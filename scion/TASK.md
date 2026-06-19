@@ -499,6 +499,8 @@ Current checkpoint:
   `scion/docs/experiments/v0.4/v04-launch-readiness-prompt-context-guard-repair-20260618.md`.
   Current CVRP bounded large-twoopt handoff repair:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`.
+  Current CVRP large-twoopt postrun summary guard:
+  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`.
   Current launch-prepared CVRP root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-67f4da9-1r-gpt55-20260619T002422Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not

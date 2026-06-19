@@ -1213,6 +1213,139 @@ def test_warehouse_followup_summary_prepared_only_requires_launch(
     )
 
 
+def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "cvrp-prepared"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "scion.launcher_prepare.v1",
+            "status": "prepared",
+            "prepared_only": True,
+            "resume_from_campaign": "/tmp/cvrp-source",
+        },
+    )
+    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    summary = brief["cvrp_large_twoopt_summary"]
+    assert summary["schema_version"] == "scion.postrun_cvrp_large_twoopt_summary.v1"
+    assert summary["report_only"] is True
+    assert summary["quality_judgment"] is False
+    assert summary["decision_features_excluded"] is True
+    assert summary["available"] is True
+    assert summary["current_run_evidence"] is False
+    assert summary["launch_required_before_twoopt_conclusion"] is True
+    assert summary["interpretation"] == "prepared_only_launch_required"
+    assert summary["handoff_complete"] is True
+    assert all(
+        item["available"] is True
+        for item in summary["handoff_requirements"].values()
+    )
+    assert summary["evidence_gaps"] == [
+        "launch_required_before_bounded_twoopt_conclusion"
+    ]
+    assert "## CVRP Large Two-Opt Summary" in markdown
+    assert "- Interpretation: prepared_only_launch_required" in markdown
+    assert "cvrp_large_twoopt_bounded_constraints_handoff" in markdown
+    assert any(
+        "cvrp_large_twoopt_summary" in question
+        for question in brief["required_questions"]
+    )
+
+
+def test_cvrp_large_twoopt_summary_requires_review_inputs_after_protocol_eval(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "cvrp-protocol-eval-missing-inputs"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
+    _write_cvrp_protocol_run(
+        run_root,
+        campaign_dir,
+        mechanism_family="bounded_large_twoopt",
+        include_runtime=False,
+        include_continuity=False,
+    )
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    summary = brief["cvrp_large_twoopt_summary"]
+    assert summary["current_run_evidence"] is True
+    assert summary["launch_required_before_twoopt_conclusion"] is False
+    assert summary["interpretation"] == "protocol_evaluated_review_inputs_incomplete"
+    assert "no_protocol_evaluated_candidates" not in summary["evidence_gaps"]
+    assert "missing_measurement_effect_summary" not in summary["evidence_gaps"]
+    assert "missing_runtime_feedback_summary" in summary["evidence_gaps"]
+    assert "missing_research_continuity_summary" in summary["evidence_gaps"]
+    assert "missing_large_twoopt_mechanism_signal" not in summary["evidence_gaps"]
+    assert "- Interpretation: protocol_evaluated_review_inputs_incomplete" in markdown
+
+
+def test_cvrp_large_twoopt_summary_rejects_protocol_eval_without_twoopt_signal(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "cvrp-protocol-eval-no-twoopt"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
+    _write_cvrp_protocol_run(
+        run_root,
+        campaign_dir,
+        mechanism_family="regret_insertion",
+    )
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    summary = brief["cvrp_large_twoopt_summary"]
+    assert summary["current_run_evidence"] is True
+    assert summary["handoff_complete"] is True
+    assert summary["interpretation"] == "protocol_evaluated_without_large_twoopt_signal"
+    assert "missing_large_twoopt_mechanism_signal" in summary["evidence_gaps"]
+    assert summary["evidence"]["large_twoopt_mechanism"]["available"] is False
+    assert "- Interpretation: protocol_evaluated_without_large_twoopt_signal" in markdown
+
+
+def test_cvrp_large_twoopt_summary_marks_bounded_twoopt_review_ready(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "cvrp-twoopt-review-ready"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
+    _write_cvrp_protocol_run(
+        run_root,
+        campaign_dir,
+        mechanism_family="bounded_large_twoopt",
+    )
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    summary = brief["cvrp_large_twoopt_summary"]
+    assert summary["available"] is True
+    assert summary["current_run_evidence"] is True
+    assert summary["handoff_complete"] is True
+    assert summary["launch_required_before_twoopt_conclusion"] is False
+    assert summary["interpretation"] == "bounded_twoopt_review_ready"
+    assert summary["evidence_gaps"] == []
+    assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
+    mechanism = summary["evidence"]["large_twoopt_mechanism"]
+    assert mechanism["available"] is True
+    assert mechanism["families"] == ["bounded_large_twoopt"]
+    assert mechanism["protocol_row_count"] == 2
+    assert "- Interpretation: bounded_twoopt_review_ready" in markdown
+    assert "- Evidence gaps:\n  - none" in markdown
+
+
 def test_warehouse_followup_summary_distinguishes_quality_blocked_run(
     tmp_path: Path,
 ) -> None:
@@ -1692,6 +1825,268 @@ def _write_warehouse_manifest(
                 "Distinguish real plateau from missed continuous-promotion opportunities."
             ],
         },
+    )
+
+
+def _write_cvrp_large_twoopt_manifest(
+    run_root: Path,
+    campaign_dir: Path,
+    *,
+    rounds: int,
+) -> None:
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "report_only": True,
+            "quality_judgment": False,
+            "decision_features_excluded": True,
+            "campaign_state_mutated": False,
+            "scheduler_state_mutated": False,
+            "promotion_state_mutated": False,
+            "problem_family": "cvrp",
+            "run_root": str(run_root),
+            "campaign_dir": str(campaign_dir),
+            "research_focus": {
+                "measurement_opportunity_diagnostics": {
+                    "screening_mde_at_power_80": 9.9,
+                    "practical_screen_delta": 2.0,
+                    "reason_codes": [
+                        "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
+                        "TRAJECTORY_DIVERGENT_LOW_SNR",
+                        "BUDGET_EXHAUSTING_RUNTIME_REPORT_ONLY",
+                    ],
+                },
+                "measurable_opportunity_classes": [
+                    "large_instance_intra_route_two_opt_seed",
+                    "bounded_local_search_variant",
+                    "construction_seed_portfolio",
+                    "destroy_repair_selection",
+                ],
+                "default_avoid_directions": [
+                    "broad VNS removal",
+                    "pure ALNS/no-polish",
+                    "initial-VNS disablement",
+                    "unbounded large-instance two-opt fallback",
+                    "cadence-2",
+                    "share70 cap",
+                    "route-merge absorption",
+                    "demand-slack regret insertion",
+                    "cross-route 2-opt reconnect",
+                    "cluster-biased worst removal",
+                    "route-limit seed diversification",
+                ],
+                "large_instance_two_opt_constraints": _large_twoopt_constraints(),
+                "route_merge_exception_rule": (
+                    "Require direct objective evidence for route merge claims."
+                ),
+                "construction_seed_rule": (
+                    "Require same-run seed baseline or same-mechanism accepted delta."
+                ),
+                "decision_boundary": (
+                    "Proposal guidance only; never enter DecisionFeatures, "
+                    "Protocol gates, promotion input, or scheduler state."
+                ),
+            },
+            "model": {"name": "gpt-5.5", "completion_preflight": True},
+            "report_metadata": {
+                "control_pair_key": "cvrp.large-twoopt-bounded:rep01",
+                "postrun_reports": True,
+                "postrun_acceptance_families": [
+                    "summaries",
+                    "failures",
+                    "research_efficiency",
+                    "manifests",
+                    "analysis_brief",
+                    "inventory",
+                    "rebuild",
+                ],
+            },
+            "execution": {"rounds": rounds},
+            "acceptance_focus": [
+                "Review bounded large-instance intra-route two-opt evidence."
+            ],
+        },
+    )
+
+
+def _large_twoopt_constraints() -> dict[str, object]:
+    return {
+        "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
+        "scope": "proposal_only_prepared_handoff",
+        "seed_report": (
+            "scion/docs/experiments/v0.4/"
+            "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md"
+        ),
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "implementation_constraints": [
+            "derive a deadline from the solver time_limit and monotonic start time",
+            "check wall-clock remaining time before each route and sweep",
+            "do not call unbounded two_opt_intra above the vns_threshold",
+        ],
+        "required_pair_evidence": [
+            "total_distance delta by case and seed",
+            "feasibility before and after",
+            "route count before and after",
+            "wall-clock elapsed status",
+        ],
+        "default_reject_directions": [
+            "unbounded two_opt_intra fallback",
+            "activation claims without wall-clock evidence",
+        ],
+    }
+
+
+def _write_cvrp_protocol_run(
+    run_root: Path,
+    campaign_dir: Path,
+    *,
+    mechanism_family: str,
+    include_runtime: bool = True,
+    include_continuity: bool = True,
+) -> None:
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+            "requested_rounds": 1,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 1,
+            "protocol_evaluated_candidates": 1,
+        },
+    )
+    payload: dict[str, object] = {
+        "protocol_rows": {
+            "effective_protocol_rounds": 1,
+            "protocol_metric_results": 2,
+            "protocol_evaluated_candidates": 1,
+            "stage_counts": {"screening": 2, "validation": 0, "frozen": 0},
+        },
+        "formal_candidates": {
+            "formal_screened_candidates": 1,
+            "protocol_evaluated_candidates": 1,
+        },
+        "formal_candidate_artifacts": {
+            "row_count": 1,
+            "index_status": "available",
+            "unreadable_rows": 0,
+        },
+        "measurement_readiness": {
+            "status": "ready",
+            "reason_code": "ok",
+            "mde_at_power_80": 9.9,
+            "signal_to_noise_tier": "low_power",
+        },
+        "protocol_effects_vs_mde": {
+            "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
+            "report_only": True,
+            "decision_features_excluded": True,
+            "measurement_readiness_status": "ready",
+            "mde_at_power_80": 9.9,
+            "interpretation": "has_positive_protocol_effect_at_or_above_mde",
+            "protocol_row_count": 2,
+            "rows_at_or_above_mde": 1,
+            "rows_with_ci_high_below_mde": 1,
+            "positive_rows": 1,
+            "nonpositive_rows": 1,
+            "max_effect_to_mde_ratio": 1.1,
+            "mechanism_family_effect_summary": {
+                "schema_version": "scion.mechanism_family_effect_summary.v1",
+                "report_only": True,
+                "decision_features_excluded": True,
+                "mapping_status": "available",
+                "mapped_row_count": 2,
+                "unmapped_row_count": 0,
+                "mechanism_family_count": 1,
+                "by_family": {
+                    mechanism_family: {
+                        "protocol_row_count": 2,
+                        "rows_with_median_delta": 2,
+                        "positive_rows": 1,
+                        "nonpositive_rows": 1,
+                        "rows_at_or_above_mde": 1,
+                        "rows_below_mde": 1,
+                        "rows_with_ci_high_below_mde": 1,
+                        "max_median_delta": 11.0,
+                        "max_effect_to_mde_ratio": 1.1,
+                    }
+                },
+            },
+            "top_rows_by_effect_to_mde": [
+                {
+                    "round": 1,
+                    "branch_id": "branch-1",
+                    "mechanism_family": mechanism_family,
+                    "stage": "screening",
+                    "decision": "continue_explore",
+                    "gate_outcome": "pass",
+                    "median_delta": 11.0,
+                    "effect_to_mde_ratio": 1.1,
+                    "positive_effect_at_or_above_mde": True,
+                }
+            ],
+        },
+        "run_status": {
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+            "run_complete": True,
+        },
+    }
+    if include_runtime:
+        payload["fresh_runtime_replay_drain"] = {
+            "status": "not_selected_no_pending",
+            "attempts": 1,
+            "executed": 0,
+            "skipped": 1,
+            "counts_toward_max_rounds": False,
+        }
+        payload["stage_transition_drain"] = {
+            "status": "not_started",
+            "attempts": 0,
+            "counts_toward_max_rounds": False,
+            "generates_new_hypothesis": False,
+        }
+    if include_continuity:
+        payload["research_continuity"] = {
+            "same_mechanism_followup": {
+                "observed_opportunity_count": 1,
+                "selected_same_branch_refinement_count": 1,
+            },
+            "branch_lesson_usage": {
+                "requirement_count": 1,
+                "satisfied_count": 1,
+                "semantic_gap_count": 0,
+            },
+            "weak_positive_transfer": {
+                "observed_opportunity_count": 0,
+                "accepted_count": 0,
+            },
+            "lesson_action_counts": {"preserved_same_branch": 1},
+            "research_shape_summary": {
+                "max_branch_depth": 2,
+                "branch_depth_distribution": {"2": 1},
+                "active_shape": "focused_followup",
+                "mechanism_family_count": 1,
+            },
+        }
+        payload["research_shape"] = {
+            "mechanism_family_breadth": {
+                "family_count": 1,
+                "families": {mechanism_family: 1},
+            }
+        }
+    _write_json(
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "cvrp.research_efficiency.v1.json",
+        payload,
     )
 
 

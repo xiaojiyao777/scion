@@ -63,7 +63,10 @@ CVRP/VRP:
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
   preserve feasibility/route-count evidence, and require pair-level objective,
-  feasibility, route-count, and wall-clock evidence.
+  feasibility, route-count, and wall-clock evidence. CVRP postrun briefs now
+  also expose `cvrp_large_twoopt_summary`, so delegated review can distinguish
+  prepared-only roots, missing review inputs, missing two-opt mechanism signal,
+  and bounded-twoopt review-ready evidence.
 
 Infrastructure:
 
@@ -116,6 +119,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-vrp-large-instance-two-opt-seed-evidence-20260618.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-launch-focus-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-v2-followup-root-refresh-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-warehouse-plateau-guard-20260619.md`,

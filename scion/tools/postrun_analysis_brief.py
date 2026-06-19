@@ -40,6 +40,8 @@ REQUIRED_QUESTIONS = (
     "proposal/codegen/tool, and algorithm-quality failures?",
     "For warehouse follow-up, did warehouse_followup_summary distinguish "
     "prepared-only, quality-blocked, protocol-evaluated, and plateau-review-ready evidence?",
+    "For CVRP large-twoopt follow-up, did cvrp_large_twoopt_summary distinguish "
+    "prepared-only, missing review inputs, missing two-opt mechanism signal, and review-ready evidence?",
     "Were repeated near-duplicate branches avoided or correctly diagnosed?",
     "Are failures framework/control regressions, provider/infra failures, or algorithm-quality failures?",
     "Is the next step repair, same-round rerun, or ladder advancement?",
@@ -59,6 +61,23 @@ WAREHOUSE_FOLLOWUP_REVIEW_AXES = (
     "compare_cost_delta_and_improving_move_telemetry_before_split_delta_only_claims",
     "explain_fast_completion_against_warehouse_runtime_model",
     "judge_continuous_improvement_vs_real_plateau_only_after_current_run_postrun_evidence",
+)
+
+CVRP_LARGE_TWOOPT_REQUIREMENT_KEYS = (
+    "cvrp_large_twoopt_seed_handoff",
+    "cvrp_large_twoopt_unbounded_default_avoid_handoff",
+    "cvrp_large_twoopt_bounded_constraints_handoff",
+    "cvrp_measurement_mde_handoff",
+    "cvrp_low_snr_reason_handoff",
+    "cvrp_decision_boundary_handoff",
+)
+
+CVRP_LARGE_TWOOPT_REVIEW_AXES = (
+    "confirm_deadline_or_remaining_time_guard_in_solver_code",
+    "confirm_no_unbounded_two_opt_intra_or_vns_fallback_above_large_threshold",
+    "inspect_pair_level_total_distance_feasibility_route_count_and_wall_clock_evidence",
+    "interpret_effect_against_aa_mde_and_case_level_variance",
+    "reject_activation_only_or_seed_selection_only_claims",
 )
 
 
@@ -105,6 +124,14 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         failure_taxonomy_summary=failure_taxonomy_summary,
         research_continuity_summary=research_continuity_summary,
     )
+    cvrp_large_twoopt_summary = _cvrp_large_twoopt_summary(
+        inventory,
+        protocol_accounting_summary=protocol_accounting_summary,
+        measurement_effect_summary=measurement_effect_summary,
+        runtime_feedback_summary=runtime_feedback_summary,
+        failure_taxonomy_summary=failure_taxonomy_summary,
+        research_continuity_summary=research_continuity_summary,
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "report_only": True,
@@ -142,6 +169,7 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
             research_context_actionability_summary
         ),
         "warehouse_followup_summary": warehouse_followup_summary,
+        "cvrp_large_twoopt_summary": cvrp_large_twoopt_summary,
         "stop_conditions": _stop_conditions(inventory),
         "required_questions": list(REQUIRED_QUESTIONS),
     }
@@ -977,6 +1005,82 @@ def render_markdown(brief: dict[str, Any]) -> str:
             f"{_list_text(actionability.get('recommendations') or [])}",
         ]
     )
+
+    cvrp_large_twoopt = brief.get("cvrp_large_twoopt_summary") or {}
+    if (
+        cvrp_large_twoopt.get("available") is True
+        or cvrp_large_twoopt.get("problem_family") == "cvrp"
+    ):
+        evidence = _mapping_or_empty(cvrp_large_twoopt.get("evidence"))
+        protocol = _mapping_or_empty(evidence.get("protocol"))
+        measurement = _mapping_or_empty(evidence.get("measurement_effect"))
+        runtime = _mapping_or_empty(evidence.get("runtime"))
+        continuity_evidence = _mapping_or_empty(evidence.get("research_continuity"))
+        mechanism = _mapping_or_empty(evidence.get("large_twoopt_mechanism"))
+        lines.extend(
+            [
+                "",
+                "## CVRP Large Two-Opt Summary",
+                "- Source: prepared CVRP large-twoopt research_focus plus current-run "
+                "protocol, measurement, runtime, and continuity summaries.",
+                f"- Available: `{_display(cvrp_large_twoopt.get('available'))}`",
+                "- Current-run evidence: "
+                f"`{_display(cvrp_large_twoopt.get('current_run_evidence'))}`",
+                "- Launch required before bounded two-opt conclusion: "
+                f"`{_display(cvrp_large_twoopt.get('launch_required_before_twoopt_conclusion'))}`",
+                f"- Interpretation: {_display(cvrp_large_twoopt.get('interpretation'))}",
+                "- Handoff complete: "
+                f"`{_display(cvrp_large_twoopt.get('handoff_complete'))}`",
+                "- Protocol formal-screened / protocol-evaluated / metric rows: "
+                f"{_display(protocol.get('formal_screened_candidates'))} / "
+                f"{_display(protocol.get('protocol_evaluated_candidates'))} / "
+                f"{_display(protocol.get('protocol_metric_results'))}",
+                "- Measurement rows at/above MDE / ci-high below MDE / max effect-MDE: "
+                f"{_display(measurement.get('rows_at_or_above_mde'))} / "
+                f"{_display(measurement.get('rows_with_ci_high_below_mde'))} / "
+                f"{_display(measurement.get('max_effect_to_mde_ratio'))}",
+                "- Large two-opt mechanism signal: "
+                f"`{_display(mechanism.get('available'))}` / "
+                f"{_list_text(mechanism.get('families') or [])}",
+                "- Runtime available / diagnostics: "
+                f"`{_display(runtime.get('available'))}` / "
+                f"{_display(runtime.get('runtime_budget_diagnostic_count'))}",
+                "- Research continuity available/reports: "
+                f"`{_display(continuity_evidence.get('available'))}` / "
+                f"{_display(continuity_evidence.get('continuity_report_count'))}",
+            ]
+        )
+        requirements = cvrp_large_twoopt.get("handoff_requirements")
+        if isinstance(requirements, dict) and requirements:
+            lines.extend(
+                [
+                    "| Handoff requirement | Available | Count | Source |",
+                    "|---|---:|---:|---|",
+                ]
+            )
+            for key, item in sorted(requirements.items()):
+                if not isinstance(item, dict):
+                    continue
+                lines.append(
+                    "| {key} | {available} | {count} | {source} |".format(
+                        key=key,
+                        available=_display(item.get("available")),
+                        count=_display(item.get("count")),
+                        source=_display(item.get("source")),
+                    )
+                )
+        gaps = cvrp_large_twoopt.get("evidence_gaps")
+        lines.append("- Evidence gaps:")
+        if isinstance(gaps, list) and gaps:
+            lines.extend(f"  - {_display(item)}" for item in gaps)
+        else:
+            lines.append("  - none")
+        axes = cvrp_large_twoopt.get("required_review_axes")
+        lines.append("- Required CVRP bounded two-opt review axes:")
+        if isinstance(axes, list) and axes:
+            lines.extend(f"  - {_display(item)}" for item in axes)
+        else:
+            lines.append("  - none")
 
     warehouse = brief.get("warehouse_followup_summary") or {}
     if (
@@ -3252,6 +3356,324 @@ def _research_context_actionability_recommendations(
             "inspect lesson ids, changed dimensions, and borrow/contrast/reject semantics"
         )
     return list(dict.fromkeys(recommendations))
+
+
+def _cvrp_large_twoopt_summary(
+    inventory: Mapping[str, Any],
+    *,
+    protocol_accounting_summary: Mapping[str, Any],
+    measurement_effect_summary: Mapping[str, Any],
+    runtime_feedback_summary: Mapping[str, Any],
+    failure_taxonomy_summary: Mapping[str, Any],
+    research_continuity_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    phase4 = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
+    launcher = _mapping_or_empty(inventory.get("launcher"))
+    contract = _mapping_or_empty(launcher.get("prepared_run_contract"))
+    problem_family = contract.get("problem_family")
+    current_run_evidence = phase4.get("current_run_evidence") is True
+    base = {
+        "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "campaign_state_mutated": False,
+        "scheduler_state_mutated": False,
+        "promotion_state_mutated": False,
+        "problem_family": problem_family,
+        "current_run_evidence": current_run_evidence,
+        "available": False,
+        "handoff_complete": False,
+        "handoff_requirements": {},
+        "launch_required_before_twoopt_conclusion": False,
+        "interpretation": "not_cvrp",
+        "evidence": {},
+        "evidence_gaps": [],
+        "required_review_axes": list(CVRP_LARGE_TWOOPT_REVIEW_AXES),
+    }
+    if problem_family != "cvrp":
+        return base
+
+    handoff_requirements = _cvrp_large_twoopt_handoff_requirements(
+        phase4=phase4,
+        contract=contract,
+    )
+    handoff_complete = bool(handoff_requirements) and all(
+        item.get("available") is True for item in handoff_requirements.values()
+    )
+    counters = _mapping_or_empty(inventory.get("counters"))
+    accounting = _mapping_or_empty(protocol_accounting_summary.get("aggregate"))
+    protocol_rows = _mapping_or_empty(accounting.get("protocol_rows"))
+    formal_artifacts = _mapping_or_empty(
+        accounting.get("formal_candidate_artifacts")
+    )
+    formal_screened_candidates = max(
+        _int_or_zero(accounting.get("formal_screened_candidates")),
+        _int_or_zero(counters.get("formal_screened_candidates")),
+        _int_or_zero(counters.get("screened_experiments")),
+    )
+    protocol_evaluated_candidates = max(
+        _int_or_zero(protocol_rows.get("protocol_evaluated_candidates")),
+        _int_or_zero(accounting.get("formal_protocol_evaluated_candidates")),
+        _int_or_zero(counters.get("protocol_evaluated_candidates")),
+    )
+    measurement = _mapping_or_empty(measurement_effect_summary.get("aggregate"))
+    runtime = _mapping_or_empty(runtime_feedback_summary.get("aggregate"))
+    runtime_budget = _mapping_or_empty(runtime.get("runtime_budget_diagnostics"))
+    failure = _mapping_or_empty(failure_taxonomy_summary.get("aggregate"))
+    proposal_quality = _mapping_or_empty(failure.get("proposal_quality"))
+    quality_block_signal = max(
+        _int_or_zero(proposal_quality.get("proposal_quality_blocks")),
+        _int_or_zero(proposal_quality.get("quality_blocks")),
+        _int_or_zero(proposal_quality.get("quality_block_ledger_count")),
+    )
+    large_twoopt_mechanism = _cvrp_large_twoopt_mechanism_signal(
+        measurement_effect_summary=measurement_effect_summary,
+        research_continuity_summary=research_continuity_summary,
+    )
+    measurement_available = measurement_effect_summary.get("available") is True
+    runtime_available = runtime_feedback_summary.get("available") is True
+    continuity_available = research_continuity_summary.get("available") is True
+    large_twoopt_available = large_twoopt_mechanism.get("available") is True
+    evidence = {
+        "protocol": {
+            "formal_screened_candidates": formal_screened_candidates,
+            "protocol_evaluated_candidates": protocol_evaluated_candidates,
+            "protocol_metric_results": _int_or_zero(
+                protocol_rows.get("protocol_metric_results")
+            ),
+            "formal_candidate_artifact_rows": _int_or_zero(
+                formal_artifacts.get("row_count")
+            ),
+            "stage_rows": _mapping_or_empty(accounting.get("stage_rows")),
+        },
+        "measurement_effect": {
+            "available": measurement_available,
+            "protocol_row_count": _int_or_zero(
+                measurement.get("protocol_row_count")
+            ),
+            "rows_at_or_above_mde": _int_or_zero(
+                measurement.get("rows_at_or_above_mde")
+            ),
+            "rows_with_ci_high_below_mde": _int_or_zero(
+                measurement.get("rows_with_ci_high_below_mde")
+            ),
+            "max_effect_to_mde_ratio": measurement.get("max_effect_to_mde_ratio"),
+            "interpretation_counts": _int_mapping(
+                measurement.get("interpretation_counts")
+            ),
+            "mechanism_family_mapped_row_count": _int_or_zero(
+                measurement.get("mechanism_family_mapped_row_count")
+            ),
+            "mechanism_family_unmapped_row_count": _int_or_zero(
+                measurement.get("mechanism_family_unmapped_row_count")
+            ),
+        },
+        "large_twoopt_mechanism": large_twoopt_mechanism,
+        "quality_blocks": {
+            "proposal_quality_blocks": _int_or_zero(
+                proposal_quality.get("proposal_quality_blocks")
+            ),
+            "quality_blocks": _int_or_zero(proposal_quality.get("quality_blocks")),
+            "quality_block_ledger_count": _int_or_zero(
+                proposal_quality.get("quality_block_ledger_count")
+            ),
+            "reason_counts": _int_mapping(
+                proposal_quality.get("quality_block_reason_counts")
+            ),
+        },
+        "runtime": {
+            "available": runtime_available,
+            "runtime_model_counts": _int_mapping(
+                runtime_budget.get("runtime_model_counts")
+            ),
+            "runtime_budget_diagnostic_count": _int_or_zero(
+                runtime_budget.get("diagnostic_count")
+            ),
+        },
+        "research_continuity": {
+            "available": continuity_available,
+            "continuity_report_count": _int_or_zero(
+                research_continuity_summary.get("continuity_report_count")
+            ),
+        },
+    }
+    interpretation = _cvrp_large_twoopt_interpretation(
+        current_run_evidence=current_run_evidence,
+        protocol_evaluated_candidates=protocol_evaluated_candidates,
+        formal_screened_candidates=formal_screened_candidates,
+        quality_block_signal=quality_block_signal,
+        measurement_available=measurement_available,
+        runtime_available=runtime_available,
+        continuity_available=continuity_available,
+        large_twoopt_available=large_twoopt_available,
+    )
+    return {
+        **base,
+        "available": True,
+        "handoff_complete": handoff_complete,
+        "handoff_requirements": handoff_requirements,
+        "launch_required_before_twoopt_conclusion": not current_run_evidence,
+        "interpretation": interpretation,
+        "evidence": evidence,
+        "evidence_gaps": _cvrp_large_twoopt_evidence_gaps(
+            current_run_evidence=current_run_evidence,
+            handoff_complete=handoff_complete,
+            protocol_evaluated_candidates=protocol_evaluated_candidates,
+            quality_block_signal=quality_block_signal,
+            measurement_available=measurement_available,
+            runtime_available=runtime_available,
+            continuity_available=continuity_available,
+            large_twoopt_available=large_twoopt_available,
+        ),
+    }
+
+
+def _cvrp_large_twoopt_handoff_requirements(
+    *,
+    phase4: Mapping[str, Any],
+    contract: Mapping[str, Any],
+) -> dict[str, Any]:
+    problem_specific = _mapping_or_empty(phase4.get("problem_specific_requirements"))
+    checks = _mapping_or_empty(contract.get("checks"))
+    requirements: dict[str, Any] = {}
+    for key in CVRP_LARGE_TWOOPT_REQUIREMENT_KEYS:
+        coverage = _mapping_or_empty(problem_specific.get(key))
+        check = _mapping_or_empty(checks.get(key))
+        requirements[key] = {
+            "available": coverage.get("available") is True
+            or check.get("passed") is True,
+            "count": _int_or_zero(coverage.get("count")),
+            "source": coverage.get("source") or check.get("detail") or "",
+            "contract_check_passed": check.get("passed"),
+            "contract_detail": check.get("detail"),
+        }
+    return requirements
+
+
+def _cvrp_large_twoopt_mechanism_signal(
+    *,
+    measurement_effect_summary: Mapping[str, Any],
+    research_continuity_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    families: set[str] = set()
+    protocol_rows = 0
+    measurement = _mapping_or_empty(measurement_effect_summary.get("aggregate"))
+    family_effects = _mapping_or_empty(measurement.get("mechanism_family_effects"))
+    for family, payload in sorted(family_effects.items()):
+        if not _is_cvrp_large_twoopt_family(str(family)):
+            continue
+        families.add(str(family))
+        protocol_rows += _int_or_zero(
+            _mapping_or_empty(payload).get("protocol_row_count")
+        )
+    entries = measurement_effect_summary.get("entries")
+    if isinstance(entries, list):
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                continue
+            effect = _mapping_or_empty(entry.get("protocol_effects_vs_mde"))
+            top_rows = effect.get("top_rows_by_effect_to_mde")
+            if not isinstance(top_rows, list):
+                continue
+            for row in top_rows:
+                if not isinstance(row, Mapping):
+                    continue
+                family = str(row.get("mechanism_family") or "")
+                if _is_cvrp_large_twoopt_family(family):
+                    families.add(family)
+    continuity = _mapping_or_empty(research_continuity_summary.get("aggregate"))
+    family_counts = _mapping_or_empty(continuity.get("mechanism_family_counts"))
+    for family in family_counts:
+        if _is_cvrp_large_twoopt_family(str(family)):
+            families.add(str(family))
+    return {
+        "available": bool(families),
+        "families": sorted(families),
+        "protocol_row_count": protocol_rows,
+        "source": (
+            "measurement_effect_summary.mechanism_family_effects and "
+            "research_continuity_summary.mechanism_family_counts"
+        ),
+    }
+
+
+def _is_cvrp_large_twoopt_family(value: str) -> bool:
+    normalized = (
+        value.lower()
+        .replace("-", "_")
+        .replace(" ", "_")
+        .replace("/", "_")
+    )
+    compact = normalized.replace("_", "")
+    return (
+        "two_opt" in normalized
+        or "2opt" in compact
+        or "twoopt" in compact
+    )
+
+
+def _cvrp_large_twoopt_interpretation(
+    *,
+    current_run_evidence: bool,
+    protocol_evaluated_candidates: int,
+    formal_screened_candidates: int,
+    quality_block_signal: int,
+    measurement_available: bool,
+    runtime_available: bool,
+    continuity_available: bool,
+    large_twoopt_available: bool,
+) -> str:
+    if not current_run_evidence:
+        return "prepared_only_launch_required"
+    if protocol_evaluated_candidates <= 0:
+        if quality_block_signal > 0:
+            return "quality_blocked_no_protocol_twoopt_conclusion"
+        if formal_screened_candidates > 0:
+            return "screened_without_protocol_evaluation"
+        return "insufficient_current_run_evidence"
+    if not (
+        measurement_available
+        and runtime_available
+        and continuity_available
+    ):
+        return "protocol_evaluated_review_inputs_incomplete"
+    if not large_twoopt_available:
+        return "protocol_evaluated_without_large_twoopt_signal"
+    return "bounded_twoopt_review_ready"
+
+
+def _cvrp_large_twoopt_evidence_gaps(
+    *,
+    current_run_evidence: bool,
+    handoff_complete: bool,
+    protocol_evaluated_candidates: int,
+    quality_block_signal: int,
+    measurement_available: bool,
+    runtime_available: bool,
+    continuity_available: bool,
+    large_twoopt_available: bool,
+) -> list[str]:
+    gaps: list[str] = []
+    if not handoff_complete:
+        gaps.append("cvrp_large_twoopt_handoff_requirements_incomplete")
+    if not current_run_evidence:
+        gaps.append("launch_required_before_bounded_twoopt_conclusion")
+        return gaps
+    if protocol_evaluated_candidates <= 0:
+        if quality_block_signal > 0:
+            gaps.append("quality_blocked_before_protocol_evaluation")
+        else:
+            gaps.append("no_protocol_evaluated_candidates")
+    if not measurement_available:
+        gaps.append("missing_measurement_effect_summary")
+    if not runtime_available:
+        gaps.append("missing_runtime_feedback_summary")
+    if not continuity_available:
+        gaps.append("missing_research_continuity_summary")
+    if protocol_evaluated_candidates > 0 and not large_twoopt_available:
+        gaps.append("missing_large_twoopt_mechanism_signal")
+    return gaps
 
 
 def _warehouse_followup_summary(
