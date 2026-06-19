@@ -219,6 +219,48 @@ def test_postrun_acceptance_rejects_stale_problem_summary_contract(
     ]
 
 
+def test_postrun_acceptance_rejects_problem_summary_family_mismatch(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-family-mismatch")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "cvrp",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert problem_check["required"] is True
+    assert problem_check["status"] == "failed"
+    assert problem_check["detail"][0]["expected_problem_family"] == (
+        "warehouse_delivery"
+    )
+    assert problem_check["detail"][0]["problem_family"] == "cvrp"
+    assert problem_check["detail"][0]["problem_family_matches_expected"] is False
+    assert problem_check["detail"][0]["summary_failures"] == [
+        "problem_summary_family_mismatch"
+    ]
+
+
 def test_postrun_acceptance_readiness_rejects_missing_prompt_source_visibility(
     tmp_path: Path,
 ) -> None:

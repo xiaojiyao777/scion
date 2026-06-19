@@ -329,7 +329,13 @@ def _problem_summary_actionability(
                     "summary_problem_family": summary.get("problem_family"),
                 },
             )
-        summaries = [_summary_actionability_detail(expected_key, summary)]
+        summaries = [
+            _summary_actionability_detail(
+                expected_key,
+                summary,
+                expected_family=expected_family,
+            )
+        ]
         return (_summary_actionability_status(summaries), summaries)
 
     summaries = []
@@ -379,6 +385,8 @@ def _problem_family(
 def _summary_actionability_detail(
     key: str,
     summary: Mapping[str, Any],
+    *,
+    expected_family: str | None = None,
 ) -> dict[str, Any]:
     evidence_gaps = _string_items(summary.get("evidence_gaps"))
     expected_schema = PROBLEM_SUMMARY_SCHEMAS.get(key)
@@ -393,9 +401,16 @@ def _summary_actionability_detail(
         summary_failures.append("stale_problem_summary_schema")
     if delegated_interpretations and interpretation not in delegated_interpretations:
         summary_failures.append("unsupported_problem_summary_interpretation")
+    problem_family = summary.get("problem_family")
+    if expected_family is not None and problem_family != expected_family:
+        summary_failures.append("problem_summary_family_mismatch")
     return {
         "summary": key,
-        "problem_family": summary.get("problem_family"),
+        "problem_family": problem_family,
+        "expected_problem_family": expected_family,
+        "problem_family_matches_expected": (
+            True if expected_family is None else problem_family == expected_family
+        ),
         "schema_version": schema_version,
         "expected_schema_version": expected_schema,
         "schema_current": schema_version == expected_schema,
