@@ -1834,6 +1834,114 @@ def test_warehouse_followup_summary_marks_protocol_evaluated_plateau_review_read
     assert "- Interpretation: protocol_evaluated_plateau_review_ready" in markdown
 
 
+def test_warehouse_followup_summary_requires_runtime_drain_status_not_budget_only(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "warehouse-protocol-eval-budget-diagnostics-only"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+            "requested_rounds": 1,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 1,
+            "protocol_evaluated_candidates": 1,
+            "runtime_budget_diagnostics": [
+                {
+                    "branch_id": "branch-1",
+                    "stage": "screening",
+                    "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
+                    "severity": "info",
+                    "runtime_model": "budget_exhausting",
+                    "saturation_ratio": 0.98,
+                    "threshold_ratio": 0.9,
+                    "total_pairs": 6,
+                }
+            ],
+        },
+    )
+    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
+    _write_json(
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "warehouse.research_efficiency.v1.json",
+        {
+            "protocol_rows": {
+                "protocol_metric_results": 2,
+                "protocol_evaluated_candidates": 1,
+            },
+            "formal_candidates": {
+                "formal_screened_candidates": 1,
+                "protocol_evaluated_candidates": 1,
+            },
+            "protocol_effects_vs_mde": {
+                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
+                "report_only": True,
+                "decision_features_excluded": True,
+                "protocol_row_count": 2,
+                "rows_at_or_above_mde": 0,
+                "rows_with_ci_high_below_mde": 2,
+                "max_effect_to_mde_ratio": 0.4,
+                "interpretation_counts": {"below_mde": 2},
+            },
+            "research_continuity": {
+                "same_mechanism_followup": {
+                    "observed_opportunity_count": 1,
+                    "selected_same_branch_refinement_count": 1,
+                },
+                "branch_lesson_usage": {
+                    "requirement_count": 1,
+                    "satisfied_count": 1,
+                    "semantic_gap_count": 0,
+                },
+                "weak_positive_transfer": {
+                    "observed_opportunity_count": 0,
+                    "accepted_count": 0,
+                },
+                "research_shape_summary": {
+                    "max_branch_depth": 2,
+                    "branch_depth_distribution": {"2": 1},
+                    "active_shape": "focused_followup",
+                },
+            },
+            "run_status": {
+                "run_validity_status": "valid",
+                "run_completeness_status": "complete",
+                "run_complete": True,
+            },
+        },
+    )
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    runtime = brief["runtime_feedback_summary"]
+    assert runtime["available"] is True
+    assert runtime["drain_status_complete"] is False
+    assert runtime["review_ready"] is False
+    summary = brief["warehouse_followup_summary"]
+    assert summary["current_run_evidence"] is True
+    assert summary["handoff_complete"] is True
+    assert summary["interpretation"] == "protocol_evaluated_review_inputs_incomplete"
+    assert "missing_runtime_feedback_summary" in summary["evidence_gaps"]
+    runtime_evidence = summary["evidence"]["runtime"]
+    assert runtime_evidence["available"] is True
+    assert runtime_evidence["review_ready"] is False
+    assert runtime_evidence["drain_status_complete"] is False
+    assert runtime_evidence["runtime_budget_diagnostic_count"] == 1
+    assert "Runtime drain status complete / review-ready: `False` / `False`" in (
+        markdown
+    )
+
+
 def test_warehouse_followup_summary_rejects_shallow_continuity_for_plateau_ready(
     tmp_path: Path,
 ) -> None:
