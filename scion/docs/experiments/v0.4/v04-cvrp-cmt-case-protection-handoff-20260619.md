@@ -18,17 +18,19 @@ scheduler state, or solver behavior.
 
 ## Runtime Commits
 
-- Local code/test commit: `025ff7d7`
-- WSL runner code/test commit: `6db5b58`
+- Local handoff-contract commit: `025ff7d7`
+- WSL handoff-contract commit: `6db5b58`
+- Local analysis-brief surface commit: `416bfad1`
+- WSL analysis-brief surface commit: `6893f1d`
 
 ## Prepared Roots
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-cmtcase-6db5b58-6r-gpt55-6r-gpt55-20260619T140050Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-briefsurface-6893f1d-6r-gpt55-6r-gpt55-20260619T141525Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-cmtcase-6db5b58-1r-gpt55-1r-gpt55-20260619T140050Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-briefsurface-6893f1d-1r-gpt55-1r-gpt55-20260619T141526Z-claw`
 
-Both roots were prepared from a clean WSL runner worktree at `6db5b58`.
+Both current roots were prepared from a clean WSL runner worktree at `6893f1d`.
 
 ## Acceptance
 

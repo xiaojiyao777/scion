@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `6db5b58` and are static-ready, including problem-specific handoff, CVRP CMT2/CMT4 case-protection handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun acceptance, interpretation-specific review-input consistency, launch-readiness prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `6893f1d` and are static-ready, including problem-specific handoff, CVRP CMT2/CMT4 case-protection handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun acceptance, interpretation-specific review-input consistency, launch-readiness prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -327,9 +327,9 @@ Current checkpoint:
   warehouse/CVRP readiness through the wrong problem family.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-cmtcase-6db5b58-6r-gpt55-6r-gpt55-20260619T140050Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-briefsurface-6893f1d-6r-gpt55-6r-gpt55-20260619T141525Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-cmtcase-6db5b58-1r-gpt55-1r-gpt55-20260619T140050Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-briefsurface-6893f1d-1r-gpt55-1r-gpt55-20260619T141526Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -354,7 +354,7 @@ Current checkpoint:
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
   true, and `cvrp_cmt_case_protection_present=true` with protected cases
   `CMT2` and `CMT4`. The roots were prepared from WSL runtime commit
-  `6db5b58`. Current
+  `6893f1d`. Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout
   `PYTHONPATH`, no-early-stop launch semantics, executable pre-campaign failure
