@@ -220,6 +220,10 @@ def build_readiness(
         "POSTRUN_READINESS_EXIT_STATUS",
     )
     add_check(
+        "run_script_postrun_reports_after_campaign",
+        *_run_script_postrun_reports_after_campaign(run_sh),
+    )
+    add_check(
         "not_already_started",
         "ok" if not (root / "exit.txt").exists() else "failed",
         str(root / "exit.txt"),
@@ -604,6 +608,84 @@ def _run_sh_contains_strict_postrun_readiness(run_sh: Path) -> bool:
         and "--require-current-run-ready" in text
         and "POSTRUN_READINESS_EXIT_STATUS" in text
     )
+
+
+def _run_script_postrun_reports_after_campaign(run_sh: Path) -> tuple[str, Any]:
+    if not run_sh.is_file():
+        return "failed", {"run_script": str(run_sh), "reason": "missing_run_script"}
+    try:
+        text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        return (
+            "failed",
+            {
+                "run_script": str(run_sh),
+                "reason": "unable_to_read_run_script",
+                "error": str(exc),
+            },
+        )
+
+    campaign_pos = text.find(RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER)
+    status_pos = (
+        text.find("STATUS=$?", campaign_pos)
+        if campaign_pos >= 0
+        else -1
+    )
+    call_pos = (
+        _find_line_after(text, "write_postrun_acceptance_reports", status_pos)
+        if status_pos >= 0
+        else -1
+    )
+    exit_pos = (
+        text.find('exit "$STATUS"', status_pos)
+        if status_pos >= 0
+        else -1
+    )
+    failures: list[dict[str, Any]] = []
+    if campaign_pos < 0:
+        failures.append(
+            {
+                "reason": "missing_campaign_command_marker",
+                "marker": RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER,
+            }
+        )
+    if status_pos < 0:
+        failures.append({"reason": "missing_campaign_status_capture"})
+    if call_pos < 0:
+        failures.append({"reason": "missing_postrun_report_call_after_campaign"})
+    if exit_pos < 0:
+        failures.append({"reason": "missing_campaign_status_exit"})
+    if call_pos >= 0 and exit_pos >= 0 and call_pos > exit_pos:
+        failures.append({"reason": "postrun_report_call_after_exit"})
+
+    detail = {
+        "run_script": str(run_sh),
+        "campaign_command_marker": RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER,
+        "campaign_command_position": campaign_pos,
+        "campaign_status_position": status_pos,
+        "postrun_report_call_position": call_pos,
+        "campaign_status_exit_position": exit_pos,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
+
+
+def _find_line_after(text: str, line: str, start: int) -> int:
+    if start < 0:
+        return -1
+    offset = start
+    needle = line.strip()
+    while True:
+        position = text.find(needle, offset)
+        if position < 0:
+            return -1
+        line_start = text.rfind("\n", 0, position) + 1
+        line_end = text.find("\n", position)
+        if line_end < 0:
+            line_end = len(text)
+        if text[line_start:line_end].strip() == needle:
+            return position
+        offset = position + len(needle)
 
 
 def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:

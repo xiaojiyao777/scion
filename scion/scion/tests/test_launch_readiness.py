@@ -47,6 +47,9 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["checks"]["prepared_analysis_brief_current"]["status"] == "ok"
     assert report["checks"]["run_script_preflight_failure_reports"]["status"] == "ok"
     assert report["checks"]["run_script_strict_postrun_readiness"]["status"] == "ok"
+    assert (
+        report["checks"]["run_script_postrun_reports_after_campaign"]["status"] == "ok"
+    )
     assert report["checks"]["completion_preflight"]["status"] == "skipped"
     markdown = readiness_tool.render_markdown(report)
     assert markdown.startswith("# Launch Readiness:")
@@ -454,6 +457,31 @@ def test_launch_readiness_rejects_run_script_without_strict_postrun_readiness(
     assert strict_check["status"] == "failed"
 
 
+def test_launch_readiness_rejects_run_script_without_postrun_call_after_campaign(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            'STATUS=$?\nwrite_postrun_acceptance_reports\nexit "$STATUS"',
+            'STATUS=$?\nexit "$STATUS"',
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    postrun_check = report["checks"]["run_script_postrun_reports_after_campaign"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert postrun_check["required"] is True
+    assert postrun_check["status"] == "failed"
+    assert postrun_check["detail"]["failures"] == [
+        {"reason": "missing_postrun_report_call_after_campaign"}
+    ]
+
+
 def test_completion_preflight_fetches_login_url_and_operator_action(
     tmp_path: Path,
     monkeypatch,
@@ -758,6 +786,9 @@ if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
   fi
 fi
 {sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --agentic-proposal
+STATUS=$?
+write_postrun_acceptance_reports
+exit "$STATUS"
 """,
         encoding="utf-8",
     )
