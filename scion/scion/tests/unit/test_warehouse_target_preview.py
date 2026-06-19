@@ -29,6 +29,7 @@ from scion.problems.warehouse_delivery.adapter import WarehouseDeliveryAdapter
 from scion.proposal.engine.hypothesis_context_profiles import (
     filter_hypothesis_context_for_prompt,
 )
+from scion.proposal.context_manager.manager import _problem_measurement_diagnostics
 from scion.proposal.agentic_session import (
     AgenticFailureCategory,
     AgenticProposalOutput,
@@ -164,7 +165,53 @@ def test_warehouse_problem_context_surfaces_validation_transfer_diagnostic() -> 
     assert "VALIDATION_FAIL_NO_HIERARCHICAL_GAIN" in diagnostic
     assert "operator_invocations" in diagnostic
     assert "split_delta_sum" in diagnostic
+    assert "validation_transfer_continuation" in diagnostic
+    assert "WAREHOUSE_V2_FOLLOWUP_CONTINUOUS_RESEARCH" in diagnostic
+    assert "PLATEAU_REQUIRES_PROTOCOL_EVIDENCE" in diagnostic
+    assert "SCREENING_ONLY_NOT_PLATEAU_EVIDENCE" in diagnostic
     assert "excluded_from_decision_features" in diagnostic
+
+
+def test_warehouse_followup_opportunity_diagnostics_are_projected() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    bridge = bridge_problem_spec_v1(spec_v1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+
+    payload = _problem_measurement_diagnostics(
+        bridge.problem_spec,
+        adapter=adapter,
+    )
+    opportunities = payload["opportunity_diagnostics"]
+
+    assert payload["decision_features_excluded"] is True
+    assert opportunities == [
+        {
+            "diagnostic_type": "post_promotion_followup",
+            "surface": "warehouse_operator",
+            "mechanism_family": "validation_transfer_continuation",
+            "metric": "lexicographic_objective",
+            "summary": (
+                "Warehouse has a proven promotion path, including the "
+                "champion-v2 validation-transfer checkpoint; follow-up "
+                "research should test continuous split/cost improvement "
+                "instead of assuming a plateau from shallow evidence."
+            ),
+            "recommended_action": (
+                "For champion-v2 follow-up, propose a bounded operator "
+                "with declared activation/effect diagnostics and require "
+                "protocol-evaluated split/cost, runtime-feedback, and "
+                "branch-continuity evidence before accepting a plateau "
+                "interpretation. Quality-blocked, infra-only, or "
+                "screened-only runs are not plateau evidence."
+            ),
+            "confidence": "medium",
+            "reason_codes": [
+                "WAREHOUSE_V2_FOLLOWUP_CONTINUOUS_RESEARCH",
+                "PLATEAU_REQUIRES_PROTOCOL_EVIDENCE",
+                "SCREENING_ONLY_NOT_PLATEAU_EVIDENCE",
+            ],
+        }
+    ]
 
 
 def test_warehouse_adapter_declares_structural_activation_refs() -> None:

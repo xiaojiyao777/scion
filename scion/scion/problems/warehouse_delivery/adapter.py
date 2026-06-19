@@ -401,6 +401,7 @@ Frozen files (do not modify): {frozen}"""
         return {
             "schema_version": "warehouse_validation_transfer_diagnostic.v1",
             "taint": "problem_owned_proposal_diagnostic",
+            "proposal_visibility_only": True,
             "decision_features_excluded": True,
             "transfer_risk": {
                 "risk_model": (
@@ -461,6 +462,46 @@ Frozen files (do not modify): {frozen}"""
                     "improving_move_count",
                 ],
             },
+            "measurable_opportunity_classes": [
+                {
+                    "mechanism_family": "validation_transfer_continuation",
+                    "required_evidence": (
+                        "bounded warehouse operator changes with activation "
+                        "and effect counters, protocol-evaluated split/cost "
+                        "deltas, runtime feedback, and branch-continuity "
+                        "evidence before calling post-promotion behavior a "
+                        "real plateau"
+                    ),
+                }
+            ],
+            "opportunity_diagnostics": [
+                {
+                    "diagnostic_type": "post_promotion_followup",
+                    "surface": "warehouse_operator",
+                    "mechanism_family": "validation_transfer_continuation",
+                    "metric": "lexicographic_objective",
+                    "summary": (
+                        "Warehouse has a proven promotion path, including the "
+                        "champion-v2 validation-transfer checkpoint; follow-up "
+                        "research should test continuous split/cost improvement "
+                        "instead of assuming a plateau from shallow evidence."
+                    ),
+                    "recommended_action": (
+                        "For champion-v2 follow-up, propose a bounded operator "
+                        "with declared activation/effect diagnostics and require "
+                        "protocol-evaluated split/cost, runtime-feedback, and "
+                        "branch-continuity evidence before accepting a plateau "
+                        "interpretation. Quality-blocked, infra-only, or "
+                        "screened-only runs are not plateau evidence."
+                    ),
+                    "confidence": "medium",
+                    "reason_codes": [
+                        "WAREHOUSE_V2_FOLLOWUP_CONTINUOUS_RESEARCH",
+                        "PLATEAU_REQUIRES_PROTOCOL_EVIDENCE",
+                        "SCREENING_ONLY_NOT_PLATEAU_EVIDENCE",
+                    ],
+                }
+            ],
             "policy": (
                 "Use these diagnostics to shape warehouse proposals before "
                 "code generation. They are not promotion evidence and are not "
