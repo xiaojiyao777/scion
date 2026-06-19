@@ -419,6 +419,23 @@ def _prompt_source_visibility_actionability(
         <= 0
     ):
         failures.append("hypothesis_target_source_visibility_not_visible")
+    code_trace_count = _int_or_zero(source_visibility.get("code_trace_count"))
+    active_constraints_trace_count = _int_or_zero(
+        source_visibility.get("active_subject_code_constraints_trace_count")
+    )
+    active_constraints_required_count = _int_or_zero(
+        source_visibility.get("active_subject_code_constraints_required_count")
+    )
+    active_constraints_full_visible_count = _int_or_zero(
+        source_visibility.get("active_subject_code_constraints_full_visible_count")
+    )
+    if problem_family == "cvrp" and code_trace_count > 0:
+        if active_constraints_trace_count <= 0:
+            failures.append("cvrp_active_subject_code_constraints_trace_missing")
+        if active_constraints_required_count < code_trace_count:
+            failures.append("cvrp_active_subject_code_constraints_not_required")
+        if active_constraints_full_visible_count < code_trace_count:
+            failures.append("cvrp_active_subject_code_constraints_not_full_visible")
     return (
         "ok" if not failures else "failed",
         {
@@ -429,6 +446,25 @@ def _prompt_source_visibility_actionability(
             "trace_count": aggregate.get("trace_count"),
             "source_visibility_trace_count": source_visibility.get("trace_count"),
             "code_trace_count": source_visibility.get("code_trace_count"),
+            "active_subject_code_constraints_trace_count": source_visibility.get(
+                "active_subject_code_constraints_trace_count"
+            ),
+            "active_subject_code_constraints_required_count": source_visibility.get(
+                "active_subject_code_constraints_required_count"
+            ),
+            "active_subject_code_constraints_full_visible_count": (
+                source_visibility.get(
+                    "active_subject_code_constraints_full_visible_count"
+                )
+            ),
+            "active_subject_code_constraints_not_full_visible_count": (
+                source_visibility.get(
+                    "active_subject_code_constraints_not_full_visible_count"
+                )
+            ),
+            "active_subject_code_constraints_status_counts": source_visibility.get(
+                "active_subject_code_constraints_status_counts"
+            ),
             "hypothesis_target_source_trace_count": source_visibility.get(
                 "hypothesis_target_source_trace_count"
             ),
