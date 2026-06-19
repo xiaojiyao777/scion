@@ -2880,8 +2880,21 @@ def _write_cvrp_large_twoopt_manifest(
 ) -> None:
     research_focus = {
         "measurement_opportunity_diagnostics": {
+            "schema_version": "cvrp_measurement_opportunity_handoff.v1",
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
             "screening_mde_at_power_80": 9.9,
             "practical_screen_delta": 2.0,
+            "source": "problem_v1.measurement.calibration_ref",
+            "measurement_readiness": {
+                "status": "ready",
+                "reason_code": "ok",
+            },
+            "calibration": {
+                "schema": "scion.aa_noise_floor.v1",
+                "ref": "formal/calibration/aa_noise_floor.json",
+                "decision_features_excluded": True,
+            },
             "reason_codes": [
                 "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
                 "TRAJECTORY_DIVERGENT_LOW_SNR",
@@ -2893,6 +2906,7 @@ def _write_cvrp_large_twoopt_manifest(
             "bounded_local_search_variant",
             "construction_seed_portfolio",
             "destroy_repair_selection",
+            "acceptance_or_adaptive_weighting",
         ],
         "default_avoid_directions": [
             "broad VNS removal",

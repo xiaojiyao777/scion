@@ -1507,6 +1507,16 @@ def _cvrp_research_focus() -> dict[str, object]:
             "decision_features_excluded": True,
             "practical_screen_delta": 2.0,
             "screening_mde_at_power_80": 9.9,
+            "source": "problem_v1.measurement.calibration_ref",
+            "measurement_readiness": {
+                "status": "ready",
+                "reason_code": "ok",
+            },
+            "calibration": {
+                "schema": "scion.aa_noise_floor.v1",
+                "ref": "formal/calibration/aa_noise_floor.json",
+                "decision_features_excluded": True,
+            },
             "reason_codes": [
                 "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
                 "TRAJECTORY_DIVERGENT_LOW_SNR",
