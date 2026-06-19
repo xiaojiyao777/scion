@@ -60,6 +60,10 @@ Framework:
   incomplete handoff, launch-only state, infra-only state, or no protocol
   evidence. Valid negative conclusions, such as quality-blocked proposals or
   CVRP without a large two-opt mechanism signal, remain analysis-ready.
+- Warehouse/CVRP postrun readiness also requires current-run
+  prompt/source-visibility trace accounting in the analysis brief; otherwise
+  branch transfer and source grounding are not auditable enough for delegated
+  current-run review.
 - Launchers run postrun readiness JSON generation with
   `--require-current-run-ready`, so `POSTRUN_READINESS_EXIT_STATUS` now records
   whether delegated current-run analysis is actually ready.
@@ -179,6 +183,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-protocol-signal-postrun-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-continuity-substance-postrun-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-readiness-blocking-summary-gaps-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-postrun-readiness-prompt-source-visibility-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-readiness-checker-20260619.md`,

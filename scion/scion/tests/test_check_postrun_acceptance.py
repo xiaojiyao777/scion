@@ -120,6 +120,7 @@ def test_postrun_acceptance_readiness_requires_expected_problem_summary(
     brief_path = _latest_analysis_brief_path(run_root)
     brief = json.loads(brief_path.read_text(encoding="utf-8"))
     brief["prepared_run_contract"]["problem_family"] = "cvrp"
+    _add_prompt_source_visibility_summary(brief)
     brief.pop("cvrp_large_twoopt_summary", None)
     brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -160,16 +161,65 @@ def test_postrun_acceptance_readiness_accepts_actionable_problem_summary(
         "problem_family": "warehouse_delivery",
         "review_axes_actionability": "actionable_current_run_evidence_present",
     }
+    _add_prompt_source_visibility_summary(brief)
     brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
 
     readiness = check_tool.build_readiness(run_root)
     problem_check = readiness["checks"]["problem_summary_actionability"]
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
 
     assert readiness["current_run_analysis_ready"] is True
     assert problem_check["required"] is True
     assert problem_check["status"] == "ok"
     assert problem_check["detail"][0]["summary"] == "warehouse_followup_summary"
     assert problem_check["detail"][0]["blocking_evidence_gaps"] == []
+    assert prompt_check["required"] is True
+    assert prompt_check["status"] == "ok"
+
+
+def test_postrun_acceptance_readiness_rejects_missing_prompt_source_visibility(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-missing-prompts")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "plateau_review_ready_current_run_evidence",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert prompt_check["required"] is True
+    assert prompt_check["status"] == "failed"
+    assert "prompt_context_visibility_summary_unavailable" in prompt_check["detail"][
+        "failures"
+    ]
+    assert "prompt_context_trace_accounting_missing" in prompt_check["detail"][
+        "failures"
+    ]
+    assert "prompt_source_visibility_trace_accounting_missing" in prompt_check[
+        "detail"
+    ]["failures"]
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
 
 
 def test_postrun_acceptance_readiness_rejects_blocking_problem_summary_gaps(
@@ -197,14 +247,17 @@ def test_postrun_acceptance_readiness_rejects_blocking_problem_summary_gaps(
         "problem_family": "warehouse_delivery",
         "review_axes_actionability": "actionable_current_run_evidence_present",
     }
+    _add_prompt_source_visibility_summary(brief)
     brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
 
     readiness = check_tool.build_readiness(run_root)
     problem_check = readiness["checks"]["problem_summary_actionability"]
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
 
     assert readiness["current_run_analysis_ready"] is False
     assert problem_check["required"] is True
     assert problem_check["status"] == "failed"
+    assert prompt_check["status"] == "ok"
     assert problem_check["detail"][0]["blocking_evidence_gaps"] == [
         "missing_runtime_feedback_summary"
     ]
@@ -240,15 +293,19 @@ def test_postrun_acceptance_readiness_accepts_nonblocking_problem_summary_gaps(
         "problem_family": "cvrp",
         "review_axes_actionability": "actionable_current_run_evidence_present",
     }
+    _add_prompt_source_visibility_summary(brief)
     brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
 
     readiness = check_tool.build_readiness(run_root)
     problem_check = readiness["checks"]["problem_summary_actionability"]
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
 
     assert readiness["current_run_analysis_ready"] is True
     assert problem_check["required"] is True
     assert problem_check["status"] == "ok"
     assert problem_check["detail"][0]["blocking_evidence_gaps"] == []
+    assert prompt_check["required"] is True
+    assert prompt_check["status"] == "ok"
 
 
 def test_postrun_acceptance_readiness_rejects_missing_bundle(
@@ -351,6 +408,21 @@ def _latest_analysis_brief_path(run_root: Path) -> Path:
     paths = sorted((run_root / "postrun_acceptance" / "analysis_brief").glob("*.json"))
     assert paths
     return paths[-1]
+
+
+def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
+    brief["prompt_context_visibility_summary"] = {
+        "available": True,
+        "current_run_evidence": True,
+        "aggregate": {
+            "trace_count": 2,
+            "source_visibility": {
+                "trace_count": 2,
+                "code_trace_count": 1,
+                "hypothesis_target_source_trace_count": 1,
+            },
+        },
+    }
 
 
 def _write_json(path: Path, value: object) -> None:

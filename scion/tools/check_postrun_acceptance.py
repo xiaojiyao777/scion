@@ -175,6 +175,16 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         problem_detail,
         required=problem_status != "skipped",
     )
+    prompt_status, prompt_detail = _prompt_source_visibility_actionability(
+        analysis_brief,
+        inventory,
+    )
+    add_check(
+        "prompt_source_visibility_actionability",
+        prompt_status,
+        prompt_detail,
+        required=prompt_status != "skipped",
+    )
     add_check(
         "postrun_report_status_marker",
         "ok"
@@ -375,6 +385,45 @@ def _summary_actionability_status(summaries: list[dict[str, Any]]) -> str:
         for item in summaries
     )
     return "ok" if ok else "failed"
+
+
+def _prompt_source_visibility_actionability(
+    brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> tuple[str, Any]:
+    problem_family = _problem_family(brief, inventory)
+    if problem_family not in {"warehouse_delivery", "cvrp"}:
+        return "skipped", {
+            "reason": "not_problem_specific_agentic_summary",
+            "problem_family": problem_family,
+        }
+    summary = _mapping_or_empty(brief.get("prompt_context_visibility_summary"))
+    aggregate = _mapping_or_empty(summary.get("aggregate"))
+    source_visibility = _mapping_or_empty(aggregate.get("source_visibility"))
+    failures: list[str] = []
+    if summary.get("current_run_evidence") is not True:
+        failures.append("prompt_context_not_current_run_evidence")
+    if summary.get("available") is not True:
+        failures.append("prompt_context_visibility_summary_unavailable")
+    if _int_or_zero(aggregate.get("trace_count")) <= 0:
+        failures.append("prompt_context_trace_accounting_missing")
+    if _int_or_zero(source_visibility.get("trace_count")) <= 0:
+        failures.append("prompt_source_visibility_trace_accounting_missing")
+    return (
+        "ok" if not failures else "failed",
+        {
+            "problem_family": problem_family,
+            "failures": failures,
+            "current_run_evidence": summary.get("current_run_evidence"),
+            "available": summary.get("available"),
+            "trace_count": aggregate.get("trace_count"),
+            "source_visibility_trace_count": source_visibility.get("trace_count"),
+            "code_trace_count": source_visibility.get("code_trace_count"),
+            "hypothesis_target_source_trace_count": source_visibility.get(
+                "hypothesis_target_source_trace_count"
+            ),
+        },
+    )
 
 
 def _blocking_problem_summary_gaps(evidence_gaps: list[str]) -> list[str]:
