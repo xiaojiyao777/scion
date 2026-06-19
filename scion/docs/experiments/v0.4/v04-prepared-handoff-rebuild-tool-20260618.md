@@ -31,14 +31,14 @@ launching a campaign or mutating runtime state.
 
 ## Current Active Root Refresh
 
-Current rebuild verification checkout: `67f4da9`.
+Current rebuild verification checkout: `529b9ef`.
 
 Refreshed on WSL:
 
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-67f4da9-1r-gpt55-20260619T002422Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-529b9ef-1r-gpt55-20260619T003637Z-claw`
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-67f4da9-6r-gpt55-20260619T002422Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-529b9ef-6r-gpt55-20260619T003636Z-claw`
 
 Both rebuild manifests report:
 
@@ -48,13 +48,12 @@ Both rebuild manifests report:
 - `promotion_state_mutated=false`
 - `decision_features_excluded=true`
 
-Prepared manifest commits are root-specific. The current CVRP root was
-regenerated from the bounded large-twoopt checkout; the warehouse root was
-regenerated after runtime guard path changes so the manifest and current
-handoff tooling agree:
+Prepared manifest commits are root-specific. The current CVRP and warehouse
+roots were regenerated after the CVRP large two-opt postrun summary guard
+changed a runtime guard path so the manifest and current handoff tooling agree:
 
-- CVRP: `prepared_manifest_commit=67f4da9`
-- Warehouse: `prepared_manifest_commit=67f4da9`
+- CVRP: `prepared_manifest_commit=529b9ef`
+- Warehouse: `prepared_manifest_commit=529b9ef`
 
 ## Problem-Specific Coverage
 

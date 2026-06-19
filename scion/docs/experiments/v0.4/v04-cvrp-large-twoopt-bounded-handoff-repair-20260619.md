@@ -148,9 +148,9 @@ accepting the unbounded fallback diff.
 
 Later current root:
 
-- The `dc83d83` root was superseded after the warehouse plateau-review input
-  guard changed a shared runtime guard path.
+- The `dc83d83` and `67f4da9` roots were superseded after later runtime guard
+  path changes.
 - Current CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-67f4da9-1r-gpt55-20260619T002422Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-529b9ef-1r-gpt55-20260619T003637Z-claw`.
 - Current refresh report:
-  `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-warehouse-plateau-guard-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-cvrp-twoopt-summary-guard-20260619.md`.
