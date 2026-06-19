@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sqlite3
 import subprocess
 from collections import Counter, defaultdict
@@ -873,7 +874,7 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
     )
     add_check(
         "command_disable_early_stop",
-        "--disable-early-stop" in command,
+        command_has_shell_flag(command, "--disable-early-stop"),
         command,
     )
     missing_config_paths = _missing_manifest_config_paths(
@@ -1149,6 +1150,16 @@ def _add_warehouse_followup_handoff_checks(
 
 def _positive_number(value: Any) -> bool:
     return not isinstance(value, bool) and isinstance(value, (float, int)) and value > 0
+
+
+def command_has_shell_flag(command: Any, flag: str) -> bool:
+    if not isinstance(command, str):
+        return False
+    try:
+        tokens = shlex.split(command, comments=False, posix=True)
+    except ValueError:
+        return False
+    return flag in tokens
 
 
 def _mapping_or_empty(value: Any) -> dict[str, Any]:

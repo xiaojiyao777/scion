@@ -734,6 +734,22 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         "detail": False,
     }
 
+    manifest["execution"]["disable_early_stop"] = True
+    manifest["command"] = manifest["command"].replace(
+        "--disable-early-stop",
+        "--disable-early-stopper",
+    )
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    failed_contract = inventory_tool.build_inventory(run_root)["launcher"][
+        "prepared_run_contract"
+    ]
+    assert failed_contract["contract_complete"] is False
+    assert failed_contract["checks"]["command_disable_early_stop"]["passed"] is False
+
 
 def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
     tmp_path: Path,

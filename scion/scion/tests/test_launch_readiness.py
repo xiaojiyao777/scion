@@ -884,6 +884,55 @@ def test_launch_readiness_rejects_run_script_without_disable_early_stop(
     } in early_stop_check["detail"]["failures"]
 
 
+def test_launch_readiness_rejects_manifest_disable_early_stop_prefix_only(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    manifest_path = run_root / "prepared_run_manifest.v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["command"] = manifest["command"].replace(
+        "--disable-early-stop",
+        "--disable-early-stopper",
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    early_stop_check = report["checks"]["run_script_no_early_stop_enforced"]
+    assert early_stop_check["status"] == "failed"
+    assert {
+        "reason": "manifest_command_missing_disable_early_stop",
+        "manifest_path": str(manifest_path),
+    } in early_stop_check["detail"]["failures"]
+
+
+def test_launch_readiness_rejects_run_script_disable_early_stop_prefix_only(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            " --disable-early-stop\nSTATUS=$?",
+            " --disable-early-stopper\nSTATUS=$?",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    early_stop_check = report["checks"]["run_script_no_early_stop_enforced"]
+    assert early_stop_check["status"] == "failed"
+    assert {
+        "reason": "run_script_campaign_command_missing_disable_early_stop",
+        "run_script": str(run_sh),
+    } in early_stop_check["detail"]["failures"]
+
+
 def test_launch_readiness_rejects_data_root_failure_without_postrun_call(
     tmp_path: Path,
 ) -> None:

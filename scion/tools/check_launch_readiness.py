@@ -16,7 +16,7 @@ TOOLS_DIR = Path(__file__).resolve().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from postrun_artifact_inventory import build_inventory  # noqa: E402
+from postrun_artifact_inventory import build_inventory, command_has_shell_flag  # noqa: E402
 
 
 SCHEMA_VERSION = "scion.launch_readiness.v1"
@@ -1120,9 +1120,12 @@ def _run_script_no_early_stop_enforced(
     )
     command_has_flag = (
         isinstance(manifest_command, str)
-        and "--disable-early-stop" in manifest_command
+        and command_has_shell_flag(manifest_command, "--disable-early-stop")
     )
-    run_script_has_flag = "--disable-early-stop" in campaign_command_block
+    run_script_has_flag = command_has_shell_flag(
+        campaign_command_block,
+        "--disable-early-stop",
+    )
 
     if env_disable_early_stop != "1":
         failures.append(
@@ -1172,7 +1175,10 @@ def _prepared_manifest_from_contract(root: Path, prepared_contract: Any) -> dict
     manifest_path = manifest.get("manifest_path")
     path = Path(manifest_path) if manifest_path else root / "prepared_run_manifest.v1.json"
     payload = _read_json(path)
-    return payload if isinstance(payload, dict) else {}
+    if not isinstance(payload, dict):
+        return {}
+    payload.setdefault("manifest_path", str(path))
+    return payload
 
 
 def _shell_assignment_value(text: str, key: str) -> str | None:
