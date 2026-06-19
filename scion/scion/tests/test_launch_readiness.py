@@ -33,6 +33,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert (
         report["checks"]["runtime_guard_paths_cover_launch_tools"]["status"] == "ok"
     )
+    assert report["checks"]["run_script_runtime_guard_enforced"]["status"] == "ok"
     problem_specific = report["checks"]["problem_specific_prepared_handoff"]
     assert problem_specific["status"] == "ok"
     assert problem_specific["required"] is True
@@ -187,6 +188,54 @@ def test_launch_readiness_rejects_runtime_guard_without_launch_tools(
     assert report["static_ready"] is False
     assert guard_check["status"] == "failed"
     assert guard_check["detail"]["missing_required_paths"] == ["scion/tools"]
+
+
+def test_launch_readiness_rejects_run_script_without_runtime_guard(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            "GIT_RUNTIME_DIRTY",
+            "GIT_RUNTIME_CLEAN",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    guard_check = report["checks"]["run_script_runtime_guard_enforced"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert guard_check["status"] == "failed"
+    assert "dirty_failure_marker" in guard_check["detail"]["missing_markers"]
+
+
+def test_launch_readiness_rejects_run_script_guard_after_campaign_command(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            "GIT_COMMIT_MISMATCH",
+            "GIT_COMMIT_SKIP",
+            1,
+        )
+        + "\n# Late marker should not satisfy launch readiness: GIT_COMMIT_MISMATCH\n",
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    guard_check = report["checks"]["run_script_runtime_guard_enforced"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert guard_check["status"] == "failed"
+    assert guard_check["detail"]["markers_after_campaign_command"] == [
+        "commit_mismatch_failure_marker"
+    ]
 
 
 def test_launch_readiness_rejects_missing_prepared_analysis_brief(
@@ -669,8 +718,13 @@ def _write_prepared_root(
         f"""#!/usr/bin/env bash
 set -uo pipefail
 RUN_ROOT={run_root}
+REPO_ROOT={SCION_DIR.parent}
+SCION_DIR={SCION_DIR}
+PY={sys.executable}
+GIT_COMMIT={_git_head_short()}
+GIT_RUNTIME_GUARD_PATHS={json.dumps(runtime_guard_paths)}
 PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}
-export RUN_ROOT PREPARED_RUN_MANIFEST
+export RUN_ROOT REPO_ROOT SCION_DIR PY GIT_COMMIT GIT_RUNTIME_GUARD_PATHS PREPARED_RUN_MANIFEST
 write_postrun_acceptance_reports() {{
   POSTRUN_READINESS_STATUS=0
   "$PY" "$SCION_DIR/tools/check_postrun_acceptance.py" "$RUN_ROOT" \
@@ -680,6 +734,21 @@ write_postrun_acceptance_reports() {{
     || POSTRUN_READINESS_STATUS=$?
   echo "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS" >> "$RUN_ROOT/run.log"
 }}
+read -r -a _GIT_RUNTIME_GUARD_PATHS <<< "$GIT_RUNTIME_GUARD_PATHS"
+if [[ -n "$(git -C "$REPO_ROOT" status --porcelain -- "${{_GIT_RUNTIME_GUARD_PATHS[@]}}")" ]]; then
+  echo "GIT_RUNTIME_DIRTY:$GIT_RUNTIME_GUARD_PATHS"
+  exit 64
+fi
+_ACTUAL_GIT_COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
+if [[ "$_ACTUAL_GIT_COMMIT" != "$GIT_COMMIT" ]]; then
+  if git -C "$REPO_ROOT" diff --quiet "$GIT_COMMIT" HEAD -- "${{_GIT_RUNTIME_GUARD_PATHS[@]}}"; then
+    echo "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED:expected=$GIT_COMMIT actual=$_ACTUAL_GIT_COMMIT paths=$GIT_RUNTIME_GUARD_PATHS"
+  else
+    echo "GIT_COMMIT_MISMATCH:expected=$GIT_COMMIT actual=$_ACTUAL_GIT_COMMIT paths=$GIT_RUNTIME_GUARD_PATHS"
+    exit 64
+  fi
+fi
+unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS
 if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
   PREFLIGHT_STATUS=64
   if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then

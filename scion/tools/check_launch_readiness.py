@@ -53,6 +53,35 @@ DEFERRED_REVIEW_AXES_ACTIONABILITY = (
     "not_actionable_before_launch_current_run_evidence_required"
 )
 REQUIRED_RUNTIME_GUARD_PATHS = ("scion/tools",)
+RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER = "-m scion.cli.main run"
+RUN_SCRIPT_RUNTIME_GUARD_MARKERS = (
+    (
+        "guard_pathspec_array",
+        'read -r -a _GIT_RUNTIME_GUARD_PATHS <<< "$GIT_RUNTIME_GUARD_PATHS"',
+    ),
+    (
+        "dirty_status_check",
+        'git -C "$REPO_ROOT" status --porcelain -- "${_GIT_RUNTIME_GUARD_PATHS[@]}"',
+    ),
+    ("dirty_failure_marker", "GIT_RUNTIME_DIRTY"),
+    (
+        "actual_commit_read",
+        'git -C "$REPO_ROOT" rev-parse --short HEAD',
+    ),
+    (
+        "commit_compare",
+        'if [[ "$_ACTUAL_GIT_COMMIT" != "$GIT_COMMIT" ]]; then',
+    ),
+    (
+        "runtime_path_diff_check",
+        'git -C "$REPO_ROOT" diff --quiet "$GIT_COMMIT" HEAD -- "${_GIT_RUNTIME_GUARD_PATHS[@]}"',
+    ),
+    (
+        "doc_only_mismatch_allowance_marker",
+        "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED",
+    ),
+    ("commit_mismatch_failure_marker", "GIT_COMMIT_MISMATCH"),
+)
 
 
 def build_readiness(
@@ -172,6 +201,10 @@ def build_readiness(
     add_check(
         "run_script_syntax",
         *_run_script_syntax(run_sh),
+    )
+    add_check(
+        "run_script_runtime_guard_enforced",
+        *_run_script_runtime_guard_enforced(run_sh),
     )
     add_check(
         "run_script_preflight_failure_reports",
@@ -471,6 +504,70 @@ def _run_script_syntax(run_sh: Path) -> tuple[str, Any]:
     )
     detail = (result.stderr or result.stdout or "").strip()
     return ("ok" if result.returncode == 0 else "failed"), detail
+
+
+def _run_script_runtime_guard_enforced(run_sh: Path) -> tuple[str, Any]:
+    if not run_sh.is_file():
+        return "failed", {"run_script": str(run_sh), "reason": "missing_run_script"}
+    try:
+        text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        return (
+            "failed",
+            {
+                "run_script": str(run_sh),
+                "reason": "unable_to_read_run_script",
+                "error": str(exc),
+            },
+        )
+
+    marker_positions: dict[str, int] = {}
+    missing_markers: list[str] = []
+    for name, marker in RUN_SCRIPT_RUNTIME_GUARD_MARKERS:
+        position = text.find(marker)
+        if position < 0:
+            missing_markers.append(name)
+        else:
+            marker_positions[name] = position
+
+    campaign_position = text.find(RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER)
+    markers_after_campaign = [
+        name
+        for name, position in sorted(marker_positions.items())
+        if campaign_position >= 0 and position > campaign_position
+    ]
+    failures: list[dict[str, Any]] = []
+    if missing_markers:
+        failures.append(
+            {
+                "reason": "missing_runtime_guard_markers",
+                "markers": missing_markers,
+            }
+        )
+    if campaign_position < 0:
+        failures.append(
+            {
+                "reason": "missing_campaign_command_marker",
+                "marker": RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER,
+            }
+        )
+    if markers_after_campaign:
+        failures.append(
+            {
+                "reason": "runtime_guard_after_campaign_command",
+                "markers": markers_after_campaign,
+            }
+        )
+
+    detail = {
+        "run_script": str(run_sh),
+        "campaign_command_marker": RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER,
+        "required_markers": [name for name, _ in RUN_SCRIPT_RUNTIME_GUARD_MARKERS],
+        "missing_markers": missing_markers,
+        "markers_after_campaign_command": markers_after_campaign,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
 
 
 def _run_sh_contains_preflight_failure_report_path(run_sh: Path) -> bool:
