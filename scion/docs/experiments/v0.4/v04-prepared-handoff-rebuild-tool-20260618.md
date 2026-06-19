@@ -31,14 +31,14 @@ launching a campaign or mutating runtime state.
 
 ## Current Active Root Refresh
 
-Current rebuild verification checkout: `270d21c`.
+Current rebuild verification checkout: `cff825a`.
 
 Refreshed on WSL:
 
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-270d21c-1r-gpt55-20260619T012732Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-cff825a-1r-gpt55-20260619T013400Z-claw`
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-270d21c-6r-gpt55-20260619T012731Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-cff825a-6r-gpt55-20260619T013400Z-claw`
 
 Both rebuild manifests report:
 
@@ -49,11 +49,11 @@ Both rebuild manifests report:
 - `decision_features_excluded=true`
 
 Prepared manifest commits are root-specific. The current CVRP and warehouse
-roots were regenerated after the postrun handoff review-ready guard changed a
-runtime guard path so the manifest and current handoff tooling agree:
+roots were regenerated after later runtime-guard and prepared-only review
+guidance changes so the manifest and current handoff tooling agree:
 
-- CVRP: `prepared_manifest_commit=270d21c`
-- Warehouse: `prepared_manifest_commit=270d21c`
+- CVRP: `prepared_manifest_commit=cff825a`
+- Warehouse: `prepared_manifest_commit=cff825a`
 
 ## Problem-Specific Coverage
 

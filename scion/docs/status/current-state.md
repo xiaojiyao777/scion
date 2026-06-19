@@ -23,10 +23,11 @@ instead of appending history. Detailed commands, counters, and caveats belong in
 Framework:
 
 - The v0.4 reporting, launcher, prepared-root, postrun-acceptance, runtime
-  semantics, low-SNR continuation, and prompt-context handoff repairs are ready
-  for focused follow-up. These remain report/control-plane or problem-owned
-  proposal signals; they do not change Decision, `DecisionFeatures`, promotion,
-  scheduler state, or problem solver semantics.
+  semantics, low-SNR continuation, prompt-context handoff, and delegated
+  analysis repairs are ready for focused follow-up. These remain
+  report/control-plane or problem-owned proposal signals; they do not change
+  Decision, `DecisionFeatures`, promotion, scheduler state, or problem solver
+  semantics.
 - Prepared handoff bundles include report-only analysis brief, artifact
   inventory, launch-readiness, and `prompt_context_readiness` families. Static
   readiness now checks artifact identity, launch markers, problem-specific
@@ -34,6 +35,9 @@ Framework:
   Launch-readiness reports now expose the problem-specific prepared handoff
   checks directly, instead of hiding them behind only
   `prepared_contract_complete`.
+- Prepared-only analysis briefs now use launch/readiness/handoff questions,
+  omit current-run branch/LLM/Protocol guidance, and defer specialist
+  warehouse/CVRP review axes until post-launch current-run evidence exists.
 - The remaining v0.4 acceptance question is empirical: prove that the repaired
   framework supports effective agent research, especially warehouse follow-on
   improvement and CVRP/VRP solver-design progress.
@@ -44,15 +48,14 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `270d21c`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-270d21c-6r-gpt55-20260619T012731Z-claw`.
+- Current prepared root, prepared from WSL checkout `cff825a`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-cff825a-6r-gpt55-20260619T013400Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
-  Its prepared analysis brief now carries only the warehouse-specific delegated
-  review question, not the CVRP large-twoopt question. Because the root is
-  prepare-only, required answers now focus on launch/readiness/handoff, not
-  research-quality or plateau conclusions; the minimum delegated-analysis
-  guidance is likewise prepare-only.
+  Because the root is prepare-only, required answers focus on
+  launch/readiness/handoff rather than research-quality or plateau conclusions;
+  the warehouse specialist review axes are marked deferred until post-launch
+  current-run evidence exists.
 
 CVRP/VRP:
 
@@ -65,22 +68,16 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `270d21c`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-270d21c-1r-gpt55-20260619T012732Z-claw`.
+- Current prepared root, prepared from WSL checkout `cff825a`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-cff825a-1r-gpt55-20260619T013400Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
   preserve feasibility/route-count evidence, and require pair-level objective,
-  feasibility, route-count, and wall-clock evidence. CVRP postrun briefs now
-  also expose `cvrp_large_twoopt_summary`, so delegated review can distinguish
-  prepared-only roots, missing review inputs, incomplete handoff, missing two-opt
-  mechanism signal, and bounded-twoopt review-ready evidence. Required postrun
-  review questions explicitly ask reviewers to check incomplete handoff before
-  accepting review-ready interpretations. Its prepared analysis brief now
-  carries only the CVRP-specific delegated review question, not the warehouse
-  plateau question. Because the root is prepare-only, required answers now focus
-  on launch/readiness/handoff, not research-quality or bounded-twoopt
-  conclusions; the minimum delegated-analysis guidance is likewise prepare-only.
+  feasibility, route-count, and wall-clock evidence. Because the root is
+  prepare-only, required answers focus on launch/readiness/handoff rather than
+  research-quality or bounded-twoopt conclusions; the CVRP specialist review
+  axes are marked deferred until post-launch current-run evidence exists.
 
 Infrastructure:
 
@@ -129,13 +126,14 @@ Infrastructure:
 - Detailed repair, launch, and postrun evidence:
   `scion/docs/experiments/v0.4/`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-prepared-only-minimum-analysis-guidance-20260619.md`.
-  It supersedes older prepared-root pointers after prepared-only markdown
-  guidance was separated from current-run postrun analysis instructions.
+  `scion/docs/experiments/v0.4/v04-prepared-only-specialist-axes-deferred-20260619.md`.
+  It supersedes older prepared-root pointers after prepared-only specialist
+  axes were deferred until current-run evidence exists.
 - Current repair context:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`,
-  and `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`,
+  and `scion/docs/experiments/v0.4/v04-prepared-only-minimum-analysis-guidance-20260619.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/RSYNC_PATHS.md`.

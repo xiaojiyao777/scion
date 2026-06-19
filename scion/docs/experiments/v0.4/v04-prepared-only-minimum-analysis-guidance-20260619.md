@@ -28,7 +28,7 @@ current-run analysis checklist below the prepared-only stop instruction.
   scheduler, promotion, proposal selection, or problem solver semantics.
 - It does not add budgets, truncation, compression, or generic gate tightening.
 
-## Current Prepared Roots
+## Prepared Roots For This Repair
 
 WSL checkout: `270d21c`
 
@@ -104,6 +104,15 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 ## Acceptance
 
-Accepted as the current prepared-root review and launch-readiness refresh. Once
-`gpt-5.5` auth is restored and strict launch readiness reports
-`launch_ready=true`, these are the current warehouse and CVRP roots to launch.
+Accepted as the prepared-only markdown guidance repair.
+
+Later current root:
+
+- The `270d21c` roots were superseded after prepared-only specialist review
+  axes were deferred until current-run evidence exists.
+- Current warehouse root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-cff825a-6r-gpt55-20260619T013400Z-claw`.
+- Current CVRP root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-cff825a-1r-gpt55-20260619T013400Z-claw`.
+- Current refresh report:
+  `scion/docs/experiments/v0.4/v04-prepared-only-specialist-axes-deferred-20260619.md`.

@@ -97,9 +97,9 @@ warehouse root to launch for the simpler continuous-improvement proof.
 Later current root:
 
 - The `35dd723`, `67f4da9`, `529b9ef`, `a57fd07`, `8c68347`, `016bb39`,
-  `44f78e9`, and `9a343e9` roots were superseded after later runtime guard path
-  changes.
+  `44f78e9`, `9a343e9`, and `270d21c` roots were superseded after later
+  runtime guard path or prepared-only review guidance changes.
 - Current warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-270d21c-6r-gpt55-20260619T012731Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-cff825a-6r-gpt55-20260619T013400Z-claw`.
 - Current refresh report:
-  `scion/docs/experiments/v0.4/v04-prepared-only-minimum-analysis-guidance-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-prepared-only-specialist-axes-deferred-20260619.md`.
