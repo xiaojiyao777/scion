@@ -518,14 +518,16 @@ Current checkpoint:
   needed for the next postrun review. Warehouse postrun analysis briefs now
   also include `warehouse_followup_summary`, so delegated review can separate
   prepared-only launch roots, quality-blocked proposal behavior,
-  protocol-evaluated evidence, and plateau-review-ready evidence before making
-  any stagnation conclusion.
+  protocol-evaluated evidence with missing review inputs, and
+  plateau-review-ready evidence before making any stagnation conclusion.
   Report:
   `scion/docs/experiments/v0.4/v04-warehouse-followup-handoff-coverage-repair-20260618.md`.
   Current warehouse follow-up analysis-brief repair:
   `scion/docs/experiments/v0.4/v04-warehouse-followup-analysis-brief-repair-20260618.md`.
   Current warehouse plateau-review regression coverage:
   `scion/docs/experiments/v0.4/v04-warehouse-followup-plateau-review-coverage-20260618.md`.
+  Current warehouse plateau-review input guard:
+  `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`.
   Current launch-prepared warehouse root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-35dd723-6r-gpt55-20260619T001002Z-claw`.
 - Future WSL campaign launches must set

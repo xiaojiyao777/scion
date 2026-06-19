@@ -89,8 +89,9 @@ Infrastructure:
 2. Once auth is stable, run the warehouse `v2` follow-up as the simpler
    continuous-improvement proof, then run the CVRP large-two-opt follow-up.
 3. For warehouse postrun review, distinguish quality-blocked proposals from
-   protocol-evaluated no-effect evidence and do not call plateau before current
-   run evidence exists.
+   protocol-evaluated no-effect evidence and require measurement-effect,
+   runtime-feedback, and research-continuity summaries before calling evidence
+   plateau-review-ready.
 4. For CVRP postrun review, inspect target intent, bounded two-opt mechanism
    design, branch-lesson transfer, effect-vs-MDE, runtime budget behavior,
    source visibility, and research-efficiency artifacts.
@@ -116,6 +117,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-launch-focus-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-v2-followup-root-refresh-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`,
   and `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-contract-coverage-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`

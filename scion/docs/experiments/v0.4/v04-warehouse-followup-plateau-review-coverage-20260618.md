@@ -11,12 +11,15 @@ contract needs regression coverage for the distinction between:
 - prepared-only roots that cannot support a plateau conclusion;
 - proposal quality blocks that cannot support a plateau conclusion;
 - screened candidates that have not reached protocol evaluation; and
-- protocol-evaluated candidates that are ready for plateau-vs-follow-up review.
+- protocol-evaluated candidates whose measurement/runtime/continuity review
+  inputs determine whether they are ready for plateau-vs-follow-up review.
 
 ## Change
 
 - Added postrun analysis brief coverage for
   `protocol_evaluated_plateau_review_ready`.
+- Added postrun analysis brief coverage for
+  `protocol_evaluated_review_inputs_incomplete`.
 - Added postrun analysis brief coverage for
   `screened_without_protocol_evaluation`.
 - Refreshed the CVRP prepared-handoff rebuild test fixture so its
@@ -51,5 +54,6 @@ PYTHONPATH=scion pytest -q \
 Accepted as a warehouse follow-up auditability repair. Once `gpt-5.5` auth is
 restored, postrun review has regression coverage for the key warehouse
 continuous-improvement question: protocol-evaluated evidence can enter plateau
-review, while prepared-only, quality-blocked, and screened-only states cannot be
-treated as plateau conclusions.
+review only when measurement, runtime, and research-continuity review inputs are
+also present, while prepared-only, quality-blocked, screened-only, and
+review-input-incomplete states cannot be treated as plateau conclusions.

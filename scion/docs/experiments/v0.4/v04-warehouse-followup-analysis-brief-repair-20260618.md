@@ -21,6 +21,7 @@ evaluation, protocol-evaluated, or ready for plateau review.
   `prepared_only_launch_required`,
   `quality_blocked_no_protocol_plateau_conclusion`,
   `screened_without_protocol_evaluation`,
+  `protocol_evaluated_review_inputs_incomplete`,
   `protocol_evaluated_plateau_review_ready`, or
   `insufficient_current_run_evidence`.
 - Markdown briefs now include a `Warehouse Follow-up Summary` section with
@@ -57,3 +58,12 @@ launch readiness, quality-blocked proposal behavior, and protocol-evaluated
 stagnation evidence before any reviewer can call the post-v2 behavior a real
 plateau. Because `postrun_analysis_brief.py` is part of the prepared-root
 runtime guard set, existing prepared roots must be refreshed after this commit.
+
+2026-06-19 tightening:
+
+- `protocol_evaluated_plateau_review_ready` now also requires measurement
+  effect, runtime feedback, and research-continuity summaries to be available.
+- Protocol-evaluated warehouse runs that lack those review inputs are reported
+  as `protocol_evaluated_review_inputs_incomplete`.
+- Follow-up report:
+  `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`.

@@ -3400,6 +3400,9 @@ def _warehouse_followup_summary(
         protocol_evaluated_candidates=protocol_evaluated_candidates,
         formal_screened_candidates=formal_screened_candidates,
         quality_block_signal=quality_block_signal,
+        measurement_available=measurement_effect_summary.get("available") is True,
+        runtime_available=runtime_feedback_summary.get("available") is True,
+        continuity_available=research_continuity_summary.get("available") is True,
     )
     return {
         **base,
@@ -3449,10 +3452,19 @@ def _warehouse_followup_interpretation(
     protocol_evaluated_candidates: int,
     formal_screened_candidates: int,
     quality_block_signal: int,
+    measurement_available: bool,
+    runtime_available: bool,
+    continuity_available: bool,
 ) -> str:
     if not current_run_evidence:
         return "prepared_only_launch_required"
     if protocol_evaluated_candidates > 0:
+        if not (
+            measurement_available
+            and runtime_available
+            and continuity_available
+        ):
+            return "protocol_evaluated_review_inputs_incomplete"
         return "protocol_evaluated_plateau_review_ready"
     if quality_block_signal > 0:
         return "quality_blocked_no_protocol_plateau_conclusion"
