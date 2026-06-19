@@ -91,6 +91,9 @@ Framework:
   evidence. Valid negative conclusions, such as quality-blocked proposals or
   CVRP without a qualifying large two-opt mechanism signal, remain
   analysis-ready.
+- Postrun readiness also rejects stale problem-specific summary contracts:
+  `warehouse_followup_summary` and `cvrp_large_twoopt_summary` must use the
+  current schema and a current delegated-review interpretation.
 - Warehouse/CVRP postrun readiness also requires current-run
   prompt/source-visibility trace accounting in the analysis brief, including
   hypothesis target-source visibility; otherwise branch transfer and source
@@ -132,8 +135,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `ff93a65`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-drainstrict-6r-gpt55-20260619T062959Z-claw`.
+- Current prepared root, prepared from WSL checkout `a74264f`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-schemaguard-6r-gpt55-6r-gpt55-20260619T064539Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -159,8 +162,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `ff93a65`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-drainstrict-1r-gpt55-20260619T062959Z-claw`.
+- Current prepared root, prepared from WSL checkout `a74264f`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-schemaguard-1r-gpt55-1r-gpt55-20260619T064539Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -209,7 +212,7 @@ Infrastructure:
   including the manifest git commit. Later docs-only commits may make the
   checkout differ from a prepared manifest commit; readiness remains acceptable
   only when runtime guard paths are unchanged. Older prepared roots before the
-  drainstrict roots above are not current. Exact supersession details belong in
+  schemaguard roots above are not current. Exact supersession details belong in
   launch/readiness evidence docs, not this operational snapshot.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
