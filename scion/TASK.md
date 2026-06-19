@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated from runtime commit `79090dc6` and are static-ready. Launch readiness verifies proposal-attempt/proposal-quality headroom (`64`/`64`) across `launch.env`, manifest execution, manifest command, and `run.sh`, rejects dirty runtime-guard paths, rejects relative `SCION_DIR` launch paths, rejects CVRP/warehouse measurement handoffs that are not backed by problem-owned declaration/calibration source proof, and now rejects missing, empty, or stale active-subject code-constraint provider payload summaries. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated from runtime commit `e69d6e53` and are static-ready. Launch readiness verifies proposal-attempt/proposal-quality headroom (`64`/`64`) plus APS tool-loop headroom (`3600` sec, `240` steps, `200` tool calls, `2000000` observation chars) across `launch.env`, manifest execution, manifest command, and `run.sh`, rejects dirty runtime-guard paths, rejects relative `SCION_DIR` launch paths, rejects CVRP/warehouse measurement handoffs that are not backed by problem-owned declaration/calibration source proof, and rejects missing, empty, or stale active-subject code-constraint provider payload summaries. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -381,9 +381,9 @@ Current checkpoint:
   readiness command.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codepayload-79090dc6-6r-gpt55-20260619T194212Z-claw-6r-gpt55-20260619T194227Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-toolheadroom-e69d6e53-6r-gpt55-20260619T200840Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codepayload-79090dc6-1r-gpt55-20260619T194212Z-claw-1r-gpt55-20260619T194241Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-toolheadroom-e69d6e53-1r-gpt55-20260619T200841Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -424,8 +424,10 @@ Current checkpoint:
   `CMT2` and `CMT4`. The strict postrun rebuild order check confirms the
   rebuild command precedes the postrun readiness command and
   `POSTRUN_REPORTS_EXIT_STATUS` is emitted after the rebuild command. The roots
-  were prepared from WSL runtime commit `79090dc6` with explicit
-  proposal-attempt/proposal-quality-loop headroom (`64`/`64`). Current
+  were prepared from WSL runtime commit `e69d6e53` with explicit
+  proposal-attempt/proposal-quality-loop headroom (`64`/`64`) plus APS
+  tool-loop headroom: session timeout `3600`, max steps `240`, max tool calls
+  `200`, and max observation chars `2000000`. Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout
   absolute `SCION_DIR`/`PYTHONPATH`, no-early-stop launch semantics, executable
@@ -448,8 +450,8 @@ Current checkpoint:
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`. Latest strict
-  launch-readiness preflight reports auth pool `active=0`, `total=1`, and no
-  launch-usable account. Do not launch either root until
+  launch-readiness preflight reports auth pool `active=0`, `refreshing=1`,
+  `total=1`, and no launch-usable account. Do not launch either root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
 - Current postrun/delegated-review boundary: postrun readiness is report-only and
@@ -537,7 +539,7 @@ Current checkpoint:
   review can audit branch transfer and source grounding instead of inferring
   them from final status.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-launch-absolute-scion-path-readiness-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-aps-tool-loop-headroom-readiness-20260619.md`.
   Earlier run-script guard and proposal-headroom details remain in
   `scion/docs/experiments/v0.4/`; they are not the current prepared-root
   pointer.
