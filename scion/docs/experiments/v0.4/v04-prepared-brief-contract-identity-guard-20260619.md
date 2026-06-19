@@ -77,6 +77,14 @@ PYTHONPATH=scion pytest -q \
 # 73 passed
 ```
 
+## Supersession
+
+The `399db52` roots were later superseded after review-input boundary readiness
+changed `scion/tools/check_postrun_acceptance.py`, a guarded runtime path.
+
+Current refresh report:
+`scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-review-input-boundary-20260619.md`.
+
 WSL:
 
 ```bash
