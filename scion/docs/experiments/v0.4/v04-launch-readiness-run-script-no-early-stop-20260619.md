@@ -128,19 +128,31 @@ PYTHONPATH=scion pytest -q \
 # 107 passed
 ```
 
+Local checkout `73831fbc` and WSL checkout `1842e50`:
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_launch_readiness.py
+# 109 passed
+```
+
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL checkout `be9911a` because
+New prepare-only roots were generated from WSL checkout `1842e50` because
 `scion/tools/check_launch_readiness.py` is part of the guarded launch/readiness
 runtime surface.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execpreflight-be9911a-6r-gpt55-20260619T102840Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunexec-1842e50-6r-gpt55-20260619T103509Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execpreflight-be9911a-1r-gpt55-20260619T102856Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postrunexec-1842e50-1r-gpt55-20260619T103525Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -166,6 +178,8 @@ Strict WSL launch readiness for both roots exits `64` and reports:
 - `prompt_context_readiness_complete=ok`
 - `problem_specific_prepared_handoff=ok`
 - `postrun_families_complete=ok`
+- `run_script_strict_postrun_readiness=ok` with executable
+  `check_postrun_acceptance.py --require-current-run-ready`
 - completion preflight `failed`, HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`
 
@@ -178,7 +192,7 @@ Accepted as the current prepared-root refresh after no-early-stop launch
 readiness enforcement, prepared-contract inventory binding, and exact-token flag
 matching. It also requires the GPT-5.5 proxy preflight to be an executable
 command block using token-level model/base-url arguments. It supersedes the
-model-route, noearlystop, prepcontract, and exactflag prepared roots as the
-current prepared-root pointer.
+model-route, noearlystop, prepcontract, exactflag, and execpreflight prepared
+roots as the current prepared-root pointer.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.

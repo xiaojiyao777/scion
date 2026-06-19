@@ -192,8 +192,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `be9911a`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execpreflight-be9911a-6r-gpt55-20260619T102840Z-claw`.
+- Current prepared root, prepared from WSL checkout `1842e50`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunexec-1842e50-6r-gpt55-20260619T103509Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -219,8 +219,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `be9911a`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execpreflight-be9911a-1r-gpt55-20260619T102856Z-claw`.
+- Current prepared root, prepared from WSL checkout `1842e50`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postrunexec-1842e50-1r-gpt55-20260619T103525Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -280,10 +280,10 @@ Infrastructure:
   export `PYTHONPATH` from `launch.env` before campaign start,
   keep manifest and launch-env model route on `gpt-5.5`,
   enforce launch-env/manifest/run-script exact-token no-early-stop semantics,
-  and include `tools/check_postrun_acceptance.py`,
-  `--require-current-run-ready`, and `POSTRUN_READINESS_EXIT_STATUS`.
+  and execute `tools/check_postrun_acceptance.py` with token-level
+  `--require-current-run-ready` while logging `POSTRUN_READINESS_EXIT_STATUS`.
   The prepared analysis brief contract identity matches the prepared manifest,
-  whose git commit is `be9911a`. Older prepared roots before the execpreflight
+  whose git commit is `1842e50`. Older prepared roots before the postrunexec
   roots above are not current. Exact supersession details belong in
   launch/readiness evidence docs, not this operational snapshot.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
