@@ -3918,6 +3918,9 @@ def _warehouse_followup_summary(
     fresh_runtime = _mapping_or_empty(runtime.get("fresh_runtime_replay_drain"))
     stage_drain = _mapping_or_empty(runtime.get("stage_transition_drain"))
     runtime_budget = _mapping_or_empty(runtime.get("runtime_budget_diagnostics"))
+    continuity_signal = _warehouse_followup_continuity_signal(
+        research_continuity_summary
+    )
     failure = _mapping_or_empty(failure_taxonomy_summary.get("aggregate"))
     proposal_quality = _mapping_or_empty(failure.get("proposal_quality"))
     quality_block_signal = max(
@@ -3993,6 +3996,7 @@ def _warehouse_followup_summary(
             "continuity_report_count": _int_or_zero(
                 research_continuity_summary.get("continuity_report_count")
             ),
+            **continuity_signal,
         },
     }
     interpretation = _warehouse_followup_interpretation(
@@ -4005,6 +4009,7 @@ def _warehouse_followup_summary(
         measurement_available=measurement_effect_summary.get("available") is True,
         runtime_available=runtime_feedback_summary.get("available") is True,
         continuity_available=research_continuity_summary.get("available") is True,
+        continuity_substantive=continuity_signal["substantive"],
     )
     return {
         **base,
@@ -4023,6 +4028,7 @@ def _warehouse_followup_summary(
             measurement_available=measurement_effect_summary.get("available") is True,
             runtime_available=runtime_feedback_summary.get("available") is True,
             continuity_available=research_continuity_summary.get("available") is True,
+            continuity_substantive=continuity_signal["substantive"],
         ),
         "deferred_review_axes": (
             list(WAREHOUSE_FOLLOWUP_REVIEW_AXES)
@@ -4060,6 +4066,36 @@ def _warehouse_handoff_requirements(
     return requirements
 
 
+def _warehouse_followup_continuity_signal(
+    research_continuity_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    aggregate = _mapping_or_empty(research_continuity_summary.get("aggregate"))
+    counts = _research_continuity_action_counts(
+        research_continuity_summary.get("entries")
+    )
+    max_branch_depth = _int_or_zero(aggregate.get("max_branch_depth"))
+    mechanism_family_counts = _int_mapping(aggregate.get("mechanism_family_counts"))
+    active_shape_counts = _int_mapping(aggregate.get("active_shape_counts"))
+    substantive = (
+        max_branch_depth >= 2
+        or counts["same_mechanism_observed"] > 0
+        or counts["branch_lessons_required"] > 0
+        or counts["weak_positive_observed"] > 0
+    )
+    return {
+        "substantive": substantive,
+        "max_branch_depth": max_branch_depth,
+        "same_mechanism_observed": counts["same_mechanism_observed"],
+        "same_mechanism_selected": counts["same_mechanism_selected"],
+        "branch_lessons_required": counts["branch_lessons_required"],
+        "branch_lessons_satisfied": counts["branch_lessons_satisfied"],
+        "weak_positive_observed": counts["weak_positive_observed"],
+        "weak_positive_accepted": counts["weak_positive_accepted"],
+        "mechanism_family_counts": mechanism_family_counts,
+        "active_shape_counts": active_shape_counts,
+    }
+
+
 def _warehouse_followup_interpretation(
     *,
     current_run_evidence: bool,
@@ -4071,6 +4107,7 @@ def _warehouse_followup_interpretation(
     measurement_available: bool,
     runtime_available: bool,
     continuity_available: bool,
+    continuity_substantive: bool,
 ) -> str:
     if invalid_infra_only:
         return "invalid_infra_only_no_research_conclusion"
@@ -4085,6 +4122,8 @@ def _warehouse_followup_interpretation(
             and continuity_available
         ):
             return "protocol_evaluated_review_inputs_incomplete"
+        if not continuity_substantive:
+            return "protocol_evaluated_research_continuity_too_shallow"
         return "protocol_evaluated_plateau_review_ready"
     if quality_block_signal > 0:
         return "quality_blocked_no_protocol_plateau_conclusion"
@@ -4103,6 +4142,7 @@ def _warehouse_followup_evidence_gaps(
     measurement_available: bool,
     runtime_available: bool,
     continuity_available: bool,
+    continuity_substantive: bool,
 ) -> list[str]:
     gaps: list[str] = []
     if not handoff_complete:
@@ -4124,6 +4164,8 @@ def _warehouse_followup_evidence_gaps(
         gaps.append("missing_runtime_feedback_summary")
     if not continuity_available:
         gaps.append("missing_research_continuity_summary")
+    elif protocol_evaluated_candidates > 0 and not continuity_substantive:
+        gaps.append("warehouse_research_continuity_evidence_too_shallow")
     return gaps
 
 

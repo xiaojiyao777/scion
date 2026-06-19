@@ -80,6 +80,10 @@ Warehouse:
   launch/readiness/handoff rather than research-quality or plateau conclusions;
   the warehouse specialist review axes are marked deferred until post-launch
   current-run evidence exists.
+- Postrun warehouse plateau review readiness now requires substantive
+  research-continuity evidence, such as branch depth, same-mechanism follow-up,
+  branch-lesson transfer, or weak-positive transfer. A shallow continuity block
+  is not enough to call a protocol-evaluated run plateau-review-ready.
 
 CVRP/VRP:
 
@@ -140,8 +144,8 @@ Infrastructure:
    continuous-improvement proof, then run the CVRP large-two-opt follow-up.
 3. For warehouse postrun review, distinguish quality-blocked proposals from
    protocol-evaluated no-effect evidence and require measurement-effect,
-   runtime-feedback, and research-continuity summaries before calling evidence
-   plateau-review-ready.
+   runtime-feedback, and substantive research-continuity signals before calling
+   evidence plateau-review-ready.
 4. For CVRP postrun review, inspect target intent, bounded two-opt mechanism
    design, branch-lesson transfer, effect-vs-MDE, runtime budget behavior,
    source visibility, and research-efficiency artifacts. Continuity-only
@@ -168,6 +172,7 @@ Infrastructure:
 - Current repair context:
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-protocol-signal-postrun-guard-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-warehouse-continuity-substance-postrun-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-readiness-checker-20260619.md`,

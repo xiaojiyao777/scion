@@ -267,6 +267,11 @@ Current checkpoint:
   context, not mechanism-effect evidence. This does not change Decision,
   `DecisionFeatures`, Protocol gates, promotion, scheduler state, or solver
   behavior.
+- Current warehouse delegated-review boundary: plateau-review readiness requires
+  protocol-evaluated current-run evidence plus measurement-effect,
+  runtime-feedback, and substantive research-continuity signals. A shallow
+  continuity block alone cannot distinguish a real post-v2 plateau from missed
+  continuous-optimization opportunity.
 - Current launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`.
 - Current operational truth lives in `scion/docs/status/current-state.md`.
