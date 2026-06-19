@@ -38,12 +38,14 @@ LAUNCHER_STATUS_KEYS = (
     "pre_campaign_completion_preflight_operator_action",
     "pre_campaign_completion_preflight_refreshing_accounts",
     "api_key_env_missing",
+    "scion_dir_missing",
     "warehouse_data_root_missing",
     "git_runtime_dirty",
     "git_runtime_commit_mismatch",
 )
 PRE_CAMPAIGN_INFRA_FAILURE_KEYS = (
     "api_key_env_missing",
+    "scion_dir_missing",
     "warehouse_data_root_missing",
     "git_runtime_dirty",
     "git_runtime_commit_mismatch",
@@ -60,6 +62,7 @@ RUN_LOG_MARKERS = (
     "POSTRUN_REPORTS_FINISHED_AT",
     "POSTRUN_REPORTS_STARTED_AT",
     "POSTRUN_READINESS_EXIT_STATUS",
+    "SCION_DIR_MISSING",
 )
 EXIT_MARKERS = (
     "POSTRUN_ACCEPTANCE_DIR",

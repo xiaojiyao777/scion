@@ -377,12 +377,12 @@ def test_launch_readiness_rejects_runtime_guard_failure_without_postrun_reports(
 ) -> None:
     run_root = _write_prepared_root(tmp_path)
     run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    dirty_pos = run_text.index("GIT_RUNTIME_DIRTY:$GIT_RUNTIME_GUARD_PATHS")
+    call_pos = run_text.index("  write_postrun_acceptance_reports\n", dirty_pos)
     run_sh.write_text(
-        run_sh.read_text(encoding="utf-8").replace(
-            '  write_postrun_acceptance_reports\n  exit 64',
-            '  exit 64',
-            1,
-        ),
+        run_text[:call_pos]
+        + run_text[call_pos + len("  write_postrun_acceptance_reports\n") :],
         encoding="utf-8",
     )
 
@@ -432,6 +432,33 @@ fi
     assert {
         "reason": "postrun_report_call_before_git_runtime_dirty_status_writer"
     } in detail["failures"]
+
+
+def test_launch_readiness_rejects_scion_dir_failure_without_postrun_reports(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    start = run_text.index('if ! cd "$SCION_DIR"; then')
+    end = run_text.index(
+        'read -r -a _GIT_RUNTIME_GUARD_PATHS <<< "$GIT_RUNTIME_GUARD_PATHS"',
+        start,
+    )
+    run_sh.write_text(
+        run_text[:start] + 'cd "$SCION_DIR" || exit 1\n' + run_text[end:],
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    scion_dir_check = report["checks"]["run_script_scion_dir_failure_reports"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert scion_dir_check["status"] == "failed"
+    assert {"reason": "scion_dir_failure_path_missing"} in scion_dir_check[
+        "detail"
+    ]["failures"]
 
 
 def test_launch_readiness_ignores_comment_only_runtime_guard_marker(
@@ -2139,6 +2166,12 @@ write_postrun_acceptance_reports() {{
     || POSTRUN_READINESS_STATUS=$?
   echo "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS" >> "$RUN_ROOT/run.log"
 }}
+if ! cd "$SCION_DIR"; then
+  echo "SCION_DIR_MISSING:$SCION_DIR"
+  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":64,"scion_dir_missing":"%s"}}\\n' "$SCION_DIR" > "$RUN_ROOT/run_status.json"
+  write_postrun_acceptance_reports
+  exit 64
+fi
 read -r -a _GIT_RUNTIME_GUARD_PATHS <<< "$GIT_RUNTIME_GUARD_PATHS"
 if [[ -n "$(git -C "$REPO_ROOT" status --porcelain -- "${{_GIT_RUNTIME_GUARD_PATHS[@]}}")" ]]; then
   echo "GIT_RUNTIME_DIRTY:$GIT_RUNTIME_GUARD_PATHS"

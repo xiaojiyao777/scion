@@ -1291,6 +1291,60 @@ def test_inventory_marks_runtime_guard_failure_resume_snapshot_not_current_run(
     assert "not current-run evidence" in markdown
 
 
+def test_inventory_marks_scion_dir_failure_resume_snapshot_not_current_run(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "scion-dir-failed-run"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "outer-wrapper.v1",
+            "status": "finished",
+            "wrapper_exit_status": 64,
+            "scion_dir_missing": "/tmp/missing-scion",
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "execution": {"rounds": 2},
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "effective_rounds_completed": 5,
+            "formal_screened_candidates": 5,
+        },
+    )
+    _write_db(campaign_dir / "scion.db")
+
+    data = inventory_tool.build_inventory(run_root)
+    markdown = inventory_tool.render_markdown(data)
+
+    assert data["lifecycle"]["pre_campaign_infra_failed"] is True
+    assert data["lifecycle"]["pre_campaign_infra_failure_keys"] == [
+        "scion_dir_missing"
+    ]
+    assert data["lifecycle"]["current_run_evidence"] is False
+    assert data["validity"] == {
+        "run_validity_status": "invalid_infra_only",
+        "run_completeness_status": "incomplete",
+        "last_stop_reason": "pre_campaign_scion_dir_missing",
+        "invalid_infra_only": True,
+    }
+    assert data["counters"]["effective_rounds_completed"] == 0
+    assert data["resume_snapshot"]["present"] is True
+    assert data["resume_snapshot"]["current_run_evidence"] is False
+    assert "PRE-CAMPAIGN INFRA FAILURE" in markdown
+    assert "scion_dir_missing" in markdown
+
+
 def test_inventory_marks_invalid_infra_resume_snapshot_not_current_run(
     tmp_path: Path,
 ) -> None:

@@ -399,6 +399,66 @@ def test_rebuild_postrun_acceptance_skips_current_run_reports_after_runtime_guar
     assert any("INVALID INFRA-ONLY RUN" in item for item in brief["stop_conditions"])
 
 
+def test_rebuild_postrun_acceptance_skips_current_run_reports_after_scion_dir_failure(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "scion-dir-failed-root"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "outer-wrapper.v1",
+            "status": "finished",
+            "wrapper_exit_status": 64,
+            "scion_dir_missing": "/tmp/missing-scion",
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "problem_family": "warehouse",
+            "execution": {
+                "measurement_governance": "on",
+                "proposal_context_ablation": "full",
+                "rounds": 1,
+            },
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "effective_rounds_completed": 3,
+            "formal_screened_candidates": 3,
+        },
+    )
+
+    manifest = rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="scion_dir_failed",
+    )
+
+    assert manifest["pre_campaign_infra_failed"] is True
+    assert manifest["pre_campaign_infra_failure_keys"] == ["scion_dir_missing"]
+    assert manifest["current_run_reports_skipped"] is True
+    assert manifest["families"]["summaries"]["status"] == "skipped"
+    assert "pre_campaign_infra_failure(scion_dir_missing)" in (
+        manifest["current_run_skip_reason"]
+    )
+    brief = json.loads(
+        (
+            run_root
+            / "postrun_acceptance"
+            / "analysis_brief"
+            / "scion_dir_failed.postrun_analysis_brief.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert brief["validity"]["last_stop_reason"] == "pre_campaign_scion_dir_missing"
+    assert brief["phase4_evidence_coverage"]["current_run_evidence"] is False
+
+
 def _write_campaign_db(campaign_dir: Path) -> None:
     registry = LineageRegistry(str(campaign_dir / "scion.db"))
     branch_store = BranchStore(registry)

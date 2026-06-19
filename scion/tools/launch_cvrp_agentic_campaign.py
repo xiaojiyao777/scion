@@ -528,7 +528,16 @@ if [[ -n "${{SCION_API_KEY_ENV:-}}" ]]; then
   SCION_API_KEY="$_RESOLVED_SCION_API_KEY"
 fi
 unset _INHERITED_SCION_API_KEY _RESOLVED_SCION_API_KEY
-cd "$SCION_DIR" || exit 1
+if ! cd "$SCION_DIR"; then
+  {{
+    echo "WRAPPER_EXIT_STATUS:{PREFLIGHT_FAILURE_EXIT_CODE}"
+    echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "SCION_DIR_MISSING:$SCION_DIR"
+  }} > "$RUN_ROOT/exit.txt"
+  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"scion_dir_missing":"%s"}}\\n' "$SCION_DIR" > "$RUN_ROOT/run_status.json"
+  write_postrun_acceptance_reports
+  exit {PREFLIGHT_FAILURE_EXIT_CODE}
+fi
 read -r -a _GIT_RUNTIME_GUARD_PATHS <<< "$GIT_RUNTIME_GUARD_PATHS"
 if [[ -n "$(git -C "$REPO_ROOT" status --porcelain -- "${{_GIT_RUNTIME_GUARD_PATHS[@]}}")" ]]; then
   {{
