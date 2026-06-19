@@ -250,7 +250,8 @@ Current checkpoint:
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
   `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`,
-  `run_script_strict_postrun_readiness=ok`, and `git_runtime_consistent=ok`.
+  `run_script_strict_postrun_readiness=ok`, `git_runtime_consistent=ok`, and
+  runtime guard coverage for `scion/tools`.
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
@@ -268,6 +269,9 @@ Current checkpoint:
   context, not mechanism-effect evidence. This does not change Decision,
   `DecisionFeatures`, Protocol gates, promotion, scheduler state, or solver
   behavior.
+- Current launch/runtime boundary: prepared roots must guard `scion/tools` as
+  runtime/control-plane code, so launcher, postrun rebuild, postrun readiness,
+  and launch-readiness changes after prepare time require a new prepared root.
 - Current warehouse delegated-review boundary: plateau-review readiness requires
   protocol-evaluated current-run evidence plus measurement-effect,
   runtime-feedback, and substantive research-continuity signals. A shallow

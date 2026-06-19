@@ -71,6 +71,9 @@ Framework:
   postrun readiness path itself, exposed as
   `run_script_strict_postrun_readiness=ok`; stale scripts that omit
   `--require-current-run-ready` cannot pass static readiness.
+- Launch readiness also requires runtime guard coverage for `scion/tools`, so
+  prepared roots generated before launcher/report/readiness tooling changes must
+  be regenerated rather than launched from a drifted checkout.
 - The remaining v0.4 acceptance question is empirical: prove that the repaired
   framework supports effective agent research, especially warehouse follow-on
   improvement and CVRP/VRP solver-design progress.
@@ -128,8 +131,9 @@ Infrastructure:
   `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
   `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`,
-  `run_script_strict_postrun_readiness=ok`, `git_runtime_consistent=ok`, and
-  completion preflight `failed`. Both current root `run.sh` files include
+  `run_script_strict_postrun_readiness=ok`, `git_runtime_consistent=ok`,
+  `runtime_guard_paths_cover_launch_tools=ok`, and completion preflight
+  `failed`. Both current root `run.sh` files include
   `tools/check_postrun_acceptance.py`, `--require-current-run-ready`, and
   `POSTRUN_READINESS_EXIT_STATUS`.
   The prepared analysis brief contract
@@ -184,6 +188,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-warehouse-continuity-substance-postrun-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-readiness-blocking-summary-gaps-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-readiness-prompt-source-visibility-guard-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-launch-runtime-guard-tools-coverage-20260619.md`,
   `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-readiness-checker-20260619.md`,

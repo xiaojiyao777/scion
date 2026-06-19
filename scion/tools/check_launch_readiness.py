@@ -52,6 +52,7 @@ CURRENT_RUN_REQUIRED_QUESTION_MARKER = (
 DEFERRED_REVIEW_AXES_ACTIONABILITY = (
     "not_actionable_before_launch_current_run_evidence_required"
 )
+REQUIRED_RUNTIME_GUARD_PATHS = ("scion/tools",)
 
 
 def build_readiness(
@@ -138,6 +139,10 @@ def build_readiness(
         "git_runtime_consistent",
         _contract_check_status(contract_checks, "git_runtime_consistent"),
         _contract_check_detail(contract_checks, "git_runtime_consistent"),
+    )
+    add_check(
+        "runtime_guard_paths_cover_launch_tools",
+        *_runtime_guard_paths_cover_launch_tools(prepared_contract),
     )
     add_check(
         "postrun_families_complete",
@@ -347,6 +352,41 @@ def _contract_check_detail(checks: Any, name: str) -> Any:
         return ""
     item = checks.get(name)
     return item.get("detail") if isinstance(item, dict) else ""
+
+
+def _runtime_guard_paths_cover_launch_tools(prepared_contract: Any) -> tuple[str, Any]:
+    if not isinstance(prepared_contract, dict):
+        return "failed", {"reason": "missing_prepared_contract"}
+    git = prepared_contract.get("git")
+    git_dict = git if isinstance(git, dict) else {}
+    raw_paths = str(git_dict.get("runtime_guard_paths") or "").strip()
+    pathspecs = raw_paths.split()
+    missing = [
+        required
+        for required in REQUIRED_RUNTIME_GUARD_PATHS
+        if not _runtime_guard_path_covers(pathspecs, required)
+    ]
+    return (
+        "ok" if not missing else "failed",
+        {
+            "runtime_guard_paths": raw_paths,
+            "required_paths": list(REQUIRED_RUNTIME_GUARD_PATHS),
+            "missing_required_paths": missing,
+        },
+    )
+
+
+def _runtime_guard_path_covers(pathspecs: list[str], required: str) -> bool:
+    required = required.strip("/")
+    for pathspec in pathspecs:
+        if not pathspec or pathspec.startswith(":("):
+            continue
+        normalized = pathspec.strip("/")
+        if normalized in {".", required}:
+            return True
+        if required.startswith(f"{normalized}/"):
+            return True
+    return False
 
 
 def _problem_specific_prepared_handoff_check(

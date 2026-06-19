@@ -30,6 +30,9 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["checks"]["prepared_only_not_started"]["status"] == "ok"
     assert report["checks"]["prepared_contract_complete"]["status"] == "ok"
     assert report["checks"]["git_runtime_consistent"]["status"] == "ok"
+    assert (
+        report["checks"]["runtime_guard_paths_cover_launch_tools"]["status"] == "ok"
+    )
     problem_specific = report["checks"]["problem_specific_prepared_handoff"]
     assert problem_specific["status"] == "ok"
     assert problem_specific["required"] is True
@@ -167,6 +170,23 @@ def test_launch_readiness_rejects_missing_prompt_context_readiness(
     assert prompt_check["detail"]["failures"][0]["reason"] == (
         "missing_prompt_context_readiness"
     )
+
+
+def test_launch_readiness_rejects_runtime_guard_without_launch_tools(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(
+        tmp_path,
+        runtime_guard_paths="scion/scion :(exclude)scion/scion/tests",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    guard_check = report["checks"]["runtime_guard_paths_cover_launch_tools"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert guard_check["status"] == "failed"
+    assert guard_check["detail"]["missing_required_paths"] == ["scion/tools"]
 
 
 def test_launch_readiness_rejects_missing_prepared_analysis_brief(
@@ -550,6 +570,7 @@ def _write_prepared_root(
     include_prompt_context_readiness: bool = True,
     include_analysis_brief: bool = True,
     prompt_context_launch_markers: bool = True,
+    runtime_guard_paths: str = "scion/tools",
 ) -> Path:
     run_root = tmp_path / "prepared-root"
     campaign_dir = run_root / "campaign"
@@ -601,7 +622,7 @@ def _write_prepared_root(
         },
         "git": {
             "commit": _git_head_short(),
-            "runtime_guard_paths": "scion/tools",
+            "runtime_guard_paths": runtime_guard_paths,
         },
         "config": {
             "problem": str(config_dir / "problem.yaml"),

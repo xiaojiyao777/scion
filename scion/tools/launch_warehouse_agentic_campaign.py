@@ -826,7 +826,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "GIT_COMMIT": _git_commit(repo_root),
         "GIT_RUNTIME_GUARD_PATHS": (
             "scion/scion :(exclude)scion/scion/tests "
-            "scion/problems/warehouse_delivery surrogate"
+            "scion/tools scion/problems/warehouse_delivery surrogate"
         ),
         "STARTED_UTC": started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }

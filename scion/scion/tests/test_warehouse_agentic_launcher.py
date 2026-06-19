@@ -163,7 +163,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert (
         "GIT_RUNTIME_GUARD_PATHS="
         "'scion/scion :(exclude)scion/scion/tests "
-        "scion/problems/warehouse_delivery surrogate'" in launch_env
+        "scion/tools scion/problems/warehouse_delivery surrogate'" in launch_env
     )
     assert "ROUNDS=6" in launch_env
     assert "RESUME_FROM_CAMPAIGN=''" in launch_env
@@ -229,7 +229,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert (
         "GIT_RUNTIME_GUARD_PATHS="
         "scion/scion :(exclude)scion/scion/tests "
-        "scion/problems/warehouse_delivery surrogate" in command_txt
+        "scion/tools scion/problems/warehouse_delivery surrogate" in command_txt
     )
     assert "POSTRUN_REPORTS=1" in command_txt
     assert "CONTROL_PAIR_KEY=warehouse.unit-warehouse:prepared" in command_txt
@@ -591,7 +591,7 @@ def test_warehouse_agentic_launcher_missing_data_root_writes_valid_status(
         launch_env.read_text(encoding="utf-8").replace(
             "GIT_RUNTIME_GUARD_PATHS="
             "'scion/scion :(exclude)scion/scion/tests "
-            "scion/problems/warehouse_delivery surrogate'",
+            "scion/tools scion/problems/warehouse_delivery surrogate'",
             "GIT_RUNTIME_GUARD_PATHS=scion/design/scion-architecture-v3.md",
         ),
         encoding="utf-8",
