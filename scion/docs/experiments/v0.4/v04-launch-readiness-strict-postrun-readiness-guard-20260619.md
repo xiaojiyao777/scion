@@ -60,10 +60,10 @@ PYTHONPATH=scion pytest -q \
   scion/scion/tests/test_warehouse_agentic_launcher.py
 ```
 
-Results: launch-readiness group `25 passed`; full v0.4 readiness/reporting
-group `92 passed`.
+Results: launch-readiness group `26 passed`; full v0.4 readiness/reporting
+group `93 passed`.
 
-WSL checkout `9f7bd6a`:
+WSL checkout `199154c`:
 
 ```bash
 PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
@@ -78,21 +78,22 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
   scion/scion/tests/test_warehouse_agentic_launcher.py
 ```
 
-Result: full v0.4 readiness/reporting group `92 passed`.
+Result: full v0.4 readiness/reporting group `93 passed`.
 
 ## Current Prepared Roots
 
-Current prepare-only roots were generated from WSL checkout `9f7bd6a` because
+Current prepare-only roots were generated from WSL checkout `199154c` because
 the launch-readiness guard now checks the generated `run.sh` strict postrun
-readiness path and the normal campaign-exit postrun report call.
+readiness path, the normal campaign-exit postrun report call, and the warehouse
+data-root failure report path.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postruncall-ready-6r-gpt55-20260619T040458Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-datarootreport-ready-6r-gpt55-20260619T041452Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-postruncall-ready-1r-gpt55-20260619T040458Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-datarootreport-ready-1r-gpt55-20260619T041453Z-claw`
 
 Strict launch readiness for both roots reports exit `64` with:
 
@@ -100,6 +101,7 @@ Strict launch readiness for both roots reports exit `64` with:
 - `launch_ready=false`
 - `run_script_strict_postrun_readiness=ok`
 - `run_script_postrun_reports_after_campaign=ok`
+- `run_script_data_root_failure_reports=ok`
 - `run_script_runtime_guard_enforced=ok`
 - `runtime_guard_paths_cover_launch_tools=ok`
 - `postrun_families_complete=ok`
@@ -110,5 +112,5 @@ Strict launch readiness for both roots reports exit `64` with:
 
 The remaining blocker is external `gpt-5.5` auth, not Scion static readiness:
 completion preflight returns HTTP `401`, `classification=not_authenticated`,
-`code=invalid_api_key`, with auth pool `active=0`, `expired=0`,
-`refreshing=1`, `total=1`.
+`code=invalid_api_key`, with auth pool `active=0`, `expired=1`,
+`refreshing=0`, `total=1`.

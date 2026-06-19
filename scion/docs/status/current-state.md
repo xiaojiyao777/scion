@@ -76,6 +76,10 @@ Framework:
   `exit "$STATUS"`, exposed as
   `run_script_postrun_reports_after_campaign=ok`; stale scripts that only
   define the postrun function cannot pass static readiness.
+- Warehouse launchers also run postrun report/readiness generation for
+  data-root-missing pre-campaign failures, and launch readiness exposes this as
+  `run_script_data_root_failure_reports=ok`; infra-only warehouse failures
+  should leave delegated-analysis artifacts instead of only `exit.txt`.
 - Launch readiness also requires runtime guard coverage for `scion/tools`, so
   prepared roots generated before launcher/report/readiness tooling changes must
   be regenerated rather than launched from a drifted checkout.
@@ -89,8 +93,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `9f7bd6a`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postruncall-ready-6r-gpt55-20260619T040458Z-claw`.
+- Current prepared root, prepared from WSL checkout `199154c`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-datarootreport-ready-6r-gpt55-20260619T041452Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Because the root is prepare-only, required answers focus on
@@ -113,8 +117,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `9f7bd6a`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-postruncall-ready-1r-gpt55-20260619T040458Z-claw`.
+- Current prepared root, prepared from WSL checkout `199154c`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-datarootreport-ready-1r-gpt55-20260619T041453Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -139,12 +143,14 @@ Infrastructure:
   `run_script_strict_postrun_readiness=ok`, `git_runtime_consistent=ok`,
   `run_script_runtime_guard_enforced=ok`,
   `run_script_postrun_reports_after_campaign=ok`,
+  `run_script_data_root_failure_reports=ok`,
   `runtime_guard_paths_cover_launch_tools=ok`, and completion preflight
   `failed`. Both current root `run.sh` files execute git dirty/head-mismatch
   runtime guards before `scion.cli.main run`, call postrun report/readiness
-  generation after campaign exit and before `exit "$STATUS"`, and include
-  `tools/check_postrun_acceptance.py`, `--require-current-run-ready`, and
-  `POSTRUN_READINESS_EXIT_STATUS`.
+  generation after campaign exit and before `exit "$STATUS"`, preserve
+  warehouse data-root-missing failures as postrun-reportable infra-only roots,
+  and include `tools/check_postrun_acceptance.py`,
+  `--require-current-run-ready`, and `POSTRUN_READINESS_EXIT_STATUS`.
   The prepared analysis brief contract
   identity matches the prepared manifest, including the manifest git commit.
   Later docs-only commits may make the checkout differ from a prepared manifest
@@ -153,11 +159,12 @@ Infrastructure:
   did not guard `scion/tools`; the `49edd77` toolsguard roots are superseded by
   the run-script guard enforcement change in `scion/tools`; the `0ba0a93`
   runshguard roots are superseded by the normal campaign-exit postrun-call
-  check in `scion/tools`.
+  check in `scion/tools`; the `9f7bd6a` postruncall roots are superseded by the
+  warehouse data-root failure postrun-report check in `scion/tools`.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`, with proxy auth pool `active=0`, `expired=0`,
-  `refreshing=1`, `total=1`.
+  `code=invalid_api_key`, with proxy auth pool `active=0`, `expired=1`,
+  `refreshing=0`, `total=1`.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -192,15 +199,19 @@ Infrastructure:
 - Detailed repair, launch, and postrun evidence:
   `scion/docs/experiments/v0.4/`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`.
-  It supersedes older prepared-root pointers after launch readiness began
-  checking strict postrun readiness markers in generated `run.sh`.
+  `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`
+  and
+  `scion/docs/experiments/v0.4/v04-warehouse-data-root-preflight-postrun-report-20260619.md`.
+  They supersede older prepared-root pointers after launch readiness began
+  checking strict postrun readiness markers, campaign-exit postrun calls, and
+  warehouse data-root failure report paths in generated `run.sh`.
 - Current repair context:
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-protocol-signal-postrun-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-continuity-substance-postrun-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-readiness-blocking-summary-gaps-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-readiness-prompt-source-visibility-guard-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-warehouse-data-root-preflight-postrun-report-20260619.md`,
   `scion/docs/experiments/v0.4/v04-launch-runtime-guard-tools-coverage-20260619.md`,
   `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`,

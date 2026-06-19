@@ -243,9 +243,9 @@ Current checkpoint:
   keeps the unbounded fallback as default-avoid.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postruncall-ready-6r-gpt55-20260619T040458Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-datarootreport-ready-6r-gpt55-20260619T041452Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-postruncall-ready-1r-gpt55-20260619T040458Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-datarootreport-ready-1r-gpt55-20260619T041453Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -253,11 +253,12 @@ Current checkpoint:
   `run_script_strict_postrun_readiness=ok`,
   `run_script_runtime_guard_enforced=ok`,
   `run_script_postrun_reports_after_campaign=ok`, `git_runtime_consistent=ok`,
-  and runtime guard coverage for `scion/tools`.
+  `run_script_data_root_failure_reports=ok`, and runtime guard coverage for
+  `scion/tools`.
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
-  `active=0`, `expired=0`, `refreshing=1`, `total=1`. Do not launch either
+  `active=0`, `expired=1`, `refreshing=0`, `total=1`. Do not launch either
   root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -277,12 +278,15 @@ Current checkpoint:
   Launch readiness also rejects a prepared root whose `run.sh` declares the
   guard contract but does not execute dirty/head-mismatch checks before
   `scion.cli.main run`, or whose normal campaign-exit path skips the postrun
-  report/readiness bundle before exiting with campaign status.
+  report/readiness bundle before exiting with campaign status. Warehouse roots
+  also fail readiness if their data-root-missing pre-campaign failure path skips
+  the postrun report/readiness bundle.
   The older `f1ee04e` prepared roots are superseded because their manifests did
   not guard `scion/tools`; the `49edd77` toolsguard roots are superseded by the
   run-script guard enforcement change in `scion/tools`; the `0ba0a93`
   runshguard roots are superseded by the normal campaign-exit postrun-call
-  check in `scion/tools`.
+  check in `scion/tools`; the `9f7bd6a` postruncall roots are superseded by the
+  warehouse data-root failure postrun-report check in `scion/tools`.
 - Current warehouse delegated-review boundary: plateau-review readiness requires
   protocol-evaluated current-run evidence plus measurement-effect,
   runtime-feedback, and substantive research-continuity signals. A shallow
@@ -297,7 +301,9 @@ Current checkpoint:
   review can audit branch transfer and source grounding instead of inferring
   them from final status.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`
+  and
+  `scion/docs/experiments/v0.4/v04-warehouse-data-root-preflight-postrun-report-20260619.md`.
 - Current operational truth lives in `scion/docs/status/current-state.md`.
   Historical repair details live in `scion/docs/status/v0.4-history.md` and
   `scion/docs/experiments/v0.4/`; do not read historical experiment reports by
