@@ -108,9 +108,22 @@ DEFERRED_REVIEW_AXES_ACTIONABILITY = (
 )
 REQUIRED_RUNTIME_GUARD_PATHS = (
     "scion/tools",
-    "scion/scion/core/proposal_trajectory_artifacts.py",
-    "scion/scion/core/research_efficiency_report.py",
+    "scion/scion/cli",
+    "scion/scion/core",
+    "scion/scion/lineage",
 )
+PROBLEM_RUNTIME_GUARD_PATHS = {
+    "cvrp": (
+        "scion/scion/problems/cvrp",
+        "scion/problems/cvrp",
+        "vrp",
+    ),
+    "warehouse_delivery": (
+        "scion/scion/problems/warehouse_delivery",
+        "scion/problems/warehouse_delivery",
+        "surrogate",
+    ),
+}
 RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER = "-m scion.cli.main run"
 RUN_SCRIPT_RUNTIME_GUARD_MARKERS = (
     (
@@ -230,6 +243,15 @@ def build_readiness(
     add_check(
         "runtime_guard_paths_cover_launch_tools",
         *_runtime_guard_paths_cover_launch_tools(prepared_contract),
+    )
+    problem_runtime_status, problem_runtime_detail, problem_runtime_required = (
+        _runtime_guard_paths_cover_problem_runtime(prepared_contract)
+    )
+    add_check(
+        "runtime_guard_paths_cover_problem_runtime",
+        problem_runtime_status,
+        problem_runtime_detail,
+        required=problem_runtime_required,
     )
     add_check(
         "postrun_families_complete",
@@ -479,17 +501,94 @@ def _runtime_guard_paths_cover_launch_tools(prepared_contract: Any) -> tuple[str
     )
 
 
+def _runtime_guard_paths_cover_problem_runtime(
+    prepared_contract: Any,
+) -> tuple[str, Any, bool]:
+    if not isinstance(prepared_contract, dict):
+        return "failed", {"reason": "missing_prepared_contract"}, True
+    problem_family = str(prepared_contract.get("problem_family") or "")
+    required_paths = PROBLEM_RUNTIME_GUARD_PATHS.get(problem_family)
+    if not required_paths:
+        return (
+            "skipped",
+            {
+                "problem_family": problem_family,
+                "reason": "no_problem_specific_runtime_guard_requirements",
+            },
+            False,
+        )
+    git = prepared_contract.get("git")
+    git_dict = git if isinstance(git, dict) else {}
+    raw_paths = str(git_dict.get("runtime_guard_paths") or "").strip()
+    pathspecs = raw_paths.split()
+    missing = [
+        required
+        for required in required_paths
+        if not _runtime_guard_path_covers(pathspecs, required)
+    ]
+    return (
+        "ok" if not missing else "failed",
+        {
+            "problem_family": problem_family,
+            "runtime_guard_paths": raw_paths,
+            "required_paths": list(required_paths),
+            "missing_required_paths": missing,
+        },
+        True,
+    )
+
+
 def _runtime_guard_path_covers(pathspecs: list[str], required: str) -> bool:
     required = required.strip("/")
+    includes: list[str] = []
+    excludes: list[str] = []
     for pathspec in pathspecs:
-        if not pathspec or pathspec.startswith(":("):
+        normalized = _normalize_runtime_guard_pathspec(pathspec)
+        if not normalized:
             continue
-        normalized = pathspec.strip("/")
-        if normalized in {".", required}:
-            return True
-        if required.startswith(f"{normalized}/"):
-            return True
-    return False
+        if normalized[0] == "exclude":
+            excludes.append(normalized[1])
+        else:
+            includes.append(normalized[1])
+    if any(
+        _runtime_guard_exclude_affects_required(excluded, required)
+        for excluded in excludes
+    ):
+        return False
+    return any(
+        _runtime_guard_include_covers_required(included, required)
+        for included in includes
+    )
+
+
+def _normalize_runtime_guard_pathspec(pathspec: str) -> tuple[str, str] | None:
+    text = str(pathspec or "").strip()
+    if not text:
+        return None
+    if text.startswith(":(exclude)"):
+        value = text[len(":(exclude)") :].strip("/")
+        return ("exclude", value) if value else None
+    if text.startswith(":!"):
+        value = text[2:].strip("/")
+        return ("exclude", value) if value else None
+    if text.startswith(":("):
+        return None
+    value = text.strip("/")
+    return ("include", value) if value else None
+
+
+def _runtime_guard_include_covers_required(included: str, required: str) -> bool:
+    if included in {".", required}:
+        return True
+    return required.startswith(f"{included}/")
+
+
+def _runtime_guard_exclude_affects_required(excluded: str, required: str) -> bool:
+    if excluded == required:
+        return True
+    if required.startswith(f"{excluded}/"):
+        return True
+    return excluded.startswith(f"{required}/")
 
 
 def _problem_specific_prepared_handoff_check(
