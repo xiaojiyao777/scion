@@ -28,8 +28,16 @@ behavior.
   `run_script_runtime_guard_failure_reports`, requiring the runtime guard
   failure marker, matching run-status writer flag, postrun report call after
   that status writer, and postrun report call before the branch exit.
+- `rebuild_postrun_acceptance.py` and `postrun_artifact_inventory.py` now treat
+  pre-campaign infra failure keys (`api_key_env_missing`,
+  `warehouse_data_root_missing`, `git_runtime_dirty`, and
+  `git_runtime_commit_mismatch`) as resume-snapshot-only evidence, so copied
+  campaign artifacts cannot be rebuilt into current-run reports after a launch
+  guard failure.
 - Regression coverage includes missing runtime-guard postrun calls,
-  postrun-before-status ordering, and comment-only postrun functions.
+  postrun-before-status ordering, comment-only postrun functions, skipped
+  current-run reports after runtime-guard failure, and inventory lifecycle
+  evidence for runtime-guard failure roots.
 
 ## Verification
 
@@ -40,6 +48,10 @@ Local:
   - `68 passed`
 - `PYTHONPATH=scion pytest -q scion/scion/tests/test_warehouse_agentic_launcher.py scion/scion/tests/test_cvrp_agentic_launcher.py`
   - `23 passed`
+- `PYTHONPATH=scion pytest -q scion/scion/tests/test_rebuild_postrun_acceptance.py::test_rebuild_postrun_acceptance_skips_current_run_reports_after_runtime_guard_failure scion/scion/tests/test_postrun_artifact_inventory.py::test_inventory_marks_runtime_guard_failure_resume_snapshot_not_current_run`
+  - `2 passed`
+- `PYTHONPATH=scion pytest -q scion/scion/tests/test_rebuild_postrun_acceptance.py scion/scion/tests/test_postrun_artifact_inventory.py scion/scion/tests/test_postrun_analysis_brief.py scion/scion/tests/test_check_postrun_acceptance.py`
+  - `79 passed`
 - `PYTHONPATH=scion pytest -q scion/scion/tests/test_launch_readiness.py scion/scion/tests/test_warehouse_agentic_launcher.py scion/scion/tests/test_cvrp_agentic_launcher.py scion/scion/tests/test_rebuild_postrun_acceptance.py scion/scion/tests/test_check_postrun_acceptance.py scion/scion/tests/test_postrun_artifact_inventory.py scion/scion/tests/test_postrun_analysis_brief.py`
   - `168 passed`
 - `git diff --check`
@@ -50,18 +62,18 @@ WSL:
 - `PYTHONPATH=scion /home/xjy-ubuntu/miniconda3/envs/scion/bin/pytest -q scion/scion/tests/test_launch_readiness.py scion/scion/tests/test_warehouse_agentic_launcher.py scion/scion/tests/test_cvrp_agentic_launcher.py`
   - `91 passed`
 - `PYTHONPATH=scion /home/xjy-ubuntu/miniconda3/envs/scion/bin/pytest -q scion/scion/tests/test_rebuild_postrun_acceptance.py scion/scion/tests/test_check_postrun_acceptance.py scion/scion/tests/test_postrun_artifact_inventory.py scion/scion/tests/test_postrun_analysis_brief.py`
-  - `77 passed`
+  - `79 passed`
 - `git diff --check`
 
 ## Current Prepared Roots
 
 Because this touched `scion/tools` and launchers, current WSL prepared roots
-were regenerated from WSL runtime commit `6948f55`:
+were regenerated from WSL runtime commit `88ac20d`:
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runguard-6948f55-6r-gpt55-6r-gpt55-20260619T161556Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-infraskip-88ac20d-6r-gpt55-6r-gpt55-20260619T162704Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-runguard-6948f55-1r-gpt55-1r-gpt55-20260619T161557Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-infraskip-88ac20d-1r-gpt55-1r-gpt55-20260619T162705Z-claw`
 
 Strict WSL launch readiness for both roots exits `64` and reports:
 
