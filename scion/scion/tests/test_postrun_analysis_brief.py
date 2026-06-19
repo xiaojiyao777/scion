@@ -1346,6 +1346,39 @@ def test_cvrp_large_twoopt_summary_marks_bounded_twoopt_review_ready(
     assert "- Evidence gaps:\n  - none" in markdown
 
 
+def test_cvrp_large_twoopt_summary_requires_handoff_before_review_ready(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "cvrp-twoopt-incomplete-handoff"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_cvrp_large_twoopt_manifest(
+        run_root,
+        campaign_dir,
+        rounds=1,
+        include_large_twoopt_constraints=False,
+    )
+    _write_cvrp_protocol_run(
+        run_root,
+        campaign_dir,
+        mechanism_family="bounded_large_twoopt",
+    )
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    summary = brief["cvrp_large_twoopt_summary"]
+    assert summary["current_run_evidence"] is True
+    assert summary["handoff_complete"] is False
+    assert summary["interpretation"] == "protocol_evaluated_handoff_incomplete"
+    assert "cvrp_large_twoopt_handoff_requirements_incomplete" in summary[
+        "evidence_gaps"
+    ]
+    assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
+    assert summary["evidence"]["large_twoopt_mechanism"]["available"] is True
+    assert "- Interpretation: protocol_evaluated_handoff_incomplete" in markdown
+
+
 def test_warehouse_followup_summary_distinguishes_quality_blocked_run(
     tmp_path: Path,
 ) -> None:
@@ -1514,6 +1547,101 @@ def test_warehouse_followup_summary_marks_protocol_evaluated_plateau_review_read
     assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
     assert summary["evidence"]["protocol"]["protocol_metric_results"] == 2
     assert "- Interpretation: protocol_evaluated_plateau_review_ready" in markdown
+
+
+def test_warehouse_followup_summary_requires_handoff_before_plateau_ready(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "warehouse-protocol-evaluated-incomplete-handoff"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+            "requested_rounds": 1,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 1,
+            "protocol_evaluated_candidates": 1,
+        },
+    )
+    _write_warehouse_manifest(
+        run_root,
+        campaign_dir,
+        rounds=1,
+        include_v2_checkpoint=False,
+    )
+    _write_json(
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "warehouse.research_efficiency.v1.json",
+        {
+            "protocol_rows": {
+                "protocol_metric_results": 2,
+                "protocol_evaluated_candidates": 1,
+            },
+            "formal_candidates": {
+                "formal_screened_candidates": 1,
+                "protocol_evaluated_candidates": 1,
+            },
+            "protocol_effects_vs_mde": {
+                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
+                "report_only": True,
+                "decision_features_excluded": True,
+                "protocol_row_count": 2,
+                "rows_at_or_above_mde": 0,
+                "rows_with_ci_high_below_mde": 2,
+                "max_effect_to_mde_ratio": 0.4,
+                "interpretation_counts": {"below_mde": 2},
+            },
+            "fresh_runtime_replay_drain": {
+                "status": "not_selected_no_pending",
+                "attempts": 1,
+                "executed": 0,
+                "skipped": 1,
+                "counts_toward_max_rounds": False,
+            },
+            "stage_transition_drain": {
+                "status": "not_started",
+                "attempts": 0,
+                "counts_toward_max_rounds": False,
+                "generates_new_hypothesis": False,
+            },
+            "research_continuity": {
+                "same_mechanism_followup": {
+                    "observed_opportunity_count": 1,
+                    "selected_same_branch_refinement_count": 1,
+                },
+                "branch_lesson_usage": {
+                    "requirement_count": 1,
+                    "satisfied_count": 1,
+                    "semantic_gap_count": 0,
+                },
+            },
+            "run_status": {
+                "run_validity_status": "valid",
+                "run_completeness_status": "complete",
+                "run_complete": True,
+            },
+        },
+    )
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    summary = brief["warehouse_followup_summary"]
+    assert summary["current_run_evidence"] is True
+    assert summary["handoff_complete"] is False
+    assert summary["interpretation"] == "protocol_evaluated_handoff_incomplete"
+    assert "warehouse_handoff_requirements_incomplete" in summary["evidence_gaps"]
+    assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
+    assert "- Interpretation: protocol_evaluated_handoff_incomplete" in markdown
 
 
 def test_warehouse_followup_summary_requires_review_inputs_after_protocol_eval(
@@ -1760,7 +1888,41 @@ def _write_warehouse_manifest(
     campaign_dir: Path,
     *,
     rounds: int,
+    include_v2_checkpoint: bool = True,
 ) -> None:
+    research_focus = {
+        "current_question": (
+            "Starting from champion v2, determine whether continuous "
+            "additional useful research remains or whether this is a "
+            "real plateau."
+        ),
+        "required_evidence": [
+            "preserve or improve promotion behavior",
+            "inspect branch transfer before judging plateau",
+            (
+                "distinguish quality-blocked proposals from "
+                "protocol-evaluated no-effect candidates"
+            ),
+            "compare cost_delta and split_delta before split-only claims",
+            "explain fast completion through the runtime model",
+        ],
+        "default_avoid_directions": [
+            "baseline",
+            "proposal-quality",
+            "fast completion",
+            "split_delta_sum==0",
+            "broad warehouse matrix",
+        ],
+        "decision_boundary": (
+            "Proposal/delegated-analysis guidance only; never enter "
+            "DecisionFeatures, Protocol gates, promotion input, or "
+            "scheduler state."
+        ),
+    }
+    if include_v2_checkpoint:
+        research_focus["accepted_checkpoint"] = (
+            "Champion v2 promoted from validation-transfer acceptance."
+        )
     _write_json(
         run_root / "prepared_run_manifest.v1.json",
         {
@@ -1774,38 +1936,7 @@ def _write_warehouse_manifest(
             "problem_family": "warehouse_delivery",
             "run_root": str(run_root),
             "campaign_dir": str(campaign_dir),
-            "research_focus": {
-                "accepted_checkpoint": (
-                    "Champion v2 promoted from validation-transfer acceptance."
-                ),
-                "current_question": (
-                    "Starting from champion v2, determine whether continuous "
-                    "additional useful research remains or whether this is a "
-                    "real plateau."
-                ),
-                "required_evidence": [
-                    "preserve or improve promotion behavior",
-                    "inspect branch transfer before judging plateau",
-                    (
-                        "distinguish quality-blocked proposals from "
-                        "protocol-evaluated no-effect candidates"
-                    ),
-                    "compare cost_delta and split_delta before split-only claims",
-                    "explain fast completion through the runtime model",
-                ],
-                "default_avoid_directions": [
-                    "baseline",
-                    "proposal-quality",
-                    "fast completion",
-                    "split_delta_sum==0",
-                    "broad warehouse matrix",
-                ],
-                "decision_boundary": (
-                    "Proposal/delegated-analysis guidance only; never enter "
-                    "DecisionFeatures, Protocol gates, promotion input, or "
-                    "scheduler state."
-                ),
-            },
+            "research_focus": research_focus,
             "model": {"name": "gpt-5.5", "completion_preflight": True},
             "report_metadata": {
                 "control_pair_key": "warehouse-v2-followup",
@@ -1833,7 +1964,52 @@ def _write_cvrp_large_twoopt_manifest(
     campaign_dir: Path,
     *,
     rounds: int,
+    include_large_twoopt_constraints: bool = True,
 ) -> None:
+    research_focus = {
+        "measurement_opportunity_diagnostics": {
+            "screening_mde_at_power_80": 9.9,
+            "practical_screen_delta": 2.0,
+            "reason_codes": [
+                "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
+                "TRAJECTORY_DIVERGENT_LOW_SNR",
+                "BUDGET_EXHAUSTING_RUNTIME_REPORT_ONLY",
+            ],
+        },
+        "measurable_opportunity_classes": [
+            "large_instance_intra_route_two_opt_seed",
+            "bounded_local_search_variant",
+            "construction_seed_portfolio",
+            "destroy_repair_selection",
+        ],
+        "default_avoid_directions": [
+            "broad VNS removal",
+            "pure ALNS/no-polish",
+            "initial-VNS disablement",
+            "unbounded large-instance two-opt fallback",
+            "cadence-2",
+            "share70 cap",
+            "route-merge absorption",
+            "demand-slack regret insertion",
+            "cross-route 2-opt reconnect",
+            "cluster-biased worst removal",
+            "route-limit seed diversification",
+        ],
+        "route_merge_exception_rule": (
+            "Require direct objective evidence for route merge claims."
+        ),
+        "construction_seed_rule": (
+            "Require same-run seed baseline or same-mechanism accepted delta."
+        ),
+        "decision_boundary": (
+            "Proposal guidance only; never enter DecisionFeatures, "
+            "Protocol gates, promotion input, or scheduler state."
+        ),
+    }
+    if include_large_twoopt_constraints:
+        research_focus["large_instance_two_opt_constraints"] = (
+            _large_twoopt_constraints()
+        )
     _write_json(
         run_root / "prepared_run_manifest.v1.json",
         {
@@ -1847,47 +2023,7 @@ def _write_cvrp_large_twoopt_manifest(
             "problem_family": "cvrp",
             "run_root": str(run_root),
             "campaign_dir": str(campaign_dir),
-            "research_focus": {
-                "measurement_opportunity_diagnostics": {
-                    "screening_mde_at_power_80": 9.9,
-                    "practical_screen_delta": 2.0,
-                    "reason_codes": [
-                        "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
-                        "TRAJECTORY_DIVERGENT_LOW_SNR",
-                        "BUDGET_EXHAUSTING_RUNTIME_REPORT_ONLY",
-                    ],
-                },
-                "measurable_opportunity_classes": [
-                    "large_instance_intra_route_two_opt_seed",
-                    "bounded_local_search_variant",
-                    "construction_seed_portfolio",
-                    "destroy_repair_selection",
-                ],
-                "default_avoid_directions": [
-                    "broad VNS removal",
-                    "pure ALNS/no-polish",
-                    "initial-VNS disablement",
-                    "unbounded large-instance two-opt fallback",
-                    "cadence-2",
-                    "share70 cap",
-                    "route-merge absorption",
-                    "demand-slack regret insertion",
-                    "cross-route 2-opt reconnect",
-                    "cluster-biased worst removal",
-                    "route-limit seed diversification",
-                ],
-                "large_instance_two_opt_constraints": _large_twoopt_constraints(),
-                "route_merge_exception_rule": (
-                    "Require direct objective evidence for route merge claims."
-                ),
-                "construction_seed_rule": (
-                    "Require same-run seed baseline or same-mechanism accepted delta."
-                ),
-                "decision_boundary": (
-                    "Proposal guidance only; never enter DecisionFeatures, "
-                    "Protocol gates, promotion input, or scheduler state."
-                ),
-            },
+            "research_focus": research_focus,
             "model": {"name": "gpt-5.5", "completion_preflight": True},
             "report_metadata": {
                 "control_pair_key": "cvrp.large-twoopt-bounded:rep01",

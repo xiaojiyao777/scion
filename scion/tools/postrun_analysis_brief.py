@@ -3500,6 +3500,7 @@ def _cvrp_large_twoopt_summary(
     }
     interpretation = _cvrp_large_twoopt_interpretation(
         current_run_evidence=current_run_evidence,
+        handoff_complete=handoff_complete,
         protocol_evaluated_candidates=protocol_evaluated_candidates,
         formal_screened_candidates=formal_screened_candidates,
         quality_block_signal=quality_block_signal,
@@ -3616,6 +3617,7 @@ def _is_cvrp_large_twoopt_family(value: str) -> bool:
 def _cvrp_large_twoopt_interpretation(
     *,
     current_run_evidence: bool,
+    handoff_complete: bool,
     protocol_evaluated_candidates: int,
     formal_screened_candidates: int,
     quality_block_signal: int,
@@ -3632,6 +3634,8 @@ def _cvrp_large_twoopt_interpretation(
         if formal_screened_candidates > 0:
             return "screened_without_protocol_evaluation"
         return "insufficient_current_run_evidence"
+    if not handoff_complete:
+        return "protocol_evaluated_handoff_incomplete"
     if not (
         measurement_available
         and runtime_available
@@ -3819,6 +3823,7 @@ def _warehouse_followup_summary(
     }
     interpretation = _warehouse_followup_interpretation(
         current_run_evidence=current_run_evidence,
+        handoff_complete=handoff_complete,
         protocol_evaluated_candidates=protocol_evaluated_candidates,
         formal_screened_candidates=formal_screened_candidates,
         quality_block_signal=quality_block_signal,
@@ -3871,6 +3876,7 @@ def _warehouse_handoff_requirements(
 def _warehouse_followup_interpretation(
     *,
     current_run_evidence: bool,
+    handoff_complete: bool,
     protocol_evaluated_candidates: int,
     formal_screened_candidates: int,
     quality_block_signal: int,
@@ -3881,6 +3887,8 @@ def _warehouse_followup_interpretation(
     if not current_run_evidence:
         return "prepared_only_launch_required"
     if protocol_evaluated_candidates > 0:
+        if not handoff_complete:
+            return "protocol_evaluated_handoff_incomplete"
         if not (
             measurement_available
             and runtime_available
