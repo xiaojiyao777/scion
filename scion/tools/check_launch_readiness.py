@@ -321,6 +321,10 @@ def build_readiness(
         *_run_script_model_route_enforced(root, run_sh, prepared_contract),
     )
     add_check(
+        "run_script_no_early_stop_enforced",
+        *_run_script_no_early_stop_enforced(root, run_sh, prepared_contract),
+    )
+    add_check(
         "run_script_strict_postrun_readiness",
         "ok" if _run_sh_contains_strict_postrun_readiness(run_sh) else "failed",
         "check_postrun_acceptance.py --require-current-run-ready and "
@@ -1072,6 +1076,91 @@ def _run_script_model_route_enforced(
     return ("ok" if not failures else "failed"), detail
 
 
+def _run_script_no_early_stop_enforced(
+    root: Path,
+    run_sh: Path,
+    prepared_contract: Any,
+) -> tuple[str, Any]:
+    launch_env = root / "launch.env"
+    failures: list[dict[str, Any]] = []
+    try:
+        launch_env_text = launch_env.read_text(encoding="utf-8")
+    except OSError as exc:
+        launch_env_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_launch_env",
+                "launch_env": str(launch_env),
+                "error": str(exc),
+            }
+        )
+    try:
+        run_text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        run_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_run_script",
+                "run_script": str(run_sh),
+                "error": str(exc),
+            }
+        )
+
+    manifest = _prepared_manifest_from_contract(root, prepared_contract)
+    manifest_command = manifest.get("command")
+    env_disable_early_stop = _shell_assignment_value(
+        launch_env_text,
+        "DISABLE_EARLY_STOP",
+    )
+    campaign_pos, campaign_line = _campaign_command_line(run_text)
+    command_has_flag = (
+        isinstance(manifest_command, str)
+        and "--disable-early-stop" in manifest_command
+    )
+    run_script_has_flag = "--disable-early-stop" in campaign_line
+
+    if env_disable_early_stop != "1":
+        failures.append(
+            {
+                "reason": "disable_early_stop_not_enabled",
+                "launch_env": str(launch_env),
+                "actual": env_disable_early_stop,
+            }
+        )
+    if not command_has_flag:
+        failures.append(
+            {
+                "reason": "manifest_command_missing_disable_early_stop",
+                "manifest_path": manifest.get("manifest_path"),
+            }
+        )
+    if campaign_pos < 0:
+        failures.append(
+            {
+                "reason": "missing_campaign_command_marker",
+                "marker": RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER,
+            }
+        )
+    elif not run_script_has_flag:
+        failures.append(
+            {
+                "reason": "run_script_campaign_command_missing_disable_early_stop",
+                "run_script": str(run_sh),
+            }
+        )
+
+    detail = {
+        "launch_env": str(launch_env),
+        "run_script": str(run_sh),
+        "disable_early_stop": env_disable_early_stop,
+        "manifest_command_has_disable_early_stop": command_has_flag,
+        "run_script_campaign_command_has_disable_early_stop": run_script_has_flag,
+        "campaign_command_position": campaign_pos,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
+
+
 def _prepared_manifest_from_contract(root: Path, prepared_contract: Any) -> dict[str, Any]:
     manifest = prepared_contract if isinstance(prepared_contract, dict) else {}
     manifest_path = manifest.get("manifest_path")
@@ -1126,6 +1215,11 @@ def _export_assignment_position(text: str, key: str) -> int:
 
 
 def _campaign_command_position(text: str) -> int:
+    position, _line = _campaign_command_line(text)
+    return position
+
+
+def _campaign_command_line(text: str) -> tuple[int, str]:
     offset = 0
     for line in text.splitlines(keepends=True):
         stripped = line.strip()
@@ -1133,9 +1227,9 @@ def _campaign_command_position(text: str) -> int:
             RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER in stripped
             and not _line_is_campaign_command_echo(stripped)
         ):
-            return offset + line.find(RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER)
+            return offset + line.find(RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER), stripped
         offset += len(line)
-    return -1
+    return -1, ""
 
 
 def _line_is_campaign_command_echo(stripped_line: str) -> bool:

@@ -51,6 +51,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     )
     assert report["checks"]["run_script_pythonpath_enforced"]["status"] == "ok"
     assert report["checks"]["run_script_model_route_enforced"]["status"] == "ok"
+    assert report["checks"]["run_script_no_early_stop_enforced"]["status"] == "ok"
     assert report["checks"]["run_script_strict_postrun_readiness"]["status"] == "ok"
     assert (
         report["checks"]["run_script_postrun_reports_after_campaign"]["status"] == "ok"
@@ -800,6 +801,59 @@ def test_launch_readiness_rejects_non_gpt55_model(
     } in failures
 
 
+def test_launch_readiness_rejects_disabled_early_stop(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(
+        launch_env.read_text(encoding="utf-8").replace(
+            "DISABLE_EARLY_STOP=1",
+            "DISABLE_EARLY_STOP=0",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    early_stop_check = report["checks"]["run_script_no_early_stop_enforced"]
+    assert early_stop_check["status"] == "failed"
+    assert early_stop_check["detail"]["failures"] == [
+        {
+            "reason": "disable_early_stop_not_enabled",
+            "launch_env": str(launch_env),
+            "actual": "0",
+        }
+    ]
+
+
+def test_launch_readiness_rejects_run_script_without_disable_early_stop(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            " --disable-early-stop\nSTATUS=$?",
+            "\nSTATUS=$?",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    early_stop_check = report["checks"]["run_script_no_early_stop_enforced"]
+    assert early_stop_check["status"] == "failed"
+    assert {
+        "reason": "run_script_campaign_command_missing_disable_early_stop",
+        "run_script": str(run_sh),
+    } in early_stop_check["detail"]["failures"]
+
+
 def test_launch_readiness_rejects_data_root_failure_without_postrun_call(
     tmp_path: Path,
 ) -> None:
@@ -1044,7 +1098,8 @@ def _write_prepared_root(
         f"--protocol {config_dir / 'protocol.yaml'} "
         f"--split {config_dir / 'split.yaml'} "
         f"--seeds {config_dir / 'seeds.yaml'} "
-        f"--campaign-dir {campaign_dir} --rounds 1 --agentic-proposal"
+        f"--campaign-dir {campaign_dir} --rounds 1 "
+        f"--agentic-proposal --disable-early-stop"
     )
     _write_json(
         run_root / "run_status.json",
@@ -1130,6 +1185,7 @@ def _write_prepared_root(
                 "SCION_MODEL=gpt-5.5",
                 "SCION_BASE_URL=http://127.0.0.1:8080",
                 "COMPLETION_PREFLIGHT=1",
+                "DISABLE_EARLY_STOP=1",
                 "",
             ]
         ),
@@ -1183,7 +1239,7 @@ if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
     exit "$PREFLIGHT_STATUS"
   fi
 fi
-{sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --agentic-proposal
+{sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --agentic-proposal --disable-early-stop
 STATUS=$?
 write_postrun_acceptance_reports
 exit "$STATUS"
