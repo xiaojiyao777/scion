@@ -121,6 +121,20 @@ ACTIVE_SUBJECT_CODE_CONSTRAINT_SIGNAL_NAMES = {
     "cvrp": "cvrp_active_subject_code_constraints_prompt_bridge",
     "warehouse_delivery": "warehouse_active_subject_code_constraints_prompt_bridge",
 }
+ACTIVE_SUBJECT_CODE_CONSTRAINT_PROVIDER_SUMMARY_SCHEMA = (
+    "scion.active_subject_code_constraints_provider_payload_summary.v1"
+)
+ACTIVE_SUBJECT_CODE_CONSTRAINT_SURFACES = {
+    "cvrp": "solver_design",
+    "warehouse_delivery": "order_level",
+}
+PROBLEM_V1_CANDIDATES_BY_FAMILY = {
+    "cvrp": ("scion/scion/problems/cvrp/problem-v1.yaml",),
+    "warehouse_delivery": (
+        "scion/problems/warehouse_delivery/problem-v1.yaml",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml",
+    ),
+}
 
 
 def rebuild_prepared_handoff(
@@ -440,6 +454,8 @@ def build_prepared_prompt_context_readiness(run_root: Path | str) -> dict[str, A
     )
     _add_active_subject_code_constraints_prompt_signal(
         signals,
+        root=root,
+        manifest=manifest_dict,
         problem_family=manifest_dict.get("problem_family"),
     )
 
@@ -846,12 +862,19 @@ def _add_launch_research_focus_prompt_signal(
 def _add_active_subject_code_constraints_prompt_signal(
     signals: dict[str, dict[str, Any]],
     *,
+    root: Path,
+    manifest: dict[str, Any],
     problem_family: Any,
 ) -> None:
     family = str(problem_family or "")
     provider_markers = ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS_BY_FAMILY.get(family)
     if not provider_markers:
         return
+    provider_payload = _active_subject_code_constraints_provider_payload_summary(
+        root=root,
+        manifest=manifest,
+        problem_family=family,
+    )
     source_marker_results = {
         name: _source_contains(relative_path, marker)
         for name, (relative_path, marker) in (
@@ -868,6 +891,7 @@ def _add_active_subject_code_constraints_prompt_signal(
         available=(
             all(source_marker_results.values())
             and all(provider_marker_results.values())
+            and provider_payload.get("available") is True
         ),
         required=True,
         source=(
@@ -877,6 +901,7 @@ def _add_active_subject_code_constraints_prompt_signal(
         detail={
             "source_markers": source_marker_results,
             "provider_markers": provider_marker_results,
+            "provider_payload": provider_payload,
             "boundary": (
                 "report-only source bridge; provider constraints guide code "
                 "generation and stay out of DecisionFeatures"
@@ -904,6 +929,94 @@ def _add_signal(
     }
 
 
+def _active_subject_code_constraints_provider_payload_summary(
+    *,
+    root: Path,
+    manifest: dict[str, Any],
+    problem_family: str,
+) -> dict[str, Any]:
+    surface = ACTIVE_SUBJECT_CODE_CONSTRAINT_SURFACES.get(problem_family, "")
+    problem_v1 = _resolve_problem_v1_path(
+        root=root,
+        manifest=manifest,
+        problem_family=problem_family,
+    )
+    base = {
+        "schema_version": ACTIVE_SUBJECT_CODE_CONSTRAINT_PROVIDER_SUMMARY_SCHEMA,
+        "problem_family": problem_family,
+        "surface": surface,
+        "problem_v1_path": str(problem_v1) if problem_v1 else "",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_payload_excluded": True,
+    }
+    if not problem_v1:
+        return {**base, "available": False, "reason": "problem_v1_not_found"}
+    try:
+        from scion.problem.bridge import load_problem_spec_v1_from_yaml
+        from scion.problem.loader import load_problem_adapter
+        from scion.problem.providers import active_subject_code_constraints_payload
+
+        spec = load_problem_spec_v1_from_yaml(problem_v1)
+        adapter = load_problem_adapter(spec)
+        payload = active_subject_code_constraints_payload(
+            problem_spec=spec,
+            adapter=adapter,
+            surface=surface,
+        )
+    except Exception as exc:  # pragma: no cover - surfaced as readiness detail.
+        return {
+            **base,
+            "available": False,
+            "reason": "provider_payload_error",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+
+    counts = {
+        "constraint_count": _sequence_count(payload.get("constraints")),
+        "object_model_hint_count": _sequence_count(payload.get("object_model_hints")),
+        "api_contract_count": _sequence_count(payload.get("api_contracts")),
+        "forbidden_pattern_count": _sequence_count(payload.get("forbidden_patterns")),
+    }
+    total = sum(counts.values())
+    version = str(payload.get("version") or "").strip()
+    available = bool(payload) and bool(version) and total > 0
+    return {
+        **base,
+        "available": available,
+        "reason": "ok" if available else "empty_payload",
+        "version": version,
+        "subject_id": str(payload.get("subject_id") or "").strip(),
+        **counts,
+        "total_guidance_item_count": total,
+    }
+
+
+def _resolve_problem_v1_path(
+    *,
+    root: Path,
+    manifest: dict[str, Any],
+    problem_family: str,
+) -> Path | None:
+    config = _mapping_or_empty(manifest.get("config"))
+    candidates: list[Path] = []
+    configured = str(config.get("problem_v1") or "").strip()
+    if configured:
+        path = Path(configured).expanduser()
+        if path.is_absolute():
+            candidates.append(path)
+        else:
+            candidates.extend((root / path, REPO_DIR / path))
+    for rel in PROBLEM_V1_CANDIDATES_BY_FAMILY.get(problem_family, ()):
+        candidates.append(REPO_DIR / rel)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
 def _resolve_campaign_dir(root: Path, manifest: dict[str, Any]) -> Path:
     local_campaign = root / "campaign"
     if local_campaign.exists():
@@ -929,7 +1042,7 @@ def _string_items(value: Any) -> list[str]:
 
 
 def _sequence_count(value: Any) -> int:
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return len(value)
     if isinstance(value, dict):
         return len(value)

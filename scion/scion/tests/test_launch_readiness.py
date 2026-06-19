@@ -1138,6 +1138,69 @@ def test_launch_readiness_rejects_missing_cvrp_code_constraint_bridge(
     )
 
 
+def test_launch_readiness_rejects_missing_cvrp_code_constraint_provider_payload(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    artifact_path = (
+        run_root
+        / "prepared_handoff"
+        / "prompt_context_readiness"
+        / "cvrp_on_full.prepared_prompt_context_readiness.v1.json"
+    )
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["signals"]["cvrp_active_subject_code_constraints_prompt_bridge"][
+        "detail"
+    ].pop("provider_payload")
+    artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert any(
+        failure["reason"]
+        == "cvrp_active_subject_code_constraints_bridge_provider_payload_missing"
+        for failure in prompt_check["detail"]["failures"]
+    )
+
+
+def test_launch_readiness_rejects_stale_cvrp_code_constraint_provider_payload(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    artifact_path = (
+        run_root
+        / "prepared_handoff"
+        / "prompt_context_readiness"
+        / "cvrp_on_full.prepared_prompt_context_readiness.v1.json"
+    )
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    provider_payload = payload["signals"][
+        "cvrp_active_subject_code_constraints_prompt_bridge"
+    ]["detail"]["provider_payload"]
+    provider_payload["constraint_count"] = 0
+    provider_payload["total_guidance_item_count"] = 11
+    artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert any(
+        failure["reason"]
+        == "cvrp_active_subject_code_constraints_bridge_provider_payload_field_mismatch"
+        and failure["field"] == "constraint_count"
+        and failure["expected"] == 2
+        and failure["actual"] == 0
+        for failure in prompt_check["detail"]["failures"]
+    )
+
+
 def test_launch_readiness_rejects_missing_warehouse_code_constraint_bridge(
     tmp_path: Path,
 ) -> None:
@@ -2975,6 +3038,31 @@ def _write_prompt_context_readiness(
             signals["warehouse_active_subject_code_constraints_prompt_bridge"] = {
                 "available": True,
                 "detail": {
+                    "provider_payload": {
+                        "schema_version": (
+                            "scion.active_subject_code_constraints_provider_payload_summary.v1"
+                        ),
+                        "problem_family": "warehouse_delivery",
+                        "surface": "order_level",
+                        "problem_v1_path": "",
+                        "report_only": True,
+                        "quality_judgment": False,
+                        "decision_features_excluded": True,
+                        "raw_payload_excluded": True,
+                        "available": True,
+                        "reason": "ok",
+                        "version": (
+                            "warehouse_operator_validation_transfer_code_constraints.v1"
+                        ),
+                        "subject_id": (
+                            "warehouse_delivery.operator.validation_transfer"
+                        ),
+                        "constraint_count": 5,
+                        "object_model_hint_count": 0,
+                        "api_contract_count": 0,
+                        "forbidden_pattern_count": 5,
+                        "total_guidance_item_count": 10,
+                    },
                     "provider_markers": {
                         "bounded_scan_guard": True,
                         "diagnostics_contract": True,
@@ -2995,6 +3083,27 @@ def _write_prompt_context_readiness(
             signals["cvrp_active_subject_code_constraints_prompt_bridge"] = {
                 "available": True,
                 "detail": {
+                    "provider_payload": {
+                        "schema_version": (
+                            "scion.active_subject_code_constraints_provider_payload_summary.v1"
+                        ),
+                        "problem_family": "cvrp",
+                        "surface": "solver_design",
+                        "problem_v1_path": "",
+                        "report_only": True,
+                        "quality_judgment": False,
+                        "decision_features_excluded": True,
+                        "raw_payload_excluded": True,
+                        "available": True,
+                        "reason": "ok",
+                        "version": "cvrp_solver_design_code_constraints.v1",
+                        "subject_id": "cvrp.solver_design.active_baseline",
+                        "constraint_count": 2,
+                        "object_model_hint_count": 3,
+                        "api_contract_count": 2,
+                        "forbidden_pattern_count": 6,
+                        "total_guidance_item_count": 13,
+                    },
                     "provider_markers": {
                         "large_twoopt_runtime_guard": True,
                         "provider_hook": True,

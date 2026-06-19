@@ -96,6 +96,20 @@ ACTIVE_SUBJECT_CODE_CONSTRAINT_SIGNAL_NAMES = {
     "cvrp": "cvrp_active_subject_code_constraints_prompt_bridge",
     "warehouse_delivery": "warehouse_active_subject_code_constraints_prompt_bridge",
 }
+ACTIVE_SUBJECT_CODE_CONSTRAINT_PROVIDER_SUMMARY_SCHEMA = (
+    "scion.active_subject_code_constraints_provider_payload_summary.v1"
+)
+ACTIVE_SUBJECT_CODE_CONSTRAINT_SURFACES = {
+    "cvrp": "solver_design",
+    "warehouse_delivery": "order_level",
+}
+PROBLEM_V1_CANDIDATES_BY_FAMILY = {
+    "cvrp": ("scion/scion/problems/cvrp/problem-v1.yaml",),
+    "warehouse_delivery": (
+        "scion/problems/warehouse_delivery/problem-v1.yaml",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml",
+    ),
+}
 PROBLEM_SPECIFIC_CONTRACT_PREFIXES = {
     "cvrp": ("cvrp_",),
     "warehouse_delivery": ("warehouse_",),
@@ -2680,8 +2694,191 @@ def _prompt_context_artifact_failures(
                             "missing": missing or ["<all>"],
                         }
                     )
+            failures.extend(
+                _active_subject_code_constraints_provider_payload_failures(
+                    code_detail_dict.get("provider_payload"),
+                    root=root,
+                    manifest=manifest,
+                    problem_family=family,
+                    failure_prefix=failure_prefix,
+                )
+            )
 
     return failures
+
+
+def _active_subject_code_constraints_provider_payload_failures(
+    value: Any,
+    *,
+    root: Path,
+    manifest: dict[str, Any],
+    problem_family: str,
+    failure_prefix: str,
+) -> list[dict[str, Any]]:
+    payload = value if isinstance(value, dict) else {}
+    expected = _active_subject_code_constraints_provider_payload_summary(
+        root=root,
+        manifest=manifest,
+        problem_family=problem_family,
+    )
+    failures: list[dict[str, Any]] = []
+    if not payload:
+        return [{"reason": f"{failure_prefix}_provider_payload_missing"}]
+
+    boundary_expectations = {
+        "schema_version": ACTIVE_SUBJECT_CODE_CONSTRAINT_PROVIDER_SUMMARY_SCHEMA,
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_payload_excluded": True,
+        "available": True,
+    }
+    for field, expected_value in boundary_expectations.items():
+        if payload.get(field) != expected_value:
+            failures.append(
+                {
+                    "reason": f"{failure_prefix}_provider_payload_field_mismatch",
+                    "field": field,
+                    "expected": expected_value,
+                    "actual": payload.get(field),
+                }
+            )
+
+    if expected.get("available") is not True:
+        failures.append(
+            {
+                "reason": f"{failure_prefix}_live_provider_payload_unavailable",
+                "expected": expected,
+            }
+        )
+        return failures
+
+    compare_fields = (
+        "problem_family",
+        "surface",
+        "version",
+        "subject_id",
+        "constraint_count",
+        "object_model_hint_count",
+        "api_contract_count",
+        "forbidden_pattern_count",
+        "total_guidance_item_count",
+    )
+    for field in compare_fields:
+        if payload.get(field) != expected.get(field):
+            failures.append(
+                {
+                    "reason": f"{failure_prefix}_provider_payload_field_mismatch",
+                    "field": field,
+                    "expected": expected.get(field),
+                    "actual": payload.get(field),
+                }
+            )
+    if _int_or_zero(payload.get("total_guidance_item_count")) <= 0:
+        failures.append({"reason": f"{failure_prefix}_provider_payload_empty"})
+    return failures
+
+
+def _active_subject_code_constraints_provider_payload_summary(
+    *,
+    root: Path,
+    manifest: dict[str, Any],
+    problem_family: str,
+) -> dict[str, Any]:
+    surface = ACTIVE_SUBJECT_CODE_CONSTRAINT_SURFACES.get(problem_family, "")
+    problem_v1 = _resolve_problem_v1_path(
+        root=root,
+        manifest=manifest,
+        problem_family=problem_family,
+    )
+    base = {
+        "schema_version": ACTIVE_SUBJECT_CODE_CONSTRAINT_PROVIDER_SUMMARY_SCHEMA,
+        "problem_family": problem_family,
+        "surface": surface,
+        "problem_v1_path": str(problem_v1) if problem_v1 else "",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_payload_excluded": True,
+    }
+    if not problem_v1:
+        return {**base, "available": False, "reason": "problem_v1_not_found"}
+    try:
+        from scion.problem.bridge import load_problem_spec_v1_from_yaml
+        from scion.problem.loader import load_problem_adapter
+        from scion.problem.providers import active_subject_code_constraints_payload
+
+        spec = load_problem_spec_v1_from_yaml(problem_v1)
+        adapter = load_problem_adapter(spec)
+        payload = active_subject_code_constraints_payload(
+            problem_spec=spec,
+            adapter=adapter,
+            surface=surface,
+        )
+    except Exception as exc:  # pragma: no cover - surfaced as readiness detail.
+        return {
+            **base,
+            "available": False,
+            "reason": "provider_payload_error",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+
+    counts = {
+        "constraint_count": _sequence_count(payload.get("constraints")),
+        "object_model_hint_count": _sequence_count(payload.get("object_model_hints")),
+        "api_contract_count": _sequence_count(payload.get("api_contracts")),
+        "forbidden_pattern_count": _sequence_count(payload.get("forbidden_patterns")),
+    }
+    total = sum(counts.values())
+    version = str(payload.get("version") or "").strip()
+    available = bool(payload) and bool(version) and total > 0
+    return {
+        **base,
+        "available": available,
+        "reason": "ok" if available else "empty_payload",
+        "version": version,
+        "subject_id": str(payload.get("subject_id") or "").strip(),
+        **counts,
+        "total_guidance_item_count": total,
+    }
+
+
+def _resolve_problem_v1_path(
+    *,
+    root: Path,
+    manifest: dict[str, Any],
+    problem_family: str,
+) -> Path | None:
+    config = _mapping_or_empty(manifest.get("config"))
+    candidates: list[Path] = []
+    configured = str(config.get("problem_v1") or "").strip()
+    if configured:
+        path = Path(configured).expanduser()
+        if path.is_absolute():
+            candidates.append(path)
+        else:
+            candidates.extend((root / path, REPO_DIR / path))
+    for rel in PROBLEM_V1_CANDIDATES_BY_FAMILY.get(problem_family, ()):
+        candidates.append(REPO_DIR / rel)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
+def _mapping_or_empty(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _sequence_count(value: Any) -> int:
+    if isinstance(value, (list, tuple)):
+        return len(value)
+    if isinstance(value, dict):
+        return len(value)
+    return 0
 
 
 def _prepared_analysis_brief_check(root: Path) -> tuple[str, Any]:
