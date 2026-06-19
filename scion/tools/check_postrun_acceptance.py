@@ -130,6 +130,7 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
     rebuild_manifest = _read_rebuild_manifest(report_dir)
     analysis_brief_path = _analysis_brief_path_from_rebuild_manifest(
         rebuild_manifest,
+        report_dir,
     )
     analysis_brief = (
         _read_json_object(analysis_brief_path)
@@ -463,6 +464,7 @@ def _read_rebuild_manifest(report_dir: Path) -> dict[str, Any]:
 
 def _analysis_brief_path_from_rebuild_manifest(
     rebuild_manifest: Mapping[str, Any],
+    report_dir: Path,
 ) -> Path | None:
     families = _mapping_or_empty(rebuild_manifest.get("families"))
     analysis_brief = _mapping_or_empty(families.get("analysis_brief"))
@@ -470,8 +472,13 @@ def _analysis_brief_path_from_rebuild_manifest(
     if not isinstance(outputs, list):
         return None
     for item in outputs:
-        path = Path(str(item))
-        if path.suffix == ".json" and path.is_file():
+        output = str(item)
+        path = _manifest_output_path(output, report_dir)
+        if (
+            path.suffix == ".json"
+            and path.is_file()
+            and _manifest_output_in_family(path, report_dir, "analysis_brief")
+        ):
             return path
     return None
 
@@ -491,6 +498,7 @@ def _rebuild_manifest_declared_outputs_present(
     missing_outputs: list[dict[str, Any]] = []
     inconsistent_outputs: list[dict[str, Any]] = []
     unexpected_outputs: list[dict[str, Any]] = []
+    out_of_scope_outputs: list[dict[str, Any]] = []
     family_failures: list[dict[str, Any]] = []
     for family_name, raw_family in sorted(families.items()):
         family = _mapping_or_empty(raw_family)
@@ -519,12 +527,22 @@ def _rebuild_manifest_declared_outputs_present(
                 }
                 )
             continue
-        declared_paths = {
-            _manifest_output_path(output, report_dir).resolve()
-            for output in outputs
-        }
+        declared_paths: set[Path] = set()
         for output in outputs:
             path = _manifest_output_path(output, report_dir)
+            in_scope = _manifest_output_in_family(path, report_dir, str(family_name))
+            if not in_scope:
+                out_of_scope_outputs.append(
+                    {
+                        "family": str(family_name),
+                        "path": str(path),
+                        "manifest_output": output,
+                        "expected_directory": str(report_dir / str(family_name)),
+                        "reason": "manifest_output_outside_family_directory",
+                    }
+                )
+            else:
+                declared_paths.add(path.resolve())
             actual_present = path.is_file()
             manifest_present = outputs_present.get(output)
             if actual_present is False:
@@ -575,6 +593,7 @@ def _rebuild_manifest_declared_outputs_present(
         missing_outputs
         or inconsistent_outputs
         or unexpected_outputs
+        or out_of_scope_outputs
         or family_failures
     )
     return (
@@ -585,6 +604,7 @@ def _rebuild_manifest_declared_outputs_present(
             "missing_outputs": missing_outputs,
             "inconsistent_outputs": inconsistent_outputs,
             "unexpected_outputs": unexpected_outputs,
+            "out_of_scope_outputs": out_of_scope_outputs,
             "family_failures": family_failures,
         },
     )
@@ -595,6 +615,13 @@ def _manifest_output_path(value: str, report_dir: Path) -> Path:
     if path.is_absolute():
         return path
     return (report_dir / path).resolve()
+
+
+def _manifest_output_in_family(path: Path, report_dir: Path, family_name: str) -> bool:
+    try:
+        return path.resolve().parent == (report_dir / family_name).resolve()
+    except OSError:
+        return False
 
 
 def _artifact_paths(directory: Path) -> list[str]:

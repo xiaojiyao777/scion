@@ -327,6 +327,65 @@ def test_postrun_acceptance_readiness_rejects_unexpected_family_output(
     ]
 
 
+def test_postrun_acceptance_rejects_manifest_output_outside_family_dir(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "run-external-manifest-output")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    manifest_path = (
+        run_root / "postrun_acceptance" / "rebuild" / "rebuild_manifest.v1.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    analysis_family = manifest["families"]["analysis_brief"]
+    declared_brief = Path(
+        next(
+            output
+            for output in analysis_family["outputs"]
+            if str(output).endswith(".json")
+        )
+    )
+    external_brief = tmp_path / "external" / "stale.postrun_analysis_brief.v1.json"
+    _write_json(
+        external_brief,
+        json.loads(declared_brief.read_text(encoding="utf-8")),
+    )
+    declared_brief.unlink()
+    analysis_family["outputs"] = [
+        str(external_brief) if output == str(declared_brief) else output
+        for output in analysis_family["outputs"]
+    ]
+    analysis_family["outputs_present"].pop(str(declared_brief))
+    analysis_family["outputs_present"][str(external_brief)] = True
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    output_check = readiness["checks"]["rebuild_manifest_declared_outputs_present"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert readiness["checks"]["analysis_brief_present"]["status"] == "failed"
+    assert output_check["status"] == "failed"
+    assert output_check["required"] is True
+    assert output_check["detail"]["missing_outputs"] == []
+    assert output_check["detail"]["inconsistent_outputs"] == []
+    assert output_check["detail"]["out_of_scope_outputs"] == [
+        {
+            "family": "analysis_brief",
+            "path": str(external_brief),
+            "manifest_output": str(external_brief),
+            "expected_directory": str(
+                run_root / "postrun_acceptance" / "analysis_brief"
+            ),
+            "reason": "manifest_output_outside_family_directory",
+        }
+    ]
+
+
 def test_postrun_acceptance_readiness_accepts_actionable_problem_summary(
     tmp_path: Path,
 ) -> None:

@@ -1881,6 +1881,7 @@ def _prepared_handoff_rebuild_declared_outputs_present(root: Path) -> tuple[str,
     missing_outputs: list[dict[str, Any]] = []
     inconsistent_outputs: list[dict[str, Any]] = []
     unexpected_outputs: list[dict[str, Any]] = []
+    out_of_scope_outputs: list[dict[str, Any]] = []
     for family_name, raw_family in sorted(families_dict.items()):
         family = raw_family if isinstance(raw_family, dict) else {}
         family_status = family.get("status")
@@ -1915,12 +1916,26 @@ def _prepared_handoff_rebuild_declared_outputs_present(root: Path) -> tuple[str,
             continue
 
         ok_families.append(str(family_name))
-        declared_paths = {
-            _prepared_handoff_manifest_output_path(output, handoff_dir).resolve()
-            for output in outputs
-        }
+        declared_paths: set[Path] = set()
         for output in outputs:
             path = _prepared_handoff_manifest_output_path(output, handoff_dir)
+            in_scope = _prepared_handoff_manifest_output_in_family(
+                path,
+                handoff_dir,
+                str(family_name),
+            )
+            if not in_scope:
+                out_of_scope_outputs.append(
+                    {
+                        "family": str(family_name),
+                        "path": str(path),
+                        "manifest_output": output,
+                        "expected_directory": str(handoff_dir / str(family_name)),
+                        "reason": "manifest_output_outside_family_directory",
+                    }
+                )
+            else:
+                declared_paths.add(path.resolve())
             actual_present = path.is_file()
             manifest_present = outputs_present.get(output)
             if actual_present is False:
@@ -1973,12 +1988,14 @@ def _prepared_handoff_rebuild_declared_outputs_present(root: Path) -> tuple[str,
     detail["missing_outputs"] = missing_outputs
     detail["inconsistent_outputs"] = inconsistent_outputs
     detail["unexpected_outputs"] = unexpected_outputs
+    detail["out_of_scope_outputs"] = out_of_scope_outputs
     detail["family_failures"] = family_failures
     return (
         "failed"
         if missing_outputs
         or inconsistent_outputs
         or unexpected_outputs
+        or out_of_scope_outputs
         or manifest_failures
         or family_failures
         else "ok",
@@ -1991,6 +2008,17 @@ def _prepared_handoff_manifest_output_path(value: str, handoff_dir: Path) -> Pat
     if path.is_absolute():
         return path
     return handoff_dir / path
+
+
+def _prepared_handoff_manifest_output_in_family(
+    path: Path,
+    handoff_dir: Path,
+    family_name: str,
+) -> bool:
+    try:
+        return path.resolve().parent == (handoff_dir / family_name).resolve()
+    except OSError:
+        return False
 
 
 def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:
