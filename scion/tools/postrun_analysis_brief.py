@@ -4476,9 +4476,9 @@ def _warehouse_followup_continuity_signal(
     active_shape_counts = _int_mapping(aggregate.get("active_shape_counts"))
     substantive = (
         max_branch_depth >= 2
-        or counts["same_mechanism_observed"] > 0
-        or counts["branch_lessons_required"] > 0
-        or counts["weak_positive_observed"] > 0
+        or counts["same_mechanism_selected"] > 0
+        or counts["branch_lessons_satisfied"] > 0
+        or counts["weak_positive_accepted"] > 0
     )
     return {
         "substantive": substantive,

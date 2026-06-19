@@ -406,9 +406,10 @@ Current checkpoint:
   launch/readiness evidence docs, not in this current checkpoint.
 - Current warehouse delegated-review boundary: plateau-review readiness requires
   protocol-evaluated current-run evidence plus measurement-effect,
-  runtime-feedback, and substantive research-continuity signals. A shallow
-  continuity block alone cannot distinguish a real post-v2 plateau from missed
-  continuous-optimization opportunity.
+  runtime-feedback, and substantive realized research-continuity signals. A
+  shallow continuity block or unrealized continuity opportunity alone cannot
+  distinguish a real post-v2 plateau from missed continuous-optimization
+  opportunity.
 - Current postrun readiness boundary: blocking problem-summary gaps such as
   missing review inputs, incomplete handoff, launch-only or infra-only status,
   and no protocol evidence prevent `current_run_analysis_ready=true`; valid

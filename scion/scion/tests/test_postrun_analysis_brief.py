@@ -2172,6 +2172,112 @@ def test_warehouse_followup_summary_rejects_shallow_continuity_for_plateau_ready
     )
 
 
+def test_warehouse_followup_summary_rejects_unrealized_continuity_for_plateau_ready(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "warehouse-protocol-evaluated-unrealized-continuity"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+            "requested_rounds": 1,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 1,
+            "protocol_evaluated_candidates": 1,
+        },
+    )
+    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
+    _write_json(
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "warehouse.research_efficiency.v1.json",
+        {
+            "protocol_rows": {
+                "protocol_metric_results": 2,
+                "protocol_evaluated_candidates": 1,
+            },
+            "formal_candidates": {
+                "formal_screened_candidates": 1,
+                "protocol_evaluated_candidates": 1,
+            },
+            "protocol_effects_vs_mde": {
+                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
+                "report_only": True,
+                "decision_features_excluded": True,
+                "protocol_row_count": 2,
+                "rows_at_or_above_mde": 0,
+                "rows_with_ci_high_below_mde": 2,
+                "max_effect_to_mde_ratio": 0.4,
+                "interpretation_counts": {"below_mde": 2},
+            },
+            "fresh_runtime_replay_drain": {
+                "status": "not_selected_no_pending",
+                "attempts": 1,
+                "executed": 0,
+                "skipped": 1,
+                "counts_toward_max_rounds": False,
+            },
+            "stage_transition_drain": {
+                "status": "not_started",
+                "attempts": 0,
+                "counts_toward_max_rounds": False,
+                "generates_new_hypothesis": False,
+            },
+            "research_continuity": {
+                "same_mechanism_followup": {
+                    "observed_opportunity_count": 1,
+                    "selected_same_branch_refinement_count": 0,
+                },
+                "branch_lesson_usage": {
+                    "requirement_count": 2,
+                    "satisfied_count": 0,
+                    "semantic_gap_count": 2,
+                },
+                "weak_positive_transfer": {
+                    "observed_opportunity_count": 1,
+                    "accepted_count": 0,
+                },
+                "research_shape_summary": {
+                    "max_branch_depth": 1,
+                    "branch_depth_distribution": {"1": 1},
+                    "active_shape": "unrealized_continuity_opportunity",
+                },
+            },
+            "run_status": {
+                "run_validity_status": "valid",
+                "run_completeness_status": "complete",
+                "run_complete": True,
+            },
+        },
+    )
+
+    brief = brief_tool.build_brief(run_root)
+
+    summary = brief["warehouse_followup_summary"]
+    assert summary["interpretation"] == (
+        "protocol_evaluated_research_continuity_too_shallow"
+    )
+    assert "warehouse_research_continuity_evidence_too_shallow" in summary[
+        "evidence_gaps"
+    ]
+    continuity = summary["evidence"]["research_continuity"]
+    assert continuity["substantive"] is False
+    assert continuity["same_mechanism_observed"] == 1
+    assert continuity["same_mechanism_selected"] == 0
+    assert continuity["branch_lessons_required"] == 2
+    assert continuity["branch_lessons_satisfied"] == 0
+    assert continuity["weak_positive_observed"] == 1
+    assert continuity["weak_positive_accepted"] == 0
+
+
 def test_warehouse_followup_summary_requires_handoff_before_plateau_ready(
     tmp_path: Path,
 ) -> None:

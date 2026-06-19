@@ -68,8 +68,9 @@ Warehouse:
   the warehouse specialist review axes are marked deferred until post-launch
   current-run evidence exists.
 - Postrun warehouse plateau review readiness now requires substantive
-  research-continuity evidence, such as branch depth, same-mechanism follow-up,
-  branch-lesson transfer, or weak-positive transfer. A shallow continuity block
+  realized research-continuity evidence, such as branch depth, selected
+  same-mechanism follow-up, satisfied branch-lesson transfer, or accepted
+  weak-positive transfer. A shallow continuity block or unrealized opportunity
   is not enough to call a protocol-evaluated run plateau-review-ready.
 
 CVRP/VRP:
@@ -168,6 +169,8 @@ Infrastructure:
   pointer and launch blocker.
 - Current CVRP postrun evidence-accounting repair:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-direct-evidence-row-coherence-20260619.md`.
+- Current warehouse postrun evidence-accounting repair:
+  `scion/docs/experiments/v0.4/v04-warehouse-continuity-realized-signal-20260619.md`.
 - Current repair context lives in `scion/docs/experiments/v0.4/`; keep this
   status page focused on operating truth rather than repair chronology.
 - WSL reference:
