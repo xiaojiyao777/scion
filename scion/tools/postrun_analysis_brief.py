@@ -1120,6 +1120,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
         evidence = _mapping_or_empty(cvrp_large_twoopt.get("evidence"))
         protocol = _mapping_or_empty(evidence.get("protocol"))
         measurement = _mapping_or_empty(evidence.get("measurement_effect"))
+        quality = _mapping_or_empty(evidence.get("quality_blocks"))
         runtime = _mapping_or_empty(evidence.get("runtime"))
         continuity_evidence = _mapping_or_empty(evidence.get("research_continuity"))
         mechanism = _mapping_or_empty(evidence.get("large_twoopt_mechanism"))
@@ -1147,6 +1148,12 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 f"{_display(measurement.get('rows_at_or_above_mde'))} / "
                 f"{_display(measurement.get('rows_with_ci_high_below_mde'))} / "
                 f"{_display(measurement.get('max_effect_to_mde_ratio'))}",
+                "- Quality-block signal: "
+                f"{_display(quality.get('proposal_quality_blocks'))} / "
+                f"{_display(quality.get('quality_blocks'))} / "
+                f"{_display(quality.get('quality_block_ledger_count'))}",
+                "- Quality-block reasons: "
+                f"{_mapping_text(quality.get('reason_counts'))}",
                 "- Large two-opt mechanism signal: "
                 f"`{_display(mechanism.get('available'))}` / "
                 f"{_list_text(mechanism.get('families') or [])}",

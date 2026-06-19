@@ -1365,6 +1365,68 @@ def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
     )
 
 
+def test_cvrp_large_twoopt_summary_distinguishes_quality_blocked_run(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "cvrp-quality-blocked"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+            "requested_rounds": 1,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 0,
+            "protocol_evaluated_candidates": 0,
+        },
+    )
+    _write_json(
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "cvrp.research_efficiency.v1.json",
+        {
+            "proposal_quality": {
+                "proposal_attempts_total": 3,
+                "proposal_attempts_consumed": 3,
+                "proposal_quality_blocks": 2,
+                "quality_blocks": 2,
+                "quality_block_ledger_count": 2,
+                "quality_block_reasons": ["missing_direct_effect"],
+            },
+            "run_status": {
+                "run_validity_status": "valid",
+                "stopped_reason": "proposal_quality_blocked",
+                "run_complete": True,
+            },
+        },
+    )
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    summary = brief["cvrp_large_twoopt_summary"]
+    assert summary["available"] is True
+    assert summary["current_run_evidence"] is True
+    assert summary["interpretation"] == "quality_blocked_no_protocol_twoopt_conclusion"
+    assert summary["launch_required_before_twoopt_conclusion"] is False
+    assert "quality_blocked_before_protocol_evaluation" in summary["evidence_gaps"]
+    assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 0
+    assert summary["evidence"]["quality_blocks"]["proposal_quality_blocks"] == 2
+    assert "- Interpretation: quality_blocked_no_protocol_twoopt_conclusion" in (
+        markdown
+    )
+    assert "- Quality-block signal: 2 / 2 / 2" in markdown
+    assert "- Quality-block reasons: missing_direct_effect=1" in markdown
+
+
 def test_cvrp_large_twoopt_summary_requires_review_inputs_after_protocol_eval(
     tmp_path: Path,
 ) -> None:
