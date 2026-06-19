@@ -392,6 +392,8 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         for check in checks.values()
         if check.get("required") is True
     )
+    failed_required_checks = _failed_check_names(checks, required=True)
+    failed_optional_checks = _failed_check_names(checks, required=False)
     delegation_ready = (
         checks["analysis_brief_present"]["status"] == "ok"
         and checks["inventory_artifact_present"]["status"] == "ok"
@@ -408,8 +410,23 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         "postrun_acceptance_dir": str(report_dir),
         "delegation_ready": delegation_ready,
         "current_run_analysis_ready": current_run_analysis_ready,
+        "failed_required_checks": failed_required_checks,
+        "failed_optional_checks": failed_optional_checks,
         "checks": checks,
     }
+
+
+def _failed_check_names(
+    checks: Mapping[str, Mapping[str, Any]],
+    *,
+    required: bool,
+) -> list[str]:
+    return [
+        name
+        for name, check in sorted(checks.items())
+        if check.get("required") is required
+        and check.get("status") not in {"ok", "skipped"}
+    ]
 
 
 def render_markdown(readiness: Mapping[str, Any]) -> str:
@@ -421,6 +438,7 @@ def render_markdown(readiness: Mapping[str, Any]) -> str:
         "or solver behavior is changed.",
         f"- Delegation ready: `{readiness.get('delegation_ready')}`",
         f"- Current-run analysis ready: `{readiness.get('current_run_analysis_ready')}`",
+        f"- Failed required checks: `{_compact_detail(readiness.get('failed_required_checks'))}`",
         "",
         "## Checks",
         "| Check | Required | Status | Detail |",

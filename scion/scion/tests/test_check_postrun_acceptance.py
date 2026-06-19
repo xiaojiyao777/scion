@@ -53,12 +53,14 @@ def test_postrun_acceptance_readiness_accepts_complete_current_run(
     assert readiness["decision_features_excluded"] is True
     assert readiness["delegation_ready"] is True
     assert readiness["current_run_analysis_ready"] is True
+    assert readiness["failed_required_checks"] == []
     assert readiness["checks"]["rebuild_manifest_complete"]["status"] == "ok"
     assert readiness["checks"]["current_run_evidence"]["status"] == "ok"
     assert readiness["checks"]["analysis_brief_current_run_evidence"]["status"] == "ok"
     assert readiness["checks"]["problem_summary_actionability"]["status"] == "skipped"
     assert readiness["checks"]["problem_summary_actionability"]["required"] is False
     assert "Current-run analysis ready: `True`" in markdown
+    assert "Failed required checks: `[]`" in markdown
     assert check_tool.main([str(run_root), "--require-current-run-ready"]) == 0
 
 
@@ -82,6 +84,7 @@ def test_postrun_acceptance_infers_legacy_warehouse_run_family(
     problem_check = readiness["checks"]["problem_summary_actionability"]
 
     assert readiness["current_run_analysis_ready"] is False
+    assert "problem_summary_actionability" in readiness["failed_required_checks"]
     assert problem_check["required"] is True
     assert problem_check["status"] == "failed"
     assert problem_check["detail"][0]["summary"] == "warehouse_followup_summary"
@@ -126,6 +129,7 @@ def test_postrun_acceptance_readiness_rejects_prepared_only_root(
 
     assert readiness["delegation_ready"] is True
     assert readiness["current_run_analysis_ready"] is False
+    assert "not_prepared_only" in readiness["failed_required_checks"]
     assert readiness["checks"]["rebuild_manifest_complete"]["status"] == "failed"
     assert readiness["checks"]["current_run_evidence"]["status"] == "failed"
     assert readiness["checks"]["not_prepared_only"]["status"] == "failed"
@@ -157,6 +161,7 @@ def test_postrun_acceptance_readiness_requires_expected_problem_summary(
     problem_check = readiness["checks"]["problem_summary_actionability"]
 
     assert readiness["current_run_analysis_ready"] is False
+    assert readiness["failed_required_checks"] == ["problem_summary_actionability"]
     assert problem_check["required"] is True
     assert problem_check["status"] == "failed"
     assert problem_check["detail"]["reason"] == "missing_problem_specific_summary"
