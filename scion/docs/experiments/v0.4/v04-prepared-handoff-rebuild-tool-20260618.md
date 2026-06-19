@@ -31,14 +31,14 @@ launching a campaign or mutating runtime state.
 
 ## Current Active Root Refresh
 
-Current rebuild verification checkouts: CVRP `dc83d83`, warehouse `9660c10`.
+Current rebuild verification checkouts: CVRP `dc83d83`, warehouse `35dd723`.
 
 Refreshed on WSL:
 
 - CVRP:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-dc83d83-1r-gpt55-20260619T000530Z-claw`
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-identityguard-7f3028a-6r-gpt55-20260618T224522Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-35dd723-6r-gpt55-20260619T001002Z-claw`
 
 Both rebuild manifests report:
 
@@ -49,12 +49,12 @@ Both rebuild manifests report:
 - `decision_features_excluded=true`
 
 Prepared manifest commits are root-specific. The current CVRP root was
-regenerated from the bounded large-twoopt checkout; the warehouse root is still
-the existing champion-v2 follow-up root with refreshed report-only handoff
-artifacts:
+regenerated from the bounded large-twoopt checkout; the warehouse root was
+regenerated after runtime guard path changes so the manifest and current
+handoff tooling agree:
 
 - CVRP: `prepared_manifest_commit=dc83d83`
-- Warehouse: `prepared_manifest_commit=7f3028a`
+- Warehouse: `prepared_manifest_commit=35dd723`
 
 ## Problem-Specific Coverage
 
@@ -92,7 +92,8 @@ not be launched yet:
 - Strict launch readiness exits `64` for both roots.
 - Completion preflight failed for both with HTTP `401`,
   `classification=not_authenticated`, and `code=invalid_api_key`.
-- The proxy auth pool reported `active=0`, `refreshing=1`, and `total=1`.
+- The proxy auth pool reported `active=0` and `total=1`; the non-active
+  account may appear as expired or refreshing.
 
 Launch remains blocked until `/v1/chat/completions` returns HTTP `200` with a
 non-empty `gpt-5.5` completion.

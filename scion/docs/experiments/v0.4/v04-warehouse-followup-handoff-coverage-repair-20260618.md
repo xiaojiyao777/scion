@@ -85,6 +85,15 @@ WSL launch-readiness and inventory checks under this repair:
   `warehouse_followup_*` prepared-contract checks passed, and all warehouse
   `problem_specific_requirements` are available.
 
+Later root status:
+
+- The earlier warehouse identityguard root was superseded after runtime guard
+  path changes.
+- Current warehouse root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-35dd723-6r-gpt55-20260619T001002Z-claw`.
+- Current root report:
+  `scion/docs/experiments/v0.4/v04-warehouse-v2-followup-root-refresh-20260619.md`.
+
 ## Acceptance
 
 Accepted as a Phase 4 warehouse auditability repair. Once `gpt-5.5` launch

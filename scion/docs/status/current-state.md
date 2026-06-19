@@ -41,9 +41,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, rebuilt report-only from WSL checkout `9660c10` with
-  prepared manifest commit `7f3028a`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-identityguard-7f3028a-6r-gpt55-20260618T224522Z-claw`.
+- Current prepared root, prepared from WSL checkout `35dd723`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-35dd723-6r-gpt55-20260619T001002Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
 
@@ -72,7 +71,9 @@ Infrastructure:
 - WSL strict launch-readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`,
   `prompt_context_readiness_complete=ok`, `git_runtime_consistent=ok`, and
-  completion preflight `failed`.
+  completion preflight `failed`. Later docs-only commits may make the checkout
+  differ from a prepared manifest commit; readiness remains acceptable only when
+  runtime guard paths are unchanged.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
   `code=invalid_api_key`, with proxy auth pool `active=0`, `total=1`. The
@@ -114,6 +115,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-vrp-large-instance-two-opt-seed-evidence-20260618.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-launch-focus-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-warehouse-v2-followup-root-refresh-20260619.md`,
   and `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-contract-coverage-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
