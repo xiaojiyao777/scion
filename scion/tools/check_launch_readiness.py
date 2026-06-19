@@ -106,6 +106,20 @@ CURRENT_RUN_REQUIRED_QUESTION_MARKER = (
 DEFERRED_REVIEW_AXES_ACTIONABILITY = (
     "not_actionable_before_launch_current_run_evidence_required"
 )
+PREPARED_PROBLEM_SUMMARY_REQUIREMENTS = {
+    "cvrp": {
+        "field": "cvrp_large_twoopt_summary",
+        "schema": "scion.postrun_cvrp_large_twoopt_summary.v1",
+        "conclusion_flag": "launch_required_before_twoopt_conclusion",
+        "evidence_gap": "launch_required_before_bounded_twoopt_conclusion",
+    },
+    "warehouse_delivery": {
+        "field": "warehouse_followup_summary",
+        "schema": "scion.postrun_warehouse_followup_summary.v1",
+        "conclusion_flag": "launch_required_before_plateau_conclusion",
+        "evidence_gap": "launch_required_before_plateau_conclusion",
+    },
+}
 REQUIRED_RUNTIME_GUARD_PATHS = (
     "scion/tools",
     "scion/scion/cli",
@@ -1415,17 +1429,57 @@ def _prepared_analysis_contract_failures(
 
 def _prepared_problem_summary_failures(payload: dict[str, Any]) -> list[dict[str, Any]]:
     failures: list[dict[str, Any]] = []
-    for field, conclusion_flag, evidence_gap in (
-        (
-            "warehouse_followup_summary",
-            "launch_required_before_plateau_conclusion",
-            "launch_required_before_plateau_conclusion",
-        ),
-        (
-            "cvrp_large_twoopt_summary",
-            "launch_required_before_twoopt_conclusion",
-            "launch_required_before_bounded_twoopt_conclusion",
-        ),
+    contract = payload.get("prepared_run_contract")
+    contract_dict = contract if isinstance(contract, dict) else {}
+    problem_family = str(contract_dict.get("problem_family") or "")
+    required = PREPARED_PROBLEM_SUMMARY_REQUIREMENTS.get(problem_family)
+    if required:
+        field = str(required["field"])
+        summary = payload.get(field)
+        if not isinstance(summary, dict) or summary.get("available") is not True:
+            return [
+                {
+                    "reason": "problem_summary_missing_for_problem_family",
+                    "problem_family": problem_family,
+                    "expected_summary": field,
+                    "available": (
+                        summary.get("available") if isinstance(summary, dict) else None
+                    ),
+                }
+            ]
+        failures.extend(
+            {
+                "summary": field,
+                **failure,
+            }
+            for failure in _prepared_problem_summary_field_failures(
+                summary,
+                expected_schema=str(required["schema"]),
+                conclusion_flag=str(required["conclusion_flag"]),
+                evidence_gap=str(required["evidence_gap"]),
+            )
+        )
+        for other_family, other in PREPARED_PROBLEM_SUMMARY_REQUIREMENTS.items():
+            other_field = str(other["field"])
+            if other_family == problem_family:
+                continue
+            other_summary = payload.get(other_field)
+            if (
+                isinstance(other_summary, dict)
+                and other_summary.get("available") is True
+            ):
+                failures.append(
+                    {
+                        "summary": other_field,
+                        "reason": "unexpected_problem_summary_available",
+                        "problem_family": problem_family,
+                    }
+                )
+        return failures
+
+    for field, required in (
+        (str(item["field"]), item)
+        for item in PREPARED_PROBLEM_SUMMARY_REQUIREMENTS.values()
     ):
         summary = payload.get(field)
         if not isinstance(summary, dict) or summary.get("available") is not True:
@@ -1437,8 +1491,9 @@ def _prepared_problem_summary_failures(payload: dict[str, Any]) -> list[dict[str
             }
             for failure in _prepared_problem_summary_field_failures(
                 summary,
-                conclusion_flag=conclusion_flag,
-                evidence_gap=evidence_gap,
+                expected_schema=str(required["schema"]),
+                conclusion_flag=str(required["conclusion_flag"]),
+                evidence_gap=str(required["evidence_gap"]),
             )
         )
     return failures
@@ -1447,10 +1502,34 @@ def _prepared_problem_summary_failures(payload: dict[str, Any]) -> list[dict[str
 def _prepared_problem_summary_field_failures(
     summary: dict[str, Any],
     *,
+    expected_schema: str,
     conclusion_flag: str,
     evidence_gap: str,
 ) -> list[dict[str, Any]]:
     failures: list[dict[str, Any]] = []
+    if summary.get("schema_version") != expected_schema:
+        failures.append(
+            {
+                "reason": "problem_summary_schema_mismatch",
+                "expected": expected_schema,
+                "actual": summary.get("schema_version"),
+            }
+        )
+    boundary_expectations = {
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+    }
+    for key, expected in boundary_expectations.items():
+        if summary.get(key) is not expected:
+            failures.append(
+                {
+                    "reason": "problem_summary_boundary_flag_mismatch",
+                    "field": key,
+                    "expected": expected,
+                    "actual": summary.get(key),
+                }
+            )
     if summary.get("current_run_evidence") is not False:
         failures.append(
             {

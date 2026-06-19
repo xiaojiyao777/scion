@@ -403,6 +403,81 @@ def test_launch_readiness_rejects_prepared_analysis_brief_contract_mismatch(
     }
 
 
+def test_launch_readiness_rejects_missing_matching_prepared_problem_summary(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(
+        tmp_path,
+        problem_family="warehouse_delivery",
+        research_focus=_warehouse_research_focus(),
+    )
+    brief_path = (
+        run_root
+        / "prepared_handoff"
+        / "analysis_brief"
+        / "warehouse_on_full.prepared_analysis_brief.v1.json"
+    )
+    payload = json.loads(brief_path.read_text(encoding="utf-8"))
+    payload["warehouse_followup_summary"]["available"] = False
+    payload["cvrp_large_twoopt_summary"] = _prepared_cvrp_summary()
+    brief_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    brief_check = report["checks"]["prepared_analysis_brief_current"]
+    assert brief_check["status"] == "failed"
+    assert any(
+        failure["reason"] == "problem_summary_missing_for_problem_family"
+        and failure["problem_family"] == "warehouse_delivery"
+        and failure["expected_summary"] == "warehouse_followup_summary"
+        for failure in brief_check["detail"]["failures"]
+    )
+
+
+def test_launch_readiness_rejects_prepared_problem_summary_boundary_gap(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    brief_path = (
+        run_root
+        / "prepared_handoff"
+        / "analysis_brief"
+        / "cvrp_on_full.prepared_analysis_brief.v1.json"
+    )
+    payload = json.loads(brief_path.read_text(encoding="utf-8"))
+    summary = payload["cvrp_large_twoopt_summary"]
+    summary["schema_version"] = "stale.schema"
+    summary["report_only"] = False
+    summary["quality_judgment"] = True
+    summary["decision_features_excluded"] = False
+    brief_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    brief_check = report["checks"]["prepared_analysis_brief_current"]
+    assert brief_check["status"] == "failed"
+    failures = brief_check["detail"]["failures"]
+    assert any(
+        failure["reason"] == "problem_summary_schema_mismatch"
+        and failure["summary"] == "cvrp_large_twoopt_summary"
+        for failure in failures
+    )
+    boundary_failures = {
+        failure["field"]
+        for failure in failures
+        if failure["reason"] == "problem_summary_boundary_flag_mismatch"
+    }
+    assert boundary_failures == {
+        "report_only",
+        "quality_judgment",
+        "decision_features_excluded",
+    }
+
+
 def test_launch_readiness_rejects_prompt_context_bridge_marker_gap(
     tmp_path: Path,
 ) -> None:
@@ -1138,11 +1213,20 @@ def _write_prepared_analysis_brief(run_root: Path) -> None:
     manifest = json.loads(
         (run_root / "prepared_run_manifest.v1.json").read_text(encoding="utf-8")
     )
+    problem_family = str(manifest["problem_family"])
+    if problem_family == "warehouse_delivery":
+        filename = "warehouse_on_full.prepared_analysis_brief.v1.json"
+        cvrp_summary = {"available": False, "current_run_evidence": False}
+        warehouse_summary = _prepared_warehouse_summary()
+    else:
+        filename = "cvrp_on_full.prepared_analysis_brief.v1.json"
+        cvrp_summary = _prepared_cvrp_summary()
+        warehouse_summary = {"available": False, "current_run_evidence": False}
     _write_json(
         run_root
         / "prepared_handoff"
         / "analysis_brief"
-        / "cvrp_on_full.prepared_analysis_brief.v1.json",
+        / filename,
         {
             "schema_version": "scion.postrun_analysis_brief.v1",
             "report_only": True,
@@ -1187,32 +1271,59 @@ def _write_prepared_analysis_brief(run_root: Path) -> None:
                     "two-opt mechanism signal, and review-ready evidence?"
                 ),
             ],
-            "cvrp_large_twoopt_summary": {
-                "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
-                "available": True,
-                "current_run_evidence": False,
-                "interpretation": "prepared_only_launch_required",
-                "launch_required_before_twoopt_conclusion": True,
-                "evidence_gaps": [
-                    "launch_required_before_bounded_twoopt_conclusion"
-                ],
-                "deferred_review_axes": [
-                    "confirm_deadline_or_remaining_time_guard_in_solver_code",
-                    (
-                        "confirm_no_unbounded_two_opt_intra_or_vns_fallback_"
-                        "above_large_threshold"
-                    ),
-                ],
-                "review_axes_actionability": (
-                    "not_actionable_before_launch_current_run_evidence_required"
-                ),
-            },
-            "warehouse_followup_summary": {
-                "available": False,
-                "current_run_evidence": False,
-            },
+            "cvrp_large_twoopt_summary": cvrp_summary,
+            "warehouse_followup_summary": warehouse_summary,
         },
     )
+
+
+def _prepared_cvrp_summary() -> dict[str, object]:
+    return {
+        "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "available": True,
+        "current_run_evidence": False,
+        "interpretation": "prepared_only_launch_required",
+        "launch_required_before_twoopt_conclusion": True,
+        "evidence_gaps": [
+            "launch_required_before_bounded_twoopt_conclusion",
+        ],
+        "deferred_review_axes": [
+            "confirm_deadline_or_remaining_time_guard_in_solver_code",
+            (
+                "confirm_no_unbounded_two_opt_intra_or_vns_fallback_"
+                "above_large_threshold"
+            ),
+        ],
+        "review_axes_actionability": (
+            "not_actionable_before_launch_current_run_evidence_required"
+        ),
+    }
+
+
+def _prepared_warehouse_summary() -> dict[str, object]:
+    return {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "available": True,
+        "current_run_evidence": False,
+        "interpretation": "prepared_only_launch_required",
+        "launch_required_before_plateau_conclusion": True,
+        "evidence_gaps": [
+            "launch_required_before_plateau_conclusion",
+        ],
+        "deferred_review_axes": [
+            "confirm_protocol_evaluated_current_run_evidence",
+            "confirm_measurement_runtime_and_continuity_review_inputs",
+        ],
+        "review_axes_actionability": (
+            "not_actionable_before_launch_current_run_evidence_required"
+        ),
+    }
 
 
 def _write_json(path: Path, payload: object) -> None:
