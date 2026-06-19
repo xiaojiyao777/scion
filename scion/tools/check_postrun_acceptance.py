@@ -17,6 +17,7 @@ if str(TOOLS_DIR) not in sys.path:
 from postrun_artifact_inventory import build_inventory  # noqa: E402
 from postrun_analysis_brief import (  # noqa: E402
     _cvrp_large_twoopt_mechanism_signal,
+    _warehouse_followup_continuity_signal,
 )
 
 
@@ -852,6 +853,35 @@ def _problem_summary_input_consistency(
     ):
         failures.append("warehouse_plateau_continuity_not_substantive")
     input_large_twoopt_signal: dict[str, Any] = {}
+    input_warehouse_continuity_signal: dict[str, Any] = {}
+    if problem_family == "warehouse_delivery":
+        input_warehouse_continuity_signal = _warehouse_followup_continuity_signal(
+            continuity_summary
+        )
+        for field in (
+            "substantive",
+            "max_branch_depth",
+            "same_mechanism_selected",
+            "same_mechanism_observed",
+            "branch_lessons_satisfied",
+            "branch_lessons_required",
+            "weak_positive_accepted",
+            "weak_positive_observed",
+        ):
+            summary_value = continuity_evidence.get(field)
+            input_value = input_warehouse_continuity_signal.get(field)
+            if isinstance(input_value, bool):
+                if summary_value is not input_value:
+                    failures.append(
+                        f"problem_summary_warehouse_continuity_{field}_mismatch"
+                    )
+            elif _int_or_zero(summary_value) != _int_or_zero(input_value):
+                failures.append(
+                    f"problem_summary_warehouse_continuity_{field}_mismatch"
+                )
+        if interpretation == "protocol_evaluated_plateau_review_ready":
+            if input_warehouse_continuity_signal.get("substantive") is not True:
+                failures.append("review_input_warehouse_continuity_not_substantive")
     if problem_family == "cvrp":
         input_large_twoopt_signal = _cvrp_large_twoopt_mechanism_signal(
             measurement_effect_summary=measurement_summary,
@@ -914,6 +944,33 @@ def _problem_summary_input_consistency(
             ),
             "summary_continuity_substantive": continuity_evidence.get(
                 "substantive"
+            ),
+            "input_continuity_substantive": input_warehouse_continuity_signal.get(
+                "substantive"
+            ),
+            "summary_continuity_max_branch_depth": continuity_evidence.get(
+                "max_branch_depth"
+            ),
+            "input_continuity_max_branch_depth": input_warehouse_continuity_signal.get(
+                "max_branch_depth"
+            ),
+            "summary_continuity_same_mechanism_selected": continuity_evidence.get(
+                "same_mechanism_selected"
+            ),
+            "input_continuity_same_mechanism_selected": (
+                input_warehouse_continuity_signal.get("same_mechanism_selected")
+            ),
+            "summary_continuity_branch_lessons_satisfied": continuity_evidence.get(
+                "branch_lessons_satisfied"
+            ),
+            "input_continuity_branch_lessons_satisfied": (
+                input_warehouse_continuity_signal.get("branch_lessons_satisfied")
+            ),
+            "summary_continuity_weak_positive_accepted": continuity_evidence.get(
+                "weak_positive_accepted"
+            ),
+            "input_continuity_weak_positive_accepted": (
+                input_warehouse_continuity_signal.get("weak_positive_accepted")
             ),
             "summary_large_twoopt_available": large_twoopt_evidence.get("available"),
             "input_large_twoopt_available": input_large_twoopt_signal.get(
