@@ -1108,6 +1108,14 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 f"{_list_text(mechanism.get('protocol_families') or [])} / "
                 f"{_list_text(mechanism.get('continuity_families') or [])} / "
                 f"{_display(mechanism.get('top_row_signal_count'))}",
+                "- Large two-opt direct evidence ready / missing: "
+                f"`{_display(_mapping_or_empty(mechanism.get('direct_evidence')).get('ready'))}` / "
+                f"{_list_text(_mapping_or_empty(mechanism.get('direct_evidence')).get('missing') or [])}",
+                "- Large two-opt direct evidence positive/activation/effect/phase: "
+                f"{_display(_mapping_or_empty(mechanism.get('direct_evidence')).get('positive_effect_row_count'))} / "
+                f"{_display(_mapping_or_empty(mechanism.get('direct_evidence')).get('activation_observed_count'))} / "
+                f"{_display(_mapping_or_empty(mechanism.get('direct_evidence')).get('objective_effect_observed_count'))} / "
+                f"{_display(_mapping_or_empty(mechanism.get('direct_evidence')).get('phase_telemetry_observed_count'))}",
                 "- Rejected two-opt-like protocol/continuity families: "
                 f"{_list_text(mechanism.get('rejected_protocol_families') or [])} / "
                 f"{_list_text(mechanism.get('rejected_continuity_families') or [])}",
@@ -2009,6 +2017,10 @@ def _compact_effect_row(row: Mapping[str, Any]) -> dict[str, Any]:
             ),
             "ci_high_below_mde": row.get("ci_high_below_mde"),
             "reason_codes": row.get("reason_codes"),
+            "mechanism_evidence": _mapping_or_empty(row.get("mechanism_evidence")),
+            "candidate_phase_telemetry_summary": _mapping_or_empty(
+                row.get("candidate_phase_telemetry_summary")
+            ),
         }
     )
 
@@ -3680,6 +3692,12 @@ def _cvrp_large_twoopt_summary(
     runtime_available = _runtime_feedback_review_ready(runtime_feedback_summary)
     continuity_available = research_continuity_summary.get("available") is True
     large_twoopt_available = large_twoopt_mechanism.get("available") is True
+    large_twoopt_family_available = (
+        large_twoopt_mechanism.get("mechanism_family_available") is True
+    )
+    large_twoopt_direct_evidence_ready = (
+        large_twoopt_mechanism.get("direct_evidence_ready") is True
+    )
     evidence = {
         "protocol": {
             "formal_screened_candidates": formal_screened_candidates,
@@ -3759,6 +3777,8 @@ def _cvrp_large_twoopt_summary(
         runtime_available=runtime_available,
         continuity_available=continuity_available,
         large_twoopt_available=large_twoopt_available,
+        large_twoopt_family_available=large_twoopt_family_available,
+        large_twoopt_direct_evidence_ready=large_twoopt_direct_evidence_ready,
     )
     return {
         **base,
@@ -3778,6 +3798,8 @@ def _cvrp_large_twoopt_summary(
             runtime_available=runtime_available,
             continuity_available=continuity_available,
             large_twoopt_available=large_twoopt_available,
+            large_twoopt_family_available=large_twoopt_family_available,
+            large_twoopt_direct_evidence_ready=large_twoopt_direct_evidence_ready,
         ),
         "deferred_review_axes": (
             list(CVRP_LARGE_TWOOPT_REVIEW_AXES)
@@ -3827,6 +3849,7 @@ def _cvrp_large_twoopt_mechanism_signal(
     rejection_reason_counts: dict[str, int] = {}
     protocol_rows = 0
     top_row_signal_count = 0
+    direct_evidence = _empty_cvrp_large_twoopt_direct_evidence()
     measurement = _mapping_or_empty(measurement_effect_summary.get("aggregate"))
     family_effects = _mapping_or_empty(measurement.get("mechanism_family_effects"))
     for family, payload in sorted(family_effects.items()):
@@ -3857,6 +3880,10 @@ def _cvrp_large_twoopt_mechanism_signal(
                 if match["matches"]:
                     protocol_families.add(family)
                     top_row_signal_count += 1
+                    _merge_cvrp_large_twoopt_direct_evidence(
+                        direct_evidence,
+                        row,
+                    )
                 elif match["twoopt_candidate"]:
                     rejected_protocol_families.add(family)
                     _increment_count(rejection_reason_counts, str(match["reason"]))
@@ -3871,8 +3898,18 @@ def _cvrp_large_twoopt_mechanism_signal(
             _increment_count(rejection_reason_counts, str(match["reason"]))
     families = sorted(protocol_families | continuity_families)
     protocol_signal_rows = max(protocol_rows, top_row_signal_count)
+    direct_evidence["ready"] = _cvrp_large_twoopt_direct_evidence_ready(
+        direct_evidence
+    )
+    direct_evidence["missing"] = _cvrp_large_twoopt_direct_evidence_missing(
+        direct_evidence
+    )
+    mechanism_family_available = bool(protocol_families) and protocol_signal_rows > 0
     return {
-        "available": bool(protocol_families) and protocol_signal_rows > 0,
+        "available": mechanism_family_available and direct_evidence["ready"],
+        "mechanism_family_available": mechanism_family_available,
+        "direct_evidence_ready": direct_evidence["ready"],
+        "direct_evidence": direct_evidence,
         "families": families,
         "protocol_families": sorted(protocol_families),
         "continuity_families": sorted(continuity_families),
@@ -3883,10 +3920,145 @@ def _cvrp_large_twoopt_mechanism_signal(
         "top_row_signal_count": top_row_signal_count,
         "source": (
             "measurement_effect_summary.mechanism_family_effects for protocol "
-            "effect evidence; research_continuity_summary.mechanism_family_counts "
-            "is context only"
+            "effect evidence; matching top_rows_by_effect_to_mde must also "
+            "carry direct activation/effect/phase telemetry; "
+            "research_continuity_summary.mechanism_family_counts is context only"
         ),
     }
+
+
+def _empty_cvrp_large_twoopt_direct_evidence() -> dict[str, Any]:
+    return {
+        "ready": False,
+        "missing": [],
+        "top_rows_checked": 0,
+        "positive_effect_row_count": 0,
+        "activation_observed_count": 0,
+        "objective_effect_observed_count": 0,
+        "phase_telemetry_observed_count": 0,
+    }
+
+
+def _merge_cvrp_large_twoopt_direct_evidence(
+    direct_evidence: dict[str, Any],
+    row: Mapping[str, Any],
+) -> None:
+    direct_evidence["top_rows_checked"] += 1
+    if row.get("positive_effect_at_or_above_mde") is True:
+        direct_evidence["positive_effect_row_count"] += 1
+    if _mechanism_activation_observed(row):
+        direct_evidence["activation_observed_count"] += 1
+    if _mechanism_objective_effect_observed(row):
+        direct_evidence["objective_effect_observed_count"] += 1
+    if _phase_telemetry_observed(row):
+        direct_evidence["phase_telemetry_observed_count"] += 1
+
+
+def _cvrp_large_twoopt_direct_evidence_ready(
+    direct_evidence: Mapping[str, Any],
+) -> bool:
+    return (
+        _int_or_zero(direct_evidence.get("positive_effect_row_count")) > 0
+        and _int_or_zero(direct_evidence.get("activation_observed_count")) > 0
+        and _int_or_zero(direct_evidence.get("objective_effect_observed_count")) > 0
+        and _int_or_zero(direct_evidence.get("phase_telemetry_observed_count")) > 0
+    )
+
+
+def _cvrp_large_twoopt_direct_evidence_missing(
+    direct_evidence: Mapping[str, Any],
+) -> list[str]:
+    missing = []
+    if _int_or_zero(direct_evidence.get("positive_effect_row_count")) <= 0:
+        missing.append("missing_positive_effect_at_or_above_mde")
+    if _int_or_zero(direct_evidence.get("activation_observed_count")) <= 0:
+        missing.append("missing_activation_observed")
+    if _int_or_zero(direct_evidence.get("objective_effect_observed_count")) <= 0:
+        missing.append("missing_objective_effect_telemetry")
+    if _int_or_zero(direct_evidence.get("phase_telemetry_observed_count")) <= 0:
+        missing.append("missing_phase_telemetry")
+    return missing
+
+
+def _mechanism_activation_observed(row: Mapping[str, Any]) -> bool:
+    evidence = _mapping_or_empty(row.get("mechanism_evidence"))
+    statuses = [
+        evidence.get("primary_activation_status"),
+        evidence.get("activation_evidence_status"),
+    ]
+    mechanisms = evidence.get("mechanisms")
+    if isinstance(mechanisms, list):
+        for item in mechanisms:
+            if isinstance(item, Mapping):
+                statuses.append(item.get("activation_status"))
+    return any(
+        _status_observed(status, ("activation_observed",))
+        for status in statuses
+    )
+
+
+def _mechanism_objective_effect_observed(row: Mapping[str, Any]) -> bool:
+    evidence = _mapping_or_empty(row.get("mechanism_evidence"))
+    statuses = [
+        evidence.get("primary_effect_status"),
+        evidence.get("objective_effect_status"),
+    ]
+    mechanisms = evidence.get("mechanisms")
+    if isinstance(mechanisms, list):
+        for item in mechanisms:
+            if isinstance(item, Mapping):
+                statuses.append(item.get("effect_status"))
+    return any(
+        _status_observed(
+            status,
+            (
+                "objective_effect_observed",
+                "mixed_objective_effect",
+                "mixed_positive",
+                "positive",
+            ),
+        )
+        for status in statuses
+    )
+
+
+def _phase_telemetry_observed(row: Mapping[str, Any]) -> bool:
+    summary = _mapping_or_empty(row.get("candidate_phase_telemetry_summary"))
+    if _int_or_zero(summary.get("runtime_observed_pairs")) > 0:
+        return True
+    buckets = _mapping_or_empty(summary.get("buckets"))
+    for payload in buckets.values():
+        if not isinstance(payload, Mapping):
+            continue
+        if _float_or_none(payload.get("weighted_sum_ms")) not in (None, 0.0):
+            return True
+        if _float_or_none(payload.get("max_ms")) not in (None, 0.0):
+            return True
+    for key in (
+        "solver_algorithm_phase_improvement_counts",
+        "phase_improvement_counts",
+    ):
+        counts = _mapping_or_empty(summary.get(key))
+        if counts and _nested_positive_count(counts) > 0:
+            return True
+    return False
+
+
+def _status_observed(status: Any, accepted: tuple[str, ...]) -> bool:
+    text = str(status or "").strip().lower()
+    if text == "observed":
+        return True
+    return text in accepted
+
+
+def _nested_positive_count(value: Mapping[str, Any]) -> int:
+    total = 0
+    for item in value.values():
+        if isinstance(item, Mapping):
+            total += _nested_positive_count(item)
+        else:
+            total += max(0, _int_or_zero(item))
+    return total
 
 
 def _is_cvrp_large_twoopt_family(value: str) -> bool:
@@ -3978,6 +4150,8 @@ def _cvrp_large_twoopt_interpretation(
     runtime_available: bool,
     continuity_available: bool,
     large_twoopt_available: bool,
+    large_twoopt_family_available: bool,
+    large_twoopt_direct_evidence_ready: bool,
 ) -> str:
     if invalid_infra_only:
         return "invalid_infra_only_no_research_conclusion"
@@ -3997,6 +4171,10 @@ def _cvrp_large_twoopt_interpretation(
         and continuity_available
     ):
         return "protocol_evaluated_review_inputs_incomplete"
+    if not large_twoopt_family_available:
+        return "protocol_evaluated_without_large_twoopt_signal"
+    if not large_twoopt_direct_evidence_ready:
+        return "protocol_evaluated_without_large_twoopt_direct_evidence"
     if not large_twoopt_available:
         return "protocol_evaluated_without_large_twoopt_signal"
     return "bounded_twoopt_review_ready"
@@ -4013,6 +4191,8 @@ def _cvrp_large_twoopt_evidence_gaps(
     runtime_available: bool,
     continuity_available: bool,
     large_twoopt_available: bool,
+    large_twoopt_family_available: bool,
+    large_twoopt_direct_evidence_ready: bool,
 ) -> list[str]:
     gaps: list[str] = []
     if not handoff_complete:
@@ -4034,7 +4214,14 @@ def _cvrp_large_twoopt_evidence_gaps(
         gaps.append("missing_runtime_feedback_summary")
     if not continuity_available:
         gaps.append("missing_research_continuity_summary")
-    if protocol_evaluated_candidates > 0 and not large_twoopt_available:
+    if protocol_evaluated_candidates > 0 and not large_twoopt_family_available:
+        gaps.append("missing_large_twoopt_mechanism_signal")
+    elif (
+        protocol_evaluated_candidates > 0
+        and not large_twoopt_direct_evidence_ready
+    ):
+        gaps.append("missing_large_twoopt_direct_evidence")
+    elif protocol_evaluated_candidates > 0 and not large_twoopt_available:
         gaps.append("missing_large_twoopt_mechanism_signal")
     return gaps
 

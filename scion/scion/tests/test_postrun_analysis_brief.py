@@ -1585,6 +1585,45 @@ def test_cvrp_large_twoopt_summary_accepts_top_row_twoopt_protocol_signal(
     ) in markdown
 
 
+def test_cvrp_large_twoopt_summary_requires_direct_evidence_for_review_ready(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "cvrp-protocol-eval-twoopt-without-direct-evidence"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
+    _write_cvrp_protocol_run(
+        run_root,
+        campaign_dir,
+        mechanism_family="bounded_large_twoopt",
+        include_direct_evidence=False,
+    )
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    summary = brief["cvrp_large_twoopt_summary"]
+    assert summary["current_run_evidence"] is True
+    assert summary["handoff_complete"] is True
+    assert summary["interpretation"] == (
+        "protocol_evaluated_without_large_twoopt_direct_evidence"
+    )
+    assert "missing_large_twoopt_direct_evidence" in summary["evidence_gaps"]
+    mechanism = summary["evidence"]["large_twoopt_mechanism"]
+    assert mechanism["mechanism_family_available"] is True
+    assert mechanism["available"] is False
+    assert mechanism["direct_evidence_ready"] is False
+    assert mechanism["direct_evidence"]["missing"] == [
+        "missing_activation_observed",
+        "missing_objective_effect_telemetry",
+        "missing_phase_telemetry",
+    ]
+    assert "- Large two-opt direct evidence ready / missing: `False`" in markdown
+    assert "- Interpretation: protocol_evaluated_without_large_twoopt_direct_evidence" in (
+        markdown
+    )
+
+
 def test_cvrp_large_twoopt_summary_marks_bounded_twoopt_review_ready(
     tmp_path: Path,
 ) -> None:
@@ -1619,7 +1658,13 @@ def test_cvrp_large_twoopt_summary_marks_bounded_twoopt_review_ready(
     assert mechanism["protocol_families"] == ["bounded_large_twoopt"]
     assert mechanism["continuity_families"] == ["bounded_large_twoopt"]
     assert mechanism["protocol_row_count"] == 2
+    assert mechanism["mechanism_family_available"] is True
+    assert mechanism["direct_evidence_ready"] is True
+    assert mechanism["direct_evidence"]["missing"] == []
     assert "- Interpretation: bounded_twoopt_review_ready" in markdown
+    assert "- Large two-opt direct evidence ready / missing: `True` / none" in (
+        markdown
+    )
     assert "- Evidence gaps:\n  - none" in markdown
 
 
@@ -2654,7 +2699,39 @@ def _write_cvrp_protocol_run(
     mechanism_family: str,
     include_runtime: bool = True,
     include_continuity: bool = True,
+    include_direct_evidence: bool = True,
 ) -> None:
+    top_row: dict[str, object] = {
+        "round": 1,
+        "branch_id": "branch-1",
+        "mechanism_family": mechanism_family,
+        "stage": "screening",
+        "decision": "continue_explore",
+        "gate_outcome": "pass",
+        "median_delta": 11.0,
+        "effect_to_mde_ratio": 1.1,
+        "positive_effect_at_or_above_mde": True,
+    }
+    if include_direct_evidence:
+        top_row["mechanism_evidence"] = {
+            "primary_mechanism": mechanism_family,
+            "primary_activation_status": "observed",
+            "primary_effect_status": "positive",
+            "activation_evidence_status": "activation_observed",
+            "objective_effect_status": "mixed_objective_effect",
+        }
+        top_row["candidate_phase_telemetry_summary"] = {
+            "selected_surface": "solver_design",
+            "candidate_pairs": 8,
+            "runtime_observed_pairs": 8,
+            "buckets": {
+                "two_opt": {
+                    "declared": True,
+                    "weighted_sum_ms": 120.0,
+                    "max_ms": 30.0,
+                }
+            },
+        }
     _write_json(
         run_root / "run_status.json",
         {
@@ -2727,19 +2804,7 @@ def _write_cvrp_protocol_run(
                     }
                 },
             },
-            "top_rows_by_effect_to_mde": [
-                {
-                    "round": 1,
-                    "branch_id": "branch-1",
-                    "mechanism_family": mechanism_family,
-                    "stage": "screening",
-                    "decision": "continue_explore",
-                    "gate_outcome": "pass",
-                    "median_delta": 11.0,
-                    "effect_to_mde_ratio": 1.1,
-                    "positive_effect_at_or_above_mde": True,
-                }
-            ],
+            "top_rows_by_effect_to_mde": [top_row],
         },
         "run_status": {
             "run_validity_status": "valid",

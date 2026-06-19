@@ -1097,12 +1097,18 @@ def _protocol_effect_row(
     win_rate = _first_float(protocol.get("win_rate"), protocol.get("case_win_rate"))
     branch_id = _first_str(step.get("branch_id"))
     mechanism_family = _mechanism_family_for_branch(branch_id, branch_family_map)
+    mechanism_evidence = _compact_protocol_mechanism_evidence(
+        _mapping_value(protocol.get("mechanism_evidence"))
+    )
+    phase_telemetry = _compact_candidate_phase_telemetry_summary(
+        _mapping_value(protocol.get("candidate_phase_telemetry_summary"))
+    )
     effect_to_mde_ratio = (
         round(median_delta / mde, 6)
         if median_delta is not None and mde is not None and mde > 0
         else None
     )
-    return {
+    row = {
         "round": _first_int(step.get("round")),
         "branch_id": branch_id,
         "mechanism_family": mechanism_family,
@@ -1126,6 +1132,86 @@ def _protocol_effect_row(
         "reason_codes": _list_of_str(protocol.get("effective_reason_codes"))
         or _list_of_str(protocol.get("reason_codes")),
     }
+    if mechanism_evidence:
+        row["mechanism_evidence"] = mechanism_evidence
+    if phase_telemetry:
+        row["candidate_phase_telemetry_summary"] = phase_telemetry
+    return row
+
+
+def _compact_protocol_mechanism_evidence(
+    evidence: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not evidence:
+        return {}
+    compact = {
+        key: evidence.get(key)
+        for key in (
+            "primary_mechanism",
+            "primary_activation_status",
+            "primary_effect_status",
+            "activation_evidence_status",
+            "objective_effect_status",
+            "telemetry_outcome",
+        )
+        if evidence.get(key) not in (None, "", [], {})
+    }
+    mechanisms = evidence.get("mechanisms")
+    if isinstance(mechanisms, list):
+        compact["mechanisms"] = [
+            {
+                key: item.get(key)
+                for key in (
+                    "mechanism",
+                    "role",
+                    "activation_status",
+                    "effect_status",
+                    "telemetry_outcome",
+                )
+                if isinstance(item, Mapping)
+                and item.get(key) not in (None, "", [], {})
+            }
+            for item in mechanisms
+            if isinstance(item, Mapping)
+        ][:5]
+    return {key: value for key, value in compact.items() if value not in (None, "", [], {})}
+
+
+def _compact_candidate_phase_telemetry_summary(
+    summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not summary:
+        return {}
+    compact = {
+        key: summary.get(key)
+        for key in (
+            "selected_surface",
+            "candidate_pairs",
+            "runtime_observed_pairs",
+            "phase_runtime_fields",
+            "declared_buckets",
+        )
+        if summary.get(key) not in (None, "", [], {})
+    }
+    buckets = summary.get("buckets")
+    if isinstance(buckets, Mapping):
+        compact["buckets"] = {
+            str(name): {
+                key: payload.get(key)
+                for key in ("declared", "weighted_sum_ms", "max_ms")
+                if isinstance(payload, Mapping)
+                and payload.get(key) not in (None, "", [], {})
+            }
+            for name, payload in sorted(buckets.items())
+            if isinstance(payload, Mapping)
+        }
+    for key in (
+        "solver_algorithm_phase_improvement_counts",
+        "phase_improvement_counts",
+    ):
+        if isinstance(summary.get(key), Mapping):
+            compact[key] = dict(summary[key])
+    return {key: value for key, value in compact.items() if value not in (None, "", [], {})}
 
 
 def _mechanism_family_for_branch(
@@ -1252,8 +1338,9 @@ def _top_effect_rows(
         key=lambda row: _first_float(row.get("effect_to_mde_ratio")) or float("-inf"),
         reverse=True,
     )
-    return [
-        {
+    compact_rows = []
+    for row in sortable[:limit]:
+        item = {
             key: row.get(key)
             for key in (
                 "round",
@@ -1272,8 +1359,14 @@ def _top_effect_rows(
                 "reason_codes",
             )
         }
-        for row in sortable[:limit]
-    ]
+        if row.get("mechanism_evidence"):
+            item["mechanism_evidence"] = row.get("mechanism_evidence")
+        if row.get("candidate_phase_telemetry_summary"):
+            item["candidate_phase_telemetry_summary"] = row.get(
+                "candidate_phase_telemetry_summary"
+            )
+        compact_rows.append(item)
+    return compact_rows
 
 
 def _artifact_measurement_readiness(

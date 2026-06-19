@@ -45,6 +45,7 @@ PROBLEM_SUMMARY_DELEGATED_INTERPRETATIONS = {
     "cvrp_large_twoopt_summary": {
         "bounded_twoopt_review_ready",
         "quality_blocked_no_protocol_twoopt_conclusion",
+        "protocol_evaluated_without_large_twoopt_direct_evidence",
         "protocol_evaluated_without_large_twoopt_signal",
     },
 }
