@@ -254,7 +254,8 @@ Current checkpoint:
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
-  `active=0`, `refreshing=1`, `total=1`. Do not launch either root until
+  `active=0`, `expired=1`, `refreshing=0`, `total=1`. Do not launch either
+  root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
 - Current postrun/delegated-review boundary: postrun readiness is report-only and
