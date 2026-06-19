@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `15ef16c` and are static-ready, including problem-specific handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun acceptance, review-input consistency, prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `cc11e7e` and are static-ready, including problem-specific handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun acceptance, review-input consistency, launch-readiness prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -322,11 +322,12 @@ Current checkpoint:
   warehouse/CVRP readiness through the wrong problem family.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-contractconsistency-15ef16c-6r-gpt55-20260619T130229Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-launchcontract-cc11e7e-6r-gpt55-6r-gpt55-20260619T131623Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-contractconsistency-15ef16c-1r-gpt55-20260619T130228Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-launchcontract-cc11e7e-1r-gpt55-1r-gpt55-20260619T131625Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
+  `analysis_brief_prepared_contract_consistency=ok`,
   `prompt_context_readiness_complete=ok`,
   `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`,
   `run_script_strict_postrun_readiness=ok`,
@@ -346,16 +347,17 @@ Current checkpoint:
   warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL runtime commit `15ef16c`. Current
+  true. The roots were prepared from WSL runtime commit `cc11e7e`. Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout
   `PYTHONPATH`, no-early-stop launch semantics, executable pre-campaign failure
   reporting, strict postrun readiness, runtime guard command markers, normal
   campaign-exit postrun reporting, postrun review-surface boundary markers,
   co-located CVRP two-opt direct evidence, and warehouse/CVRP problem-summary
-  consistency recomputed from review inputs. Postrun acceptance also checks
-  analysis-brief prepared-contract consistency against the inventory/launcher
-  contract before current-run delegated review can be ready.
+  consistency recomputed from review inputs. Launch readiness and postrun
+  acceptance both check analysis-brief prepared-contract consistency against
+  the inventory/launcher contract before a root can be launch-ready or
+  current-run delegated review can be ready.
 - The blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
@@ -415,7 +417,7 @@ Current checkpoint:
   `PYTHONPATH` before campaign start, or if manifest and launch-env model route
   diverge from `gpt-5.5`, or if launch-env/manifest/run-script no-early-stop
   semantics are missing.
-  Older prepared roots before the contractconsistency roots above are not current
+  Older prepared roots before the launchcontract roots above are not current
   because launch/readiness runtime paths changed after prepare time. Exact
   supersession details belong in the
   launch/readiness evidence docs, not in this current checkpoint.

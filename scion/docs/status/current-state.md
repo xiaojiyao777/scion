@@ -63,8 +63,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `15ef16c`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-contractconsistency-15ef16c-6r-gpt55-20260619T130229Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `cc11e7e`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-launchcontract-cc11e7e-6r-gpt55-6r-gpt55-20260619T131623Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -97,8 +97,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `15ef16c`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-contractconsistency-15ef16c-1r-gpt55-20260619T130228Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `cc11e7e`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-launchcontract-cc11e7e-1r-gpt55-1r-gpt55-20260619T131625Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -123,7 +123,7 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `15ef16c`.
+- The active prepared roots were generated from WSL runtime commit `cc11e7e`.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`. Static checks include
   prepared contract/brief identity, prepared-contract consistency,
@@ -180,8 +180,9 @@ Infrastructure:
   Earlier launch/readiness guard details remain in
   `scion/docs/experiments/v0.4/`; this page keeps only the current root
   pointer and launch blocker.
-- Current postrun prepared-contract consistency repair:
+- Current prepared-contract consistency evidence:
   `scion/docs/experiments/v0.4/v04-postrun-prepared-contract-consistency-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-launch-readiness-prepared-contract-consistency-20260619.md`.
 - Current repair context lives in `scion/docs/experiments/v0.4/`; keep this
   status page focused on operating truth rather than repair chronology.
 - WSL reference:

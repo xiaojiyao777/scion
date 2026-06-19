@@ -280,7 +280,7 @@ PYTHONPATH=scion \
 
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL runtime commit `15ef16c` because
+New prepare-only roots were generated from WSL runtime commit `cc11e7e` because
 `scion/tools` is part of the guarded launch/readiness runtime surface. The
 current checkout requires completion-preflight failure status writing and
 data-root/API-key-env failure markers to be executable shell paths, not
@@ -300,17 +300,18 @@ review cannot omit or hand-write a stale branch/hypothesis/event/trace audit
 surface. It also requires prompt/source visibility, research-context,
 signal-density, and failure-taxonomy review surfaces to preserve current schemas,
 report-only and `DecisionFeatures`-excluded boundary markers, and raw material
-exclusion markers. The postrun bundle also requires the analysis brief
-`prepared_run_contract` to match the inventory/launcher prepared contract, and
-problem-family routing uses the inventory contract as the authority.
+exclusion markers. Launch readiness and the postrun bundle both require the
+analysis brief `prepared_run_contract` to match the inventory/launcher prepared
+contract, and problem-family routing uses the inventory contract as the
+authority.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-contractconsistency-15ef16c-6r-gpt55-20260619T130229Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-launchcontract-cc11e7e-6r-gpt55-6r-gpt55-20260619T131623Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-contractconsistency-15ef16c-1r-gpt55-20260619T130228Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-launchcontract-cc11e7e-1r-gpt55-1r-gpt55-20260619T131625Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -388,6 +389,7 @@ schemas, boundary markers, and raw-material exclusion markers. It supersedes
 earlier prepared roots that lacked any of these guarded
 launch/readiness/postrun guarantees. The boundarymarkers roots
 listed in older sections are superseded by the contractconsistency roots above,
-which are the current prepared-root pointers.
+and those in turn are superseded by the launchcontract roots above, which are
+the current prepared-root pointers.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.
