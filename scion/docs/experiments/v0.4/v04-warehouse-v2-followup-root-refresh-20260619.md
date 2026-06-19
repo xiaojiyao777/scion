@@ -93,3 +93,12 @@ Strict launch readiness remains externally blocked:
 Accepted as the current warehouse launch-prepared root. Once `gpt-5.5` auth is
 restored and strict launch readiness reports `launch_ready=true`, this is the
 warehouse root to launch for the simpler continuous-improvement proof.
+
+Later current root:
+
+- The `35dd723` root was superseded after the warehouse plateau-review input
+  guard changed a runtime guard path.
+- Current warehouse root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-67f4da9-6r-gpt55-20260619T002422Z-claw`.
+- Current refresh report:
+  `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-warehouse-plateau-guard-20260619.md`.

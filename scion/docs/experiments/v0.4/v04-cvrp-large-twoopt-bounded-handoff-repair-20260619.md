@@ -145,3 +145,12 @@ Accepted as a CVRP launch-handoff repair. Once `gpt-5.5` auth is restored, the
 current CVRP root can ask the agent to pursue the large-instance two-opt seed
 without relying on an ambiguous prose-only "bounded" instruction and without
 accepting the unbounded fallback diff.
+
+Later current root:
+
+- The `dc83d83` root was superseded after the warehouse plateau-review input
+  guard changed a shared runtime guard path.
+- Current CVRP root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-67f4da9-1r-gpt55-20260619T002422Z-claw`.
+- Current refresh report:
+  `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-warehouse-plateau-guard-20260619.md`.
