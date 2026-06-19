@@ -40,6 +40,7 @@ PROBLEM_SUMMARY_SCHEMAS = {
     "warehouse_followup_summary": "scion.postrun_warehouse_followup_summary.v1",
     "cvrp_large_twoopt_summary": "scion.postrun_cvrp_large_twoopt_summary.v1",
 }
+BRANCH_RESEARCH_STATE_SCHEMA = "scion.postrun_branch_research_state_summary.v1"
 CHAMPION_PROGRESS_SCHEMA = "scion.postrun_champion_progress_summary.v1"
 PROBLEM_SUMMARY_DELEGATED_INTERPRETATIONS = {
     "warehouse_followup_summary": {
@@ -301,6 +302,16 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         research_context_status,
         research_context_detail,
         required=research_context_status != "skipped",
+    )
+    branch_state_status, branch_state_detail = _branch_research_state_actionability(
+        analysis_brief,
+        inventory,
+    )
+    add_check(
+        "branch_research_state_actionability",
+        branch_state_status,
+        branch_state_detail,
+        required=branch_state_status != "skipped",
     )
     champion_status, champion_detail = _champion_progress_actionability(
         analysis_brief,
@@ -1231,6 +1242,76 @@ def _research_context_actionability(
             ),
             "weak_positive_observed": indicators.get("weak_positive_observed"),
             "weak_positive_missed": indicators.get("weak_positive_missed"),
+        },
+    )
+
+
+def _branch_research_state_actionability(
+    brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> tuple[str, Any]:
+    problem_family = _problem_family(brief, inventory)
+    if problem_family not in {"warehouse_delivery", "cvrp"}:
+        return "skipped", {
+            "reason": "not_problem_specific_agentic_summary",
+            "problem_family": problem_family,
+        }
+    summary = _mapping_or_empty(brief.get("branch_research_state_summary"))
+    aggregate = _mapping_or_empty(summary.get("aggregate"))
+    top_branches = summary.get("top_branches")
+    failures: list[str] = []
+    if summary.get("schema_version") != BRANCH_RESEARCH_STATE_SCHEMA:
+        failures.append("branch_research_state_schema_stale")
+    if summary.get("report_only") is not True:
+        failures.append("branch_research_state_not_report_only")
+    if summary.get("quality_judgment") is not False:
+        failures.append("branch_research_state_quality_judgment_not_false")
+    if summary.get("decision_features_excluded") is not True:
+        failures.append("branch_research_state_decision_features_not_excluded")
+    for mutation_field in (
+        "campaign_state_mutated",
+        "scheduler_state_mutated",
+        "promotion_state_mutated",
+    ):
+        if summary.get(mutation_field) is not False:
+            failures.append(f"branch_research_state_{mutation_field}_not_false")
+    for excluded_field in (
+        "raw_prompts_excluded",
+        "raw_responses_excluded",
+        "patch_body_excluded",
+    ):
+        if summary.get(excluded_field) is not True:
+            failures.append(f"branch_research_state_{excluded_field}_not_true")
+    if summary.get("current_run_evidence") is not True:
+        failures.append("branch_research_state_not_current_run_evidence")
+    if not isinstance(summary.get("available"), bool):
+        failures.append("branch_research_state_available_not_bool")
+    if not aggregate:
+        failures.append("branch_research_state_aggregate_missing")
+    if not isinstance(top_branches, list):
+        failures.append("branch_research_state_top_branches_not_list")
+
+    return (
+        "ok" if not failures else "failed",
+        {
+            "problem_family": problem_family,
+            "failures": failures,
+            "current_run_evidence": summary.get("current_run_evidence"),
+            "available": summary.get("available"),
+            "branch_count": aggregate.get("branch_count"),
+            "lineage_count": aggregate.get("lineage_count"),
+            "branch_state_counts": aggregate.get("branch_state_counts"),
+            "branches_with_hypotheses": aggregate.get("branches_with_hypotheses"),
+            "branches_with_events": aggregate.get("branches_with_events"),
+            "branches_with_sessions": aggregate.get("branches_with_sessions"),
+            "branches_with_traces": aggregate.get("branches_with_traces"),
+            "hypothesis_count": aggregate.get("hypothesis_count"),
+            "events_by_kind": aggregate.get("events_by_kind"),
+            "events_by_decision": aggregate.get("events_by_decision"),
+            "events_by_stage": aggregate.get("events_by_stage"),
+            "top_branch_count": (
+                len(top_branches) if isinstance(top_branches, list) else None
+            ),
         },
     )
 
