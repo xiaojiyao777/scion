@@ -56,6 +56,43 @@ PYTHONPATH=scion pytest -q \
 Results: launch-readiness group `22 passed`; launcher group `23 passed`; full
 v0.4 readiness/reporting group `89 passed`.
 
+WSL checkout after sync:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_prepared_handoff.py \
+  scion/scion/tests/test_launch_readiness.py \
+  scion/scion/tests/test_cvrp_agentic_launcher.py \
+  scion/scion/tests/test_warehouse_agentic_launcher.py
+```
+
+Result: full v0.4 readiness/reporting group `89 passed`.
+
+Old prepared roots from WSL checkout `f1ee04e` now fail static readiness with
+`runtime_guard_paths_cover_launch_tools=failed` because their manifests omit
+`scion/tools`.
+
+Replacement prepared roots:
+
+- Warehouse:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-toolsguard-ready-6r-gpt55-20260619T034516Z-claw`
+- CVRP:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-toolsguard-ready-1r-gpt55-20260619T034516Z-claw`
+
+Strict launch readiness for both replacements reports `static_ready=true`,
+`git_runtime_consistent=ok`, `runtime_guard_paths_cover_launch_tools=ok`,
+`prepared_analysis_brief_current=ok`, `prompt_context_readiness_complete=ok`,
+`problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`, and
+`run_script_strict_postrun_readiness=ok`. Launch readiness remains blocked only
+by the external `gpt-5.5` completion preflight: HTTP `401`,
+`classification=not_authenticated`, `code=invalid_api_key`, auth pool
+`active=0`, `expired=1`, `refreshing=0`, `total=1`.
+
 New regression coverage:
 
 - launch readiness rejects a prepared root whose runtime guard paths omit

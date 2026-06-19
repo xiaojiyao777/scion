@@ -84,8 +84,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `f1ee04e`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-f1ee04e-6r-gpt55-20260619T025919Z-claw`.
+- Current prepared root, prepared from WSL checkout `49edd77`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-toolsguard-ready-6r-gpt55-20260619T034516Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Because the root is prepare-only, required answers focus on
@@ -108,8 +108,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `f1ee04e`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-f1ee04e-1r-gpt55-20260619T025920Z-claw`.
+- Current prepared root, prepared from WSL checkout `49edd77`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-toolsguard-ready-1r-gpt55-20260619T034516Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -140,7 +140,8 @@ Infrastructure:
   identity matches the prepared manifest, including the manifest git commit.
   Later docs-only commits may make the checkout differ from a prepared manifest
   commit; readiness remains acceptable only when runtime guard paths are
-  unchanged.
+  unchanged. The older `f1ee04e` prepared roots are superseded because their
+  manifests did not guard `scion/tools`.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
   `code=invalid_api_key`, with proxy auth pool `active=0`, `expired=1`,
