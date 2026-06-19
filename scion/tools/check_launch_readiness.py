@@ -27,6 +27,10 @@ ANALYSIS_BRIEF_SCHEMA = "scion.postrun_analysis_brief.v1"
 UNREADY_EXIT = 64
 REQUIRED_SCION_MODEL = "gpt-5.5"
 MIN_PREPARED_PROPOSAL_HEADROOM = 64
+MIN_PREPARED_AGENTIC_SESSION_TIMEOUT_SEC = 3600
+MIN_PREPARED_AGENTIC_TOOL_MAX_STEPS = 240
+MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS = 200
+MIN_PREPARED_AGENTIC_OBSERVATION_MAX_CHARS = 2_000_000
 REPO_DIR = Path(__file__).resolve().parents[2]
 LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS = {
     "manifest_env_reader": (
@@ -1570,19 +1574,42 @@ def _run_script_proposal_headroom_enforced(
     )
 
     fields = {
+        "agentic_session_timeout_sec": {
+            "env": "AGENTIC_SESSION_TIMEOUT_SEC",
+            "option": "--agentic-session-timeout-sec",
+            "min": MIN_PREPARED_AGENTIC_SESSION_TIMEOUT_SEC,
+        },
+        "agentic_tool_max_steps": {
+            "env": "AGENTIC_TOOL_MAX_STEPS",
+            "option": "--agentic-tool-max-steps",
+            "min": MIN_PREPARED_AGENTIC_TOOL_MAX_STEPS,
+        },
+        "agentic_tool_max_calls": {
+            "env": "AGENTIC_TOOL_MAX_CALLS",
+            "option": "--agentic-tool-max-calls",
+            "min": MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS,
+        },
+        "agentic_observation_max_chars": {
+            "env": "AGENTIC_OBSERVATION_MAX_CHARS",
+            "option": "--agentic-observation-max-chars",
+            "min": MIN_PREPARED_AGENTIC_OBSERVATION_MAX_CHARS,
+        },
         "proposal_attempt_limit": {
             "env": "PROPOSAL_ATTEMPT_LIMIT",
             "option": "--proposal-attempt-limit",
+            "min": MIN_PREPARED_PROPOSAL_HEADROOM,
         },
         "proposal_quality_loop_limit": {
             "env": "PROPOSAL_QUALITY_LOOP_LIMIT",
             "option": "--proposal-quality-loop-limit",
+            "min": MIN_PREPARED_PROPOSAL_HEADROOM,
         },
     }
     detail_fields: dict[str, Any] = {}
     for field, spec in fields.items():
         env_key = str(spec["env"])
         option = str(spec["option"])
+        expected_min = int(spec["min"])
         env_raw = _shell_assignment_value(launch_env_text, env_key)
         env_value = _parse_positive_int(env_raw)
         manifest_value = _parse_positive_int(execution.get(field))
@@ -1599,6 +1626,7 @@ def _run_script_proposal_headroom_enforced(
         )
         detail_fields[field] = {
             "env_key": env_key,
+            "expected_min": expected_min,
             "env_value": env_value,
             "manifest_execution_value": manifest_value,
             "manifest_command_value": manifest_command_value,
@@ -1615,7 +1643,7 @@ def _run_script_proposal_headroom_enforced(
                         "reason": f"{field}_{source}_missing_or_invalid",
                         "field": field,
                         "source": source,
-                        "expected_min": MIN_PREPARED_PROPOSAL_HEADROOM,
+                        "expected_min": expected_min,
                         "actual": env_raw
                         if source == "launch_env"
                         else execution.get(field)
@@ -1623,13 +1651,13 @@ def _run_script_proposal_headroom_enforced(
                         else manifest_command_raw,
                     }
                 )
-            elif value < MIN_PREPARED_PROPOSAL_HEADROOM:
+            elif value < expected_min:
                 failures.append(
                     {
                         "reason": f"{field}_{source}_below_minimum",
                         "field": field,
                         "source": source,
-                        "expected_min": MIN_PREPARED_PROPOSAL_HEADROOM,
+                        "expected_min": expected_min,
                         "actual": value,
                     }
                 )
@@ -1656,6 +1684,14 @@ def _run_script_proposal_headroom_enforced(
         "launch_env": str(launch_env),
         "run_script": str(run_sh),
         "min_prepared_proposal_headroom": MIN_PREPARED_PROPOSAL_HEADROOM,
+        "min_prepared_agentic_session_timeout_sec": (
+            MIN_PREPARED_AGENTIC_SESSION_TIMEOUT_SEC
+        ),
+        "min_prepared_agentic_tool_max_steps": MIN_PREPARED_AGENTIC_TOOL_MAX_STEPS,
+        "min_prepared_agentic_tool_max_calls": MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS,
+        "min_prepared_agentic_observation_max_chars": (
+            MIN_PREPARED_AGENTIC_OBSERVATION_MAX_CHARS
+        ),
         "campaign_command_position": campaign_pos,
         "campaign_status_position": campaign_status_pos,
         "fields": detail_fields,

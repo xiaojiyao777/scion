@@ -378,12 +378,18 @@ def test_default_agentic_session_uses_configured_timeout() -> None:
     pipeline, _, _, _, _, _ = _pipeline(
         use_agentic_proposal=True,
         agentic_session_timeout_sec=7.5,
+        agentic_tool_max_steps=120,
+        agentic_tool_max_calls=96,
+        agentic_observation_max_chars=1500000,
     )
 
     session = pipeline._get_agentic_session()
 
     assert isinstance(session, AgenticProposalSession)
     assert session._tool_loop_config.max_wall_time_sec == 7.5
+    assert session._tool_loop_config.max_steps == 120
+    assert session._tool_loop_config.max_tool_calls == 96
+    assert session._tool_loop_config.max_observation_chars == 1500000
 
 
 def test_agentic_session_invalid_target_does_not_build_code_context_or_patch(

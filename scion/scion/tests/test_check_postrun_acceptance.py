@@ -2400,7 +2400,12 @@ def _write_prepared_manifest_fixture(run_root: Path, problem_family: str) -> Non
     campaign_dir = run_root / "campaign"
     command = (
         "python -m scion.cli.main run "
-        f"--campaign-dir {campaign_dir} --disable-early-stop"
+        f"--campaign-dir {campaign_dir} "
+        "--agentic-session-timeout-sec 3600 "
+        "--agentic-tool-max-steps 240 "
+        "--agentic-tool-max-calls 200 "
+        "--agentic-observation-max-chars 2000000 "
+        "--disable-early-stop"
     )
     _write_json(
         run_root / "prepared_run_manifest.v1.json",
@@ -2437,7 +2442,10 @@ def _write_prepared_manifest_fixture(run_root: Path, problem_family: str) -> Non
             "execution": {
                 "rounds": 2,
                 "time_limit_sec": 30,
-                "agentic_session_timeout_sec": 900,
+                "agentic_session_timeout_sec": 3600,
+                "agentic_tool_max_steps": 240,
+                "agentic_tool_max_calls": 200,
+                "agentic_observation_max_chars": 2000000,
                 "measurement_governance": "on",
                 "proposal_context_ablation": "full",
                 "agentic_proposal": True,

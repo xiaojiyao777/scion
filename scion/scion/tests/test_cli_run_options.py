@@ -372,6 +372,12 @@ def test_run_agentic_proposal_threads_config_to_campaign_manager(
             str(artifact_dir),
             "--agentic-session-timeout-sec",
             "7.5",
+            "--agentic-tool-max-steps",
+            "120",
+            "--agentic-tool-max-calls",
+            "96",
+            "--agentic-observation-max-chars",
+            "1500000",
             "--proposal-attempt-limit",
             "4",
         ],
@@ -382,6 +388,9 @@ def test_run_agentic_proposal_threads_config_to_campaign_manager(
     assert kwargs["use_agentic_proposal"] is True
     assert kwargs["agentic_artifact_dir"] == str(artifact_dir.resolve())
     assert kwargs["agentic_session_timeout_sec"] == 7.5
+    assert kwargs["agentic_tool_max_steps"] == 120
+    assert kwargs["agentic_tool_max_calls"] == 96
+    assert kwargs["agentic_observation_max_chars"] == 1500000
     assert kwargs["proposal_attempt_limit"] == 4
     assert kwargs["max_rounds"] == 1
 
@@ -432,6 +441,9 @@ def test_run_agentic_proposal_defaults_to_campaign_subdir(
     assert kwargs["use_agentic_proposal"] is True
     assert kwargs["agentic_artifact_dir"] == str(campaign_dir.resolve() / "agentic_sessions")
     assert kwargs["agentic_session_timeout_sec"] is None
+    assert kwargs["agentic_tool_max_steps"] is None
+    assert kwargs["agentic_tool_max_calls"] is None
+    assert kwargs["agentic_observation_max_chars"] is None
 
 
 def test_run_leaves_agentic_proposal_disabled_by_default(
@@ -478,6 +490,9 @@ def test_run_leaves_agentic_proposal_disabled_by_default(
     assert kwargs["use_agentic_proposal"] is False
     assert kwargs["agentic_artifact_dir"] is None
     assert kwargs["agentic_session_timeout_sec"] is None
+    assert kwargs["agentic_tool_max_steps"] is None
+    assert kwargs["agentic_tool_max_calls"] is None
+    assert kwargs["agentic_observation_max_chars"] is None
 
 
 def test_run_writes_wrapper_audit_status_and_exit_files(

@@ -23,7 +23,10 @@ DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_BASE_URL = "http://127.0.0.1:8080"
 DEFAULT_LOCAL_PROXY_API_KEY = "pwd"
 DEFAULT_TIME_LIMIT_SEC = 30
-DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC = 900
+DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC = 3600
+DEFAULT_AGENTIC_TOOL_MAX_STEPS = 240
+DEFAULT_AGENTIC_TOOL_MAX_CALLS = 200
+DEFAULT_AGENTIC_OBSERVATION_MAX_CHARS = 2_000_000
 DEFAULT_PROPOSAL_ATTEMPT_LIMIT = 64
 DEFAULT_PROPOSAL_QUALITY_LOOP_LIMIT = 64
 DEFAULT_PYTHON = Path(sys.executable)
@@ -562,6 +565,9 @@ def _build_command(env: dict[str, object]) -> str:
         f"--rounds {env['ROUNDS']} "
         f"--time-limit-sec {env['TIME_LIMIT_SEC']} "
         f"--agentic-session-timeout-sec {env['AGENTIC_SESSION_TIMEOUT_SEC']} "
+        f"--agentic-tool-max-steps {env['AGENTIC_TOOL_MAX_STEPS']} "
+        f"--agentic-tool-max-calls {env['AGENTIC_TOOL_MAX_CALLS']} "
+        f"--agentic-observation-max-chars {env['AGENTIC_OBSERVATION_MAX_CHARS']} "
         f"--proposal-attempt-limit {env['PROPOSAL_ATTEMPT_LIMIT']} "
         f"--proposal-quality-loop-limit {env['PROPOSAL_QUALITY_LOOP_LIMIT']} "
         f"--measurement-governance {env['MEASUREMENT_GOVERNANCE']} "
@@ -607,6 +613,9 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "AGENTIC_PROPOSAL",
         "DISABLE_EARLY_STOP",
         "AGENTIC_SESSION_TIMEOUT_SEC",
+        "AGENTIC_TOOL_MAX_STEPS",
+        "AGENTIC_TOOL_MAX_CALLS",
+        "AGENTIC_OBSERVATION_MAX_CHARS",
         "GIT_COMMIT",
         "GIT_RUNTIME_GUARD_PATHS",
         "STARTED_UTC",
@@ -731,6 +740,9 @@ fi
   --rounds "$ROUNDS" \\
   --time-limit-sec "$TIME_LIMIT_SEC" \\
   --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" \\
+  --agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS" \\
+  --agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS" \\
+  --agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS" \\
   --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" \\
   --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" \\
   --measurement-governance "$MEASUREMENT_GOVERNANCE" \\
@@ -794,6 +806,10 @@ def _write_prepare_status(run_root: Path, env: dict[str, object]) -> None:
         "completion_preflight": bool(int(env["COMPLETION_PREFLIGHT"])),
         "postrun_reports": bool(int(env["POSTRUN_REPORTS"])),
         "control_pair_key": str(env.get("CONTROL_PAIR_KEY") or ""),
+        "agentic_session_timeout_sec": int(env["AGENTIC_SESSION_TIMEOUT_SEC"]),
+        "agentic_tool_max_steps": int(env["AGENTIC_TOOL_MAX_STEPS"]),
+        "agentic_tool_max_calls": int(env["AGENTIC_TOOL_MAX_CALLS"]),
+        "agentic_observation_max_chars": int(env["AGENTIC_OBSERVATION_MAX_CHARS"]),
         "proposal_attempt_limit": int(env["PROPOSAL_ATTEMPT_LIMIT"]),
         "proposal_quality_loop_limit": int(env["PROPOSAL_QUALITY_LOOP_LIMIT"]),
         "git_commit": str(env["GIT_COMMIT"]),
@@ -852,6 +868,11 @@ def _write_prepared_run_manifest(
             "rounds": int(env["ROUNDS"]),
             "time_limit_sec": int(env["TIME_LIMIT_SEC"]),
             "agentic_session_timeout_sec": int(env["AGENTIC_SESSION_TIMEOUT_SEC"]),
+            "agentic_tool_max_steps": int(env["AGENTIC_TOOL_MAX_STEPS"]),
+            "agentic_tool_max_calls": int(env["AGENTIC_TOOL_MAX_CALLS"]),
+            "agentic_observation_max_chars": int(
+                env["AGENTIC_OBSERVATION_MAX_CHARS"]
+            ),
             "proposal_attempt_limit": int(env["PROPOSAL_ATTEMPT_LIMIT"]),
             "proposal_quality_loop_limit": int(
                 env["PROPOSAL_QUALITY_LOOP_LIMIT"]
@@ -962,6 +983,9 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         "rounds",
         "time_limit_sec",
         "agentic_session_timeout_sec",
+        "agentic_tool_max_steps",
+        "agentic_tool_max_calls",
+        "agentic_observation_max_chars",
         "proposal_attempt_limit",
         "proposal_quality_loop_limit",
         "measurement_governance",
@@ -1081,6 +1105,9 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "AGENTIC_PROPOSAL": 1,
         "DISABLE_EARLY_STOP": 1,
         "AGENTIC_SESSION_TIMEOUT_SEC": args.agentic_session_timeout_sec,
+        "AGENTIC_TOOL_MAX_STEPS": args.agentic_tool_max_steps,
+        "AGENTIC_TOOL_MAX_CALLS": args.agentic_tool_max_calls,
+        "AGENTIC_OBSERVATION_MAX_CHARS": args.agentic_observation_max_chars,
         "GIT_COMMIT": _git_commit(repo_root),
         "GIT_RUNTIME_GUARD_PATHS": (
             "scion/scion :(exclude)scion/scion/tests "
@@ -1105,6 +1132,11 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             f"SCION_MODEL={env['SCION_MODEL']}\n"
             f"SCION_BASE_URL={env['SCION_BASE_URL']}\n"
             f"SCION_WAREHOUSE_DATA_ROOT={env['SCION_WAREHOUSE_DATA_ROOT']}\n\n"
+            f"AGENTIC_SESSION_TIMEOUT_SEC={env['AGENTIC_SESSION_TIMEOUT_SEC']}\n"
+            f"AGENTIC_TOOL_MAX_STEPS={env['AGENTIC_TOOL_MAX_STEPS']}\n"
+            f"AGENTIC_TOOL_MAX_CALLS={env['AGENTIC_TOOL_MAX_CALLS']}\n"
+            "AGENTIC_OBSERVATION_MAX_CHARS="
+            f"{env['AGENTIC_OBSERVATION_MAX_CHARS']}\n\n"
             f"PROPOSAL_ATTEMPT_LIMIT={env['PROPOSAL_ATTEMPT_LIMIT']}\n"
             f"PROPOSAL_QUALITY_LOOP_LIMIT={env['PROPOSAL_QUALITY_LOOP_LIMIT']}\n\n"
             f"COMPLETION_PREFLIGHT={env['COMPLETION_PREFLIGHT']}\n\n"
@@ -1246,6 +1278,24 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC,
     )
     parser.add_argument(
+        "--agentic-tool-max-steps",
+        type=int,
+        default=DEFAULT_AGENTIC_TOOL_MAX_STEPS,
+        help="APS per-session step headroom for focused v0.4 agentic research.",
+    )
+    parser.add_argument(
+        "--agentic-tool-max-calls",
+        type=int,
+        default=DEFAULT_AGENTIC_TOOL_MAX_CALLS,
+        help="APS per-session tool-call headroom for focused v0.4 agentic research.",
+    )
+    parser.add_argument(
+        "--agentic-observation-max-chars",
+        type=int,
+        default=DEFAULT_AGENTIC_OBSERVATION_MAX_CHARS,
+        help="APS retained observation-character headroom for focused v0.4 runs.",
+    )
+    parser.add_argument(
         "--proposal-attempt-limit",
         type=int,
         default=DEFAULT_PROPOSAL_ATTEMPT_LIMIT,
@@ -1281,6 +1331,12 @@ def parse_args() -> argparse.Namespace:
         raise SystemExit("--time-limit-sec must be >= 1")
     if args.agentic_session_timeout_sec < 1:
         raise SystemExit("--agentic-session-timeout-sec must be >= 1")
+    if args.agentic_tool_max_steps < 1:
+        raise SystemExit("--agentic-tool-max-steps must be >= 1")
+    if args.agentic_tool_max_calls < 1:
+        raise SystemExit("--agentic-tool-max-calls must be >= 1")
+    if args.agentic_observation_max_chars < 1:
+        raise SystemExit("--agentic-observation-max-chars must be >= 1")
     if args.proposal_attempt_limit < 1:
         raise SystemExit("--proposal-attempt-limit must be >= 1")
     if args.proposal_quality_loop_limit < 1:

@@ -461,6 +461,21 @@ def register_init_run_commands(app: typer.Typer) -> None:
             "--agentic-session-timeout-sec",
             help="APS max wall time per session in seconds",
         ),
+        agentic_tool_max_steps: Optional[int] = typer.Option(
+            None,
+            "--agentic-tool-max-steps",
+            help="APS max planning/code loop steps per proposal session",
+        ),
+        agentic_tool_max_calls: Optional[int] = typer.Option(
+            None,
+            "--agentic-tool-max-calls",
+            help="APS max tool calls per proposal session",
+        ),
+        agentic_observation_max_chars: Optional[int] = typer.Option(
+            None,
+            "--agentic-observation-max-chars",
+            help="APS max retained observation characters per proposal session",
+        ),
         allow_skeleton: bool = typer.Option(
             False,
             "--allow-skeleton",
@@ -500,6 +515,15 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 err=True,
             )
             raise typer.Exit(code=1)
+        for option_name, option_value in (
+            ("--agentic-session-timeout-sec", agentic_session_timeout_sec),
+            ("--agentic-tool-max-steps", agentic_tool_max_steps),
+            ("--agentic-tool-max-calls", agentic_tool_max_calls),
+            ("--agentic-observation-max-chars", agentic_observation_max_chars),
+        ):
+            if option_value is not None and option_value < 1:
+                typer.echo(f"ERROR: {option_name} must be >= 1", err=True)
+                raise typer.Exit(code=1)
 
         from scion.config.problem import (
             ProblemSpec,
@@ -754,6 +778,9 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 use_agentic_proposal=agentic_proposal,
                 agentic_artifact_dir=resolved_agentic_artifact_dir,
                 agentic_session_timeout_sec=agentic_session_timeout_sec,
+                agentic_tool_max_steps=agentic_tool_max_steps,
+                agentic_tool_max_calls=agentic_tool_max_calls,
+                agentic_observation_max_chars=agentic_observation_max_chars,
                 allow_skeleton_mode=allow_skeleton,
                 force_surface=forced_request.surface if forced_request else None,
                 force_action=forced_request.action if forced_request else None,

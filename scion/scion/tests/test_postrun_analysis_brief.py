@@ -2820,7 +2820,10 @@ def _write_warehouse_manifest(
         f"--campaign-dir {campaign_dir} "
         f"--rounds {rounds} "
         "--time-limit-sec 30 "
-        "--agentic-session-timeout-sec 900 "
+        "--agentic-session-timeout-sec 3600 "
+        "--agentic-tool-max-steps 240 "
+        "--agentic-tool-max-calls 200 "
+        "--agentic-observation-max-chars 2000000 "
         "--measurement-governance on "
         "--proposal-context-ablation full "
         "--disable-early-stop "
@@ -2858,7 +2861,10 @@ def _write_warehouse_manifest(
             "execution": {
                 "rounds": rounds,
                 "time_limit_sec": 30,
-                "agentic_session_timeout_sec": 900,
+                "agentic_session_timeout_sec": 3600,
+                "agentic_tool_max_steps": 240,
+                "agentic_tool_max_calls": 200,
+                "agentic_observation_max_chars": 2000000,
                 "measurement_governance": "on",
                 "proposal_context_ablation": "full",
                 "agentic_proposal": True,
@@ -2944,7 +2950,10 @@ def _write_cvrp_large_twoopt_manifest(
         f"--campaign-dir {campaign_dir} "
         f"--rounds {rounds} "
         "--time-limit-sec 30 "
-        "--agentic-session-timeout-sec 900 "
+        "--agentic-session-timeout-sec 3600 "
+        "--agentic-tool-max-steps 240 "
+        "--agentic-tool-max-calls 200 "
+        "--agentic-observation-max-chars 2000000 "
         "--stage-transition-drain-limit 4 "
         "--measurement-governance on "
         "--proposal-context-ablation full "
@@ -2983,7 +2992,10 @@ def _write_cvrp_large_twoopt_manifest(
             "execution": {
                 "rounds": rounds,
                 "time_limit_sec": 30,
-                "agentic_session_timeout_sec": 900,
+                "agentic_session_timeout_sec": 3600,
+                "agentic_tool_max_steps": 240,
+                "agentic_tool_max_calls": 200,
+                "agentic_observation_max_chars": 2000000,
                 "stage_transition_drain_limit": 4,
                 "measurement_governance": "on",
                 "proposal_context_ablation": "full",

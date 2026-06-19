@@ -172,6 +172,9 @@ class ProposalPipeline(
     agentic_session: AgenticProposalSessionLike | None = None
     agentic_artifact_dir: str | None = None
     agentic_session_timeout_sec: float | None = None
+    agentic_tool_max_steps: int | None = None
+    agentic_tool_max_calls: int | None = None
+    agentic_observation_max_chars: int | None = None
     lineage_registry: Any | None = None
     split_manifest: Any | None = None
     seed_ledger: Any | None = None

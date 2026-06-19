@@ -1017,6 +1017,13 @@ def _prepared_contract_execution(execution: Mapping[str, Any]) -> dict[str, Any]
         "rounds": execution.get("rounds"),
         "time_limit_sec": execution.get("time_limit_sec"),
         "agentic_session_timeout_sec": execution.get("agentic_session_timeout_sec"),
+        "agentic_tool_max_steps": execution.get("agentic_tool_max_steps"),
+        "agentic_tool_max_calls": execution.get("agentic_tool_max_calls"),
+        "agentic_observation_max_chars": execution.get(
+            "agentic_observation_max_chars"
+        ),
+        "proposal_attempt_limit": execution.get("proposal_attempt_limit"),
+        "proposal_quality_loop_limit": execution.get("proposal_quality_loop_limit"),
         "stage_transition_drain_limit": execution.get("stage_transition_drain_limit"),
         "measurement_governance": execution.get("measurement_governance"),
         "proposal_context_ablation": execution.get("proposal_context_ablation"),

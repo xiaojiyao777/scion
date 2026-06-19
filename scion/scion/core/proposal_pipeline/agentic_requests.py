@@ -51,11 +51,18 @@ class AgenticRequestMixin:
         return self.agentic_session
 
     def _agentic_tool_loop_config(self) -> AgenticToolLoopConfig:
-        if self.agentic_session_timeout_sec is None:
-            return AgenticToolLoopConfig()
-        return AgenticToolLoopConfig(
-            max_wall_time_sec=float(self.agentic_session_timeout_sec)
-        )
+        kwargs: dict[str, Any] = {}
+        if self.agentic_session_timeout_sec is not None:
+            kwargs["max_wall_time_sec"] = float(self.agentic_session_timeout_sec)
+        if self.agentic_tool_max_steps is not None:
+            kwargs["max_steps"] = int(self.agentic_tool_max_steps)
+        if self.agentic_tool_max_calls is not None:
+            kwargs["max_tool_calls"] = int(self.agentic_tool_max_calls)
+        if self.agentic_observation_max_chars is not None:
+            kwargs["max_observation_chars"] = int(
+                self.agentic_observation_max_chars
+            )
+        return AgenticToolLoopConfig(**kwargs)
 
     def _build_agentic_request(
         self,

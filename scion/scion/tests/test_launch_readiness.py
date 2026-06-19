@@ -2053,6 +2053,72 @@ def test_launch_readiness_rejects_low_manifest_proposal_headroom(
     } in failures
 
 
+def test_launch_readiness_rejects_missing_agentic_tool_headroom_env(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(
+        "\n".join(
+            line
+            for line in launch_env.read_text(encoding="utf-8").splitlines()
+            if not line.startswith("AGENTIC_TOOL_MAX_CALLS=")
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    headroom_check = report["checks"]["run_script_proposal_headroom_enforced"]
+    assert headroom_check["status"] == "failed"
+    assert {
+        "reason": "agentic_tool_max_calls_launch_env_missing_or_invalid",
+        "field": "agentic_tool_max_calls",
+        "source": "launch_env",
+        "expected_min": 200,
+        "actual": None,
+    } in headroom_check["detail"]["failures"]
+
+
+def test_launch_readiness_rejects_low_manifest_agentic_tool_headroom(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    manifest_path = run_root / "prepared_run_manifest.v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["execution"]["agentic_tool_max_steps"] = 24
+    manifest["command"] = manifest["command"].replace(
+        "--agentic-tool-max-steps 240",
+        "--agentic-tool-max-steps 24",
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    headroom_check = report["checks"]["run_script_proposal_headroom_enforced"]
+    assert headroom_check["status"] == "failed"
+    failures = headroom_check["detail"]["failures"]
+    assert {
+        "reason": "agentic_tool_max_steps_manifest_execution_below_minimum",
+        "field": "agentic_tool_max_steps",
+        "source": "manifest_execution",
+        "expected_min": 240,
+        "actual": 24,
+    } in failures
+    assert {
+        "reason": "agentic_tool_max_steps_manifest_command_below_minimum",
+        "field": "agentic_tool_max_steps",
+        "source": "manifest_command",
+        "expected_min": 240,
+        "actual": 24,
+    } in failures
+
+
 def test_launch_readiness_rejects_run_script_without_proposal_headroom_flags(
     tmp_path: Path,
 ) -> None:
@@ -2388,6 +2454,10 @@ def _write_prepared_root(
         f"--split {config_dir / 'split.yaml'} "
         f"--seeds {config_dir / 'seeds.yaml'} "
         f"--campaign-dir {campaign_dir} --rounds 1 "
+        "--agentic-session-timeout-sec 3600 "
+        "--agentic-tool-max-steps 240 "
+        "--agentic-tool-max-calls 200 "
+        "--agentic-observation-max-chars 2000000 "
         "--proposal-attempt-limit 64 --proposal-quality-loop-limit 64 "
         f"--agentic-proposal --disable-early-stop"
     )
@@ -2436,7 +2506,10 @@ def _write_prepared_root(
         "execution": {
             "rounds": 1,
             "time_limit_sec": 30,
-            "agentic_session_timeout_sec": 900,
+            "agentic_session_timeout_sec": 3600,
+            "agentic_tool_max_steps": 240,
+            "agentic_tool_max_calls": 200,
+            "agentic_observation_max_chars": 2000000,
             "proposal_attempt_limit": 64,
             "proposal_quality_loop_limit": 64,
             "measurement_governance": "on",
@@ -2486,6 +2559,10 @@ def _write_prepared_root(
                 "SCION_MODEL=gpt-5.5",
                 "SCION_BASE_URL=http://127.0.0.1:8080",
                 "COMPLETION_PREFLIGHT=1",
+                "AGENTIC_SESSION_TIMEOUT_SEC=3600",
+                "AGENTIC_TOOL_MAX_STEPS=240",
+                "AGENTIC_TOOL_MAX_CALLS=200",
+                "AGENTIC_OBSERVATION_MAX_CHARS=2000000",
                 "PROPOSAL_ATTEMPT_LIMIT=64",
                 "PROPOSAL_QUALITY_LOOP_LIMIT=64",
                 "DISABLE_EARLY_STOP=1",
@@ -2562,7 +2639,7 @@ if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
     exit "$PREFLIGHT_STATUS"
   fi
 fi
-{sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" --agentic-proposal --disable-early-stop
+{sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" --agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS" --agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS" --agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS" --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" --agentic-proposal --disable-early-stop
 STATUS=$?
 write_postrun_acceptance_reports
 exit "$STATUS"
