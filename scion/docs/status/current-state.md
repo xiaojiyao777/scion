@@ -44,12 +44,14 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `44f78e9`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-44f78e9-6r-gpt55-20260619T011450Z-claw`.
+- Current prepared root, prepared from WSL checkout `9a343e9`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-9a343e9-6r-gpt55-20260619T012114Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Its prepared analysis brief now carries only the warehouse-specific delegated
-  review question, not the CVRP large-twoopt question.
+  review question, not the CVRP large-twoopt question. Because the root is
+  prepare-only, required answers now focus on launch/readiness/handoff, not
+  research-quality or plateau conclusions.
 
 CVRP/VRP:
 
@@ -62,8 +64,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `44f78e9`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-44f78e9-1r-gpt55-20260619T011450Z-claw`.
+- Current prepared root, prepared from WSL checkout `9a343e9`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-9a343e9-1r-gpt55-20260619T012114Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -75,7 +77,9 @@ CVRP/VRP:
   review questions explicitly ask reviewers to check incomplete handoff before
   accepting review-ready interpretations. Its prepared analysis brief now
   carries only the CVRP-specific delegated review question, not the warehouse
-  plateau question.
+  plateau question. Because the root is prepare-only, required answers now focus
+  on launch/readiness/handoff, not research-quality or bounded-twoopt
+  conclusions.
 
 Infrastructure:
 
@@ -124,9 +128,9 @@ Infrastructure:
 - Detailed repair, launch, and postrun evidence:
   `scion/docs/experiments/v0.4/`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-postrun-problem-specific-review-question-filter-20260619.md`.
-  It supersedes older prepared-root pointers after postrun required-review
-  questions became problem-specific.
+  `scion/docs/experiments/v0.4/v04-prepared-only-review-question-filter-20260619.md`.
+  It supersedes older prepared-root pointers after prepared-only required
+  answers were separated from current-run postrun review questions.
 - Current repair context:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`,

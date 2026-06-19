@@ -448,15 +448,18 @@ Current checkpoint:
   to report `launch_ready=true`; if completion preflight fails, follow its
   `operator_action` and use the reported proxy login URL when present.
   The previous prepared roots were invalidated by runtime guard path changes.
-  The current CVRP root was prepared from WSL checkout `44f78e9` with the
+  The current CVRP root was prepared from WSL checkout `9a343e9` with the
   large-instance two-opt seed as proposal-only research focus and structured
   `large_instance_two_opt_constraints`; the current
-  warehouse root was prepared from WSL checkout `44f78e9` for the champion
+  warehouse root was prepared from WSL checkout `9a343e9` for the champion
   `v2` continuous-improvement follow-up. Both current roots pass static
   launch, prompt/context identity, launch-env readiness, and runtime-guard
   consistency. Their prepared analysis briefs keep required review questions
   problem-specific: warehouse roots do not ask the CVRP large-twoopt question,
-  and CVRP roots do not ask the warehouse plateau question.
+  and CVRP roots do not ask the warehouse plateau question. Because both roots
+  are prepare-only, required answers now focus on launch/readiness/handoff
+  verification and explicitly avoid research-quality, plateau, or bounded
+  two-opt conclusions before launch.
   Their prepared handoff artifacts carry current CVRP/warehouse
   `problem_specific_requirements`, and strict launch readiness now expands the
   corresponding problem-specific prepared contract checks as
@@ -493,6 +496,8 @@ Current checkpoint:
   Current problem-specific postrun review-question filter and prepared-root
   refresh:
   `scion/docs/experiments/v0.4/v04-postrun-problem-specific-review-question-filter-20260619.md`.
+  Current prepared-only review-question filter and prepared-root refresh:
+  `scion/docs/experiments/v0.4/v04-prepared-only-review-question-filter-20260619.md`.
   Current prepared prompt/context readiness report:
   `scion/docs/experiments/v0.4/v04-prepared-prompt-context-readiness-handoff-repair-20260618.md`.
   Current strict launch-readiness report:
@@ -514,7 +519,7 @@ Current checkpoint:
   Current CVRP large-twoopt postrun summary guard:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-44f78e9-1r-gpt55-20260619T011450Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-9a343e9-1r-gpt55-20260619T012114Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -545,7 +550,7 @@ Current checkpoint:
   Current warehouse plateau-review input guard:
   `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-44f78e9-6r-gpt55-20260619T011450Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-9a343e9-6r-gpt55-20260619T012114Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

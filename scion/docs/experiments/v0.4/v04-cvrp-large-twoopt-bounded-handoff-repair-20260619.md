@@ -148,9 +148,9 @@ accepting the unbounded fallback diff.
 
 Later current root:
 
-- The `dc83d83`, `67f4da9`, `529b9ef`, `a57fd07`, `8c68347`, and `016bb39`
-  roots were superseded after later runtime guard path changes.
+- The `dc83d83`, `67f4da9`, `529b9ef`, `a57fd07`, `8c68347`, `016bb39`,
+  and `44f78e9` roots were superseded after later runtime guard path changes.
 - Current CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-44f78e9-1r-gpt55-20260619T011450Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-9a343e9-1r-gpt55-20260619T012114Z-claw`.
 - Current refresh report:
-  `scion/docs/experiments/v0.4/v04-postrun-problem-specific-review-question-filter-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-prepared-only-review-question-filter-20260619.md`.

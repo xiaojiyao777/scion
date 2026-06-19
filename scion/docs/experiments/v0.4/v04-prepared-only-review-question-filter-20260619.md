@@ -1,25 +1,30 @@
-# v0.4 Postrun Problem-Specific Review Question Filter
+# v0.4 Prepared-Only Review Question Filter
 
 Date: 2026-06-19
 
 ## Purpose
 
-Prepared analysis briefs should ask delegated reviewers the specialist question
-for the problem they are reviewing. The previous incomplete-handoff repair made
-the right questions available, but every brief carried both the warehouse
-follow-up question and the CVRP large-twoopt question. That extra cross-problem
-question was report-only, but it added avoidable review noise.
+Prepared launch roots should not ask delegated reviewers to answer current-run
+research-quality questions before any campaign has started. The previous
+problem-specific question filter removed cross-problem review noise, but
+prepare-only briefs still included common postrun questions about completed
+formal candidates, effective research, LLM tool-call usefulness, and
+branch-level research behavior. This repair separates prepared-only review from
+postrun review.
 
 ## Change
 
-- Split postrun required questions into common questions plus
-  problem-specific warehouse/CVRP questions.
-- Append the warehouse follow-up question only when
-  `warehouse_followup_summary.available=true`.
-- Append the CVRP large-twoopt question only when
-  `cvrp_large_twoopt_summary.available=true`.
-- Added regression coverage proving prepared warehouse briefs omit the CVRP
-  question and prepared CVRP briefs omit the warehouse question.
+- Prepared-only analysis briefs now use launch/readiness/handoff required
+  answers.
+- Prepared-only required answers ask reviewers to prove zero current-run
+  counters, no postrun acceptance evidence, prepared-run contract identity,
+  launch markers, prompt bridge readiness, problem-specific report-only handoff,
+  and actionable completion-preflight status.
+- Prepared-only required answers explicitly say the next step is readiness
+  recheck or launch, not a research-quality, plateau, or bounded-twoopt
+  conclusion.
+- Current-run postrun briefs keep the original research-quality required
+  answers.
 
 ## Boundary Check
 
@@ -30,12 +35,12 @@ question was report-only, but it added avoidable review noise.
 
 ## Current Prepared Roots
 
-WSL checkout: `44f78e9`
+WSL checkout: `9a343e9`
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-44f78e9-6r-gpt55-20260619T011450Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-9a343e9-6r-gpt55-20260619T012114Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-44f78e9-1r-gpt55-20260619T011450Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-9a343e9-1r-gpt55-20260619T012114Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -43,10 +48,12 @@ Both roots are prepare-only and not started.
 
 The prepared analysis briefs report:
 
-- Warehouse: `warehouse_question=true`, `cvrp_question=false`,
-  `warehouse_followup_summary.interpretation=prepared_only_launch_required`.
-- CVRP: `warehouse_question=false`, `cvrp_question=true`,
-  `cvrp_large_twoopt_summary.interpretation=prepared_only_launch_required`.
+- Warehouse: `question_count=6`, `prepared_only_question=true`,
+  `research_quality_question=false`, `warehouse_question=true`,
+  `cvrp_question=false`.
+- CVRP: `question_count=6`, `prepared_only_question=true`,
+  `research_quality_question=false`, `warehouse_question=false`,
+  `cvrp_question=true`.
 
 ## Readiness Evidence
 
@@ -98,11 +105,6 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 ## Acceptance
 
-Accepted as the current postrun auditability and prepared-root refresh. Once
+Accepted as the current prepared-root review and launch-readiness refresh. Once
 `gpt-5.5` auth is restored and strict launch readiness reports
 `launch_ready=true`, these are the current warehouse and CVRP roots to launch.
-
-The roots from WSL checkout `44f78e9` were later superseded by
-`scion/docs/experiments/v0.4/v04-prepared-only-review-question-filter-20260619.md`,
-after prepared-only required answers were separated from current-run postrun
-review questions and the roots were regenerated from WSL checkout `9a343e9`.
