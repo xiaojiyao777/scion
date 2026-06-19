@@ -282,6 +282,7 @@ def test_postrun_acceptance_readiness_accepts_actionable_problem_summary(
     branch_check = readiness["checks"]["branch_research_state_actionability"]
     assert branch_check["required"] is True
     assert branch_check["status"] == "ok"
+    assert branch_check["detail"]["consistency_failures"] == []
     champion_check = readiness["checks"]["champion_progress_actionability"]
     assert champion_check["required"] is True
     assert champion_check["status"] == "ok"
@@ -334,6 +335,53 @@ def test_postrun_acceptance_requires_branch_research_state_actionability(
     assert "branch_research_state_not_current_run_evidence" in branch_check[
         "detail"
     ]["failures"]
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
+def test_postrun_acceptance_rejects_stale_branch_research_state_summary(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-stale-branch")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    branch_summary = brief["branch_research_state_summary"]
+    branch_summary["aggregate"] = dict(branch_summary["aggregate"])
+    branch_summary["aggregate"]["branch_count"] = 0
+    branch_summary["aggregate"]["events_by_decision"] = {}
+    branch_summary["top_branches"] = []
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    branch_check = readiness["checks"]["branch_research_state_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert branch_check["required"] is True
+    assert branch_check["status"] == "failed"
+    failures = branch_check["detail"]["failures"]
+    assert "branch_research_state_branch_count_mismatch" in failures
+    assert "branch_research_state_events_by_decision_mismatch" in failures
+    assert "branch_research_state_top_branches_mismatch" in failures
     assert (
         check_tool.main([str(run_root), "--require-current-run-ready"])
         == check_tool.UNREADY_EXIT

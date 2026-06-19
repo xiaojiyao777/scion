@@ -16,6 +16,7 @@ if str(TOOLS_DIR) not in sys.path:
 
 from postrun_artifact_inventory import build_inventory  # noqa: E402
 from postrun_analysis_brief import (  # noqa: E402
+    _branch_research_state_summary,
     _cvrp_large_twoopt_mechanism_signal,
     _warehouse_followup_continuity_signal,
 )
@@ -1259,6 +1260,9 @@ def _branch_research_state_actionability(
     summary = _mapping_or_empty(brief.get("branch_research_state_summary"))
     aggregate = _mapping_or_empty(summary.get("aggregate"))
     top_branches = summary.get("top_branches")
+    expected = _branch_research_state_summary(inventory)
+    expected_aggregate = _mapping_or_empty(expected.get("aggregate"))
+    expected_top_branches = expected.get("top_branches")
     failures: list[str] = []
     if summary.get("schema_version") != BRANCH_RESEARCH_STATE_SCHEMA:
         failures.append("branch_research_state_schema_stale")
@@ -1290,30 +1294,119 @@ def _branch_research_state_actionability(
         failures.append("branch_research_state_aggregate_missing")
     if not isinstance(top_branches, list):
         failures.append("branch_research_state_top_branches_not_list")
+    consistency_failures = _branch_research_state_consistency_failures(
+        summary=summary,
+        expected=expected,
+    )
+    failures.extend(consistency_failures)
 
     return (
         "ok" if not failures else "failed",
         {
             "problem_family": problem_family,
             "failures": failures,
+            "consistency_failures": consistency_failures,
             "current_run_evidence": summary.get("current_run_evidence"),
+            "expected_current_run_evidence": expected.get("current_run_evidence"),
             "available": summary.get("available"),
+            "expected_available": expected.get("available"),
             "branch_count": aggregate.get("branch_count"),
+            "expected_branch_count": expected_aggregate.get("branch_count"),
             "lineage_count": aggregate.get("lineage_count"),
+            "expected_lineage_count": expected_aggregate.get("lineage_count"),
             "branch_state_counts": aggregate.get("branch_state_counts"),
+            "expected_branch_state_counts": expected_aggregate.get(
+                "branch_state_counts"
+            ),
             "branches_with_hypotheses": aggregate.get("branches_with_hypotheses"),
+            "expected_branches_with_hypotheses": expected_aggregate.get(
+                "branches_with_hypotheses"
+            ),
             "branches_with_events": aggregate.get("branches_with_events"),
+            "expected_branches_with_events": expected_aggregate.get(
+                "branches_with_events"
+            ),
             "branches_with_sessions": aggregate.get("branches_with_sessions"),
+            "expected_branches_with_sessions": expected_aggregate.get(
+                "branches_with_sessions"
+            ),
             "branches_with_traces": aggregate.get("branches_with_traces"),
+            "expected_branches_with_traces": expected_aggregate.get(
+                "branches_with_traces"
+            ),
             "hypothesis_count": aggregate.get("hypothesis_count"),
+            "expected_hypothesis_count": expected_aggregate.get("hypothesis_count"),
             "events_by_kind": aggregate.get("events_by_kind"),
+            "expected_events_by_kind": expected_aggregate.get("events_by_kind"),
             "events_by_decision": aggregate.get("events_by_decision"),
+            "expected_events_by_decision": expected_aggregate.get(
+                "events_by_decision"
+            ),
             "events_by_stage": aggregate.get("events_by_stage"),
+            "expected_events_by_stage": expected_aggregate.get("events_by_stage"),
             "top_branch_count": (
                 len(top_branches) if isinstance(top_branches, list) else None
             ),
+            "expected_top_branch_count": (
+                len(expected_top_branches)
+                if isinstance(expected_top_branches, list)
+                else None
+            ),
         },
     )
+
+
+def _branch_research_state_consistency_failures(
+    *,
+    summary: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> list[str]:
+    failures: list[str] = []
+    if summary.get("current_run_evidence") is not expected.get(
+        "current_run_evidence"
+    ):
+        failures.append("branch_research_state_current_run_evidence_mismatch")
+    if summary.get("available") is not expected.get("available"):
+        failures.append("branch_research_state_available_mismatch")
+
+    aggregate = _mapping_or_empty(summary.get("aggregate"))
+    expected_aggregate = _mapping_or_empty(expected.get("aggregate"))
+    for field in (
+        "branch_count",
+        "lineage_count",
+        "branches_with_hypotheses",
+        "branches_with_events",
+        "branches_with_sessions",
+        "branches_with_traces",
+        "rollback_count_total",
+        "branches_with_rollback",
+        "hypothesis_count",
+    ):
+        if _int_or_zero(aggregate.get(field)) != _int_or_zero(
+            expected_aggregate.get(field)
+        ):
+            failures.append(f"branch_research_state_{field}_mismatch")
+    for field in (
+        "branch_state_counts",
+        "failure_code_counts",
+        "hypotheses_by_status",
+        "hypotheses_by_action",
+        "hypotheses_by_change_locus",
+        "events_by_kind",
+        "events_by_decision",
+        "events_by_stage",
+    ):
+        if _int_mapping(aggregate.get(field)) != _int_mapping(
+            expected_aggregate.get(field)
+        ):
+            failures.append(f"branch_research_state_{field}_mismatch")
+
+    top_branches = summary.get("top_branches")
+    expected_top_branches = expected.get("top_branches")
+    if isinstance(top_branches, list) and isinstance(expected_top_branches, list):
+        if top_branches != expected_top_branches:
+            failures.append("branch_research_state_top_branches_mismatch")
+    return failures
 
 
 def _champion_progress_actionability(
@@ -1477,6 +1570,12 @@ def _int_or_zero(value: Any) -> int:
         return int(str(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _int_mapping(value: Any) -> dict[str, int]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {str(key): _int_or_zero(count) for key, count in value.items()}
 
 
 def _stable_json(value: Any) -> str:
