@@ -107,6 +107,12 @@ Framework:
   manifest. A stale directory count or replacement file in the same report
   family no longer makes delegated current-run review ready if the
   manifest-declared artifact is missing.
+- Postrun readiness also requires current-run
+  `research_context_actionability_summary`, prompt block-family accounting, and
+  prompt signal-density token accounting for warehouse/CVRP delegated review.
+  This makes branch-transfer and same-mechanism gaps auditable without turning
+  research-context quality into Decision, Protocol, scheduler, or promotion
+  input.
 - Runtime feedback is review-ready only when raw runtime feedback exists and
   both fresh-runtime replay drain status and stage-transition drain status are
   present. Budget diagnostics remain useful for investigation, but they do not
@@ -149,8 +155,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `fbc32bf`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-manifestoutputguard-6r-gpt55-20260619T074347Z-claw`.
+- Current prepared root, prepared from WSL checkout `1c89337`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-researchcontextguard-6r-gpt55-20260619T075401Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -176,8 +182,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `fbc32bf`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-manifestoutputguard-1r-gpt55-20260619T074347Z-claw`.
+- Current prepared root, prepared from WSL checkout `1c89337`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-researchcontextguard-1r-gpt55-20260619T075401Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -231,14 +237,14 @@ Infrastructure:
   including the manifest git commit. Later docs-only commits may make the
   checkout differ from the prepared manifest commit; readiness remains
   acceptable only when runtime guard paths are unchanged. Older prepared roots
-  before the manifestoutputguard roots above are not current. Exact supersession
+  before the researchcontextguard roots above are not current. Exact supersession
   details belong in launch/readiness evidence docs, not this operational
   snapshot.
-- The current blocker is external WSL `gpt-5.5` provider/env auth, not Scion
-  static readiness. The latest completion preflight fails because
-  `SCION_API_KEY` is not set in the WSL launch environment; a stale proxy login
-  may instead return HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`.
+- The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
+  readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
+  `/v1/chat/completions` preflight returns HTTP `401`,
+  `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
+  `active=0`, `expired=1`, `total=1`.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -246,8 +252,8 @@ Infrastructure:
 ## Next Actions
 
 1. Refresh the WSL/local proxy login, then rerun strict launch readiness on the
-   prepared root to be started, with `SCION_API_KEY` set in the WSL launch
-   environment. `/v1/models` is not enough.
+   prepared root to be started, with `SCION_API_KEY=pwd` or the current proxy
+   key set in the WSL launch environment. `/v1/models` is not enough.
 2. Once auth is stable, run the warehouse `v2` follow-up as the simpler
    continuous-improvement proof, then run the CVRP large-two-opt follow-up.
 3. For warehouse postrun review, distinguish quality-blocked proposals from
