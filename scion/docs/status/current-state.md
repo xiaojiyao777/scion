@@ -45,7 +45,10 @@ Framework:
   report-only champion-progress summaries, and consistency between inventory,
   review inputs, branch summaries, champion-progress summaries, and the
   problem-specific conclusion. Missing review inputs fail readiness; valid
-  negative conclusions can still be analysis-ready.
+  negative conclusions can still be analysis-ready. Review surfaces must also
+  preserve current schemas, report-only/non-quality-judgment boundary markers
+  where applicable, `DecisionFeatures` exclusion, and raw prompt/response/patch
+  body/log exclusion markers.
 - Adapter-owned diagnostics are redacted before prompt exposure for raw
   pair/calibration rows, BKS/gap details, holdout/case details, prompt ratios,
   and LLM text. Problem-owned proposal diagnostics may guide proposal context
@@ -58,8 +61,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `9149bf9`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-champconsistency-9149bf9-6r-gpt55-20260619T123932Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `865e0fb`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-boundarymarkers-865e0fb-6r-gpt55-20260619T125317Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -92,8 +95,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `9149bf9`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-champconsistency-9149bf9-1r-gpt55-20260619T123946Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `865e0fb`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-boundarymarkers-865e0fb-1r-gpt55-20260619T125317Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -118,7 +121,7 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `9149bf9`.
+- The active prepared roots were generated from WSL runtime commit `865e0fb`.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`. Static checks include
   prepared contract/brief identity, prompt-context handoff,
@@ -190,6 +193,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-branch-research-state-readiness-20260619.md`.
 - Current branch-research-state input consistency repair:
   `scion/docs/experiments/v0.4/v04-branch-research-state-input-consistency-20260619.md`.
+- Current postrun review-surface boundary repair:
+  `scion/docs/experiments/v0.4/v04-postrun-review-surface-boundary-markers-20260619.md`.
 - Current repair context lives in `scion/docs/experiments/v0.4/`; keep this
   status page focused on operating truth rather than repair chronology.
 - WSL reference:

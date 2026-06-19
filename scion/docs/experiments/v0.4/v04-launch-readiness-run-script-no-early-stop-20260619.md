@@ -280,7 +280,7 @@ PYTHONPATH=scion \
 
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL runtime commit `9149bf9` because
+New prepare-only roots were generated from WSL runtime commit `865e0fb` because
 `scion/tools` is part of the guarded launch/readiness runtime surface. The
 current checkout requires completion-preflight failure status writing and
 data-root/API-key-env failure markers to be executable shell paths, not
@@ -297,15 +297,18 @@ input consistency so a current run can distinguish copied resume champion
 history from current-run champion advancement, and report-only
 branch-research-state readiness and input consistency so current-run delegated
 review cannot omit or hand-write a stale branch/hypothesis/event/trace audit
-surface.
+surface. It also requires prompt/source visibility, research-context,
+signal-density, and failure-taxonomy review surfaces to preserve current schemas,
+report-only and `DecisionFeatures`-excluded boundary markers, and raw material
+exclusion markers.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-champconsistency-9149bf9-6r-gpt55-20260619T123932Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-boundarymarkers-865e0fb-6r-gpt55-20260619T125317Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-champconsistency-9149bf9-1r-gpt55-20260619T123946Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-boundarymarkers-865e0fb-1r-gpt55-20260619T125317Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -374,8 +377,11 @@ postrun summaries are required as report-only delegated-review input for
 warehouse/CVRP runs and are checked against current-run inventory.
 Branch-research-state summaries are also required as report-only
 delegated-review input for warehouse/CVRP current runs and are checked against
-current-run inventory. It supersedes earlier prepared roots that lacked any of
-these guarded launch/readiness/postrun guarantees. The champconsistency roots
+current-run inventory. Prompt/source visibility, research-context,
+signal-density, and failure-taxonomy summaries must also preserve current
+schemas, boundary markers, and raw-material exclusion markers. It supersedes
+earlier prepared roots that lacked any of these guarded
+launch/readiness/postrun guarantees. The boundarymarkers roots
 listed above are the current prepared-root pointers.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `9149bf9` and are static-ready, including problem-specific handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun acceptance, review-input consistency, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `865e0fb` and are static-ready, including problem-specific handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun acceptance, review-input consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -285,6 +285,12 @@ Current checkpoint:
   `failure_taxonomy_summary` evidence for warehouse/CVRP delegated review.
   Missing, stale, non-current, or empty failure taxonomy no longer allows a
   hand-written problem summary to make a run analysis-ready.
+- Postrun acceptance readiness now also requires prompt/source visibility,
+  research-context, signal-density, and failure-taxonomy review surfaces to
+  preserve current schemas, report-only/non-quality-judgment boundary markers
+  where applicable, `DecisionFeatures` exclusion, and raw prompt/response/patch
+  body/log exclusions. Hand-written review surfaces can no longer provide
+  plausible counts while bypassing the v3 tainted-material boundary.
 - Postrun acceptance readiness now also requires current-run protocol
   accounting, measurement-effect, runtime-feedback, and research-continuity
   summaries for warehouse/CVRP delegated review. A hand-written
@@ -311,9 +317,9 @@ Current checkpoint:
   claim a protocol-evaluated conclusion when the input summaries disagree.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-champconsistency-9149bf9-6r-gpt55-20260619T123932Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-boundarymarkers-865e0fb-6r-gpt55-20260619T125317Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-champconsistency-9149bf9-1r-gpt55-20260619T123946Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-boundarymarkers-865e0fb-1r-gpt55-20260619T125317Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -335,13 +341,14 @@ Current checkpoint:
   warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL runtime commit `9149bf9`. Current
+  true. The roots were prepared from WSL runtime commit `865e0fb`. Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout
   `PYTHONPATH`, no-early-stop launch semantics, executable pre-campaign failure
   reporting, strict postrun readiness, runtime guard command markers, normal
-  campaign-exit postrun reporting, co-located CVRP two-opt direct evidence, and
-  warehouse/CVRP problem-summary consistency recomputed from review inputs.
+  campaign-exit postrun reporting, postrun review-surface boundary markers,
+  co-located CVRP two-opt direct evidence, and warehouse/CVRP problem-summary
+  consistency recomputed from review inputs.
 - The blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
