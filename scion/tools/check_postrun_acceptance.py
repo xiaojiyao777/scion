@@ -154,7 +154,10 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         else "failed",
         postrun_counts,
     )
-    problem_status, problem_detail = _problem_summary_actionability(analysis_brief)
+    problem_status, problem_detail = _problem_summary_actionability(
+        analysis_brief,
+        inventory,
+    )
     add_check(
         "problem_summary_actionability",
         problem_status,
@@ -271,31 +274,93 @@ def _brief_current_run_evidence(brief: Mapping[str, Any]) -> bool:
     )
 
 
-def _problem_summary_actionability(brief: Mapping[str, Any]) -> tuple[str, Any]:
+def _problem_summary_actionability(
+    brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> tuple[str, Any]:
+    expected_family, expected_key = _expected_problem_summary(brief, inventory)
+    if expected_key:
+        summary = _mapping_or_empty(brief.get(expected_key))
+        if summary.get("available") is not True:
+            return (
+                "failed",
+                {
+                    "reason": "missing_problem_specific_summary",
+                    "expected_problem_family": expected_family,
+                    "expected_summary": expected_key,
+                    "summary_available": summary.get("available"),
+                    "summary_problem_family": summary.get("problem_family"),
+                },
+            )
+        summaries = [_summary_actionability_detail(expected_key, summary)]
+        return (_summary_actionability_status(summaries), summaries)
+
     summaries = []
     for key in ("warehouse_followup_summary", "cvrp_large_twoopt_summary"):
         summary = _mapping_or_empty(brief.get(key))
         if summary.get("available") is not True:
             continue
-        summaries.append(
-            {
-                "summary": key,
-                "problem_family": summary.get("problem_family"),
-                "current_run_evidence": summary.get("current_run_evidence"),
-                "interpretation": summary.get("interpretation"),
-                "review_axes_actionability": summary.get("review_axes_actionability"),
-                "evidence_gaps": summary.get("evidence_gaps"),
-            }
-        )
+        summaries.append(_summary_actionability_detail(key, summary))
     if not summaries:
         return "skipped", "no problem-specific summary"
+    return (_summary_actionability_status(summaries), summaries)
+
+
+def _expected_problem_summary(
+    brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> tuple[str | None, str | None]:
+    problem_family = _problem_family(brief, inventory)
+    if problem_family == "warehouse_delivery":
+        return problem_family, "warehouse_followup_summary"
+    if problem_family == "cvrp":
+        return problem_family, "cvrp_large_twoopt_summary"
+    return problem_family, None
+
+
+def _problem_family(
+    brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> str | None:
+    brief_contract = _mapping_or_empty(brief.get("prepared_run_contract"))
+    if isinstance(brief_contract.get("problem_family"), str):
+        return str(brief_contract["problem_family"])
+    launcher = _mapping_or_empty(inventory.get("launcher"))
+    inventory_contract = _mapping_or_empty(launcher.get("prepared_run_contract"))
+    if isinstance(inventory_contract.get("problem_family"), str):
+        return str(inventory_contract["problem_family"])
+    for key in ("warehouse_followup_summary", "cvrp_large_twoopt_summary"):
+        summary = _mapping_or_empty(brief.get(key))
+        if summary.get("available") is True and isinstance(
+            summary.get("problem_family"),
+            str,
+        ):
+            return str(summary["problem_family"])
+    return None
+
+
+def _summary_actionability_detail(
+    key: str,
+    summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "summary": key,
+        "problem_family": summary.get("problem_family"),
+        "current_run_evidence": summary.get("current_run_evidence"),
+        "interpretation": summary.get("interpretation"),
+        "review_axes_actionability": summary.get("review_axes_actionability"),
+        "evidence_gaps": summary.get("evidence_gaps"),
+    }
+
+
+def _summary_actionability_status(summaries: list[dict[str, Any]]) -> str:
     ok = all(
         item.get("current_run_evidence") is True
         and item.get("review_axes_actionability")
         == "actionable_current_run_evidence_present"
         for item in summaries
     )
-    return ("ok" if ok else "failed", summaries)
+    return "ok" if ok else "failed"
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:
