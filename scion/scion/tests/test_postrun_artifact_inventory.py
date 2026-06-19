@@ -1203,6 +1203,94 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
     assert "not current-run evidence" in markdown
 
 
+def test_inventory_marks_runtime_guard_failure_resume_snapshot_not_current_run(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "runtime-guard-failed-run"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "outer-wrapper.v1",
+            "status": "finished",
+            "wrapper_exit_status": 64,
+            "git_runtime_commit_mismatch": True,
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "execution": {"rounds": 3},
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        campaign_dir / "run_status.json",
+        {
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+            "effective_rounds_completed": 7,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 7,
+            "measurement_readiness": {"status": "ready"},
+        },
+    )
+    traces_dir = campaign_dir / "llm_traces"
+    traces_dir.mkdir()
+    _write_json(
+        traces_dir / "20260606T000000_hypothesis_branch_1.json",
+        {"request_kind": "hypothesis", "ok": True, "branch_id": "branch-1"},
+    )
+    _write_db(campaign_dir / "scion.db")
+
+    data = inventory_tool.build_inventory(run_root)
+    markdown = inventory_tool.render_markdown(data)
+
+    assert data["lifecycle"]["pre_campaign_infra_failed"] is True
+    assert data["lifecycle"]["pre_campaign_infra_failure_keys"] == [
+        "git_runtime_commit_mismatch"
+    ]
+    assert data["lifecycle"]["current_run_evidence"] is False
+    assert data["lifecycle"]["evidence_scope"] == (
+        "pre_campaign_infra_failed_with_resume_snapshot"
+    )
+    assert data["validity"] == {
+        "run_validity_status": "invalid_infra_only",
+        "run_completeness_status": "incomplete",
+        "last_stop_reason": "pre_campaign_git_runtime_commit_mismatch",
+        "invalid_infra_only": True,
+    }
+    assert data["counters"] == {
+        "requested_rounds": 3,
+        "effective_rounds_completed": 0,
+        "formal_screened_candidates": 0,
+        "protocol_evaluated_candidates": 0,
+        "screened_experiments": 0,
+        "proposal_attempts_total": 0,
+    }
+    assert data["branches"] == []
+    assert data["llm_traces"]["trace_count"] == 0
+    assert data["resume_snapshot"]["present"] is True
+    assert data["resume_snapshot"]["current_run_evidence"] is False
+    assert data["resume_snapshot"]["branch_count"] == 1
+    assert data["resume_snapshot"]["llm_trace_count"] == 1
+    phase4 = data["phase4_evidence_coverage"]
+    assert phase4["current_run_evidence"] is False
+    assert phase4["pre_campaign_infra_failed"] is True
+    assert phase4["pre_campaign_infra_failure_keys"] == [
+        "git_runtime_commit_mismatch"
+    ]
+    assert "PRE-CAMPAIGN INFRA FAILURE" in markdown
+    assert "not current-run evidence" in markdown
+
+
 def test_inventory_marks_invalid_infra_resume_snapshot_not_current_run(
     tmp_path: Path,
 ) -> None:

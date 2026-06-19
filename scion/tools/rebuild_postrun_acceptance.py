@@ -37,6 +37,12 @@ DEFAULT_FAMILIES = (
     "inventory",
 )
 OBSERVED_CONTROL_ARMS = {"on", "record_only"}
+PRE_CAMPAIGN_INFRA_FAILURE_KEYS = (
+    "api_key_env_missing",
+    "warehouse_data_root_missing",
+    "git_runtime_dirty",
+    "git_runtime_commit_mismatch",
+)
 
 
 def rebuild_postrun_acceptance(
@@ -59,7 +65,10 @@ def rebuild_postrun_acceptance(
     prepared_manifest = _read_json(root / "prepared_run_manifest.v1.json")
     prepared_only = _is_prepared_only_root(root)
     preflight_failed = _is_pre_campaign_preflight_failed_root(root)
-    skip_current_run_reports = prepared_only or preflight_failed
+    pre_campaign_infra_failure_keys = _pre_campaign_infra_failure_keys(root)
+    skip_current_run_reports = (
+        prepared_only or preflight_failed or bool(pre_campaign_infra_failure_keys)
+    )
     stem = _resolve_report_stem(
         explicit=report_stem,
         run_root=root,
@@ -84,6 +93,7 @@ def rebuild_postrun_acceptance(
         skip_reason = _current_run_skip_reason(
             prepared_only=prepared_only,
             preflight_failed=preflight_failed,
+            pre_campaign_infra_failure_keys=pre_campaign_infra_failure_keys,
         )
         family_results["summaries"] = _skipped_family("summary", skip_reason)
         family_results["failures"] = _skipped_family("failures", skip_reason)
@@ -185,11 +195,14 @@ def rebuild_postrun_acceptance(
         "control_pair_key": pair_key,
         "prepared_only": prepared_only,
         "pre_campaign_completion_preflight_failed": preflight_failed,
+        "pre_campaign_infra_failed": bool(pre_campaign_infra_failure_keys),
+        "pre_campaign_infra_failure_keys": pre_campaign_infra_failure_keys,
         "current_run_reports_skipped": skip_current_run_reports,
         "current_run_skip_reason": (
             _current_run_skip_reason(
                 prepared_only=prepared_only,
                 preflight_failed=preflight_failed,
+                pre_campaign_infra_failure_keys=pre_campaign_infra_failure_keys,
             )
             if skip_current_run_reports
             else ""
@@ -330,14 +343,39 @@ def _is_pre_campaign_preflight_failed_root(run_root: Path) -> bool:
     )
 
 
+def _pre_campaign_infra_failure_keys(run_root: Path) -> list[str]:
+    status = _read_json(run_root / "run_status.json")
+    manifest = _read_json(run_root / "prepared_run_manifest.v1.json")
+    if not isinstance(status, dict) or not isinstance(manifest, dict):
+        return []
+    if manifest.get("schema_version") != "scion.launcher_prepared_run_manifest.v1":
+        return []
+    return [
+        key
+        for key in PRE_CAMPAIGN_INFRA_FAILURE_KEYS
+        if _status_value_present(status.get(key))
+    ]
+
+
+def _status_value_present(value: Any) -> bool:
+    return value not in (None, False, "", 0)
+
+
 def _current_run_skip_reason(
     *,
     prepared_only: bool,
     preflight_failed: bool,
+    pre_campaign_infra_failure_keys: list[str] | tuple[str, ...] = (),
 ) -> str:
     if preflight_failed:
         return (
             "pre_campaign_completion_preflight_failed: copied campaign artifacts "
+            "are resume input, not current-run postrun evidence"
+        )
+    if pre_campaign_infra_failure_keys:
+        keys = ",".join(str(key) for key in pre_campaign_infra_failure_keys)
+        return (
+            f"pre_campaign_infra_failure({keys}): copied campaign artifacts "
             "are resume input, not current-run postrun evidence"
         )
     if prepared_only:

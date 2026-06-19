@@ -42,6 +42,12 @@ LAUNCHER_STATUS_KEYS = (
     "git_runtime_dirty",
     "git_runtime_commit_mismatch",
 )
+PRE_CAMPAIGN_INFRA_FAILURE_KEYS = (
+    "api_key_env_missing",
+    "warehouse_data_root_missing",
+    "git_runtime_dirty",
+    "git_runtime_commit_mismatch",
+)
 RUN_LOG_MARKERS = (
     "COMPLETION_PREFLIGHT_DETAIL",
     "COMPLETION_PREFLIGHT_FAILED",
@@ -242,7 +248,10 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         "validity": _prepared_only_validity(lifecycle)
         if lifecycle["prepared_only"]
         else _pre_campaign_failure_validity(lifecycle)
-        if lifecycle["pre_campaign_completion_preflight_failed"]
+        if (
+            lifecycle["pre_campaign_completion_preflight_failed"]
+            or lifecycle.get("pre_campaign_infra_failed") is True
+        )
         else _validity(run_status, campaign_run_status, campaign_status, summary),
         "counters": _prepared_only_counters(prepared_manifest)
         if _launch_root_without_current_run(lifecycle)
@@ -291,6 +300,13 @@ def render_markdown(inventory: dict[str, Any]) -> str:
         lines.append(
             "- PRE-CAMPAIGN PREFLIGHT FAILED: no current Scion campaign ran; "
             "copied campaign artifacts are resume input, not current-run evidence."
+        )
+    if lifecycle.get("pre_campaign_infra_failed") is True:
+        keys = ", ".join(lifecycle.get("pre_campaign_infra_failure_keys") or [])
+        lines.append(
+            "- PRE-CAMPAIGN INFRA FAILURE: no current Scion campaign ran; "
+            f"failure keys `{keys}` mark copied campaign artifacts as resume input, "
+            "not current-run evidence."
         )
     if validity["invalid_infra_only"]:
         lines.append("- INVALID INFRA-ONLY RUN: stop after proving infra-only status.")
@@ -585,6 +601,8 @@ def _doc_says_invalid_infra_only(doc: Any) -> bool:
         return True
     if doc.get("pre_campaign_completion_preflight") == "failed":
         return True
+    if _pre_campaign_infra_failure_keys(doc):
+        return True
     values: list[str] = []
     for key in (
         "run_validity_status",
@@ -608,6 +626,14 @@ def _doc_says_invalid_infra_only(doc: Any) -> bool:
         return True
     joined = " ".join(values)
     return "infra" in joined and ("invalid" in joined or "failed_infra" in joined)
+
+
+def _pre_campaign_infra_failure_keys(doc: Mapping[str, Any]) -> list[str]:
+    return [
+        key
+        for key in PRE_CAMPAIGN_INFRA_FAILURE_KEYS
+        if doc.get(key) not in (None, False, "", 0)
+    ]
 
 
 def _counters(*docs: Any) -> dict[str, int | None]:
@@ -661,6 +687,10 @@ def _lifecycle_inventory(
         status_doc.get("pre_campaign_completion_preflight") == "failed"
         and manifest_is_prepared
     )
+    pre_campaign_infra_failure_keys = (
+        _pre_campaign_infra_failure_keys(status_doc) if manifest_is_prepared else []
+    )
+    pre_campaign_infra_failed = bool(pre_campaign_infra_failure_keys)
     invalid_infra_only = any(
         _doc_says_invalid_infra_only(doc) for doc in (status_doc, *campaign_docs)
     )
@@ -671,6 +701,8 @@ def _lifecycle_inventory(
         evidence_scope = "prepared_launch_root_with_resume_snapshot"
     elif preflight_failed:
         evidence_scope = "pre_campaign_preflight_failed_with_resume_snapshot"
+    elif pre_campaign_infra_failed:
+        evidence_scope = "pre_campaign_infra_failed_with_resume_snapshot"
     elif invalid_infra_only:
         evidence_scope = "invalid_infra_only_with_resume_snapshot"
     else:
@@ -679,9 +711,14 @@ def _lifecycle_inventory(
         "schema_version": "scion.launcher_lifecycle.v1",
         "prepared_only": bool(prepared_only),
         "pre_campaign_completion_preflight_failed": bool(preflight_failed),
+        "pre_campaign_infra_failed": pre_campaign_infra_failed,
+        "pre_campaign_infra_failure_keys": pre_campaign_infra_failure_keys,
         "invalid_infra_only": bool(invalid_infra_only),
         "current_run_evidence": not (
-            prepared_only or preflight_failed or invalid_infra_only
+            prepared_only
+            or preflight_failed
+            or pre_campaign_infra_failed
+            or invalid_infra_only
         ),
         "status": _string_or_none(status_doc.get("status")),
         "prepared_status_schema": _string_or_none(status_doc.get("schema")),
@@ -700,6 +737,7 @@ def _launch_root_without_current_run(lifecycle: Mapping[str, Any]) -> bool:
     return (
         lifecycle.get("prepared_only") is True
         or lifecycle.get("pre_campaign_completion_preflight_failed") is True
+        or lifecycle.get("pre_campaign_infra_failed") is True
         or lifecycle.get("invalid_infra_only") is True
     )
 
@@ -714,10 +752,14 @@ def _prepared_only_validity(lifecycle: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _pre_campaign_failure_validity(lifecycle: Mapping[str, Any]) -> dict[str, Any]:
+    last_stop_reason = "pre_campaign_completion_preflight_failed"
+    keys = lifecycle.get("pre_campaign_infra_failure_keys")
+    if isinstance(keys, list) and keys:
+        last_stop_reason = f"pre_campaign_{keys[0]}"
     return {
         "run_validity_status": "invalid_infra_only",
         "run_completeness_status": "incomplete",
-        "last_stop_reason": "pre_campaign_completion_preflight_failed",
+        "last_stop_reason": last_stop_reason,
         "invalid_infra_only": True,
     }
 
@@ -1419,6 +1461,12 @@ def _phase4_evidence_coverage(
             "prepared_only": lifecycle.get("prepared_only") is True,
             "pre_campaign_completion_preflight_failed": (
                 lifecycle.get("pre_campaign_completion_preflight_failed") is True
+            ),
+            "pre_campaign_infra_failed": (
+                lifecycle.get("pre_campaign_infra_failed") is True
+            ),
+            "pre_campaign_infra_failure_keys": (
+                lifecycle.get("pre_campaign_infra_failure_keys") or []
             ),
             "invalid_infra_only": lifecycle.get("invalid_infra_only") is True,
             "current_run_evidence": False,

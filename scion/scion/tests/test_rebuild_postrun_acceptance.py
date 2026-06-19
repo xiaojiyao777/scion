@@ -319,6 +319,86 @@ def test_rebuild_postrun_acceptance_skips_current_run_reports_after_preflight_fa
     assert any("INVALID INFRA-ONLY RUN" in item for item in brief["stop_conditions"])
 
 
+def test_rebuild_postrun_acceptance_skips_current_run_reports_after_runtime_guard_failure(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "runtime-guard-failed-root"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "outer-wrapper.v1",
+            "status": "finished",
+            "wrapper_exit_status": 64,
+            "git_runtime_dirty": True,
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "problem_family": "cvrp",
+            "execution": {
+                "measurement_governance": "on",
+                "proposal_context_ablation": "full",
+                "rounds": 1,
+            },
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "effective_rounds_completed": 9,
+            "formal_screened_candidates": 9,
+            "measurement_readiness": {"status": "ready"},
+        },
+    )
+    formal_index = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    formal_index.parent.mkdir(parents=True)
+    formal_index.write_text('{"candidate_id":"old-candidate"}\n', encoding="utf-8")
+
+    manifest = rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="runtime_guard_failed",
+    )
+
+    report_dir = run_root / "postrun_acceptance"
+    assert manifest["pre_campaign_infra_failed"] is True
+    assert manifest["pre_campaign_infra_failure_keys"] == ["git_runtime_dirty"]
+    assert manifest["current_run_reports_skipped"] is True
+    assert manifest["complete"] is False
+    assert manifest["families"]["summaries"]["status"] == "skipped"
+    assert manifest["families"]["research_efficiency"]["status"] == "skipped"
+    assert manifest["families"]["manifests"]["status"] == "skipped"
+    assert "pre_campaign_infra_failure(git_runtime_dirty)" in (
+        manifest["current_run_skip_reason"]
+    )
+    assert not (
+        report_dir
+        / "research_efficiency"
+        / "runtime_guard_failed.research_efficiency.v1.json"
+    ).exists()
+    assert not (
+        report_dir
+        / "manifests"
+        / "runtime_guard_failed.proposal_trajectory_manifest.v1.json"
+    ).exists()
+    brief = json.loads(
+        (
+            report_dir
+            / "analysis_brief"
+            / "runtime_guard_failed.postrun_analysis_brief.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert brief["validity"]["run_validity_status"] == "invalid_infra_only"
+    assert brief["validity"]["last_stop_reason"] == "pre_campaign_git_runtime_dirty"
+    assert brief["counters"]["effective_rounds_completed"] == 0
+    assert brief["phase4_evidence_coverage"]["current_run_evidence"] is False
+    assert any("INVALID INFRA-ONLY RUN" in item for item in brief["stop_conditions"])
+
+
 def _write_campaign_db(campaign_dir: Path) -> None:
     registry = LineageRegistry(str(campaign_dir / "scion.db"))
     branch_store = BranchStore(registry)
