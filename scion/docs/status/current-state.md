@@ -105,8 +105,9 @@ Prepared manifests record:
 - Warehouse protocol-evaluated follow-up review distinguishes positive
   at-or-above-MDE effects from plateau-consistent no-positive-MDE effects.
   Plateau-ready summaries require the measurement signal to be
-  plateau-consistent, while positive measurement effects route to
-  continuous-improvement review instead of being mislabeled as plateau.
+  plateau-consistent, meaning all protocol effect rows have available CI high
+  below MDE; positive or measurement-inconclusive effects route out of plateau
+  review instead of being mislabeled as plateau.
 
 ## Warehouse
 

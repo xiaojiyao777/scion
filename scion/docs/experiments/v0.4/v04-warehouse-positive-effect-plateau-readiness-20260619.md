@@ -15,7 +15,9 @@ effect at or above MDE cannot be mislabeled as
   `effect_signal`, `positive_effect_at_or_above_mde`,
   `plateau_consistent`, and `all_ci_high_below_mde`.
 - Warehouse plateau-ready interpretation requires measurement to be
-  plateau-consistent.
+  plateau-consistent: every protocol effect row must have available CI high
+  below MDE. No-positive-MDE but CI-inconclusive effects route to
+  `protocol_evaluated_measurement_effect_inconclusive`.
 - Positive at-or-above-MDE warehouse evidence routes to
   `protocol_evaluated_positive_effect_review_ready`.
 - Postrun acceptance recomputes the warehouse measurement signal from

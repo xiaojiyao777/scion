@@ -4734,10 +4734,14 @@ def _warehouse_followup_measurement_signal(
     positive_effect_at_or_above_mde = (
         available and protocol_row_count > 0 and rows_at_or_above_mde > 0
     )
-    plateau_consistent = (
+    all_ci_high_below_mde = (
         available
         and protocol_row_count > 0
-        and rows_at_or_above_mde <= 0
+        and rows_with_ci_high_below_mde >= protocol_row_count
+    )
+    plateau_consistent = (
+        all_ci_high_below_mde
+        and not positive_effect_at_or_above_mde
     )
     if not available:
         effect_signal = "measurement_unavailable"
@@ -4745,21 +4749,17 @@ def _warehouse_followup_measurement_signal(
         effect_signal = "no_protocol_effect_rows"
     elif positive_effect_at_or_above_mde:
         effect_signal = "positive_effect_at_or_above_mde"
-    elif rows_with_ci_high_below_mde >= protocol_row_count:
+    elif all_ci_high_below_mde:
         effect_signal = "ci_high_below_mde_plateau_consistent"
     elif rows_with_ci_high_below_mde > 0:
-        effect_signal = "partial_ci_high_below_mde_plateau_consistent"
+        effect_signal = "partial_ci_high_below_mde_inconclusive"
     else:
-        effect_signal = "no_positive_mde_effect_plateau_consistent"
+        effect_signal = "protocol_effects_below_mde_or_inconclusive"
     return {
         "effect_signal": effect_signal,
         "positive_effect_at_or_above_mde": positive_effect_at_or_above_mde,
         "plateau_consistent": plateau_consistent,
-        "all_ci_high_below_mde": (
-            available
-            and protocol_row_count > 0
-            and rows_with_ci_high_below_mde >= protocol_row_count
-        ),
+        "all_ci_high_below_mde": all_ci_high_below_mde,
     }
 
 

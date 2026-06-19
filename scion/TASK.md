@@ -533,11 +533,14 @@ Current checkpoint:
   launch/readiness evidence docs, not in this current checkpoint.
 - Current warehouse delegated-review boundary: plateau-review readiness requires
   protocol-evaluated current-run evidence plus measurement-effect,
-  runtime-feedback, and substantive realized research-continuity signals. A
-  shallow continuity block or unrealized continuity opportunity alone cannot
-  distinguish a real post-v2 plateau from missed continuous-optimization
-  opportunity. Postrun acceptance recomputes the warehouse continuity signal
-  from `research_continuity_summary` before accepting
+  runtime-feedback, and substantive realized research-continuity signals.
+  Measurement must be plateau-consistent through all available protocol-effect
+  CI highs below MDE; no-positive-MDE but CI-inconclusive effects are not a
+  plateau conclusion. A shallow continuity block or unrealized continuity
+  opportunity alone cannot distinguish a real post-v2 plateau from missed
+  continuous-optimization opportunity. Postrun acceptance recomputes the
+  warehouse measurement and continuity signals from review inputs before
+  accepting
   `protocol_evaluated_plateau_review_ready`.
 - Current warehouse negative-conclusion boundary: a
   `quality_blocked_no_protocol_plateau_conclusion` is analysis-ready only when
