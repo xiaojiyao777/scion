@@ -52,6 +52,13 @@ Framework:
   and LLM text. Problem-owned proposal diagnostics may guide proposal context
   and readiness checks only through deterministic, schema-validated,
   report-only fields.
+- Measurement-governed `pairing_validity: trajectory_divergent` lifecycle now
+  keeps non-regressive low-SNR screening branches researching instead of parking
+  them via fixed no-effect, repeated-signature, rollback-budget, or zero-win
+  lifecycle counters. Negative median delta, loss-heavy evidence, candidate
+  runtime failure, verification failure, canary failure, timeout, and true
+  runtime regression still fail closed. Default/trajectory-stable lifecycle
+  behavior is unchanged.
 
 Warehouse:
 
@@ -59,8 +66,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `bea482de`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-noprotocol-bea482de-6r-gpt55-20260619T172019Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `8f1994ea`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-openlowsnr-8f1994ea-6r-gpt55-20260619T173441Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness verifies the active-subject source-constraint prompt bridge.
@@ -95,8 +102,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `bea482de`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-noprotocol-bea482de-1r-gpt55-20260619T172019Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `8f1994ea`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-openlowsnr-8f1994ea-1r-gpt55-20260619T173442Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance.
   It requires bounded/deadline-aware implementation, pair-level
   objective/feasibility/route-count/wall-clock evidence, and CMT2/CMT4 case
@@ -123,10 +130,11 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `bea482de`
-  after the CVRP CMT case-protection handoff and analysis-brief surface
-  repairs, plus postrun and prepared-handoff stale/undeclared output guards and
-  prepared/postrun rebuild-manifest identity and output scope validation.
+- The active prepared roots were generated from WSL runtime commit `8f1994ea`
+  after the trajectory-divergent open low-SNR lifecycle repair, CVRP CMT
+  case-protection handoff, analysis-brief surface repairs, postrun and
+  prepared-handoff stale/undeclared output guards, and prepared/postrun
+  rebuild-manifest identity and output scope validation.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`.
 - Static readiness includes
@@ -201,6 +209,8 @@ Infrastructure:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-runtime-guard-failure-postrun-report-20260619.md`.
+- Current trajectory-divergent lifecycle evidence:
+  `scion/docs/experiments/v0.4/v04-trajectory-divergent-open-low-signal-lifecycle-20260619.md`.
 - Historical repair details remain in `scion/docs/experiments/v0.4/`; this
   page keeps only the current root pointer, launch blocker, and next action.
 - WSL reference:
