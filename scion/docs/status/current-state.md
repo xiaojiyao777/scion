@@ -39,6 +39,9 @@ Framework:
   bounded two-opt opportunity and warehouse post-v2 follow-up/plateau evidence
   requirement outside prepared-only roots. These remain tainted proposal
   diagnostics and stay out of `DecisionFeatures`.
+- Adapter-owned measurement/opportunity diagnostics are redacted before prompt
+  exposure for raw pair/calibration rows, BKS/gap details, holdout/case details,
+  prompt ratios, and LLM text.
 - Prepared-only analysis briefs now use launch/readiness/handoff questions,
   omit current-run branch/LLM/Protocol guidance, and defer specialist
   warehouse/CVRP review axes until post-launch current-run evidence exists.

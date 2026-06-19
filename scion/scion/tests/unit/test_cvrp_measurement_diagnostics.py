@@ -92,6 +92,15 @@ def test_adapter_opportunity_projection_drops_unapproved_fields() -> None:
     class _Adapter:
         def render_problem_measurement_diagnostics(self) -> dict[str, object]:
             return {
+                "adapter_summary": "safe proposal planning summary",
+                "nested": {
+                    "safe_note": "keep this adapter note",
+                    "raw_pair_rows": [{"case": "hidden-nested-row"}],
+                    "pair_evidence": [{"case": "hidden-pair-evidence"}],
+                    "bks_gap_details": "hidden-bks-gap",
+                    "prompt_ratios": {"research_signal_ratio": 0.9},
+                    "llm_text": "hidden free-form llm text",
+                },
                 "opportunity_diagnostics": [
                     {
                         "diagnostic_type": "measurement_power",
@@ -110,6 +119,19 @@ def test_adapter_opportunity_projection_drops_unapproved_fields() -> None:
         _Spec(), adapter=_Adapter()  # type: ignore[arg-type]
     )
     projected = payload["opportunity_diagnostics"][0]
+    rendered_payload = json.dumps(payload, sort_keys=True, default=str)
+    compact = filter_hypothesis_context_for_prompt(
+        {
+            "problem_summary": "CVRP formal solver-design objective.",
+            "research_surfaces": "Research surfaces: solver_design",
+            "operator_categories": "solver_design",
+            "available_actions": "modify",
+            "targetable_files": "policies/baseline_algorithm.py",
+            "champion_operators_code": "def solve():\n    return best\n",
+            "champion_stats": "champion_v1",
+            "problem_measurement_diagnostics": payload,
+        }
+    )["problem_measurement_diagnostics"]
 
     assert projected == {
         "diagnostic_type": "measurement_power",
@@ -118,3 +140,22 @@ def test_adapter_opportunity_projection_drops_unapproved_fields() -> None:
         "recommended_action": "use direct objective-effect evidence",
         "reason_codes": ["LOW_SNR"],
     }
+    assert "safe proposal planning summary" in rendered_payload
+    assert "keep this adapter note" in rendered_payload
+    assert "LOW_SNR" in compact
+    for forbidden in (
+        "raw_pair_rows",
+        "hidden-nested-row",
+        "pair_evidence",
+        "hidden-pair-evidence",
+        "bks_gap_details",
+        "hidden-bks-gap",
+        "prompt_ratios",
+        "research_signal_ratio",
+        "llm_text",
+        "hidden free-form llm text",
+        "validation_case_details",
+        "frozen_case_details",
+    ):
+        assert forbidden not in rendered_payload
+        assert forbidden not in compact

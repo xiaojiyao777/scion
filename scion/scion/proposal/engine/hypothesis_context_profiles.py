@@ -672,9 +672,17 @@ def _allowed_generic_key(key: str) -> bool:
         "session",
         "payload",
         "raw_metrics",
+        "raw_pair",
+        "pair_rows",
+        "pair_evidence",
+        "raw_calibration",
+        "calibration_pair",
+        "bks",
         "holdout",
         "validation",
         "frozen",
+        "prompt_ratio",
+        "llm_text",
         "material_difference",
     )
     return not any(fragment in lowered for fragment in blocked_fragments)

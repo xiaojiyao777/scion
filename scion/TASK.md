@@ -276,6 +276,11 @@ Current checkpoint:
   context, not mechanism-effect evidence. This does not change Decision,
   `DecisionFeatures`, Protocol gates, promotion, scheduler state, or solver
   behavior.
+- Current proposal-diagnostic boundary: adapter-owned measurement/opportunity
+  diagnostics are redacted before prompt exposure for raw pair/calibration rows,
+  BKS/gap details, holdout/case details, prompt ratios, and LLM text; the
+  remaining payload stays tainted proposal context and does not enter
+  `DecisionFeatures`.
 - Current launch/runtime boundary: prepared roots must guard `scion/tools` as
   runtime/control-plane code, so launcher, postrun rebuild, postrun readiness,
   and launch-readiness changes after prepare time require a new prepared root.

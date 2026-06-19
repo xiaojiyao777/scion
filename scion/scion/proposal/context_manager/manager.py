@@ -459,7 +459,57 @@ def _adapter_problem_measurement_diagnostics(adapter: Any | None) -> dict[str, A
         payload = hook()
     except Exception:
         return {}
-    return dict(payload) if isinstance(payload, Mapping) else {}
+    if not isinstance(payload, Mapping):
+        return {}
+    redacted = _redact_problem_measurement_diagnostic_payload(dict(payload))
+    return dict(redacted) if isinstance(redacted, Mapping) else {}
+
+
+_PROBLEM_MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS = (
+    "pair_evidence",
+    "pair_rows",
+    "raw_pair",
+    "raw_calibration",
+    "calibration_pair",
+    "bks",
+    "validation_case",
+    "frozen_case",
+    "holdout",
+    "prompt_ratio",
+    "llm_text",
+)
+
+
+def _redact_problem_measurement_diagnostic_payload(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        projected: dict[str, Any] = {}
+        for key, child in value.items():
+            key_text = str(key)
+            if not _problem_measurement_diagnostic_key_allowed(key_text):
+                continue
+            redacted = _redact_problem_measurement_diagnostic_payload(child)
+            if redacted not in ("", None, [], {}, ()):
+                projected[key_text] = redacted
+        return projected
+    if isinstance(value, (list, tuple)):
+        projected_items = [
+            _redact_problem_measurement_diagnostic_payload(item)
+            for item in value
+        ]
+        return [
+            item
+            for item in projected_items
+            if item not in ("", None, [], {}, ())
+        ]
+    return value
+
+
+def _problem_measurement_diagnostic_key_allowed(key: str) -> bool:
+    lowered = key.lower()
+    return not any(
+        fragment in lowered
+        for fragment in _PROBLEM_MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS
+    )
 
 
 def _adapter_opportunity_diagnostics(
