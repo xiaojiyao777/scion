@@ -386,6 +386,93 @@ def test_postrun_acceptance_rejects_manifest_output_outside_family_dir(
     ]
 
 
+def test_postrun_acceptance_rejects_dirty_rebuild_manifest_boundary(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "run-dirty-rebuild-manifest")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    manifest_path = (
+        run_root / "postrun_acceptance" / "rebuild" / "rebuild_manifest.v1.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["artifact_kind"] = "stale_postrun_acceptance_rebuild"
+    manifest["report_dir"] = str(tmp_path / "external-postrun-acceptance")
+    manifest["report_only"] = False
+    manifest["quality_judgment"] = True
+    manifest["decision_features_excluded"] = False
+    manifest["campaign_state_mutated"] = True
+    manifest["scheduler_state_mutated"] = True
+    manifest["promotion_state_mutated"] = True
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    boundary_check = readiness["checks"]["rebuild_manifest_identity_boundary"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert boundary_check["status"] == "failed"
+    assert boundary_check["required"] is True
+    assert boundary_check["detail"]["failures"] == [
+        {
+            "reason": "manifest_identity_mismatch",
+            "field": "artifact_kind",
+            "expected": "postrun_acceptance_rebuild",
+            "actual": "stale_postrun_acceptance_rebuild",
+        },
+        {
+            "reason": "manifest_identity_mismatch",
+            "field": "report_dir",
+            "expected": str(run_root / "postrun_acceptance"),
+            "actual": str(tmp_path / "external-postrun-acceptance"),
+        },
+        {
+            "reason": "manifest_boundary_flag_mismatch",
+            "field": "report_only",
+            "expected": True,
+            "actual": False,
+        },
+        {
+            "reason": "manifest_boundary_flag_mismatch",
+            "field": "quality_judgment",
+            "expected": False,
+            "actual": True,
+        },
+        {
+            "reason": "manifest_boundary_flag_mismatch",
+            "field": "decision_features_excluded",
+            "expected": True,
+            "actual": False,
+        },
+        {
+            "reason": "manifest_boundary_flag_mismatch",
+            "field": "campaign_state_mutated",
+            "expected": False,
+            "actual": True,
+        },
+        {
+            "reason": "manifest_boundary_flag_mismatch",
+            "field": "scheduler_state_mutated",
+            "expected": False,
+            "actual": True,
+        },
+        {
+            "reason": "manifest_boundary_flag_mismatch",
+            "field": "promotion_state_mutated",
+            "expected": False,
+            "actual": True,
+        },
+    ]
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_readiness_accepts_actionable_problem_summary(
     tmp_path: Path,
 ) -> None:

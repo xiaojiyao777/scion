@@ -166,6 +166,16 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
             "manifest_run_root": rebuild_manifest.get("run_root"),
         },
     )
+    identity_status, identity_detail = _rebuild_manifest_identity_boundary(
+        root,
+        report_dir,
+        rebuild_manifest,
+    )
+    add_check(
+        "rebuild_manifest_identity_boundary",
+        identity_status,
+        identity_detail,
+    )
     add_check(
         "rebuild_manifest_complete",
         "ok" if rebuild_manifest.get("complete") is True else "failed",
@@ -481,6 +491,67 @@ def _analysis_brief_path_from_rebuild_manifest(
         ):
             return path
     return None
+
+
+def _rebuild_manifest_identity_boundary(
+    root: Path,
+    report_dir: Path,
+    rebuild_manifest: Mapping[str, Any],
+) -> tuple[str, Any]:
+    if not rebuild_manifest:
+        return "failed", {"reason": "missing_rebuild_manifest", "failures": []}
+
+    failures: list[dict[str, Any]] = []
+    expected_identity = {
+        "artifact_kind": "postrun_acceptance_rebuild",
+        "run_root": str(root),
+        "campaign_dir": str(root / "campaign"),
+        "report_dir": str(report_dir),
+    }
+    for field, expected in expected_identity.items():
+        actual = rebuild_manifest.get(field)
+        matches = (
+            _payload_path_matches(actual, Path(expected))
+            if field in {"run_root", "campaign_dir", "report_dir"}
+            else actual == expected
+        )
+        if not matches:
+            failures.append(
+                {
+                    "reason": "manifest_identity_mismatch",
+                    "field": field,
+                    "expected": expected,
+                    "actual": actual,
+                }
+            )
+
+    boundary_expectations = {
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "campaign_state_mutated": False,
+        "scheduler_state_mutated": False,
+        "promotion_state_mutated": False,
+    }
+    for field, expected in boundary_expectations.items():
+        if rebuild_manifest.get(field) is not expected:
+            failures.append(
+                {
+                    "reason": "manifest_boundary_flag_mismatch",
+                    "field": field,
+                    "expected": expected,
+                    "actual": rebuild_manifest.get(field),
+                }
+            )
+
+    return (
+        "ok" if not failures else "failed",
+        {
+            "failures": failures,
+            "expected_identity": expected_identity,
+            "boundary_expectations": boundary_expectations,
+        },
+    )
 
 
 def _rebuild_manifest_declared_outputs_present(
