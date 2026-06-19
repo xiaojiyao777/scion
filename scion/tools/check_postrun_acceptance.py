@@ -126,6 +126,14 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
             "families": rebuild_manifest.get("families"),
         },
     )
+    manifest_outputs_status, manifest_outputs_detail = (
+        _rebuild_manifest_declared_outputs_present(rebuild_manifest, report_dir)
+    )
+    add_check(
+        "rebuild_manifest_declared_outputs_present",
+        manifest_outputs_status,
+        manifest_outputs_detail,
+    )
     add_check(
         "analysis_brief_present",
         "ok" if analysis_brief else "failed",
@@ -344,6 +352,105 @@ def _analysis_brief_path_from_rebuild_manifest(
         if path.suffix == ".json" and path.is_file():
             return path
     return None
+
+
+def _rebuild_manifest_declared_outputs_present(
+    rebuild_manifest: Mapping[str, Any],
+    report_dir: Path,
+) -> tuple[str, Any]:
+    if not rebuild_manifest:
+        return "failed", {"reason": "missing_rebuild_manifest"}
+    families = _mapping_or_empty(rebuild_manifest.get("families"))
+    if not families:
+        return "failed", {"reason": "missing_rebuild_manifest_families"}
+
+    ok_families: list[str] = []
+    skipped_families: list[str] = []
+    missing_outputs: list[dict[str, Any]] = []
+    inconsistent_outputs: list[dict[str, Any]] = []
+    family_failures: list[dict[str, Any]] = []
+    for family_name, raw_family in sorted(families.items()):
+        family = _mapping_or_empty(raw_family)
+        family_status = family.get("status")
+        outputs = _string_items(family.get("outputs"))
+        outputs_present = _mapping_or_empty(family.get("outputs_present"))
+        if family_status == "skipped":
+            skipped_families.append(str(family_name))
+            continue
+        if family_status != "ok":
+            family_failures.append(
+                {
+                    "family": str(family_name),
+                    "status": family_status,
+                    "reason": "family_status_not_ok",
+                }
+            )
+            continue
+        ok_families.append(str(family_name))
+        if not outputs:
+            family_failures.append(
+                {
+                    "family": str(family_name),
+                    "status": family_status,
+                    "reason": "ok_family_without_outputs",
+                }
+            )
+            continue
+        for output in outputs:
+            path = _manifest_output_path(output, report_dir)
+            actual_present = path.is_file()
+            manifest_present = outputs_present.get(output)
+            if actual_present is False:
+                missing_outputs.append(
+                    {
+                        "family": str(family_name),
+                        "path": str(path),
+                        "manifest_output": output,
+                    }
+                )
+            if isinstance(manifest_present, bool):
+                if manifest_present is not actual_present:
+                    inconsistent_outputs.append(
+                        {
+                            "family": str(family_name),
+                            "path": str(path),
+                            "manifest_output": output,
+                            "manifest_outputs_present": manifest_present,
+                            "actual_present": actual_present,
+                        }
+                    )
+            else:
+                inconsistent_outputs.append(
+                    {
+                        "family": str(family_name),
+                        "path": str(path),
+                        "manifest_output": output,
+                        "manifest_outputs_present": manifest_present,
+                        "actual_present": actual_present,
+                        "reason": "missing_outputs_present_entry",
+                    }
+                )
+
+    failures_present = bool(
+        missing_outputs or inconsistent_outputs or family_failures
+    )
+    return (
+        "failed" if failures_present else "ok",
+        {
+            "ok_families": ok_families,
+            "skipped_families": skipped_families,
+            "missing_outputs": missing_outputs,
+            "inconsistent_outputs": inconsistent_outputs,
+            "family_failures": family_failures,
+        },
+    )
+
+
+def _manifest_output_path(value: str, report_dir: Path) -> Path:
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path
+    return (report_dir / path).resolve()
 
 
 def _artifact_paths(directory: Path) -> list[str]:

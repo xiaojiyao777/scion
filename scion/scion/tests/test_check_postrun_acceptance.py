@@ -187,6 +187,59 @@ def test_postrun_acceptance_readiness_uses_manifest_bound_analysis_brief(
     assert problem_check["detail"]["reason"] == "missing_problem_specific_summary"
 
 
+def test_postrun_acceptance_readiness_rejects_missing_manifest_declared_output(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "run-missing-manifest-output")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    manifest_path = (
+        run_root / "postrun_acceptance" / "rebuild" / "rebuild_manifest.v1.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    declared_output = Path(
+        manifest["families"]["research_efficiency"]["outputs"][0]
+    )
+    declared_output.unlink()
+    _write_json(
+        declared_output.with_name("zz_stale.research_efficiency.v1.json"),
+        {"schema_version": "stale.test", "stale": True},
+    )
+
+    readiness = check_tool.build_readiness(run_root)
+    output_check = readiness["checks"]["rebuild_manifest_declared_outputs_present"]
+
+    assert readiness["checks"]["current_run_report_families_present"]["status"] == "ok"
+    assert readiness["current_run_analysis_ready"] is False
+    assert output_check["status"] == "failed"
+    assert output_check["required"] is True
+    assert output_check["detail"]["missing_outputs"] == [
+        {
+            "family": "research_efficiency",
+            "path": str(declared_output),
+            "manifest_output": str(declared_output),
+        }
+    ]
+    assert output_check["detail"]["inconsistent_outputs"] == [
+        {
+            "family": "research_efficiency",
+            "path": str(declared_output),
+            "manifest_output": str(declared_output),
+            "manifest_outputs_present": True,
+            "actual_present": False,
+        }
+    ]
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_readiness_accepts_actionable_problem_summary(
     tmp_path: Path,
 ) -> None:
