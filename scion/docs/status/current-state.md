@@ -66,9 +66,9 @@ Framework:
   proposal attempts before useful protocol evidence existed. Launch readiness
   now also requires clean runtime-guard paths and verifies the headroom across
   `launch.env`, manifest execution, manifest command, and `run.sh`.
-- CVRP prepared handoff measurement diagnostics are now derived from
+- CVRP and warehouse prepared handoff measurement diagnostics are now derived from
   `problem-v1.yaml` measurement declarations and the declared A/A
-  `calibration_ref`. Prepared-contract readiness rejects CVRP handoffs that
+  `calibration_ref`. Prepared-contract readiness rejects handoffs that
   contain MDE/practical-delta values without problem-owned source, calibration,
   and measurement-readiness proof.
 
@@ -78,13 +78,17 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `3b74b90e`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-measurecontract-3b74b90e-6r-gpt55-20260619T181700Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `feaddec7`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-measurecontract-feaddec7-6r-gpt55-20260619T183236Z-claw`.
   Its prepared manifest records `proposal_attempt_limit=64` and
-  `proposal_quality_loop_limit=64`.
+  `proposal_quality_loop_limit=64`, and its measurement handoff source is
+  `problem_v1.measurement.calibration_ref`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
-  default-avoid directions, required evidence, and decision-boundary coverage.
-  Static readiness verifies the active-subject source-constraint prompt bridge.
+  default-avoid directions, required evidence, decision-boundary coverage, and
+  problem-owned warehouse measurement/runtime diagnostics: raw `total_cost` MDE
+  `577.5`, related create-new MDE `1725.0`, `runtime_model=comparative`, and
+  `pairing_validity=trajectory_divergent`. Static readiness verifies both the
+  measurement handoff and active-subject source-constraint prompt bridge.
   Because this root is prepare-only, warehouse specialist review axes remain
   deferred until post-launch current-run evidence exists.
 - Postrun warehouse plateau review readiness now requires substantive
@@ -116,8 +120,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `3b74b90e`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-measurecontract-3b74b90e-1r-gpt55-20260619T181700Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `feaddec7`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-measurecontract-feaddec7-1r-gpt55-20260619T183236Z-claw`.
   Its prepared manifest records `proposal_attempt_limit=64` and
   `proposal_quality_loop_limit=64`, and its measurement handoff source is
   `problem_v1.measurement.calibration_ref`.
@@ -147,18 +151,18 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `3b74b90e`
+- The active prepared roots were generated from WSL runtime commit `feaddec7`
   after the trajectory-divergent open low-SNR lifecycle repair, CVRP CMT
   case-protection handoff, analysis-brief surface repairs, postrun and
   prepared-handoff stale/undeclared output guards, prepared/postrun
   rebuild-manifest identity and output scope validation, and focused launcher
-  proposal-headroom/readiness-contract repair plus CVRP problem-owned
+  proposal-headroom/readiness-contract repair plus CVRP/warehouse problem-owned
   measurement-handoff source repair.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`; the prepared manifests
   expose proposal-attempt and proposal-quality-loop limits as `64`/`64`, and
   readiness reports `git_runtime_worktree_clean=ok` plus
-  `run_script_proposal_headroom_enforced=ok`; the CVRP root also reports
+  `run_script_proposal_headroom_enforced=ok`; both roots also report
   `problem_specific_prepared_handoff=ok` with problem-owned measurement source
   proof.
 - Static readiness includes

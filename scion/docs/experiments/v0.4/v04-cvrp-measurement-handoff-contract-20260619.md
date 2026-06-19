@@ -46,17 +46,17 @@ Result: `106 passed`.
 
 ## Current Prepared Roots
 
-Generated from WSL runtime commit `3b74b90e`:
+Generated from WSL runtime commit `feaddec7`:
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-measurecontract-3b74b90e-6r-gpt55-20260619T181700Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-measurecontract-feaddec7-6r-gpt55-20260619T183236Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-measurecontract-3b74b90e-1r-gpt55-20260619T181700Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-measurecontract-feaddec7-1r-gpt55-20260619T183236Z-claw`
 
 Strict WSL launch readiness with real completion preflight reports
 `static_ready=true`, `launch_ready=false`, exit `64` for both roots. Static
 checks include `git_runtime_worktree_clean=ok` and
-`run_script_proposal_headroom_enforced=ok`; the CVRP root also reports
+`run_script_proposal_headroom_enforced=ok`; both roots also report
 `problem_specific_prepared_handoff=ok`.
 
 The CVRP prepared manifest records:
@@ -65,6 +65,14 @@ The CVRP prepared manifest records:
 - readiness: `status=ready`, `reason_code=ok`
 - calibration schema: `scion.aa_noise_floor.v1`
 - `mde_at_power_80=9.9`, `practical_screen_delta=2.0`, `n_pairs=96`
+
+The warehouse prepared manifest records:
+
+- measurement source: `problem_v1.measurement.calibration_ref`
+- readiness: `status=ready`, `reason_code=ok`
+- calibration schema: `scion.aa_noise_floor.v1`
+- `mde_at_power_80=577.5`, `practical_screen_delta=0.001`, `n_pairs=36`
+- related create-new calibration MDE: `1725.0`
 
 The remaining blocker is external `gpt-5.5` provider auth, not Scion static
 readiness: chat completion preflight returns HTTP `401`,

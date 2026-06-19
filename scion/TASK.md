@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated from runtime commit `3b74b90e` and are static-ready. Launch readiness verifies proposal-attempt/proposal-quality headroom (`64`/`64`) across `launch.env`, manifest execution, manifest command, and `run.sh`, rejects dirty runtime-guard paths, and rejects CVRP measurement handoffs that are not backed by problem-owned declaration/calibration source proof. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated from runtime commit `feaddec7` and are static-ready. Launch readiness verifies proposal-attempt/proposal-quality headroom (`64`/`64`) across `launch.env`, manifest execution, manifest command, and `run.sh`, rejects dirty runtime-guard paths, and rejects CVRP/warehouse measurement handoffs that are not backed by problem-owned declaration/calibration source proof. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -370,9 +370,9 @@ Current checkpoint:
   readiness command.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-measurecontract-3b74b90e-6r-gpt55-20260619T181700Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-measurecontract-feaddec7-6r-gpt55-20260619T183236Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-measurecontract-3b74b90e-1r-gpt55-20260619T181700Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-measurecontract-feaddec7-1r-gpt55-20260619T183236Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -407,7 +407,7 @@ Current checkpoint:
   `CMT2` and `CMT4`. The strict postrun rebuild order check confirms the
   rebuild command precedes the postrun readiness command and
   `POSTRUN_REPORTS_EXIT_STATUS` is emitted after the rebuild command. The roots
-  were prepared from WSL runtime commit `3b74b90e` with explicit
+  were prepared from WSL runtime commit `feaddec7` with explicit
   proposal-attempt/proposal-quality-loop headroom (`64`/`64`). Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout
@@ -419,10 +419,13 @@ Current checkpoint:
   acceptance both check analysis-brief prepared-contract consistency against
   the inventory/launcher contract before a root can be launch-ready or
   current-run delegated review can be ready.
-  The CVRP root additionally verifies that prepared measurement diagnostics are
+  Both roots additionally verify that prepared measurement diagnostics are
   derived from `problem_v1.measurement.calibration_ref`, with measurement
   readiness `ready`, calibration schema `scion.aa_noise_floor.v1`, and
-  `DecisionFeatures` exclusion.
+  `DecisionFeatures` exclusion. The warehouse handoff exposes raw
+  `total_cost` MDE `577.5`, related create-new MDE `1725.0`, and the
+  comparative/trajectory-divergent runtime interpretation as report-only
+  proposal guidance.
 - The blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
