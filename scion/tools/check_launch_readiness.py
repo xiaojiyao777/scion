@@ -717,7 +717,7 @@ def _run_script_runtime_guard_enforced(run_sh: Path) -> tuple[str, Any]:
         else:
             marker_positions[name] = position
 
-    campaign_position = text.find(RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER)
+    campaign_position = _campaign_command_position(text)
     markers_after_campaign = [
         name
         for name, position in sorted(marker_positions.items())
@@ -838,7 +838,7 @@ def _run_script_completion_preflight_enforced(
     source_pos = _first_launch_env_source_position(run_text)
     preflight_pos = run_text.find('if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then')
     proxy_pos = run_text.find("tools/check_gpt55_proxy.py")
-    campaign_pos = run_text.find(RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER)
+    campaign_pos = _campaign_command_position(run_text)
     if source_pos < 0:
         failures.append({"reason": "run_script_does_not_source_launch_env"})
     if preflight_pos < 0:
@@ -900,6 +900,28 @@ def _first_launch_env_source_position(text: str) -> int:
     return min(positions) if positions else -1
 
 
+def _campaign_command_position(text: str) -> int:
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if (
+            RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER in stripped
+            and not _line_is_campaign_command_echo(stripped)
+        ):
+            return offset + line.find(RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER)
+        offset += len(line)
+    return -1
+
+
+def _line_is_campaign_command_echo(stripped_line: str) -> bool:
+    return (
+        stripped_line.startswith("echo ")
+        or stripped_line.startswith("COMMAND:")
+        or 'echo "COMMAND:' in stripped_line
+        or "echo 'COMMAND:" in stripped_line
+    )
+
+
 def _run_script_postrun_reports_after_campaign(run_sh: Path) -> tuple[str, Any]:
     if not run_sh.is_file():
         return "failed", {"run_script": str(run_sh), "reason": "missing_run_script"}
@@ -915,7 +937,7 @@ def _run_script_postrun_reports_after_campaign(run_sh: Path) -> tuple[str, Any]:
             },
         )
 
-    campaign_pos = text.find(RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER)
+    campaign_pos = _campaign_command_position(text)
     status_pos = (
         text.find("STATUS=$?", campaign_pos)
         if campaign_pos >= 0
