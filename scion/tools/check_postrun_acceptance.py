@@ -683,6 +683,12 @@ def _review_input_summaries_actionability(
         failures: list[str] = []
         if summary.get("schema_version") != schema:
             failures.append(f"{key}_schema_stale")
+        if summary.get("report_only") is not True:
+            failures.append(f"{key}_not_report_only")
+        if summary.get("quality_judgment") is not False:
+            failures.append(f"{key}_quality_judgment_not_false")
+        if summary.get("decision_features_excluded") is not True:
+            failures.append(f"{key}_decision_features_not_excluded")
         if summary.get("current_run_evidence") is not True:
             failures.append(f"{key}_not_current_run_evidence")
         if summary.get("available") is not True:
@@ -702,6 +708,11 @@ def _review_input_summaries_actionability(
                 "failures": failures,
                 "schema_version": summary.get("schema_version"),
                 "expected_schema_version": schema,
+                "report_only": summary.get("report_only"),
+                "quality_judgment": summary.get("quality_judgment"),
+                "decision_features_excluded": summary.get(
+                    "decision_features_excluded"
+                ),
                 "current_run_evidence": summary.get("current_run_evidence"),
                 "available": summary.get("available"),
                 "report_count": summary.get("report_count"),

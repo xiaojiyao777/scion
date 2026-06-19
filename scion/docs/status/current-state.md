@@ -121,8 +121,10 @@ Framework:
 - Postrun readiness also requires current-run protocol accounting,
   measurement-effect, runtime-feedback, and research-continuity summaries for
   warehouse/CVRP delegated review. A hand-written problem-specific summary no
-  longer bypasses missing review-input summaries; runtime feedback must still
-  be review-ready with drain status complete.
+  longer bypasses missing review-input summaries; those summaries must preserve
+  report-only, non-quality-judgment, `DecisionFeatures`-excluded boundary
+  markers; runtime feedback must still be review-ready with drain status
+  complete.
 - Postrun readiness also cross-checks the problem-specific summary's protocol,
   measurement, runtime, continuity, and quality-block evidence against those
   input summaries. A stale or hand-written problem summary can no longer claim a

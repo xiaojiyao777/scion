@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt handoff plus code-phase active-subject constraints, problem-owned CVRP/warehouse opportunity diagnostics, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, postrun prompt-audit traceability and readiness checks for CVRP/warehouse active subject code constraints, research-context/signal-density/failure-taxonomy/review-input delegated-readiness checks, problem-summary/input consistency checks, manifest-bound postrun readiness identity and declared-output checks, launch-readiness verification that `run.sh` carries strict postrun acceptance readiness plus normal campaign-exit, warehouse data-root, and API-key-env preflight postrun report paths, and runtime guard coverage for postrun package paths plus matching CVRP/warehouse problem runtime paths. Launch remains blocked by WSL `gpt-5.5` provider auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt handoff plus code-phase active-subject constraints, problem-owned CVRP/warehouse opportunity diagnostics, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, postrun prompt-audit traceability and readiness checks for CVRP/warehouse active subject code constraints, research-context/signal-density/failure-taxonomy/review-input delegated-readiness and report-only boundary checks, problem-summary/input consistency checks, manifest-bound postrun readiness identity and declared-output checks, launch-readiness verification that `run.sh` carries strict postrun acceptance readiness plus normal campaign-exit, warehouse data-root, and API-key-env preflight postrun report paths, and runtime guard coverage for postrun package paths plus matching CVRP/warehouse problem runtime paths. Launch remains blocked by WSL `gpt-5.5` provider auth, not by Scion code.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -284,7 +284,9 @@ Current checkpoint:
   accounting, measurement-effect, runtime-feedback, and research-continuity
   summaries for warehouse/CVRP delegated review. A hand-written
   problem-specific summary can no longer bypass missing review-input summaries,
-  and runtime feedback must still be review-ready with drain status complete.
+  those summaries must preserve report-only, non-quality-judgment,
+  `DecisionFeatures`-excluded boundary markers, and runtime feedback must still
+  be review-ready with drain status complete.
 - Postrun acceptance readiness also cross-checks the problem-specific summary's
   protocol, measurement, runtime, continuity, and quality-block evidence against
   those input summaries. A stale or hand-written problem summary can no longer
@@ -331,8 +333,9 @@ Current checkpoint:
   directory contents cannot mask a missing report artifact. For warehouse/CVRP
   current runs it additionally requires research-context actionability, prompt
   signal-density accounting, failure-taxonomy evidence, and review-input
-  summaries to be present and internally consistent with the problem summary,
-  while allowing valid review-required gaps as delegated-analysis evidence.
+  summaries to be present, report-only/`DecisionFeatures`-excluded, and
+  internally consistent with the problem summary, while allowing valid
+  review-required gaps as delegated-analysis evidence.
   CVRP bounded
   two-opt review readiness also requires a qualifying large/two-opt
   protocol-effect row signal in measurement evidence plus direct
