@@ -105,10 +105,10 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- Local checkout is `f9b632f6`; WSL checkout is `f7b5c65`. Both are clean. The
-  active prepared roots were generated from WSL runtime commit `1842e50`; the
-  later WSL checkout differs only in docs, and launch readiness reports
-  `git_runtime_consistent=ok` because runtime guard paths are unchanged.
+- The active prepared roots were generated from WSL runtime commit `1842e50`.
+  Current local/WSL checkouts may include later documentation-only commits;
+  launch readiness reports `git_runtime_consistent=ok` because runtime guard
+  paths are unchanged.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`. Static checks include
   prepared contract/brief identity, prompt-context handoff,
