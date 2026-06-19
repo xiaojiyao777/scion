@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `ae9f71d3` after the proxy-format operator repair touched runtime-guarded `scion/tools`. Warehouse is the 6R champion-v2 follow-up root; CVRP is the 4R Phase 4 bounded two-opt root, preserving branch-depth/continuity evidence beyond a one-off attempt. Launch readiness verifies proposal-attempt/proposal-quality headroom (`64`/`64`), APS tool-loop headroom (`3600` sec, `240` steps, `200` total tool calls, `200` code-phase tool calls, `2000000` observation chars), solver-design source-read headroom, absolute WSL launch paths, clean runtime-guard paths, problem-owned measurement handoffs, and current active-subject code-constraint provider payload summaries. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `c91b4cec` after the postrun launch-required flag guard touched runtime-guarded `scion/tools`. Warehouse is the 6R champion-v2 follow-up root; CVRP is the 4R Phase 4 bounded two-opt root, preserving branch-depth/continuity evidence beyond a one-off attempt. Launch readiness verifies proposal-attempt/proposal-quality headroom (`64`/`64`), APS tool-loop headroom (`3600` sec, `240` steps, `200` total tool calls, `200` code-phase tool calls, `2000000` observation chars), solver-design source-read headroom, absolute WSL launch paths, clean runtime-guard paths, problem-owned measurement handoffs, and current active-subject code-constraint provider payload summaries. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -381,9 +381,9 @@ Current checkpoint:
   readiness command.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-proxyfmt-ae9f71d3-preflight-6r-gpt55-20260619T213723Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-launchflag-c91b4cec-preflight-6r-gpt55-20260619T215212Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-proxyfmt-ae9f71d3-preflight-4r-gpt55-20260619T213724Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-launchflag-c91b4cec-preflight-4r-gpt55-20260619T215214Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -428,8 +428,8 @@ Current checkpoint:
   (`64`/`64`) plus APS tool-loop headroom: session timeout `3600`, max steps
   `240`, max total tool calls `200`, max code-phase tool calls `200`, and max
   observation chars `2000000`. Both current roots record WSL runtime commit
-  `ae9f71d3`, whose runtime guard paths match after the proxy-format operator
-  repair touched `scion/tools`. Solver-design
+  `c91b4cec`, whose runtime guard paths match after the postrun
+  launch-required flag guard touched `scion/tools`. Solver-design
   target file and code-phase surface reads now use `96000` char source
   headroom, while bounded algorithm slices remain at `24000`. Current
   readiness also verifies executable `launch.env` sourcing, executable

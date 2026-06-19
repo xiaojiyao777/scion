@@ -81,6 +81,8 @@ The only current launch blocker remains external `gpt-5.5` proxy auth.
 
 ## Acceptance
 
-Accepted as the current prepared-root refresh after the proxy-format operator
-repair. Do not launch either root until strict launch readiness reports
-`launch_ready=true`.
+Accepted as the proxy-format prepared-root refresh evidence. It was later
+superseded for launch by
+`scion/docs/experiments/v0.4/v04-postrun-launch-required-flag-guard-20260619.md`
+because a runtime-guarded `scion/tools` file changed again. Do not launch either
+root until strict launch readiness reports `launch_ready=true`.

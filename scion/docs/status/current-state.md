@@ -35,14 +35,15 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL after the proxy-format operator
-repair touched `scion/tools`, which is covered by the runtime guard. Static
-readiness passes; launch readiness fails only at completion preflight auth.
+The active prepared roots were generated on WSL after the postrun
+launch-required flag guard touched `scion/tools`, which is covered by the
+runtime guard. Static readiness passes; launch readiness fails only at
+completion preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-proxyfmt-ae9f71d3-preflight-6r-gpt55-20260619T213723Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-launchflag-c91b4cec-preflight-6r-gpt55-20260619T215212Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-proxyfmt-ae9f71d3-preflight-4r-gpt55-20260619T213724Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-launchflag-c91b4cec-preflight-4r-gpt55-20260619T215214Z-claw`
 
 Prepared manifests record:
 
@@ -50,7 +51,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `ae9f71d3`; CVRP `ae9f71d3`.
+- Runtime commits: warehouse `c91b4cec`; CVRP `c91b4cec`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -142,6 +143,7 @@ Prepared manifests record:
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
+  `scion/docs/experiments/v0.4/v04-postrun-launch-required-flag-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-proxy-format-alias-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-measurement-note-root-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-phase4-four-round-root-readiness-20260619.md`
