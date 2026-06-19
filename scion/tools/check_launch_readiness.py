@@ -1738,6 +1738,7 @@ def _prepared_handoff_rebuild_declared_outputs_present(root: Path) -> tuple[str,
     detail: dict[str, Any] = {
         "manifest_path": str(manifest_path),
         "ok_families": [],
+        "manifest_failures": [],
         "missing_outputs": [],
         "inconsistent_outputs": [],
         "unexpected_outputs": [],
@@ -1747,9 +1748,53 @@ def _prepared_handoff_rebuild_declared_outputs_present(root: Path) -> tuple[str,
         detail["reason"] = "missing_rebuild_manifest"
         return "failed", detail
 
+    prepared_manifest_path = root / "prepared_run_manifest.v1.json"
+    prepared_manifest = _read_json(prepared_manifest_path)
+    prepared_manifest_dict = (
+        prepared_manifest if isinstance(prepared_manifest, dict) else {}
+    )
+    manifest_failures: list[dict[str, Any]] = []
+    expected_identity = {
+        "artifact_kind": "prepared_handoff_rebuild",
+        "run_root": str(root),
+        "prepared_handoff_dir": str(handoff_dir),
+        "problem_family": prepared_manifest_dict.get("problem_family"),
+        "prepared_manifest_commit": _manifest_commit(prepared_manifest_dict),
+    }
+    for field, expected in expected_identity.items():
+        if manifest.get(field) != expected:
+            manifest_failures.append(
+                {
+                    "reason": "manifest_identity_mismatch",
+                    "field": field,
+                    "expected": expected,
+                    "actual": manifest.get(field),
+                }
+            )
+
+    boundary_expectations = {
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "campaign_state_mutated": False,
+        "scheduler_state_mutated": False,
+        "promotion_state_mutated": False,
+        "complete": True,
+    }
+    for field, expected in boundary_expectations.items():
+        if manifest.get(field) is not expected:
+            manifest_failures.append(
+                {
+                    "reason": "manifest_boundary_flag_mismatch",
+                    "field": field,
+                    "expected": expected,
+                    "actual": manifest.get(field),
+                }
+            )
+
     family_failures: list[dict[str, Any]] = []
     if manifest.get("schema_version") != PREPARED_HANDOFF_REBUILD_SCHEMA:
-        family_failures.append(
+        manifest_failures.append(
             {
                 "reason": "schema_mismatch",
                 "expected": PREPARED_HANDOFF_REBUILD_SCHEMA,
@@ -1859,9 +1904,10 @@ def _prepared_handoff_rebuild_declared_outputs_present(root: Path) -> tuple[str,
                             "path": str(path),
                             "reason": "undeclared_generated_output",
                         }
-                    )
+            )
 
     detail["ok_families"] = ok_families
+    detail["manifest_failures"] = manifest_failures
     detail["missing_outputs"] = missing_outputs
     detail["inconsistent_outputs"] = inconsistent_outputs
     detail["unexpected_outputs"] = unexpected_outputs
@@ -1871,6 +1917,7 @@ def _prepared_handoff_rebuild_declared_outputs_present(root: Path) -> tuple[str,
         if missing_outputs
         or inconsistent_outputs
         or unexpected_outputs
+        or manifest_failures
         or family_failures
         else "ok",
         detail,

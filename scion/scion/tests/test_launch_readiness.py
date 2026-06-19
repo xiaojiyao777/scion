@@ -511,6 +511,61 @@ def test_launch_readiness_rejects_undeclared_prepared_handoff_output(
     ]
 
 
+def test_launch_readiness_rejects_prepared_handoff_rebuild_identity_mismatch(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    manifest_path = (
+        run_root / "prepared_handoff" / "rebuild" / "prepared_handoff_rebuild.v1.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["run_root"] = str(tmp_path / "other-root")
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+    output_check = report["checks"][
+        "prepared_handoff_rebuild_declared_outputs_present"
+    ]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert output_check["status"] == "failed"
+    assert {
+        "reason": "manifest_identity_mismatch",
+        "field": "run_root",
+        "expected": str(run_root),
+        "actual": str(tmp_path / "other-root"),
+    } in output_check["detail"]["manifest_failures"]
+
+
+def test_launch_readiness_rejects_prepared_handoff_rebuild_boundary_gap(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    manifest_path = (
+        run_root / "prepared_handoff" / "rebuild" / "prepared_handoff_rebuild.v1.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["report_only"] = False
+    manifest["complete"] = False
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+    output_check = report["checks"][
+        "prepared_handoff_rebuild_declared_outputs_present"
+    ]
+    failures = {
+        (failure["reason"], failure["field"])
+        for failure in output_check["detail"]["manifest_failures"]
+    }
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert output_check["status"] == "failed"
+    assert ("manifest_boundary_flag_mismatch", "report_only") in failures
+    assert ("manifest_boundary_flag_mismatch", "complete") in failures
+
+
 def test_launch_readiness_rejects_prepared_analysis_brief_contract_mismatch(
     tmp_path: Path,
 ) -> None:
