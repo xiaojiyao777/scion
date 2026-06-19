@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `48a61ed6` after warehouse positive-effect-vs-plateau postrun readiness was tightened. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `1c2c1bbb` after CVRP two-opt direct-evidence mechanism binding was tightened. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -263,7 +263,9 @@ Current checkpoint:
   unbounded/fallback, VNS, and two-opt-star protocol family labels as
   two-opt-like but non-qualifying signals, and requires direct
   activation/effect/two-opt-specific phase telemetry co-located on the same
-  matching top effect row before calling the follow-up
+  matching top effect row. Activation/effect must also be attributed to a
+  matching large/bounded two-opt mechanism rather than unrelated
+  `mechanism_evidence` before calling the follow-up
   `bounded_twoopt_review_ready`.
 - Solver smoke/protocol subprocesses now resolve inherited relative
   `PYTHONPATH` entries against the parent checkout before changing into the
@@ -389,9 +391,9 @@ Current checkpoint:
   readiness command.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ciplateau-48a61ed6-preflight-6r-gpt55-20260619T233848Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-mechanismbind-1c2c1bbb-preflight-6r-gpt55-20260619T234940Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-ciplateau-48a61ed6-preflight-4r-gpt55-20260619T233849Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-mechanismbind-1c2c1bbb-preflight-4r-gpt55-20260619T234941Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -436,8 +438,8 @@ Current checkpoint:
   (`64`/`64`) plus APS tool-loop headroom: session timeout `3600`, max steps
   `240`, max total tool calls `200`, max code-phase tool calls `200`, and max
   observation chars `2000000`. Both current roots record WSL runtime commit
-  `48a61ed6`, whose runtime guard paths match after the warehouse
-  positive-effect-vs-plateau postrun readiness repair touched `scion/tools`.
+  `1c2c1bbb`, whose runtime guard paths match after the CVRP two-opt
+  direct-evidence mechanism-binding repair touched `scion/tools`.
   Solver-design
   target file and code-phase surface reads now use `96000` char source
   headroom, while bounded algorithm slices remain at `24000`. Current
@@ -491,11 +493,13 @@ Current checkpoint:
   CVRP bounded
   two-opt review readiness also requires a qualifying large/two-opt
   protocol-effect row signal in measurement evidence plus direct
-  activation/effect/phase telemetry co-located on a matching top effect row;
-  postrun acceptance recomputes that signal from review inputs before accepting
-  `bounded_twoopt_review_ready`. Continuity-only family mentions remain context,
-  and generic/default-avoid two-opt-like labels are explicitly rejected, not
-  mechanism-effect evidence.
+  activation/effect/phase telemetry co-located on a matching top effect row.
+  The activation/effect evidence must belong to a matching large/bounded
+  two-opt mechanism, so unrelated `mechanism_evidence` cannot complete direct
+  evidence; postrun acceptance recomputes that signal from review inputs before
+  accepting `bounded_twoopt_review_ready`. Continuity-only family mentions
+  remain context, and generic/default-avoid two-opt-like labels are explicitly
+  rejected, not mechanism-effect evidence.
   This does not change
   Decision, `DecisionFeatures`, Protocol gates, promotion, scheduler state, or
   solver behavior.

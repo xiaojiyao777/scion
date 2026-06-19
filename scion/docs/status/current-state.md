@@ -35,15 +35,15 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL after the warehouse
-positive-effect-vs-plateau postrun readiness repair touched `scion/tools`,
-which is covered by the runtime guard. WSL static readiness passes; launch
-readiness fails only at completion preflight auth.
+The active prepared roots were generated on WSL after the CVRP two-opt
+direct-evidence mechanism-binding repair touched `scion/tools`, which is
+covered by the runtime guard. WSL static readiness passes; launch readiness
+fails only at completion preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ciplateau-48a61ed6-preflight-6r-gpt55-20260619T233848Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-mechanismbind-1c2c1bbb-preflight-6r-gpt55-20260619T234940Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-ciplateau-48a61ed6-preflight-4r-gpt55-20260619T233849Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-mechanismbind-1c2c1bbb-preflight-4r-gpt55-20260619T234941Z-claw`
 
 Prepared manifests record:
 
@@ -51,7 +51,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `48a61ed6`; CVRP `48a61ed6`.
+- Runtime commits: warehouse `1c2c1bbb`; CVRP `1c2c1bbb`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -101,7 +101,9 @@ Prepared manifests record:
   optional markers without scanning the full check table.
 - CVRP bounded two-opt postrun review readiness requires co-located positive
   effect, activation, objective-effect, and two-opt-specific phase telemetry on
-  the same matching top effect row.
+  the same matching top effect row. Activation/effect evidence must be
+  attributed to a matching large/bounded two-opt mechanism; unrelated
+  `mechanism_evidence` cannot satisfy direct evidence.
 - Warehouse protocol-evaluated follow-up review distinguishes positive
   at-or-above-MDE effects from plateau-consistent no-positive-MDE effects.
   Plateau-ready summaries require the measurement signal to be
@@ -170,6 +172,7 @@ Prepared manifests record:
   `scion/docs/experiments/v0.4/v04-launch-readiness-failed-check-summary-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-readiness-failed-check-summary-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-mechanism-bound-direct-evidence-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-positive-effect-plateau-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-measurement-note-root-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-phase4-four-round-root-readiness-20260619.md`
