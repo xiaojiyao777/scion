@@ -92,6 +92,26 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
                         "bounded_local_search_variant",
                         "destroy_repair_selection",
                     ],
+                    "large_instance_two_opt_constraints": {
+                        "schema_version": (
+                            "scion.cvrp_large_instance_two_opt_constraints.v1"
+                        ),
+                        "scope": "proposal_only_prepared_handoff",
+                        "seed_report": "seed-report.md",
+                        "proposal_visibility_only": True,
+                        "decision_features_excluded": True,
+                        "implementation_constraints": [
+                            "derive a deadline from solver time_limit",
+                            "do not call unbounded two_opt_intra",
+                        ],
+                        "required_pair_evidence": [
+                            "total_distance delta by case and seed",
+                            "wall-clock elapsed status",
+                        ],
+                        "default_reject_directions": [
+                            "activation claims without wall-clock evidence",
+                        ],
+                    },
                     "measurement_opportunity_diagnostics": {
                         "schema_version": (
                             "cvrp_measurement_opportunity_handoff.v1"
@@ -151,6 +171,12 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
         focus["research_focus"]["current_question"]
         == "Select a materially different CVRP solver-design mechanism."
     )
+    assert focus["research_focus"]["large_instance_two_opt_constraints"][
+        "implementation_constraints"
+    ] == [
+        "derive a deadline from solver time_limit",
+        "do not call unbounded two_opt_intra",
+    ]
 
     system_blocks, user_prompt = _split_hypothesis_context(ctx)
     prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
@@ -158,6 +184,8 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
     assert "launch_research_focus" in prompt_text
     assert "route-merge absorption" in prompt_text
     assert "bounded_local_search_variant" in prompt_text
+    assert "large_instance_two_opt_constraints" in prompt_text
+    assert "two_opt_intra" in prompt_text
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prompt_text
     assert "DecisionFeatures" in prompt_text
 

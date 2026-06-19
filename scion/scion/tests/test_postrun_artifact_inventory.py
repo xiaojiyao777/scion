@@ -668,6 +668,10 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         ]
     )
     assert contract["checks"]["cvrp_direct_effect_rules_present"]["passed"] is True
+    assert (
+        contract["checks"]["cvrp_large_twoopt_bounded_constraints_present"]["passed"]
+        is True
+    )
     problem_specific = data["phase4_evidence_coverage"][
         "problem_specific_requirements"
     ]
@@ -678,6 +682,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         "cvrp_default_avoid_handoff",
         "cvrp_large_twoopt_seed_handoff",
         "cvrp_large_twoopt_unbounded_default_avoid_handoff",
+        "cvrp_large_twoopt_bounded_constraints_handoff",
         "cvrp_direct_effect_rules_handoff",
         "cvrp_decision_boundary_handoff",
     ):
@@ -690,6 +695,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     assert "cvrp_default_avoid_handoff" in markdown
     assert "cvrp_large_twoopt_seed_handoff" in markdown
     assert "cvrp_large_twoopt_unbounded_default_avoid_handoff" in markdown
+    assert "cvrp_large_twoopt_bounded_constraints_handoff" in markdown
 
 
 def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
@@ -787,6 +793,10 @@ def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
         contract["checks"]["cvrp_default_avoid_directions_present"]["passed"] is False
     )
     assert contract["checks"]["cvrp_direct_effect_rules_present"]["passed"] is False
+    assert (
+        contract["checks"]["cvrp_large_twoopt_bounded_constraints_present"]["passed"]
+        is False
+    )
     problem_specific = data["phase4_evidence_coverage"][
         "problem_specific_requirements"
     ]
@@ -795,6 +805,12 @@ def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
     assert problem_specific["cvrp_large_twoopt_seed_handoff"]["available"] is False
     assert (
         problem_specific["cvrp_large_twoopt_unbounded_default_avoid_handoff"][
+            "available"
+        ]
+        is False
+    )
+    assert (
+        problem_specific["cvrp_large_twoopt_bounded_constraints_handoff"][
             "available"
         ]
         is False
@@ -1184,6 +1200,7 @@ def _cvrp_research_focus() -> dict[str, object]:
             "cluster-biased worst removal",
             "route-limit seed diversification",
         ],
+        "large_instance_two_opt_constraints": _large_twoopt_constraints(),
         "route_merge_exception_rule": (
             "Only continue route_merge_repair when the proposal names a causal "
             "path beyond tested variants and defines direct activation-to-objective-effect evidence."
@@ -1196,6 +1213,34 @@ def _cvrp_research_focus() -> dict[str, object]:
             "This focus must not enter DecisionFeatures, Protocol gates, "
             "promotion input, or scheduler state."
         ),
+    }
+
+
+def _large_twoopt_constraints() -> dict[str, object]:
+    return {
+        "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
+        "scope": "proposal_only_prepared_handoff",
+        "seed_report": (
+            "scion/docs/experiments/v0.4/"
+            "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md"
+        ),
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "implementation_constraints": [
+            "derive a deadline from the solver time_limit and monotonic start time",
+            "check wall-clock remaining time before each route and sweep",
+            "do not call unbounded two_opt_intra above the vns_threshold",
+        ],
+        "required_pair_evidence": [
+            "total_distance delta by case and seed",
+            "feasibility before and after",
+            "route count before and after",
+            "wall-clock elapsed status",
+        ],
+        "default_reject_directions": [
+            "unbounded two_opt_intra fallback",
+            "activation claims without wall-clock evidence",
+        ],
     }
 
 

@@ -134,6 +134,31 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
             "measurable_opportunity_classes"
         ]
     )
+    large_twoopt = prepared_manifest["research_focus"][
+        "large_instance_two_opt_constraints"
+    ]
+    assert large_twoopt["schema_version"] == (
+        "scion.cvrp_large_instance_two_opt_constraints.v1"
+    )
+    assert large_twoopt["proposal_visibility_only"] is True
+    assert large_twoopt["decision_features_excluded"] is True
+    assert "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md" in (
+        large_twoopt["seed_report"]
+    )
+    assert any(
+        "deadline" in item and "wall-clock" in item
+        for item in large_twoopt["implementation_constraints"]
+    )
+    assert any(
+        "two_opt_intra" in item and "unbounded" in item
+        for item in large_twoopt["implementation_constraints"]
+    )
+    assert any(
+        "total_distance" in item for item in large_twoopt["required_pair_evidence"]
+    )
+    assert any(
+        "activation" in item for item in large_twoopt["default_reject_directions"]
+    )
     assert "DecisionFeatures" in prepared_manifest["research_focus"][
         "decision_boundary"
     ]
@@ -171,6 +196,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "route-merge absorption" in prepared_manifest_md
     assert "large_instance_intra_route_two_opt_seed" in prepared_manifest_md
     assert "unbounded large-instance two-opt fallback" in prepared_manifest_md
+    assert "Large-instance two-opt constraints" in prepared_manifest_md
+    assert "two_opt_intra" in prepared_manifest_md
     assert f"SCION_DIR={SCION_DIR}" in launch_env
     assert f"PY={sys.executable}" in launch_env
     assert f"PYTHONPATH={SCION_DIR}" in launch_env
@@ -347,6 +374,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert cvrp_checks["cvrp_measurement_handoff_present"]["passed"] is True
     assert cvrp_checks["cvrp_default_avoid_directions_present"]["passed"] is True
     assert cvrp_checks["cvrp_direct_effect_rules_present"]["passed"] is True
+    assert (
+        cvrp_checks["cvrp_large_twoopt_bounded_constraints_present"]["passed"]
+        is True
+    )
     assert cvrp_checks["cvrp_handoff_decision_boundary_present"]["passed"] is True
     assert any(
         "Decision input" in item
@@ -366,6 +397,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "cvrp_default_avoid_handoff",
         "cvrp_large_twoopt_seed_handoff",
         "cvrp_large_twoopt_unbounded_default_avoid_handoff",
+        "cvrp_large_twoopt_bounded_constraints_handoff",
         "cvrp_direct_effect_rules_handoff",
         "cvrp_decision_boundary_handoff",
     ):
@@ -408,6 +440,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         ]
         is True
     )
+    assert (
+        prepared_prompt_context["signals"]["cvrp_large_twoopt_bounded_constraints"][
+            "available"
+        ]
+        is True
+    )
     assert prepared_rebuild["schema_version"] == "scion.prepared_handoff_rebuild.v1"
     assert prepared_rebuild["complete"] is True
     assert prepared_rebuild["families"]["analysis_brief"]["status"] == "ok"
@@ -427,6 +465,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "cvrp_direct_effect_rules_handoff" in brief_text
     assert "cvrp_large_twoopt_seed_handoff" in brief_text
     assert "cvrp_large_twoopt_unbounded_default_avoid_handoff" in brief_text
+    assert "cvrp_large_twoopt_bounded_constraints_handoff" in brief_text
     assert (
         "## Launcher Artifacts"
         in inventory_text
@@ -437,6 +476,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "cvrp_default_avoid_handoff" in inventory_text
     assert "cvrp_large_twoopt_seed_handoff" in inventory_text
     assert "cvrp_large_twoopt_unbounded_default_avoid_handoff" in inventory_text
+    assert "cvrp_large_twoopt_bounded_constraints_handoff" in inventory_text
     assert "copied_campaign_summary" in prompt_context_md.read_text(
         encoding="utf-8"
     )

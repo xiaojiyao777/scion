@@ -100,6 +100,28 @@ CVRP_REQUIRED_DEFAULT_AVOID_TOKENS = (
     "cluster-biased",
     "route-limit",
 )
+CVRP_REQUIRED_LARGE_TWOOPT_IMPLEMENTATION_TOKENS = (
+    "deadline",
+    "wall-clock",
+    "route",
+    "sweep",
+    "unbounded",
+    "two_opt_intra",
+)
+CVRP_REQUIRED_LARGE_TWOOPT_EVIDENCE_TOKENS = (
+    "total_distance",
+    "case",
+    "seed",
+    "feasibility",
+    "route count",
+    "wall-clock",
+)
+CVRP_REQUIRED_LARGE_TWOOPT_REJECT_TOKENS = (
+    "unbounded",
+    "two_opt_intra",
+    "activation",
+    "wall-clock",
+)
 WAREHOUSE_REQUIRED_EVIDENCE_TOKENS = (
     ("promotion behavior",),
     ("branch transfer",),
@@ -965,6 +987,15 @@ def _add_cvrp_measurement_handoff_checks(
             "construction_seed_rule": focus.get("construction_seed_rule"),
         },
     )
+    large_twoopt = _mapping_or_empty(
+        focus.get("large_instance_two_opt_constraints")
+    )
+    large_twoopt_status = _cvrp_large_twoopt_constraint_status(large_twoopt)
+    add_check(
+        "cvrp_large_twoopt_bounded_constraints_present",
+        large_twoopt_status["complete"],
+        large_twoopt_status,
+    )
     boundary = str(focus.get("decision_boundary") or "").lower()
     add_check(
         "cvrp_handoff_decision_boundary_present",
@@ -1489,6 +1520,9 @@ def _cvrp_problem_specific_phase4_requirements(
     route_rule = str(focus.get("route_merge_exception_rule") or "").lower()
     construction_rule = str(focus.get("construction_seed_rule") or "").lower()
     boundary = str(focus.get("decision_boundary") or "").lower()
+    large_twoopt_status = _cvrp_large_twoopt_constraint_status(
+        _mapping_or_empty(focus.get("large_instance_two_opt_constraints"))
+    )
 
     return {
         "cvrp_measurement_mde_handoff": _coverage_item(
@@ -1528,6 +1562,10 @@ def _cvrp_problem_specific_phase4_requirements(
             int(CVRP_UNBOUNDED_LARGE_TWOOPT_DEFAULT_AVOID_TOKEN in avoid_text),
             "prepared_run_manifest cvrp research_focus default_avoid_directions unbounded large-instance two-opt fallback",
         ),
+        "cvrp_large_twoopt_bounded_constraints_handoff": _coverage_item(
+            int(large_twoopt_status["complete"]),
+            "prepared_run_manifest cvrp research_focus large_instance_two_opt_constraints",
+        ),
         "cvrp_direct_effect_rules_handoff": _coverage_item(
             int(
                 "direct" in route_rule
@@ -1546,6 +1584,56 @@ def _cvrp_problem_specific_phase4_requirements(
             ),
             "prepared_run_manifest cvrp research_focus decision_boundary",
         ),
+    }
+
+
+def _cvrp_large_twoopt_constraint_status(
+    constraints: Mapping[str, Any],
+) -> dict[str, Any]:
+    implementation_items = _string_items(constraints.get("implementation_constraints"))
+    evidence_items = _string_items(constraints.get("required_pair_evidence"))
+    reject_items = _string_items(constraints.get("default_reject_directions"))
+    implementation_text = "\n".join(implementation_items).lower()
+    evidence_text = "\n".join(evidence_items).lower()
+    reject_text = "\n".join(reject_items).lower()
+    missing_implementation = [
+        token
+        for token in CVRP_REQUIRED_LARGE_TWOOPT_IMPLEMENTATION_TOKENS
+        if token.lower() not in implementation_text
+    ]
+    missing_evidence = [
+        token
+        for token in CVRP_REQUIRED_LARGE_TWOOPT_EVIDENCE_TOKENS
+        if token.lower() not in evidence_text
+    ]
+    missing_reject = [
+        token
+        for token in CVRP_REQUIRED_LARGE_TWOOPT_REJECT_TOKENS
+        if token.lower() not in reject_text
+    ]
+    complete = (
+        bool(constraints)
+        and constraints.get("proposal_visibility_only") is True
+        and constraints.get("decision_features_excluded") is True
+        and bool(str(constraints.get("seed_report") or "").strip())
+        and not missing_implementation
+        and not missing_evidence
+        and not missing_reject
+    )
+    return {
+        "complete": complete,
+        "schema_version": constraints.get("schema_version"),
+        "seed_report": constraints.get("seed_report"),
+        "proposal_visibility_only": constraints.get("proposal_visibility_only"),
+        "decision_features_excluded": constraints.get(
+            "decision_features_excluded"
+        ),
+        "implementation_constraint_count": len(implementation_items),
+        "required_pair_evidence_count": len(evidence_items),
+        "default_reject_direction_count": len(reject_items),
+        "missing_implementation_tokens": missing_implementation,
+        "missing_evidence_tokens": missing_evidence,
+        "missing_reject_tokens": missing_reject,
     }
 
 

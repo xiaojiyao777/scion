@@ -74,6 +74,51 @@ CVRP_DEFAULT_AVOID_DIRECTIONS = (
     "cluster-biased worst removal",
     "route-limit seed diversification",
 )
+CVRP_LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
+    "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
+    "scope": "proposal_only_prepared_handoff",
+    "seed_report": CVRP_LARGE_INSTANCE_TWO_OPT_SEED_REPORT,
+    "proposal_visibility_only": True,
+    "decision_features_excluded": True,
+    "implementation_constraints": [
+        (
+            "derive an explicit monotonic-clock deadline or remaining-time guard "
+            "from the solver time_limit/start time before any large-instance "
+            "two-opt work"
+        ),
+        (
+            "check remaining wall-clock budget before each route, sweep, and "
+            "accepted improvement; stop cleanly when the deadline is reached"
+        ),
+        (
+            "bound effort with route/sweep/improvement caps and skip oversized "
+            "routes when the remaining budget is too small"
+        ),
+        (
+            "do not call unbounded two_opt_intra or VNS above the vns_threshold; "
+            "use a bounded wrapper or deadline-aware operator"
+        ),
+        (
+            "preserve feasibility, remove empty routes, and report route-count "
+            "changes under max_routes constraints"
+        ),
+    ],
+    "required_pair_evidence": [
+        "total_distance delta by case and seed",
+        "feasibility before and after local search",
+        "route count before and after local search",
+        "elapsed wall-clock plus budget-saturation or timeout status",
+        (
+            "same split, cases, seeds, and time-limit controls as the prepared "
+            "run unless explicit replay controls are documented"
+        ),
+    ],
+    "default_reject_directions": [
+        "unbounded vrp/src/solver.py fallback that calls two_opt_intra without a deadline",
+        "operator activation claims without objective and wall-clock evidence",
+        "route-count regressions without feasibility and objective attribution",
+    ],
+}
 CVRP_CURRENT_RESEARCH_FOCUS = {
     "schema_version": "scion.cvrp_research_focus.v1",
     "scope": "report_only_prepared_handoff",
@@ -106,6 +151,7 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
         ],
     },
     "default_avoid_directions": list(CVRP_DEFAULT_AVOID_DIRECTIONS),
+    "large_instance_two_opt_constraints": CVRP_LARGE_INSTANCE_TWO_OPT_CONSTRAINTS,
     "measurable_opportunity_classes": [
         (
             "construction_seed_portfolio: require same-run seed baseline or "
@@ -682,6 +728,24 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
             lines.append(f"  - {item}")
     else:
         lines.append("  - None recorded in the prepared manifest.")
+    large_twoopt = research_focus.get("large_instance_two_opt_constraints")
+    if isinstance(large_twoopt, dict) and large_twoopt:
+        lines.extend(
+            [
+                "- Large-instance two-opt constraints:",
+                f"  - schema_version: {large_twoopt.get('schema_version')}",
+                f"  - seed_report: {large_twoopt.get('seed_report')}",
+                "  - implementation_constraints:",
+            ]
+        )
+        for item in large_twoopt.get("implementation_constraints") or []:
+            lines.append(f"    - {item}")
+        lines.append("  - required_pair_evidence:")
+        for item in large_twoopt.get("required_pair_evidence") or []:
+            lines.append(f"    - {item}")
+        lines.append("  - default_reject_directions:")
+        for item in large_twoopt.get("default_reject_directions") or []:
+            lines.append(f"    - {item}")
     lines.extend([
         "- Default-avoid directions:",
     ])

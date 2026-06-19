@@ -542,6 +542,7 @@ def _cvrp_research_focus() -> dict[str, object]:
             "cluster-biased worst removal",
             "route-limit seed diversification",
         ],
+        "large_instance_two_opt_constraints": _large_twoopt_constraints(),
         "route_merge_exception_rule": (
             "Only continue route_merge_repair when the proposal names a causal "
             "path beyond tested variants and defines direct activation-to-objective-effect evidence."
@@ -554,6 +555,34 @@ def _cvrp_research_focus() -> dict[str, object]:
             "This focus must not enter DecisionFeatures, Protocol gates, "
             "promotion input, or scheduler state."
         ),
+    }
+
+
+def _large_twoopt_constraints() -> dict[str, object]:
+    return {
+        "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
+        "scope": "proposal_only_prepared_handoff",
+        "seed_report": (
+            "scion/docs/experiments/v0.4/"
+            "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md"
+        ),
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "implementation_constraints": [
+            "derive a deadline from the solver time_limit and monotonic start time",
+            "check wall-clock remaining time before each route and sweep",
+            "do not call unbounded two_opt_intra above the vns_threshold",
+        ],
+        "required_pair_evidence": [
+            "total_distance delta by case and seed",
+            "feasibility before and after",
+            "route count before and after",
+            "wall-clock elapsed status",
+        ],
+        "default_reject_directions": [
+            "unbounded two_opt_intra fallback",
+            "activation claims without wall-clock evidence",
+        ],
     }
 
 

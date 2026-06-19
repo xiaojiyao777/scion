@@ -259,6 +259,34 @@ def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
             }.items()
             if child not in ("", [], {}, None)
         }
+    large_twoopt = value.get("large_instance_two_opt_constraints")
+    if isinstance(large_twoopt, Mapping):
+        projected["large_instance_two_opt_constraints"] = {
+            key: child
+            for key, child in {
+                "schema_version": _string_or_empty(
+                    large_twoopt.get("schema_version")
+                ),
+                "scope": _string_or_empty(large_twoopt.get("scope")),
+                "seed_report": _string_or_empty(large_twoopt.get("seed_report")),
+                "proposal_visibility_only": large_twoopt.get(
+                    "proposal_visibility_only"
+                ),
+                "decision_features_excluded": large_twoopt.get(
+                    "decision_features_excluded"
+                ),
+                "implementation_constraints": _string_items(
+                    large_twoopt.get("implementation_constraints")
+                ),
+                "required_pair_evidence": _string_items(
+                    large_twoopt.get("required_pair_evidence")
+                ),
+                "default_reject_directions": _string_items(
+                    large_twoopt.get("default_reject_directions")
+                ),
+            }.items()
+            if child not in ("", [], {}, None)
+        }
     return projected
 
 

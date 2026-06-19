@@ -528,6 +528,35 @@ def _add_focus_signals(
                 ),
             },
         )
+        large_twoopt = _mapping_or_empty(
+            research_focus.get("large_instance_two_opt_constraints")
+        )
+        implementation_items = _string_items(
+            large_twoopt.get("implementation_constraints")
+        )
+        evidence_items = _string_items(large_twoopt.get("required_pair_evidence"))
+        reject_items = _string_items(large_twoopt.get("default_reject_directions"))
+        _add_signal(
+            signals,
+            "cvrp_large_twoopt_bounded_constraints",
+            available=(
+                bool(large_twoopt)
+                and bool(implementation_items)
+                and bool(evidence_items)
+                and bool(reject_items)
+                and large_twoopt.get("proposal_visibility_only") is True
+                and large_twoopt.get("decision_features_excluded") is True
+            ),
+            required=True,
+            source="prepared_run_manifest.research_focus.large_instance_two_opt_constraints",
+            detail={
+                "schema_version": large_twoopt.get("schema_version"),
+                "seed_report": large_twoopt.get("seed_report"),
+                "implementation_constraint_count": len(implementation_items),
+                "required_pair_evidence_count": len(evidence_items),
+                "default_reject_direction_count": len(reject_items),
+            },
+        )
     elif family == "warehouse_delivery":
         required_evidence = _string_items(research_focus.get("required_evidence"))
         avoid_items = _string_items(research_focus.get("default_avoid_directions"))
