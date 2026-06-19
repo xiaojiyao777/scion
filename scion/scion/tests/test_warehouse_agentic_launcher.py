@@ -214,6 +214,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert '--observed-control-arm "$OBSERVED_CONTROL_ARM"' in run_sh_text
     assert 'OBSERVED_CONTROL_ARM="${MEASUREMENT_GOVERNANCE//-/_}"' in run_sh_text
     assert 'rebuild_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text
+    assert "POSTRUN_REPORTS_EXIT_STATUS:$POSTRUN_STATUS" in run_sh_text
     assert "--agentic-proposal" in command_txt
     assert "--measurement-governance on" in command_txt
     assert "--proposal-context-ablation full" in command_txt

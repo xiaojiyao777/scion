@@ -262,9 +262,11 @@ write_postrun_acceptance_reports() {
   if [[ -n "${CONTROL_PAIR_KEY:-}" ]]; then
     rebuild_args+=(--control-pair-key "$CONTROL_PAIR_KEY")
   fi
+  POSTRUN_STATUS=0
   "$PY" "$SCION_DIR/tools/rebuild_postrun_acceptance.py" \
-    "${rebuild_args[@]}" >> "$RUN_ROOT/run.log" 2>&1 || true
+    "${rebuild_args[@]}" >> "$RUN_ROOT/run.log" 2>&1 || POSTRUN_STATUS=$?
   {
+    echo "POSTRUN_REPORTS_EXIT_STATUS:$POSTRUN_STATUS"
     echo "POSTRUN_REPORTS_FINISHED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   } >> "$RUN_ROOT/run.log"
 }

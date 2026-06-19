@@ -44,6 +44,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
                 "POSTRUN_REPORTS_STARTED_AT:2026-06-18T00:00:00Z",
                 "POSTRUN_REPORT_DIR:/tmp/run-a/postrun_acceptance",
                 "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED:expected=a actual=b paths=docs",
+                "POSTRUN_REPORTS_EXIT_STATUS:0",
                 "POSTRUN_REPORTS_FINISHED_AT:2026-06-18T00:01:00Z",
             ]
         ),
@@ -300,6 +301,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert data["launcher"]["run_log_markers"] == {
         "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED": 1,
         "POSTRUN_REPORT_DIR": 1,
+        "POSTRUN_REPORTS_EXIT_STATUS": 1,
         "POSTRUN_REPORTS_FINISHED_AT": 1,
         "POSTRUN_REPORTS_STARTED_AT": 1,
     }
