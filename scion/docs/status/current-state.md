@@ -102,6 +102,10 @@ CVRP/VRP:
   prepare-only, required answers focus on launch/readiness/handoff rather than
   research-quality or bounded-twoopt conclusions; the CVRP specialist review
   axes are marked deferred until post-launch current-run evidence exists.
+- Postrun bounded two-opt review readiness now requires a large/two-opt
+  protocol-effect row signal in measurement evidence. Research-continuity family
+  mentions remain context only and cannot by themselves make the two-opt
+  follow-up review-ready.
 
 Infrastructure:
 
@@ -140,7 +144,8 @@ Infrastructure:
    plateau-review-ready.
 4. For CVRP postrun review, inspect target intent, bounded two-opt mechanism
    design, branch-lesson transfer, effect-vs-MDE, runtime budget behavior,
-   source visibility, and research-efficiency artifacts.
+   source visibility, and research-efficiency artifacts. Continuity-only
+   two-opt family mentions are not enough; require protocol/effect row evidence.
 5. Keep this file short. Update it only when the operating truth or next action
    changes.
 
@@ -162,6 +167,7 @@ Infrastructure:
   checking strict postrun readiness markers in generated `run.sh`.
 - Current repair context:
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-protocol-signal-postrun-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-readiness-checker-20260619.md`,

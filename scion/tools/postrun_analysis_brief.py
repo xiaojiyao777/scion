@@ -3711,14 +3711,16 @@ def _cvrp_large_twoopt_mechanism_signal(
     measurement_effect_summary: Mapping[str, Any],
     research_continuity_summary: Mapping[str, Any],
 ) -> dict[str, Any]:
-    families: set[str] = set()
+    protocol_families: set[str] = set()
+    continuity_families: set[str] = set()
     protocol_rows = 0
+    top_row_signal_count = 0
     measurement = _mapping_or_empty(measurement_effect_summary.get("aggregate"))
     family_effects = _mapping_or_empty(measurement.get("mechanism_family_effects"))
     for family, payload in sorted(family_effects.items()):
         if not _is_cvrp_large_twoopt_family(str(family)):
             continue
-        families.add(str(family))
+        protocol_families.add(str(family))
         protocol_rows += _int_or_zero(
             _mapping_or_empty(payload).get("protocol_row_count")
         )
@@ -3736,19 +3738,26 @@ def _cvrp_large_twoopt_mechanism_signal(
                     continue
                 family = str(row.get("mechanism_family") or "")
                 if _is_cvrp_large_twoopt_family(family):
-                    families.add(family)
+                    protocol_families.add(family)
+                    top_row_signal_count += 1
     continuity = _mapping_or_empty(research_continuity_summary.get("aggregate"))
     family_counts = _mapping_or_empty(continuity.get("mechanism_family_counts"))
     for family in family_counts:
         if _is_cvrp_large_twoopt_family(str(family)):
-            families.add(str(family))
+            continuity_families.add(str(family))
+    families = sorted(protocol_families | continuity_families)
+    protocol_signal_rows = max(protocol_rows, top_row_signal_count)
     return {
-        "available": bool(families),
-        "families": sorted(families),
-        "protocol_row_count": protocol_rows,
+        "available": bool(protocol_families) and protocol_signal_rows > 0,
+        "families": families,
+        "protocol_families": sorted(protocol_families),
+        "continuity_families": sorted(continuity_families),
+        "protocol_row_count": protocol_signal_rows,
+        "top_row_signal_count": top_row_signal_count,
         "source": (
-            "measurement_effect_summary.mechanism_family_effects and "
-            "research_continuity_summary.mechanism_family_counts"
+            "measurement_effect_summary.mechanism_family_effects for protocol "
+            "effect evidence; research_continuity_summary.mechanism_family_counts "
+            "is context only"
         ),
     }
 

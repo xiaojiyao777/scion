@@ -261,9 +261,12 @@ Current checkpoint:
   requires the matching warehouse/CVRP problem-specific summary before a current
   run can be called `current_run_analysis_ready=true`; launchers propagate that
   readiness result into `POSTRUN_READINESS_EXIT_STATUS`, and launch readiness
-  rejects prepared scripts that omit the strict marker path. This does not
-  change Decision, `DecisionFeatures`, Protocol gates, promotion, scheduler
-  state, or solver behavior.
+  rejects prepared scripts that omit the strict marker path. CVRP bounded
+  two-opt review readiness also requires a large/two-opt protocol-effect row
+  signal in measurement evidence; continuity-only family mentions remain
+  context, not mechanism-effect evidence. This does not change Decision,
+  `DecisionFeatures`, Protocol gates, promotion, scheduler state, or solver
+  behavior.
 - Current launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`.
 - Current operational truth lives in `scion/docs/status/current-state.md`.
