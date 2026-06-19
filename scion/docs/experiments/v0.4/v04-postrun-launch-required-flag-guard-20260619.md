@@ -4,9 +4,10 @@ Date: 2026-06-19
 
 ## Purpose
 
-Postrun delegated review can now reject a contradictory problem-specific
-summary that claims current-run review actionability while still saying launch
-is required before a plateau or bounded two-opt conclusion.
+Postrun delegated review can now reject a contradictory or incomplete
+problem-specific summary that claims current-run review actionability without
+explicitly clearing the launch-required flag before a plateau or bounded two-opt
+conclusion.
 
 This is a report-only readiness guard. It does not feed `DecisionFeatures`,
 Protocol gates, promotion, scheduler state, or solver behavior.
@@ -14,12 +15,13 @@ Protocol gates, promotion, scheduler state, or solver behavior.
 ## Change
 
 `check_postrun_acceptance.py` now marks `problem_summary_actionability=failed`
-when:
+unless current-run problem summaries explicitly set their launch-required field
+to `false`:
 
 - `warehouse_followup_summary.current_run_evidence=true` and
-  `launch_required_before_plateau_conclusion=true`; or
+  `launch_required_before_plateau_conclusion` is not `false`; or
 - `cvrp_large_twoopt_summary.current_run_evidence=true` and
-  `launch_required_before_twoopt_conclusion=true`.
+  `launch_required_before_twoopt_conclusion` is not `false`.
 
 The readiness detail reports the exact stale launch-required field so a
 delegated reviewer can distinguish a stale/prepared-only summary from a
@@ -33,33 +35,45 @@ Local focused verification:
 
 Result: `42 passed in 35.73s`.
 
+After tightening missing-field behavior:
+
+`PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_check_postrun_acceptance.py`
+
+Result: `42 passed in 32.27s`.
+
 WSL focused verification:
 
 `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q scion/scion/tests/test_check_postrun_acceptance.py`
 
 Result: `42 passed in 22.20s`.
 
+After tightening missing-field behavior:
+
+`PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q scion/scion/tests/test_check_postrun_acceptance.py`
+
+Result: `42 passed in 22.34s`.
+
 ## Prepared Root Refresh
 
 The repair touched `scion/tools`, which is covered by the warehouse and CVRP
-runtime guards. The previous proxy-format prepared roots were superseded and
-new roots were regenerated on WSL runtime commit `c91b4cec`.
+runtime guards. The previous prepared roots were superseded and new roots were
+regenerated on WSL runtime commit `567a29dd`.
 
 Warehouse WSL root:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-launchflag-c91b4cec-preflight-6r-gpt55-20260619T215212Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-explicitlaunch-567a29dd-preflight-6r-gpt55-20260619T220040Z-claw`
 
 Warehouse local mirror:
 
-`/home/clawd/research/scion-experiments/v04-warehouse-v2-followup-launchflag-c91b4cec-preflight-6r-gpt55-20260619T215212Z-claw`
+`/home/clawd/research/scion-experiments/v04-warehouse-v2-followup-explicitlaunch-567a29dd-preflight-6r-gpt55-20260619T220040Z-claw`
 
 CVRP WSL root:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-launchflag-c91b4cec-preflight-4r-gpt55-20260619T215214Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-explicitlaunch-567a29dd-preflight-4r-gpt55-20260619T220040Z-claw`
 
 CVRP local mirror:
 
-`/home/clawd/research/scion-experiments/v04-cvrp-large-twoopt-phase4-launchflag-c91b4cec-preflight-4r-gpt55-20260619T215214Z-claw`
+`/home/clawd/research/scion-experiments/v04-cvrp-large-twoopt-phase4-explicitlaunch-567a29dd-preflight-4r-gpt55-20260619T220040Z-claw`
 
 Strict readiness for both regenerated roots reports:
 
