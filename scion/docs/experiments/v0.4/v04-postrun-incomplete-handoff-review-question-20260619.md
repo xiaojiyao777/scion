@@ -84,3 +84,8 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 Accepted as the current postrun auditability and prepared-root refresh. Once
 `gpt-5.5` auth is restored and strict launch readiness reports
 `launch_ready=true`, these are the current warehouse and CVRP roots to launch.
+
+The roots from WSL checkout `016bb39` were later superseded by
+`scion/docs/experiments/v0.4/v04-postrun-problem-specific-review-question-filter-20260619.md`,
+after required review questions became problem-specific and the roots were
+regenerated from WSL checkout `44f78e9`.
