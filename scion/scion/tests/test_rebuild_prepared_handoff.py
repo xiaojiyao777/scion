@@ -250,6 +250,22 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
         "prepared_manifest_exists": True,
         "run_sh_exports_manifest": True,
     }
+    code_bridge = prompt_context["signals"][
+        "cvrp_active_subject_code_constraints_prompt_bridge"
+    ]
+    assert code_bridge["available"] is True
+    assert code_bridge["required"] is True
+    assert code_bridge["runtime_generated_after_launch"] is False
+    assert code_bridge["detail"]["source_markers"] == {
+        "code_prompt_renderer": True,
+        "context_key": True,
+        "context_provider_payload": True,
+    }
+    assert code_bridge["detail"]["provider_markers"] == {
+        "large_twoopt_runtime_guard": True,
+        "provider_hook": True,
+        "unbounded_twoopt_reject": True,
+    }
     assert (
         prompt_context["signals"]["cvrp_measurement_opportunity_handoff"][
             "available"

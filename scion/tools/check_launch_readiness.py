@@ -38,6 +38,34 @@ LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS = {
         "launch_research_focus",
     ),
 }
+ACTIVE_SUBJECT_CODE_CONSTRAINT_PROMPT_MARKERS = {
+    "context_provider_payload": (
+        "scion/scion/proposal/context_manager/manager.py",
+        "active_subject_code_constraints_payload(",
+    ),
+    "context_key": (
+        "scion/scion/proposal/context_manager/manager.py",
+        "active_subject_code_constraints",
+    ),
+    "code_prompt_renderer": (
+        "scion/scion/proposal/engine/code_prompts.py",
+        "Active Subject Code Constraints",
+    ),
+}
+CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS = {
+    "provider_hook": (
+        "scion/scion/problems/cvrp/solver_design_provider.py",
+        "def active_subject_code_constraints",
+    ),
+    "large_twoopt_runtime_guard": (
+        "scion/scion/problems/cvrp/solver_design_provider.py",
+        "large_instance_two_opt_runtime_guard",
+    ),
+    "unbounded_twoopt_reject": (
+        "scion/scion/problems/cvrp/solver_design_provider.py",
+        "UNBOUNDED_TWO_OPT_DEFAULT_REJECT",
+    ),
+}
 PROBLEM_SPECIFIC_CONTRACT_PREFIXES = {
     "cvrp": ("cvrp_",),
     "warehouse_delivery": ("warehouse_",),
@@ -878,6 +906,14 @@ def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:
             and _path_contains(root / "run.sh", "scion.cli.main run"),
         },
     }
+    if manifest_dict.get("problem_family") == "cvrp":
+        live_markers["cvrp_active_subject_code_constraint_source_markers"] = {
+            name: _repo_path_contains(relative_path, marker)
+            for name, (relative_path, marker) in (
+                ACTIVE_SUBJECT_CODE_CONSTRAINT_PROMPT_MARKERS
+                | CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS
+            ).items()
+        }
     detail["live_markers"] = live_markers
     missing_live = [
         f"{group}.{name}"
@@ -1014,6 +1050,66 @@ def _prompt_context_artifact_failures(
                     "missing": missing or ["<all>"],
                 }
             )
+
+    if manifest.get("problem_family") == "cvrp":
+        code_bridge = signals_dict.get(
+            "cvrp_active_subject_code_constraints_prompt_bridge"
+        )
+        if not isinstance(code_bridge, dict):
+            failures.append(
+                {
+                    "reason": (
+                        "cvrp_active_subject_code_constraints_bridge_missing"
+                    )
+                }
+            )
+        else:
+            if code_bridge.get("required") is not True:
+                failures.append(
+                    {
+                        "reason": (
+                            "cvrp_active_subject_code_constraints_bridge_not_required"
+                        ),
+                        "required": code_bridge.get("required"),
+                    }
+                )
+            if code_bridge.get("available") is not True:
+                failures.append(
+                    {
+                        "reason": (
+                            "cvrp_active_subject_code_constraints_bridge_unavailable"
+                        ),
+                        "available": code_bridge.get("available"),
+                    }
+                )
+            if code_bridge.get("runtime_generated_after_launch") is True:
+                failures.append(
+                    {
+                        "reason": (
+                            "cvrp_active_subject_code_constraints_bridge_runtime_generated"
+                        )
+                    }
+                )
+            code_detail = code_bridge.get("detail")
+            code_detail_dict = code_detail if isinstance(code_detail, dict) else {}
+            for group in ("source_markers", "provider_markers"):
+                markers = code_detail_dict.get(group)
+                markers_dict = markers if isinstance(markers, dict) else {}
+                missing = [
+                    name
+                    for name, available in markers_dict.items()
+                    if available is not True
+                ]
+                if not markers_dict or missing:
+                    failures.append(
+                        {
+                            "reason": (
+                                "cvrp_active_subject_code_constraints_bridge_"
+                                f"{group}_missing"
+                            ),
+                            "missing": missing or ["<all>"],
+                        }
+                    )
 
     return failures
 

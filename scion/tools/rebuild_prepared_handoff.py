@@ -67,6 +67,34 @@ LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS = {
         "launch_research_focus",
     ),
 }
+ACTIVE_SUBJECT_CODE_CONSTRAINT_PROMPT_MARKERS = {
+    "context_provider_payload": (
+        "scion/scion/proposal/context_manager/manager.py",
+        "active_subject_code_constraints_payload(",
+    ),
+    "context_key": (
+        "scion/scion/proposal/context_manager/manager.py",
+        "active_subject_code_constraints",
+    ),
+    "code_prompt_renderer": (
+        "scion/scion/proposal/engine/code_prompts.py",
+        "Active Subject Code Constraints",
+    ),
+}
+CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS = {
+    "provider_hook": (
+        "scion/scion/problems/cvrp/solver_design_provider.py",
+        "def active_subject_code_constraints",
+    ),
+    "large_twoopt_runtime_guard": (
+        "scion/scion/problems/cvrp/solver_design_provider.py",
+        "large_instance_two_opt_runtime_guard",
+    ),
+    "unbounded_twoopt_reject": (
+        "scion/scion/problems/cvrp/solver_design_provider.py",
+        "UNBOUNDED_TWO_OPT_DEFAULT_REJECT",
+    ),
+}
 
 
 def rebuild_prepared_handoff(
@@ -351,6 +379,10 @@ def build_prepared_prompt_context_readiness(run_root: Path | str) -> dict[str, A
         signals,
         root=root,
         required=bool(research_focus),
+    )
+    _add_active_subject_code_constraints_prompt_signal(
+        signals,
+        problem_family=manifest_dict.get("problem_family"),
     )
 
     missing_required = [
@@ -718,6 +750,48 @@ def _add_launch_research_focus_prompt_signal(
         detail={
             "source_markers": source_marker_results,
             "launch_markers": launch_marker_results,
+        },
+    )
+
+
+def _add_active_subject_code_constraints_prompt_signal(
+    signals: dict[str, dict[str, Any]],
+    *,
+    problem_family: Any,
+) -> None:
+    if problem_family != "cvrp":
+        return
+    source_marker_results = {
+        name: _source_contains(relative_path, marker)
+        for name, (relative_path, marker) in (
+            ACTIVE_SUBJECT_CODE_CONSTRAINT_PROMPT_MARKERS.items()
+        )
+    }
+    provider_marker_results = {
+        name: _source_contains(relative_path, marker)
+        for name, (relative_path, marker) in (
+            CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS.items()
+        )
+    }
+    _add_signal(
+        signals,
+        "cvrp_active_subject_code_constraints_prompt_bridge",
+        available=(
+            all(source_marker_results.values())
+            and all(provider_marker_results.values())
+        ),
+        required=True,
+        source=(
+            "current checkout CVRP active subject code constraint provider plus "
+            "code prompt renderer"
+        ),
+        detail={
+            "source_markers": source_marker_results,
+            "provider_markers": provider_marker_results,
+            "boundary": (
+                "report-only source bridge; provider constraints guide code "
+                "generation and stay out of DecisionFeatures"
+            ),
         },
     )
 

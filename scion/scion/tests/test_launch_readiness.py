@@ -390,6 +390,34 @@ def test_launch_readiness_rejects_prompt_context_artifact_identity_mismatch(
     )
 
 
+def test_launch_readiness_rejects_missing_cvrp_code_constraint_bridge(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    artifact_path = (
+        run_root
+        / "prepared_handoff"
+        / "prompt_context_readiness"
+        / "cvrp_on_full.prepared_prompt_context_readiness.v1.json"
+    )
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["signals"].pop("cvrp_active_subject_code_constraints_prompt_bridge")
+    artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert any(
+        failure["reason"] == (
+            "cvrp_active_subject_code_constraints_bridge_missing"
+        )
+        for failure in prompt_check["detail"]["failures"]
+    )
+
+
 def test_launch_readiness_keeps_static_ready_when_completion_preflight_fails(
     tmp_path: Path,
     monkeypatch,
@@ -1077,6 +1105,24 @@ def _write_prompt_context_readiness(
                             "context_payload": True,
                             "manifest_env_reader": True,
                             "prompt_renderer": True,
+                        },
+                    },
+                    "required": True,
+                    "runtime_generated_after_launch": False,
+                    "source": "fixture",
+                },
+                "cvrp_active_subject_code_constraints_prompt_bridge": {
+                    "available": True,
+                    "detail": {
+                        "provider_markers": {
+                            "large_twoopt_runtime_guard": True,
+                            "provider_hook": True,
+                            "unbounded_twoopt_reject": True,
+                        },
+                        "source_markers": {
+                            "code_prompt_renderer": True,
+                            "context_key": True,
+                            "context_provider_payload": True,
                         },
                     },
                     "required": True,
