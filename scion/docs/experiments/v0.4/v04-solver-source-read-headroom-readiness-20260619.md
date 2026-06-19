@@ -81,7 +81,7 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 Result: `142 passed in 77.42s`; `65 passed in 1.08s`.
 
-## Prepared Roots
+## Initial Prepared Roots
 
 Warehouse:
 
@@ -90,6 +90,10 @@ Warehouse:
 CVRP:
 
 `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-sourceheadroom-cf8fb5a7-preflight-1r-gpt55-20260619T210116Z-claw`
+
+The CVRP 1R root above was a source-headroom diagnostic root. It has been
+superseded for Phase 4 launch by the 4R root documented in
+`scion/docs/experiments/v0.4/v04-cvrp-phase4-four-round-root-readiness-20260619.md`.
 
 Both roots report:
 
