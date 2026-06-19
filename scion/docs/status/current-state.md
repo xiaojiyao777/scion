@@ -102,6 +102,11 @@ Prepared manifests record:
 - CVRP bounded two-opt postrun review readiness requires co-located positive
   effect, activation, objective-effect, and two-opt-specific phase telemetry on
   the same matching top effect row.
+- Warehouse protocol-evaluated follow-up review distinguishes positive
+  at-or-above-MDE effects from plateau-consistent no-positive-MDE effects.
+  Plateau-ready summaries require the measurement signal to be
+  plateau-consistent, while positive measurement effects route to
+  continuous-improvement review instead of being mislabeled as plateau.
 
 ## Warehouse
 
@@ -137,10 +142,10 @@ Prepared manifests record:
 2. Run warehouse `v2` follow-up first as the simpler continuous-improvement
    proof. Then run the CVRP large-two-opt follow-up.
 3. After warehouse launch, classify the result as taxonomy-backed
-   quality-blocked, protocol-evaluated no-effect/plateau, or missed continuity
-   opportunity. Only protocol-evaluated plateau conclusions can use
-   measurement-effect, runtime-feedback, and substantive continuity as plateau
-   evidence.
+   quality-blocked, protocol-evaluated positive-effect opportunity,
+   protocol-evaluated no-effect/plateau, or missed continuity opportunity.
+   Only protocol-evaluated plateau conclusions can use measurement-effect,
+   runtime-feedback, and substantive continuity as plateau evidence.
 4. After CVRP launch, inspect target intent, bounded two-opt mechanism design,
    branch-lesson transfer, effect-vs-MDE, runtime budget behavior, source
    visibility, and research-efficiency artifacts.
@@ -164,6 +169,7 @@ Prepared manifests record:
   `scion/docs/experiments/v0.4/v04-launch-readiness-failed-check-summary-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-readiness-failed-check-summary-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-warehouse-positive-effect-plateau-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-measurement-note-root-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-phase4-four-round-root-readiness-20260619.md`
   and

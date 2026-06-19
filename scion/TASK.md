@@ -94,6 +94,9 @@ For warehouse, effective research requires:
 - Existing promotion behavior does not regress.
 - Repeated campaigns distinguish real plateau from missed continuous-promotion
   opportunities.
+- Protocol-evaluated positive effects at or above MDE must be routed as
+  continuous-improvement review opportunities, not mislabeled as plateau-ready
+  evidence.
 - Runtime configuration and observed fast completion are explained by the
   problem/runtime model rather than treated as incidental noise.
 - Branch transfer and prompt context are inspected, not inferred from final

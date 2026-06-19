@@ -2443,6 +2443,67 @@ def test_postrun_acceptance_rejects_warehouse_ready_summary_without_realized_inp
     assert "review_input_warehouse_continuity_not_substantive" in failures
 
 
+def test_postrun_acceptance_rejects_warehouse_plateau_ready_with_positive_measurement_effect(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-positive-plateau")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    _add_prompt_source_visibility_summary(brief)
+    evidence = _warehouse_problem_evidence()
+    evidence["measurement_effect"].update(
+        {
+            "rows_at_or_above_mde": 1,
+            "rows_with_ci_high_below_mde": 0,
+            "max_effect_to_mde_ratio": 1.2,
+            "interpretation_counts": {"above_mde": 1},
+            "effect_signal": "positive_effect_at_or_above_mde",
+            "positive_effect_at_or_above_mde": True,
+            "plateau_consistent": False,
+            "all_ci_high_below_mde": False,
+        }
+    )
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": evidence,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    brief["measurement_effect_summary"]["aggregate"].update(
+        {
+            "interpretation_counts": {"above_mde": 1},
+            "rows_at_or_above_mde": 1,
+            "rows_with_ci_high_below_mde": 0,
+            "max_effect_to_mde_ratio": 1.2,
+        }
+    )
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    consistency = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert consistency["status"] == "failed"
+    failures = consistency["detail"]["failures"]
+    assert "review_input_warehouse_measurement_not_plateau_consistent" in failures
+    assert "review_input_warehouse_positive_effect_not_plateau" in failures
+
+
 def test_postrun_acceptance_readiness_rejects_missing_bundle(
     tmp_path: Path,
 ) -> None:
@@ -3184,6 +3245,10 @@ def _warehouse_problem_evidence() -> dict[str, object]:
             "rows_with_ci_high_below_mde": 1,
             "max_effect_to_mde_ratio": 0.25,
             "interpretation_counts": {"below_mde": 1},
+            "effect_signal": "ci_high_below_mde_plateau_consistent",
+            "positive_effect_at_or_above_mde": False,
+            "plateau_consistent": True,
+            "all_ci_high_below_mde": True,
         },
         "quality_blocks": {
             "proposal_quality_blocks": 0,

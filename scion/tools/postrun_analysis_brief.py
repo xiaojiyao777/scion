@@ -1258,6 +1258,10 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 f"{_display(measurement.get('rows_at_or_above_mde'))} / "
                 f"{_display(measurement.get('rows_with_ci_high_below_mde'))} / "
                 f"{_display(measurement.get('max_effect_to_mde_ratio'))}",
+                "- Measurement signal / plateau-consistent / positive-at-MDE: "
+                f"{_display(measurement.get('effect_signal'))} / "
+                f"{_display(measurement.get('plateau_consistent'))} / "
+                f"{_display(measurement.get('positive_effect_at_or_above_mde'))}",
                 "- Quality-block signal: "
                 f"{_display(quality.get('proposal_quality_blocks'))} / "
                 f"{_display(quality.get('quality_blocks'))} / "
@@ -4546,6 +4550,9 @@ def _warehouse_followup_summary(
         _int_or_zero(counters.get("protocol_evaluated_candidates")),
     )
     measurement = _mapping_or_empty(measurement_effect_summary.get("aggregate"))
+    measurement_signal = _warehouse_followup_measurement_signal(
+        measurement_effect_summary
+    )
     runtime = _mapping_or_empty(runtime_feedback_summary.get("aggregate"))
     fresh_runtime = _mapping_or_empty(runtime.get("fresh_runtime_replay_drain"))
     stage_drain = _mapping_or_empty(runtime.get("stage_transition_drain"))
@@ -4589,6 +4596,7 @@ def _warehouse_followup_summary(
             "interpretation_counts": _int_mapping(
                 measurement.get("interpretation_counts")
             ),
+            **measurement_signal,
         },
         "quality_blocks": {
             "proposal_quality_blocks": _int_or_zero(
@@ -4646,6 +4654,10 @@ def _warehouse_followup_summary(
         formal_screened_candidates=formal_screened_candidates,
         quality_block_signal=quality_block_signal,
         measurement_available=measurement_effect_summary.get("available") is True,
+        measurement_plateau_consistent=measurement_signal["plateau_consistent"],
+        measurement_positive_effect_at_or_above_mde=measurement_signal[
+            "positive_effect_at_or_above_mde"
+        ],
         runtime_available=runtime_available,
         continuity_available=research_continuity_summary.get("available") is True,
         continuity_substantive=continuity_signal["substantive"],
@@ -4665,6 +4677,10 @@ def _warehouse_followup_summary(
             protocol_evaluated_candidates=protocol_evaluated_candidates,
             quality_block_signal=quality_block_signal,
             measurement_available=measurement_effect_summary.get("available") is True,
+            measurement_plateau_consistent=measurement_signal["plateau_consistent"],
+            measurement_positive_effect_at_or_above_mde=measurement_signal[
+                "positive_effect_at_or_above_mde"
+            ],
             runtime_available=runtime_available,
             continuity_available=research_continuity_summary.get("available") is True,
             continuity_substantive=continuity_signal["substantive"],
@@ -4703,6 +4719,48 @@ def _warehouse_handoff_requirements(
             "contract_detail": check.get("detail"),
         }
     return requirements
+
+
+def _warehouse_followup_measurement_signal(
+    measurement_effect_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    aggregate = _mapping_or_empty(measurement_effect_summary.get("aggregate"))
+    available = measurement_effect_summary.get("available") is True
+    protocol_row_count = _int_or_zero(aggregate.get("protocol_row_count"))
+    rows_at_or_above_mde = _int_or_zero(aggregate.get("rows_at_or_above_mde"))
+    rows_with_ci_high_below_mde = _int_or_zero(
+        aggregate.get("rows_with_ci_high_below_mde")
+    )
+    positive_effect_at_or_above_mde = (
+        available and protocol_row_count > 0 and rows_at_or_above_mde > 0
+    )
+    plateau_consistent = (
+        available
+        and protocol_row_count > 0
+        and rows_at_or_above_mde <= 0
+    )
+    if not available:
+        effect_signal = "measurement_unavailable"
+    elif protocol_row_count <= 0:
+        effect_signal = "no_protocol_effect_rows"
+    elif positive_effect_at_or_above_mde:
+        effect_signal = "positive_effect_at_or_above_mde"
+    elif rows_with_ci_high_below_mde >= protocol_row_count:
+        effect_signal = "ci_high_below_mde_plateau_consistent"
+    elif rows_with_ci_high_below_mde > 0:
+        effect_signal = "partial_ci_high_below_mde_plateau_consistent"
+    else:
+        effect_signal = "no_positive_mde_effect_plateau_consistent"
+    return {
+        "effect_signal": effect_signal,
+        "positive_effect_at_or_above_mde": positive_effect_at_or_above_mde,
+        "plateau_consistent": plateau_consistent,
+        "all_ci_high_below_mde": (
+            available
+            and protocol_row_count > 0
+            and rows_with_ci_high_below_mde >= protocol_row_count
+        ),
+    }
 
 
 def _warehouse_followup_continuity_signal(
@@ -4744,6 +4802,8 @@ def _warehouse_followup_interpretation(
     formal_screened_candidates: int,
     quality_block_signal: int,
     measurement_available: bool,
+    measurement_plateau_consistent: bool,
+    measurement_positive_effect_at_or_above_mde: bool,
     runtime_available: bool,
     continuity_available: bool,
     continuity_substantive: bool,
@@ -4761,6 +4821,10 @@ def _warehouse_followup_interpretation(
             and continuity_available
         ):
             return "protocol_evaluated_review_inputs_incomplete"
+        if measurement_positive_effect_at_or_above_mde:
+            return "protocol_evaluated_positive_effect_review_ready"
+        if not measurement_plateau_consistent:
+            return "protocol_evaluated_measurement_effect_inconclusive"
         if not continuity_substantive:
             return "protocol_evaluated_research_continuity_too_shallow"
         return "protocol_evaluated_plateau_review_ready"
@@ -4779,6 +4843,8 @@ def _warehouse_followup_evidence_gaps(
     protocol_evaluated_candidates: int,
     quality_block_signal: int,
     measurement_available: bool,
+    measurement_plateau_consistent: bool,
+    measurement_positive_effect_at_or_above_mde: bool,
     runtime_available: bool,
     continuity_available: bool,
     continuity_substantive: bool,
@@ -4799,11 +4865,22 @@ def _warehouse_followup_evidence_gaps(
             gaps.append("no_protocol_evaluated_candidates")
     if not measurement_available:
         gaps.append("missing_measurement_effect_summary")
+    elif (
+        protocol_evaluated_candidates > 0
+        and not measurement_plateau_consistent
+        and not measurement_positive_effect_at_or_above_mde
+    ):
+        gaps.append("warehouse_measurement_effect_inconclusive")
     if not runtime_available:
         gaps.append("missing_runtime_feedback_summary")
     if not continuity_available:
         gaps.append("missing_research_continuity_summary")
-    elif protocol_evaluated_candidates > 0 and not continuity_substantive:
+    elif (
+        protocol_evaluated_candidates > 0
+        and measurement_plateau_consistent
+        and not measurement_positive_effect_at_or_above_mde
+        and not continuity_substantive
+    ):
         gaps.append("warehouse_research_continuity_evidence_too_shallow")
     return gaps
 

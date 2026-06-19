@@ -20,6 +20,7 @@ from postrun_analysis_brief import (  # noqa: E402
     _champion_progress_summary,
     _cvrp_large_twoopt_mechanism_signal,
     _warehouse_followup_continuity_signal,
+    _warehouse_followup_measurement_signal,
 )
 
 
@@ -68,7 +69,9 @@ FAILURE_TAXONOMY_SCHEMA = "scion.postrun_failure_taxonomy_summary.v1"
 PROBLEM_SUMMARY_DELEGATED_INTERPRETATIONS = {
     "warehouse_followup_summary": {
         "quality_blocked_no_protocol_plateau_conclusion",
+        "protocol_evaluated_measurement_effect_inconclusive",
         "protocol_evaluated_plateau_review_ready",
+        "protocol_evaluated_positive_effect_review_ready",
         "protocol_evaluated_research_continuity_too_shallow",
     },
     "cvrp_large_twoopt_summary": {
@@ -1122,6 +1125,11 @@ def _problem_summary_input_consistency(
         measurement_aggregate.get("protocol_row_count")
     ):
         failures.append("problem_summary_measurement_protocol_rows_mismatch")
+    for field in ("rows_at_or_above_mde", "rows_with_ci_high_below_mde"):
+        if _int_or_zero(measurement_evidence.get(field)) != _int_or_zero(
+            measurement_aggregate.get(field)
+        ):
+            failures.append(f"problem_summary_measurement_{field}_mismatch")
     runtime_ready = runtime_summary.get("review_ready") is True
     runtime_evidence_ready = (
         runtime_evidence.get("review_ready")
@@ -1150,8 +1158,31 @@ def _problem_summary_input_consistency(
     ):
         failures.append("warehouse_plateau_continuity_not_substantive")
     input_large_twoopt_signal: dict[str, Any] = {}
+    input_warehouse_measurement_signal: dict[str, Any] = {}
     input_warehouse_continuity_signal: dict[str, Any] = {}
     if problem_family == "warehouse_delivery":
+        input_warehouse_measurement_signal = _warehouse_followup_measurement_signal(
+            measurement_summary
+        )
+        for field in (
+            "effect_signal",
+            "positive_effect_at_or_above_mde",
+            "plateau_consistent",
+            "all_ci_high_below_mde",
+        ):
+            if not _is_protocol_evaluated_interpretation(interpretation):
+                continue
+            summary_value = measurement_evidence.get(field)
+            input_value = input_warehouse_measurement_signal.get(field)
+            if isinstance(input_value, bool):
+                if summary_value is not input_value:
+                    failures.append(
+                        f"problem_summary_warehouse_measurement_{field}_mismatch"
+                    )
+            elif str(summary_value or "") != str(input_value or ""):
+                failures.append(
+                    f"problem_summary_warehouse_measurement_{field}_mismatch"
+                )
         input_warehouse_continuity_signal = _warehouse_followup_continuity_signal(
             continuity_summary
         )
@@ -1177,8 +1208,44 @@ def _problem_summary_input_consistency(
                     f"problem_summary_warehouse_continuity_{field}_mismatch"
                 )
         if interpretation == "protocol_evaluated_plateau_review_ready":
+            if (
+                input_warehouse_measurement_signal.get("plateau_consistent")
+                is not True
+            ):
+                failures.append(
+                    "review_input_warehouse_measurement_not_plateau_consistent"
+                )
+            if (
+                input_warehouse_measurement_signal.get(
+                    "positive_effect_at_or_above_mde"
+                )
+                is True
+            ):
+                failures.append("review_input_warehouse_positive_effect_not_plateau")
             if input_warehouse_continuity_signal.get("substantive") is not True:
                 failures.append("review_input_warehouse_continuity_not_substantive")
+        if interpretation == "protocol_evaluated_positive_effect_review_ready":
+            if (
+                input_warehouse_measurement_signal.get(
+                    "positive_effect_at_or_above_mde"
+                )
+                is not True
+            ):
+                failures.append("review_input_warehouse_positive_effect_missing")
+        if interpretation == "protocol_evaluated_measurement_effect_inconclusive":
+            if input_warehouse_measurement_signal.get("plateau_consistent") is True:
+                failures.append(
+                    "review_input_warehouse_measurement_inconclusive_has_plateau_signal"
+                )
+            if (
+                input_warehouse_measurement_signal.get(
+                    "positive_effect_at_or_above_mde"
+                )
+                is True
+            ):
+                failures.append(
+                    "review_input_warehouse_measurement_inconclusive_has_positive_effect"
+                )
     if problem_family == "cvrp":
         input_large_twoopt_signal = _cvrp_large_twoopt_mechanism_signal(
             measurement_effect_summary=measurement_summary,
@@ -1222,6 +1289,38 @@ def _problem_summary_input_consistency(
             ),
             "input_measurement_protocol_row_count": measurement_aggregate.get(
                 "protocol_row_count"
+            ),
+            "summary_measurement_rows_at_or_above_mde": measurement_evidence.get(
+                "rows_at_or_above_mde"
+            ),
+            "input_measurement_rows_at_or_above_mde": measurement_aggregate.get(
+                "rows_at_or_above_mde"
+            ),
+            "summary_measurement_rows_with_ci_high_below_mde": measurement_evidence.get(
+                "rows_with_ci_high_below_mde"
+            ),
+            "input_measurement_rows_with_ci_high_below_mde": measurement_aggregate.get(
+                "rows_with_ci_high_below_mde"
+            ),
+            "summary_measurement_effect_signal": measurement_evidence.get(
+                "effect_signal"
+            ),
+            "input_measurement_effect_signal": input_warehouse_measurement_signal.get(
+                "effect_signal"
+            ),
+            "summary_measurement_plateau_consistent": measurement_evidence.get(
+                "plateau_consistent"
+            ),
+            "input_measurement_plateau_consistent": input_warehouse_measurement_signal.get(
+                "plateau_consistent"
+            ),
+            "summary_measurement_positive_effect_at_or_above_mde": (
+                measurement_evidence.get("positive_effect_at_or_above_mde")
+            ),
+            "input_measurement_positive_effect_at_or_above_mde": (
+                input_warehouse_measurement_signal.get(
+                    "positive_effect_at_or_above_mde"
+                )
             ),
             "summary_runtime_review_ready": runtime_evidence_ready,
             "input_runtime_review_ready": runtime_summary.get("review_ready"),

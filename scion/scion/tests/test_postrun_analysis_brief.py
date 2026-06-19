@@ -2074,6 +2074,10 @@ def test_warehouse_followup_summary_marks_protocol_evaluated_plateau_review_read
     assert summary["evidence"]["protocol"]["formal_screened_candidates"] == 1
     assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
     assert summary["evidence"]["protocol"]["protocol_metric_results"] == 2
+    measurement = summary["evidence"]["measurement_effect"]
+    assert measurement["effect_signal"] == "ci_high_below_mde_plateau_consistent"
+    assert measurement["plateau_consistent"] is True
+    assert measurement["positive_effect_at_or_above_mde"] is False
     continuity = summary["evidence"]["research_continuity"]
     assert continuity["substantive"] is True
     assert continuity["max_branch_depth"] == 2
@@ -2105,6 +2109,125 @@ def test_warehouse_followup_summary_marks_protocol_evaluated_plateau_review_read
     assert "## Champion Progress Summary" in markdown
     assert "- Champion version gain: 1" in markdown
     assert "- Interpretation: protocol_evaluated_plateau_review_ready" in markdown
+    assert (
+        "- Measurement signal / plateau-consistent / positive-at-MDE: "
+        "ci_high_below_mde_plateau_consistent / True / False"
+        in markdown
+    )
+
+
+def test_warehouse_followup_summary_routes_positive_mde_effect_out_of_plateau_ready(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "warehouse-protocol-evaluated-positive-effect"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+            "requested_rounds": 1,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 1,
+            "protocol_evaluated_candidates": 1,
+        },
+    )
+    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
+    _write_json(
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "warehouse.research_efficiency.v1.json",
+        {
+            "protocol_rows": {
+                "protocol_metric_results": 2,
+                "protocol_evaluated_candidates": 1,
+            },
+            "formal_candidates": {
+                "formal_screened_candidates": 1,
+                "protocol_evaluated_candidates": 1,
+            },
+            "protocol_effects_vs_mde": {
+                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
+                "report_only": True,
+                "decision_features_excluded": True,
+                "protocol_row_count": 2,
+                "rows_at_or_above_mde": 1,
+                "rows_with_ci_high_below_mde": 1,
+                "max_effect_to_mde_ratio": 1.2,
+                "interpretation_counts": {"above_mde": 1, "below_mde": 1},
+            },
+            "fresh_runtime_replay_drain": {
+                "status": "not_selected_no_pending",
+                "attempts": 1,
+                "executed": 0,
+                "skipped": 1,
+                "counts_toward_max_rounds": False,
+            },
+            "stage_transition_drain": {
+                "status": "not_started",
+                "attempts": 0,
+                "counts_toward_max_rounds": False,
+                "generates_new_hypothesis": False,
+            },
+            "research_continuity": {
+                "same_mechanism_followup": {
+                    "observed_opportunity_count": 1,
+                    "selected_same_branch_refinement_count": 0,
+                },
+                "branch_lesson_usage": {
+                    "requirement_count": 1,
+                    "satisfied_count": 0,
+                    "semantic_gap_count": 1,
+                },
+                "weak_positive_transfer": {
+                    "observed_opportunity_count": 1,
+                    "accepted_count": 0,
+                },
+                "research_shape_summary": {
+                    "max_branch_depth": 1,
+                    "branch_depth_distribution": {"1": 1},
+                    "active_shape": "unrealized_continuity_opportunity",
+                },
+            },
+            "run_status": {
+                "run_validity_status": "valid",
+                "run_completeness_status": "complete",
+                "run_complete": True,
+            },
+        },
+    )
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    summary = brief["warehouse_followup_summary"]
+    assert summary["available"] is True
+    assert summary["current_run_evidence"] is True
+    assert summary["handoff_complete"] is True
+    assert summary["interpretation"] == (
+        "protocol_evaluated_positive_effect_review_ready"
+    )
+    assert "warehouse_research_continuity_evidence_too_shallow" not in summary[
+        "evidence_gaps"
+    ]
+    measurement = summary["evidence"]["measurement_effect"]
+    assert measurement["effect_signal"] == "positive_effect_at_or_above_mde"
+    assert measurement["plateau_consistent"] is False
+    assert measurement["positive_effect_at_or_above_mde"] is True
+    assert "- Interpretation: protocol_evaluated_positive_effect_review_ready" in (
+        markdown
+    )
+    assert (
+        "- Measurement signal / plateau-consistent / positive-at-MDE: "
+        "positive_effect_at_or_above_mde / False / True"
+        in markdown
+    )
 
 
 def test_warehouse_followup_summary_requires_runtime_drain_status_not_budget_only(
