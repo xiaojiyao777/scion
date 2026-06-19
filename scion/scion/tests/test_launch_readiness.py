@@ -981,6 +981,35 @@ def test_launch_readiness_rejects_comment_only_completion_preflight_proxy(
     ]["failures"]
 
 
+def test_launch_readiness_rejects_comment_only_launch_env_source(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    run_text = run_text.replace(
+        'source "$RUN_ROOT/launch.env"',
+        '# source "$RUN_ROOT/launch.env"\n'
+        'echo \'source "$RUN_ROOT/launch.env"\'',
+    )
+    run_sh.write_text(run_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    preflight_check = report["checks"]["run_script_completion_preflight_enforced"]
+    pythonpath_check = report["checks"]["run_script_pythonpath_enforced"]
+    assert {"reason": "run_script_does_not_source_launch_env"} in preflight_check[
+        "detail"
+    ]["failures"]
+    assert {"reason": "run_script_does_not_source_launch_env"} in pythonpath_check[
+        "detail"
+    ]["failures"]
+    assert preflight_check["detail"]["launch_env_source_position"] == -1
+    assert pythonpath_check["detail"]["launch_env_source_position"] == -1
+
+
 def test_launch_readiness_rejects_missing_pythonpath(
     tmp_path: Path,
 ) -> None:

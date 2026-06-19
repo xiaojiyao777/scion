@@ -1351,14 +1351,23 @@ def _path_list_contains(path_list: str, required: str) -> bool:
 
 
 def _first_launch_env_source_position(text: str) -> int:
-    candidates = [
-        text.find('source "$(dirname "$0")/launch.env"'),
-        text.find('. "$(dirname "$0")/launch.env"'),
-        text.find('source "$RUN_ROOT/launch.env"'),
-        text.find('. "$RUN_ROOT/launch.env"'),
-    ]
-    positions = [position for position in candidates if position >= 0]
-    return min(positions) if positions else -1
+    markers = (
+        'source "$(dirname "$0")/launch.env"',
+        '. "$(dirname "$0")/launch.env"',
+        'source "$RUN_ROOT/launch.env"',
+        '. "$RUN_ROOT/launch.env"',
+    )
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if _line_is_non_executed_shell_text(stripped):
+            offset += len(line)
+            continue
+        for marker in markers:
+            if stripped == marker:
+                return offset + line.find(marker)
+        offset += len(line)
+    return -1
 
 
 def _export_assignment_position(text: str, key: str) -> int:
