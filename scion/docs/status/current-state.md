@@ -55,6 +55,11 @@ Framework:
 - Postrun acceptance readiness now requires the matching problem-specific
   summary for warehouse and CVRP current runs before reporting
   `current_run_analysis_ready=true`.
+- Postrun readiness now also fails when the matching problem-specific summary
+  exposes blocking gaps such as missing measurement/runtime/continuity inputs,
+  incomplete handoff, launch-only state, infra-only state, or no protocol
+  evidence. Valid negative conclusions, such as quality-blocked proposals or
+  CVRP without a large two-opt mechanism signal, remain analysis-ready.
 - Launchers run postrun readiness JSON generation with
   `--require-current-run-ready`, so `POSTRUN_READINESS_EXIT_STATUS` now records
   whether delegated current-run analysis is actually ready.
@@ -173,6 +178,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-protocol-signal-postrun-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-continuity-substance-postrun-guard-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-postrun-readiness-blocking-summary-gaps-20260619.md`,
   `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-readiness-checker-20260619.md`,

@@ -169,6 +169,86 @@ def test_postrun_acceptance_readiness_accepts_actionable_problem_summary(
     assert problem_check["required"] is True
     assert problem_check["status"] == "ok"
     assert problem_check["detail"][0]["summary"] == "warehouse_followup_summary"
+    assert problem_check["detail"][0]["blocking_evidence_gaps"] == []
+
+
+def test_postrun_acceptance_readiness_rejects_blocking_problem_summary_gaps(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-missing-inputs")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [
+            "missing_runtime_feedback_summary",
+            "warehouse_research_continuity_evidence_too_shallow",
+        ],
+        "interpretation": "protocol_evaluated_review_inputs_incomplete",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert problem_check["required"] is True
+    assert problem_check["status"] == "failed"
+    assert problem_check["detail"][0]["blocking_evidence_gaps"] == [
+        "missing_runtime_feedback_summary"
+    ]
+    assert (
+        "warehouse_research_continuity_evidence_too_shallow"
+        not in problem_check["detail"][0]["blocking_evidence_gaps"]
+    )
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
+def test_postrun_acceptance_readiness_accepts_nonblocking_problem_summary_gaps(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "cvrp-run-no-twoopt-signal")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "cvrp"
+    brief["cvrp_large_twoopt_summary"] = {
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": ["missing_large_twoopt_mechanism_signal"],
+        "interpretation": "protocol_evaluated_without_large_twoopt_signal",
+        "problem_family": "cvrp",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is True
+    assert problem_check["required"] is True
+    assert problem_check["status"] == "ok"
+    assert problem_check["detail"][0]["blocking_evidence_gaps"] == []
 
 
 def test_postrun_acceptance_readiness_rejects_missing_bundle(

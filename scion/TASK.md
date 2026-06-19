@@ -272,6 +272,10 @@ Current checkpoint:
   runtime-feedback, and substantive research-continuity signals. A shallow
   continuity block alone cannot distinguish a real post-v2 plateau from missed
   continuous-optimization opportunity.
+- Current postrun readiness boundary: blocking problem-summary gaps such as
+  missing review inputs, incomplete handoff, launch-only or infra-only status,
+  and no protocol evidence prevent `current_run_analysis_ready=true`; valid
+  negative conclusions remain analysis-ready.
 - Current launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`.
 - Current operational truth lives in `scion/docs/status/current-state.md`.

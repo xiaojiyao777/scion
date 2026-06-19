@@ -21,6 +21,17 @@ SCHEMA_VERSION = "scion.postrun_acceptance_readiness.v1"
 ANALYSIS_BRIEF_SCHEMA = "scion.postrun_analysis_brief.v1"
 REBUILD_SCHEMA = "scion.postrun_acceptance_rebuild.v1"
 UNREADY_EXIT = 64
+BLOCKING_PROBLEM_SUMMARY_GAPS = {
+    "cvrp_large_twoopt_handoff_requirements_incomplete",
+    "invalid_infra_only_no_research_conclusion",
+    "launch_required_before_bounded_twoopt_conclusion",
+    "launch_required_before_plateau_conclusion",
+    "missing_measurement_effect_summary",
+    "missing_research_continuity_summary",
+    "missing_runtime_feedback_summary",
+    "no_protocol_evaluated_candidates",
+    "warehouse_handoff_requirements_incomplete",
+}
 
 
 def build_readiness(run_root: Path | str) -> dict[str, Any]:
@@ -343,13 +354,15 @@ def _summary_actionability_detail(
     key: str,
     summary: Mapping[str, Any],
 ) -> dict[str, Any]:
+    evidence_gaps = _string_items(summary.get("evidence_gaps"))
     return {
         "summary": key,
         "problem_family": summary.get("problem_family"),
         "current_run_evidence": summary.get("current_run_evidence"),
         "interpretation": summary.get("interpretation"),
         "review_axes_actionability": summary.get("review_axes_actionability"),
-        "evidence_gaps": summary.get("evidence_gaps"),
+        "evidence_gaps": evidence_gaps,
+        "blocking_evidence_gaps": _blocking_problem_summary_gaps(evidence_gaps),
     }
 
 
@@ -358,9 +371,24 @@ def _summary_actionability_status(summaries: list[dict[str, Any]]) -> str:
         item.get("current_run_evidence") is True
         and item.get("review_axes_actionability")
         == "actionable_current_run_evidence_present"
+        and not item.get("blocking_evidence_gaps")
         for item in summaries
     )
     return "ok" if ok else "failed"
+
+
+def _blocking_problem_summary_gaps(evidence_gaps: list[str]) -> list[str]:
+    return [
+        gap
+        for gap in evidence_gaps
+        if gap in BLOCKING_PROBLEM_SUMMARY_GAPS
+    ]
+
+
+def _string_items(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item)]
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:
