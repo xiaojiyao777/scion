@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt handoff plus code-phase active-subject constraints, problem-owned CVRP/warehouse opportunity diagnostics, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, postrun prompt-audit traceability and readiness checks for CVRP/warehouse active subject code constraints, manifest-bound postrun readiness identity checks, launch-readiness verification that `run.sh` carries strict postrun acceptance readiness plus normal campaign-exit, warehouse data-root, and API-key-env preflight postrun report paths, and runtime guard coverage for postrun package paths plus matching CVRP/warehouse problem runtime paths. Launch remains blocked by `gpt-5.5` auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt handoff plus code-phase active-subject constraints, problem-owned CVRP/warehouse opportunity diagnostics, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, postrun prompt-audit traceability and readiness checks for CVRP/warehouse active subject code constraints, manifest-bound postrun readiness identity and declared-output checks, launch-readiness verification that `run.sh` carries strict postrun acceptance readiness plus normal campaign-exit, warehouse data-root, and API-key-env preflight postrun report paths, and runtime guard coverage for postrun package paths plus matching CVRP/warehouse problem runtime paths. Launch remains blocked by WSL `gpt-5.5` provider/env auth, not by Scion code.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -267,11 +267,15 @@ Current checkpoint:
   current schema, match the prepared problem family, and use a current
   delegated-review interpretation before a current run can be called
   analysis-ready.
+- Postrun acceptance readiness now validates every output declared by
+  `postrun_acceptance/rebuild/rebuild_manifest.v1.json`; stale directory
+  counts or lexically later replacement files cannot make current-run delegated
+  review ready when a manifest-declared artifact is missing.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-manifestboundreadiness-6r-gpt55-20260619T073434Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-manifestoutputguard-6r-gpt55-20260619T074347Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-manifestboundreadiness-1r-gpt55-20260619T073434Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-manifestoutputguard-1r-gpt55-20260619T074347Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -286,12 +290,15 @@ Current checkpoint:
   warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL checkout `35b50a0`.
-- The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
-  `/v1/chat/completions` preflight returns HTTP `401`,
-  `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
-  `active=0`, `total=1`; `expired`/`refreshing` may vary while the proxy login
-  is stale. Do not launch either
+  true. The roots were prepared from WSL checkout `fbc32bf`.
+  Later docs-only commits may make the checkout differ from the prepared
+  manifest commit; readiness remains acceptable only when runtime guard paths
+  are unchanged.
+- The blocker is external WSL `gpt-5.5` provider/env auth, not Scion static
+  readiness. The current completion preflight fails because `SCION_API_KEY` is
+  not set in the WSL launch environment; a stale proxy login may instead return
+  HTTP `401`, `classification=not_authenticated`, `code=invalid_api_key`. Do
+  not launch either
   root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -302,6 +309,8 @@ Current checkpoint:
   rejects prepared scripts that omit the strict marker path. It also binds the
   selected analysis brief to the rebuild manifest and checks run identity, so
   stale or lexically later brief artifacts cannot make delegated review ready.
+  It also requires manifest-declared family outputs to still exist, so stale
+  directory contents cannot mask a missing report artifact.
   CVRP bounded
   two-opt review readiness also requires a qualifying large/two-opt
   protocol-effect row signal in measurement evidence plus direct
@@ -330,7 +339,7 @@ Current checkpoint:
   the postrun report/readiness bundle. Warehouse and CVRP roots also fail
   readiness if the API-key-env-missing pre-campaign failure path skips the same
   report/readiness bundle.
-  Older prepared roots before the manifestboundreadiness roots above are not current
+  Older prepared roots before the manifestoutputguard roots above are not current
   because launch/readiness runtime paths changed after prepare time. Exact
   supersession details belong in the
   launch/readiness evidence docs, not in this current checkpoint.
