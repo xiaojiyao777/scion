@@ -110,5 +110,5 @@ Strict launch readiness for both roots reports exit `64` with:
 
 The remaining blocker is external `gpt-5.5` auth, not Scion static readiness:
 completion preflight returns HTTP `401`, `classification=not_authenticated`,
-`code=invalid_api_key`, with auth pool `active=0`, `expired=1`,
-`refreshing=0`, `total=1`.
+`code=invalid_api_key`, with auth pool `active=0`, `expired=0`,
+`refreshing=1`, `total=1`.

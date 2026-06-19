@@ -105,7 +105,7 @@ Strict launch readiness for both replacements reports `static_ready=true`,
 `run_script_postrun_reports_after_campaign=ok`. Launch readiness remains blocked
 only by the external `gpt-5.5` completion preflight: HTTP `401`,
 `classification=not_authenticated`, `code=invalid_api_key`, auth pool
-`active=0`, `expired=1`, `refreshing=0`, `total=1`.
+`active=0`, `expired=0`, `refreshing=1`, `total=1`.
 
 New regression coverage:
 
