@@ -234,9 +234,31 @@ PYTHONPATH=scion pytest -q \
 # 50 passed
 ```
 
+Local checkout `68d8eefb` and WSL checkout `a019ee9`:
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_check_postrun_acceptance.py
+# 51 passed
+
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py
+# 14 passed
+
+PYTHONPATH=scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py
+# 65 passed
+```
+
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL runtime commit `ca5a7eb` because
+New prepare-only roots were generated from WSL runtime commit `a019ee9` because
 `scion/tools` is part of the guarded launch/readiness runtime surface. The
 current checkout requires completion-preflight failure status writing and
 data-root/API-key-env failure markers to be executable shell paths, not
@@ -245,16 +267,16 @@ executable guard lines, not comments or echo-only text. The postrun report
 bundle function must be a real shell function definition, not a comment. The
 `launch.env` source command must also be an executable shell line, not a comment
 or echo-only string. Postrun delegated-review evidence accounting now also
-requires co-located CVRP two-opt direct evidence and realized warehouse
-continuity evidence.
+requires co-located CVRP two-opt direct evidence, review-input consistency for
+CVRP two-opt ready claims, and realized warehouse continuity evidence.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunreview-ca5a7eb-6r-gpt55-20260619T113058Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-inputcheck-a019ee9-6r-gpt55-20260619T113828Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postrunreview-ca5a7eb-1r-gpt55-20260619T113059Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-inputcheck-a019ee9-1r-gpt55-20260619T113829Z-claw`
 
 Both roots are prepare-only and not started.
 

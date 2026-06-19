@@ -56,8 +56,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `ca5a7eb`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunreview-ca5a7eb-6r-gpt55-20260619T113058Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `a019ee9`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-inputcheck-a019ee9-6r-gpt55-20260619T113828Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -84,8 +84,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `ca5a7eb`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postrunreview-ca5a7eb-1r-gpt55-20260619T113059Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `a019ee9`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-inputcheck-a019ee9-1r-gpt55-20260619T113829Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -101,15 +101,16 @@ CVRP/VRP:
 - Postrun bounded two-opt review readiness now requires both a qualifying
   large/two-opt protocol-effect row signal in measurement evidence and direct
   activation/effect/phase telemetry co-located on the same matching top effect
-  row. Generic, cross-route, unbounded/fallback, VNS, or two-opt-star family
-  labels are listed as rejected two-opt-like families instead of making the
-  follow-up review-ready. Research-continuity family mentions remain context
-  only.
+  row, and postrun acceptance recomputes that signal from review inputs before
+  accepting a problem-summary `bounded_twoopt_review_ready` claim. Generic,
+  cross-route, unbounded/fallback, VNS, or two-opt-star family labels are listed
+  as rejected two-opt-like families instead of making the follow-up
+  review-ready. Research-continuity family mentions remain context only.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `ca5a7eb`.
+- The active prepared roots were generated from WSL runtime commit `a019ee9`.
   Current local/WSL checkouts may include later documentation-only commits;
   launch readiness reports `git_runtime_consistent=ok` because runtime guard
   paths are unchanged.
@@ -169,6 +170,8 @@ Infrastructure:
   pointer and launch blocker.
 - Current CVRP postrun evidence-accounting repair:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-direct-evidence-row-coherence-20260619.md`.
+- Current CVRP postrun acceptance consistency repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-readiness-input-consistency-20260619.md`.
 - Current warehouse postrun evidence-accounting repair:
   `scion/docs/experiments/v0.4/v04-warehouse-continuity-realized-signal-20260619.md`.
 - Current repair context lives in `scion/docs/experiments/v0.4/`; keep this

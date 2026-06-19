@@ -298,9 +298,9 @@ Current checkpoint:
   claim a protocol-evaluated conclusion when the input summaries disagree.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunreview-ca5a7eb-6r-gpt55-20260619T113058Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-inputcheck-a019ee9-6r-gpt55-20260619T113828Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postrunreview-ca5a7eb-1r-gpt55-20260619T113059Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-inputcheck-a019ee9-1r-gpt55-20260619T113829Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -322,7 +322,7 @@ Current checkpoint:
   warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL runtime commit `ca5a7eb` after launch
+  true. The roots were prepared from WSL runtime commit `a019ee9` after launch
   readiness began verifying that generated scripts source `launch.env` through
   an executable shell line rather than comment/echo-only text, require
   `COMPLETION_PREFLIGHT=1`, and execute `tools/check_gpt55_proxy.py` before the
@@ -345,7 +345,9 @@ Current checkpoint:
   postrun report function definition began requiring an executable shell
   function line, and after postrun delegated-review evidence accounting began
   requiring co-located CVRP two-opt direct evidence plus realized warehouse
-  continuity evidence.
+  continuity evidence, and after postrun acceptance began recomputing CVRP
+  large-twoopt readiness from review inputs before accepting a problem-summary
+  ready claim.
 - The blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
@@ -371,9 +373,11 @@ Current checkpoint:
   CVRP bounded
   two-opt review readiness also requires a qualifying large/two-opt
   protocol-effect row signal in measurement evidence plus direct
-  activation/effect/phase telemetry on a matching top effect row;
-  continuity-only family mentions remain context, and generic/default-avoid
-  two-opt-like labels are explicitly rejected, not mechanism-effect evidence.
+  activation/effect/phase telemetry co-located on a matching top effect row;
+  postrun acceptance recomputes that signal from review inputs before accepting
+  `bounded_twoopt_review_ready`. Continuity-only family mentions remain context,
+  and generic/default-avoid two-opt-like labels are explicitly rejected, not
+  mechanism-effect evidence.
   This does not change
   Decision, `DecisionFeatures`, Protocol gates, promotion, scheduler state, or
   solver behavior.

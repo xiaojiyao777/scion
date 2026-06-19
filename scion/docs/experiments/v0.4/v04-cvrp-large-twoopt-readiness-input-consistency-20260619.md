@@ -62,3 +62,15 @@ git diff --check
 Accepted locally for the CVRP large-twoopt delegated-review readiness path. A
 problem-specific summary can no longer claim `bounded_twoopt_review_ready` when
 the review-input summaries lack the corresponding large-twoopt direct evidence.
+
+WSL verification, checkout `a019ee9`:
+
+```bash
+PYTHONPATH=scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py
+# 65 passed
+```
