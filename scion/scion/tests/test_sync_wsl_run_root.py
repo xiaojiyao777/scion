@@ -105,6 +105,64 @@ def test_sync_wsl_run_root_skips_postrun_check_when_requested(
     assert report["postrun_check_exit_status"] is None
 
 
+def test_sync_wsl_run_root_preserves_postrun_unready_status(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fake_run(command: list[str]) -> subprocess.CompletedProcess[str]:
+        if command[0] == "rsync":
+            return subprocess.CompletedProcess(command, 0, "synced", "")
+        return subprocess.CompletedProcess(
+            command,
+            sync_tool.POSTRUN_UNREADY_EXIT,
+            json.dumps({"current_run_analysis_ready": False}),
+            "",
+        )
+
+    monkeypatch.setattr(sync_tool, "_run", fake_run)
+
+    report = sync_tool.sync_and_check(
+        wsl_run_root="/wsl/experiments/run-unready",
+        local_experiments_root=tmp_path,
+        execute=True,
+    )
+
+    assert report["rsync_exit_status"] == 0
+    assert report["postrun_check_exit_status"] == sync_tool.POSTRUN_UNREADY_EXIT
+    assert report["postrun_current_run_ready"] is False
+    assert "current_run_analysis_ready" in report["postrun_check_stdout"]
+
+
+def test_sync_wsl_run_root_cli_returns_postrun_unready_exit(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    def fake_sync_and_check(**_: object) -> dict[str, object]:
+        return {
+            "execute": True,
+            "rsync_exit_status": 0,
+            "postrun_check_exit_status": sync_tool.POSTRUN_UNREADY_EXIT,
+        }
+
+    monkeypatch.setattr(sync_tool, "sync_and_check", fake_sync_and_check)
+
+    exit_code = sync_tool.main(
+        [
+            "/wsl/experiments/run-unready",
+            "--local-experiments-root",
+            str(tmp_path),
+            "--execute",
+            "--format",
+            "json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == sync_tool.POSTRUN_UNREADY_EXIT
+    assert payload["postrun_check_exit_status"] == sync_tool.POSTRUN_UNREADY_EXIT
+
+
 def test_sync_wsl_run_root_cli_dry_run_json(tmp_path: Path, capsys) -> None:
     exit_code = sync_tool.main(
         [
