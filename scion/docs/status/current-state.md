@@ -46,14 +46,14 @@ After strict readiness passes, launch from WSL by running the prepared wrapper
 itself, not by reconstructing the long `scion run` command:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-faa8c29-postsum-6r-gpt55-20260620T175859Z-claw-6r-gpt55-20260620T175928Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6df6b6b-phase4-6r-gpt55-20260620T183145Z-claw/run.sh
 ```
 
 Run the CVRP wrapper only after the warehouse run is underway or accepted for
 launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-faa8c29-postsum-4r-gpt55-20260620T175859Z-claw-4r-gpt55-20260620T175929Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6df6b6b-phase4-4r-gpt55-20260620T183205Z-claw/run.sh
 ```
 
 The wrappers already enforce completion preflight, runtime guards, campaign
@@ -78,17 +78,17 @@ mirror root. Without `--execute`, it prints the planned commands only.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `faa8c29e`;
-the corresponding local framework repair commit is `711610ca`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `6df6b6b7`;
+the corresponding local framework repair commit is `9684d593`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection only. Run launch readiness on WSL, because prepared
 contracts and wrapper scripts intentionally contain WSL absolute paths and will
 fail identity checks if evaluated from the server-side mirror.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-faa8c29-postsum-6r-gpt55-20260620T175859Z-claw-6r-gpt55-20260620T175928Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6df6b6b-phase4-6r-gpt55-20260620T183145Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-faa8c29-postsum-4r-gpt55-20260620T175859Z-claw-4r-gpt55-20260620T175929Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6df6b6b-phase4-4r-gpt55-20260620T183205Z-claw`
 
 Readiness snapshot:
 
@@ -96,7 +96,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `faa8c29e`; strict readiness
+- Runtime guard status: prepared runtime commit `6df6b6b7`; strict readiness
   must keep reporting runtime guard OK. Treat all earlier prepared roots as
   superseded because runtime-guarded launcher, prompt-context, and postrun
   artifact-identity paths changed.
@@ -158,9 +158,9 @@ reports.
   boilerplate, not the research object code.
 - Postrun acceptance must fail closed unless warehouse/CVRP conclusions,
   review-input summaries, failure taxonomy, prompt/source visibility,
-  runtime-budget evidence, continuity evidence, and bounded two-opt direct
-  evidence recompute from current-run artifacts with matching local/WSL-safe
-  artifact identity.
+  Phase 4 evidence coverage, runtime-budget evidence, continuity evidence, and
+  bounded two-opt direct evidence recompute from current-run artifacts with
+  matching local/WSL-safe artifact identity.
 - Screening gate, Decision, proposal feedback, and search memory must agree on
   marginal evidence: high-win-rate, non-negative, sub-practical-delta screening
   evidence is diagnostic follow-up material, not a promotable signal.
