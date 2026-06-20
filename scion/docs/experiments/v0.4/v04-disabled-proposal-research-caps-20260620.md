@@ -90,14 +90,14 @@ WSL focused results:
 
 ## Current Prepared Roots
 
-Generated on WSL at launch-authoritative runtime commit `27de4218`; the local
-runtime-equivalent commit is `9c284940`. Both roots are mirrored under
+Generated on WSL at launch-authoritative runtime commit `37feae79`; the local
+runtime-equivalent commit is `f7745a8e`. Both roots are mirrored under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-27de4218-nocaps-aps0-preflight-6r-gpt55-20260620T111148Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-37feae79-nocaps-aps0-sourceheadroom-preflight-6r-gpt55-20260620T113041Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-27de4218-nocaps-aps0-preflight-4r-gpt55-20260620T111201Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-37feae79-nocaps-aps0-sourceheadroom-preflight-4r-gpt55-20260620T113058Z-claw`
 
 Strict launch readiness for both reports:
 
@@ -105,6 +105,7 @@ Strict launch readiness for both reports:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - `failed_required_checks=["completion_preflight"]`
+- runtime guard OK for prepared commit `37feae79`
 - `headroom_status=ok`
 - `headroom_failures=[]`
 - `headroom_warning_count=0`

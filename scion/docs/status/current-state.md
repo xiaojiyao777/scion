@@ -41,15 +41,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `27de4218`
-after local runtime-equivalent commit `9c284940`; local mirrors exist under
+Generated on WSL at launch-authoritative prepared runtime commit `37feae79`
+after local runtime-equivalent commit `f7745a8e`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names for
 inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-27de4218-nocaps-aps0-preflight-6r-gpt55-20260620T111148Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-37feae79-nocaps-aps0-sourceheadroom-preflight-6r-gpt55-20260620T113041Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-27de4218-nocaps-aps0-preflight-4r-gpt55-20260620T111201Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-37feae79-nocaps-aps0-sourceheadroom-preflight-4r-gpt55-20260620T113058Z-claw`
 
 Readiness snapshot:
 
@@ -57,7 +57,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `27de4218`; strict readiness
+- Runtime guard status: prepared runtime commit `37feae79`; strict readiness
   must keep reporting runtime guard OK. Doc/status-only commits after prepare
   are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -137,7 +137,12 @@ Prepared run shape:
   diagnostics before broader feedback, and prompt manifest accounting classifies
   this block as `research_signal`.
 - Code-phase prompts must retain direct source visibility for champion/current
-  branch/target files and declared integration files.
+  branch/target files and declared integration files. Source-read tool schemas,
+  registry result caps, ledger normalization, and active solver preview
+  headroom must remain aligned so `context.read_algorithm_file`,
+  `context.read_algorithm_symbol`, and `context.read_surface` can carry the
+  96k source-window used by current solver-design/code prompts without
+  `RESULT_TOO_LARGE` or shallow-preview misses.
 - Postrun acceptance cannot silently pass when strict rebuild/readiness fails:
   launcher wrappers promote strict postrun acceptance failure to an effective
   wrapper failure and annotate top-level `run_status.json`.
@@ -231,6 +236,8 @@ Prepared run shape:
   `scion/docs/experiments/v0.4/v04-cvrp-size70-direct-evidence-guard-20260620.md`.
 - Current disabled proposal/APS research-cap semantics:
   `scion/docs/experiments/v0.4/v04-disabled-proposal-research-caps-20260620.md`.
+- Current source-read result/headroom alignment:
+  `scion/docs/experiments/v0.4/v04-source-read-result-headroom-20260620.md`.
 - Current CVRP prompt-diagnostic repair:
   `scion/docs/experiments/v0.4/v04-cvrp-mechanism-effect-diagnostics-prompt-repair-20260620.md`.
 - Current warehouse prompt-diagnostic repair:
