@@ -8,6 +8,7 @@ from typing import Any
 from scion.runtime.telemetry_guard.evidence import (
     _bounded_value,
     _empty_value,
+    _explicit_false_evidence,
     _positive_evidence,
 )
 from scion.runtime.telemetry_guard.runtime_paths import _runtime_path_observation
@@ -23,6 +24,7 @@ def _runtime_field_summary(
     candidate_present = 0
     candidate_positive = 0
     candidate_zero = 0
+    candidate_false = 0
     candidate_missing = 0
     champion_positive = 0
     examples: list[Any] = []
@@ -38,6 +40,8 @@ def _runtime_field_summary(
             candidate_positive += 1
         elif not _empty_value(value):
             candidate_zero += 1
+            if _explicit_false_evidence(value):
+                candidate_false += 1
         if len(examples) < 3:
             examples.append(_bounded_value(value))
 
@@ -51,6 +55,7 @@ def _runtime_field_summary(
         "candidate_missing": candidate_missing,
         "candidate_positive": candidate_positive,
         "candidate_zero": candidate_zero,
+        "candidate_false": candidate_false,
         "champion_positive": champion_positive,
         "examples": examples,
     }

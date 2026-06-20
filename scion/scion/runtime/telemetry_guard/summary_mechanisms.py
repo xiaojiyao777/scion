@@ -342,6 +342,10 @@ def _runtime_zero_summary(
             int(totals.get("runtime_zero", 0) or 0)
             for totals in category_totals.values()
         ),
+        "candidate_false": sum(
+            int(totals.get("candidate_false", 0) or 0)
+            for totals in category_totals.values()
+        ),
         "candidate_missing": 0,
         "champion_positive": 0,
     }
@@ -463,6 +467,7 @@ def _observation_status(
         "candidate_positive": 0,
         "candidate_present": 0,
         "candidate_zero": 0,
+        "candidate_false": 0,
         "candidate_missing": 0,
         "champion_positive": 0,
     }
@@ -476,6 +481,8 @@ def _observation_status(
             totals[key] += int(summary.get(key, 0) or 0)
     if totals["candidate_positive"] > 0:
         status = positive_label
+    elif positive_label == "observed" and totals["candidate_false"] > 0:
+        status = "inactive"
     elif totals["candidate_present"] > 0:
         status = "zero"
     else:
@@ -491,7 +498,7 @@ def _mechanism_diagnostic_type(
 ) -> str | None:
     if effect_status in {"zero", "declared_field_warning"}:
         return MECHANISM_EXECUTED_NO_IMPROVEMENT
-    if activation_status in {"missing", "zero"}:
+    if activation_status in {"missing", "zero", "inactive"}:
         return ACTIVATION_MISSING_OR_WIRING_SUSPECT
     if effect_status == "missing" and (
         activation_status == "observed" or runtime_status == "observed"
@@ -552,7 +559,7 @@ def _mechanism_diagnostic_signals(
         "declared_field_warning",
     }:
         signals.append(ACTIVATED_NO_POSITIVE_EFFECT)
-    elif activation_status in {"missing", "zero"} and not effect_positive:
+    elif activation_status in {"missing", "zero", "inactive"} and not effect_positive:
         if not effect_observation_required:
             signals.append(NOT_EVALUATED_OR_TRIGGERED)
         elif runtime_status in {"missing", "zero"} and not effect_present:

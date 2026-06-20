@@ -27,6 +27,7 @@ def _guard_issue(
         "candidate_positive": summary.get("candidate_positive", 0),
         "candidate_present": summary.get("candidate_present", 0),
         "candidate_zero": summary.get("candidate_zero", 0),
+        "candidate_false": summary.get("candidate_false", 0),
         "candidate_missing": summary.get("candidate_missing", 0),
         "champion_positive": summary.get("champion_positive", 0),
     }
@@ -136,8 +137,11 @@ def _zero_or_missing_observation(issue: Mapping[str, Any]) -> str:
     try:
         present = int(issue.get("candidate_present", 0) or 0)
         positive = int(issue.get("candidate_positive", 0) or 0)
+        false_count = int(issue.get("candidate_false", 0) or 0)
     except (TypeError, ValueError):
         return "no"
+    if false_count > 0 and positive == 0:
+        return "explicitly inactive"
     if present > 0 and positive == 0:
         return "zero-valued"
     return "no"

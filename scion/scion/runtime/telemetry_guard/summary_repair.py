@@ -74,6 +74,14 @@ def _mechanism_repair_guidance(
             "active solve/search path and that the exact mechanism id is used "
             "by telemetry helpers."
         )
+    if activation_status == "inactive":
+        guidance.append(
+            "Declared activation telemetry for mechanism "
+            f"{mechanism} was present but explicitly inactive. Do not flip the "
+            "flag only to satisfy telemetry; inspect the natural trigger, "
+            "canary threshold, and mechanism-id wiring, or revise expected "
+            "telemetry when the mechanism is intentionally conditional."
+        )
     if RUNTIME_BUDGET_ZERO_OR_SUBMS in diagnostic_signals:
         guidance.append(
             f"Runtime/budget telemetry for {mechanism} is zero-valued while "

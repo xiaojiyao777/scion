@@ -30,6 +30,7 @@ def _record_no_expected_telemetry_fallbacks(
     if activity_fields:
         activity_positive = 0
         activity_present = 0
+        activity_false = 0
         activity_missing = 0
         activity_champion_positive = 0
         for field in activity_fields:
@@ -43,6 +44,7 @@ def _record_no_expected_telemetry_fallbacks(
                 field_summaries[field] = summary
             activity_positive += int(summary["candidate_positive"])
             activity_present += int(summary["candidate_present"])
+            activity_false += int(summary.get("candidate_false", 0) or 0)
             activity_missing += int(summary["candidate_missing"])
             activity_champion_positive += int(summary["champion_positive"])
         if candidate_runtimes and activity_positive == 0:
@@ -51,6 +53,7 @@ def _record_no_expected_telemetry_fallbacks(
                     "activity",
                     {
                         "candidate_present": activity_present,
+                        "candidate_false": activity_false,
                         "candidate_missing": activity_missing,
                         "candidate_positive": activity_positive,
                     },
@@ -67,6 +70,7 @@ def _record_no_expected_telemetry_fallbacks(
                     "candidate_runs": len(candidate_runtimes),
                     "candidate_positive": activity_positive,
                     "candidate_present": activity_present,
+                    "candidate_false": activity_false,
                     "candidate_missing": activity_missing,
                     "champion_positive": activity_champion_positive,
                 },

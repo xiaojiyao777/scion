@@ -362,6 +362,35 @@ def test_activation_missing_with_evaluation_is_advisory_when_effect_is_advisory(
     } == {"evaluated_no_effect"}
 
 
+def test_explicit_false_activation_is_reported_as_inactive() -> None:
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {
+                "mechanism_activation": {"target_probe": False},
+            }
+        ],
+        problem_spec=_mechanism_probe_spec(),
+        selected_surface="solver",
+        declared_mechanisms=[
+            MechanismChange(id="target_probe", change_type="modify")
+        ],
+        effect_observation_required=False,
+    )
+
+    assert summary["passed"] is True
+    assert summary["failures"] == []
+    warning = summary["warnings"][0]
+    assert warning["code"] == "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED"
+    assert warning["candidate_false"] == 1
+    assert warning["diagnostic_kind"] == "not_evaluated/not_triggered"
+    diagnostic = summary["mechanism_diagnostics"][0]
+    assert diagnostic["activation_status"] == "inactive"
+    assert diagnostic["activation"]["candidate_false"] == 1
+    assert diagnostic["diagnostic_kind"] == "not_evaluated/not_triggered"
+    assert diagnostic["telemetry_outcome"] == "not_evaluated/not_triggered"
+    assert "explicitly inactive" in " ".join(diagnostic["repair_guidance"])
+
+
 def test_zero_ms_runtime_with_positive_evaluation_is_runtime_budget_warning() -> None:
     spec = SimpleNamespace(
         research_surfaces=[

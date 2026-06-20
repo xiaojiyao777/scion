@@ -184,6 +184,7 @@ def build_telemetry_guard_summary(
             category_positive = 0
             category_present = 0
             category_zero = 0
+            category_false = 0
             category_missing = 0
             category_champion_positive = 0
             runtime_positive = 0
@@ -205,6 +206,7 @@ def build_telemetry_guard_summary(
                 category_positive += int(summary["candidate_positive"])
                 category_present += int(summary["candidate_present"])
                 category_zero += int(summary.get("candidate_zero", 0) or 0)
+                category_false += int(summary.get("candidate_false", 0) or 0)
                 category_missing += int(summary["candidate_missing"])
                 category_champion_positive += int(summary["champion_positive"])
                 if _looks_like_runtime_field(field):
@@ -218,6 +220,7 @@ def build_telemetry_guard_summary(
                 "candidate_positive": category_positive,
                 "candidate_present": category_present,
                 "candidate_zero": category_zero,
+                "candidate_false": category_false,
                 "candidate_missing": category_missing,
                 "champion_positive": category_champion_positive,
                 "runtime_positive": runtime_positive,
@@ -298,6 +301,7 @@ def build_telemetry_guard_summary(
                     "candidate_positive": totals.get("candidate_positive", 0),
                     "candidate_present": totals.get("candidate_present", 0),
                     "candidate_zero": totals.get("candidate_zero", 0),
+                    "candidate_false": totals.get("candidate_false", 0),
                     "candidate_missing": totals.get("candidate_missing", 0),
                     "champion_positive": totals.get("champion_positive", 0),
                 },

@@ -31,6 +31,25 @@ def _positive_evidence(value: Any) -> bool:
     return bool(value)
 
 
+def _explicit_false_evidence(value: Any) -> bool:
+    if isinstance(value, bool):
+        return not value
+    if isinstance(value, str):
+        return value.strip().lower() in {
+            "false",
+            "disabled",
+            "off",
+            "no",
+        }
+    if isinstance(value, Mapping):
+        values = list(value.values())
+        return bool(values) and all(_explicit_false_evidence(item) for item in values)
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray, str)):
+        values = list(value)
+        return bool(values) and all(_explicit_false_evidence(item) for item in values)
+    return False
+
+
 def _empty_value(value: Any) -> bool:
     if value is None:
         return True
