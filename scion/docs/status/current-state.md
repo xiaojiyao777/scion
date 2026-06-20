@@ -46,14 +46,14 @@ After strict readiness passes, launch from WSL by running the prepared wrapper
 itself, not by reconstructing the long `scion run` command:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-f25f4c-preflightmarkerguard-6r-gpt55-20260620T223221Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-5f60dbe-markersummary-6r-gpt55-20260620T224702Z-claw/run.sh
 ```
 
 Run the CVRP wrapper only after the warehouse run is underway or accepted for
 launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-f25f4c-preflightmarkerguard-4r-gpt55-20260620T223222Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-5f60dbe-markersummary-4r-gpt55-20260620T224703Z-claw/run.sh
 ```
 
 The wrappers already enforce completion preflight, runtime guards, campaign
@@ -84,17 +84,17 @@ current-run readiness only; it does not skip root-status validation.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `f25f4cbb`;
-the corresponding local framework repair commit is `a52391a5`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `5f60dbe4`;
+the corresponding local framework repair commit is `107b96aa`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection only. Run launch readiness on WSL, because prepared
 contracts and wrapper scripts intentionally contain WSL absolute paths and will
 fail identity checks if evaluated from the server-side mirror.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-f25f4c-preflightmarkerguard-6r-gpt55-20260620T223221Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-5f60dbe-markersummary-6r-gpt55-20260620T224702Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-f25f4c-preflightmarkerguard-4r-gpt55-20260620T223222Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-5f60dbe-markersummary-4r-gpt55-20260620T224703Z-claw`
 
 Readiness snapshot:
 
@@ -103,12 +103,17 @@ Readiness snapshot:
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
 - Runtime guard status: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=f25f4cbb`, and either
+  `prepared_runtime_commit=5f60dbe4`, and either
   `runtime_guard_reason=runtime_guard_commit_matches` or
   `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare` after
   doc-only commits. Treat all earlier prepared roots as superseded because
   runtime-guarded launcher, prompt-context, and postrun artifact-identity paths
   changed.
+- Campaign execution marker status is exposed by launch readiness in flat
+  `campaign_execution_marker_status`, `campaign_execution_marker_ok`,
+  `campaign_execution_marker_failure_reasons`, and marker/preflight/campaign
+  position fields. Both current roots report
+  `campaign_execution_marker_status=ok`.
 - `launch_env_secret_permissions=ok`; each current root reports
   `launch_env_mode=0o600`.
 - Completion auth status is exposed by launch readiness in

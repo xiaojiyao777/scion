@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `f25f4cbb`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `5f60dbe4`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -252,9 +252,9 @@ Current checkpoint:
   considered static-ready.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-f25f4c-preflightmarkerguard-6r-gpt55-20260620T223221Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-5f60dbe-markersummary-6r-gpt55-20260620T224702Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-f25f4c-preflightmarkerguard-4r-gpt55-20260620T223222Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-5f60dbe-markersummary-4r-gpt55-20260620T224703Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -269,10 +269,12 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok`,
-  `prepared_runtime_commit=f25f4cbb`, and either
+  `prepared_runtime_commit=5f60dbe4`, and either
   `runtime_guard_reason=runtime_guard_commit_matches` or
   `runtime_guard_paths_unchanged_since_prepare` after doc-only commits. They
-  also report `launch_env_secret_permissions=ok` and `launch_env_mode=0o600`.
+  also report `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
+  `campaign_execution_marker_status=ok` through top-level marker summary
+  fields.
   Disabled proposal/APS caps, code-source visibility, source-read headroom,
   item-level `research_focus` prompt visibility, and CVRP/warehouse
   adapter-derived opportunity diagnostics are covered by current evidence
@@ -399,9 +401,10 @@ Current checkpoint:
   - Launch readiness guards the active checkout, absolute WSL `SCION_DIR` /
     `PYTHONPATH`, prepared-handoff identity, completion preflight, model route,
     private `launch.env` permissions, campaign-execution marker placement after
-    completion-preflight failure handling, no-early-stop semantics, strict
-    postrun rebuild/readiness, committed runtime-guard drift, and
-    wrapper/manifest runtime-guard contract consistency.
+    completion-preflight failure handling with top-level marker status/failure
+    evidence, no-early-stop semantics, strict postrun rebuild/readiness,
+    committed runtime-guard drift, and wrapper/manifest runtime-guard contract
+    consistency.
   - Launcher wrappers now promote strict postrun rebuild/readiness failure to
     an effective wrapper failure and annotate top-level `run_status.json`, so a
     campaign that finishes but lacks current-run-ready postrun acceptance cannot
