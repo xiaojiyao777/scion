@@ -27,6 +27,11 @@ LAUNCHER_ARTIFACTS = (
     "run.log",
     "exit.txt",
 )
+CAMPAIGN_EXECUTION_ARTIFACTS = (
+    ("campaign_run_status", "run_status.json"),
+    ("campaign_status", "status.json"),
+    ("campaign_summary", "campaign_summary.json"),
+)
 LAUNCHER_STATUS_KEYS = (
     "wrapper_exit_status",
     "pre_campaign_completion_preflight",
@@ -206,6 +211,14 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
     campaign_run_status = _read_json(campaign_dir / "run_status.json")
     campaign_status = _read_json(campaign_dir / "status.json")
     summary = _read_json(campaign_dir / "campaign_summary.json")
+    campaign_execution_artifacts = _campaign_execution_artifact_state(
+        campaign_dir=campaign_dir,
+        docs={
+            "campaign_run_status": campaign_run_status,
+            "campaign_status": campaign_status,
+            "campaign_summary": summary,
+        },
+    )
     lifecycle = _lifecycle_inventory(
         run_status,
         prepared_manifest,
@@ -214,6 +227,7 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         summary,
         run_status_present=run_status_present,
         run_status_valid=run_status_valid,
+        campaign_execution_artifacts=campaign_execution_artifacts,
     )
     trace_index = _read_json(
         campaign_dir / "agentic_sessions" / "agentic_session_trace_index.json"
@@ -285,6 +299,7 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
             lifecycle.get("launcher_status_unavailable") is True
             or lifecycle["pre_campaign_completion_preflight_failed"]
             or lifecycle.get("pre_campaign_infra_failed") is True
+            or lifecycle.get("campaign_execution_artifacts_unavailable") is True
         )
         else _validity(run_status, campaign_run_status, campaign_status, summary),
         "counters": _prepared_only_counters(prepared_manifest)
@@ -347,6 +362,12 @@ def render_markdown(inventory: dict[str, Any]) -> str:
             "- PRE-CAMPAIGN INFRA FAILURE: no current Scion campaign ran; "
             f"failure keys `{keys}` mark copied campaign artifacts as resume input, "
             "not current-run evidence."
+        )
+    if lifecycle.get("campaign_execution_artifacts_unavailable") is True:
+        lines.append(
+            "- CAMPAIGN EXECUTION ARTIFACTS UNAVAILABLE: root launcher status "
+            "is not enough to prove current-run research evidence; copied or "
+            "partial campaign artifacts are treated as resume snapshots."
         )
     if validity["invalid_infra_only"]:
         lines.append("- INVALID INFRA-ONLY RUN: stop after proving infra-only status.")
@@ -714,9 +735,15 @@ def _lifecycle_inventory(
     *campaign_docs: Any,
     run_status_present: bool = True,
     run_status_valid: bool = True,
+    campaign_execution_artifacts: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     status_doc = run_status if isinstance(run_status, dict) else {}
     manifest = prepared_manifest if isinstance(prepared_manifest, dict) else {}
+    artifact_state = (
+        campaign_execution_artifacts
+        if isinstance(campaign_execution_artifacts, Mapping)
+        else _empty_campaign_execution_artifact_state()
+    )
     manifest_is_prepared = manifest.get("schema_version") == PREPARED_RUN_MANIFEST_SCHEMA
     launcher_status_unavailable = not run_status_present or not run_status_valid
     launcher_status_failure_key = (
@@ -741,9 +768,28 @@ def _lifecycle_inventory(
         _pre_campaign_infra_failure_keys(status_doc) if manifest_is_prepared else []
     )
     pre_campaign_infra_failed = bool(pre_campaign_infra_failure_keys)
-    invalid_infra_only = any(
+    invalid_infra_only_from_docs = any(
         _doc_says_invalid_infra_only(doc) for doc in (status_doc, *campaign_docs)
     ) or launcher_status_unavailable
+    campaign_execution_artifacts_available = (
+        artifact_state.get("available") is True
+    )
+    campaign_execution_artifacts_unavailable = (
+        not prepared_only
+        and not launcher_status_unavailable
+        and not preflight_failed
+        and not pre_campaign_infra_failed
+        and not invalid_infra_only_from_docs
+        and not campaign_execution_artifacts_available
+    )
+    campaign_execution_failure_key = (
+        artifact_state.get("failure_key")
+        if campaign_execution_artifacts_unavailable
+        else None
+    )
+    invalid_infra_only = (
+        invalid_infra_only_from_docs or campaign_execution_artifacts_unavailable
+    )
     resume_from = status_doc.get("resume_from_campaign")
     if resume_from is None:
         resume_from = manifest.get("resume_from_campaign")
@@ -755,6 +801,8 @@ def _lifecycle_inventory(
         evidence_scope = "pre_campaign_preflight_failed_with_resume_snapshot"
     elif pre_campaign_infra_failed:
         evidence_scope = "pre_campaign_infra_failed_with_resume_snapshot"
+    elif campaign_execution_artifacts_unavailable:
+        evidence_scope = "campaign_execution_artifacts_unavailable_with_resume_snapshot"
     elif invalid_infra_only:
         evidence_scope = "invalid_infra_only_with_resume_snapshot"
     else:
@@ -771,12 +819,21 @@ def _lifecycle_inventory(
             or launcher_status_unavailable
             or preflight_failed
             or pre_campaign_infra_failed
+            or campaign_execution_artifacts_unavailable
             or invalid_infra_only
         ),
         "launcher_status_unavailable": launcher_status_unavailable,
         "launcher_status_failure_key": launcher_status_failure_key,
         "root_run_status_present": run_status_present,
         "root_run_status_valid": run_status_valid,
+        "campaign_execution_artifacts_available": (
+            campaign_execution_artifacts_available
+        ),
+        "campaign_execution_artifacts_unavailable": (
+            campaign_execution_artifacts_unavailable
+        ),
+        "campaign_execution_failure_key": campaign_execution_failure_key,
+        "campaign_execution_artifacts": artifact_state.get("artifacts", {}),
         "status": _string_or_none(status_doc.get("status")),
         "prepared_status_schema": _string_or_none(status_doc.get("schema")),
         "resume_from_campaign": _string_or_none(resume_from),
@@ -796,6 +853,7 @@ def _launch_root_without_current_run(lifecycle: Mapping[str, Any]) -> bool:
         or lifecycle.get("launcher_status_unavailable") is True
         or lifecycle.get("pre_campaign_completion_preflight_failed") is True
         or lifecycle.get("pre_campaign_infra_failed") is True
+        or lifecycle.get("campaign_execution_artifacts_unavailable") is True
         or lifecycle.get("invalid_infra_only") is True
     )
 
@@ -814,6 +872,12 @@ def _pre_campaign_failure_validity(lifecycle: Mapping[str, Any]) -> dict[str, An
     launcher_status_failure_key = lifecycle.get("launcher_status_failure_key")
     if isinstance(launcher_status_failure_key, str) and launcher_status_failure_key:
         last_stop_reason = launcher_status_failure_key
+    campaign_execution_failure_key = lifecycle.get("campaign_execution_failure_key")
+    if (
+        isinstance(campaign_execution_failure_key, str)
+        and campaign_execution_failure_key
+    ):
+        last_stop_reason = campaign_execution_failure_key
     keys = lifecycle.get("pre_campaign_infra_failure_keys")
     if isinstance(keys, list) and keys:
         last_stop_reason = f"pre_campaign_{keys[0]}"
@@ -837,6 +901,47 @@ def _prepared_only_counters(prepared_manifest: Any) -> dict[str, int | None]:
         "protocol_evaluated_candidates": 0,
         "screened_experiments": 0,
         "proposal_attempts_total": 0,
+    }
+
+
+def _campaign_execution_artifact_state(
+    *,
+    campaign_dir: Path,
+    docs: Mapping[str, Any],
+) -> dict[str, Any]:
+    artifacts: dict[str, dict[str, Any]] = {}
+    for key, filename in CAMPAIGN_EXECUTION_ARTIFACTS:
+        path = campaign_dir / filename
+        doc = docs.get(key)
+        artifacts[key] = {
+            "path": str(path),
+            "present": path.exists(),
+            "valid": isinstance(doc, dict),
+        }
+    present_any = any(item["present"] for item in artifacts.values())
+    valid_any = any(item["valid"] for item in artifacts.values())
+    if valid_any:
+        failure_key = None
+    elif present_any:
+        failure_key = "campaign_execution_artifacts_unreadable"
+    else:
+        failure_key = "campaign_execution_artifacts_missing"
+    return {
+        "available": valid_any,
+        "present_any": present_any,
+        "valid_any": valid_any,
+        "failure_key": failure_key,
+        "artifacts": artifacts,
+    }
+
+
+def _empty_campaign_execution_artifact_state() -> dict[str, Any]:
+    return {
+        "available": False,
+        "present_any": False,
+        "valid_any": False,
+        "failure_key": "campaign_execution_artifacts_missing",
+        "artifacts": {},
     }
 
 
@@ -1757,6 +1862,16 @@ def _phase4_evidence_coverage(
             "launcher_status_failure_key": lifecycle.get(
                 "launcher_status_failure_key"
             ),
+            "campaign_execution_artifacts_unavailable": (
+                lifecycle.get("campaign_execution_artifacts_unavailable") is True
+            ),
+            "campaign_execution_failure_key": lifecycle.get(
+                "campaign_execution_failure_key"
+            ),
+            "campaign_execution_artifacts": lifecycle.get(
+                "campaign_execution_artifacts"
+            )
+            or {},
             "invalid_infra_only": lifecycle.get("invalid_infra_only") is True,
             "current_run_evidence": False,
             "requirements": _empty_phase4_requirements(

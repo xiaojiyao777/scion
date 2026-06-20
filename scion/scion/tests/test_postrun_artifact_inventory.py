@@ -471,6 +471,7 @@ def test_phase4_coverage_separates_generic_and_code_source_visibility(
         traces_dir / "20260606T000000_code_branch_1.json",
         {"trace_kind": "code", "status": "ok", "branch_id": "branch-1"},
     )
+    _write_minimal_campaign_execution_docs(run_root)
 
     data = inventory_tool.build_inventory(run_root)
 
@@ -508,6 +509,7 @@ def test_phase4_coverage_tracks_continuity_subsignals(
             }
         },
     )
+    _write_minimal_campaign_execution_docs(run_root)
 
     data = inventory_tool.build_inventory(run_root)
 
@@ -543,6 +545,7 @@ def test_phase4_coverage_requires_protocol_accounting_fields(
             },
         },
     )
+    _write_minimal_campaign_execution_docs(run_root)
 
     data = inventory_tool.build_inventory(run_root)
 
@@ -1167,6 +1170,86 @@ def test_inventory_marks_missing_or_invalid_root_status_not_current_run(
         assert "not current-run postrun evidence" in markdown
 
 
+def test_inventory_marks_missing_or_unreadable_campaign_execution_artifacts_not_current_run(
+    tmp_path: Path,
+) -> None:
+    cases = (
+        ("missing-campaign-docs", (), "campaign_execution_artifacts_missing"),
+        (
+            "unreadable-campaign-docs",
+            ("run_status.json", "status.json", "campaign_summary.json"),
+            "campaign_execution_artifacts_unreadable",
+        ),
+    )
+    for run_name, invalid_doc_names, expected_failure_key in cases:
+        run_root = tmp_path / run_name
+        campaign_dir = run_root / "campaign"
+        campaign_dir.mkdir(parents=True)
+        _write_json(
+            run_root / "run_status.json",
+            {
+                "schema": "outer-wrapper.v1",
+                "status": "finished",
+                "wrapper_exit_status": 0,
+                "campaign_wrapper_exit_status": 0,
+            },
+        )
+        _write_json(
+            run_root / "prepared_run_manifest.v1.json",
+            {
+                "schema_version": "scion.launcher_prepared_run_manifest.v1",
+                "execution": {"rounds": 4},
+                "resume_from_campaign": "/tmp/source-campaign",
+            },
+        )
+        for doc_name in invalid_doc_names:
+            (campaign_dir / doc_name).write_text("{not-json", encoding="utf-8")
+        _write_db(campaign_dir / "scion.db")
+
+        data = inventory_tool.build_inventory(run_root)
+        markdown = inventory_tool.render_markdown(data)
+
+        lifecycle = data["lifecycle"]
+        assert lifecycle["current_run_evidence"] is False
+        assert lifecycle["campaign_execution_artifacts_available"] is False
+        assert lifecycle["campaign_execution_artifacts_unavailable"] is True
+        assert lifecycle["campaign_execution_failure_key"] == expected_failure_key
+        assert lifecycle["invalid_infra_only"] is True
+        assert lifecycle["evidence_scope"] == (
+            "campaign_execution_artifacts_unavailable_with_resume_snapshot"
+        )
+        assert data["validity"] == {
+            "run_validity_status": "invalid_infra_only",
+            "run_completeness_status": "incomplete",
+            "last_stop_reason": expected_failure_key,
+            "invalid_infra_only": True,
+        }
+        assert data["counters"] == {
+            "requested_rounds": 4,
+            "effective_rounds_completed": 0,
+            "formal_screened_candidates": 0,
+            "protocol_evaluated_candidates": 0,
+            "screened_experiments": 0,
+            "proposal_attempts_total": 0,
+        }
+        assert data["branches"] == []
+        assert data["events"]["by_kind"] == {}
+        assert data["hypotheses"]["count"] == 0
+        assert data["champions"]["count"] == 0
+        assert data["resume_snapshot"]["present"] is True
+        assert data["resume_snapshot"]["current_run_evidence"] is False
+        assert data["resume_snapshot"]["branch_count"] == 1
+        assert data["phase4_evidence_coverage"]["current_run_evidence"] is False
+        assert data["phase4_evidence_coverage"][
+            "campaign_execution_artifacts_unavailable"
+        ] is True
+        assert data["phase4_evidence_coverage"][
+            "campaign_execution_failure_key"
+        ] == expected_failure_key
+        assert "CAMPAIGN EXECUTION ARTIFACTS UNAVAILABLE" in markdown
+        assert "resume snapshots" in markdown
+
+
 def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
     tmp_path: Path,
 ) -> None:
@@ -1600,6 +1683,22 @@ def test_invalid_infra_only_markdown_without_db(tmp_path: Path) -> None:
 def _write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _write_minimal_campaign_execution_docs(run_root: Path) -> None:
+    campaign_dir = run_root / "campaign"
+    _write_json(
+        campaign_dir / "status.json",
+        {
+            "effective_rounds_completed": 1,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "effective_rounds_completed": 1,
+        },
+    )
 
 
 def _cvrp_research_focus() -> dict[str, object]:
