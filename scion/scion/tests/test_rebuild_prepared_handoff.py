@@ -306,6 +306,25 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
         "prepared_manifest_exists": True,
         "run_sh_exports_manifest": True,
     }
+    prompt_summary = bridge_detail["prompt_summary"]
+    assert prompt_summary["schema_version"] == (
+        "scion.prepared_research_focus_prompt_summary.v1"
+    )
+    assert prompt_summary["available"] is True
+    assert prompt_summary["report_only"] is True
+    assert prompt_summary["decision_features_excluded"] is True
+    assert prompt_summary["raw_prompt_excluded"] is True
+    assert prompt_summary["launch_focus_schema_present"] is True
+    assert prompt_summary["launch_focus_taint_present"] is True
+    assert prompt_summary["prompt_section_present"] is True
+    assert prompt_summary["compact_prompt_value_present"] is True
+    assert prompt_summary["launch_research_focus_key_present"] is True
+    assert prompt_summary["cvrp_case_protection_present"] is True
+    assert prompt_summary["cvrp_bounded_twoopt_present"] is True
+    assert prompt_summary["cvrp_direct_effect_rules_present"] is True
+    assert prompt_summary["cvrp_measurement_handoff_present"] is True
+    assert prompt_summary["missing_rendered_paths"] == []
+    assert prompt_summary["forbidden_prompt_tokens_present"] == []
     code_bridge = prompt_context["signals"][
         "cvrp_active_subject_code_constraints_prompt_bridge"
     ]
@@ -412,6 +431,28 @@ def test_rebuild_prepared_handoff_adds_warehouse_code_constraint_bridge(
 
     assert manifest["complete"] is True
     assert prompt_context["problem_family"] == "warehouse_delivery"
+    focus_bridge = prompt_context["signals"]["prepared_research_focus_prompt_bridge"]
+    focus_summary = focus_bridge["detail"]["prompt_summary"]
+    assert focus_bridge["available"] is True
+    assert focus_summary["schema_version"] == (
+        "scion.prepared_research_focus_prompt_summary.v1"
+    )
+    assert focus_summary["available"] is True
+    assert focus_summary["report_only"] is True
+    assert focus_summary["decision_features_excluded"] is True
+    assert focus_summary["raw_prompt_excluded"] is True
+    assert focus_summary["launch_focus_schema_present"] is True
+    assert focus_summary["launch_focus_taint_present"] is True
+    assert focus_summary["prompt_section_present"] is True
+    assert focus_summary["compact_prompt_value_present"] is True
+    assert focus_summary["launch_research_focus_key_present"] is True
+    assert focus_summary["warehouse_v2_followup_present"] is True
+    assert focus_summary["warehouse_current_question_present"] is True
+    assert focus_summary["warehouse_required_evidence_present"] is True
+    assert focus_summary["warehouse_avoid_directions_present"] is True
+    assert focus_summary["warehouse_measurement_handoff_present"] is True
+    assert focus_summary["missing_rendered_paths"] == []
+    assert focus_summary["forbidden_prompt_tokens_present"] == []
     assert diagnostic_bridge["available"] is True
     assert diagnostic_bridge["required"] is True
     assert diagnostic_bridge["runtime_generated_after_launch"] is False
@@ -731,7 +772,56 @@ def _cvrp_research_focus() -> dict[str, object]:
 
 def _warehouse_research_focus() -> dict[str, object]:
     return {
+        "schema_version": "scion.warehouse_research_focus.v1",
         "scope": "report_only_prepared_handoff",
+        "measurement_opportunity_diagnostics": {
+            "schema_version": "warehouse_measurement_runtime_handoff.v1",
+            "source": "problem_v1.measurement.calibration_ref",
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "metric": "total_cost",
+            "unit": "raw_delta",
+            "runtime_model": "comparative",
+            "pairing_validity": "trajectory_divergent",
+            "practical_screen_delta": 0.001,
+            "practical_validate_delta": 0.001,
+            "screening_mde_at_power_80": 577.5,
+            "measurement_readiness": {
+                "status": "ready",
+                "reason_code": "ok",
+                "calibration_age_days": 8,
+                "calibration_max_age_days": 90,
+                "n_pairs": 36,
+                "mde_at_power_80": 577.5,
+                "noise_band_p90_abs": 8500.0,
+                "effect_to_mde_ratio": 1.7316017316017316e-06,
+                "signal_to_noise_tier": "low_power",
+                "decision_features_excluded": True,
+                "calibration_ref": "calibration/aa_noise_floor.json",
+            },
+            "calibration": {
+                "schema": "scion.aa_noise_floor.v1",
+                "ref": "calibration/aa_noise_floor.json",
+                "path": "/tmp/warehouse/calibration/aa_noise_floor.json",
+                "calibrated_at": "2026-06-11T16:47:24.372634+00:00",
+                "n_pairs": 36,
+                "decision_features_excluded": True,
+                "calibration_run_action": "modify",
+            },
+            "reason_codes": [
+                "WAREHOUSE_MDE_EXCEEDS_PRACTICAL_DELTA",
+                "TRAJECTORY_DIVERGENT_LOW_SNR",
+                "WAREHOUSE_COMPARATIVE_RUNTIME_REPORT_ONLY",
+            ],
+            "recommended_min_seeds": 4,
+            "related_calibrations": [
+                {
+                    "action": "create_new",
+                    "n_pairs": 60,
+                    "mde_at_power_80": 1725.0,
+                }
+            ],
+        },
         "accepted_checkpoint": "Champion v2 promoted.",
         "current_question": (
             "Can warehouse v2 plateau be advanced with one bounded follow-up?"

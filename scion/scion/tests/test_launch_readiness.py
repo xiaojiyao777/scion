@@ -1407,6 +1407,71 @@ def test_launch_readiness_rejects_stale_research_focus_nested_projection(
     )
 
 
+def test_launch_readiness_rejects_missing_research_focus_prompt_summary(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    artifact_path = (
+        run_root
+        / "prepared_handoff"
+        / "prompt_context_readiness"
+        / "cvrp_on_full.prepared_prompt_context_readiness.v1.json"
+    )
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["signals"]["prepared_research_focus_prompt_bridge"]["detail"].pop(
+        "prompt_summary"
+    )
+    artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert any(
+        failure["reason"] == "prepared_focus_prompt_summary_missing"
+        for failure in prompt_check["detail"]["failures"]
+    )
+
+
+def test_launch_readiness_rejects_stale_research_focus_prompt_summary(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    artifact_path = (
+        run_root
+        / "prepared_handoff"
+        / "prompt_context_readiness"
+        / "cvrp_on_full.prepared_prompt_context_readiness.v1.json"
+    )
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    summary = payload["signals"]["prepared_research_focus_prompt_bridge"][
+        "detail"
+    ]["prompt_summary"]
+    summary["cvrp_case_protection_present"] = False
+    summary["rendered_required_paths"] = [
+        path
+        for path in summary["rendered_required_paths"]
+        if path != "case_protection_requirements.protected_cases"
+    ]
+    artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert any(
+        failure["reason"] == "prepared_focus_prompt_summary_field_mismatch"
+        and failure["field"] == "cvrp_case_protection_present"
+        and failure["expected"] is True
+        and failure["actual"] is False
+        for failure in prompt_check["detail"]["failures"]
+    )
+
+
 def test_launch_readiness_rejects_missing_cvrp_code_constraint_bridge(
     tmp_path: Path,
 ) -> None:
@@ -3686,9 +3751,17 @@ def _write_prompt_context_readiness(
         manifest_path=manifest_path,
         manifest=manifest,
     )
+    prompt_summary = readiness_tool.research_focus_prompt_summary(
+        manifest_path=manifest_path,
+        manifest=manifest,
+    )
     signals = {
         "prepared_research_focus_prompt_bridge": {
-            "available": ready and launch_markers,
+            "available": (
+                ready
+                and launch_markers
+                and prompt_summary["available"] is True
+            ),
             "detail": {
                 "launch_markers": launch_marker_payload,
                 "source_markers": {
@@ -3696,6 +3769,7 @@ def _write_prompt_context_readiness(
                     "manifest_env_reader": True,
                     "prompt_renderer": True,
                 },
+                "prompt_summary": prompt_summary,
             },
             "required": True,
             "runtime_generated_after_launch": False,

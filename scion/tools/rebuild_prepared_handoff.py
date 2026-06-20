@@ -34,6 +34,7 @@ from postrun_artifact_inventory import (  # noqa: E402
 )
 from prepared_prompt_context import (  # noqa: E402
     problem_measurement_diagnostics_prompt_summary,
+    research_focus_prompt_summary,
     research_focus_projection_summary,
 )
 
@@ -923,12 +924,19 @@ def _add_launch_research_focus_prompt_signal(
         and _path_contains(root / "run.sh", "export ")
         and _path_contains(root / "run.sh", "scion.cli.main run"),
     }
+    manifest_path = root / "prepared_run_manifest.v1.json"
+    manifest = _mapping_or_empty(_read_json(manifest_path))
+    prompt_summary = research_focus_prompt_summary(
+        manifest_path=manifest_path,
+        manifest=manifest,
+    )
     _add_signal(
         signals,
         "prepared_research_focus_prompt_bridge",
         available=(
             all(source_marker_results.values())
             and all(launch_marker_results.values())
+            and (required is not True or prompt_summary.get("available") is True)
         ),
         required=required,
         source=(
@@ -938,11 +946,12 @@ def _add_launch_research_focus_prompt_signal(
         detail={
             "source_markers": source_marker_results,
             "launch_markers": launch_marker_results,
+            "prompt_summary": prompt_summary,
         },
     )
     projection_summary = research_focus_projection_summary(
-        manifest_path=root / "prepared_run_manifest.v1.json",
-        manifest=_mapping_or_empty(_read_json(root / "prepared_run_manifest.v1.json")),
+        manifest_path=manifest_path,
+        manifest=manifest,
     )
     _add_signal(
         signals,

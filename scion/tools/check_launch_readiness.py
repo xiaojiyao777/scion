@@ -23,8 +23,10 @@ if str(TOOLS_DIR) not in sys.path:
 from postrun_artifact_inventory import build_inventory, command_has_shell_flag  # noqa: E402
 from prepared_prompt_context import (  # noqa: E402
     PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_SUMMARY_SCHEMA,
+    RESEARCH_FOCUS_PROMPT_SUMMARY_SCHEMA,
     RESEARCH_FOCUS_PROJECTION_SUMMARY_SCHEMA,
     problem_measurement_diagnostics_prompt_summary,
+    research_focus_prompt_summary,
     research_focus_projection_summary,
 )
 
@@ -3405,6 +3407,13 @@ def _prompt_context_artifact_failures(
                     "missing": missing or ["<all>"],
                 }
             )
+    failures.extend(
+        _research_focus_prompt_summary_failures(
+            detail_dict.get("prompt_summary"),
+            manifest_path=manifest_path,
+            manifest=manifest,
+        )
+    )
 
     projection = signals_dict.get("prepared_research_focus_projection")
     if not isinstance(projection, dict):
@@ -3542,6 +3551,88 @@ def _prompt_context_artifact_failures(
                 )
             )
 
+    return failures
+
+
+def _research_focus_prompt_summary_failures(
+    value: Any,
+    *,
+    manifest_path: Path,
+    manifest: dict[str, Any],
+) -> list[dict[str, Any]]:
+    payload = value if isinstance(value, dict) else {}
+    expected = research_focus_prompt_summary(
+        manifest_path=manifest_path,
+        manifest=manifest,
+    )
+    failures: list[dict[str, Any]] = []
+    if not payload:
+        return [{"reason": "prepared_focus_prompt_summary_missing"}]
+
+    boundary_expectations = {
+        "schema_version": RESEARCH_FOCUS_PROMPT_SUMMARY_SCHEMA,
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_prompt_excluded": True,
+        "available": True,
+        "reason": "ok",
+        "forbidden_prompt_tokens_present": [],
+        "missing_rendered_paths": [],
+    }
+    for field, expected_value in boundary_expectations.items():
+        if payload.get(field) != expected_value:
+            failures.append(
+                {
+                    "reason": "prepared_focus_prompt_summary_field_mismatch",
+                    "field": field,
+                    "expected": expected_value,
+                    "actual": payload.get(field),
+                }
+            )
+
+    if expected.get("available") is not True:
+        failures.append(
+            {
+                "reason": "prepared_focus_live_prompt_summary_unavailable",
+                "expected": expected,
+            }
+        )
+        return failures
+
+    compare_fields = (
+        "problem_family",
+        "manifest_path",
+        "launch_focus_schema_present",
+        "launch_focus_taint_present",
+        "prompt_section_present",
+        "compact_prompt_value_present",
+        "launch_research_focus_key_present",
+        "decision_features_exclusion_present",
+        "manifest_path_present",
+        "rendered_required_paths",
+        "rendered_required_path_count",
+        "required_rendered_path_count",
+        "warehouse_v2_followup_present",
+        "warehouse_current_question_present",
+        "warehouse_required_evidence_present",
+        "warehouse_avoid_directions_present",
+        "warehouse_measurement_handoff_present",
+        "cvrp_case_protection_present",
+        "cvrp_bounded_twoopt_present",
+        "cvrp_direct_effect_rules_present",
+        "cvrp_measurement_handoff_present",
+    )
+    for field in compare_fields:
+        if payload.get(field) != expected.get(field):
+            failures.append(
+                {
+                    "reason": "prepared_focus_prompt_summary_field_mismatch",
+                    "field": field,
+                    "expected": expected.get(field),
+                    "actual": payload.get(field),
+                }
+            )
     return failures
 
 

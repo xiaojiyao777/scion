@@ -9,6 +9,9 @@ from typing import Any
 RESEARCH_FOCUS_PROJECTION_SUMMARY_SCHEMA = (
     "scion.prepared_research_focus_projection_summary.v1"
 )
+RESEARCH_FOCUS_PROMPT_SUMMARY_SCHEMA = (
+    "scion.prepared_research_focus_prompt_summary.v1"
+)
 PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_SUMMARY_SCHEMA = (
     "scion.problem_measurement_diagnostics_prompt_summary.v1"
 )
@@ -117,6 +120,226 @@ def research_focus_projection_summary(
         "projected_path_count": len(projected_paths),
         "projected_field_count": len(projected_dict),
         "manifest_field_count": len(research_focus),
+    }
+
+
+def research_focus_prompt_summary(
+    *,
+    manifest_path: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    """Summarize prepared research focus content that reaches prompts."""
+
+    research_focus = _mapping_or_empty(manifest.get("research_focus"))
+    problem_family = str(manifest.get("problem_family") or "").strip()
+    base = {
+        "schema_version": RESEARCH_FOCUS_PROMPT_SUMMARY_SCHEMA,
+        "problem_family": problem_family,
+        "manifest_path": str(manifest_path),
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_prompt_excluded": True,
+    }
+    if not research_focus:
+        return {
+            **base,
+            "available": False,
+            "reason": "missing_research_focus",
+            "rendered_required_paths": [],
+            "missing_rendered_paths": [],
+            "rendered_required_path_count": 0,
+        }
+
+    try:
+        from scion.proposal.context_manager.manager import (
+            _project_launch_research_focus,
+        )
+        from scion.proposal.engine.hypothesis_context_profiles import (
+            filter_hypothesis_context_for_prompt,
+        )
+        from scion.proposal.engine.hypothesis_prompts import (
+            _split_hypothesis_context,
+        )
+
+        projected = _project_launch_research_focus(research_focus)
+        projected_dict = projected if isinstance(projected, dict) else {}
+        launch_payload = _launch_research_focus_payload(
+            manifest_path=manifest_path,
+            manifest=manifest,
+            projected_focus=projected_dict,
+        )
+        filtered = filter_hypothesis_context_for_prompt(
+            _minimal_research_focus_context(
+                problem_family=problem_family,
+                launch_research_focus=launch_payload,
+            )
+        )
+        compact = str(filtered.get("launch_research_focus") or "")
+        system_blocks, user_prompt = _split_hypothesis_context(dict(filtered))
+        rendered_prompt = "\n".join(
+            str(block.get("text") or "")
+            for block in system_blocks
+            if isinstance(block, dict)
+        )
+        rendered_prompt = f"{rendered_prompt}\n{user_prompt}"
+    except Exception as exc:  # pragma: no cover - surfaced as readiness detail.
+        return {
+            **base,
+            "available": False,
+            "reason": "prompt_bridge_error",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+            "rendered_required_paths": [],
+            "missing_rendered_paths": [],
+            "rendered_required_path_count": 0,
+        }
+
+    required_paths = _required_research_focus_projection_paths(
+        problem_family,
+        research_focus,
+    )
+    rendered_required_paths = [
+        path for path in required_paths if _prompt_contains_path(rendered_prompt, path)
+    ]
+    missing_rendered_paths = [
+        path for path in required_paths if path not in rendered_required_paths
+    ]
+    rendered_lower = rendered_prompt.lower()
+    forbidden_present = [
+        token
+        for token in PROBLEM_MEASUREMENT_DIAGNOSTICS_FORBIDDEN_PROMPT_TOKENS
+        if token in rendered_lower
+    ]
+    summary = {
+        **base,
+        "launch_focus_schema_present": (
+            "scion.launch_research_focus_prompt.v1" in rendered_prompt
+        ),
+        "launch_focus_taint_present": (
+            "prepared_launch_research_focus" in rendered_prompt
+        ),
+        "prompt_section_present": "## Compact Research Signals" in rendered_prompt,
+        "compact_prompt_value_present": bool(compact.strip()),
+        "launch_research_focus_key_present": "launch_research_focus" in rendered_prompt,
+        "decision_features_exclusion_present": (
+            "excluded from DecisionFeatures" in rendered_prompt
+            or "excluded_from_decision_features" in rendered_prompt
+        ),
+        "manifest_path_present": str(manifest_path) in rendered_prompt,
+        "rendered_required_paths": rendered_required_paths,
+        "missing_rendered_paths": missing_rendered_paths,
+        "rendered_required_path_count": len(rendered_required_paths),
+        "required_rendered_path_count": len(required_paths),
+        "forbidden_prompt_tokens_present": forbidden_present,
+        "warehouse_v2_followup_present": (
+            problem_family == "warehouse_delivery"
+            and (
+                "champion v2" in rendered_lower
+                or "champion-v2" in rendered_lower
+            )
+        ),
+        "warehouse_current_question_present": (
+            problem_family == "warehouse_delivery"
+            and "current_question" in rendered_prompt
+        ),
+        "warehouse_required_evidence_present": (
+            problem_family == "warehouse_delivery"
+            and "required_evidence" in rendered_prompt
+        ),
+        "warehouse_avoid_directions_present": (
+            problem_family == "warehouse_delivery"
+            and "default_avoid_directions" in rendered_prompt
+        ),
+        "warehouse_measurement_handoff_present": (
+            problem_family == "warehouse_delivery"
+            and "measurement_opportunity_diagnostics" in rendered_prompt
+            and "runtime_model" in rendered_prompt
+        ),
+        "cvrp_case_protection_present": (
+            problem_family == "cvrp"
+            and "CMT2" in rendered_prompt
+            and "CMT4" in rendered_prompt
+        ),
+        "cvrp_bounded_twoopt_present": (
+            problem_family == "cvrp"
+            and "large_instance_two_opt_constraints" in rendered_prompt
+            and (
+                "deadline" in rendered_lower
+                or "remaining-time" in rendered_lower
+                or "remaining time" in rendered_lower
+            )
+        ),
+        "cvrp_direct_effect_rules_present": (
+            problem_family == "cvrp"
+            and "route_merge_exception_rule" in rendered_prompt
+            and "construction_seed_rule" in rendered_prompt
+        ),
+        "cvrp_measurement_handoff_present": (
+            problem_family == "cvrp"
+            and "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in rendered_prompt
+        ),
+    }
+    required_true_fields = [
+        "launch_focus_schema_present",
+        "launch_focus_taint_present",
+        "prompt_section_present",
+        "compact_prompt_value_present",
+        "launch_research_focus_key_present",
+        "decision_features_exclusion_present",
+        "manifest_path_present",
+    ]
+    if problem_family == "warehouse_delivery":
+        if research_focus.get("accepted_checkpoint") not in ({}, [], "", None):
+            required_true_fields.append("warehouse_v2_followup_present")
+        if research_focus.get("current_question") not in ({}, [], "", None):
+            required_true_fields.append("warehouse_current_question_present")
+        if research_focus.get("required_evidence") not in ({}, [], "", None):
+            required_true_fields.append("warehouse_required_evidence_present")
+        if research_focus.get("default_avoid_directions") not in ({}, [], "", None):
+            required_true_fields.append("warehouse_avoid_directions_present")
+        if (
+            research_focus.get("measurement_opportunity_diagnostics")
+            not in ({}, [], "", None)
+        ):
+            required_true_fields.append("warehouse_measurement_handoff_present")
+    elif problem_family == "cvrp":
+        if research_focus.get("case_protection_requirements") not in (
+            {},
+            [],
+            "",
+            None,
+        ):
+            required_true_fields.append("cvrp_case_protection_present")
+        if research_focus.get("large_instance_two_opt_constraints") not in (
+            {},
+            [],
+            "",
+            None,
+        ):
+            required_true_fields.append("cvrp_bounded_twoopt_present")
+        if (
+            research_focus.get("route_merge_exception_rule")
+            not in ({}, [], "", None)
+            or research_focus.get("construction_seed_rule")
+            not in ({}, [], "", None)
+        ):
+            required_true_fields.append("cvrp_direct_effect_rules_present")
+        if (
+            research_focus.get("measurement_opportunity_diagnostics")
+            not in ({}, [], "", None)
+        ):
+            required_true_fields.append("cvrp_measurement_handoff_present")
+    available = (
+        bool(projected_dict)
+        and not missing_rendered_paths
+        and not forbidden_present
+        and all(summary[field] is True for field in required_true_fields)
+    )
+    return {
+        **summary,
+        "available": available,
+        "reason": "ok" if available else "missing_prompt_projection",
     }
 
 
@@ -326,6 +549,60 @@ def _minimal_hypothesis_context(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _minimal_research_focus_context(
+    *,
+    problem_family: str,
+    launch_research_focus: dict[str, Any],
+) -> dict[str, Any]:
+    family = str(problem_family or "")
+    if family == "warehouse_delivery":
+        return {
+            "problem_summary": "Warehouse prepared research-focus audit.",
+            "research_surfaces": "Research surfaces: warehouse_operator",
+            "operator_categories": "warehouse_operator",
+            "available_actions": "modify, create_new",
+            "targetable_files": "operators/*.py",
+            "champion_operators_code": "class MergeVehicles:\n    pass\n",
+            "champion_stats": "champion_v2",
+            "launch_research_focus": launch_research_focus,
+        }
+    return {
+        "problem_summary": "CVRP prepared research-focus audit.",
+        "research_surfaces": "Research surfaces: solver_design",
+        "operator_categories": "solver_design",
+        "available_actions": "modify, create_new",
+        "targetable_files": "policies/baseline_algorithm.py",
+        "champion_operators_code": "def solve():\n    return best\n",
+        "champion_stats": "prepared_focus_audit",
+        "launch_research_focus": launch_research_focus,
+    }
+
+
+def _launch_research_focus_payload(
+    *,
+    manifest_path: Path,
+    manifest: dict[str, Any],
+    projected_focus: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "scion.launch_research_focus_prompt.v1",
+        "taint": "prepared_launch_research_focus",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "decision_input_policy": "excluded_from_decision_features",
+        "source": "PREPARED_RUN_MANIFEST",
+        "manifest_path": str(manifest_path),
+        "problem_family": str(manifest.get("problem_family") or ""),
+        "analysis_intent": str(manifest.get("analysis_intent") or ""),
+        "acceptance_focus": [
+            str(item)
+            for item in (manifest.get("acceptance_focus") or [])
+            if str(item).strip()
+        ],
+        "research_focus": projected_focus,
+    }
+
+
 def _expected_adapter_diagnostic_schema(problem_family: str) -> str:
     if problem_family == "cvrp":
         return "cvrp_measurement_opportunity_diagnostic.v1"
@@ -474,6 +751,11 @@ def _path_value(value: dict[str, Any], path: str) -> Any:
             return None
         current = current.get(part)
     return current
+
+
+def _prompt_contains_path(rendered_prompt: str, path: str) -> bool:
+    parts = [part for part in path.split(".") if part]
+    return bool(parts) and all(part in rendered_prompt for part in parts)
 
 
 def _mapping_or_empty(value: Any) -> dict[str, Any]:
