@@ -109,6 +109,25 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
         report["checks"]["run_script_runtime_guard_failure_reports"]["status"] == "ok"
     )
     assert report["checks"]["launch_env_secret_permissions"]["status"] == "ok"
+    runtime_guard_detail = report["checks"]["git_runtime_guard_commit_consistent"][
+        "detail"
+    ]
+    assert report["runtime_guard_status"] == "ok"
+    assert report["runtime_guard_reason"] in {
+        "runtime_guard_commit_matches",
+        "runtime_guard_paths_unchanged_since_prepare",
+    }
+    assert report["prepared_runtime_commit"] == runtime_guard_detail[
+        "prepared_commit"
+    ]
+    assert report["actual_runtime_commit"] == runtime_guard_detail.get(
+        "actual_commit"
+    )
+    assert report["runtime_guard_paths"] == runtime_guard_detail[
+        "runtime_guard_paths"
+    ]
+    assert report["launch_env_secret_permissions"] == "ok"
+    assert report["launch_env_mode"] == "0o600"
     assert report["checks"]["run_script_data_root_failure_reports"]["status"] == "ok"
     assert report["checks"]["run_script_api_key_env_failure_reports"]["status"] == "ok"
     assert report["checks"]["completion_preflight"]["status"] == "skipped"

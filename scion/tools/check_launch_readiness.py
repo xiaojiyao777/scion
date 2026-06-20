@@ -535,6 +535,12 @@ def build_readiness(
     completion_summary = _completion_preflight_summary(
         checks.get("completion_preflight")
     )
+    runtime_guard_summary = _runtime_guard_commit_summary(
+        checks.get("git_runtime_guard_commit_consistent")
+    )
+    launch_env_summary = _launch_env_permissions_summary(
+        checks.get("launch_env_secret_permissions")
+    )
     launch_blockers = _launch_blockers(
         static_ready=static_ready,
         completion_preflight=completion_preflight,
@@ -571,6 +577,13 @@ def build_readiness(
         "completion_classification": completion_summary.get("classification"),
         "completion_code": completion_summary.get("code"),
         "completion_auth_pool": completion_summary.get("auth_pool"),
+        "runtime_guard_status": runtime_guard_summary.get("status"),
+        "runtime_guard_reason": runtime_guard_summary.get("reason"),
+        "prepared_runtime_commit": runtime_guard_summary.get("prepared_commit"),
+        "actual_runtime_commit": runtime_guard_summary.get("actual_commit"),
+        "runtime_guard_paths": runtime_guard_summary.get("runtime_guard_paths"),
+        "launch_env_secret_permissions": launch_env_summary.get("status"),
+        "launch_env_mode": launch_env_summary.get("mode"),
         "failed_required_checks": failed_required_checks,
         "failed_static_required_checks": failed_static_required_checks,
         "failed_optional_checks": failed_optional_checks,
@@ -641,6 +654,40 @@ def _completion_preflight_summary(item: Any) -> dict[str, Any]:
     if action_map:
         summary["operator_action"] = action_map
     return summary
+
+
+def _runtime_guard_commit_summary(item: Any) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {
+            "status": "missing",
+            "reason": None,
+            "prepared_commit": None,
+            "actual_commit": None,
+            "runtime_guard_paths": None,
+        }
+    detail = item.get("detail")
+    detail_map = detail if isinstance(detail, dict) else {}
+    return {
+        "status": item.get("status"),
+        "reason": detail_map.get("reason"),
+        "prepared_commit": detail_map.get("prepared_commit"),
+        "actual_commit": detail_map.get("actual_commit"),
+        "runtime_guard_paths": detail_map.get("runtime_guard_paths"),
+    }
+
+
+def _launch_env_permissions_summary(item: Any) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {
+            "status": "missing",
+            "mode": None,
+        }
+    detail = item.get("detail")
+    detail_map = detail if isinstance(detail, dict) else {}
+    return {
+        "status": item.get("status"),
+        "mode": detail_map.get("mode"),
+    }
 
 
 def render_markdown(report: dict[str, Any]) -> str:
