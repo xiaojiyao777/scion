@@ -26,6 +26,8 @@ _PROMPT_SAME_MECHANISM_ALLOWED_ACTIONS = (
 )
 _BRANCH_LESSON_SEQUENCE_LIMIT = 8
 _BRANCH_LESSON_TEXT_CHARS = 220
+_RUNTIME_FEEDBACK_SECTION_LINE_LIMIT = 6
+_RUNTIME_FEEDBACK_LINE_CHARS = 360
 
 
 def _split_hypothesis_context(
@@ -159,7 +161,9 @@ def _split_hypothesis_context(
     if D["weight_opt_feedback"]:
         branch_context_parts.append(D["weight_opt_feedback"])
     if D["runtime_feedback"]:
-        branch_context_parts.append(f"## Runtime Feedback\n{D['runtime_feedback']}")
+        branch_context_parts.append(
+            _runtime_feedback_context_block(D["runtime_feedback"])
+        )
     if D["runtime_failure_guidance"]:
         branch_context_parts.append(
             f"## Runtime Failure Guidance\n{D['runtime_failure_guidance']}"
@@ -634,7 +638,9 @@ def _compact_research_signals(
                 D.get("compact_problem_measurement_diagnostics")
                 or D.get("problem_measurement_diagnostics"),
             ),
-            "runtime_feedback": _compact_text_signal(D["runtime_feedback"]),
+            "runtime_feedback": _compact_runtime_feedback_signal(
+                D["runtime_feedback"]
+            ),
             "cross_branch_index": _compact_cross_branch_signal_index(context, D),
             "branch_lesson_ids": _lesson_ids_from_context(context),
             "research_shape": _compact_structured_signal(
@@ -674,6 +680,104 @@ def _compact_text_signal(
     if not text or text in {"(none)", "none", "null"}:
         return ""
     return text
+
+
+def _runtime_feedback_context_block(value: Any) -> str:
+    """Render runtime feedback as bounded proposal guidance.
+
+    Runtime feedback is tainted screening/verification context. Keep mechanism
+    planning signals visible, but do not let raw or tool-projected runtime text
+    dominate the formal hypothesis prompt.
+    """
+
+    text = _distill_runtime_feedback_text(value)
+    return f"## Runtime Feedback\n{text}" if text else ""
+
+
+def _compact_runtime_feedback_signal(value: Any) -> str:
+    text = _distill_runtime_feedback_text(value)
+    return _compact_text_signal(text)
+
+
+def _distill_runtime_feedback_text(value: Any) -> str:
+    raw_lines = [
+        re.sub(r"\s+", " ", line).strip()
+        for line in str(value or "").splitlines()
+    ]
+    raw_lines = [
+        line
+        for line in raw_lines
+        if line and line.lower() not in {"## runtime feedback", "runtime feedback"}
+    ]
+    if not raw_lines:
+        return ""
+
+    sections: list[tuple[str, list[str]]] = []
+    heading = "Runtime feedback summary"
+    lines: list[str] = []
+    for line in raw_lines:
+        if _runtime_feedback_heading(line):
+            if lines:
+                sections.append((heading, lines))
+                lines = []
+            heading = line.rstrip(":")
+            continue
+        lines.append(line)
+    if lines:
+        sections.append((heading, lines))
+
+    rendered: list[str] = [
+        "Screening/verification runtime guidance for proposal planning only; "
+        "excluded from DecisionFeatures."
+    ]
+    for heading, section_lines in sections:
+        rendered.append(f"{heading}:")
+        kept = section_lines[:_RUNTIME_FEEDBACK_SECTION_LINE_LIMIT]
+        for line in kept:
+            rendered.append(_limit_runtime_feedback_line(line))
+        omitted = len(section_lines) - len(kept)
+        if omitted > 0:
+            digest = hashlib.sha256(
+                "\n".join(section_lines[len(kept) :]).encode("utf-8")
+            ).hexdigest()[:12]
+            rendered.append(
+                "- omitted_runtime_feedback_line_count="
+                f"{omitted} omitted_runtime_feedback_digest={digest}"
+            )
+    return "\n".join(rendered)
+
+
+def _runtime_feedback_heading(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("-"):
+        return False
+    lowered = stripped.lower()
+    if lowered.startswith("## "):
+        return True
+    if stripped.endswith(":"):
+        return True
+    return lowered.startswith(
+        (
+            "recent ",
+            "low-confidence ",
+            "runtime-saturated ",
+            "problem-declared ",
+        )
+    )
+
+
+def _limit_runtime_feedback_line(line: str) -> str:
+    text = re.sub(r"\s+", " ", str(line or "")).strip()
+    if len(text) <= _RUNTIME_FEEDBACK_LINE_CHARS:
+        return text
+    head = text[:_RUNTIME_FEEDBACK_LINE_CHARS].rstrip()
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    omitted = len(text) - len(head)
+    return (
+        f"{head} "
+        f"[omitted_runtime_feedback_chars={omitted} "
+        f"runtime_feedback_text_digest={digest}]"
+    )
 
 
 def _compact_structured_signal(value: Any) -> str:

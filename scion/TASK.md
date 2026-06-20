@@ -318,7 +318,11 @@ Current checkpoint:
     mechanism-level distilled signals with lesson ids, signatures, maturity,
     evidence counts/statuses, and explicit `omitted_*`/digest audit markers
     instead of default-visible raw long lesson prose, raw rows, or large
-    branch/case enumerations.
+    branch/case enumerations. Runtime feedback in hypothesis prompts is also
+    rendered as bounded screening/verification proposal guidance with explicit
+    omitted-line/omitted-char digest markers, so long runtime or telemetry-like
+    strings cannot dominate the formal hypothesis prompt while remaining
+    excluded from `DecisionFeatures`.
   - Warehouse positive-at-or-above-MDE evidence routes to
     `protocol_evaluated_positive_effect_review_ready`; plateau conclusions
     require plateau-consistent measurement, review-ready runtime feedback, and

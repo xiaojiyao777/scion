@@ -621,6 +621,67 @@ def test_compact_measurement_diagnostics_ablation_keeps_research_context_without
     )
 
 
+def test_runtime_feedback_renders_as_distilled_prompt_guidance():
+    runtime_lines = [
+        "Recent screening runtime summary:",
+        "- R1 target=policies/baseline.py: median_ratio=1.05x pairs=8",
+        "- R2 target=policies/baseline.py: median_ratio=1.10x pairs=8",
+        "- R3 target=policies/baseline.py: median_ratio=1.15x pairs=8",
+        "- R4 target=policies/baseline.py: median_ratio=1.20x pairs=8",
+        "- R5 target=policies/baseline.py: median_ratio=1.25x pairs=8",
+        "- R6 target=policies/baseline.py: median_ratio=1.30x pairs=8",
+        "- R7 target=policies/baseline.py: median_ratio=1.35x pairs=8 "
+        "runtime-tail-marker-07",
+        "- R8 target=policies/baseline.py: median_ratio=1.40x pairs=8 "
+        "runtime-tail-marker-08",
+        "Recent screening failure causes:",
+        "- R9 target=policies/baseline.py: "
+        + ("candidate telemetry detail " * 40)
+        + "runtime-long-tail-marker",
+    ]
+    context = {
+        "problem_summary": "CVRP runtime prompt audit.",
+        "research_surfaces": "Research surfaces: solver_design",
+        "operator_categories": "solver_design",
+        "available_actions": "modify",
+        "targetable_files": "policies/baseline.py",
+        "champion_operators_code": "def solve():\n    return best\n",
+        "champion_stats": "champion_v1",
+        "runtime_feedback": "\n".join(runtime_lines),
+    }
+
+    filtered = filter_hypothesis_context_for_prompt(context)
+    system_blocks, user_prompt = _split_hypothesis_context(filtered)
+    rendered_prompt = "\n".join(block["text"] for block in system_blocks) + user_prompt
+
+    assert "## Runtime Feedback" in rendered_prompt
+    assert "excluded from DecisionFeatures" in rendered_prompt
+    assert "median_ratio=1.05x" in rendered_prompt
+    assert "median_ratio=1.30x" in rendered_prompt
+    assert "omitted_runtime_feedback_line_count=2" in rendered_prompt
+    assert "omitted_runtime_feedback_digest=" in rendered_prompt
+    assert "omitted_runtime_feedback_chars=" in rendered_prompt
+    assert "runtime_feedback_text_digest=" in rendered_prompt
+    assert "runtime-tail-marker-07" not in rendered_prompt
+    assert "runtime-tail-marker-08" not in rendered_prompt
+    assert "runtime-long-tail-marker" not in rendered_prompt
+    assert "[truncated]" not in rendered_prompt
+    assert "<truncated" not in rendered_prompt
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-runtime-feedback-distilled",
+        phase="hypothesis",
+        call_kind="hypothesis",
+        prompt_context=filtered,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+    assert "runtime_feedback" in manifest["section_names"]
+    assert manifest["section_statuses"]["runtime_feedback"]["status"] == "included"
+
+
 def test_minimal_research_context_ablation_keeps_source_and_measurement_context():
     context = {
         "problem_summary": "Warehouse objective.",

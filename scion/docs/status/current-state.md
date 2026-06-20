@@ -193,7 +193,11 @@ reports.
   mechanism-level distilled signals with lesson ids, signatures, maturity,
   evidence counts/statuses, and explicit `omitted_*`/digest audit markers
   instead of default-visible raw long lesson prose, raw rows, or large
-  branch/case enumerations.
+  branch/case enumerations. Runtime feedback must render as bounded
+  screening/verification proposal guidance with explicit omitted-line and
+  omitted-char digest markers, so long runtime or telemetry-like strings cannot
+  dominate the formal hypothesis prompt while remaining excluded from
+  `DecisionFeatures`.
 - Postrun acceptance must fail closed unless warehouse/CVRP conclusions,
   review-input summaries, failure taxonomy, prompt/source visibility,
   Phase 4 evidence coverage, runtime-budget evidence, continuity evidence, and
