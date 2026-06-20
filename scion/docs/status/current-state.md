@@ -41,15 +41,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `44388e29`
-after local equivalent commit `a99555a9`; local mirrors exist under
+Generated on WSL at launch-authoritative prepared runtime commit `27de4218`
+after local equivalent HEAD `9c284940`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names for
 inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-44388e29-nocaps-preflight-6r-gpt55-20260620T104927Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-27de4218-nocaps-aps0-preflight-6r-gpt55-20260620T111148Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-44388e29-nocaps-preflight-4r-gpt55-20260620T104927Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-27de4218-nocaps-aps0-preflight-4r-gpt55-20260620T111201Z-claw`
 
 Readiness snapshot:
 
@@ -57,7 +57,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `44388e29`; strict readiness
+- Runtime guard status: prepared runtime commit `27de4218`; strict readiness
   must keep reporting runtime guard OK. Doc/status-only commits after prepare
   are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -75,11 +75,13 @@ Prepared run shape:
   campaign loop still has a high-water `campaign_safety_step_limit` and the
   normal circuit breaker.
 - Launch readiness treats missing or command-disconnected proposal-cap fields
-  as launch blockers, but disabled/low values are audit warnings, not a v0.4
-  research gate.
-- APS headroom: `agentic_session_timeout_sec=3600`,
-  `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
-  `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
+  as launch blockers. Exact `0` values for disabled proposal/APS caps are
+  recorded as disabled details, not warnings or gates; positive values below
+  the historical recommendation remain audit warnings only.
+- APS research caps are disabled for the current prepared roots while the
+  wall-time guard remains enabled: `agentic_session_timeout_sec=3600`,
+  `agentic_tool_max_steps=0`, `agentic_tool_max_calls=0`,
+  `agentic_code_tool_max_calls=0`, `agentic_observation_max_chars=0`.
 - Runtime replay semantics: budget-exhausting summaries suppress stale
   fresh-runtime replay markers, materialization, and pressure reports. Runtime
   tie fresh replay remains available only for comparative runtime semantics.
@@ -227,9 +229,7 @@ Prepared run shape:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-cvrp-size70-direct-evidence-guard-20260620.md`.
-- Current prepared headroom readiness semantics:
-  `scion/docs/experiments/v0.4/v04-prepared-headroom-readiness-gate-relaxation-20260620.md`.
-- Current disabled proposal research-cap semantics:
+- Current disabled proposal/APS research-cap semantics:
   `scion/docs/experiments/v0.4/v04-disabled-proposal-research-caps-20260620.md`.
 - Current CVRP prompt-diagnostic repair:
   `scion/docs/experiments/v0.4/v04-cvrp-mechanism-effect-diagnostics-prompt-repair-20260620.md`.
