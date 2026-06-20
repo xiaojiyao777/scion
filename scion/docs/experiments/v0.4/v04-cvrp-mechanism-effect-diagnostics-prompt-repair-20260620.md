@@ -23,6 +23,15 @@ blob.
 - The hypothesis context profile explicitly projects those fields and keeps raw
   BKS, validation/frozen, pair-row, raw calibration, LLM-text, and prompt-ratio
   details hidden.
+- Prepared prompt/context readiness now emits
+  `cvrp_problem_measurement_diagnostics_prompt_bridge`, a report-only summary
+  proving that the CVRP adapter diagnostics, context projection, compact
+  hypothesis profile, and prompt renderer still carry
+  `mechanism_effect_ranking` into hypothesis prompts.
+- Launch readiness recomputes that summary from the current checkout and rejects
+  missing or stale prepared summaries before launch. The summary stores only
+  marker booleans, prompt-projection booleans, and counts; it does not persist
+  the raw provider prompt or raw adapter diagnostics payload.
 
 These diagnostics remain tainted proposal material. They do not change
 Decision, `DecisionFeatures`, Protocol gates, lifecycle, scheduler, promotion,
@@ -33,6 +42,22 @@ solver behavior, or problem-runtime semantics.
 Local:
 
 ```bash
+PYTHONPATH=scion python -m py_compile \
+  scion/tools/prepared_prompt_context.py \
+  scion/tools/rebuild_prepared_handoff.py \
+  scion/tools/check_launch_readiness.py \
+  scion/scion/tests/test_launch_readiness.py \
+  scion/scion/tests/test_rebuild_prepared_handoff.py
+# clean
+
+PYTHONPATH=scion pytest scion/scion/tests/test_rebuild_prepared_handoff.py -q
+# 3 passed
+
+PYTHONPATH=scion pytest \
+  scion/scion/tests/test_launch_readiness.py::test_launch_readiness_rejects_missing_cvrp_problem_measurement_diagnostics_bridge \
+  scion/scion/tests/test_launch_readiness.py::test_launch_readiness_rejects_stale_cvrp_problem_measurement_diagnostics_summary -q
+# 2 passed
+
 PYTHONPATH=scion pytest \
   scion/scion/tests/unit/test_cvrp_measurement_diagnostics.py \
   scion/scion/tests/unit/test_hypothesis_context_profiles.py \

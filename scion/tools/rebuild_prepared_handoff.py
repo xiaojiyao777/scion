@@ -32,7 +32,10 @@ from postrun_artifact_inventory import (  # noqa: E402
     build_inventory,
     render_markdown as render_inventory_markdown,
 )
-from prepared_prompt_context import research_focus_projection_summary  # noqa: E402
+from prepared_prompt_context import (  # noqa: E402
+    problem_measurement_diagnostics_prompt_summary,
+    research_focus_projection_summary,
+)
 
 
 SCHEMA_VERSION = "scion.prepared_handoff_rebuild.v1"
@@ -83,6 +86,24 @@ ACTIVE_SUBJECT_CODE_CONSTRAINT_PROMPT_MARKERS = {
     "code_prompt_renderer": (
         "scion/scion/proposal/engine/code_prompts.py",
         "Active Subject Code Constraints",
+    ),
+}
+CVRP_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS = {
+    "adapter_hook": (
+        "scion/scion/problems/cvrp/adapter.py",
+        "def render_problem_measurement_diagnostics",
+    ),
+    "context_payload": (
+        "scion/scion/proposal/context_manager/manager.py",
+        "problem_measurement_diagnostics",
+    ),
+    "profile_projection": (
+        "scion/scion/proposal/engine/hypothesis_context_profiles.py",
+        "mechanism_effect_ranking",
+    ),
+    "prompt_renderer": (
+        "scion/scion/proposal/engine/hypothesis_prompts.py",
+        "Problem Measurement Diagnostics",
     ),
 }
 CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS = {
@@ -457,6 +478,12 @@ def build_prepared_prompt_context_readiness(run_root: Path | str) -> dict[str, A
         required=bool(research_focus),
     )
     _add_active_subject_code_constraints_prompt_signal(
+        signals,
+        root=root,
+        manifest=manifest_dict,
+        problem_family=manifest_dict.get("problem_family"),
+    )
+    _add_problem_measurement_diagnostics_prompt_signal(
         signals,
         root=root,
         manifest=manifest_dict,
@@ -953,6 +980,54 @@ def _add_active_subject_code_constraints_prompt_signal(
             "boundary": (
                 "report-only source bridge; provider constraints guide code "
                 "generation and stay out of DecisionFeatures"
+            ),
+        },
+    )
+
+
+def _add_problem_measurement_diagnostics_prompt_signal(
+    signals: dict[str, dict[str, Any]],
+    *,
+    root: Path,
+    manifest: dict[str, Any],
+    problem_family: Any,
+) -> None:
+    family = str(problem_family or "")
+    if family != "cvrp":
+        return
+    problem_v1 = _resolve_problem_v1_path(
+        root=root,
+        manifest=manifest,
+        problem_family=family,
+    )
+    diagnostic_summary = problem_measurement_diagnostics_prompt_summary(
+        problem_v1_path=problem_v1,
+        problem_family=family,
+    )
+    source_marker_results = {
+        name: _source_contains(relative_path, marker)
+        for name, (relative_path, marker) in (
+            CVRP_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS.items()
+        )
+    }
+    _add_signal(
+        signals,
+        "cvrp_problem_measurement_diagnostics_prompt_bridge",
+        available=(
+            all(source_marker_results.values())
+            and diagnostic_summary.get("available") is True
+        ),
+        required=True,
+        source=(
+            "current checkout CVRP problem measurement diagnostics adapter, "
+            "context projection, and hypothesis prompt renderer"
+        ),
+        detail={
+            "source_markers": source_marker_results,
+            "diagnostic_summary": diagnostic_summary,
+            "boundary": (
+                "report-only problem-owned diagnostics bridge; mechanism effect "
+                "ranking guides proposal planning and stays out of DecisionFeatures"
             ),
         },
     )

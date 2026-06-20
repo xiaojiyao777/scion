@@ -22,7 +22,9 @@ if str(TOOLS_DIR) not in sys.path:
 
 from postrun_artifact_inventory import build_inventory, command_has_shell_flag  # noqa: E402
 from prepared_prompt_context import (  # noqa: E402
+    PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_SUMMARY_SCHEMA,
     RESEARCH_FOCUS_PROJECTION_SUMMARY_SCHEMA,
+    problem_measurement_diagnostics_prompt_summary,
     research_focus_projection_summary,
 )
 
@@ -66,6 +68,24 @@ ACTIVE_SUBJECT_CODE_CONSTRAINT_PROMPT_MARKERS = {
     "code_prompt_renderer": (
         "scion/scion/proposal/engine/code_prompts.py",
         "Active Subject Code Constraints",
+    ),
+}
+CVRP_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS = {
+    "adapter_hook": (
+        "scion/scion/problems/cvrp/adapter.py",
+        "def render_problem_measurement_diagnostics",
+    ),
+    "context_payload": (
+        "scion/scion/proposal/context_manager/manager.py",
+        "problem_measurement_diagnostics",
+    ),
+    "profile_projection": (
+        "scion/scion/proposal/engine/hypothesis_context_profiles.py",
+        "mechanism_effect_ranking",
+    ),
+    "prompt_renderer": (
+        "scion/scion/proposal/engine/hypothesis_prompts.py",
+        "Problem Measurement Diagnostics",
     ),
 }
 CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS = {
@@ -3209,6 +3229,13 @@ def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:
                 | provider_markers
             ).items()
         }
+    if family == "cvrp":
+        live_markers["cvrp_problem_measurement_diagnostics_source_markers"] = {
+            name: _repo_path_contains(relative_path, marker)
+            for name, (relative_path, marker) in (
+                CVRP_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS.items()
+            )
+        }
     detail["live_markers"] = live_markers
     missing_live = [
         f"{group}.{name}"
@@ -3431,6 +3458,58 @@ def _prompt_context_artifact_failures(
                 )
             )
 
+    if family == "cvrp":
+        failure_prefix = "cvrp_problem_measurement_diagnostics_bridge"
+        diagnostics_bridge = signals_dict.get(
+            "cvrp_problem_measurement_diagnostics_prompt_bridge"
+        )
+        if not isinstance(diagnostics_bridge, dict):
+            failures.append({"reason": f"{failure_prefix}_missing"})
+        else:
+            if diagnostics_bridge.get("required") is not True:
+                failures.append(
+                    {
+                        "reason": f"{failure_prefix}_not_required",
+                        "required": diagnostics_bridge.get("required"),
+                    }
+                )
+            if diagnostics_bridge.get("available") is not True:
+                failures.append(
+                    {
+                        "reason": f"{failure_prefix}_unavailable",
+                        "available": diagnostics_bridge.get("available"),
+                    }
+                )
+            if diagnostics_bridge.get("runtime_generated_after_launch") is True:
+                failures.append({"reason": f"{failure_prefix}_runtime_generated"})
+            diagnostics_detail = diagnostics_bridge.get("detail")
+            diagnostics_detail_dict = (
+                diagnostics_detail if isinstance(diagnostics_detail, dict) else {}
+            )
+            markers = diagnostics_detail_dict.get("source_markers")
+            markers_dict = markers if isinstance(markers, dict) else {}
+            missing_markers = [
+                name
+                for name, available in markers_dict.items()
+                if available is not True
+            ]
+            if not markers_dict or missing_markers:
+                failures.append(
+                    {
+                        "reason": f"{failure_prefix}_source_markers_missing",
+                        "missing": missing_markers or ["<all>"],
+                    }
+                )
+            failures.extend(
+                _problem_measurement_diagnostics_prompt_summary_failures(
+                    diagnostics_detail_dict.get("diagnostic_summary"),
+                    root=root,
+                    manifest=manifest,
+                    problem_family=family,
+                    failure_prefix=failure_prefix,
+                )
+            )
+
     return failures
 
 
@@ -3502,6 +3581,89 @@ def _research_focus_projection_summary_failures(
                     "actual": payload.get(field),
                 }
             )
+    return failures
+
+
+def _problem_measurement_diagnostics_prompt_summary_failures(
+    value: Any,
+    *,
+    root: Path,
+    manifest: dict[str, Any],
+    problem_family: str,
+    failure_prefix: str,
+) -> list[dict[str, Any]]:
+    payload = value if isinstance(value, dict) else {}
+    problem_v1 = _resolve_problem_v1_path(
+        root=root,
+        manifest=manifest,
+        problem_family=problem_family,
+    )
+    expected = problem_measurement_diagnostics_prompt_summary(
+        problem_v1_path=problem_v1,
+        problem_family=problem_family,
+    )
+    failures: list[dict[str, Any]] = []
+    if not payload:
+        return [{"reason": f"{failure_prefix}_diagnostic_summary_missing"}]
+
+    boundary_expectations = {
+        "schema_version": PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_SUMMARY_SCHEMA,
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_payload_excluded": True,
+        "raw_prompt_excluded": True,
+        "available": True,
+        "reason": "ok",
+        "forbidden_prompt_tokens_present": [],
+    }
+    for field, expected_value in boundary_expectations.items():
+        if payload.get(field) != expected_value:
+            failures.append(
+                {
+                    "reason": f"{failure_prefix}_diagnostic_summary_field_mismatch",
+                    "field": field,
+                    "expected": expected_value,
+                    "actual": payload.get(field),
+                }
+            )
+
+    if expected.get("available") is not True:
+        failures.append(
+            {
+                "reason": f"{failure_prefix}_live_diagnostic_summary_unavailable",
+                "expected": expected,
+            }
+        )
+        return failures
+
+    compare_fields = (
+        "problem_family",
+        "problem_v1_path",
+        "payload_schema_version",
+        "adapter_schema_present",
+        "prompt_section_present",
+        "compact_prompt_value_present",
+        "problem_measurement_diagnostics_key_present",
+        "screening_headroom_present",
+        "measurable_opportunity_classes_present",
+        "mechanism_effect_ranking_present",
+        "highest_current_followup_present",
+        "decision_features_exclusion_present",
+        "mechanism_rank_count",
+    )
+    for field in compare_fields:
+        if payload.get(field) != expected.get(field):
+            failures.append(
+                {
+                    "reason": f"{failure_prefix}_diagnostic_summary_field_mismatch",
+                    "field": field,
+                    "expected": expected.get(field),
+                    "actual": payload.get(field),
+                }
+            )
+    if _int_or_zero(payload.get("mechanism_rank_count")) <= 0:
+        failures.append({"reason": f"{failure_prefix}_diagnostic_summary_empty"})
     return failures
 
 

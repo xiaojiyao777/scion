@@ -332,6 +332,35 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
     assert provider_payload["forbidden_pattern_count"] >= 1
     assert provider_payload["decision_features_excluded"] is True
     assert provider_payload["raw_payload_excluded"] is True
+    diagnostic_bridge = prompt_context["signals"][
+        "cvrp_problem_measurement_diagnostics_prompt_bridge"
+    ]
+    assert diagnostic_bridge["available"] is True
+    assert diagnostic_bridge["required"] is True
+    assert diagnostic_bridge["runtime_generated_after_launch"] is False
+    assert diagnostic_bridge["detail"]["source_markers"] == {
+        "adapter_hook": True,
+        "context_payload": True,
+        "profile_projection": True,
+        "prompt_renderer": True,
+    }
+    diagnostic_summary = diagnostic_bridge["detail"]["diagnostic_summary"]
+    assert diagnostic_summary["schema_version"] == (
+        "scion.problem_measurement_diagnostics_prompt_summary.v1"
+    )
+    assert diagnostic_summary["available"] is True
+    assert diagnostic_summary["report_only"] is True
+    assert diagnostic_summary["decision_features_excluded"] is True
+    assert diagnostic_summary["raw_payload_excluded"] is True
+    assert diagnostic_summary["raw_prompt_excluded"] is True
+    assert diagnostic_summary["adapter_schema_present"] is True
+    assert diagnostic_summary["prompt_section_present"] is True
+    assert diagnostic_summary["screening_headroom_present"] is True
+    assert diagnostic_summary["measurable_opportunity_classes_present"] is True
+    assert diagnostic_summary["mechanism_effect_ranking_present"] is True
+    assert diagnostic_summary["highest_current_followup_present"] is True
+    assert diagnostic_summary["mechanism_rank_count"] >= 1
+    assert diagnostic_summary["forbidden_prompt_tokens_present"] == []
     assert (
         prompt_context["signals"]["cvrp_measurement_opportunity_handoff"][
             "available"

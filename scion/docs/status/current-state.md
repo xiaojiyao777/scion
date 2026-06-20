@@ -82,7 +82,10 @@ Prepared run shape:
   `screening_headroom`, `measurable_opportunity_classes`, and
   `mechanism_effect_ranking` as proposal-only research signals while raw BKS,
   validation, frozen, calibration-row, and pair-row details remain hidden from
-  prompts and excluded from `DecisionFeatures`.
+  prompts and excluded from `DecisionFeatures`. Prepared prompt readiness now
+  carries a `cvrp_problem_measurement_diagnostics_prompt_bridge` summary and
+  launch readiness recomputes it from the current checkout, so missing or stale
+  ranking projection blocks static launch readiness before a campaign starts.
 
 ## Framework Guarantees To Preserve
 
@@ -98,6 +101,10 @@ Prepared run shape:
 - Prepared prompt context must project required `research_focus` fields into
   the actual launch prompt path, including CVRP CMT2/CMT4 protection
   requirements.
+- CVRP prepared prompt context must also prove that problem-owned measurement
+  diagnostics reach the hypothesis prompt through a safe summary, including the
+  mechanism-effect ranking, without persisting raw prompts or raw diagnostic
+  payloads.
 - Current hypothesis prompts carry compact proposal-only research-shape
   diagnostics before broader feedback, and prompt manifest accounting classifies
   this block as `research_signal`.

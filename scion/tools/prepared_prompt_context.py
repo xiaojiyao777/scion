@@ -9,6 +9,19 @@ from typing import Any
 RESEARCH_FOCUS_PROJECTION_SUMMARY_SCHEMA = (
     "scion.prepared_research_focus_projection_summary.v1"
 )
+PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_SUMMARY_SCHEMA = (
+    "scion.problem_measurement_diagnostics_prompt_summary.v1"
+)
+PROBLEM_MEASUREMENT_DIAGNOSTICS_FORBIDDEN_PROMPT_TOKENS = (
+    "bks_gap_details",
+    "hidden-bks",
+    "validation_case_details",
+    "frozen_case_details",
+    "raw_pair_rows",
+    "raw_calibration_pair_rows",
+    "prompt_ratios",
+    "llm_text",
+)
 
 
 def research_focus_projection_summary(
@@ -104,6 +117,152 @@ def research_focus_projection_summary(
         "projected_path_count": len(projected_paths),
         "projected_field_count": len(projected_dict),
         "manifest_field_count": len(research_focus),
+    }
+
+
+def problem_measurement_diagnostics_prompt_summary(
+    *,
+    problem_v1_path: Path | str | None,
+    problem_family: str,
+) -> dict[str, Any]:
+    """Summarize problem-owned measurement diagnostics that reach prompts."""
+
+    family = str(problem_family or "").strip()
+    problem_path = Path(problem_v1_path).expanduser() if problem_v1_path else None
+    problem_path = (
+        problem_path.resolve()
+        if problem_path is not None and problem_path.exists()
+        else None
+    )
+    base = {
+        "schema_version": PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_SUMMARY_SCHEMA,
+        "problem_family": family,
+        "problem_v1_path": str(problem_path) if problem_path else "",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_payload_excluded": True,
+        "raw_prompt_excluded": True,
+    }
+    if family != "cvrp":
+        return {**base, "available": False, "reason": "unsupported_problem_family"}
+    if problem_path is None:
+        return {**base, "available": False, "reason": "problem_v1_not_found"}
+
+    try:
+        from scion.problem.bridge import (
+            legacy_problem_spec_from_v1,
+            load_problem_spec_v1_from_yaml,
+        )
+        from scion.problem.loader import load_problem_adapter
+        from scion.proposal.context_manager.manager import (
+            _problem_measurement_diagnostics,
+        )
+        from scion.proposal.engine.hypothesis_context_profiles import (
+            filter_hypothesis_context_for_prompt,
+        )
+        from scion.proposal.engine.hypothesis_prompts import (
+            _split_hypothesis_context,
+        )
+
+        spec_v1 = load_problem_spec_v1_from_yaml(problem_path)
+        legacy = legacy_problem_spec_from_v1(spec_v1)
+        adapter = load_problem_adapter(spec_v1)
+        payload = _problem_measurement_diagnostics(legacy, adapter=adapter)
+        filtered = filter_hypothesis_context_for_prompt(
+            _minimal_hypothesis_context(payload)
+        )
+        compact = str(
+            filtered.get("problem_measurement_diagnostics")
+            or filtered.get("compact_problem_measurement_diagnostics")
+            or ""
+        )
+        system_blocks, user_prompt = _split_hypothesis_context(dict(filtered))
+        rendered_prompt = "\n".join(
+            str(block.get("text") or "")
+            for block in system_blocks
+            if isinstance(block, dict)
+        )
+        rendered_prompt = f"{rendered_prompt}\n{user_prompt}"
+    except Exception as exc:  # pragma: no cover - surfaced as readiness detail.
+        return {
+            **base,
+            "available": False,
+            "reason": "prompt_bridge_error",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+
+    rendered_lower = rendered_prompt.lower()
+    forbidden_present = [
+        token
+        for token in PROBLEM_MEASUREMENT_DIAGNOSTICS_FORBIDDEN_PROMPT_TOKENS
+        if token in rendered_lower
+    ]
+    summary = {
+        **base,
+        "payload_schema_version": str(payload.get("schema_version") or ""),
+        "adapter_schema_present": (
+            "cvrp_measurement_opportunity_diagnostic.v1" in rendered_prompt
+        ),
+        "prompt_section_present": "## Problem Measurement Diagnostics" in rendered_prompt,
+        "compact_prompt_value_present": bool(compact.strip()),
+        "problem_measurement_diagnostics_key_present": bool(
+            filtered.get("problem_measurement_diagnostics")
+        ),
+        "screening_headroom_present": "screening_headroom" in rendered_prompt,
+        "measurable_opportunity_classes_present": (
+            "measurable_opportunity_classes" in rendered_prompt
+        ),
+        "mechanism_effect_ranking_present": (
+            "mechanism_effect_ranking" in rendered_prompt
+        ),
+        "highest_current_followup_present": (
+            "highest_current_followup" in rendered_prompt
+        ),
+        "decision_features_exclusion_present": (
+            "excluded from DecisionFeatures" in rendered_prompt
+            or "excluded_from_decision_features" in rendered_prompt
+        ),
+        "mechanism_rank_count": _sequence_count(
+            payload.get("mechanism_effect_ranking")
+        ),
+        "forbidden_prompt_tokens_present": forbidden_present,
+    }
+    required_true_fields = (
+        "adapter_schema_present",
+        "prompt_section_present",
+        "compact_prompt_value_present",
+        "problem_measurement_diagnostics_key_present",
+        "screening_headroom_present",
+        "measurable_opportunity_classes_present",
+        "mechanism_effect_ranking_present",
+        "highest_current_followup_present",
+        "decision_features_exclusion_present",
+    )
+    available = (
+        bool(payload)
+        and summary["mechanism_rank_count"] > 0
+        and not forbidden_present
+        and all(summary[field] is True for field in required_true_fields)
+    )
+    return {
+        **summary,
+        "available": available,
+        "reason": "ok" if available else "missing_prompt_projection",
+    }
+
+
+def _minimal_hypothesis_context(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "problem_summary": "CVRP prepared prompt diagnostics audit.",
+        "research_surfaces": "Research surfaces: solver_design",
+        "operator_categories": "solver_design",
+        "available_actions": "modify, create_new",
+        "targetable_files": "policies/baseline_algorithm.py",
+        "champion_operators_code": "def solve():\n    return best\n",
+        "champion_stats": "prepared_prompt_audit",
+        "problem_measurement_diagnostics": payload,
     }
 
 
@@ -253,3 +412,9 @@ def _mapping_or_empty(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
     return {}
+
+
+def _sequence_count(value: Any) -> int:
+    if isinstance(value, (list, tuple)):
+        return len(value)
+    return 0
