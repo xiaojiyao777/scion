@@ -108,6 +108,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert (
         report["checks"]["run_script_runtime_guard_failure_reports"]["status"] == "ok"
     )
+    assert report["checks"]["launch_env_secret_permissions"]["status"] == "ok"
     assert report["checks"]["run_script_data_root_failure_reports"]["status"] == "ok"
     assert report["checks"]["run_script_api_key_env_failure_reports"]["status"] == "ok"
     assert report["checks"]["completion_preflight"]["status"] == "skipped"
@@ -822,6 +823,31 @@ def test_launch_readiness_rejects_launch_env_failure_without_postrun_reports(
     assert {"reason": "launch_env_failure_path_missing"} in launch_env_check[
         "detail"
     ]["failures"]
+
+
+def test_launch_readiness_rejects_group_readable_launch_env(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    launch_env = run_root / "launch.env"
+    launch_env.chmod(0o644)
+
+    report = readiness_tool.build_readiness(run_root)
+    permission_check = report["checks"]["launch_env_secret_permissions"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert "launch_env_secret_permissions" in report["failed_required_checks"]
+    assert "launch_env_secret_permissions" in report["failed_static_required_checks"]
+    assert permission_check["status"] == "failed"
+    assert permission_check["detail"]["mode"] == "0o644"
+    assert {
+        "reason": "launch_env_has_group_or_other_permissions",
+        "launch_env": str(launch_env),
+        "mode": "0o644",
+        "group_or_other_mode": "0o44",
+        "expected": "no group/other permission bits",
+    } in permission_check["detail"]["failures"]
 
 
 def test_launch_readiness_ignores_comment_only_runtime_guard_marker(
@@ -3580,6 +3606,7 @@ def _write_prepared_root(
         ),
         encoding="utf-8",
     )
+    (run_root / "launch.env").chmod(0o600)
     (run_root / "run.sh").write_text(
         f"""#!/usr/bin/env bash
 set -uo pipefail

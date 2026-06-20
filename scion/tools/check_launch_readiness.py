@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import shlex
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -428,6 +429,10 @@ def build_readiness(
     add_check(
         "run_script_launch_env_failure_reports",
         *_run_script_launch_env_failure_reports(run_sh),
+    )
+    add_check(
+        "launch_env_secret_permissions",
+        *_launch_env_secret_permissions(root),
     )
     add_check(
         "run_script_scion_dir_failure_reports",
@@ -1666,6 +1671,41 @@ def _run_script_completion_preflight_enforced(
         "preflight_guard_position": preflight_pos,
         "proxy_call_position": proxy_pos,
         "campaign_command_position": campaign_pos,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
+
+
+def _launch_env_secret_permissions(root: Path) -> tuple[str, Any]:
+    launch_env = root / "launch.env"
+    failures: list[dict[str, Any]] = []
+    mode: int | None = None
+    try:
+        mode = stat.S_IMODE(launch_env.stat().st_mode)
+    except OSError as exc:
+        failures.append(
+            {
+                "reason": "unable_to_stat_launch_env",
+                "launch_env": str(launch_env),
+                "error": str(exc),
+            }
+        )
+
+    if mode is not None and mode & 0o077:
+        failures.append(
+            {
+                "reason": "launch_env_has_group_or_other_permissions",
+                "launch_env": str(launch_env),
+                "mode": oct(mode),
+                "group_or_other_mode": oct(mode & 0o077),
+                "expected": "no group/other permission bits",
+            }
+        )
+
+    detail = {
+        "launch_env": str(launch_env),
+        "mode": oct(mode) if mode is not None else None,
+        "expected": "no group/other permission bits",
         "failures": failures,
     }
     return ("ok" if not failures else "failed"), detail
