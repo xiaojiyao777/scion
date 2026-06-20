@@ -797,7 +797,7 @@ def validate_agentic_session_artifact(
             except Exception:
                 errors.append(f"invalid tool budget field: {used_key}")
                 continue
-            if max_value >= 0 and used_value > max_value:
+            if max_value > 0 and used_value > max_value:
                 errors.append(f"tool budget exceeded: {used_key}")
     else:
         errors.append("tool_loop_config and tool_budget_used must be objects")

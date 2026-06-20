@@ -667,6 +667,43 @@ def test_agentic_replay_validator_rejects_budget_duplicate_step_and_raw_marker(
     assert "raw ref marker" in rendered_errors
 
 
+def test_agentic_replay_validator_treats_zero_budget_limits_as_disabled() -> None:
+    artifact = {
+        "schema_version": AGENTIC_SESSION_SCHEMA_VERSION,
+        "session_id": "session-disabled",
+        "request_id": "request-disabled",
+        "idempotency_key": "aps:disabled",
+        "termination_reason": "completed",
+        "tool_loop_config": {
+            "max_steps": 0,
+            "max_tool_calls": 0,
+            "max_observation_chars": 0,
+        },
+        "tool_budget_used": {
+            "tool_steps": 12,
+            "tool_calls": 10,
+            "observation_chars": 250000,
+        },
+        "transcript_digest": "",
+        "compact_transcript": [
+            {
+                "phase": "diagnose",
+                "metadata": {
+                    "step_id": "tool-0001",
+                    "tool_name": "context.read_algorithm_file",
+                    "status": "ok",
+                    "result_summary": "source context captured",
+                },
+            }
+        ],
+    }
+
+    result = validate_agentic_session_artifact(artifact)
+
+    assert result.ok is True
+    assert not result.errors
+
+
 def test_resume_from_artifact_returns_sanitized_length_bounded_context(
     tmp_path: Path,
 ) -> None:
