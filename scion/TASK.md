@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `46c3d1d3`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `faa8c29e`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -250,9 +250,9 @@ Current checkpoint:
   protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-46c3d1d-postid-6r-gpt55-20260620T173536Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-faa8c29-postsum-6r-gpt55-20260620T175859Z-claw-6r-gpt55-20260620T175928Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-46c3d1d-postid-4r-gpt55-20260620T173536Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-faa8c29-postsum-4r-gpt55-20260620T175859Z-claw-4r-gpt55-20260620T175929Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -334,6 +334,12 @@ Current checkpoint:
     runtime-feedback raw availability, drain/review readiness, runtime model
     counts, and runtime budget diagnostic counts before delegated review can
     accept the summary as current-run analysis evidence.
+  - Current-run warehouse/CVRP problem-summary `interpretation`,
+    `evidence_gaps`, `review_axes_actionability`, and launch-required flags
+    must match the recomputed problem-specific summary from current
+    review-input summaries. Readiness rejects stale or overly optimistic
+    delegated-review conclusions even when an omitted gap would otherwise be
+    nonblocking.
   - Quality-blocked no-protocol warehouse/CVRP conclusions must match the
     current failure-taxonomy quality-block counts, reports-with-quality-blocks,
     and reason-count distribution; matching only the aggregate blocked count is
