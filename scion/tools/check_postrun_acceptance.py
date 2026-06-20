@@ -1090,13 +1090,40 @@ def _problem_summary_input_consistency(
     protocol_summary = _mapping_or_empty(brief.get("protocol_accounting_summary"))
     protocol_aggregate = _mapping_or_empty(protocol_summary.get("aggregate"))
     protocol_rows = _mapping_or_empty(protocol_aggregate.get("protocol_rows"))
+    protocol_formal_artifacts = _mapping_or_empty(
+        protocol_aggregate.get("formal_candidate_artifacts")
+    )
+    protocol_stage_rows = _mapping_or_empty(protocol_aggregate.get("stage_rows"))
+    counters = _mapping_or_empty(inventory.get("counters"))
+    input_formal_screened_candidates = max(
+        _int_or_zero(protocol_aggregate.get("formal_screened_candidates")),
+        _int_or_zero(counters.get("formal_screened_candidates")),
+        _int_or_zero(counters.get("screened_experiments")),
+    )
     input_protocol_evaluated = max(
         _int_or_zero(protocol_rows.get("protocol_evaluated_candidates")),
         _int_or_zero(protocol_aggregate.get("formal_protocol_evaluated_candidates")),
+        _int_or_zero(counters.get("protocol_evaluated_candidates")),
     )
     summary_protocol_evaluated = _int_or_zero(
         protocol_evidence.get("protocol_evaluated_candidates")
     )
+    summary_formal_screened_candidates = _int_or_zero(
+        protocol_evidence.get("formal_screened_candidates")
+    )
+    input_protocol_metric_results = _int_or_zero(
+        protocol_rows.get("protocol_metric_results")
+    )
+    summary_protocol_metric_results = _int_or_zero(
+        protocol_evidence.get("protocol_metric_results")
+    )
+    input_formal_candidate_artifact_rows = _int_or_zero(
+        protocol_formal_artifacts.get("row_count")
+    )
+    summary_formal_candidate_artifact_rows = _int_or_zero(
+        protocol_evidence.get("formal_candidate_artifact_rows")
+    )
+    summary_protocol_stage_rows = _mapping_or_empty(protocol_evidence.get("stage_rows"))
 
     measurement_summary = _mapping_or_empty(brief.get("measurement_effect_summary"))
     measurement_aggregate = _mapping_or_empty(measurement_summary.get("aggregate"))
@@ -1135,6 +1162,19 @@ def _problem_summary_input_consistency(
     if summary_protocol_evaluated != input_protocol_evaluated:
         failures.append("problem_summary_protocol_evaluated_mismatch")
     if _is_protocol_evaluated_interpretation(interpretation):
+        if summary_formal_screened_candidates != input_formal_screened_candidates:
+            failures.append("problem_summary_formal_screened_candidates_mismatch")
+        if summary_protocol_metric_results != input_protocol_metric_results:
+            failures.append("problem_summary_protocol_metric_results_mismatch")
+        if (
+            summary_formal_candidate_artifact_rows
+            != input_formal_candidate_artifact_rows
+        ):
+            failures.append("problem_summary_formal_candidate_artifact_rows_mismatch")
+        if _json_comparison_value(summary_protocol_stage_rows) != _json_comparison_value(
+            protocol_stage_rows
+        ):
+            failures.append("problem_summary_protocol_stage_rows_mismatch")
         if summary_protocol_evaluated <= 0:
             failures.append("problem_summary_protocol_evaluated_missing")
         if input_protocol_evaluated <= 0:
@@ -1393,6 +1433,20 @@ def _problem_summary_input_consistency(
             "failures": failures,
             "summary_protocol_evaluated_candidates": summary_protocol_evaluated,
             "input_protocol_evaluated_candidates": input_protocol_evaluated,
+            "summary_formal_screened_candidates": (
+                summary_formal_screened_candidates
+            ),
+            "input_formal_screened_candidates": input_formal_screened_candidates,
+            "summary_protocol_metric_results": summary_protocol_metric_results,
+            "input_protocol_metric_results": input_protocol_metric_results,
+            "summary_formal_candidate_artifact_rows": (
+                summary_formal_candidate_artifact_rows
+            ),
+            "input_formal_candidate_artifact_rows": (
+                input_formal_candidate_artifact_rows
+            ),
+            "summary_protocol_stage_rows": summary_protocol_stage_rows,
+            "input_protocol_stage_rows": protocol_stage_rows,
             "summary_quality_block_signal": summary_quality_block_signal,
             "input_quality_block_signal": input_quality_block_signal,
             "summary_reports_with_quality_blocks": summary_reports_with_quality_blocks,
@@ -2441,6 +2495,13 @@ def _int_mapping(value: Any) -> dict[str, int]:
     if not isinstance(value, Mapping):
         return {}
     return {str(key): _int_or_zero(count) for key, count in value.items()}
+
+
+def _json_comparison_value(value: Any) -> Any:
+    try:
+        return json.loads(json.dumps(value, sort_keys=True))
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def _large_twoopt_direct_evidence_signature(value: Any) -> dict[str, Any]:

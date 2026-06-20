@@ -1598,6 +1598,72 @@ def test_postrun_acceptance_rejects_problem_summary_input_mismatch(
     )
 
 
+def test_postrun_acceptance_rejects_stale_protocol_detail_in_problem_summary(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-stale-protocol")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    evidence = _warehouse_problem_evidence()
+    protocol_evidence = evidence["protocol"]
+    assert isinstance(protocol_evidence, dict)
+    protocol_evidence.update(
+        {
+            "protocol_metric_results": 99,
+            "formal_candidate_artifact_rows": 99,
+            "stage_rows": {"screening": 99},
+        }
+    )
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": evidence,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    protocol = brief["protocol_accounting_summary"]
+    assert isinstance(protocol, dict)
+    aggregate = protocol["aggregate"]
+    assert isinstance(aggregate, dict)
+    aggregate.update(
+        {
+            "formal_candidate_artifacts": {"row_count": 1},
+            "stage_rows": {"screening": 1},
+        }
+    )
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    consistency = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert consistency["status"] == "failed"
+    failures = consistency["detail"]["failures"]
+    assert "problem_summary_protocol_evaluated_mismatch" not in failures
+    assert "problem_summary_protocol_metric_results_mismatch" in failures
+    assert "problem_summary_formal_candidate_artifact_rows_mismatch" in failures
+    assert "problem_summary_protocol_stage_rows_mismatch" in failures
+    assert consistency["detail"]["summary_protocol_evaluated_candidates"] == 1
+    assert consistency["detail"]["input_protocol_evaluated_candidates"] == 1
+    assert consistency["detail"]["summary_protocol_metric_results"] == 99
+    assert consistency["detail"]["input_protocol_metric_results"] == 1
+
+
 def test_postrun_acceptance_rejects_stale_runtime_evidence_in_problem_summary(
     tmp_path: Path,
 ) -> None:
@@ -4185,6 +4251,8 @@ def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
                 "protocol_evaluated_candidates": 1,
                 "protocol_metric_results": 1,
             },
+            "formal_candidate_artifacts": {"row_count": 1},
+            "stage_rows": {},
         },
         "entries": [{"report": "fixture.research_efficiency.v1.json"}],
     }
@@ -4567,6 +4635,8 @@ def _apply_quality_blocked_review_inputs(
             "protocol_evaluated_candidates": 0,
             "protocol_metric_results": 0,
         },
+        "formal_candidate_artifacts": {"row_count": 0},
+        "stage_rows": {},
     }
     _mark_measurement_effect_unavailable(brief["measurement_effect_summary"])
     _mark_runtime_feedback_unavailable(brief["runtime_feedback_summary"])
@@ -4600,6 +4670,8 @@ def _mark_protocol_accounting_evaluated(brief: dict[str, object]) -> None:
             "protocol_evaluated_candidates": 1,
             "protocol_metric_results": 1,
         },
+        "formal_candidate_artifacts": {"row_count": 1},
+        "stage_rows": {},
     }
 
 
