@@ -46,14 +46,14 @@ After strict readiness passes, launch from WSL by running the prepared wrapper
 itself, not by reconstructing the long `scion run` command:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-f22ad5f4-pathidentity-6r-gpt55-20260620T153154Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-68773004-cmtprotect-6r-gpt55-20260620T163626Z-claw/run.sh
 ```
 
 Run the CVRP wrapper only after the warehouse run is underway or accepted for
 launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-f22ad5f4-pathidentity-4r-gpt55-20260620T153155Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-68773004-cmtprotect-4r-gpt55-20260620T163627Z-claw/run.sh
 ```
 
 The wrappers already enforce completion preflight, runtime guards, campaign
@@ -78,17 +78,17 @@ mirror root. Without `--execute`, it prints the planned commands only.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `f22ad5f4`;
-the corresponding local framework repair commit is `b2d19a59`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `68773004`;
+the corresponding local framework repair commit is `5e627086`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection only. Run launch readiness on WSL, because prepared
 contracts and wrapper scripts intentionally contain WSL absolute paths and will
 fail identity checks if evaluated from the server-side mirror.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-f22ad5f4-pathidentity-6r-gpt55-20260620T153154Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-68773004-cmtprotect-6r-gpt55-20260620T163626Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-f22ad5f4-pathidentity-4r-gpt55-20260620T153155Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-68773004-cmtprotect-4r-gpt55-20260620T163627Z-claw`
 
 Readiness snapshot:
 
@@ -96,10 +96,9 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `f22ad5f4`; strict readiness
-  must keep reporting runtime guard OK. The previous `febeaf11-runtimeinactive`
-  roots are superseded because the postrun acceptance path-identity repair
-  changed a runtime-guarded tool path.
+- Runtime guard status: prepared runtime commit `68773004`; strict readiness
+  must keep reporting runtime guard OK. Treat all earlier prepared roots as
+  superseded because runtime-guarded postrun tool paths changed.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
   `prepared_run_manifest.v1.json` agree on the problem/protocol/split/seeds,
   campaign directory, rounds, time limit, measurement-governance mode, and
@@ -215,20 +214,10 @@ Prepared run shape:
   `scion/design/v0.5-evidence-uplift-roadmap.md`.
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
-- Current repair/readiness evidence:
-  - `scion/docs/experiments/v0.4/v04-disabled-proposal-research-caps-20260620.md`
-  - `scion/docs/experiments/v0.4/v04-source-read-result-headroom-20260620.md`
-  - `scion/docs/experiments/v0.4/v04-disabled-code-surface-full-read-repair-20260620.md`
-  - `scion/docs/experiments/v0.4/v04-code-prompt-solver-source-96k-projection-repair-20260620.md`
-  - `scion/docs/experiments/v0.4/v04-screening-marginal-gate-decision-alignment-20260620.md`
-  - `scion/docs/experiments/v0.4/v04-postrun-review-input-path-identity-repair-20260620.md`
-  - `scion/docs/experiments/v0.4/v04-pathidentity-prepared-root-refresh-20260620.md`
-  - `scion/docs/experiments/v0.4/v04-postrun-runtime-budget-side-summary-20260620.md`
-  - `scion/docs/experiments/v0.4/v04-runtime-telemetry-inactive-observation-repair-20260620.md`
-  - `scion/docs/experiments/v0.4/v04-cvrp-mechanism-effect-diagnostics-prompt-repair-20260620.md`
-  - `scion/docs/experiments/v0.4/v04-warehouse-diagnostics-prompt-bridge-20260620.md`
-  - `scion/docs/experiments/v0.4/v04-research-focus-prompt-bridge-20260620.md`
-  - `scion/docs/experiments/v0.4/v04-postrun-wrapper-status-escalation-20260620.md`
+- Repair/readiness evidence: use the current task, this status file, and the
+  v0.4 planning summary first. Detailed repair reports live under
+  `scion/docs/experiments/v0.4/`; read them only when auditing a specific
+  guarantee or failure.
 - Current WSL access:
   `ssh -i ~/.ssh/id_ed25519_codex_wsl -p 2222 -o BatchMode=yes -o StrictHostKeyChecking=no xjy-ubuntu@127.0.0.1`.
 - WSL repo: `/home/xjy-ubuntu/research/or-autoresearch-agent`.
