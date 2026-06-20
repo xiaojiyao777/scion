@@ -27,23 +27,24 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. `/v1/models` can list `gpt-5.5`, but the strict completion
   preflight currently fails with HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`; latest auth pool has `active=0`, no launch-usable
-  account, and may report the sole account as `expired` or `refreshing`.
+  `code=invalid_api_key`; latest strict preflight has auth pool `active=0`,
+  `expired=1`, `total=1`.
 - Do not launch a prepared root until:
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL after CVRP postrun readiness
-began rejecting seed-only large two-opt evidence as a bounded two-opt review
-conclusion. WSL static readiness passes; launch readiness fails only at
-completion preflight auth.
+The active prepared roots were generated on WSL after current-run postrun
+problem summaries began requiring an explicit `evidence` payload before review
+readiness can accept warehouse/CVRP conclusions. The earlier CVRP seed-only
+large two-opt rejection remains in force. WSL static readiness passes; launch
+readiness fails only at completion preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-seedguard-2d0db1b6-preflight-6r-gpt55-20260620T004921Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-evidenceguard-29b65698-preflight-6r-gpt55-20260620T011035Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-seedguard-2d0db1b6-preflight-4r-gpt55-20260620T004921Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-evidenceguard-29b65698-preflight-4r-gpt55-20260620T011050Z-claw`
 
 Prepared manifests record:
 
@@ -51,7 +52,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `2d0db1b6`; CVRP `2d0db1b6`.
+- Runtime commits: warehouse `29b65698`; CVRP `29b65698`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -105,6 +106,10 @@ Prepared manifests record:
 - Postrun acceptance readiness emits top-level failed-check summaries, so
   delegated reviewers can distinguish missing current-run analysis inputs from
   optional markers without scanning the full check table.
+- Current-run warehouse/CVRP problem summaries must carry an explicit
+  `evidence` payload before postrun delegated review can accept
+  protocol-evaluated, plateau, positive-effect, or bounded two-opt conclusions;
+  summary text alone is not accepted as current-run evidence.
 - CVRP bounded two-opt postrun review readiness requires co-located positive
   effect, activation, objective-effect, and two-opt-specific phase telemetry on
   the same matching top effect row. Activation/effect evidence must be
