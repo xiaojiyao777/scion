@@ -21,6 +21,10 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from postrun_artifact_inventory import build_inventory, command_has_shell_flag  # noqa: E402
+from prepared_prompt_context import (  # noqa: E402
+    RESEARCH_FOCUS_PROJECTION_SUMMARY_SCHEMA,
+    research_focus_projection_summary,
+)
 
 
 SCHEMA_VERSION = "scion.launch_readiness.v1"
@@ -3014,6 +3018,34 @@ def _prompt_context_artifact_failures(
                 }
             )
 
+    projection = signals_dict.get("prepared_research_focus_projection")
+    if not isinstance(projection, dict):
+        failures.append({"reason": "prepared_focus_projection_missing"})
+    else:
+        if projection.get("required") is not True:
+            failures.append(
+                {
+                    "reason": "prepared_focus_projection_not_required",
+                    "required": projection.get("required"),
+                }
+            )
+        if projection.get("available") is not True:
+            failures.append(
+                {
+                    "reason": "prepared_focus_projection_unavailable",
+                    "available": projection.get("available"),
+                }
+            )
+        if projection.get("runtime_generated_after_launch") is True:
+            failures.append({"reason": "prepared_focus_projection_runtime_generated"})
+        failures.extend(
+            _research_focus_projection_summary_failures(
+                projection.get("detail"),
+                manifest_path=manifest_path,
+                manifest=manifest,
+            )
+        )
+
     family = str(manifest.get("problem_family") or "")
     bridge_signal_name = ACTIVE_SUBJECT_CODE_CONSTRAINT_SIGNAL_NAMES.get(family)
     if bridge_signal_name:
@@ -3071,6 +3103,73 @@ def _prompt_context_artifact_failures(
                 )
             )
 
+    return failures
+
+
+def _research_focus_projection_summary_failures(
+    value: Any,
+    *,
+    manifest_path: Path,
+    manifest: dict[str, Any],
+) -> list[dict[str, Any]]:
+    payload = value if isinstance(value, dict) else {}
+    expected = research_focus_projection_summary(
+        manifest_path=manifest_path,
+        manifest=manifest,
+    )
+    failures: list[dict[str, Any]] = []
+    if not payload:
+        return [{"reason": "prepared_focus_projection_detail_missing"}]
+
+    boundary_expectations = {
+        "schema_version": RESEARCH_FOCUS_PROJECTION_SUMMARY_SCHEMA,
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_prompt_excluded": True,
+        "available": True,
+        "reason": "ok",
+        "missing_projected_keys": [],
+    }
+    for field, expected_value in boundary_expectations.items():
+        if payload.get(field) != expected_value:
+            failures.append(
+                {
+                    "reason": "prepared_focus_projection_field_mismatch",
+                    "field": field,
+                    "expected": expected_value,
+                    "actual": payload.get(field),
+                }
+            )
+
+    if expected.get("available") is not True:
+        failures.append(
+            {
+                "reason": "prepared_focus_projection_live_unavailable",
+                "expected": expected,
+            }
+        )
+        return failures
+
+    compare_fields = (
+        "problem_family",
+        "manifest_path",
+        "manifest_keys",
+        "projected_keys",
+        "required_projected_keys",
+        "projected_field_count",
+        "manifest_field_count",
+    )
+    for field in compare_fields:
+        if payload.get(field) != expected.get(field):
+            failures.append(
+                {
+                    "reason": "prepared_focus_projection_field_mismatch",
+                    "field": field,
+                    "expected": expected.get(field),
+                    "actual": payload.get(field),
+                }
+            )
     return failures
 
 

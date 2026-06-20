@@ -1336,6 +1336,40 @@ def test_launch_readiness_rejects_prompt_context_artifact_identity_mismatch(
     )
 
 
+def test_launch_readiness_rejects_stale_research_focus_projection(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    artifact_path = (
+        run_root
+        / "prepared_handoff"
+        / "prompt_context_readiness"
+        / "cvrp_on_full.prepared_prompt_context_readiness.v1.json"
+    )
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    detail = payload["signals"]["prepared_research_focus_projection"]["detail"]
+    detail["projected_keys"] = [
+        key
+        for key in detail["projected_keys"]
+        if key != "case_protection_requirements"
+    ]
+    artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert any(
+        failure["reason"] == "prepared_focus_projection_field_mismatch"
+        and failure["field"] == "projected_keys"
+        and "case_protection_requirements" in failure["expected"]
+        and "case_protection_requirements" not in failure["actual"]
+        for failure in prompt_check["detail"]["failures"]
+    )
+
+
 def test_launch_readiness_rejects_missing_cvrp_code_constraint_bridge(
     tmp_path: Path,
 ) -> None:
@@ -3354,6 +3388,12 @@ def _write_prompt_context_readiness(
         "prepared_manifest_exists": True,
         "run_sh_exports_manifest": launch_markers,
     }
+    manifest_path = run_root / "prepared_run_manifest.v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    projection_summary = readiness_tool.research_focus_projection_summary(
+        manifest_path=manifest_path,
+        manifest=manifest,
+    )
     signals = {
         "prepared_research_focus_prompt_bridge": {
             "available": ready and launch_markers,
@@ -3365,6 +3405,13 @@ def _write_prompt_context_readiness(
                     "prompt_renderer": True,
                 },
             },
+            "required": True,
+            "runtime_generated_after_launch": False,
+            "source": "fixture",
+        },
+        "prepared_research_focus_projection": {
+            "available": ready and projection_summary["available"] is True,
+            "detail": projection_summary,
             "required": True,
             "runtime_generated_after_launch": False,
             "source": "fixture",

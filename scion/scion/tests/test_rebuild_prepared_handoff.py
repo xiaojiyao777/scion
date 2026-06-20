@@ -251,6 +251,23 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
         ]
         is True
     )
+    projection = prompt_context["signals"]["prepared_research_focus_projection"]
+    assert projection["available"] is True
+    assert projection["required"] is True
+    assert projection["runtime_generated_after_launch"] is False
+    projection_detail = projection["detail"]
+    assert projection_detail["schema_version"] == (
+        "scion.prepared_research_focus_projection_summary.v1"
+    )
+    assert projection_detail["available"] is True
+    assert projection_detail["raw_prompt_excluded"] is True
+    assert projection_detail["decision_features_excluded"] is True
+    assert projection_detail["missing_projected_keys"] == []
+    assert "case_protection_requirements" in projection_detail["projected_keys"]
+    assert (
+        "case_protection_requirements"
+        in projection_detail["required_projected_keys"]
+    )
     case_protection = prompt_context["signals"]["cvrp_case_protection_requirements"]
     assert case_protection["available"] is True
     assert case_protection["required"] is True

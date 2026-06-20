@@ -32,6 +32,7 @@ from postrun_artifact_inventory import (  # noqa: E402
     build_inventory,
     render_markdown as render_inventory_markdown,
 )
+from prepared_prompt_context import research_focus_projection_summary  # noqa: E402
 
 
 SCHEMA_VERSION = "scion.prepared_handoff_rebuild.v1"
@@ -885,6 +886,24 @@ def _add_launch_research_focus_prompt_signal(
             "source_markers": source_marker_results,
             "launch_markers": launch_marker_results,
         },
+    )
+    projection_summary = research_focus_projection_summary(
+        manifest_path=root / "prepared_run_manifest.v1.json",
+        manifest=_mapping_or_empty(_read_json(root / "prepared_run_manifest.v1.json")),
+    )
+    _add_signal(
+        signals,
+        "prepared_research_focus_projection",
+        available=(
+            required is not True
+            or projection_summary.get("available") is True
+        ),
+        required=required,
+        source=(
+            "prepared_run_manifest.research_focus projected through "
+            "scion.proposal.context_manager.manager._project_launch_research_focus"
+        ),
+        detail=projection_summary,
     )
 
 
