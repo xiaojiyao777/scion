@@ -47,7 +47,9 @@ reports `launch_ready=true`.
 Generated on WSL at launch-authoritative prepared runtime commit `f22ad5f4`;
 the corresponding local framework repair commit is `b2d19a59`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
-names for inspection.
+names for inspection only. Run launch readiness on WSL, because prepared
+contracts and wrapper scripts intentionally contain WSL absolute paths and will
+fail identity checks if evaluated from the server-side mirror.
 
 - Warehouse:
   `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-f22ad5f4-pathidentity-6r-gpt55-20260620T153154Z-claw`
