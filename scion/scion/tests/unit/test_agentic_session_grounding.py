@@ -420,3 +420,60 @@ def test_zero_agentic_tool_budgets_disable_budget_cutoffs(
         session._enforce_observation_budget(context, state, observation)
         is observation
     )
+
+
+def test_zero_agentic_tool_budgets_do_not_cap_diagnosis_planner_decisions(
+    tmp_path: Path,
+) -> None:
+    context = replace(
+        _context(tmp_path, policy=_tool_enabled_policy()),
+        step_history=(),
+        search_memory=None,
+        research_log=None,
+    )
+    creative = PlanningCreative(
+        [
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_problem", "args": {}},
+            {"stop": True},
+        ]
+    )
+    config = AgenticToolLoopConfig(
+        max_steps=0,
+        max_tool_calls=0,
+        max_code_tool_calls=0,
+        max_observation_chars=0,
+        max_wall_time_sec=3600,
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-no-planner-cap",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
+    )
+
+    observations = session._run_bounded_planner_tools(context, state)
+    planner_events = [
+        event.metadata
+        for event in state.transcript
+        if event.metadata.get("selection_source") == "planner_selected"
+        and event.metadata.get("step_id")
+    ]
+
+    assert [observation.tool_name for observation in observations[:2]] == [
+        "context.list_surfaces",
+        "context.read_problem",
+    ]
+    assert [event["tool_name"] for event in planner_events[:2]] == [
+        "context.list_surfaces",
+        "context.read_problem",
+    ]
+    assert len(creative.planner_contexts) >= 2
+    assert not any(
+        event.metadata.get("error_code") == "planner_selection_limit"
+        for event in state.transcript
+    )

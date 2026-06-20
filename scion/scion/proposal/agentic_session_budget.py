@@ -35,6 +35,19 @@ def _code_tool_call_limit(config: AgenticToolLoopConfig) -> int:
     return max(0, int(config.max_code_tool_calls))
 
 
+def _planner_selection_decision_limit(config: AgenticToolLoopConfig) -> int:
+    if not (_tool_step_limit_enabled(config) or _tool_call_limit_enabled(config)):
+        return _DISABLED_LIMIT_REMAINING
+    return max(
+        1,
+        (
+            max(0, int(config.max_steps))
+            + max(0, int(config.max_tool_calls))
+        )
+        * 2,
+    )
+
+
 def _observation_limit_enabled(config: AgenticToolLoopConfig) -> bool:
     return int(config.max_observation_chars) > 0
 

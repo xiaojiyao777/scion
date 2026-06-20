@@ -50,13 +50,8 @@ class AgenticSessionPlannerLoopMixin:
                 return observations
 
             planner_decisions = 0
-            max_planner_decisions = max(
-                1,
-                (
-                    int(self._tool_loop_config.max_steps)
-                    + int(self._tool_loop_config.max_tool_calls)
-                )
-                * 2,
+            max_planner_decisions = _planner_selection_decision_limit_for_config(
+                self._tool_loop_config
             )
             while not self._tool_loop_limit_reached(state):
                 planner_decisions += 1
