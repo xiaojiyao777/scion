@@ -44,15 +44,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `fb03204b`;
-the corresponding local framework repair commit is `197ee67f`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `febeaf11`;
+the corresponding local framework repair commit is `e4a30277`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-fb03204b-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-runtimebrief-preflight-6r-gpt55-20260620T144847Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-febeaf11-runtimeinactive-6r-gpt55-20260620T150740Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-fb03204b-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-runtimebrief-preflight-4r-gpt55-20260620T144847Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-febeaf11-runtimeinactive-4r-gpt55-20260620T150741Z-claw`
 
 Readiness snapshot:
 
@@ -60,7 +60,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `fb03204b`; strict readiness
+- Runtime guard status: prepared runtime commit `febeaf11`; strict readiness
   must keep reporting runtime guard OK. Doc/status-only commits after prepare
   are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -119,6 +119,11 @@ Prepared run shape:
   counts plus side-specific top diagnostics, so delegated review can distinguish
   candidate repair signals from champion-only or observational budget
   saturation.
+- Runtime telemetry guard summaries preserve explicit inactive observations
+  (`candidate_false`, activation status `inactive`) separately from numeric
+  zero counters. Delegated review and proposal feedback can now distinguish
+  a mechanism that did not trigger from a mechanism that ran but produced no
+  positive effect or only zero/sub-ms runtime evidence.
 - Screening gate/Decision semantics: high-win-rate, non-negative,
   sub-practical-delta screening evidence is reported as
   `SCREENING_PASS_MARGINAL_DELTA` and routed as a diagnostic validation
@@ -281,6 +286,8 @@ Prepared run shape:
   `scion/docs/experiments/v0.4/v04-screening-marginal-gate-decision-alignment-20260620.md`.
 - Current postrun runtime budget side summary:
   `scion/docs/experiments/v0.4/v04-postrun-runtime-budget-side-summary-20260620.md`.
+- Current runtime telemetry inactive-observation repair:
+  `scion/docs/experiments/v0.4/v04-runtime-telemetry-inactive-observation-repair-20260620.md`.
 - Current launch/readiness and code-prompt 96k source-projection evidence:
   `scion/docs/experiments/v0.4/v04-code-prompt-solver-source-96k-projection-repair-20260620.md`.
 - Disabled mandatory code-surface full-read repair evidence:
