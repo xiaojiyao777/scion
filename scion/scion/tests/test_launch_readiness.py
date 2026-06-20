@@ -1757,6 +1757,31 @@ def test_launch_readiness_rejects_campaign_execution_marker_after_campaign(
     ]["failures"]
 
 
+def test_launch_readiness_rejects_campaign_execution_marker_before_preflight_exit(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    marker_start = run_text.index("CAMPAIGN_EXECUTION_MARKER_STARTED_AT=")
+    campaign_start = run_text.index(f"{sys.executable} -m scion.cli.main run")
+    marker_block = run_text[marker_start:campaign_start]
+    run_text = run_text[:marker_start] + run_text[campaign_start:]
+    insert_after = "    --json || PREFLIGHT_STATUS=$?\n"
+    run_text = run_text.replace(insert_after, insert_after + marker_block, 1)
+    run_sh.write_text(run_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    marker_check = report["checks"]["run_script_campaign_execution_marker_enforced"]
+    assert marker_check["status"] == "failed"
+    assert {
+        "reason": "campaign_execution_marker_before_preflight_failure_exit"
+    } in marker_check["detail"]["failures"]
+
+
 def test_launch_readiness_rejects_missing_cvrp_code_constraint_bridge(
     tmp_path: Path,
 ) -> None:

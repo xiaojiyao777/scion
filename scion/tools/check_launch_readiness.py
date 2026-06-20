@@ -1746,6 +1746,11 @@ def _run_script_campaign_execution_marker_enforced(run_sh: Path) -> tuple[str, A
         run_text,
         "tools/check_gpt55_proxy.py",
     )
+    preflight_failure_exit_pos = _find_line_after(
+        run_text,
+        'exit "$PREFLIGHT_STATUS"',
+        preflight_proxy_pos if preflight_proxy_pos >= 0 else 0,
+    )
     marker_file_pos, ignored_marker_file_count = _find_executable_marker_position(
         run_text,
         "campaign_execution_marker.v1.json",
@@ -1785,6 +1790,18 @@ def _run_script_campaign_execution_marker_enforced(run_sh: Path) -> tuple[str, A
         and earliest_marker_pos < preflight_proxy_pos
     ):
         failures.append({"reason": "campaign_execution_marker_before_preflight"})
+    if preflight_proxy_pos >= 0 and preflight_failure_exit_pos < 0:
+        failures.append(
+            {"reason": "campaign_execution_marker_preflight_failure_exit_missing"}
+        )
+    if (
+        preflight_failure_exit_pos >= 0
+        and earliest_marker_pos >= 0
+        and earliest_marker_pos <= preflight_failure_exit_pos
+    ):
+        failures.append(
+            {"reason": "campaign_execution_marker_before_preflight_failure_exit"}
+        )
     if (
         campaign_pos >= 0
         and earliest_marker_pos >= 0
@@ -1795,6 +1812,7 @@ def _run_script_campaign_execution_marker_enforced(run_sh: Path) -> tuple[str, A
     detail = {
         "run_script": str(run_sh),
         "preflight_proxy_position": preflight_proxy_pos,
+        "preflight_failure_exit_position": preflight_failure_exit_pos,
         "campaign_command_position": campaign_pos,
         "marker_file_position": marker_file_pos,
         "marker_schema_position": marker_schema_pos,
