@@ -41,13 +41,13 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at prepared runtime commit `fdc7ec85`; local mirrors exist under
+Generated on WSL at prepared runtime commit `72d57b17`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-protocoldetail-fdc7ec85-preflight-6r-gpt55-20260620T062233Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-failtax-72d57b17-preflight-6r-gpt55-20260620T063838Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-protocoldetail-fdc7ec85-preflight-4r-gpt55-20260620T062250Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-failtax-72d57b17-preflight-4r-gpt55-20260620T063837Z-claw`
 
 Readiness snapshot:
 
@@ -55,7 +55,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared commit `fdc7ec85`; launch-critical runtime
+- Runtime guard status: prepared commit `72d57b17`; launch-critical runtime
   guard paths are unchanged after docs-only snapshot commits.
 
 Prepared run shape:
@@ -101,13 +101,15 @@ Prepared run shape:
   protocol-accounting detail for formal-screened candidates, metric rows,
   artifact rows, and stage rows. Quality-blocked no-protocol conclusions must
   also match current failure-taxonomy quality-block counts,
-  reports-with-quality-blocks, and reason-count distribution. CVRP bounded
-  two-opt ready summaries must
-  match recomputed direct-evidence counters, family lists, rejection counts, and
-  top-row signal count from current measurement/continuity inputs. Measurement
-  evidence must match current interpretation counts and
-  `max_effect_to_mde_ratio`; CVRP bounded two-opt ready summaries must also
-  match current mechanism-family mapped/unmapped row counts.
+  reports-with-quality-blocks, and reason-count distribution. Failure-taxonomy
+  summaries must also match the current research-efficiency reports for
+  aggregate failure counts, proposal-quality counts, run-status counts, entries,
+  and top examples. CVRP bounded two-opt ready summaries must match recomputed
+  direct-evidence counters, family lists, rejection counts, and top-row signal
+  count from current measurement/continuity inputs. Measurement evidence must
+  match current interpretation counts and `max_effect_to_mde_ratio`; CVRP
+  bounded two-opt ready summaries must also match current mechanism-family
+  mapped/unmapped row counts.
 
 ## Warehouse
 
