@@ -42,6 +42,9 @@ interpretation.
 - Generic observation rendering deduplicates both dedicated full-file and
   dedicated symbol-source observations, so source remains visible once in the
   source sections instead of being replaced by receipts.
+- Both dedicated source sections are grouped into the stable code-source cache
+  block for solver-design code prompts, keeping source separate from dynamic
+  retry and previous-patch feedback.
 - Regression tests assert markers beyond the old 24k and 12k projection windows
   survive through the compact code payload and the complete rendered prompt.
 
@@ -58,7 +61,8 @@ git diff --check
 ```
 
 Results: `2 passed`, `118 passed`, `67 passed`, compile clean, and diff check
-clean.
+clean. The symbol-source regression also asserts that the dedicated source
+section and late marker are present in the stable system source block.
 
 WSL with explicit checkout `PYTHONPATH` and launch Python:
 
@@ -92,14 +96,14 @@ Results: compile clean, `118 passed`, and `67 passed`.
 
 ## Current Prepared Roots
 
-Generated on WSL at launch-authoritative runtime commit `480e6fd9`; the local
-runtime-equivalent commit is `8471fcdc`. Both roots are mirrored under
+Generated on WSL at launch-authoritative runtime commit `7468fbe4`; the local
+runtime-equivalent commit is `0549df7c`. Both roots are mirrored under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-480e6fd9-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-preflight-6r-gpt55-20260620T132115Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-7468fbe4-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-preflight-6r-gpt55-20260620T133929Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-480e6fd9-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-preflight-4r-gpt55-20260620T132116Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-7468fbe4-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-preflight-4r-gpt55-20260620T133930Z-claw`
 
 Strict launch readiness for both reports:
 
@@ -109,7 +113,7 @@ Strict launch readiness for both reports:
 - `failed_static_required_checks=[]`
 - `failed_required_checks=["completion_preflight"]`
 - prompt context readiness `ok`
-- runtime guard `ok` for prepared commit `480e6fd9`
+- runtime guard `ok` for prepared commit `7468fbe4`
 
 The remaining blocker is external `gpt-5.5` completion auth:
 HTTP `401`, `classification=not_authenticated`, `code=invalid_api_key`;

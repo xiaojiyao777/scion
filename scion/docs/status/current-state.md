@@ -44,15 +44,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `480e6fd9`
-after local runtime-equivalent commit `8471fcdc`; local mirrors exist under
+Generated on WSL at launch-authoritative prepared runtime commit `7468fbe4`
+after local runtime-equivalent commit `0549df7c`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names for
 inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-480e6fd9-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-preflight-6r-gpt55-20260620T132115Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-7468fbe4-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-preflight-6r-gpt55-20260620T133929Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-480e6fd9-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-preflight-4r-gpt55-20260620T132116Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-7468fbe4-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-preflight-4r-gpt55-20260620T133930Z-claw`
 
 Readiness snapshot:
 
@@ -60,7 +60,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `480e6fd9`; strict readiness
+- Runtime guard status: prepared runtime commit `7468fbe4`; strict readiness
   must keep reporting runtime guard OK. Doc/status-only commits after prepare
   are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -103,7 +103,8 @@ Prepared run shape:
   the 96k source window for `context.read_algorithm_file` and
   `context.read_algorithm_symbol`; dedicated full-file and symbol-source prompt
   sections prevent generic observation compaction or receipt-only projection
-  from hiding targeted solver source.
+  from hiding targeted solver source. Both full-file and symbol-source sections
+  are kept in the stable code-source cache block for solver-design code prompts.
 - Runtime replay semantics: budget-exhausting summaries suppress stale
   fresh-runtime replay markers, materialization, and pressure reports. Runtime
   tie fresh replay remains available only for comparative runtime semantics.
@@ -165,7 +166,7 @@ Prepared run shape:
   `context.read_algorithm_symbol`, and `context.read_surface` can carry the
   96k source-window used by current solver-design/code prompts without
   `RESULT_TOO_LARGE`, shallow-preview misses, code-prompt projection shrinkage,
-  or symbol-read receipt-only visibility.
+  symbol-read receipt-only visibility, or unstable retry-block placement.
 - Postrun acceptance cannot silently pass when strict rebuild/readiness fails:
   launcher wrappers promote strict postrun acceptance failure to an effective
   wrapper failure and annotate top-level `run_status.json`.
