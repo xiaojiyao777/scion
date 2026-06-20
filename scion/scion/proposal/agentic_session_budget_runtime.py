@@ -80,6 +80,8 @@ class AgenticSessionBudgetRuntimeMixin:
             return _optional_surface_read_budget_floor_for_config(self._tool_loop_config)
 
     def _self_check_preview_budget_chars(self) -> int:
+            if not _observation_limit_enabled_for_config(self._tool_loop_config):
+                return _DISABLED_LIMIT_REMAINING_FOR_CONFIG
             configured_reserve = self._self_check_observation_reserve_chars()
             if configured_reserve > 0:
                 return configured_reserve

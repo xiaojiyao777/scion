@@ -2,6 +2,32 @@ from __future__ import annotations
 
 from scion.tests.unit.agentic_session_test_support import *
 
+
+class _LargeContractPreviewTool:
+    name = "proposal.contract_preview"
+    input_schema = ContractPreviewInput
+    permission = ProposalToolPermission.CONTRACT_PREVIEW
+    read_only = True
+    concurrency_safe = True
+    max_result_chars = 200000
+
+    def call(self, args, context: ProposalToolContext) -> ProposalObservation:
+        del args
+        return ProposalObservation(
+            observation_id="large-contract-preview",
+            session_id=context.session_id,
+            tool_name=self.name,
+            tool_call_id="",
+            observation_type="contract_preview",
+            summary="Large contract preview passed.",
+            structured_payload={
+                "passed": True,
+                "issue_summary": "large contract preview retained",
+                "detail_blob": "source-visible-self-check-detail-" * 1200,
+            },
+        )
+
+
 def test_agentic_session_wall_time_reserve_stops_smoke_repair_before_code_llm(
     tmp_path: Path,
     monkeypatch,
@@ -298,6 +324,44 @@ def test_agentic_session_runs_contract_preview_with_independent_preview_budget(
     assert not any(
         event.get("observation_type") == "tool_skipped" for event in contract_events
     )
+
+
+def test_disabled_observation_budget_does_not_truncate_authoritative_preview(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry([_LargeContractPreviewTool()]),
+        tool_loop_config=AgenticToolLoopConfig(
+            max_steps=0,
+            max_tool_calls=0,
+            max_observation_chars=0,
+            max_wall_time_sec=3600,
+        ),
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-preview-no-cap",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
+    )
+
+    observation = session._call_tool(
+        context,
+        state,
+        AgenticProposalPhase.SELF_CHECK,
+        "proposal.contract_preview",
+        {},
+        selection_source="fallback_selected",
+    )
+
+    assert observation.structured_payload["passed"] is True
+    assert "source-visible-self-check-detail" in observation.structured_payload[
+        "detail_blob"
+    ]
+    assert "budget_action" not in observation.structured_payload
+    assert "remaining_observation_chars" not in observation.structured_payload
+    assert state.observation_chars_used == 0
 
 
 def test_agentic_session_default_budget_completes_with_empty_failure_ledger(

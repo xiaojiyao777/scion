@@ -128,6 +128,7 @@ from scion.proposal.agentic_preview import (
     _self_check_required,
 )
 from scion.proposal.agentic_session_budget import (
+    _DISABLED_LIMIT_REMAINING as _DISABLED_LIMIT_REMAINING_FOR_CONFIG,
     _code_tool_call_limit as _code_tool_call_limit_for_config,
     _code_tool_call_limit_enabled as _code_tool_call_limit_enabled_for_config,
     _code_phase_budget_reserved as _code_phase_budget_reserved_for_config,
@@ -295,6 +296,7 @@ __all__ = (
     "_APS_SURFACE_READ_CODE_CHARS",
     "_APS_TARGET_ALGORITHM_FILE_READ_CHARS",
     "_CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC",
+    "_DISABLED_LIMIT_REMAINING_FOR_CONFIG",
     "_FINAL_PREVIEW_WALL_TIME_RESERVE_SEC",
     "_MAX_HYPOTHESIS_SEMANTIC_RETRIES",
     "_MAX_HYPOTHESIS_PREVIEW_RETRIES",
