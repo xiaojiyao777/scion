@@ -35,18 +35,19 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL at runtime commit `cec86a07`
-after agentic partial-hypothesis recovery landed. Research-context actionability,
-runtime-evidence consistency, the formal hypothesis prompt-trace, problem-summary
-`evidence` payload, and CVRP seed-only large two-opt rejection guards remain in
-force. WSL static readiness passes; launch readiness fails only at completion
-preflight auth. Local mirrors exist under
+The active prepared roots were generated on WSL at runtime commit `7f06d4c4`
+after CVRP CMT2/CMT4 case-protection requirements were projected into prepared
+proposal prompts. Agentic partial-hypothesis recovery, research-context
+actionability, runtime-evidence consistency, the formal hypothesis prompt-trace,
+problem-summary `evidence` payload, and CVRP seed-only large two-opt rejection
+guards remain in force. WSL static readiness passes; launch readiness fails
+only at completion preflight auth. Local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-partialrec-cec86a07-preflight-6r-gpt55-20260620T030033Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-cmtprompt-7f06d4c4-preflight-6r-gpt55-20260620T031230Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-partialrec-cec86a07-preflight-4r-gpt55-20260620T030045Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-cmtprompt-7f06d4c4-preflight-4r-gpt55-20260620T031242Z-claw`
 
 Prepared manifests record:
 
@@ -54,7 +55,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `cec86a07`; CVRP `cec86a07`.
+- Runtime commits: warehouse `7f06d4c4`; CVRP `7f06d4c4`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -160,6 +161,9 @@ Prepared manifests record:
   two-opt result. The prepared handoff treats it only as proposal guidance and
   requires a bounded, deadline-aware implementation with pair-level objective,
   feasibility, route-count, wall-clock, and CMT2/CMT4 protection evidence.
+- Prepared prompt-context readiness now verifies
+  `cvrp_case_protection_requirements` as required and available, so the
+  CMT2/CMT4 protection plan is not merely a report artifact.
 - Generic, cross-route, unbounded/fallback, VNS, and two-opt-star family labels
   are not enough for bounded two-opt review readiness; current-run protocol
   effect and co-located activation/effect/phase telemetry are required.
@@ -193,7 +197,7 @@ Prepared manifests record:
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-agentic-partial-recovery-20260620.md`.
+  `scion/docs/experiments/v0.4/v04-cvrp-case-protection-prepared-prompt-projection-20260620.md`.
 - Repair-detail reports remain under `scion/docs/experiments/v0.4/`; do not
   read them by default unless a specific guarantee above needs source evidence.
 - Current WSL access:
