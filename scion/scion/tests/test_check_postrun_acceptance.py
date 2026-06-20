@@ -1146,6 +1146,70 @@ def test_postrun_acceptance_rejects_code_only_research_context_trace(
     assert context_check["detail"]["hypothesis_generation_trace_count"] == 0
 
 
+def test_postrun_acceptance_rejects_stale_research_context_actionability_projection(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-stale-context")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": _warehouse_problem_evidence(),
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    actionability = brief["research_context_actionability_summary"]
+    indicators = actionability["indicators"]
+    assert isinstance(actionability, dict)
+    assert isinstance(indicators, dict)
+    actionability["guidance_status"] = "context_actionability_review_required"
+    actionability["actionability_gaps"] = ["stale_prompt_projection"]
+    actionability["recommendations"] = ["stale recommendation"]
+    indicators["same_mechanism_selected"] = 0
+    indicators["same_mechanism_observed"] = 0
+    indicators["research_signal_tokens"] = 0
+    indicators["research_plus_source_to_governance_ratio"] = 0.0
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    context_check = readiness["checks"]["research_context_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert context_check["required"] is True
+    assert context_check["status"] == "failed"
+    failures = context_check["detail"]["failures"]
+    assert "research_context_actionability_guidance_status_mismatch" in failures
+    assert "research_context_actionability_gaps_mismatch" in failures
+    assert "research_context_actionability_recommendations_mismatch" in failures
+    assert "research_context_actionability_same_mechanism_selected_mismatch" in (
+        failures
+    )
+    assert "research_context_actionability_same_mechanism_observed_mismatch" in (
+        failures
+    )
+    assert "research_context_actionability_research_signal_tokens_mismatch" in (
+        failures
+    )
+    assert (
+        "research_context_actionability_research_plus_source_to_governance_ratio_mismatch"
+        in failures
+    )
+    assert context_check["detail"]["consistency_failures"]
+
+
 def test_postrun_acceptance_rejects_review_surface_boundary_marker_gaps(
     tmp_path: Path,
 ) -> None:
@@ -1377,6 +1441,7 @@ def test_postrun_acceptance_requires_review_input_summaries_actionability(
         "report_count": 0,
         "continuity_report_count": 0,
     }
+    _refresh_research_context_actionability_summary(brief)
     brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
 
     readiness = check_tool.build_readiness(run_root)
@@ -3421,6 +3486,7 @@ def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
         "actionability_gaps": [],
         "recommendations": [],
     }
+    _refresh_research_context_actionability_summary(brief)
     brief["failure_taxonomy_summary"] = {
         "schema_version": "scion.postrun_failure_taxonomy_summary.v1",
         "report_only": True,
@@ -3612,7 +3678,23 @@ def _apply_quality_blocked_review_inputs(
     _mark_measurement_effect_unavailable(brief["measurement_effect_summary"])
     _mark_runtime_feedback_unavailable(brief["runtime_feedback_summary"])
     _mark_research_continuity_unavailable(brief["research_continuity_summary"])
+    _refresh_research_context_actionability_summary(brief)
     _set_failure_taxonomy_quality_blocks(brief, quality_block_count)
+
+
+def _refresh_research_context_actionability_summary(brief: dict[str, object]) -> None:
+    prompt_context = brief.get("prompt_context_visibility_summary")
+    research_continuity = brief.get("research_continuity_summary")
+    brief["research_context_actionability_summary"] = (
+        check_tool._research_context_actionability_summary(
+            prompt_context_visibility_summary=(
+                prompt_context if isinstance(prompt_context, dict) else {}
+            ),
+            research_continuity_summary=(
+                research_continuity if isinstance(research_continuity, dict) else {}
+            ),
+        )
+    )
 
 
 def _mark_protocol_accounting_evaluated(brief: dict[str, object]) -> None:

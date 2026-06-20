@@ -19,6 +19,7 @@ from postrun_analysis_brief import (  # noqa: E402
     _branch_research_state_summary,
     _champion_progress_summary,
     _cvrp_large_twoopt_mechanism_signal,
+    _research_context_actionability_summary,
     _warehouse_followup_continuity_signal,
     _warehouse_followup_measurement_signal,
 )
@@ -1640,6 +1641,7 @@ def _research_context_actionability(
     prompt_summary = _mapping_or_empty(
         brief.get("prompt_context_visibility_summary")
     )
+    continuity_summary = _mapping_or_empty(brief.get("research_continuity_summary"))
     prompt_aggregate = _mapping_or_empty(prompt_summary.get("aggregate"))
     call_kind_counts = _mapping_or_empty(prompt_aggregate.get("call_kind_counts"))
     density = _mapping_or_empty(prompt_aggregate.get("signal_density"))
@@ -1647,6 +1649,10 @@ def _research_context_actionability(
         brief.get("research_context_actionability_summary")
     )
     indicators = _mapping_or_empty(actionability.get("indicators"))
+    expected_actionability = _research_context_actionability_summary(
+        prompt_context_visibility_summary=prompt_summary,
+        research_continuity_summary=continuity_summary,
+    )
     failures: list[str] = []
     if actionability.get("schema_version") != RESEARCH_CONTEXT_ACTIONABILITY_SCHEMA:
         failures.append("research_context_actionability_schema_stale")
@@ -1678,22 +1684,38 @@ def _research_context_actionability(
         == "no_prompt_or_continuity_actionability_evidence"
     ):
         failures.append("research_context_actionability_no_evidence")
+    consistency_failures = _research_context_actionability_consistency_failures(
+        actionability=actionability,
+        expected=expected_actionability,
+    )
+    failures.extend(consistency_failures)
     return (
         "ok" if not failures else "failed",
         {
             "problem_family": problem_family,
             "failures": failures,
+            "consistency_failures": consistency_failures,
             "schema_version": actionability.get("schema_version"),
             "expected_schema_version": RESEARCH_CONTEXT_ACTIONABILITY_SCHEMA,
             "current_run_evidence": actionability.get("current_run_evidence"),
+            "expected_current_run_evidence": expected_actionability.get(
+                "current_run_evidence"
+            ),
             "report_only": actionability.get("report_only"),
             "quality_judgment": actionability.get("quality_judgment"),
             "decision_features_excluded": actionability.get(
                 "decision_features_excluded"
             ),
             "available": actionability.get("available"),
+            "expected_available": expected_actionability.get("available"),
             "guidance_status": actionability.get("guidance_status"),
+            "expected_guidance_status": expected_actionability.get(
+                "guidance_status"
+            ),
             "actionability_gaps": actionability.get("actionability_gaps"),
+            "expected_actionability_gaps": expected_actionability.get(
+                "actionability_gaps"
+            ),
             "block_family_trace_count": prompt_aggregate.get(
                 "block_family_trace_count"
             ),
@@ -1714,15 +1736,106 @@ def _research_context_actionability(
                 "research_plus_source_to_governance_ratio"
             ),
             "same_mechanism_observed": indicators.get("same_mechanism_observed"),
+            "expected_same_mechanism_observed": _mapping_or_empty(
+                expected_actionability.get("indicators")
+            ).get("same_mechanism_observed"),
             "same_mechanism_missed": indicators.get("same_mechanism_missed"),
+            "expected_same_mechanism_missed": _mapping_or_empty(
+                expected_actionability.get("indicators")
+            ).get("same_mechanism_missed"),
             "branch_lessons_required": indicators.get("branch_lessons_required"),
+            "expected_branch_lessons_required": _mapping_or_empty(
+                expected_actionability.get("indicators")
+            ).get("branch_lessons_required"),
             "branch_lesson_semantic_gap_count": indicators.get(
                 "branch_lesson_semantic_gap_count"
             ),
+            "expected_branch_lesson_semantic_gap_count": _mapping_or_empty(
+                expected_actionability.get("indicators")
+            ).get("branch_lesson_semantic_gap_count"),
             "weak_positive_observed": indicators.get("weak_positive_observed"),
+            "expected_weak_positive_observed": _mapping_or_empty(
+                expected_actionability.get("indicators")
+            ).get("weak_positive_observed"),
             "weak_positive_missed": indicators.get("weak_positive_missed"),
+            "expected_weak_positive_missed": _mapping_or_empty(
+                expected_actionability.get("indicators")
+            ).get("weak_positive_missed"),
         },
     )
+
+
+def _research_context_actionability_consistency_failures(
+    *,
+    actionability: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> list[str]:
+    failures: list[str] = []
+    for field in (
+        "current_run_evidence",
+        "available",
+        "prompt_context_available",
+        "research_continuity_available",
+        "guidance_status",
+    ):
+        if actionability.get(field) != expected.get(field):
+            failures.append(f"research_context_actionability_{field}_mismatch")
+
+    if _string_list(actionability.get("actionability_gaps")) != _string_list(
+        expected.get("actionability_gaps")
+    ):
+        failures.append("research_context_actionability_gaps_mismatch")
+    if _string_list(actionability.get("recommendations")) != _string_list(
+        expected.get("recommendations")
+    ):
+        failures.append("research_context_actionability_recommendations_mismatch")
+
+    indicators = _mapping_or_empty(actionability.get("indicators"))
+    expected_indicators = _mapping_or_empty(expected.get("indicators"))
+    if indicators.get("schema_version") != expected_indicators.get("schema_version"):
+        failures.append("research_context_actionability_indicators_schema_mismatch")
+
+    for field in (
+        "same_mechanism_selected",
+        "same_mechanism_observed",
+        "same_mechanism_missed",
+        "branch_lessons_satisfied",
+        "branch_lessons_required",
+        "branch_lesson_semantic_gap_count",
+        "branch_lesson_semantic_failure_count",
+        "branch_lesson_semantic_block_count",
+        "weak_positive_accepted",
+        "weak_positive_observed",
+        "weak_positive_missed",
+        "research_signal_tokens",
+        "source_code_tokens",
+        "cross_branch_tokens",
+        "governance_tokens",
+        "omitted_section_trace_count",
+        "truncated_section_trace_count",
+    ):
+        if _int_or_zero(indicators.get(field)) != _int_or_zero(
+            expected_indicators.get(field)
+        ):
+            failures.append(f"research_context_actionability_{field}_mismatch")
+
+    for field in (
+        "branch_lesson_semantic_failure_counts",
+        "branch_lesson_semantic_block_counts",
+    ):
+        if _int_mapping(indicators.get(field)) != _int_mapping(
+            expected_indicators.get(field)
+        ):
+            failures.append(f"research_context_actionability_{field}_mismatch")
+
+    field = "research_plus_source_to_governance_ratio"
+    if not _numeric_or_value_equal(
+        indicators.get(field),
+        expected_indicators.get(field),
+    ):
+        failures.append(f"research_context_actionability_{field}_mismatch")
+
+    return failures
 
 
 def _hypothesis_generation_trace_count(call_kind_counts: Mapping[str, Any]) -> int:
@@ -2161,6 +2274,21 @@ def _int_mapping(value: Any) -> dict[str, int]:
     if not isinstance(value, Mapping):
         return {}
     return {str(key): _int_or_zero(count) for key, count in value.items()}
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
+
+
+def _numeric_or_value_equal(actual: Any, expected: Any) -> bool:
+    if actual == expected:
+        return True
+    try:
+        return abs(float(actual) - float(expected)) <= 1e-9
+    except (TypeError, ValueError):
+        return False
 
 
 def _int_or_none(value: Any) -> int | None:
