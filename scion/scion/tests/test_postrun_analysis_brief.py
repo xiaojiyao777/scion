@@ -2221,6 +2221,16 @@ def test_cvrp_large_twoopt_summary_marks_bounded_twoopt_review_ready(
         "actionable_current_run_evidence_present"
     )
     assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
+    continuity = summary["evidence"]["research_continuity"]
+    assert continuity["available"] is True
+    assert continuity["substantive"] is True
+    assert continuity["max_branch_depth"] == 2
+    assert continuity["same_mechanism_observed"] == 1
+    assert continuity["same_mechanism_selected"] == 1
+    assert continuity["same_mechanism_missed"] == 0
+    assert continuity["mechanism_family_counts"] == {
+        "bounded_large_twoopt": 1,
+    }
     mechanism = summary["evidence"]["large_twoopt_mechanism"]
     assert mechanism["available"] is True
     assert mechanism["families"] == ["bounded_large_twoopt"]

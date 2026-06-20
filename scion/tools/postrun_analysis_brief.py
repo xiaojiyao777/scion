@@ -4030,6 +4030,9 @@ def _cvrp_large_twoopt_summary(
         measurement_effect_summary=measurement_effect_summary,
         research_continuity_summary=research_continuity_summary,
     )
+    continuity_signal = _problem_research_continuity_signal(
+        research_continuity_summary
+    )
     measurement_available = measurement_effect_summary.get("available") is True
     runtime_raw_available = runtime_feedback_summary.get("available") is True
     runtime_available = _runtime_feedback_review_ready(runtime_feedback_summary)
@@ -4107,6 +4110,7 @@ def _cvrp_large_twoopt_summary(
             "continuity_report_count": _int_or_zero(
                 research_continuity_summary.get("continuity_report_count")
             ),
+            **continuity_signal,
         },
     }
     interpretation = _cvrp_large_twoopt_interpretation(
@@ -5125,7 +5129,7 @@ def _warehouse_followup_measurement_signal(
     }
 
 
-def _warehouse_followup_continuity_signal(
+def _problem_research_continuity_signal(
     research_continuity_summary: Mapping[str, Any],
 ) -> dict[str, Any]:
     aggregate = _mapping_or_empty(research_continuity_summary.get("aggregate"))
@@ -5166,6 +5170,12 @@ def _warehouse_followup_continuity_signal(
         "mechanism_family_counts": mechanism_family_counts,
         "active_shape_counts": active_shape_counts,
     }
+
+
+def _warehouse_followup_continuity_signal(
+    research_continuity_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    return _problem_research_continuity_signal(research_continuity_summary)
 
 
 def _warehouse_followup_interpretation(

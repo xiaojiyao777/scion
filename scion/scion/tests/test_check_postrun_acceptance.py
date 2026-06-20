@@ -3541,6 +3541,79 @@ def test_postrun_acceptance_rejects_cvrp_ready_summary_without_input_twoopt_evid
     assert "review_input_large_twoopt_direct_evidence_missing" in failures
 
 
+def test_postrun_acceptance_rejects_cvrp_summary_with_stale_continuity_signal(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "cvrp-run-stale-continuity")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "cvrp"
+    brief["cvrp_large_twoopt_summary"] = {
+        "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": _cvrp_problem_evidence(),
+        "evidence_gaps": ["missing_large_twoopt_mechanism_signal"],
+        "interpretation": "protocol_evaluated_without_large_twoopt_signal",
+        "problem_family": "cvrp",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    brief["research_continuity_summary"]["aggregate"] = {
+        "max_branch_depth": 1,
+        "branch_depth_distribution": {"1": 1},
+        "mechanism_family_counts": {"fixture_mechanism": 1},
+        "active_shape_counts": {"missed_same_mechanism_followup": 1},
+    }
+    brief["research_continuity_summary"]["entries"] = [
+        {
+            "report": "fixture.research_efficiency.v1.json",
+            "same_mechanism_followup": {
+                "observed_opportunity_count": 1,
+                "selected_same_branch_refinement_count": 0,
+            },
+            "branch_lesson_usage": {
+                "requirement_count": 1,
+                "satisfied_count": 0,
+                "semantic_gap_count": 1,
+            },
+            "weak_positive_transfer": {
+                "observed_opportunity_count": 1,
+                "accepted_count": 0,
+            },
+        }
+    ]
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    consistency = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert consistency["status"] == "failed"
+    failures = consistency["detail"]["failures"]
+    assert "problem_summary_cvrp_continuity_substantive_mismatch" in failures
+    assert "problem_summary_cvrp_continuity_max_branch_depth_mismatch" in failures
+    assert (
+        "problem_summary_cvrp_continuity_same_mechanism_selected_mismatch"
+        in failures
+    )
+    assert "problem_summary_cvrp_continuity_same_mechanism_missed_mismatch" in failures
+    assert (
+        "problem_summary_cvrp_continuity_branch_lessons_required_mismatch"
+        in failures
+    )
+    assert "problem_summary_cvrp_continuity_weak_positive_observed_mismatch" in (
+        failures
+    )
+
+
 def test_postrun_acceptance_rejects_cvrp_ready_summary_with_stale_direct_evidence_detail(
     tmp_path: Path,
 ) -> None:
@@ -6040,6 +6113,17 @@ def _cvrp_problem_evidence() -> dict[str, object]:
         "research_continuity": {
             "available": True,
             "continuity_report_count": 1,
+            "substantive": True,
+            "max_branch_depth": 2,
+            "same_mechanism_observed": 1,
+            "same_mechanism_selected": 1,
+            "same_mechanism_missed": 0,
+            "branch_lessons_required": 0,
+            "branch_lessons_satisfied": 0,
+            "weak_positive_observed": 0,
+            "weak_positive_accepted": 0,
+            "mechanism_family_counts": {"fixture_mechanism": 1},
+            "active_shape_counts": {"continue": 1},
         },
     }
 

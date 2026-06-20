@@ -24,6 +24,7 @@ from postrun_analysis_brief import (  # noqa: E402
     _measurement_effect_summary,
     _prompt_context_visibility_summary,
     _protocol_accounting_summary,
+    _problem_research_continuity_signal,
     _research_continuity_summary,
     _research_context_actionability_summary,
     _runtime_feedback_summary,
@@ -1514,6 +1515,7 @@ def _problem_summary_input_consistency(
     ):
         failures.append("warehouse_plateau_continuity_not_substantive")
     input_large_twoopt_signal: dict[str, Any] = {}
+    input_cvrp_continuity_signal: dict[str, Any] = {}
     input_warehouse_measurement_signal: dict[str, Any] = {}
     input_warehouse_continuity_signal: dict[str, Any] = {}
     if problem_family == "warehouse_delivery":
@@ -1608,6 +1610,38 @@ def _problem_summary_input_consistency(
             measurement_effect_summary=measurement_summary,
             research_continuity_summary=continuity_summary,
         )
+        input_cvrp_continuity_signal = _problem_research_continuity_signal(
+            continuity_summary
+        )
+        cvrp_continuity_signal_fields = (
+            "substantive",
+            "max_branch_depth",
+            "same_mechanism_selected",
+            "same_mechanism_observed",
+            "same_mechanism_missed",
+            "branch_lessons_required",
+            "branch_lessons_satisfied",
+            "weak_positive_observed",
+            "weak_positive_accepted",
+        )
+        cvrp_continuity_signal_present = (
+            continuity_evidence.get("available") is True
+            or continuity_summary.get("available") is True
+            or any(field in continuity_evidence for field in cvrp_continuity_signal_fields)
+        )
+        if cvrp_continuity_signal_present:
+            for field in cvrp_continuity_signal_fields:
+                summary_value = continuity_evidence.get(field)
+                input_value = input_cvrp_continuity_signal.get(field)
+                if isinstance(input_value, bool):
+                    if summary_value is not input_value:
+                        failures.append(
+                            f"problem_summary_cvrp_continuity_{field}_mismatch"
+                        )
+                elif _int_or_zero(summary_value) != _int_or_zero(input_value):
+                    failures.append(
+                        f"problem_summary_cvrp_continuity_{field}_mismatch"
+                    )
         if large_twoopt_evidence:
             for field in (
                 "available",
@@ -1854,6 +1888,42 @@ def _problem_summary_input_consistency(
             ),
             "input_continuity_weak_positive_accepted": (
                 input_warehouse_continuity_signal.get("weak_positive_accepted")
+            ),
+            "summary_cvrp_continuity_substantive": continuity_evidence.get(
+                "substantive"
+            ),
+            "input_cvrp_continuity_substantive": input_cvrp_continuity_signal.get(
+                "substantive"
+            ),
+            "summary_cvrp_continuity_max_branch_depth": continuity_evidence.get(
+                "max_branch_depth"
+            ),
+            "input_cvrp_continuity_max_branch_depth": input_cvrp_continuity_signal.get(
+                "max_branch_depth"
+            ),
+            "summary_cvrp_continuity_same_mechanism_selected": (
+                continuity_evidence.get("same_mechanism_selected")
+            ),
+            "input_cvrp_continuity_same_mechanism_selected": (
+                input_cvrp_continuity_signal.get("same_mechanism_selected")
+            ),
+            "summary_cvrp_continuity_same_mechanism_missed": (
+                continuity_evidence.get("same_mechanism_missed")
+            ),
+            "input_cvrp_continuity_same_mechanism_missed": (
+                input_cvrp_continuity_signal.get("same_mechanism_missed")
+            ),
+            "summary_cvrp_continuity_branch_lessons_satisfied": (
+                continuity_evidence.get("branch_lessons_satisfied")
+            ),
+            "input_cvrp_continuity_branch_lessons_satisfied": (
+                input_cvrp_continuity_signal.get("branch_lessons_satisfied")
+            ),
+            "summary_cvrp_continuity_weak_positive_accepted": (
+                continuity_evidence.get("weak_positive_accepted")
+            ),
+            "input_cvrp_continuity_weak_positive_accepted": (
+                input_cvrp_continuity_signal.get("weak_positive_accepted")
             ),
             "summary_large_twoopt_available": large_twoopt_evidence.get("available"),
             "input_large_twoopt_available": input_large_twoopt_signal.get(
