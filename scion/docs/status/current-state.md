@@ -41,15 +41,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `2cf20b0f`
-after local equivalent commit `6530a4e0`; local mirrors exist under
+Generated on WSL at launch-authoritative prepared runtime commit `cb41c3c5`
+after local equivalent commit `4928b207`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names for
 inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-2cf20b0f-preflight-6r-gpt55-20260620T094851Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-cb41c3c5-preflight-6r-gpt55-20260620T101240Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-2cf20b0f-preflight-4r-gpt55-20260620T094851Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-cb41c3c5-preflight-4r-gpt55-20260620T101240Z-claw`
 
 Readiness snapshot:
 
@@ -57,7 +57,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `2cf20b0f`; strict readiness
+- Runtime guard status: prepared runtime commit `cb41c3c5`; strict readiness
   must keep reporting runtime guard OK. Doc/status-only commits after prepare
   are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -111,7 +111,12 @@ Prepared run shape:
   and prepared/postrun rebuild identity.
 - Prepared prompt context must project required `research_focus` fields into
   the actual launch prompt path, including CVRP CMT2/CMT4 protection
-  requirements.
+  requirements. The current prepared roots carry
+  `prepared_research_focus_prompt_bridge.detail.prompt_summary` with
+  schema `scion.prepared_research_focus_prompt_summary.v1`: warehouse renders
+  19 required `research_focus` paths, CVRP renders 36, both with
+  `missing_rendered_paths=[]`, no forbidden prompt tokens, raw prompts excluded,
+  and `DecisionFeatures` excluded.
 - CVRP prepared prompt context must also prove that problem-owned measurement
   diagnostics reach the hypothesis prompt through a safe summary, including the
   mechanism-effect ranking, without persisting raw prompts or raw diagnostic
@@ -220,6 +225,8 @@ Prepared run shape:
   `scion/docs/experiments/v0.4/v04-cvrp-mechanism-effect-diagnostics-prompt-repair-20260620.md`.
 - Current warehouse prompt-diagnostic repair:
   `scion/docs/experiments/v0.4/v04-warehouse-diagnostics-prompt-bridge-20260620.md`.
+- Current prepared `research_focus` prompt bridge:
+  `scion/docs/experiments/v0.4/v04-research-focus-prompt-bridge-20260620.md`.
 - Current postrun wrapper-status evidence:
   `scion/docs/experiments/v0.4/v04-postrun-wrapper-status-escalation-20260620.md`.
 - Current WSL access:

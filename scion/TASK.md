@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at WSL runtime commit `2cf20b0f` and pass static launch readiness for the warehouse 6R champion-v2 follow-up and the CVRP 4R Phase 4 bounded two-opt follow-up. They include current evidence-payload, analysis-brief boundary checks, protocol-detail consistency, runtime-consistency, research-actionability, review-input current-run evidence/artifact consistency, failure-taxonomy current-input consistency, prompt/source visibility current-manifest consistency, hypothesis-generation prompt-context signal consistency, quality-block reason-count consistency, budget-exhausting runtime replay and low-SNR runtime-ratio suppression, warehouse continuity including missed same-mechanism consistency, warehouse validation-transfer diagnostics prompt bridge verification, CVRP intra-large-two-opt/direct-evidence-detail guards including `size70_two_opt_*` fallback rejection, CVRP mechanism-effect ranking proposal diagnostics with prepared prompt bridge verification, measurement-detail consistency guards, and campaign launch command contract consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at WSL runtime commit `cb41c3c5` and pass static launch readiness for the warehouse 6R champion-v2 follow-up and the CVRP 4R Phase 4 bounded two-opt follow-up. They include current evidence-payload, analysis-brief boundary checks, protocol-detail consistency, runtime-consistency, research-actionability, review-input current-run evidence/artifact consistency, failure-taxonomy current-input consistency, prompt/source visibility current-manifest consistency, hypothesis-generation prompt-context signal consistency, quality-block reason-count consistency, budget-exhausting runtime replay and low-SNR runtime-ratio suppression, warehouse continuity including missed same-mechanism consistency, warehouse validation-transfer diagnostics prompt bridge verification, CVRP intra-large-two-opt/direct-evidence-detail guards including `size70_two_opt_*` fallback rejection, CVRP mechanism-effect ranking proposal diagnostics with prepared prompt bridge verification, prepared `research_focus` content-level prompt bridge verification, measurement-detail consistency guards, and campaign launch command contract consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -249,9 +249,9 @@ Current checkpoint:
   a bounded, deadline-aware mechanism with CMT2/CMT4 protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-2cf20b0f-preflight-6r-gpt55-20260620T094851Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-cb41c3c5-preflight-6r-gpt55-20260620T101240Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-2cf20b0f-preflight-4r-gpt55-20260620T094851Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-cb41c3c5-preflight-4r-gpt55-20260620T101240Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -341,7 +341,10 @@ Current checkpoint:
     `research_focus` projection path and required nested projected paths, so
     problem-owned launch guidance such as CVRP CMT2/CMT4 protected cases,
     rules, and required evidence cannot pass only as manifest/report data while
-    being absent from proposal prompt focus.
+    being absent from proposal prompt focus. It also renders the compact
+    hypothesis prompt summary in memory and stores only safe boolean/count/path
+    evidence, proving warehouse renders 19 required `research_focus` paths and
+    CVRP renders 36 required paths with `missing_rendered_paths=[]`.
   - Launch readiness guards the active checkout, absolute WSL `SCION_DIR` /
     `PYTHONPATH`, prepared-handoff identity, completion preflight, model route,
     no-early-stop semantics, strict postrun rebuild/readiness, committed
