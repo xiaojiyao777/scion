@@ -139,7 +139,16 @@ def test_sync_wsl_run_root_preserves_postrun_unready_status(
         return subprocess.CompletedProcess(
             command,
             sync_tool.POSTRUN_UNREADY_EXIT,
-            json.dumps({"current_run_analysis_ready": False}),
+            json.dumps(
+                {
+                    "current_run_analysis_ready": False,
+                    "failed_required_checks": ["problem_summary_input_consistency"],
+                    "failed_checks": [
+                        "problem_summary_input_consistency",
+                        "research_context_actionability",
+                    ],
+                }
+            ),
             "",
         )
 
@@ -154,7 +163,21 @@ def test_sync_wsl_run_root_preserves_postrun_unready_status(
     assert report["rsync_exit_status"] == 0
     assert report["postrun_check_exit_status"] == sync_tool.POSTRUN_UNREADY_EXIT
     assert report["postrun_current_run_ready"] is False
+    assert report["postrun_check_summary"] == {
+        "current_run_analysis_ready": False,
+        "failed_required_checks": ["problem_summary_input_consistency"],
+        "failed_checks": [
+            "problem_summary_input_consistency",
+            "research_context_actionability",
+        ],
+    }
     assert "current_run_analysis_ready" in report["postrun_check_stdout"]
+    rendered = sync_tool.render_text(report)
+    assert "POSTRUN_CURRENT_RUN_READY=0" in rendered
+    assert (
+        "POSTRUN_FAILED_REQUIRED_CHECKS=problem_summary_input_consistency"
+        in rendered
+    )
 
 
 def test_sync_wsl_run_root_source_check_failure_stops_before_rsync(

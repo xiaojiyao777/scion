@@ -201,8 +201,11 @@ def sync_and_check(
     report["postrun_check_exit_status"] = postrun_result.returncode
     report["postrun_check_stdout"] = postrun_result.stdout
     report["postrun_check_stderr"] = postrun_result.stderr
-    report["postrun_current_run_ready"] = _postrun_ready_from_stdout(
+    report["postrun_check_summary"] = _postrun_summary_from_stdout(
         postrun_result.stdout
+    )
+    report["postrun_current_run_ready"] = report["postrun_check_summary"].get(
+        "current_run_analysis_ready"
     )
     return report
 
@@ -249,6 +252,14 @@ def render_text(report: dict[str, Any]) -> str:
         lines.append(
             f"POSTRUN_CURRENT_RUN_READY={int(bool(report['postrun_current_run_ready']))}"
         )
+    postrun_summary = report.get("postrun_check_summary")
+    if isinstance(postrun_summary, dict):
+        failed_required = postrun_summary.get("failed_required_checks")
+        if isinstance(failed_required, list):
+            lines.append(
+                "POSTRUN_FAILED_REQUIRED_CHECKS="
+                + ",".join(str(item) for item in failed_required)
+            )
     return "\n".join(lines) + "\n"
 
 
@@ -363,14 +374,32 @@ def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def _postrun_ready_from_stdout(stdout: str) -> bool | None:
+    value = _postrun_summary_from_stdout(stdout).get("current_run_analysis_ready")
+    return value if isinstance(value, bool) else None
+
+
+def _postrun_summary_from_stdout(stdout: str) -> dict[str, Any]:
     try:
         payload = json.loads(stdout)
     except json.JSONDecodeError:
-        return None
+        return {}
     if not isinstance(payload, dict):
-        return None
+        return {}
     ready = payload.get("current_run_analysis_ready")
-    return bool(ready) if ready is not None else None
+    summary: dict[str, Any] = {
+        "current_run_analysis_ready": bool(ready)
+        if ready is not None
+        else None,
+    }
+    for key in (
+        "failed_required_checks",
+        "failed_checks",
+        "failed_optional_checks",
+    ):
+        value = payload.get(key)
+        if isinstance(value, list):
+            summary[key] = [str(item) for item in value]
+    return summary
 
 
 def _shell_join(command: list[str]) -> str:
