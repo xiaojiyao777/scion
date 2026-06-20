@@ -40,14 +40,18 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 Result after the hypothesis prompt-context evidence refresh: `199 passed`.
 
+Additional runtime replay semantics check after the budget-exhausting stale
+marker suppression: local and WSL adjacent runtime/finalizer/scheduler suites
+each report `224 passed`.
+
 ## Prepared Roots
 
-Regenerated on WSL at runtime commit `d32b2101`.
+Regenerated on WSL at runtime commit `7389bba6`.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-d32b2101-preflight-6r-gpt55-20260620T081449Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-7389bba6-preflight-6r-gpt55-20260620T083153Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-d32b2101-preflight-4r-gpt55-20260620T081449Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-7389bba6-preflight-4r-gpt55-20260620T083209Z-claw`
 
 Strict launch readiness for both roots:
 
@@ -56,7 +60,7 @@ Strict launch readiness for both roots:
 - `failed_static_required_checks=[]`
 - `failed_required_checks=["completion_preflight"]`
 - completion preflight HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`, auth pool `active=0`, `total=1`, `expired=1`
+  `code=invalid_api_key`, auth pool `active=0`, `total=1`
 
 No campaign was launched.
 
@@ -66,3 +70,7 @@ aggregate prompt context. Current-run warehouse/CVRP research-context readiness
 cannot be proven by code-only, target-intent, or aggregate-only prompt traces
 when continuity signals require research or cross-branch lesson signal to reach
 the formal hypothesis prompt.
+
+They also include budget-exhausting runtime replay suppression: stale
+fresh-runtime markers, materialization, and pressure reports no longer force a
+runtime replay path under a budget-exhausting measurement model.

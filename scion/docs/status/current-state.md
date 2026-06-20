@@ -41,13 +41,13 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at prepared runtime commit `d32b2101`; local mirrors exist under
+Generated on WSL at prepared runtime commit `7389bba6`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-d32b2101-preflight-6r-gpt55-20260620T081449Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-7389bba6-preflight-6r-gpt55-20260620T083153Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-d32b2101-preflight-4r-gpt55-20260620T081449Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-7389bba6-preflight-4r-gpt55-20260620T083209Z-claw`
 
 Readiness snapshot:
 
@@ -55,9 +55,9 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `d32b2101`; launch-critical
-  runtime guard paths are clean. Later doc/status-only commits are acceptable
-  only when readiness reports `runtime_guard_paths_unchanged_since_prepare`.
+- Runtime guard status: prepared runtime commit `7389bba6`; later
+  doc/status-only commits are acceptable only when readiness reports
+  `runtime_guard_paths_unchanged_since_prepare`.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
   `prepared_run_manifest.v1.json` agree on the problem/protocol/split/seeds,
   campaign directory, rounds, time limit, measurement-governance mode, and
@@ -72,6 +72,9 @@ Prepared run shape:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
+- Runtime replay semantics: budget-exhausting summaries suppress stale
+  fresh-runtime replay markers, materialization, and pressure reports. Runtime
+  tie fresh replay remains available only for comparative runtime semantics.
 
 ## Framework Guarantees To Preserve
 

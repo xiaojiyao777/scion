@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `d32b2101` and pass static launch readiness for the warehouse 6R champion-v2 follow-up and the CVRP 4R Phase 4 bounded two-opt follow-up. They include current evidence-payload, analysis-brief boundary checks, protocol-detail consistency, runtime-consistency, research-actionability, review-input current-run evidence/artifact consistency, failure-taxonomy current-input consistency, prompt/source visibility current-manifest consistency, hypothesis-generation prompt-context signal consistency, quality-block reason-count consistency, warehouse continuity, CVRP intra-large-two-opt/direct-evidence-detail guards including `size70_two_opt_*` fallback rejection, measurement-detail consistency guards, and campaign launch command contract consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `7389bba6` and pass static launch readiness for the warehouse 6R champion-v2 follow-up and the CVRP 4R Phase 4 bounded two-opt follow-up. They include current evidence-payload, analysis-brief boundary checks, protocol-detail consistency, runtime-consistency, research-actionability, review-input current-run evidence/artifact consistency, failure-taxonomy current-input consistency, prompt/source visibility current-manifest consistency, hypothesis-generation prompt-context signal consistency, quality-block reason-count consistency, budget-exhausting runtime replay suppression, warehouse continuity, CVRP intra-large-two-opt/direct-evidence-detail guards including `size70_two_opt_*` fallback rejection, measurement-detail consistency guards, and campaign launch command contract consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -249,9 +249,9 @@ Current checkpoint:
   a bounded, deadline-aware mechanism with CMT2/CMT4 protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-d32b2101-preflight-6r-gpt55-20260620T081449Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-7389bba6-preflight-6r-gpt55-20260620T083153Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-d32b2101-preflight-4r-gpt55-20260620T081449Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-7389bba6-preflight-4r-gpt55-20260620T083209Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -266,9 +266,9 @@ Current checkpoint:
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded
     from `DecisionFeatures`.
-  - Budget-exhausting runtime semantics, low-SNR trajectory-divergent lifecycle
-    continuation, and hard-negative fail-closed behavior are covered by focused
-    tests.
+  - Budget-exhausting runtime semantics suppress stale fresh-runtime replay
+    markers/pressure, low-SNR trajectory-divergent lifecycle continuation, and
+    hard-negative fail-closed behavior are covered by focused tests.
   - Code-phase prompts preserve target/integration/algorithm source visibility;
     current-run postrun readiness audits prompt/source visibility, branch state,
     champion progress, failure taxonomy, research-context actionability, signal
