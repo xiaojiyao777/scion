@@ -27,8 +27,8 @@ conclusions instead of appending history. Detailed repair notes belong in
 - Current blocker: external WSL `gpt-5.5` provider auth, not Scion static
   readiness. `/v1/models` can list `gpt-5.5`, but strict completion preflight
   fails with HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`. The auth pool has `active=0`, `total=1`; no active
-  account is available.
+  `code=invalid_api_key`. The auth pool has `active=0`, `total=1`,
+  `expired=1`; no active account is available.
 
 Do not launch a prepared root until:
 
@@ -40,13 +40,13 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at runtime commit `0f77f5f6`; local mirrors exist under
+Generated on WSL at runtime commit `bb359851`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunstatus-0f77f5f6-preflight-6r-gpt55-20260620T050837Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunstatus-bb359851-preflight-6r-gpt55-20260620T051931Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-postrunstatus-0f77f5f6-preflight-4r-gpt55-20260620T050837Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-postrunstatus-bb359851-preflight-4r-gpt55-20260620T051930Z-claw`
 
 Readiness snapshot:
 
@@ -54,7 +54,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared/runtime commit matches `0f77f5f6`
+- Runtime guard status: prepared/runtime commit matches `bb359851`
 
 Prepared run shape:
 
