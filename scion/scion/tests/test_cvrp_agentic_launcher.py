@@ -496,6 +496,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         cvrp_checks["cvrp_large_twoopt_bounded_constraints_present"]["passed"]
         is True
     )
+    assert cvrp_checks["cvrp_protected_cases_in_split"]["passed"] is True
+    assert cvrp_checks["cvrp_protected_cases_in_split"]["detail"][
+        "stage_membership"
+    ] == {"CMT2": ["screening"], "CMT4": ["screening"]}
     assert cvrp_checks["cvrp_handoff_decision_boundary_present"]["passed"] is True
     assert any(
         "Decision input" in item
