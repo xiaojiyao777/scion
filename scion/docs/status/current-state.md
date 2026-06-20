@@ -62,22 +62,17 @@ escalation. After each run, inspect `exit.txt`, `run_status.json`, and
 `postrun_acceptance/readiness/`, then rsync the WSL run root back to the
 same-named local mirror before server-side analysis.
 
-```bash
-rsync -a --delete \
-  -e "ssh -i /home/clawd/.ssh/id_ed25519_codex_wsl -p 2222 -o BatchMode=yes -o StrictHostKeyChecking=no" \
-  xjy-ubuntu@127.0.0.1:<wsl-run-root>/ \
-  /home/clawd/research/scion-experiments/<same-run-root-name>/
-```
-
-After syncing, rerun the report-only postrun readiness check against the local
-mirror before delegating analysis:
+Run this from the server checkout:
 
 ```bash
 PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
-  python scion/tools/check_postrun_acceptance.py \
-  /home/clawd/research/scion-experiments/<same-run-root-name> \
-  --require-current-run-ready --format json
+  python scripts/sync_wsl_run_root.py <wsl-run-root> \
+  --execute --format json
 ```
+
+The helper mirrors the WSL root with rsync and then reruns
+`check_postrun_acceptance.py --require-current-run-ready` against the local
+mirror. Without `--execute`, it prints the planned commands only.
 
 ## Active Prepared Roots
 
