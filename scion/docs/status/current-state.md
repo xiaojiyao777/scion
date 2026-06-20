@@ -46,14 +46,14 @@ After strict readiness passes, launch from WSL by running the prepared wrapper
 itself, not by reconstructing the long `scion run` command:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-add376-markerreadiness-6r-gpt55-20260620T222137Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-f25f4c-preflightmarkerguard-6r-gpt55-20260620T223221Z-claw/run.sh
 ```
 
 Run the CVRP wrapper only after the warehouse run is underway or accepted for
 launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-add376-markerreadiness-4r-gpt55-20260620T222137Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-f25f4c-preflightmarkerguard-4r-gpt55-20260620T223222Z-claw/run.sh
 ```
 
 The wrappers already enforce completion preflight, runtime guards, campaign
@@ -84,17 +84,17 @@ current-run readiness only; it does not skip root-status validation.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `add3760a`;
-the corresponding local framework repair commit is `4fbf511b`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `f25f4cbb`;
+the corresponding local framework repair commit is `a52391a5`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection only. Run launch readiness on WSL, because prepared
 contracts and wrapper scripts intentionally contain WSL absolute paths and will
 fail identity checks if evaluated from the server-side mirror.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-add376-markerreadiness-6r-gpt55-20260620T222137Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-f25f4c-preflightmarkerguard-6r-gpt55-20260620T223221Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-add376-markerreadiness-4r-gpt55-20260620T222137Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-f25f4c-preflightmarkerguard-4r-gpt55-20260620T223222Z-claw`
 
 Readiness snapshot:
 
@@ -103,7 +103,7 @@ Readiness snapshot:
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
 - Runtime guard status: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=add3760a`, and either
+  `prepared_runtime_commit=f25f4cbb`, and either
   `runtime_guard_reason=runtime_guard_commit_matches` or
   `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare` after
   doc-only commits. Treat all earlier prepared roots as superseded because
@@ -172,8 +172,8 @@ reports.
 - Launch readiness is the operator-facing authority for prepared roots. It must
   guard prepared contract identity, prompt-context bridge, runtime paths, model
   route, completion preflight, private `launch.env` permissions, wrapper command
-  consistency, campaign-execution marker placement, and strict postrun
-  rebuild/readiness before launch.
+  consistency, campaign-execution marker placement after completion-preflight
+  failure handling, and strict postrun rebuild/readiness before launch.
 - CVRP launch readiness must reject prepared roots whose prompt-visible
   CMT2/CMT4 protection requirements are absent from formal screening. This
   remains a problem-owned prepared-handoff contract and does not enter
@@ -207,9 +207,10 @@ reports.
   partial campaign artifacts remain resume snapshots until valid launcher and
   campaign execution status exist. Launch wrappers write a current
   campaign-execution marker after pre-campaign checks, and launch readiness
-  rejects wrappers that omit that marker or place it after the campaign command.
-  When the marker exists, stale copied resume-campaign documents older than the
-  marker are rejected as `campaign_execution_artifacts_stale_resume_snapshot`.
+  rejects wrappers that omit that marker, place it before completion-preflight
+  failure handling can exit, or place it after the campaign command. When the
+  marker exists, stale copied resume-campaign documents older than the marker
+  are rejected as `campaign_execution_artifacts_stale_resume_snapshot`.
   Postrun rebuild uses this same lifecycle source to skip current-run summary,
   failure, research-efficiency, and manifest report families when current-run
   evidence is false.
