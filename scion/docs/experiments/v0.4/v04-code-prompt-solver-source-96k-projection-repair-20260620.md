@@ -45,35 +45,45 @@ interpretation.
 - Both dedicated source sections are grouped into the stable code-source cache
   block for solver-design code prompts, keeping source separate from dynamic
   retry and previous-patch feedback.
+- Cacheable active algorithm facts and related agentic context are now also
+  preserved in the stable system block for non-solver/operator code prompts.
+  Previously `_split_code_context()` only emitted the cacheable agentic block
+  when a solver-design source surface existed, which could drop active facts on
+  warehouse/operator code surfaces.
 - Regression tests assert markers beyond the old 24k and 12k projection windows
   survive through the compact code payload and the complete rendered prompt.
+  A focused non-solver regression asserts active facts survive in both the
+  rendered prompt and cacheable system block.
 
 ## Verification
 
 Local:
 
 ```bash
-pytest -q scion/scion/tests/unit/test_agentic_solver_design_prompt_payloads.py::test_code_phase_projects_full_algorithm_file_source_to_96k_window scion/scion/tests/unit/test_agentic_solver_design_prompt_payloads.py::test_code_phase_projects_algorithm_symbol_source_to_96k_window
+pytest -q scion/scion/tests/unit/test_agentic_active_algorithm_facts_prompt.py::test_non_solver_code_context_keeps_cacheable_active_algorithm_facts scion/scion/tests/unit/test_agentic_active_algorithm_facts_prompt.py::test_hypothesis_and_code_context_include_active_algorithm_facts
 pytest -q scion/scion/tests/unit/test_agentic_solver_design_prompt_payloads.py scion/scion/tests/unit/test_agentic_active_algorithm_facts_prompt.py scion/scion/tests/unit/test_agentic_target_file_grounding.py scion/scion/tests/unit/test_code_edit_protocol.py
 pytest -q scion/scion/tests/unit/test_agentic_session_surface_reads.py scion/scion/tests/unit/test_agentic_session_grounding.py scion/scion/tests/unit/test_agentic_session_budget_limits.py scion/scion/tests/unit/test_agentic_session_tool_selection.py scion/scion/tests/unit/test_agentic_session_model_planner_fallbacks.py scion/scion/tests/unit/test_agentic_session_model_planner.py
-python -m py_compile scion/scion/proposal/agentic_code_context.py scion/scion/proposal/engine/prompt/solver_context_receipts.py scion/scion/proposal/engine/prompt/observations.py scion/scion/proposal/engine/prompt_common.py scion/scion/tests/unit/test_agentic_solver_design_prompt_payloads.py
+python -m py_compile scion/scion/proposal/engine/code_prompts.py scion/scion/tests/unit/test_agentic_active_algorithm_facts_prompt.py
 git diff --check
 ```
 
-Results: `2 passed`, `118 passed`, `67 passed`, compile clean, and diff check
-clean. The symbol-source regression also asserts that the dedicated source
-section and late marker are present in the stable system source block.
+Results: focused non-solver fact visibility `2 passed`; broader prompt/protocol
+suite `119 passed`; session grounding/planner suite `67 passed`; compile clean;
+diff check clean. The symbol-source regression still asserts that the dedicated
+source section and late marker are present in the stable system source block.
 
 WSL with explicit checkout `PYTHONPATH` and launch Python:
 
 ```bash
 PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
   /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m py_compile \
-  scion/scion/proposal/agentic_code_context.py \
-  scion/scion/proposal/engine/prompt/solver_context_receipts.py \
-  scion/scion/proposal/engine/prompt/observations.py \
-  scion/scion/proposal/engine/prompt_common.py \
-  scion/scion/tests/unit/test_agentic_solver_design_prompt_payloads.py
+  scion/scion/proposal/engine/code_prompts.py \
+  scion/scion/tests/unit/test_agentic_active_algorithm_facts_prompt.py
+
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/unit/test_agentic_active_algorithm_facts_prompt.py::test_non_solver_code_context_keeps_cacheable_active_algorithm_facts \
+  scion/scion/tests/unit/test_agentic_active_algorithm_facts_prompt.py::test_hypothesis_and_code_context_include_active_algorithm_facts
 
 PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
   /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
@@ -92,18 +102,20 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
   scion/scion/tests/unit/test_agentic_session_model_planner.py
 ```
 
-Results: compile clean, `118 passed`, and `67 passed`.
+Results: compile clean, focused non-solver fact visibility `2 passed`, broader
+prompt/protocol suite `119 passed`, and session grounding/planner suite
+`67 passed`.
 
 ## Current Prepared Roots
 
-Generated on WSL at launch-authoritative runtime commit `7468fbe4`; the local
-runtime-equivalent commit is `0549df7c`. Both roots are mirrored under
+Generated on WSL at launch-authoritative runtime commit `3f75860f`; the local
+runtime-equivalent commit is `0e8bad42`. Both roots are mirrored under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-7468fbe4-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-preflight-6r-gpt55-20260620T133929Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-3f75860f-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-preflight-6r-gpt55-20260620T135256Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-7468fbe4-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-preflight-4r-gpt55-20260620T133930Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-3f75860f-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-preflight-4r-gpt55-20260620T135257Z-claw`
 
 Strict launch readiness for both reports:
 
@@ -113,7 +125,7 @@ Strict launch readiness for both reports:
 - `failed_static_required_checks=[]`
 - `failed_required_checks=["completion_preflight"]`
 - prompt context readiness `ok`
-- runtime guard `ok` for prepared commit `7468fbe4`
+- runtime guard `ok` for prepared commit `3f75860f`
 
 The remaining blocker is external `gpt-5.5` completion auth:
 HTTP `401`, `classification=not_authenticated`, `code=invalid_api_key`;
