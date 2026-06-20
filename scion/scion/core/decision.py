@@ -457,7 +457,8 @@ class DecisionEngine:
         if features.runtime_guard_timeout or features.runtime_guard_passed is False:
             return False
         if (
-            features.runtime_ratio_median is not None
+            _runtime_regression_rate_actionable(self.config)
+            and features.runtime_ratio_median is not None
             and features.runtime_ratio_median > self.config.max_runtime_ratio
         ):
             return False

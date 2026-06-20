@@ -482,6 +482,30 @@ def test_low_mid_win_runtime_slowdown_soft_abandons() -> None:
     )
 
 
+def test_non_actionable_runtime_comparison_does_not_soft_abandon_slowdown() -> None:
+    decision = BranchLifecyclePolicy(
+        runtime_regression_rate_actionable=False,
+    ).decide(
+        _features(
+            n_cases=10,
+            wins=4,
+            losses=0,
+            ties=6,
+            win_rate=0.4,
+            median_delta=0.0,
+            valid_pairs=10,
+            runtime_ratio_median=1.2,
+            runtime_regression_rate=0.95,
+        ),
+    )
+
+    assert decision.action == "retain_head"
+    assert SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN not in decision.reason_codes
+    assert SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE not in (
+        decision.reason_codes
+    )
+
+
 def test_two_case_runtime_noise_is_diagnostic_not_soft_abandon() -> None:
     decision = BranchLifecyclePolicy().decide(
         _features(

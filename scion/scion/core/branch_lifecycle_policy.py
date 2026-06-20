@@ -729,7 +729,8 @@ class BranchLifecyclePolicy:
         if features.median_delta is not None and features.median_delta < 0:
             reasons.append(SCREENING_SOFT_ABANDON_NEGATIVE_DELTA)
         if (
-            features.runtime_ratio_median is not None
+            self.runtime_regression_rate_actionable
+            and features.runtime_ratio_median is not None
             and features.runtime_ratio_median > self.soft_runtime_ratio_threshold
             and self._runtime_evidence_confident(features)
         ):

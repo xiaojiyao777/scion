@@ -368,6 +368,38 @@ def test_budget_exhausting_runtime_regression_does_not_block_low_snr_expand():
     )
 
 
+def test_budget_exhausting_runtime_ratio_does_not_block_low_snr_expand():
+    stats = _make_stats(
+        wins=3,
+        losses=4,
+        ties=9,
+        win_rate=3 / 16,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=2.0,
+        pair_wins=14,
+        pair_losses=11,
+        pair_ties=32,
+        valid_pairs=57,
+        runtime_ratio_median=2.0,
+        runtime_regression_rate=0.0,
+        runtime_pairs=16,
+    )
+    config = ProtocolConfig.model_validate(
+        {
+            "pairing_validity": "trajectory_divergent",
+            "runtime": {"runtime_model": "budget_exhausting"},
+        }
+    )
+
+    result = screening_gate(stats, config)
+
+    assert result.outcome == "expand"
+    assert result.reason_codes == (
+        "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",
+    )
+
+
 def test_trajectory_divergent_negative_delta_still_fails_screening():
     stats = _make_stats(
         wins=3,
