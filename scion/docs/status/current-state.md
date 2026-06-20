@@ -41,13 +41,13 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at prepared runtime commit `df871c55`; local mirrors exist under
+Generated on WSL at prepared runtime commit `55c1aaf9`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-campaigncontract-df871c55-preflight-6r-gpt55-20260620T073437Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70guard-55c1aaf9-preflight-6r-gpt55-20260620T075129Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-campaigncontract-df871c55-preflight-4r-gpt55-20260620T073451Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70guard-55c1aaf9-preflight-4r-gpt55-20260620T075146Z-claw`
 
 Readiness snapshot:
 
@@ -55,7 +55,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `df871c55`; launch-critical
+- Runtime guard status: prepared runtime commit `55c1aaf9`; launch-critical
   runtime guard paths are clean. Later doc/status-only commits are acceptable
   only when readiness reports `runtime_guard_paths_unchanged_since_prepare`.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -148,8 +148,9 @@ Prepared run shape:
   result only as proposal guidance. Review readiness requires a bounded,
   deadline-aware implementation with co-located positive effect, activation,
   objective-effect, intra-large-two-opt phase telemetry, and CMT2/CMT4
-  protection evidence; `two_opt_star`, cross-route, VNS, unbounded, and
-  fallback phase telemetry do not satisfy this direct-evidence rule.
+  protection evidence; `two_opt_star`, cross-route, VNS, unbounded,
+  `size70_two_opt_*`, and fallback phase telemetry do not satisfy this
+  direct-evidence rule.
 
 ## Next Actions
 
@@ -175,7 +176,7 @@ Prepared run shape:
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-prepared-research-focus-projection-readiness-20260620.md`.
+  `scion/docs/experiments/v0.4/v04-cvrp-size70-direct-evidence-guard-20260620.md`.
 - Current postrun wrapper-status evidence:
   `scion/docs/experiments/v0.4/v04-postrun-wrapper-status-escalation-20260620.md`.
 - Current WSL access:
