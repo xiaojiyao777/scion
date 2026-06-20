@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `45cbec3a` after launch readiness began checking committed runtime-guard drift and wrapper/manifest runtime-guard contract consistency before launch. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `2d0db1b6` after CVRP postrun readiness began rejecting seed-only large two-opt guidance as bounded two-opt evidence and launch readiness began guarding committed runtime-guard drift plus wrapper/manifest runtime-guard contract consistency before launch. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -249,9 +249,9 @@ Current checkpoint:
   a bounded, deadline-aware mechanism with CMT2/CMT4 protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runguardcontract-45cbec3a-preflight-6r-gpt55-20260620T002429Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-seedguard-2d0db1b6-preflight-6r-gpt55-20260620T004921Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-runguardcontract-45cbec3a-preflight-4r-gpt55-20260620T002429Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-seedguard-2d0db1b6-preflight-4r-gpt55-20260620T004921Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -275,10 +275,12 @@ Current checkpoint:
     require plateau-consistent measurement, runtime feedback, and substantive
     continuity evidence. Quality-blocked no-protocol negative conclusions require
     matching current-run failure-taxonomy evidence.
-  - CVRP bounded two-opt review readiness requires a qualifying large/bounded
-    two-opt protocol-effect signal plus co-located activation/effect/phase
-    telemetry on a matching top effect row; generic two-opt-like, VNS,
-    unbounded, fallback, and continuity-only mentions are not sufficient.
+  - CVRP bounded two-opt review readiness requires a qualifying bounded or
+    deadline-aware large two-opt protocol-effect signal plus co-located
+    activation/effect/phase telemetry on a matching top effect row; seed-only
+    guidance labels, generic/intra-only two-opt-like labels, VNS, unbounded,
+    fallback, unrelated mechanism evidence, and continuity-only mentions are
+    not sufficient.
   - Launch readiness guards the active checkout, absolute WSL `SCION_DIR` /
     `PYTHONPATH`, prepared-handoff identity, completion preflight, model route,
     no-early-stop semantics, strict postrun rebuild/readiness, committed

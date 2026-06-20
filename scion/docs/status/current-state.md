@@ -35,15 +35,15 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL after launch readiness began
-checking both committed runtime-guard drift and wrapper/manifest runtime-guard
-contract consistency before launch. WSL static readiness passes; launch
-readiness fails only at completion preflight auth.
+The active prepared roots were generated on WSL after CVRP postrun readiness
+began rejecting seed-only large two-opt evidence as a bounded two-opt review
+conclusion. WSL static readiness passes; launch readiness fails only at
+completion preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runguardcontract-45cbec3a-preflight-6r-gpt55-20260620T002429Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-seedguard-2d0db1b6-preflight-6r-gpt55-20260620T004921Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-runguardcontract-45cbec3a-preflight-4r-gpt55-20260620T002429Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-seedguard-2d0db1b6-preflight-4r-gpt55-20260620T004921Z-claw`
 
 Prepared manifests record:
 
@@ -51,7 +51,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `45cbec3a`; CVRP `45cbec3a`.
+- Runtime commits: warehouse `2d0db1b6`; CVRP `2d0db1b6`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -108,8 +108,10 @@ Prepared manifests record:
 - CVRP bounded two-opt postrun review readiness requires co-located positive
   effect, activation, objective-effect, and two-opt-specific phase telemetry on
   the same matching top effect row. Activation/effect evidence must be
-  attributed to a matching large/bounded two-opt mechanism; unrelated
-  `mechanism_evidence` cannot satisfy direct evidence.
+  attributed to a matching bounded or deadline-aware large two-opt mechanism;
+  unrelated `mechanism_evidence`, generic/intra-only two-opt labels, and the
+  external `large_instance_intra_route_two_opt_seed` guidance label cannot
+  satisfy direct evidence.
 - Warehouse protocol-evaluated follow-up review distinguishes positive
   at-or-above-MDE effects from plateau-consistent no-positive-MDE effects.
   Plateau-ready summaries require the measurement signal to be
@@ -179,6 +181,7 @@ Prepared manifests record:
   `scion/docs/experiments/v0.4/v04-postrun-readiness-failed-check-summary-20260619.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-runtime-guard-commit-drift-20260620.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-runtime-guard-contract-consistency-20260620.md`,
+  `scion/docs/experiments/v0.4/v04-cvrp-seed-only-twoopt-readiness-guard-20260620.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-mechanism-bound-direct-evidence-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-positive-effect-plateau-readiness-20260619.md`,
