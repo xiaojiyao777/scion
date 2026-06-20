@@ -46,14 +46,14 @@ After strict readiness passes, launch from WSL by running the prepared wrapper
 itself, not by reconstructing the long `scion run` command:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-f995674-screening-6r-gpt55-20260620T195352Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-5d46c46-launchenv-6r-gpt55-20260620T200709Z-claw/run.sh
 ```
 
 Run the CVRP wrapper only after the warehouse run is underway or accepted for
 launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-f995674-screening-4r-gpt55-20260620T195352Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-5d46c46-launchenv-4r-gpt55-20260620T200722Z-claw/run.sh
 ```
 
 The wrappers already enforce completion preflight, runtime guards, campaign
@@ -81,17 +81,17 @@ the planned commands only.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `f995674b`;
-the corresponding local framework repair commit is `6c44fea6`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `5d46c463`;
+the corresponding local framework repair commit is `681430f4`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection only. Run launch readiness on WSL, because prepared
 contracts and wrapper scripts intentionally contain WSL absolute paths and will
 fail identity checks if evaluated from the server-side mirror.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-f995674-screening-6r-gpt55-20260620T195352Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-5d46c46-launchenv-6r-gpt55-20260620T200709Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-f995674-screening-4r-gpt55-20260620T195352Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-5d46c46-launchenv-4r-gpt55-20260620T200722Z-claw`
 
 Readiness snapshot:
 
@@ -99,10 +99,12 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `f995674b`; strict readiness
+- Runtime guard status: prepared runtime commit `5d46c463`; strict readiness
   must keep reporting runtime guard OK. Treat all earlier prepared roots as
   superseded because runtime-guarded launcher, prompt-context, and postrun
   artifact-identity paths changed.
+- `launch_env_secret_permissions=ok`; each current root has `launch.env` mode
+  `0o600`.
 - Completion auth status is exposed by launch readiness in
   `completion_preflight_summary` plus flat `completion_http_status`,
   `completion_classification`, `completion_code`, and `completion_auth_pool`
@@ -159,8 +161,8 @@ reports.
   fields.
 - Launch readiness is the operator-facing authority for prepared roots. It must
   guard prepared contract identity, prompt-context bridge, runtime paths, model
-  route, completion preflight, wrapper command consistency, and strict postrun
-  rebuild/readiness before launch.
+  route, completion preflight, private `launch.env` permissions, wrapper command
+  consistency, and strict postrun rebuild/readiness before launch.
 - CVRP launch readiness must reject prepared roots whose prompt-visible
   CMT2/CMT4 protection requirements are absent from formal screening. This
   remains a problem-owned prepared-handoff contract and does not enter
