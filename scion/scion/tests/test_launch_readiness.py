@@ -2634,6 +2634,56 @@ def test_launch_readiness_warns_on_low_manifest_proposal_headroom(
     } in warnings
 
 
+def test_launch_readiness_accepts_disabled_proposal_headroom_caps(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    manifest_path = run_root / "prepared_run_manifest.v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["execution"]["proposal_attempt_limit"] = 0
+    manifest["execution"]["proposal_quality_loop_limit"] = 0
+    manifest["command"] = manifest["command"].replace(
+        "--proposal-attempt-limit 64",
+        "--proposal-attempt-limit 0",
+    )
+    manifest["command"] = manifest["command"].replace(
+        "--proposal-quality-loop-limit 64",
+        "--proposal-quality-loop-limit 0",
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(
+        launch_env.read_text(encoding="utf-8")
+        .replace("PROPOSAL_ATTEMPT_LIMIT=64", "PROPOSAL_ATTEMPT_LIMIT=0")
+        .replace(
+            "PROPOSAL_QUALITY_LOOP_LIMIT=64",
+            "PROPOSAL_QUALITY_LOOP_LIMIT=0",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    headroom_check = report["checks"]["run_script_proposal_headroom_enforced"]
+    assert headroom_check["status"] == "ok"
+    assert headroom_check["detail"]["failures"] == []
+    warnings = headroom_check["detail"]["warnings"]
+    assert {
+        "reason": "proposal_attempt_limit_launch_env_below_minimum",
+        "field": "proposal_attempt_limit",
+        "source": "launch_env",
+        "recommended_min": 64,
+        "actual": 0,
+    } in warnings
+    assert {
+        "reason": "proposal_quality_loop_limit_manifest_execution_below_minimum",
+        "field": "proposal_quality_loop_limit",
+        "source": "manifest_execution",
+        "recommended_min": 64,
+        "actual": 0,
+    } in warnings
+
+
 def test_launch_readiness_rejects_missing_agentic_tool_headroom_env(
     tmp_path: Path,
 ) -> None:

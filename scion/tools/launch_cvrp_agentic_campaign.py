@@ -29,8 +29,8 @@ DEFAULT_AGENTIC_TOOL_MAX_CALLS = 200
 DEFAULT_AGENTIC_CODE_TOOL_MAX_CALLS = DEFAULT_AGENTIC_TOOL_MAX_CALLS
 DEFAULT_AGENTIC_OBSERVATION_MAX_CHARS = 2_000_000
 DEFAULT_STAGE_TRANSITION_DRAIN_LIMIT = 4
-DEFAULT_PROPOSAL_ATTEMPT_LIMIT = 64
-DEFAULT_PROPOSAL_QUALITY_LOOP_LIMIT = 64
+DEFAULT_PROPOSAL_ATTEMPT_LIMIT = 0
+DEFAULT_PROPOSAL_QUALITY_LOOP_LIMIT = 0
 DEFAULT_PYTHON = Path(sys.executable)
 DEFAULT_USER_SUFFIX = "claw"
 PREFLIGHT_FAILURE_EXIT_CODE = 64
@@ -1371,9 +1371,9 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_PROPOSAL_ATTEMPT_LIMIT,
         help=(
-            "Focused v0.4 proposal attempt headroom passed to scion run. "
-            "Defaults to 64 so prepared research roots are not stopped by the "
-            "core rounds+6 fallback before useful protocol evidence appears."
+            "Focused v0.4 proposal attempt cap passed to scion run. Defaults "
+            "to 0, which disables this research-headroom cap; runaway loops "
+            "still use the core safety guard and circuit breaker."
         ),
     )
     parser.add_argument(
@@ -1381,8 +1381,8 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_PROPOSAL_QUALITY_LOOP_LIMIT,
         help=(
-            "Focused v0.4 proposal-quality block headroom passed to scion run. "
-            "Defaults to 64 for warehouse/CVRP research continuity."
+            "Focused v0.4 proposal-quality block cap passed to scion run. "
+            "Defaults to 0, which disables this research-headroom cap."
         ),
     )
     parser.add_argument(
@@ -1430,10 +1430,10 @@ def parse_args() -> argparse.Namespace:
         raise SystemExit("--agentic-code-tool-max-calls must be >= 1")
     if args.agentic_observation_max_chars < 1:
         raise SystemExit("--agentic-observation-max-chars must be >= 1")
-    if args.proposal_attempt_limit < 1:
-        raise SystemExit("--proposal-attempt-limit must be >= 1")
-    if args.proposal_quality_loop_limit < 1:
-        raise SystemExit("--proposal-quality-loop-limit must be >= 1")
+    if args.proposal_attempt_limit < 0:
+        raise SystemExit("--proposal-attempt-limit must be >= 0")
+    if args.proposal_quality_loop_limit < 0:
+        raise SystemExit("--proposal-quality-loop-limit must be >= 0")
     if args.stage_transition_drain_limit < 0:
         raise SystemExit("--stage-transition-drain-limit must be >= 0")
     if args.api_key is not None and args.api_key_env:

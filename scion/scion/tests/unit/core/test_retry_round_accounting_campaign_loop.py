@@ -7,6 +7,7 @@ from scion.core.campaign_loop import (
     CampaignLoop,
     _fresh_runtime_replay_drain_status,
     _proposal_attempt_limit,
+    _proposal_quality_loop_limit,
 )
 from scion.core.models import Decision
 from scion.core.step_result import StepResult
@@ -81,6 +82,77 @@ def test_campaign_loop_default_proposal_attempt_limit_includes_repair_headroom()
 
 def test_proposal_attempt_limit_prefers_explicit_config_over_default() -> None:
     assert _proposal_attempt_limit(8, configured=9) == 9
+
+
+def test_zero_proposal_limits_disable_research_headroom_caps() -> None:
+    assert _proposal_attempt_limit(8, configured=0) == 0
+    assert _proposal_quality_loop_limit(8, configured=0) == 0
+
+    results = [
+        *[
+            StepResult(
+                action="explore",
+                branch_id="b1",
+                reason="agent_quality_blocked",
+                counts_toward_max_rounds=False,
+                attempt_kind="proposal_block",
+            )
+            for _ in range(5)
+        ],
+        _screening_result(reason="screening 1"),
+        _screening_result(reason="screening 2"),
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=0,
+        proposal_quality_loop_limit=0,
+    )
+
+    loop.run(max_rounds=2)
+
+    final_status = loop_statuses[-1]
+    assert calls == 7
+    assert "proposal_quality_loop" not in stopped_reasons
+    assert "proposal_attempt_limit_exhausted" not in stopped_reasons
+    assert "max_rounds_exhausted" in stopped_reasons
+    assert final_status["proposal_attempt_limit"] == 0
+    assert final_status["proposal_attempt_limit_enabled"] is False
+    assert final_status["proposal_quality_loop_limit"] == 0
+    assert final_status["proposal_quality_loop_limit_enabled"] is False
+    assert final_status["proposal_quality_blocks_consumed"] == 5
+    assert final_status["effective_rounds_completed"] == 2
 
 
 def test_campaign_loop_does_not_count_retry_attempt_against_max_rounds() -> None:

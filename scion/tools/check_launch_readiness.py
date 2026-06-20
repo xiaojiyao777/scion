@@ -2277,14 +2277,14 @@ def _run_script_proposal_headroom_enforced(
         option = str(spec["option"])
         expected_min = int(spec["min"])
         env_raw = _shell_assignment_value(launch_env_text, env_key)
-        env_value = _parse_positive_int(env_raw)
-        manifest_value = _parse_positive_int(execution.get(field))
+        env_value = _parse_nonnegative_int(env_raw)
+        manifest_value = _parse_nonnegative_int(execution.get(field))
         manifest_command_raw = (
             _shell_command_option_value(manifest_command, option)
             if isinstance(manifest_command, str)
             else None
         )
-        manifest_command_value = _parse_positive_int(manifest_command_raw)
+        manifest_command_value = _parse_nonnegative_int(manifest_command_raw)
         run_script_uses_env = _shell_command_has_option_value(
             campaign_command_block,
             option,
@@ -2417,6 +2417,16 @@ def _parse_positive_int(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed > 0 else None
+
+
+def _parse_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
 
 
 def _shell_command_option_value(command: str, option: str) -> str | None:

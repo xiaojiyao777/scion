@@ -98,8 +98,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepare_status["agentic_tool_max_calls"] == 200
     assert prepare_status["agentic_code_tool_max_calls"] == 200
     assert prepare_status["agentic_observation_max_chars"] == 2000000
-    assert prepare_status["proposal_attempt_limit"] == 64
-    assert prepare_status["proposal_quality_loop_limit"] == 64
+    assert prepare_status["proposal_attempt_limit"] == 0
+    assert prepare_status["proposal_quality_loop_limit"] == 0
 
     launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
     prepared_manifest = json.loads(
@@ -198,8 +198,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         prepared_manifest["execution"]["agentic_observation_max_chars"]
         == 2000000
     )
-    assert prepared_manifest["execution"]["proposal_attempt_limit"] == 64
-    assert prepared_manifest["execution"]["proposal_quality_loop_limit"] == 64
+    assert prepared_manifest["execution"]["proposal_attempt_limit"] == 0
+    assert prepared_manifest["execution"]["proposal_quality_loop_limit"] == 0
     assert prepared_manifest["execution"]["stage_transition_drain_limit"] == 4
     assert prepared_manifest["config"]["problem"] == "scion/problems/cvrp/problem.yaml"
     assert prepared_manifest["report_metadata"]["postrun_acceptance_families"] == [
@@ -258,8 +258,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "AGENTIC_TOOL_MAX_CALLS=200" in launch_env
     assert "AGENTIC_CODE_TOOL_MAX_CALLS=200" in launch_env
     assert "AGENTIC_OBSERVATION_MAX_CHARS=2000000" in launch_env
-    assert "PROPOSAL_ATTEMPT_LIMIT=64" in launch_env
-    assert "PROPOSAL_QUALITY_LOOP_LIMIT=64" in launch_env
+    assert "PROPOSAL_ATTEMPT_LIMIT=0" in launch_env
+    assert "PROPOSAL_QUALITY_LOOP_LIMIT=0" in launch_env
     assert (
         f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}"
         in launch_env
@@ -322,8 +322,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "AGENTIC_TOOL_MAX_CALLS=200" in command_txt
     assert "AGENTIC_CODE_TOOL_MAX_CALLS=200" in command_txt
     assert "AGENTIC_OBSERVATION_MAX_CHARS=2000000" in command_txt
-    assert "PROPOSAL_ATTEMPT_LIMIT=64" in command_txt
-    assert "PROPOSAL_QUALITY_LOOP_LIMIT=64" in command_txt
+    assert "PROPOSAL_ATTEMPT_LIMIT=0" in command_txt
+    assert "PROPOSAL_QUALITY_LOOP_LIMIT=0" in command_txt
     assert "SCION_API_KEY=<set>" in command_txt
     assert "COMPLETION_PREFLIGHT=0" in command_txt
     assert (
@@ -347,8 +347,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "--agentic-tool-max-calls 200" in command_txt
     assert "--agentic-code-tool-max-calls 200" in command_txt
     assert "--agentic-observation-max-chars 2000000" in command_txt
-    assert "--proposal-attempt-limit 64" in command_txt
-    assert "--proposal-quality-loop-limit 64" in command_txt
+    assert "--proposal-attempt-limit 0" in command_txt
+    assert "--proposal-quality-loop-limit 0" in command_txt
     assert "--measurement-governance on" in command_txt
     assert "--proposal-context-ablation full" in command_txt
     assert '--measurement-governance "$MEASUREMENT_GOVERNANCE"' in run_sh_text

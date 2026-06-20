@@ -93,8 +93,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert prepare_status["agentic_tool_max_calls"] == 200
     assert prepare_status["agentic_code_tool_max_calls"] == 200
     assert prepare_status["agentic_observation_max_chars"] == 2000000
-    assert prepare_status["proposal_attempt_limit"] == 64
-    assert prepare_status["proposal_quality_loop_limit"] == 64
+    assert prepare_status["proposal_attempt_limit"] == 0
+    assert prepare_status["proposal_quality_loop_limit"] == 0
 
     launch_env_path = run_root / "launch.env"
     launch_env = launch_env_path.read_text(encoding="utf-8")
@@ -154,8 +154,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         prepared_manifest["execution"]["agentic_observation_max_chars"]
         == 2000000
     )
-    assert prepared_manifest["execution"]["proposal_attempt_limit"] == 64
-    assert prepared_manifest["execution"]["proposal_quality_loop_limit"] == 64
+    assert prepared_manifest["execution"]["proposal_attempt_limit"] == 0
+    assert prepared_manifest["execution"]["proposal_quality_loop_limit"] == 0
     assert prepared_manifest["config"]["warehouse_data_root"] == str(data_root)
     assert prepared_manifest["config"]["problem_v1"] == str(
         run_root / "config" / "problem-v1.yaml"
@@ -211,8 +211,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "AGENTIC_TOOL_MAX_CALLS=200" in launch_env
     assert "AGENTIC_CODE_TOOL_MAX_CALLS=200" in launch_env
     assert "AGENTIC_OBSERVATION_MAX_CHARS=2000000" in launch_env
-    assert "PROPOSAL_ATTEMPT_LIMIT=64" in launch_env
-    assert "PROPOSAL_QUALITY_LOOP_LIMIT=64" in launch_env
+    assert "PROPOSAL_ATTEMPT_LIMIT=0" in launch_env
+    assert "PROPOSAL_QUALITY_LOOP_LIMIT=0" in launch_env
     assert "CONTROL_PAIR_KEY=warehouse.unit-warehouse:prepared" in launch_env
     assert (
         "GIT_RUNTIME_GUARD_PATHS="
@@ -297,8 +297,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         '--proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT"'
         in run_sh_text
     )
-    assert "--proposal-attempt-limit 64" in command_txt
-    assert "--proposal-quality-loop-limit 64" in command_txt
+    assert "--proposal-attempt-limit 0" in command_txt
+    assert "--proposal-quality-loop-limit 0" in command_txt
     assert "--agentic-session-timeout-sec 3600" in command_txt
     assert "--agentic-tool-max-steps 240" in command_txt
     assert "--agentic-tool-max-calls 200" in command_txt
@@ -313,8 +313,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         "scion/tools scion/problems/warehouse_delivery surrogate" in command_txt
     )
     assert "POSTRUN_REPORTS=1" in command_txt
-    assert "PROPOSAL_ATTEMPT_LIMIT=64" in command_txt
-    assert "PROPOSAL_QUALITY_LOOP_LIMIT=64" in command_txt
+    assert "PROPOSAL_ATTEMPT_LIMIT=0" in command_txt
+    assert "PROPOSAL_QUALITY_LOOP_LIMIT=0" in command_txt
     assert "AGENTIC_SESSION_TIMEOUT_SEC=3600" in command_txt
     assert "AGENTIC_TOOL_MAX_STEPS=240" in command_txt
     assert "AGENTIC_TOOL_MAX_CALLS=200" in command_txt

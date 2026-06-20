@@ -110,21 +110,11 @@ class CampaignLoop:
             configured=self.stage_transition_drain_limit,
         )
         # Non-round steps such as proposal blocks and telemetry-repairable
-        # formal runs do not consume the screened-round budget.  Ordinary
-        # proposal attempts have a hard cap; telemetry repair/diagnostic
-        # attempts instead use a separate per-branch/per-mechanism cap so they
-        # cannot exhaust requested effective rounds.
-        loop_step_limit = (
-            requested_rounds
-            + proposal_quality_loop_limit
-            + bad_proposal_limit
-            + telemetry_repairable_limit
-            + validation_repair_required_limit
-            + same_family_retry_limit
-            + branch_lifecycle_policy_block_limit
-            + reconcile_lifecycle_step_limit
-            + scheduler_active_slot_blocked_attempt_limit
-        )
+        # formal runs do not consume the screened-round budget.  Proposal and
+        # quality caps are configurable research headroom and may be disabled
+        # for v0.4 focused runs.  ``loop_step_limit`` remains a high-water
+        # safety guard so a broken scheduler/proposal loop cannot run forever.
+        loop_step_limit = _campaign_safety_step_limit(requested_rounds)
 
         proposal_attempts_consumed_count = _initial_proposal_attempts(
             self.get_proposal_attempts,
@@ -246,7 +236,9 @@ class CampaignLoop:
 
         self.write_status(loop_status=loop_status())
         while counted_rounds < requested_rounds:
-            if proposal_attempts_consumed() >= attempt_limit:
+            if _limit_enabled(attempt_limit) and (
+                proposal_attempts_consumed() >= attempt_limit
+            ):
                 final_reason = "proposal_attempt_limit_exhausted"
                 self.write_status(
                     stopped_reason=final_reason,
@@ -254,7 +246,7 @@ class CampaignLoop:
                 )
                 break
             if loop_steps >= loop_step_limit:
-                final_reason = "attempt_limit_exhausted"
+                final_reason = "campaign_safety_step_limit_exhausted"
                 self.write_status(
                     stopped_reason=final_reason,
                     loop_status=loop_status(),
@@ -352,7 +344,7 @@ class CampaignLoop:
                             attempt_kind=kind,
                         )
                     )
-                    if (
+                    if _limit_enabled(proposal_quality_loop_limit) and (
                         proposal_quality_blocked_attempts
                         >= proposal_quality_loop_limit
                     ):
@@ -367,7 +359,7 @@ class CampaignLoop:
                             attempt_kind=kind,
                         )
                     )
-                    if (
+                    if _limit_enabled(proposal_quality_loop_limit) and (
                         proposal_quality_blocked_attempts
                         >= proposal_quality_loop_limit
                     ):
@@ -382,6 +374,7 @@ class CampaignLoop:
             if (
                 final_reason is None
                 and counted_rounds < requested_rounds
+                and _limit_enabled(attempt_limit)
                 and proposal_attempts_consumed() >= attempt_limit
             ):
                 final_reason = "proposal_attempt_limit_exhausted"
@@ -532,7 +525,7 @@ class CampaignLoop:
         elif final_reason is None and counted_rounds == 0:
             final_reason = "no_effective_round_loop"
         elif final_reason is None:
-            final_reason = "attempt_limit_exhausted"
+            final_reason = "campaign_safety_step_limit_exhausted"
 
         self.set_last_stop_reason(final_reason)
         # A max-rounds stop closes this campaign invocation, not the research
@@ -885,13 +878,17 @@ def _proposal_quality_loop_limit(
     *,
     configured: int | None,
 ) -> int:
-    """Return the cumulative pre-screen agent-quality block cap."""
+    """Return the cumulative pre-screen agent-quality block cap.
+
+    A value of 0 disables this research-headroom cap.  The campaign still has
+    a separate high-water safety step guard and the normal circuit breaker.
+    """
     if configured is not None:
-        return max(1, int(configured))
+        return max(0, int(configured))
     raw = os.environ.get("SCION_PROPOSAL_QUALITY_LOOP_LIMIT")
     if raw:
         try:
-            return max(1, int(raw))
+            return max(0, int(raw))
         except ValueError:
             logger.warning(
                 "Ignoring invalid SCION_PROPOSAL_QUALITY_LOOP_LIMIT=%r",
@@ -911,14 +908,16 @@ def _proposal_attempt_limit(
     ``--rounds`` is the requested effective screened-round target, not the
     proposal-attempt ceiling.  By default the proposal cap includes bounded
     headroom for pre-screen repair/quality loops while still preventing
-    unbounded proposal cycling.
+    unbounded proposal cycling.  A configured value of 0 disables this
+    research-headroom cap for focused v0.4 runs; the high-water campaign safety
+    guard and circuit breaker still apply.
     """
     if configured is not None:
-        return max(1, int(configured))
+        return max(0, int(configured))
     raw = os.environ.get("SCION_PROPOSAL_ATTEMPT_LIMIT")
     if raw:
         try:
-            return max(1, int(raw))
+            return max(0, int(raw))
         except ValueError:
             logger.warning(
                 "Ignoring invalid SCION_PROPOSAL_ATTEMPT_LIMIT=%r",
@@ -926,6 +925,25 @@ def _proposal_attempt_limit(
             )
     rounds = max(1, int(requested_rounds))
     return rounds + max(6, rounds * 2)
+
+
+def _campaign_safety_step_limit(requested_rounds: int) -> int:
+    """Return the runaway-loop guard, not a research budget."""
+    raw = os.environ.get("SCION_CAMPAIGN_SAFETY_STEP_LIMIT")
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            logger.warning(
+                "Ignoring invalid SCION_CAMPAIGN_SAFETY_STEP_LIMIT=%r",
+                raw,
+            )
+    rounds = max(1, int(requested_rounds))
+    return rounds + max(256, rounds * 64)
+
+
+def _limit_enabled(limit: int | None) -> bool:
+    return limit is not None and int(limit) > 0
 
 
 def _telemetry_repair_attempt_limit(
@@ -1241,6 +1259,7 @@ def _campaign_loop_status(
         "requested_rounds": max(1, int(requested_rounds)),
         "attempt_limit": max(0, int(attempt_limit)),
         "proposal_attempt_limit": max(0, int(attempt_limit)),
+        "proposal_attempt_limit_enabled": _limit_enabled(attempt_limit),
         "attempts": attempts_value,
         "total_rounds": max(0, int(legacy_total_rounds)),
         "proposal_attempts": attempts_value,
@@ -1249,6 +1268,7 @@ def _campaign_loop_status(
         "loop_steps": max(0, int(loop_steps)),
         "campaign_steps": max(0, int(loop_steps)),
         "loop_step_limit": max(0, int(loop_step_limit)),
+        "campaign_safety_step_limit": max(0, int(loop_step_limit)),
         "effective_rounds_completed": effective_rounds,
         "formal_screened_candidates": max(0, int(formal_screened_candidates)),
         "protocol_evaluated_candidates": max(
@@ -1367,8 +1387,11 @@ def _campaign_loop_status(
         "fresh_runtime_replay_drain_unresolved_closures": (
             fresh_replay_unresolved_closures
         ),
-        "proposal_quality_loop_limit": max(1, int(proposal_quality_loop_limit)),
-        "proposal_quality_limit": max(1, int(proposal_quality_loop_limit)),
+        "proposal_quality_loop_limit": max(0, int(proposal_quality_loop_limit)),
+        "proposal_quality_limit": max(0, int(proposal_quality_loop_limit)),
+        "proposal_quality_loop_limit_enabled": _limit_enabled(
+            proposal_quality_loop_limit
+        ),
         "proposal_quality_blocks_consumed": quality_blocks,
         "quality_blocks": quality_blocks,
         "quality_block_ledger": [dict(item) for item in quality_block_ledger],

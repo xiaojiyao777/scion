@@ -357,7 +357,8 @@ def register_init_run_commands(app: typer.Typer) -> None:
             "--proposal-quality-loop-limit",
             help=(
                 "Maximum proposal-quality blocks before stopping; defaults to "
-                "rounds + max(6, rounds * 2), or SCION_PROPOSAL_QUALITY_LOOP_LIMIT"
+                "rounds + max(6, rounds * 2), or SCION_PROPOSAL_QUALITY_LOOP_LIMIT; "
+                "use 0 to disable this research-headroom cap"
             ),
         ),
         proposal_attempt_limit: Optional[int] = typer.Option(
@@ -366,7 +367,8 @@ def register_init_run_commands(app: typer.Typer) -> None:
             help=(
                 "Maximum user-visible LLM proposal attempts before stopping; "
                 "defaults to rounds + max(6, rounds * 2), or "
-                "SCION_PROPOSAL_ATTEMPT_LIMIT"
+                "SCION_PROPOSAL_ATTEMPT_LIMIT; use 0 to disable this "
+                "research-headroom cap"
             ),
         ),
         campaign_dir: str = typer.Option(
