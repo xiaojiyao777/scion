@@ -27,8 +27,9 @@ conclusions instead of appending history. Detailed repair notes belong in
 - Current blocker: external WSL `gpt-5.5` provider auth, not Scion static
   readiness. `/v1/models` can list `gpt-5.5`, but strict completion preflight
   fails with HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`. The auth pool has `active=0`, `expired=1`,
-  `total=1`; no active account is available.
+  `code=invalid_api_key`. The auth pool has `active=0`, `total=1`; no active
+  account is available. Ignore volatile substate changes such as expired versus
+  refreshing unless active auth becomes available.
 
 Do not launch a prepared root until:
 
