@@ -798,6 +798,7 @@ def _problem_summary_actionability(
     inventory: Mapping[str, Any],
 ) -> tuple[str, Any]:
     expected_family, expected_key = _expected_problem_summary(brief, inventory)
+    expected_current_run_evidence = _brief_current_run_evidence(brief)
     if expected_key:
         summary = _mapping_or_empty(brief.get(expected_key))
         if summary.get("available") is not True:
@@ -816,6 +817,7 @@ def _problem_summary_actionability(
                 expected_key,
                 summary,
                 expected_family=expected_family,
+                expected_current_run_evidence=expected_current_run_evidence,
             )
         ]
         return (_summary_actionability_status(summaries), summaries)
@@ -825,7 +827,13 @@ def _problem_summary_actionability(
         summary = _mapping_or_empty(brief.get(key))
         if summary.get("available") is not True:
             continue
-        summaries.append(_summary_actionability_detail(key, summary))
+        summaries.append(
+            _summary_actionability_detail(
+                key,
+                summary,
+                expected_current_run_evidence=expected_current_run_evidence,
+            )
+        )
     if not summaries:
         return "skipped", "no problem-specific summary"
     return (_summary_actionability_status(summaries), summaries)
@@ -869,6 +877,7 @@ def _summary_actionability_detail(
     summary: Mapping[str, Any],
     *,
     expected_family: str | None = None,
+    expected_current_run_evidence: bool | None = None,
 ) -> dict[str, Any]:
     evidence_gaps = _string_items(summary.get("evidence_gaps"))
     expected_schema = PROBLEM_SUMMARY_SCHEMAS.get(key)
@@ -892,6 +901,11 @@ def _summary_actionability_detail(
     problem_family = summary.get("problem_family")
     if expected_family is not None and problem_family != expected_family:
         summary_failures.append("problem_summary_family_mismatch")
+    if (
+        expected_current_run_evidence is not None
+        and summary.get("current_run_evidence") is not expected_current_run_evidence
+    ):
+        summary_failures.append("problem_summary_current_run_evidence_mismatch")
     if (
         summary.get("current_run_evidence") is True
         and not _mapping_or_empty(summary.get("evidence"))
@@ -918,6 +932,7 @@ def _summary_actionability_detail(
         "expected_schema_version": expected_schema,
         "schema_current": schema_version == expected_schema,
         "current_run_evidence": summary.get("current_run_evidence"),
+        "expected_current_run_evidence": expected_current_run_evidence,
         "launch_required_field": launch_required_field,
         "launch_required_before_conclusion": (
             summary.get(launch_required_field)

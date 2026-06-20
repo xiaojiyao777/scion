@@ -91,6 +91,8 @@ Prepared run shape:
 - Warehouse/CVRP postrun conclusions require current-run evidence payloads,
   runtime-evidence consistency, formal hypothesis prompt traces, and
   problem-owned review rules; summary prose alone is not acceptance evidence.
+  Problem-summary `current_run_evidence` must match the analysis brief
+  lifecycle and Phase 4 current-run state.
 
 ## Warehouse
 

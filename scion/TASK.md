@@ -288,7 +288,9 @@ Current checkpoint:
   - Current-run warehouse/CVRP problem summaries must carry an explicit
     `evidence` payload before delegated review can accept protocol-evaluated,
     plateau, positive-effect, or bounded two-opt conclusions; free-text summary
-    claims alone remain insufficient evidence.
+    claims alone remain insufficient evidence. Their `current_run_evidence`
+    flag must also match the analysis brief lifecycle and Phase 4 current-run
+    evidence state.
   - Current-run warehouse/CVRP problem-summary runtime evidence must match
     runtime-feedback raw availability, drain/review readiness, runtime model
     counts, and runtime budget diagnostic counts before delegated review can
