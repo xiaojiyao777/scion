@@ -46,14 +46,14 @@ After strict readiness passes, launch from WSL by running the prepared wrapper
 itself, not by reconstructing the long `scion run` command:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-d8cc212-statusfailclosed-6r-gpt55-20260620T210805Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-2c806e-campaignexecfailclosed-6r-gpt55-20260620T212433Z-claw/run.sh
 ```
 
 Run the CVRP wrapper only after the warehouse run is underway or accepted for
 launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-d8cc212-statusfailclosed-4r-gpt55-20260620T210806Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2c806e-campaignexecfailclosed-4r-gpt55-20260620T212433Z-claw/run.sh
 ```
 
 The wrappers already enforce completion preflight, runtime guards, campaign
@@ -81,17 +81,17 @@ failures. Without `--execute`, it prints the planned commands only.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `d8cc212c`;
-the corresponding local framework repair commit is `6f85eb6a`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `2c806e95`;
+the corresponding local framework repair commit is `85708c79`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection only. Run launch readiness on WSL, because prepared
 contracts and wrapper scripts intentionally contain WSL absolute paths and will
 fail identity checks if evaluated from the server-side mirror.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-d8cc212-statusfailclosed-6r-gpt55-20260620T210805Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-2c806e-campaignexecfailclosed-6r-gpt55-20260620T212433Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-d8cc212-statusfailclosed-4r-gpt55-20260620T210806Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2c806e-campaignexecfailclosed-4r-gpt55-20260620T212433Z-claw`
 
 Readiness snapshot:
 
@@ -100,7 +100,7 @@ Readiness snapshot:
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
 - Runtime guard status: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=d8cc212c`, and either
+  `prepared_runtime_commit=2c806e95`, and either
   `runtime_guard_reason=runtime_guard_commit_matches` or
   `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare` after
   doc-only commits. Treat all earlier prepared roots as superseded because
@@ -196,10 +196,12 @@ reports.
   hide failed postrun annotation. Postrun acceptance/readiness/report failure
   markers in `exit.txt` fail readiness as well, covering interrupted status
   updates before `run_status.json` is refreshed.
-- Postrun inventory treats missing or unreadable root `run_status.json` as
-  invalid infra-only launcher status, not current-run research evidence. Copied
-  campaign artifacts remain resume snapshots until a valid root wrapper status
-  exists.
+- Postrun inventory treats missing/unreadable root `run_status.json`, and root
+  launcher status without any readable campaign execution
+  `run_status.json`/`status.json`/`campaign_summary.json`, as invalid
+  infra-only evidence rather than current-run research evidence. Copied or
+  partial campaign artifacts remain resume snapshots until valid launcher and
+  campaign execution status exist.
 - Research-context actionability requires an allowlisted formal
   hypothesis-generation prompt trace; code, target intent, and unknown
   `hypothesis_*` call kinds cannot prove continuity signals reached the next
