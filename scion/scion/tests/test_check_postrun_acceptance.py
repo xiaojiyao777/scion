@@ -2397,6 +2397,66 @@ def test_postrun_acceptance_rejects_warehouse_quality_blocked_without_taxonomy_s
     )
 
 
+def test_postrun_acceptance_rejects_quality_blocked_reason_mismatch(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(
+        tmp_path / "warehouse-run-quality-blocked-reason-mismatch"
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    evidence = _warehouse_quality_blocked_problem_evidence()
+    quality_evidence = evidence["quality_blocks"]
+    assert isinstance(quality_evidence, dict)
+    quality_evidence["reason_counts"] = {"stale_reason": 2}
+    quality_evidence["reports_with_quality_blocks"] = 2
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": evidence,
+        "evidence_gaps": [
+            "quality_blocked_before_protocol_evaluation",
+            "missing_measurement_effect_summary",
+            "missing_runtime_feedback_summary",
+            "missing_research_continuity_summary",
+        ],
+        "interpretation": "quality_blocked_no_protocol_plateau_conclusion",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    _apply_warehouse_quality_blocked_review_inputs(brief, quality_block_count=2)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    consistency_check = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert consistency_check["status"] == "failed"
+    failures = consistency_check["detail"]["failures"]
+    assert "problem_summary_quality_block_reason_counts_mismatch" in failures
+    assert "problem_summary_reports_with_quality_blocks_mismatch" in failures
+    assert consistency_check["detail"]["summary_quality_block_reason_counts"] == {
+        "stale_reason": 2
+    }
+    assert consistency_check["detail"]["input_quality_block_reason_counts"] == {
+        "missing_direct_effect": 2
+    }
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_rejects_warehouse_quality_blocked_when_protocol_evaluated(
     tmp_path: Path,
 ) -> None:
@@ -4483,6 +4543,7 @@ def _cvrp_quality_blocked_problem_evidence() -> dict[str, object]:
             "proposal_quality_blocks": 2,
             "quality_blocks": 2,
             "quality_block_ledger_count": 2,
+            "reports_with_quality_blocks": 1,
             "reason_counts": {"missing_direct_effect": 2},
         },
         "runtime": {

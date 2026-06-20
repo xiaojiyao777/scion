@@ -95,7 +95,9 @@ Prepared run shape:
   lifecycle and Phase 4 current-run state. Required or present review-input
   summaries must also be current-run, so stale optional
   measurement/runtime/continuity summaries cannot make a delegated review look
-  analysis-ready.
+  analysis-ready. Quality-blocked no-protocol conclusions must also match
+  current failure-taxonomy quality-block counts, reports-with-quality-blocks,
+  and reason-count distribution.
 
 ## Warehouse
 

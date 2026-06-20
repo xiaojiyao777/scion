@@ -1115,6 +1115,18 @@ def _problem_summary_input_consistency(
         _int_or_zero(quality_evidence.get("quality_blocks")),
         _int_or_zero(quality_evidence.get("quality_block_ledger_count")),
     )
+    input_quality_block_reason_counts = _int_mapping(
+        proposal_quality.get("quality_block_reason_counts")
+    )
+    summary_quality_block_reason_counts = _int_mapping(
+        quality_evidence.get("reason_counts")
+    )
+    input_reports_with_quality_blocks = _int_or_zero(
+        proposal_quality.get("reports_with_quality_blocks")
+    )
+    summary_reports_with_quality_blocks = _int_or_zero(
+        quality_evidence.get("reports_with_quality_blocks")
+    )
 
     failures: list[str] = []
     interpretation = str(summary.get("interpretation") or "")
@@ -1136,6 +1148,10 @@ def _problem_summary_input_consistency(
             failures.append("problem_summary_quality_block_signal_missing")
         if input_quality_block_signal <= 0:
             failures.append("failure_taxonomy_quality_block_signal_missing")
+        if summary_reports_with_quality_blocks != input_reports_with_quality_blocks:
+            failures.append("problem_summary_reports_with_quality_blocks_mismatch")
+        if summary_quality_block_reason_counts != input_quality_block_reason_counts:
+            failures.append("problem_summary_quality_block_reason_counts_mismatch")
     if (
         measurement_evidence.get("available")
         is not measurement_summary.get("available")
@@ -1322,6 +1338,10 @@ def _problem_summary_input_consistency(
             "input_protocol_evaluated_candidates": input_protocol_evaluated,
             "summary_quality_block_signal": summary_quality_block_signal,
             "input_quality_block_signal": input_quality_block_signal,
+            "summary_reports_with_quality_blocks": summary_reports_with_quality_blocks,
+            "input_reports_with_quality_blocks": input_reports_with_quality_blocks,
+            "summary_quality_block_reason_counts": summary_quality_block_reason_counts,
+            "input_quality_block_reason_counts": input_quality_block_reason_counts,
             "summary_measurement_available": measurement_evidence.get("available"),
             "input_measurement_available": measurement_summary.get("available"),
             "summary_measurement_protocol_row_count": measurement_evidence.get(

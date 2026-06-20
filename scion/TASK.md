@@ -295,6 +295,10 @@ Current checkpoint:
     runtime-feedback raw availability, drain/review readiness, runtime model
     counts, and runtime budget diagnostic counts before delegated review can
     accept the summary as current-run analysis evidence.
+  - Quality-blocked no-protocol warehouse/CVRP conclusions must match the
+    current failure-taxonomy quality-block counts, reports-with-quality-blocks,
+    and reason-count distribution; matching only the aggregate blocked count is
+    insufficient evidence.
   - Current-run warehouse/CVRP review-input summaries must be current-run when
     required by the interpretation or when present in the brief, so optional
     measurement/runtime/continuity summaries cannot carry stale report-only
