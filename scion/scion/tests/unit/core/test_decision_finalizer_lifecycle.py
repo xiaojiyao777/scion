@@ -746,6 +746,125 @@ def test_no_effect_fresh_required_runtime_tie_does_not_mark_followup() -> None:
     assert "fresh_runtime_followup" not in summary
 
 
+def test_budget_exhausting_stale_fresh_runtime_marker_does_not_preserve_replay() -> None:
+    controller = BranchController()
+    branch = controller.create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion",
+        )
+    )
+    branch.branch_evidence_summary = {
+        "runtime_model": "budget_exhausting",
+        "runtime_evidence_status": "fresh_champion_required",
+        "fresh_runtime_required": True,
+        "fresh_runtime_pending": True,
+        "fresh_runtime_followup": {
+            "scheduler_marker": "fresh_champion_runtime_replay_pending",
+            "fresh_runtime_required": True,
+            "fresh_runtime_pending": True,
+            "followup_required": True,
+        },
+        "reason_codes": ["RUNTIME_TIE_FRESH_CHAMPION_REQUIRED"],
+    }
+    hypothesis = HypothesisProposal(
+        hypothesis_text="No-effect budget-exhausting runtime tie should not replay.",
+        change_locus="generic_surface",
+        action="modify",
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-budget-exhausting-no-replay",
+        branch_id=branch.branch_id,
+        change_locus="generic_surface",
+        action="modify",
+        status="running",
+    )
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="# candidate\n",
+    )
+    hyp_store = _HypothesisStore()
+    discarded: list[str] = []
+    finalizer = DecisionFinalizer(
+        branch_controller=controller,
+        branch_store=None,
+        hypothesis_store=hyp_store,
+        branch_workspaces={branch.branch_id: "/tmp/workspace"},
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches={branch.branch_id: patch},
+        branch_current_hypothesis={branch.branch_id: h_record},
+        branch_zero_win_streaks={},
+        prepare_promoted_champion=lambda _branch: None,  # type: ignore[arg-type]
+        require_promotable_branch=lambda _branch: None,
+        commit_promote_plan=lambda _plan: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_hard_abandon=lambda *_args: None,
+        record_step_lineage=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args: None,
+        discard_branch_workspace=lambda branch_id: discarded.append(branch_id),
+        archive_workspace=lambda *_args: None,
+        cleanup_workspace=lambda *_args: None,
+        persist_branch_state=lambda _branch_id: None,
+        reset_recent_abandoned_count=lambda: None,
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+            runtime_pairs=0,
+            champion_cached_runtime_pairs=4,
+            runtime_evidence_status="fresh_champion_required",
+        ),
+        gate_outcome="unclear",
+        reason_codes=("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",),
+        exposed_summary="stale fresh runtime marker under budget-exhausting model",
+        raw_metrics_ref="/tmp/metrics.json",
+        runtime_confidence="low_cached_champion",
+        runtime_evidence_status="fresh_champion_required",
+        champion_cached_runtime_pairs=4,
+        candidate_surface_runtime_summary={
+            "runtime_model": "budget_exhausting",
+            "runtime_budget_diagnostic": {"runtime_model": "budget_exhausting"},
+        },
+    )
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.CONTINUE_EXPLORE,
+        hypothesis=hypothesis,
+        h_record=h_record,
+        protocol_result=protocol,
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="screening",
+        decision_reason_codes=("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",),
+        lifecycle_action="retain_head",
+    )
+
+    stored = controller.get_branch(branch.branch_id)
+    summary = stored.branch_evidence_summary
+
+    assert result.decision == Decision.CONTINUE_EXPLORE
+    assert summary["runtime_model"] == "budget_exhausting"
+    assert summary.get("fresh_runtime_pending") is not True
+    assert summary.get("fresh_runtime_required") is not True
+    assert "fresh_runtime_followup" not in summary
+    assert hyp_store.statuses == [("h-budget-exhausting-no-replay", "rejected")]
+    assert discarded == [branch.branch_id]
+
+
 def test_continue_explore_discards_candidate_failed_screening_workspace() -> None:
     controller = BranchController()
     branch = controller.create_branch(

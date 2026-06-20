@@ -42,6 +42,7 @@ from scion.core.branch_lifecycle_policy import (
 )
 from scion.core.step_result import StepResult
 from scion.core.frozen_budget import FROZEN_BUDGET_EXHAUSTED
+from scion.core.runtime_budget_diagnostics import runtime_model_from_summary
 from scion.core.telemetry_validation import screened_experiment_effective
 from scion.core.verification_call import run_verification_gate
 
@@ -1307,17 +1308,8 @@ def _fresh_runtime_pressure_without_replayable_candidate(
         state_value = str(getattr(state, "value", state) or "")
         if pending_marker and state_value == BranchState.EXPLORE.value:
             continue
-        reason_codes = _summary_reason_codes(summary)
         runtime_status = str(summary.get("runtime_evidence_status") or "").lower()
-        fresh_required = (
-            bool(summary.get("fresh_runtime_required"))
-            or bool(marker_payload.get("fresh_runtime_required"))
-            or bool(marker_payload.get("followup_required"))
-            or runtime_status in {"fresh_champion_required", "fresh_required"}
-            or "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED" in reason_codes
-            or "RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED" in reason_codes
-        )
-        if not fresh_required:
+        if not _summary_fresh_runtime_required(summary, marker_payload):
             continue
         materialization = _fresh_runtime_replay_materialization_diagnostic(
             branch,
@@ -1626,6 +1618,11 @@ def _materializable_fresh_runtime_pending_branch(
         )
         if not isinstance(marker, Mapping):
             continue
+        if (
+            _fresh_runtime_summary_runtime_model(summary, marker)
+            == "budget_exhausting"
+        ):
+            continue
         state = getattr(branch, "state", "")
         if str(getattr(state, "value", state) or "") != BranchState.EXPLORE.value:
             continue
@@ -1651,6 +1648,10 @@ def _summary_fresh_runtime_required(
     summary: Mapping[str, Any],
     marker_payload: Mapping[str, Any],
 ) -> bool:
+    if _fresh_runtime_summary_runtime_model(summary, marker_payload) == (
+        "budget_exhausting"
+    ):
+        return False
     reason_codes = _summary_reason_codes(summary)
     runtime_status = str(summary.get("runtime_evidence_status") or "").lower()
     return bool(
@@ -1674,6 +1675,10 @@ def _fresh_runtime_replay_signal_trigger(
     summary: Mapping[str, Any],
     marker_payload: Mapping[str, Any],
 ) -> str:
+    if _fresh_runtime_summary_runtime_model(summary, marker_payload) == (
+        "budget_exhausting"
+    ):
+        return ""
     trigger = str(marker_payload.get("trigger") or "").strip()
     if trigger in {"pair_level_win_no_loss", "actionable_loss_diagnostic"}:
         return trigger
@@ -1699,6 +1704,19 @@ def _fresh_runtime_replay_signal_trigger(
     if _fresh_runtime_actionable_loss_signal(summary):
         return "actionable_loss_diagnostic"
     return ""
+
+
+def _fresh_runtime_summary_runtime_model(
+    summary: Mapping[str, Any],
+    marker_payload: Mapping[str, Any],
+) -> str:
+    return runtime_model_from_summary(
+        summary,
+        default="",
+    ) or runtime_model_from_summary(
+        marker_payload,
+        default="",
+    )
 
 
 def _fresh_runtime_actionable_loss_signal(summary: Mapping[str, Any]) -> bool:

@@ -169,6 +169,34 @@ def protocol_runtime_budget_diagnostic(
     return dict(diagnostic) if isinstance(diagnostic, Mapping) else None
 
 
+def runtime_model_from_summary(
+    summary: Mapping[str, Any] | None,
+    *,
+    default: str = "",
+) -> str:
+    """Return the explicit runtime model carried by a runtime summary."""
+    if not isinstance(summary, Mapping):
+        return _known_runtime_model(default)
+    diagnostic = summary.get("runtime_budget_diagnostic")
+    if isinstance(diagnostic, Mapping):
+        model = _known_runtime_model(diagnostic.get("runtime_model"))
+        if model:
+            return model
+    model = _known_runtime_model(summary.get("runtime_model"))
+    if model:
+        return model
+    return _known_runtime_model(default)
+
+
+def protocol_runtime_model(protocol_result: Any, *, default: str = "") -> str:
+    surface_summary = getattr(
+        protocol_result,
+        "candidate_surface_runtime_summary",
+        None,
+    )
+    return runtime_model_from_summary(surface_summary, default=default)
+
+
 def runtime_budget_diagnostic_code(protocol_result: Any) -> str:
     diagnostic = protocol_runtime_budget_diagnostic(protocol_result)
     if not diagnostic:
@@ -244,9 +272,13 @@ def _diagnostic_is_info(diagnostic: Mapping[str, Any]) -> bool:
     return str(diagnostic.get("severity") or "").strip().lower() == "info"
 
 
-def _runtime_model(value: Any) -> str:
+def _known_runtime_model(value: Any) -> str:
     text = str(value or "").strip()
-    return text if text in {"comparative", "budget_exhausting"} else "comparative"
+    return text if text in {"comparative", "budget_exhausting"} else ""
+
+
+def _runtime_model(value: Any) -> str:
+    return _known_runtime_model(value) or "comparative"
 
 
 def _elapsed_samples(values: Sequence[Any]) -> list[float]:
@@ -415,10 +447,12 @@ __all__ = [
     "format_runtime_budget_diagnostic",
     "runtime_budget_candidate_diagnostic_code",
     "runtime_budget_candidate_saturation_detected",
+    "protocol_runtime_model",
     "protocol_runtime_budget_diagnostic",
     "runtime_budget_diagnostic",
     "runtime_budget_diagnostic_code",
     "runtime_budget_diagnostic_detected",
     "runtime_budget_diagnostic_reason_codes",
+    "runtime_model_from_summary",
     "runtime_budget_summary_reason_codes",
 ]

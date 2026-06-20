@@ -47,7 +47,11 @@ from scion.core.models import (
 )
 from scion.core.promotion_service import PromotionCommitError, PromotionPlan
 from scion.core.step_result import StepResult
-from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_code
+from scion.core.runtime_budget_diagnostics import (
+    protocol_runtime_model as _runtime_model_for_protocol,
+    runtime_budget_diagnostic_code,
+    runtime_model_from_summary,
+)
 from scion.core.screening_visibility import runtime_aggregate_exclusion_for_protocol
 from scion.core.telemetry_validation import (
     SCREENING_TELEMETRY_REPAIRABLE,
@@ -1217,17 +1221,7 @@ def _preserve_low_signal_screening_workspace(
 
 
 def _protocol_runtime_model(protocol_result: ProtocolResult) -> str:
-    summary = getattr(protocol_result, "candidate_surface_runtime_summary", None)
-    if isinstance(summary, dict):
-        diagnostic = summary.get("runtime_budget_diagnostic")
-        if isinstance(diagnostic, dict):
-            text = str(diagnostic.get("runtime_model") or "").strip()
-            if text in {"comparative", "budget_exhausting"}:
-                return text
-        text = str(summary.get("runtime_model") or "").strip()
-        if text in {"comparative", "budget_exhausting"}:
-            return text
-    return ""
+    return _runtime_model_for_protocol(protocol_result, default="")
 
 
 def _fresh_runtime_replay_required(
@@ -1243,6 +1237,14 @@ def _fresh_runtime_replay_required(
     summary = getattr(branch, "branch_evidence_summary", {}) or {}
     if not isinstance(summary, dict):
         summary = {}
+    runtime_model = _protocol_runtime_model(
+        protocol_result,
+    ) or runtime_model_from_summary(
+        summary,
+        default="",
+    )
+    if runtime_model == "budget_exhausting":
+        return False
     marker = summary.get("fresh_runtime_followup")
     marker_required = (
         bool(marker.get("fresh_runtime_required") or marker.get("followup_required"))

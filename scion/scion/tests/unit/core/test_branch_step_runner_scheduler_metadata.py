@@ -880,6 +880,90 @@ def test_fresh_runtime_replay_drain_does_not_materialize_no_effect_runtime_tie()
     assert "fresh_runtime_pending_materialized" not in drain
 
 
+def test_fresh_runtime_replay_drain_ignores_budget_exhausting_marker() -> None:
+    branch = _branch("fresh-pressure-budget-exhausting")
+    branch.branch_code_status = "active_weak_positive"
+    branch.last_screening_feedback_tier = "weak_positive"
+    branch.current_code_hash = "candidate-hash"
+    branch.last_clean_code_hash = "candidate-hash"
+    branch.branch_evidence_summary = {
+        "tier": "weak_positive",
+        "wins": 1,
+        "losses": 0,
+        "ties": 3,
+        "pair_wins": 1,
+        "pair_losses": 0,
+        "pair_ties": 3,
+        "runtime_model": "budget_exhausting",
+        "runtime_evidence_status": "fresh_champion_required",
+        "fresh_runtime_required": True,
+        "fresh_runtime_pending": False,
+        "runtime_evidence_pressure_count": 2,
+        "reason_codes": ["RUNTIME_TIE_FRESH_CHAMPION_REQUIRED"],
+        "protocol_stage": "screening",
+        "replay_identity": _complete_replay_identity(),
+    }
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Weak positive budget-exhausting runtime tie should not replay.",
+        change_locus="generic_surface",
+        action="modify",
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-fresh-pressure-budget-exhausting",
+        branch_id=branch.branch_id,
+        change_locus="generic_surface",
+        action="modify",
+        status="running",
+    )
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="# candidate\n",
+    )
+    evaluated: list[str] = []
+    persisted: list[str] = []
+
+    def fail_proposal(selected: Branch) -> StepResult:
+        return StepResult(
+            action="explore",
+            branch_id=selected.branch_id,
+            reason="normal clean fork remains available",
+        )
+
+    def evaluate(*_args):
+        evaluated.append("called")
+        raise AssertionError("budget-exhausting runtime marker must not replay")
+
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="create_new",
+            branch=None,
+            slot="explore_new",
+            reason="runtime_evidence_completeness_clean_fork",
+        ),
+        branch=branch,
+        run_explore_step=fail_proposal,
+    )
+    runner.branch_workspaces[branch.branch_id] = "/tmp/workspace"
+    runner.branch_hypotheses[branch.branch_id] = hypothesis
+    runner.branch_current_hypothesis[branch.branch_id] = h_record
+    runner.branch_patches[branch.branch_id] = patch
+    runner.evaluate = evaluate
+    runner.persist_branch_state = persisted.append
+
+    result = runner.run_fresh_runtime_replay_drain_step()
+    drain = result.scheduler_audit_metadata["fresh_runtime_replay_drain"]
+
+    assert result.action == "skip"
+    assert result.counts_toward_max_rounds is False
+    assert result.attempt_kind == "other"
+    assert evaluated == []
+    assert persisted == []
+    assert "fresh_runtime_pending_materialized" not in drain
+    assert "pressure_no_schedulable_replay_candidate" not in drain
+    assert branch.branch_evidence_summary["fresh_runtime_pending"] is False
+
+
 def test_fresh_runtime_replay_drain_reports_stale_materializable_as_unschedulable() -> None:
     branch = _branch("fresh-pressure-stale-materializable", state=BranchState.STALE)
     branch.branch_code_status = "active_no_effect"

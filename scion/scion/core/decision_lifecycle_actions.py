@@ -27,6 +27,8 @@ from scion.core.reason_code_groups import classify_reason_codes
 from scion.core.runtime_budget_diagnostics import (
     BOTH_RUNTIME_BUDGET_SATURATION,
     CANDIDATE_RUNTIME_BUDGET_SATURATION,
+    protocol_runtime_model,
+    runtime_model_from_summary,
 )
 from scion.core.screening_visibility import (
     mechanism_evidence_for_protocol,
@@ -311,6 +313,9 @@ def update_branch_screening_evidence_summary(
         )
     if runtime_aggregate_exclusion:
         summary["runtime_aggregate_exclusion"] = runtime_aggregate_exclusion
+    runtime_model = protocol_runtime_model(protocol_result, default="")
+    if runtime_model:
+        summary["runtime_model"] = runtime_model
     runtime_policy = runtime_evidence_policy_summary(
         runtime_confidence=summary["runtime_evidence_confidence"],
         runtime_evidence_status=summary["runtime_evidence_status"],
@@ -904,6 +909,8 @@ def _fresh_champion_runtime_required(
     summary: Mapping[str, Any],
     reason_codes: tuple[str, ...],
 ) -> bool:
+    if runtime_model_from_summary(summary, default="") == "budget_exhausting":
+        return False
     status = str(summary.get("runtime_evidence_status") or "").strip().lower()
     policy = summary.get("runtime_evidence_policy")
     policy_fresh = (
