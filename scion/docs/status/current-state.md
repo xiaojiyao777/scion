@@ -27,8 +27,8 @@ conclusions instead of appending history. Detailed repair notes belong in
 - Current blocker: external WSL `gpt-5.5` provider auth, not Scion static
   readiness. `/v1/models` can list `gpt-5.5`, but strict completion preflight
   fails with HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`. The auth pool has `active=0`, `total=1`; no active
-  account is available.
+  `code=invalid_api_key`. The auth pool has `active=0`, `expired=1`,
+  `total=1`; no active account is available.
 
 Do not launch a prepared root until:
 
@@ -40,13 +40,13 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at prepared runtime commit `bb629c12`; local mirrors exist under
+Generated on WSL at prepared runtime commit `5669a551`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-qualityreason-bb629c12-preflight-6r-gpt55-20260620T054452Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-twooptdetail-5669a551-preflight-6r-gpt55-20260620T055856Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-qualityreason-bb629c12-preflight-4r-gpt55-20260620T054506Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-twooptdetail-5669a551-preflight-4r-gpt55-20260620T055910Z-claw`
 
 Readiness snapshot:
 
@@ -54,8 +54,8 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared commit `bb629c12`, with launch-critical
-  runtime guard paths unchanged after any docs-only snapshot commits.
+- Runtime guard status: prepared commit `5669a551`; launch-critical runtime
+  guard paths are unchanged after docs-only snapshot commits.
 
 Prepared run shape:
 
@@ -98,7 +98,9 @@ Prepared run shape:
   measurement/runtime/continuity summaries cannot make a delegated review look
   analysis-ready. Quality-blocked no-protocol conclusions must also match
   current failure-taxonomy quality-block counts, reports-with-quality-blocks,
-  and reason-count distribution.
+  and reason-count distribution. CVRP bounded two-opt ready summaries must
+  match recomputed direct-evidence counters, family lists, rejection counts, and
+  top-row signal count from current measurement/continuity inputs.
 
 ## Warehouse
 

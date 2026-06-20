@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `bb629c12` and pass static launch readiness for the warehouse 6R champion-v2 follow-up and the CVRP 4R Phase 4 bounded two-opt follow-up. They include current evidence-payload, runtime-consistency, research-actionability, review-input current-run evidence matching, quality-block reason-count consistency, warehouse continuity, and CVRP intra-large-two-opt phase guards. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `5669a551` and pass static launch readiness for the warehouse 6R champion-v2 follow-up and the CVRP 4R Phase 4 bounded two-opt follow-up. They include current evidence-payload, runtime-consistency, research-actionability, review-input current-run evidence matching, quality-block reason-count consistency, warehouse continuity, and CVRP intra-large-two-opt/direct-evidence-detail guards. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -249,15 +249,15 @@ Current checkpoint:
   a bounded, deadline-aware mechanism with CMT2/CMT4 protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-qualityreason-bb629c12-preflight-6r-gpt55-20260620T054452Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-twooptdetail-5669a551-preflight-6r-gpt55-20260620T055856Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-qualityreason-bb629c12-preflight-4r-gpt55-20260620T054506Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-twooptdetail-5669a551-preflight-4r-gpt55-20260620T055910Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
   HTTP `401`, `classification=not_authenticated`, `code=invalid_api_key`.
-  The auth pool has `active=0`, `total=1`; there is no active account
-  available.
+  The auth pool has `active=0`, `expired=1`, `total=1`; there is no active
+  account available.
   Do not launch either root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -284,7 +284,9 @@ Current checkpoint:
     effect row; seed-only guidance labels, generic/intra-only two-opt-like
     labels, `two_opt_star`/cross-route phases, VNS, unbounded, fallback,
     unrelated mechanism evidence, and continuity-only mentions are not
-    sufficient.
+    sufficient. Ready summaries must also match recomputed direct-evidence
+    counters, mechanism-family lists, rejection counts, and top-row signal count
+    from the current measurement/continuity inputs.
   - Current-run warehouse/CVRP problem summaries must carry an explicit
     `evidence` payload before delegated review can accept protocol-evaluated,
     plateau, positive-effect, or bounded two-opt conclusions; free-text summary
