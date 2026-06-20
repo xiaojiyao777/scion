@@ -44,15 +44,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `7993da30`
-after local runtime-equivalent commit `68118222`; local mirrors exist under
+Generated on WSL at launch-authoritative prepared runtime commit `8427fc84`
+after local runtime-equivalent commit `5bc05de0`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names for
 inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-7993da30-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-preflight-6r-gpt55-20260620T123708Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-8427fc84-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-preflight-6r-gpt55-20260620T124740Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-7993da30-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-preflight-4r-gpt55-20260620T123724Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-8427fc84-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-preflight-4r-gpt55-20260620T124755Z-claw`
 
 Readiness snapshot:
 
@@ -60,7 +60,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `7993da30`; strict readiness
+- Runtime guard status: prepared runtime commit `8427fc84`; strict readiness
   must keep reporting runtime guard OK. Doc/status-only commits after prepare
   are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -93,7 +93,9 @@ Prepared run shape:
   self-check preview payloads instead of applying the small preview fallback
   budget. APS artifact replay validation also treats zero step/tool/observation
   caps as disabled, so a valid no-cap research trajectory is not later rejected
-  as over budget.
+  as over budget. Code-phase planner prompts derive their self-check reserve
+  fields from the same runtime helpers, so disabled step/tool/observation caps
+  no longer appear to the planner as fixed 4/4 reserve slots.
 - Runtime replay semantics: budget-exhausting summaries suppress stale
   fresh-runtime replay markers, materialization, and pressure reports. Runtime
   tie fresh replay remains available only for comparative runtime semantics.
@@ -245,7 +247,7 @@ Prepared run shape:
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-disabled-aps-artifact-budget-validation-repair-20260620.md`.
+  `scion/docs/experiments/v0.4/v04-disabled-code-planner-reserve-repair-20260620.md`.
 - Current disabled proposal/APS research-cap semantics:
   `scion/docs/experiments/v0.4/v04-disabled-proposal-research-caps-20260620.md`.
 - Current source-read result/headroom alignment:
