@@ -3225,12 +3225,16 @@ def test_postrun_acceptance_rejects_cvrp_ready_summary_with_stale_direct_evidenc
         "direct_evidence": {
             "ready": True,
             "missing": [],
+            "required_protected_cases": ["CMT2", "CMT4"],
+            "protected_cases_observed": ["CMT2", "CMT4"],
             "top_rows_checked": 1,
             "complete_direct_evidence_row_count": 1,
             "positive_effect_row_count": 1,
             "activation_observed_count": 99,
             "objective_effect_observed_count": 1,
             "phase_telemetry_observed_count": 1,
+            "protected_case_evidence_row_count": 1,
+            "protected_case_complete_row_count": 1,
         },
         "families": ["bounded_large_twoopt"],
         "protocol_families": ["bounded_large_twoopt"],
@@ -3289,6 +3293,16 @@ def test_postrun_acceptance_rejects_cvrp_ready_summary_with_stale_direct_evidenc
                             "selected_surface": "solver_design",
                             "runtime_observed_pairs": 8,
                             "buckets": {"two_opt": {"weighted_sum_ms": 120.0}},
+                        },
+                        "case_level_total_distance_deltas": {
+                            "CMT2": {
+                                "candidate_minus_champion": 0.5,
+                                "feasible": True,
+                            },
+                            "CMT4": {
+                                "candidate_minus_champion": 0.25,
+                                "feasible": True,
+                            },
                         },
                     }
                 ]
@@ -3351,12 +3365,16 @@ def test_postrun_acceptance_rejects_cvrp_ready_summary_with_stale_measurement_fa
         "direct_evidence": {
             "ready": True,
             "missing": [],
+            "required_protected_cases": ["CMT2", "CMT4"],
+            "protected_cases_observed": ["CMT2", "CMT4"],
             "top_rows_checked": 1,
             "complete_direct_evidence_row_count": 1,
             "positive_effect_row_count": 1,
             "activation_observed_count": 1,
             "objective_effect_observed_count": 1,
             "phase_telemetry_observed_count": 1,
+            "protected_case_evidence_row_count": 1,
+            "protected_case_complete_row_count": 1,
         },
         "families": ["bounded_large_twoopt"],
         "protocol_families": ["bounded_large_twoopt"],
@@ -3417,6 +3435,16 @@ def test_postrun_acceptance_rejects_cvrp_ready_summary_with_stale_measurement_fa
                             "selected_surface": "solver_design",
                             "runtime_observed_pairs": 8,
                             "buckets": {"two_opt": {"weighted_sum_ms": 120.0}},
+                        },
+                        "case_level_total_distance_deltas": {
+                            "CMT2": {
+                                "candidate_minus_champion": 0.5,
+                                "feasible": True,
+                            },
+                            "CMT4": {
+                                "candidate_minus_champion": 0.25,
+                                "feasible": True,
+                            },
                         },
                     }
                 ]

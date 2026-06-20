@@ -3417,6 +3417,12 @@ def _large_twoopt_direct_evidence_signature(value: Any) -> dict[str, Any]:
     return {
         "ready": evidence.get("ready") is True,
         "missing": _string_list(evidence.get("missing")),
+        "required_protected_cases": _string_list(
+            evidence.get("required_protected_cases")
+        ),
+        "protected_cases_observed": _string_list(
+            evidence.get("protected_cases_observed")
+        ),
         "top_rows_checked": _int_or_zero(evidence.get("top_rows_checked")),
         "complete_direct_evidence_row_count": _int_or_zero(
             evidence.get("complete_direct_evidence_row_count")
@@ -3432,6 +3438,12 @@ def _large_twoopt_direct_evidence_signature(value: Any) -> dict[str, Any]:
         ),
         "phase_telemetry_observed_count": _int_or_zero(
             evidence.get("phase_telemetry_observed_count")
+        ),
+        "protected_case_evidence_row_count": _int_or_zero(
+            evidence.get("protected_case_evidence_row_count")
+        ),
+        "protected_case_complete_row_count": _int_or_zero(
+            evidence.get("protected_case_complete_row_count")
         ),
     }
 

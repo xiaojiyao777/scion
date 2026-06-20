@@ -104,6 +104,7 @@ CVRP_LARGE_TWOOPT_REVIEW_AXES = (
     "interpret_effect_against_aa_mde_and_case_level_variance",
     "reject_activation_only_or_seed_selection_only_claims",
 )
+CVRP_LARGE_TWOOPT_PROTECTED_CASES = ("CMT2", "CMT4")
 
 
 def build_brief(run_root: Path | str) -> dict[str, Any]:
@@ -1168,11 +1169,12 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 "- Large two-opt direct evidence ready / missing: "
                 f"`{_display(_mapping_or_empty(mechanism.get('direct_evidence')).get('ready'))}` / "
                 f"{_list_text(_mapping_or_empty(mechanism.get('direct_evidence')).get('missing') or [])}",
-                "- Large two-opt direct evidence positive/activation/effect/phase: "
+                "- Large two-opt direct evidence positive/activation/effect/phase/CMT: "
                 f"{_display(_mapping_or_empty(mechanism.get('direct_evidence')).get('positive_effect_row_count'))} / "
                 f"{_display(_mapping_or_empty(mechanism.get('direct_evidence')).get('activation_observed_count'))} / "
                 f"{_display(_mapping_or_empty(mechanism.get('direct_evidence')).get('objective_effect_observed_count'))} / "
-                f"{_display(_mapping_or_empty(mechanism.get('direct_evidence')).get('phase_telemetry_observed_count'))}",
+                f"{_display(_mapping_or_empty(mechanism.get('direct_evidence')).get('phase_telemetry_observed_count'))} / "
+                f"{_display(_mapping_or_empty(mechanism.get('direct_evidence')).get('protected_case_complete_row_count'))}",
                 "- Rejected two-opt-like protocol/continuity families: "
                 f"{_list_text(mechanism.get('rejected_protocol_families') or [])} / "
                 f"{_list_text(mechanism.get('rejected_continuity_families') or [])}",
@@ -2235,6 +2237,14 @@ def _compact_effect_row(row: Mapping[str, Any]) -> dict[str, Any]:
             "candidate_phase_telemetry_summary": _mapping_or_empty(
                 row.get("candidate_phase_telemetry_summary")
             ),
+            "case_level_deltas": row.get("case_level_deltas"),
+            "case_level_total_distance_deltas": row.get(
+                "case_level_total_distance_deltas"
+            ),
+            "case_metrics": row.get("case_metrics"),
+            "case_results": row.get("case_results"),
+            "case_protection_evidence": row.get("case_protection_evidence"),
+            "protected_case_evidence": row.get("protected_case_evidence"),
         }
     )
 
@@ -4264,12 +4274,16 @@ def _empty_cvrp_large_twoopt_direct_evidence() -> dict[str, Any]:
     return {
         "ready": False,
         "missing": [],
+        "required_protected_cases": list(CVRP_LARGE_TWOOPT_PROTECTED_CASES),
+        "protected_cases_observed": [],
         "top_rows_checked": 0,
         "complete_direct_evidence_row_count": 0,
         "positive_effect_row_count": 0,
         "activation_observed_count": 0,
         "objective_effect_observed_count": 0,
         "phase_telemetry_observed_count": 0,
+        "protected_case_evidence_row_count": 0,
+        "protected_case_complete_row_count": 0,
     }
 
 
@@ -4291,6 +4305,10 @@ def _merge_cvrp_large_twoopt_direct_evidence(
         expected_family=row_family,
     )
     phase_telemetry_observed = _cvrp_large_twoopt_phase_telemetry_observed(row)
+    protected_cases_observed = _cvrp_protected_cases_observed(row)
+    protected_case_complete = all(
+        case in protected_cases_observed for case in CVRP_LARGE_TWOOPT_PROTECTED_CASES
+    )
     if positive_effect:
         direct_evidence["positive_effect_row_count"] += 1
     if activation_observed:
@@ -4299,11 +4317,20 @@ def _merge_cvrp_large_twoopt_direct_evidence(
         direct_evidence["objective_effect_observed_count"] += 1
     if phase_telemetry_observed:
         direct_evidence["phase_telemetry_observed_count"] += 1
+    if protected_cases_observed:
+        direct_evidence["protected_case_evidence_row_count"] += 1
+        direct_evidence["protected_cases_observed"] = sorted(
+            set(_string_items(direct_evidence.get("protected_cases_observed")))
+            | protected_cases_observed
+        )
+    if protected_case_complete:
+        direct_evidence["protected_case_complete_row_count"] += 1
     if (
         positive_effect
         and activation_observed
         and objective_effect_observed
         and phase_telemetry_observed
+        and protected_case_complete
     ):
         direct_evidence["complete_direct_evidence_row_count"] += 1
 
@@ -4328,6 +4355,14 @@ def _cvrp_large_twoopt_direct_evidence_missing(
         missing.append("missing_objective_effect_telemetry")
     if _int_or_zero(direct_evidence.get("phase_telemetry_observed_count")) <= 0:
         missing.append("missing_phase_telemetry")
+    observed = set(_string_items(direct_evidence.get("protected_cases_observed")))
+    missing_cases = [
+        case
+        for case in CVRP_LARGE_TWOOPT_PROTECTED_CASES
+        if case not in observed
+    ]
+    if missing_cases:
+        missing.append("missing_cmt_case_protection_evidence")
     if (
         not missing
         and _int_or_zero(direct_evidence.get("complete_direct_evidence_row_count"))
@@ -4426,6 +4461,119 @@ def _mechanism_evidence_family_matches(
         expected = str(expected_family or "").strip()
         return not expected or text == expected
     return family_match(text).get("matches") is True
+
+
+def _cvrp_protected_cases_observed(row: Mapping[str, Any]) -> set[str]:
+    observed: set[str] = set()
+    for key in (
+        "case_protection_evidence",
+        "protected_case_evidence",
+        "case_level_total_distance_deltas",
+        "case_level_deltas",
+        "case_metrics",
+        "case_results",
+        "case_level_results",
+        "per_case_results",
+        "per_case",
+    ):
+        observed.update(_protected_cases_from_case_payload(row.get(key)))
+    mechanism_evidence = _mapping_or_empty(row.get("mechanism_evidence"))
+    for key in (
+        "case_protection_evidence",
+        "protected_case_evidence",
+        "case_level_total_distance_deltas",
+        "case_level_deltas",
+        "case_results",
+    ):
+        observed.update(_protected_cases_from_case_payload(mechanism_evidence.get(key)))
+    return observed
+
+
+def _protected_cases_from_case_payload(value: Any) -> set[str]:
+    observed: set[str] = set()
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            case = _protected_case_name(key)
+            if case and _case_payload_has_effect_evidence(item):
+                observed.add(case)
+            if isinstance(item, Mapping):
+                embedded_case = _protected_case_from_mapping(item)
+                if embedded_case and _case_payload_has_effect_evidence(item):
+                    observed.add(embedded_case)
+                observed.update(_protected_cases_from_case_payload(item))
+            elif isinstance(item, list):
+                observed.update(_protected_cases_from_case_payload(item))
+    elif isinstance(value, list):
+        for item in value:
+            if isinstance(item, Mapping):
+                case = _protected_case_from_mapping(item)
+                if case and _case_payload_has_effect_evidence(item):
+                    observed.add(case)
+                observed.update(_protected_cases_from_case_payload(item))
+            elif isinstance(item, list):
+                observed.update(_protected_cases_from_case_payload(item))
+    return observed
+
+
+def _protected_case_from_mapping(value: Mapping[str, Any]) -> str | None:
+    for key in (
+        "case",
+        "case_id",
+        "case_name",
+        "instance",
+        "instance_id",
+        "problem_case",
+        "protected_case",
+        "name",
+    ):
+        case = _protected_case_name(value.get(key))
+        if case:
+            return case
+    return None
+
+
+def _protected_case_name(value: Any) -> str | None:
+    text = str(value or "").upper().replace("-", "_")
+    for case in CVRP_LARGE_TWOOPT_PROTECTED_CASES:
+        if case in text:
+            return case
+    return None
+
+
+def _case_payload_has_effect_evidence(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return True
+    if isinstance(value, str):
+        return bool(value.strip()) and _protected_case_name(value) is None
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            key_text = str(key).lower()
+            if any(
+                marker in key_text
+                for marker in (
+                    "delta",
+                    "distance",
+                    "objective",
+                    "cost",
+                    "feasible",
+                    "route",
+                    "improvement",
+                    "effect",
+                    "evaluated",
+                    "metric",
+                )
+            ) and _case_payload_has_effect_evidence(item):
+                return True
+            if isinstance(item, (Mapping, list)) and _case_payload_has_effect_evidence(
+                item
+            ):
+                return True
+        return False
+    if isinstance(value, list):
+        return any(_case_payload_has_effect_evidence(item) for item in value)
+    return False
 
 
 def _cvrp_large_twoopt_phase_telemetry_observed(row: Mapping[str, Any]) -> bool:
