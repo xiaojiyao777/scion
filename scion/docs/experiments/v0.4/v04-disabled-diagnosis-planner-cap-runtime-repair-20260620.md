@@ -72,7 +72,10 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 Results: `9 passed`, `26 passed`, `49 passed`.
 
-## Current Prepared Roots
+## Prepared Roots From This Repair
+
+These roots are superseded by the later disabled self-check preview budget
+repair. See `scion/docs/status/current-state.md` for the current launch roots.
 
 Generated on WSL at launch-authoritative runtime commit `f010f383`; the local
 runtime-equivalent commit is `cd298d5b`. Both roots are mirrored under
