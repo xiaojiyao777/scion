@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -279,6 +280,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert data["llm_traces"]["index_trace_count"] == 4
     assert data["llm_traces"]["index_session_count"] == 1
     assert data["launcher"]["artifacts"] == {
+        "campaign_execution_marker.v1.json": False,
         "command.txt": True,
         "exit.txt": True,
         "launch.env": True,
@@ -1248,6 +1250,110 @@ def test_inventory_marks_missing_or_unreadable_campaign_execution_artifacts_not_
         ] == expected_failure_key
         assert "CAMPAIGN EXECUTION ARTIFACTS UNAVAILABLE" in markdown
         assert "resume snapshots" in markdown
+
+
+def test_inventory_marks_stale_resume_campaign_docs_not_current_run(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "stale-resume-docs-run"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "outer-wrapper.v1",
+            "status": "finished",
+            "wrapper_exit_status": 1,
+            "campaign_wrapper_exit_status": 1,
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "execution": {"rounds": 4},
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        campaign_dir / "run_status.json",
+        {
+            "schema": "scion.run_wrapper_audit.v1",
+            "status": "finished",
+            "started_at": "2026-06-20T10:00:00Z",
+            "wrapper_exit_status": 0,
+            "run_validity_status": "valid",
+        },
+    )
+    _write_json(
+        campaign_dir / "status.json",
+        {
+            "run_validity_status": "valid",
+            "formal_screened_candidates": 7,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 7,
+            "protocol_evaluated_candidates": 7,
+        },
+    )
+    old_mtime = 1_700_000_000
+    for path in (
+        campaign_dir / "run_status.json",
+        campaign_dir / "status.json",
+        campaign_dir / "campaign_summary.json",
+    ):
+        os.utime(path, (old_mtime, old_mtime))
+    _write_json(
+        run_root / "campaign_execution_marker.v1.json",
+        {
+            "schema": "scion.launcher_campaign_execution_marker.v1",
+            "started_at": "2026-06-20T11:00:00Z",
+            "run_root": str(run_root),
+            "campaign_dir": str(campaign_dir),
+        },
+    )
+    marker_mtime = old_mtime + 3600
+    os.utime(
+        run_root / "campaign_execution_marker.v1.json",
+        (marker_mtime, marker_mtime),
+    )
+    _write_db(campaign_dir / "scion.db")
+
+    data = inventory_tool.build_inventory(run_root)
+    markdown = inventory_tool.render_markdown(data)
+
+    lifecycle = data["lifecycle"]
+    artifact_state = lifecycle["campaign_execution_artifacts"]
+    assert lifecycle["current_run_evidence"] is False
+    assert lifecycle["campaign_execution_artifacts_available"] is False
+    assert lifecycle["campaign_execution_artifacts_unavailable"] is True
+    assert lifecycle["campaign_execution_failure_key"] == (
+        "campaign_execution_artifacts_stale_resume_snapshot"
+    )
+    assert artifact_state["campaign_run_status"]["valid"] is True
+    assert artifact_state["campaign_run_status"]["fresh"] is False
+    assert data["validity"] == {
+        "run_validity_status": "invalid_infra_only",
+        "run_completeness_status": "incomplete",
+        "last_stop_reason": "campaign_execution_artifacts_stale_resume_snapshot",
+        "invalid_infra_only": True,
+    }
+    assert data["counters"] == {
+        "requested_rounds": 4,
+        "effective_rounds_completed": 0,
+        "formal_screened_candidates": 0,
+        "protocol_evaluated_candidates": 0,
+        "screened_experiments": 0,
+        "proposal_attempts_total": 0,
+    }
+    assert data["resume_snapshot"]["present"] is True
+    assert data["resume_snapshot"]["current_run_evidence"] is False
+    assert data["phase4_evidence_coverage"]["current_run_evidence"] is False
+    assert "CAMPAIGN EXECUTION ARTIFACTS UNAVAILABLE" in markdown
+    assert "resume snapshots" in markdown
 
 
 def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(

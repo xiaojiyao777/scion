@@ -850,6 +850,11 @@ unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS
   echo "COMMAND:{command}"
 }} >> "$RUN_ROOT/run.log"
 {COMPLETION_PREFLIGHT_SNIPPET}
+CAMPAIGN_EXECUTION_MARKER_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf '{{"schema":"scion.launcher_campaign_execution_marker.v1","started_at":"%s","run_root":"%s","campaign_dir":"%s"}}\n' \
+  "$CAMPAIGN_EXECUTION_MARKER_STARTED_AT" "$RUN_ROOT" "$CAMPAIGN_DIR" \
+  > "$RUN_ROOT/campaign_execution_marker.v1.json"
+echo "CAMPAIGN_EXECUTION_MARKER:$RUN_ROOT/campaign_execution_marker.v1.json" >> "$RUN_ROOT/run.log"
 "$PY" -m scion.cli.main run \\
   --problem "$PROBLEM" \\
   --protocol "$PROTOCOL" \\

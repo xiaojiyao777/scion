@@ -9,6 +9,7 @@ import shlex
 import sqlite3
 import subprocess
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -24,6 +25,7 @@ LAUNCHER_ARTIFACTS = (
     "prepared_run_manifest.md",
     "prepared_handoff",
     "pre_campaign_completion_preflight.v1.json",
+    "campaign_execution_marker.v1.json",
     "run.log",
     "exit.txt",
 )
@@ -208,11 +210,16 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
     run_status = _read_json(run_status_path)
     run_status_valid = isinstance(run_status, dict)
     prepared_manifest = _read_json(run_root / "prepared_run_manifest.v1.json")
+    campaign_execution_marker = _read_json(
+        run_root / "campaign_execution_marker.v1.json"
+    )
     campaign_run_status = _read_json(campaign_dir / "run_status.json")
     campaign_status = _read_json(campaign_dir / "status.json")
     summary = _read_json(campaign_dir / "campaign_summary.json")
     campaign_execution_artifacts = _campaign_execution_artifact_state(
         campaign_dir=campaign_dir,
+        marker_path=run_root / "campaign_execution_marker.v1.json",
+        marker=campaign_execution_marker,
         docs={
             "campaign_run_status": campaign_run_status,
             "campaign_status": campaign_status,
@@ -907,29 +914,51 @@ def _prepared_only_counters(prepared_manifest: Any) -> dict[str, int | None]:
 def _campaign_execution_artifact_state(
     *,
     campaign_dir: Path,
+    marker_path: Path,
+    marker: Any,
     docs: Mapping[str, Any],
 ) -> dict[str, Any]:
     artifacts: dict[str, dict[str, Any]] = {}
+    marker_state = _campaign_execution_marker_state(marker_path, marker)
     for key, filename in CAMPAIGN_EXECUTION_ARTIFACTS:
         path = campaign_dir / filename
         doc = docs.get(key)
+        valid = isinstance(doc, dict)
+        fresh = (
+            _campaign_execution_doc_is_fresh(
+                key=key,
+                path=path,
+                doc=doc,
+                marker_state=marker_state,
+            )
+            if valid
+            else False
+        )
         artifacts[key] = {
             "path": str(path),
             "present": path.exists(),
-            "valid": isinstance(doc, dict),
+            "valid": valid,
+            "fresh": fresh,
         }
     present_any = any(item["present"] for item in artifacts.values())
     valid_any = any(item["valid"] for item in artifacts.values())
-    if valid_any:
+    marker_enforced = marker_state["valid"]
+    fresh_any = any(item["fresh"] for item in artifacts.values())
+    available = fresh_any if marker_enforced else valid_any
+    if available:
         failure_key = None
+    elif marker_enforced and valid_any:
+        failure_key = "campaign_execution_artifacts_stale_resume_snapshot"
     elif present_any:
         failure_key = "campaign_execution_artifacts_unreadable"
     else:
         failure_key = "campaign_execution_artifacts_missing"
     return {
-        "available": valid_any,
+        "available": available,
         "present_any": present_any,
         "valid_any": valid_any,
+        "fresh_any": fresh_any,
+        "freshness_marker": marker_state,
         "failure_key": failure_key,
         "artifacts": artifacts,
     }
@@ -940,9 +969,88 @@ def _empty_campaign_execution_artifact_state() -> dict[str, Any]:
         "available": False,
         "present_any": False,
         "valid_any": False,
+        "fresh_any": False,
+        "freshness_marker": {
+            "path": "",
+            "present": False,
+            "valid": False,
+            "started_at": None,
+        },
         "failure_key": "campaign_execution_artifacts_missing",
         "artifacts": {},
     }
+
+
+def _campaign_execution_marker_state(path: Path, marker: Any) -> dict[str, Any]:
+    marker_doc = marker if isinstance(marker, dict) else {}
+    started_at = _parse_iso_timestamp(marker_doc.get("started_at"))
+    valid = (
+        path.exists()
+        and marker_doc.get("schema")
+        == "scion.launcher_campaign_execution_marker.v1"
+        and started_at is not None
+    )
+    return {
+        "path": str(path),
+        "present": path.exists(),
+        "valid": valid,
+        "schema": marker_doc.get("schema"),
+        "started_at": marker_doc.get("started_at"),
+        "started_at_epoch": started_at.timestamp() if started_at else None,
+        "mtime": _mtime(path),
+    }
+
+
+def _campaign_execution_doc_is_fresh(
+    *,
+    key: str,
+    path: Path,
+    doc: Any,
+    marker_state: Mapping[str, Any],
+) -> bool:
+    if marker_state.get("valid") is not True:
+        return isinstance(doc, dict)
+    marker_started = _float_or_none(marker_state.get("started_at_epoch"))
+    if marker_started is None:
+        return False
+    if key == "campaign_run_status" and isinstance(doc, dict):
+        doc_started = _parse_iso_timestamp(doc.get("started_at"))
+        if doc_started is not None:
+            return doc_started.timestamp() >= marker_started
+    marker_mtime = _float_or_none(marker_state.get("mtime"))
+    doc_mtime = _mtime(path)
+    if marker_mtime is None or doc_mtime is None:
+        return False
+    return doc_mtime + 1e-6 >= marker_mtime
+
+
+def _parse_iso_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _mtime(path: Path) -> float | None:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _launcher_inventory(run_root: Path, run_status: Any) -> dict[str, Any]:

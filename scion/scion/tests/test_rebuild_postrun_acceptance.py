@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import uuid
 from pathlib import Path
 
@@ -396,6 +397,110 @@ def test_rebuild_postrun_acceptance_skips_current_run_reports_without_campaign_e
         assert "summaries" in str(exc)
     else:
         raise AssertionError("strict rebuild unexpectedly accepted missing campaign docs")
+
+
+def test_rebuild_postrun_acceptance_skips_stale_resume_campaign_docs(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "stale-resume-campaign-docs-root"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_campaign_db(campaign_dir)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "outer-wrapper.v1",
+            "status": "finished",
+            "wrapper_exit_status": 1,
+            "campaign_wrapper_exit_status": 1,
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "problem_family": "cvrp",
+            "execution": {"rounds": 2},
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        campaign_dir / "run_status.json",
+        {
+            "schema": "scion.run_wrapper_audit.v1",
+            "status": "finished",
+            "started_at": "2026-06-20T10:00:00Z",
+            "wrapper_exit_status": 0,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 3,
+            "protocol_evaluated_candidates": 3,
+        },
+    )
+    old_mtime = 1_700_000_000
+    for path in (campaign_dir / "run_status.json", campaign_dir / "campaign_summary.json"):
+        os.utime(path, (old_mtime, old_mtime))
+    _write_json(
+        run_root / "campaign_execution_marker.v1.json",
+        {
+            "schema": "scion.launcher_campaign_execution_marker.v1",
+            "started_at": "2026-06-20T11:00:00Z",
+            "run_root": str(run_root),
+            "campaign_dir": str(campaign_dir),
+        },
+    )
+    marker_mtime = old_mtime + 3600
+    os.utime(
+        run_root / "campaign_execution_marker.v1.json",
+        (marker_mtime, marker_mtime),
+    )
+
+    manifest = rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="stale_resume_docs",
+    )
+
+    report_dir = run_root / "postrun_acceptance"
+    assert manifest["current_run_evidence"] is False
+    assert manifest["campaign_execution_artifacts_unavailable"] is True
+    assert manifest["campaign_execution_failure_key"] == (
+        "campaign_execution_artifacts_stale_resume_snapshot"
+    )
+    assert manifest["current_run_reports_skipped"] is True
+    assert manifest["complete"] is False
+    assert manifest["families"]["summaries"]["status"] == "skipped"
+    assert manifest["families"]["research_efficiency"]["status"] == "skipped"
+    assert manifest["families"]["manifests"]["status"] == "skipped"
+    assert not (
+        report_dir
+        / "research_efficiency"
+        / "stale_resume_docs.research_efficiency.v1.json"
+    ).exists()
+    brief = json.loads(
+        (
+            report_dir
+            / "analysis_brief"
+            / "stale_resume_docs.postrun_analysis_brief.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert brief["validity"]["last_stop_reason"] == (
+        "campaign_execution_artifacts_stale_resume_snapshot"
+    )
+    assert brief["phase4_evidence_coverage"]["current_run_evidence"] is False
+    try:
+        rebuild_tool.rebuild_postrun_acceptance(
+            run_root,
+            report_stem="stale_resume_docs_strict",
+            strict=True,
+        )
+    except RuntimeError as exc:
+        assert "postrun acceptance rebuild incomplete" in str(exc)
+        assert "summaries" in str(exc)
+    else:
+        raise AssertionError("strict rebuild unexpectedly accepted stale resume docs")
 
 
 def test_rebuild_postrun_acceptance_skips_current_run_reports_after_runtime_guard_failure(
