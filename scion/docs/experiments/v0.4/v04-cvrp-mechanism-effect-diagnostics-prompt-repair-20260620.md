@@ -91,13 +91,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 ## Prepared Roots
 
-The runtime-guarded prepared roots were refreshed from WSL commit `63b8b353`
-after the later warehouse postrun-readiness guard and mirrored locally.
+The runtime-guarded prepared roots were refreshed from WSL commit `2cf20b0f`
+after the later warehouse prompt-diagnostics bridge guard and mirrored locally.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-63b8b353-preflight-6r-gpt55-20260620T092950Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-2cf20b0f-preflight-6r-gpt55-20260620T094851Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-63b8b353-preflight-4r-gpt55-20260620T092950Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-2cf20b0f-preflight-4r-gpt55-20260620T094851Z-claw`
 
 Strict launch readiness for both roots reports:
 

@@ -41,15 +41,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `63b8b353`
-after local equivalent commit `995dad7b`; local mirrors exist under
+Generated on WSL at launch-authoritative prepared runtime commit `2cf20b0f`
+after local equivalent commit `6530a4e0`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names for
 inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-63b8b353-preflight-6r-gpt55-20260620T092950Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-2cf20b0f-preflight-6r-gpt55-20260620T094851Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-63b8b353-preflight-4r-gpt55-20260620T092950Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-2cf20b0f-preflight-4r-gpt55-20260620T094851Z-claw`
 
 Readiness snapshot:
 
@@ -57,7 +57,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `63b8b353`; strict readiness
+- Runtime guard status: prepared runtime commit `2cf20b0f`; strict readiness
   must keep reporting runtime guard OK. Doc/status-only commits after prepare
   are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -88,6 +88,15 @@ Prepared run shape:
   carries a `cvrp_problem_measurement_diagnostics_prompt_bridge` summary and
   launch readiness recomputes it from the current checkout, so missing or stale
   ranking projection blocks static launch readiness before a campaign starts.
+- Warehouse prompt diagnostics: hypothesis context exposes problem-owned
+  validation-transfer follow-up diagnostics, including transfer risk,
+  activation/effect counters, `validation_transfer_continuation`, and
+  plateau-vs-continuous-follow-up reason codes as proposal-only research
+  signals while raw prompts/payloads remain excluded. Prepared prompt readiness
+  now carries a `warehouse_problem_measurement_diagnostics_prompt_bridge`
+  summary and launch readiness recomputes it from the current checkout, so
+  missing or stale warehouse diagnostic projection blocks static readiness
+  before a campaign starts.
 
 ## Framework Guarantees To Preserve
 
@@ -107,6 +116,10 @@ Prepared run shape:
   diagnostics reach the hypothesis prompt through a safe summary, including the
   mechanism-effect ranking, without persisting raw prompts or raw diagnostic
   payloads.
+- Warehouse prepared prompt context must also prove that problem-owned
+  validation-transfer diagnostics reach the hypothesis prompt through a safe
+  summary, including the continuous-follow-up and plateau-guard signals, without
+  persisting raw prompts or raw diagnostic payloads.
 - Current hypothesis prompts carry compact proposal-only research-shape
   diagnostics before broader feedback, and prompt manifest accounting classifies
   this block as `research_signal`.
@@ -205,6 +218,8 @@ Prepared run shape:
   `scion/docs/experiments/v0.4/v04-cvrp-size70-direct-evidence-guard-20260620.md`.
 - Current CVRP prompt-diagnostic repair:
   `scion/docs/experiments/v0.4/v04-cvrp-mechanism-effect-diagnostics-prompt-repair-20260620.md`.
+- Current warehouse prompt-diagnostic repair:
+  `scion/docs/experiments/v0.4/v04-warehouse-diagnostics-prompt-bridge-20260620.md`.
 - Current postrun wrapper-status evidence:
   `scion/docs/experiments/v0.4/v04-postrun-wrapper-status-escalation-20260620.md`.
 - Current WSL access:
