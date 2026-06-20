@@ -46,14 +46,14 @@ After strict readiness passes, launch from WSL by running the prepared wrapper
 itself, not by reconstructing the long `scion run` command:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-2c806e-campaignexecfailclosed-6r-gpt55-20260620T212433Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-bcb5cb-rebuildlifecycleskip-6r-gpt55-20260620T213835Z-claw/run.sh
 ```
 
 Run the CVRP wrapper only after the warehouse run is underway or accepted for
 launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2c806e-campaignexecfailclosed-4r-gpt55-20260620T212433Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-bcb5cb-rebuildlifecycleskip-4r-gpt55-20260620T213836Z-claw/run.sh
 ```
 
 The wrappers already enforce completion preflight, runtime guards, campaign
@@ -81,17 +81,17 @@ failures. Without `--execute`, it prints the planned commands only.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `2c806e95`;
-the corresponding local framework repair commit is `85708c79`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `bcb5cb60`;
+the corresponding local framework repair commit is `e4f053b3`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection only. Run launch readiness on WSL, because prepared
 contracts and wrapper scripts intentionally contain WSL absolute paths and will
 fail identity checks if evaluated from the server-side mirror.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-2c806e-campaignexecfailclosed-6r-gpt55-20260620T212433Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-bcb5cb-rebuildlifecycleskip-6r-gpt55-20260620T213835Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2c806e-campaignexecfailclosed-4r-gpt55-20260620T212433Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-bcb5cb-rebuildlifecycleskip-4r-gpt55-20260620T213836Z-claw`
 
 Readiness snapshot:
 
@@ -100,7 +100,7 @@ Readiness snapshot:
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
 - Runtime guard status: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=2c806e95`, and either
+  `prepared_runtime_commit=bcb5cb60`, and either
   `runtime_guard_reason=runtime_guard_commit_matches` or
   `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare` after
   doc-only commits. Treat all earlier prepared roots as superseded because
@@ -201,7 +201,9 @@ reports.
   `run_status.json`/`status.json`/`campaign_summary.json`, as invalid
   infra-only evidence rather than current-run research evidence. Copied or
   partial campaign artifacts remain resume snapshots until valid launcher and
-  campaign execution status exist.
+  campaign execution status exist. Postrun rebuild uses this same lifecycle
+  source to skip current-run summary, failure, research-efficiency, and manifest
+  report families when current-run evidence is false.
 - Research-context actionability requires an allowlisted formal
   hypothesis-generation prompt trace; code, target intent, and unknown
   `hypothesis_*` call kinds cannot prove continuity signals reached the next
