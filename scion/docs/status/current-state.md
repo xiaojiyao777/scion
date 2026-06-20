@@ -99,8 +99,9 @@ Prepared run shape:
 - Next live question: can Scion produce useful follow-up research from `v2`, or
   correctly diagnose a real post-v2 plateau?
 - A plateau conclusion is accepted only when protocol evidence shows no
-  positive effect at or above MDE and the runtime/continuity evidence supports
-  that interpretation.
+  positive effect at or above MDE, runtime evidence is review-ready, and
+  continuity evidence is substantive without fully missed same-mechanism
+  follow-up opportunities.
 
 ## CVRP/VRP
 

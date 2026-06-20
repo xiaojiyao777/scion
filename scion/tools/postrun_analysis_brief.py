@@ -3708,11 +3708,12 @@ def _research_context_actionability_gaps(
     elif semantic_failures > 0 or semantic_blocks > 0:
         gaps.append("branch_lesson_semantic_gap_despite_cross_branch_prompt_signal")
 
-    if (
-        _int_or_zero(indicators.get("same_mechanism_missed")) > 0
-        and research_tokens <= 0
-    ):
-        gaps.append("same_mechanism_opportunities_without_research_signal_prompt")
+    same_mechanism_missed = _int_or_zero(indicators.get("same_mechanism_missed"))
+    if same_mechanism_missed > 0:
+        if research_tokens <= 0:
+            gaps.append("same_mechanism_opportunities_without_research_signal_prompt")
+        else:
+            gaps.append("same_mechanism_opportunities_not_selected")
     if (
         _int_or_zero(indicators.get("weak_positive_missed")) > 0
         and research_tokens + cross_branch_tokens <= 0
@@ -4851,17 +4852,30 @@ def _warehouse_followup_continuity_signal(
     max_branch_depth = _int_or_zero(aggregate.get("max_branch_depth"))
     mechanism_family_counts = _int_mapping(aggregate.get("mechanism_family_counts"))
     active_shape_counts = _int_mapping(aggregate.get("active_shape_counts"))
+    same_mechanism_observed = counts["same_mechanism_observed"]
+    same_mechanism_selected = counts["same_mechanism_selected"]
+    same_mechanism_missed = max(
+        0,
+        same_mechanism_observed - same_mechanism_selected,
+    )
+    missed_all_same_mechanism_opportunities = (
+        same_mechanism_observed > 0 and same_mechanism_selected <= 0
+    )
     substantive = (
-        max_branch_depth >= 2
-        or counts["same_mechanism_selected"] > 0
-        or counts["branch_lessons_satisfied"] > 0
-        or counts["weak_positive_accepted"] > 0
+        (
+            max_branch_depth >= 2
+            or same_mechanism_selected > 0
+            or counts["branch_lessons_satisfied"] > 0
+            or counts["weak_positive_accepted"] > 0
+        )
+        and not missed_all_same_mechanism_opportunities
     )
     return {
         "substantive": substantive,
         "max_branch_depth": max_branch_depth,
-        "same_mechanism_observed": counts["same_mechanism_observed"],
-        "same_mechanism_selected": counts["same_mechanism_selected"],
+        "same_mechanism_observed": same_mechanism_observed,
+        "same_mechanism_selected": same_mechanism_selected,
+        "same_mechanism_missed": same_mechanism_missed,
         "branch_lessons_required": counts["branch_lessons_required"],
         "branch_lessons_satisfied": counts["branch_lessons_satisfied"],
         "weak_positive_observed": counts["weak_positive_observed"],

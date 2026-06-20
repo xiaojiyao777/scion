@@ -274,9 +274,10 @@ Current checkpoint:
     density, runtime drain readiness, and interpretation-specific review inputs.
   - Warehouse positive-at-or-above-MDE evidence routes to
     `protocol_evaluated_positive_effect_review_ready`; plateau conclusions
-    require plateau-consistent measurement, runtime feedback, and substantive
-    continuity evidence. Quality-blocked no-protocol negative conclusions require
-    matching current-run failure-taxonomy evidence.
+    require plateau-consistent measurement, review-ready runtime feedback, and
+    substantive continuity evidence without fully missed same-mechanism
+    follow-up opportunities. Quality-blocked no-protocol negative conclusions
+    require matching current-run failure-taxonomy evidence.
   - CVRP bounded two-opt review readiness requires a qualifying bounded or
     deadline-aware large two-opt protocol-effect signal plus co-located
     activation/effect/phase telemetry on a matching top effect row; seed-only
