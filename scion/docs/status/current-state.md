@@ -41,15 +41,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `aa916783`
-after local runtime-equivalent commit `a36e4604`; local mirrors exist under
+Generated on WSL at launch-authoritative prepared runtime commit `f010f383`
+after local runtime-equivalent commit `cd298d5b`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names for
 inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-aa916783-nocaps-aps0-sourceheadroom-codecap0-preflight-6r-gpt55-20260620T115809Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-f010f383-nocaps-aps0-sourceheadroom-codecap0-plannercap0-preflight-6r-gpt55-20260620T121026Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-aa916783-nocaps-aps0-sourceheadroom-codecap0-preflight-4r-gpt55-20260620T115809Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-f010f383-nocaps-aps0-sourceheadroom-codecap0-plannercap0-preflight-4r-gpt55-20260620T121026Z-claw`
 
 Readiness snapshot:
 
@@ -57,7 +57,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `aa916783`; strict readiness
+- Runtime guard status: prepared runtime commit `f010f383`; strict readiness
   must keep reporting runtime guard OK. Doc/status-only commits after prepare
   are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -84,7 +84,9 @@ Prepared run shape:
   `agentic_code_tool_max_calls=0`, `agentic_observation_max_chars=0`.
   Runtime semantics now match readiness semantics: `agentic_code_tool_max_calls=0`
   uses a disabled effective limit and must not suppress code-phase
-  planner-selected source reads.
+  planner-selected source reads. `agentic_tool_max_steps=0` and
+  `agentic_tool_max_calls=0` also no longer derive a one-decision diagnosis
+  planner cap.
 - Runtime replay semantics: budget-exhausting summaries suppress stale
   fresh-runtime replay markers, materialization, and pressure reports. Runtime
   tie fresh replay remains available only for comparative runtime semantics.

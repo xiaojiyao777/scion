@@ -70,7 +70,10 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 Results: `4 passed`, `30 passed`, `49 passed`.
 
-## Current Prepared Roots
+## Prepared Roots From This Repair
+
+These roots are superseded by the later disabled diagnosis planner cap runtime
+repair. See `scion/docs/status/current-state.md` for the current launch roots.
 
 Generated on WSL at launch-authoritative runtime commit `aa916783`; the local
 runtime-equivalent commit is `a36e4604`. Both roots are mirrored under

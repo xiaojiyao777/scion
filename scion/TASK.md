@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at WSL runtime commit `aa916783` and pass static launch readiness for the warehouse 6R champion-v2 follow-up and the CVRP 4R Phase 4 bounded two-opt follow-up. Proposal and APS research caps are disabled in those roots (`proposal_attempt_limit=0`, `proposal_quality_loop_limit=0`, `agentic_tool_max_steps=0`, `agentic_tool_max_calls=0`, `agentic_code_tool_max_calls=0`, `agentic_observation_max_chars=0`) while the wall-time guard, core safety step guard, and circuit breaker remain active; `agentic_code_tool_max_calls=0` now preserves code-phase planner source reads instead of becoming a zero-call bound. Code-source read result caps align with the 96k solver/source prompt window. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at WSL runtime commit `f010f383` and pass static launch readiness for the warehouse 6R champion-v2 follow-up and the CVRP 4R Phase 4 bounded two-opt follow-up. Proposal and APS research caps are disabled in those roots (`proposal_attempt_limit=0`, `proposal_quality_loop_limit=0`, `agentic_tool_max_steps=0`, `agentic_tool_max_calls=0`, `agentic_code_tool_max_calls=0`, `agentic_observation_max_chars=0`) while the wall-time guard, core safety step guard, and circuit breaker remain active; disabled APS caps now preserve diagnosis planner decisions and code-phase planner source reads instead of becoming derived zero/one-call bounds. Code-source read result caps align with the 96k solver/source prompt window. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -249,9 +249,9 @@ Current checkpoint:
   a bounded, deadline-aware mechanism with CMT2/CMT4 protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-aa916783-nocaps-aps0-sourceheadroom-codecap0-preflight-6r-gpt55-20260620T115809Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-f010f383-nocaps-aps0-sourceheadroom-codecap0-plannercap0-preflight-6r-gpt55-20260620T121026Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-aa916783-nocaps-aps0-sourceheadroom-codecap0-preflight-4r-gpt55-20260620T115809Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-f010f383-nocaps-aps0-sourceheadroom-codecap0-plannercap0-preflight-4r-gpt55-20260620T121026Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -263,7 +263,10 @@ Current checkpoint:
   `headroom_warning_count=0`, not as readiness warnings or launch gates.
   The disabled code-tool-call cap repair is included: `0` is an
   unbounded/disabled cap for code-phase source-read planning, not a request to
-  skip all planner-selected code-phase tool calls.
+  skip all planner-selected code-phase tool calls. The diagnosis planner
+  selection budget also follows disabled cap semantics and no longer derives a
+  one-decision cap from `agentic_tool_max_steps=0` plus
+  `agentic_tool_max_calls=0`.
   Do not launch either root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
