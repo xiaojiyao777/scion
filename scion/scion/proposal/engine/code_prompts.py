@@ -267,6 +267,8 @@ def _split_code_context(
         )
     if source_context_section:
         stable_system_parts.append(source_context_section)
+    elif cacheable_agentic_context:
+        stable_system_parts.append(cacheable_agentic_context)
     system_blocks = [
         {
             "type": "text",

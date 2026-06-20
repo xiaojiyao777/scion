@@ -127,6 +127,53 @@ def test_hypothesis_and_code_context_include_active_algorithm_facts(
     assert all(block.get("cache_control") for block in code_active_fact_blocks)
 
 
+def test_non_solver_code_context_keeps_cacheable_active_algorithm_facts() -> None:
+    context = {
+        "problem_summary": "Warehouse operator research.",
+        "research_surface_name": "picker_policy",
+        "research_surface_kind": "operator",
+        "change_locus": "picker_policy",
+        "target_file": "operators/picker_policy.py",
+        "action": "modify",
+        "hypothesis_text": "Refine the operator with existing active facts.",
+        "target_file_code": (
+            "File: operators/picker_policy.py\n"
+            "```python\n"
+            "def choose_next_order(state):\n"
+            "    return None\n"
+            "```\n"
+        ),
+        "champion_operators_code": "def choose_next_order(state):\n    return None\n",
+        "operator_interface_spec": "def choose_next_order(state)",
+        "import_whitelist": "math",
+        "editable_patterns": "operators/*.py",
+        "frozen_patterns": "config.py",
+        "agentic_active_algorithm_facts": {
+            "schema_version": "operator_active_algorithm_facts.v1",
+            "facts": [
+                {
+                    "fact_id": "warehouse.operator.assignment_invariant",
+                    "claim": "VISIBLE_NON_SOLVER_ACTIVE_FACT",
+                    "used_by_prompt": True,
+                }
+            ],
+        },
+    }
+
+    system_blocks, user_prompt = _split_code_context(context)
+    rendered = "\n".join(block["text"] for block in system_blocks) + "\n" + user_prompt
+
+    assert "## Active Algorithm Facts" in rendered
+    assert "VISIBLE_NON_SOLVER_ACTIVE_FACT" in rendered
+    fact_blocks = [
+        block
+        for block in system_blocks
+        if "## Active Algorithm Facts" in str(block.get("text", ""))
+    ]
+    assert fact_blocks
+    assert all(block.get("cache_control") for block in fact_blocks)
+
+
 def test_prompt_manifest_marks_large_observations_truncated_but_facts_included() -> None:
     active_facts = {
         "source": "context.read_active_solver_design",
