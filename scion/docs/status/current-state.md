@@ -75,8 +75,9 @@ The helper mirrors the WSL root with rsync and then reruns
 mirror. With `--execute`, it first verifies that the WSL source has Scion run
 root markers, refuses destructive rsync targets outside the local experiment
 mirror root, and includes a `local_run_status_summary` with wrapper,
-pre-campaign, and postrun status fields. Without `--execute`, it prints the
-planned commands only.
+pre-campaign, postrun readiness/report exit status, and launcher marker counts
+for status-writer/effective-wrapper failures. Without `--execute`, it prints
+the planned commands only.
 
 ## Active Prepared Roots
 

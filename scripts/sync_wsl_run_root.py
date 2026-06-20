@@ -272,7 +272,11 @@ def render_text(report: dict[str, Any]) -> str:
             "git_runtime_commit_mismatch",
             "postrun_acceptance_status",
             "postrun_acceptance_failed",
-            "postrun_acceptance_exit_status",
+            "postrun_reports_exit_status",
+            "postrun_readiness_exit_status",
+            "postrun_status_write_exit_status_markers",
+            "wrapper_exit_status_effective_markers",
+            "postrun_acceptance_failed_markers",
         ):
             if key in run_status_summary:
                 lines.append(
@@ -422,9 +426,10 @@ def _run_status_summary(path: Path) -> dict[str, Any]:
         "git_runtime_commit_mismatch",
         "postrun_acceptance_status",
         "postrun_acceptance_failed",
-        "postrun_acceptance_exit_status",
+        "postrun_reports_exit_status",
+        "postrun_readiness_exit_status",
+        "postrun_acceptance_report_dir",
         "postrun_acceptance_readiness_path",
-        "postrun_report_dir",
     )
     summary = {
         "available": True,
@@ -433,7 +438,28 @@ def _run_status_summary(path: Path) -> dict[str, Any]:
     for key in keys:
         if key in status:
             summary[key] = status.get(key)
+    run_root = path.parent
+    summary["postrun_status_write_exit_status_markers"] = _line_marker_count(
+        run_root / "run.log",
+        "POSTRUN_STATUS_WRITE_EXIT_STATUS:",
+    )
+    summary["wrapper_exit_status_effective_markers"] = _line_marker_count(
+        run_root / "exit.txt",
+        "WRAPPER_EXIT_STATUS_EFFECTIVE:",
+    )
+    summary["postrun_acceptance_failed_markers"] = _line_marker_count(
+        run_root / "exit.txt",
+        "POSTRUN_ACCEPTANCE_FAILED:",
+    )
     return summary
+
+
+def _line_marker_count(path: Path, marker: str) -> int:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return 0
+    return sum(1 for line in text.splitlines() if line.startswith(marker))
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:

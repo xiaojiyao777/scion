@@ -84,8 +84,18 @@ def test_sync_wsl_run_root_execute_runs_rsync_then_postrun_check(
                         "campaign_wrapper_exit_status": 0,
                         "postrun_acceptance_status": "ready",
                         "postrun_acceptance_failed": False,
+                        "postrun_reports_exit_status": 0,
+                        "postrun_readiness_exit_status": 0,
                     }
                 ),
+                encoding="utf-8",
+            )
+            (local_dir / "run.log").write_text(
+                "POSTRUN_REPORTS_EXIT_STATUS:0\nPOSTRUN_READINESS_EXIT_STATUS:0\n",
+                encoding="utf-8",
+            )
+            (local_dir / "exit.txt").write_text(
+                "WRAPPER_EXIT_STATUS:0\n",
                 encoding="utf-8",
             )
             return subprocess.CompletedProcess(command, 0, "synced", "")
@@ -119,12 +129,19 @@ def test_sync_wsl_run_root_execute_runs_rsync_then_postrun_check(
         "campaign_wrapper_exit_status": 0,
         "postrun_acceptance_status": "ready",
         "postrun_acceptance_failed": False,
+        "postrun_reports_exit_status": 0,
+        "postrun_readiness_exit_status": 0,
+        "postrun_status_write_exit_status_markers": 0,
+        "wrapper_exit_status_effective_markers": 0,
+        "postrun_acceptance_failed_markers": 0,
     }
     assert report["postrun_check_exit_status"] == 0
     assert report["postrun_current_run_ready"] is True
     rendered = sync_tool.render_text(report)
     assert "LOCAL_RUN_STATUS_WRAPPER_EXIT_STATUS=0" in rendered
     assert "LOCAL_RUN_STATUS_POSTRUN_ACCEPTANCE_STATUS=ready" in rendered
+    assert "LOCAL_RUN_STATUS_POSTRUN_READINESS_EXIT_STATUS=0" in rendered
+    assert "LOCAL_RUN_STATUS_POSTRUN_STATUS_WRITE_EXIT_STATUS_MARKERS=0" in rendered
 
 
 def test_sync_wsl_run_root_skips_postrun_check_when_requested(
@@ -145,8 +162,20 @@ def test_sync_wsl_run_root_skips_postrun_check_when_requested(
                         "prepared_only": False,
                         "wrapper_exit_status": 64,
                         "pre_campaign_completion_preflight": "failed",
+                        "postrun_reports_exit_status": 0,
+                        "postrun_readiness_exit_status": 64,
                     }
                 ),
+                encoding="utf-8",
+            )
+            (local_dir / "run.log").write_text(
+                "POSTRUN_STATUS_WRITE_EXIT_STATUS:1\n",
+                encoding="utf-8",
+            )
+            (local_dir / "exit.txt").write_text(
+                "WRAPPER_EXIT_STATUS:0\n"
+                "POSTRUN_ACCEPTANCE_FAILED:64\n"
+                "WRAPPER_EXIT_STATUS_EFFECTIVE:64\n",
                 encoding="utf-8",
             )
         return subprocess.CompletedProcess(command, 0, "", "")
@@ -169,6 +198,18 @@ def test_sync_wsl_run_root_skips_postrun_check_when_requested(
     assert report["local_run_status_summary"][
         "pre_campaign_completion_preflight"
     ] == "failed"
+    assert report["local_run_status_summary"]["postrun_readiness_exit_status"] == 64
+    assert (
+        report["local_run_status_summary"][
+            "postrun_status_write_exit_status_markers"
+        ]
+        == 1
+    )
+    assert (
+        report["local_run_status_summary"]["wrapper_exit_status_effective_markers"]
+        == 1
+    )
+    assert report["local_run_status_summary"]["postrun_acceptance_failed_markers"] == 1
 
 
 def test_sync_wsl_run_root_preserves_postrun_unready_status(
