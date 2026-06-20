@@ -28,17 +28,17 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
   readiness. `/v1/models` can list `gpt-5.5`, but the strict completion
   preflight currently fails with HTTP `401`, `classification=not_authenticated`,
   `code=invalid_api_key`; latest strict preflight has auth pool `active=0`,
-  `refreshing=1`, `total=1`.
+  `expired=1`, `total=1`.
 - Do not launch a prepared root until:
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL at runtime commit `76a3bccd`
-after prepared `research_focus` projection was added to prompt-context
-readiness. CVRP CMT2/CMT4 case-protection requirements now pass both
-manifest-signal and launch-projection checks before launch. Agentic
+The active prepared roots were generated on WSL at runtime commit `9f353314`
+after prepared `research_focus` projection readiness was extended to required
+nested fields. CVRP CMT2/CMT4 case-protection requirements now pass manifest,
+top-level projection, and nested projected-path checks before launch. Agentic
 partial-hypothesis recovery, research-context actionability,
 runtime-evidence consistency, the formal hypothesis prompt-trace,
 problem-summary `evidence` payload, and CVRP seed-only large two-opt rejection
@@ -47,9 +47,9 @@ only at completion preflight auth. Local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-projguard-76a3bccd-preflight-6r-gpt55-20260620T032757Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-nestedproj-9f353314-preflight-6r-gpt55-20260620T034239Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-projguard-76a3bccd-preflight-4r-gpt55-20260620T032757Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-nestedproj-9f353314-preflight-4r-gpt55-20260620T034239Z-claw`
 
 Prepared manifests record:
 
@@ -57,7 +57,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `76a3bccd`; CVRP `76a3bccd`.
+- Runtime commits: warehouse `9f353314`; CVRP `9f353314`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -89,9 +89,10 @@ Prepared manifests record:
   and readiness verifies the current provider payload summary before static
   readiness can pass.
 - Prepared prompt-context readiness also verifies that prepared
-  `research_focus` fields project through the current checkout's launch prompt
-  projection path. Required fields such as CVRP CMT2/CMT4 case protection may
-  not remain only in manifest/report artifacts.
+  `research_focus` fields and required nested payload paths project through the
+  current checkout's launch prompt projection path. Required fields such as
+  CVRP CMT2/CMT4 `protected_cases`, rules, and required evidence may not remain
+  only in manifest/report artifacts.
 - Prepared handoff rebuild and launch readiness self-locate the current
   checkout's `scion/` package path before importing problem-owned providers, so
   static readiness does not depend on ambient `PYTHONPATH`.
@@ -169,8 +170,8 @@ Prepared manifests record:
   feasibility, route-count, wall-clock, and CMT2/CMT4 protection evidence.
 - Prepared prompt-context readiness now verifies
   `cvrp_case_protection_requirements` as required, available, and projected
-  into launch research focus, so the CMT2/CMT4 protection plan is not merely a
-  report artifact.
+  into launch research focus with required nested paths, so the CMT2/CMT4
+  protection plan is not merely a report artifact.
 - Generic, cross-route, unbounded/fallback, VNS, and two-opt-star family labels
   are not enough for bounded two-opt review readiness; current-run protocol
   effect and co-located activation/effect/phase telemetry are required.

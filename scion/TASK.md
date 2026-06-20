@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `76a3bccd` after agentic partial-hypothesis recovery, research-context actionability, runtime-evidence consistency, formal hypothesis prompt trace, problem-summary evidence-payload, prepared research-focus projection readiness, CVRP CMT2/CMT4 case-protection prompt projection, CVRP seed-only bounded two-opt, and launch runtime-guard contract checks. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `9f353314` after agentic partial-hypothesis recovery, research-context actionability, runtime-evidence consistency, formal hypothesis prompt trace, problem-summary evidence-payload, prepared research-focus nested projection readiness, CVRP CMT2/CMT4 case-protection prompt projection, CVRP seed-only bounded two-opt, and launch runtime-guard contract checks. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -249,14 +249,14 @@ Current checkpoint:
   a bounded, deadline-aware mechanism with CMT2/CMT4 protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-projguard-76a3bccd-preflight-6r-gpt55-20260620T032757Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-nestedproj-9f353314-preflight-6r-gpt55-20260620T034239Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-projguard-76a3bccd-preflight-4r-gpt55-20260620T032757Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-nestedproj-9f353314-preflight-4r-gpt55-20260620T034239Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
   HTTP `401`, `classification=not_authenticated`, `code=invalid_api_key`;
-  latest auth pool is `active=0`, `refreshing=1`, `total=1`.
+  latest auth pool is `active=0`, `expired=1`, `total=1`.
   Do not launch either root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -305,9 +305,10 @@ Current checkpoint:
     target-intent prompts cannot prove that branch-depth, continuity, or
     cross-branch research signals reached the next proposal prompt.
   - Prepared prompt-context readiness now checks the deterministic
-    `research_focus` projection path, so required problem-owned launch guidance
-    such as CVRP CMT2/CMT4 case protection cannot pass only as manifest/report
-    data while being absent from proposal prompt focus.
+    `research_focus` projection path and required nested projected paths, so
+    problem-owned launch guidance such as CVRP CMT2/CMT4 protected cases,
+    rules, and required evidence cannot pass only as manifest/report data while
+    being absent from proposal prompt focus.
   - Launch readiness guards the active checkout, absolute WSL `SCION_DIR` /
     `PYTHONPATH`, prepared-handoff identity, completion preflight, model route,
     no-early-stop semantics, strict postrun rebuild/readiness, committed

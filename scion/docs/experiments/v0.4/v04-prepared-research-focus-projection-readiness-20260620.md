@@ -7,8 +7,10 @@ Date: 2026-06-20
 Prepared prompt-context readiness now checks that prepared
 `research_focus` fields are not only present in the manifest, but also survive
 the deterministic `launch_research_focus` projection used by hypothesis
-prompts. This closes the launch-before-auth gap where a problem-owned handoff
-field could pass report checks while being absent from the proposal focus.
+prompts. The check now covers both top-level keys and required nested projected
+paths. This closes the launch-before-auth gap where a problem-owned handoff
+field or nested payload could pass report checks while being absent from the
+proposal focus.
 
 The check is report-only and prompt-safe:
 
@@ -19,22 +21,22 @@ The check is report-only and prompt-safe:
 
 ## Roots
 
-Prepared from synchronized WSL commit `76a3bccd` after the local code commit
-`0b2ef126`.
+Prepared from synchronized WSL commit `9f353314` after the local code commit
+`0c387d06`.
 
 Warehouse:
 
 - WSL:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-projguard-76a3bccd-preflight-6r-gpt55-20260620T032757Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-nestedproj-9f353314-preflight-6r-gpt55-20260620T034239Z-claw`
 - Local mirror:
-  `/home/clawd/research/scion-experiments/v04-warehouse-v2-followup-projguard-76a3bccd-preflight-6r-gpt55-20260620T032757Z-claw`
+  `/home/clawd/research/scion-experiments/v04-warehouse-v2-followup-nestedproj-9f353314-preflight-6r-gpt55-20260620T034239Z-claw`
 
 CVRP:
 
 - WSL:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-projguard-76a3bccd-preflight-4r-gpt55-20260620T032757Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-nestedproj-9f353314-preflight-4r-gpt55-20260620T034239Z-claw`
 - Local mirror:
-  `/home/clawd/research/scion-experiments/v04-cvrp-large-twoopt-phase4-projguard-76a3bccd-preflight-4r-gpt55-20260620T032757Z-claw`
+  `/home/clawd/research/scion-experiments/v04-cvrp-large-twoopt-phase4-nestedproj-9f353314-preflight-4r-gpt55-20260620T034239Z-claw`
 
 Strict readiness for both roots:
 
@@ -43,18 +45,24 @@ Strict readiness for both roots:
 - `failed_static_required_checks=[]`
 - `failed_required_checks=["completion_preflight"]`
 - completion auth: HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`, auth pool `active=0`, `refreshing=1`, `total=1`
+  `code=invalid_api_key`, auth pool `active=0`, `expired=1`, `total=1`
 
 Projection readiness:
 
 - Warehouse projected required fields include `accepted_checkpoint`,
   `current_question`, measurement diagnostics, required evidence, default
   avoid directions, and the decision boundary.
+- Warehouse reports `missing_projected_keys=[]`, `missing_projected_paths=[]`,
+  and `projected_path_count=18`.
 - CVRP projected required fields include `case_protection_requirements`,
   bounded large two-opt constraints, measurement diagnostics, direct-effect
   rules, measurable opportunity classes, default avoid directions, and the
   decision boundary.
-- Both roots report `missing_projected_keys=[]`.
+- CVRP reports `missing_projected_keys=[]`, `missing_projected_paths=[]`, and
+  `projected_path_count=34`. Required nested paths include
+  `case_protection_requirements.protected_cases`,
+  `case_protection_requirements.rules`, and
+  `case_protection_requirements.required_evidence`.
 
 ## Verification
 
