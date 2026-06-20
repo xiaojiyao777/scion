@@ -41,13 +41,13 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at prepared runtime commit `5ae79470`; local mirrors exist under
+Generated on WSL at prepared runtime commit `00e8e07b`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-5ae79470-preflight-6r-gpt55-20260620T084135Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-00e8e07b-preflight-6r-gpt55-20260620T085531Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-5ae79470-preflight-4r-gpt55-20260620T084150Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-00e8e07b-preflight-4r-gpt55-20260620T085532Z-claw`
 
 Readiness snapshot:
 
@@ -55,7 +55,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `5ae79470`; later
+- Runtime guard status: prepared runtime commit `00e8e07b`; later
   doc/status-only commits are acceptable only when readiness reports
   `runtime_guard_paths_unchanged_since_prepare`.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -78,6 +78,11 @@ Prepared run shape:
 - Low-SNR runtime semantics: budget-exhausting runtime ratios do not block
   trajectory-divergent low-SNR expansion or same-branch follow-up; comparative
   runtime slowdown still remains actionable.
+- CVRP prompt diagnostics: hypothesis context exposes problem-owned
+  `screening_headroom`, `measurable_opportunity_classes`, and
+  `mechanism_effect_ranking` as proposal-only research signals while raw BKS,
+  validation, frozen, calibration-row, and pair-row details remain hidden from
+  prompts and excluded from `DecisionFeatures`.
 
 ## Framework Guarantees To Preserve
 
@@ -187,6 +192,8 @@ Prepared run shape:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-cvrp-size70-direct-evidence-guard-20260620.md`.
+- Current CVRP prompt-diagnostic repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-mechanism-effect-diagnostics-prompt-repair-20260620.md`.
 - Current postrun wrapper-status evidence:
   `scion/docs/experiments/v0.4/v04-postrun-wrapper-status-escalation-20260620.md`.
 - Current WSL access:
