@@ -70,7 +70,9 @@ class AgenticLifecycleMixin:
                     hypothesis_context=context,
                 )
             )
-            output = self._get_agentic_session().run(request)
+            output = self._recover_agentic_partial_hypothesis_output(request)
+            if output is None:
+                output = self._get_agentic_session().run(request)
         except LLMBalanceError as exc:
             logger.critical(
                 "Branch %s: API balance exhausted in agentic proposal session: %s",

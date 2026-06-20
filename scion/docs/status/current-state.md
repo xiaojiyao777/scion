@@ -39,8 +39,11 @@ The active prepared roots were generated on WSL after postrun acceptance began
 checking research-context actionability projections against prompt visibility
 and research-continuity inputs. Runtime-evidence consistency, the formal
 hypothesis prompt-trace, problem-summary `evidence` payload, and CVRP seed-only
-large two-opt rejection guards remain in force. WSL static readiness passes;
-launch readiness fails only at completion preflight auth.
+large two-opt rejection guards remain in force. Agentic partial-hypothesis
+recovery landed after these roots were prepared; refresh prepared roots before
+launch once auth is restored so restart/recovery behavior matches the active
+checkout. WSL static readiness passes; launch readiness fails only at
+completion preflight auth.
 
 - Warehouse:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ctxproj-7c80f84b-preflight-6r-gpt55-20260620T020853Z-claw`
@@ -118,6 +121,11 @@ Prepared manifests record:
   hypothesis-generation prompt trace. Code-only prompt manifests and target
   intent prompts are not sufficient evidence that branch-depth, continuity, or
   cross-branch research signals reached the next proposal prompt.
+- Agentic proposal recovery may reuse a valid waiting-approval partial
+  hypothesis artifact for the same branch and code-phase idempotency key after
+  restart. The recovered hypothesis remains tainted, passes through normal
+  anchor/problem/follow-up/ContractGate checks, and never restores a
+  pre-approval patch.
 - CVRP bounded two-opt postrun review readiness requires co-located positive
   effect, activation, objective-effect, and two-opt-specific phase telemetry on
   the same matching top effect row. Activation/effect evidence must be
@@ -194,6 +202,7 @@ Prepared manifests record:
   `scion/docs/experiments/v0.4/v04-postrun-readiness-failed-check-summary-20260619.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-runtime-guard-commit-drift-20260620.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-runtime-guard-contract-consistency-20260620.md`,
+  `scion/docs/experiments/v0.4/v04-agentic-partial-hypothesis-recovery-20260620.md`,
   `scion/docs/experiments/v0.4/v04-postrun-runtime-evidence-consistency-guard-20260620.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-seed-only-twoopt-readiness-guard-20260620.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`,
@@ -208,3 +217,7 @@ Prepared manifests record:
   WSL repo is `/home/xjy-ubuntu/research/or-autoresearch-agent`, WSL
   experiments root is `/home/xjy-ubuntu/research/scion-experiments`, and the
   Scion Python is `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`.
+  For ad hoc WSL tests, set
+  `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion` or verify
+  `inspect.getsourcefile(...)` points at this repo, because the conda env also
+  has an editable install for `/home/xjy-ubuntu/projects/scion`.

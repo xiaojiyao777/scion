@@ -210,8 +210,17 @@ def _compact_algorithm_smoke_runtime_counters(value: Any) -> dict[str, Any] | No
     if runtime is None:
         return None
     compact: dict[str, Any] = {}
-    for key, value in runtime.items():
+    items = list(runtime.items())
+    prioritized_items = [
+        *[(key, item) for key, item in items if _looks_like_path_key(str(key))],
+        *[(key, item) for key, item in items if not _looks_like_path_key(str(key))],
+    ]
+    seen_keys: set[str] = set()
+    for key, value in prioritized_items:
         key_text = str(key)
+        if key_text in seen_keys:
+            continue
+        seen_keys.add(key_text)
         if key_text.replace(".", "_").endswith("events"):
             continue
         if _looks_like_path_key(key_text):

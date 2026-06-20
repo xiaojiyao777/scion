@@ -357,10 +357,10 @@ def _scheduler_code_using(
             1,
         )
     if import_block:
+        local_search_import = _scheduler_local_search_import_line(code)
         code = code.replace(
-            "from .local_search import _default_vns_operators, _vns\n",
-            "from .local_search import _default_vns_operators, _vns\n"
-            + import_block,
+            local_search_import,
+            local_search_import + import_block,
             1,
         )
     return code.replace(
@@ -379,16 +379,16 @@ def _scheduler_patch_with_noise_repair(
 ) -> dict:
     scheduler_path = "policies/baseline_modules/scheduler.py"
     before = (workspace / scheduler_path).read_text(encoding="utf-8")
+    local_search_import = _scheduler_local_search_import_line(before)
     first_old = (
         "    _worst_removal,\n"
         if import_line
-        else "from .local_search import _default_vns_operators, _vns\n"
+        else local_search_import
     )
     first_new = (
         "    _worst_removal,\n" + import_line
         if import_line
-        else "from .local_search import _default_vns_operators, _vns\n"
-        + import_block
+        else local_search_import + import_block
     )
     return {
         "file_path": scheduler_path,
@@ -408,3 +408,10 @@ def _scheduler_patch_with_noise_repair(
             }
         ],
     }
+
+
+def _scheduler_local_search_import_line(code: str) -> str:
+    for line in code.splitlines(keepends=True):
+        if line.startswith("from .local_search import "):
+            return line
+    raise AssertionError("scheduler.py local_search import line not found")

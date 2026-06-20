@@ -16,6 +16,7 @@ from scion.proposal.agentic_session import (
     AgenticSessionStore,
     AgenticTerminationReason,
     compute_agentic_idempotency_key,
+    partial_hypothesis_output_from_artifact,
     resume_from_artifact,
 )
 
@@ -47,6 +48,103 @@ class AgenticRefsMixin:
         if resume_context is None:
             return request
         return replace(request, resume_context=resume_context)
+
+    def _recover_agentic_partial_hypothesis_output(
+        self,
+        request: AgenticProposalRequest,
+    ) -> AgenticProposalOutput | None:
+        if not self.agentic_artifact_dir:
+            return None
+        store = AgenticSessionStore(self.agentic_artifact_dir)
+        branch_id = request.branch.branch_id
+        for stored in reversed(store.list_sessions()):
+            if stored.entry.branch_id != branch_id:
+                continue
+            if (
+                stored.entry.status
+                != AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY.value
+            ):
+                continue
+            if (
+                stored.entry.termination_reason
+                != AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL.value
+            ):
+                continue
+            report = {
+                "session_id": stored.entry.session_id,
+                "idempotency_key": stored.entry.idempotency_key,
+                "artifact_ref": stored.entry.artifact_ref,
+                "status": stored.entry.status,
+                "termination_reason": stored.entry.termination_reason,
+                "validation_ok": stored.validation.ok,
+                "validation_errors": list(stored.validation.errors),
+                "recovery_mode": "partial_hypothesis_output_reuse",
+            }
+            self.agentic_recovery_reports[branch_id] = report
+            if not stored.validation.ok or stored.artifact is None:
+                logger.warning(
+                    "Branch %s: partial hypothesis recovery artifact invalid; "
+                    "starting fresh: %s",
+                    branch_id,
+                    "; ".join(stored.validation.errors),
+                )
+                return None
+            try:
+                output = partial_hypothesis_output_from_artifact(stored.artifact)
+            except Exception as exc:
+                self.agentic_recovery_reports[branch_id] = {
+                    **report,
+                    "validation_ok": False,
+                    "validation_errors": [str(exc)],
+                }
+                logger.warning(
+                    "Branch %s: partial hypothesis recovery failed; "
+                    "starting fresh: %s",
+                    branch_id,
+                    exc,
+                )
+                return None
+            expected_key = self._agentic_idempotency_key_for_request(
+                replace(request, approved_hypothesis=output.hypothesis)
+            )
+            if output.idempotency_key != expected_key:
+                detail = (
+                    "partial hypothesis idempotency_key mismatch: expected "
+                    f"{expected_key!r} got {output.idempotency_key!r}"
+                )
+                self.agentic_recovery_reports[branch_id] = {
+                    **report,
+                    "validation_ok": False,
+                    "validation_errors": [detail],
+                    "expected_idempotency_key": expected_key,
+                }
+                logger.warning(
+                    "Branch %s: %s; starting fresh",
+                    branch_id,
+                    detail,
+                )
+                return None
+            artifact_refs = tuple(
+                dict.fromkeys(
+                    (
+                        *output.tainted_artifact_refs,
+                        stored.entry.artifact_ref,
+                    )
+                )
+            )
+            self.agentic_recovery_reports[branch_id] = {
+                **report,
+                "validation_ok": True,
+                "validation_errors": [],
+                "expected_idempotency_key": expected_key,
+                "hypothesis_recovered": True,
+                "patch_ignored": bool(
+                    isinstance(stored.artifact, Mapping)
+                    and stored.artifact.get("patch")
+                ),
+            }
+            return replace(output, tainted_artifact_refs=artifact_refs)
+        return None
 
     def _lookup_agentic_resume_context(
         self,

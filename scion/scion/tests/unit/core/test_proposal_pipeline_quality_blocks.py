@@ -1292,6 +1292,122 @@ def test_agentic_pipeline_passes_compact_resume_context_from_failed_artifact(
     assert "SECRET" not in rendered
 
 
+def test_agentic_pipeline_recovers_waiting_hypothesis_without_rerun(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "agentic"
+    creative = FakeCreative()
+    initial_pipeline, branch, _, _, _, _ = _pipeline(
+        creative=creative,
+        agentic_artifact_dir=str(artifact_dir),
+    )
+    previous = AgenticProposalSession(
+        creative,
+        artifact_store=FileAgenticSessionArtifactStore(artifact_dir),
+    )
+    previous_output = previous.run(
+        initial_pipeline._build_agentic_request(
+            branch=branch,
+            champion=_champion(),
+            hypothesis_context={},
+        )
+    )
+
+    class NoRunSession:
+        def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
+            raise AssertionError("stored partial hypothesis should be reused")
+
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        creative=creative,
+        agentic_session=NoRunSession(),
+        agentic_artifact_dir=str(artifact_dir),
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis == creative.hypothesis
+    assert record is not None
+    assert creative.hypothesis_calls == 1
+    assert failures == []
+    assert circuit.successes == 1
+    recovered = pipeline.agentic_outputs[branch.branch_id]
+    assert recovered.session_id == previous_output.session_id
+    assert recovered.patch is None
+    report = pipeline.agentic_recovery_reports[branch.branch_id]
+    assert report["recovery_mode"] == "partial_hypothesis_output_reuse"
+    assert report["hypothesis_recovered"] is True
+    assert report["validation_ok"] is True
+    session_ref = pipeline.pop_agentic_session_ref(branch.branch_id)
+    assert session_ref is not None
+    assert session_ref["session_id"] == previous_output.session_id
+
+
+def test_agentic_pipeline_rejects_stale_partial_hypothesis_key_and_runs_fresh(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "agentic"
+    creative = FakeCreative()
+    initial_pipeline, branch, _, _, _, _ = _pipeline(
+        creative=creative,
+        agentic_artifact_dir=str(artifact_dir),
+    )
+    previous = AgenticProposalSession(
+        creative,
+        artifact_store=FileAgenticSessionArtifactStore(artifact_dir),
+    )
+    previous_output = previous.run(
+        initial_pipeline._build_agentic_request(
+            branch=branch,
+            champion=_champion(),
+            hypothesis_context={},
+        )
+    )
+    output_ref = next(
+        ref
+        for ref in previous_output.tainted_artifact_refs
+        if ref.endswith("output.json")
+    )
+    artifact = json.loads(Path(output_ref).read_text(encoding="utf-8"))
+    artifact["idempotency_key"] = "aps:stale-partial-hypothesis"
+    Path(output_ref).write_text(json.dumps(artifact), encoding="utf-8")
+    captured: list[AgenticProposalRequest] = []
+
+    class CapturingSession:
+        def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
+            captured.append(request)
+            return AgenticProposalOutput(
+                status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+                session_id="fresh-session",
+                campaign_id=request.campaign_id,
+                branch_id=request.branch.branch_id,
+                champion_version=request.champion.version if request.champion else None,
+                problem_id=request.problem_id,
+                problem_spec_hash=request.problem_spec_hash,
+                hypothesis=creative.hypothesis,
+                termination_reason=(
+                    AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL
+                ),
+            )
+
+    pipeline, branch, _, _, _, _ = _pipeline(
+        creative=creative,
+        agentic_session=CapturingSession(),
+        agentic_artifact_dir=str(artifact_dir),
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis == creative.hypothesis
+    assert record is not None
+    assert len(captured) == 1
+    report = pipeline.agentic_recovery_reports[branch.branch_id]
+    assert report["validation_ok"] is False
+    assert any(
+        "partial hypothesis idempotency_key mismatch" in error
+        for error in report["validation_errors"]
+    )
+
+
 def test_agentic_pipeline_does_not_reuse_invalid_recovery_artifact(
     tmp_path: Path,
 ) -> None:

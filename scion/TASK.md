@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `7c80f84b` after postrun readiness began checking research-context actionability projections against prompt visibility and research-continuity inputs; earlier runtime-evidence consistency, formal hypothesis prompt trace, problem-summary evidence-payload, CVRP seed-only bounded two-opt, and launch runtime-guard contract checks remain in force. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `7c80f84b` after postrun readiness began checking research-context actionability projections against prompt visibility and research-continuity inputs; earlier runtime-evidence consistency, formal hypothesis prompt trace, problem-summary evidence-payload, CVRP seed-only bounded two-opt, launch runtime-guard contract checks, and agentic partial-hypothesis recovery remain in force. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -294,6 +294,12 @@ Current checkpoint:
     projection of prompt visibility and research-continuity inputs; stale
     prompt token, continuity, gap, or recommendation projections fail postrun
     readiness before delegated review.
+  - Agentic proposal recovery can reuse a persisted
+    `partial_hypothesis_only` / `hypothesis_awaiting_approval` artifact for the
+    same branch and code-phase idempotency key, avoiding duplicate hypothesis
+    LLM calls after restart while still rerunning normal anchor, problem
+    quality, follow-up, lineage, and ContractGate approval checks. Persisted
+    pre-approval patches are never restored.
   - Current-run warehouse/CVRP research-context readiness requires a formal
     hypothesis-generation prompt trace. Code-only prompt manifests and
     target-intent prompts cannot prove that branch-depth, continuity, or

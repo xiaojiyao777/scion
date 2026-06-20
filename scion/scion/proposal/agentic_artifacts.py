@@ -7,25 +7,35 @@ import os
 import re
 import uuid
 from datetime import datetime
-from dataclasses import asdict, is_dataclass, replace
+from dataclasses import asdict, fields, is_dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping
 
 from scion.core.explore_step.branch_lesson_usage import (
     branch_lesson_usage_report_projection,
 )
-from scion.core.models import ChampionState, PatchProposal
+from scion.core.models import (
+    ChampionState,
+    HypothesisProposal,
+    MechanismChange,
+    PatchProposal,
+)
 from scion.core.public_refs import public_artifact_ref
 from scion.proposal.agentic_models import (
     AGENTIC_SESSION_SCHEMA_VERSION,
+    AgenticEvidenceRef,
     AgenticProposalOutput,
     AgenticProposalRequest,
     AgenticProposalSessionState,
+    AgenticProposalStatus,
     AgenticReplayValidationResult,
     AgenticSessionIndexEntry,
     AgenticStoredSession,
+    AgenticTerminationReason,
+    AgenticTranscriptEvent,
     AgenticToolLoopConfig,
 )
+from scion.proposal.agentic_preview import AgenticSelfCheck
 from scion.proposal.agentic_utils import (
     _enum_value,
     _json_ready,
@@ -858,6 +868,226 @@ def inspect_agentic_session_artifact(
             "errors": list(validation.errors),
         },
     }
+
+
+def partial_hypothesis_output_from_artifact(
+    artifact: str | Path | Mapping[str, Any],
+) -> AgenticProposalOutput:
+    """Hydrate a persisted waiting-approval hypothesis output.
+
+    This helper intentionally never restores a patch.  The returned output is
+    still tainted and must pass the pipeline's normal anchor, problem-quality,
+    follow-up, and ContractGate checks before code generation can run.
+    """
+
+    payload = _load_artifact_payload(artifact)
+    validation = validate_agentic_session_artifact(payload)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.errors))
+    status = str(payload.get("status") or "")
+    if status != AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY.value:
+        raise ValueError(
+            "artifact is not a partial hypothesis output: "
+            f"status={status!r}"
+        )
+    termination_reason = str(payload.get("termination_reason") or "")
+    if (
+        termination_reason
+        != AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL.value
+    ):
+        raise ValueError(
+            "artifact is not waiting for hypothesis approval: "
+            f"termination_reason={termination_reason!r}"
+        )
+    hypothesis_payload = payload.get("hypothesis")
+    if not isinstance(hypothesis_payload, Mapping):
+        raise ValueError("artifact missing recoverable hypothesis payload")
+    hypothesis = _hypothesis_from_payload(hypothesis_payload)
+    return AgenticProposalOutput(
+        status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+        session_id=str(payload.get("session_id") or ""),
+        request_id=str(payload.get("request_id") or ""),
+        idempotency_key=str(payload.get("idempotency_key") or ""),
+        campaign_id=str(payload.get("campaign_id") or ""),
+        branch_id=str(payload.get("branch_id") or ""),
+        champion_version=_int_or_none(payload.get("champion_version")),
+        champion_weight_revision=_int_or_none(
+            payload.get("champion_weight_revision")
+        ),
+        problem_id=_optional_text(payload.get("problem_id")),
+        problem_spec_hash=_optional_text(payload.get("problem_spec_hash")),
+        split_manifest_hash=_optional_text(payload.get("split_manifest_hash")),
+        seed_ledger_hash=_optional_text(payload.get("seed_ledger_hash")),
+        context_profile=_optional_text(payload.get("context_profile")),
+        selected_surface=(
+            _optional_text(payload.get("selected_surface"))
+            or hypothesis.change_locus
+        ),
+        action=_optional_text(payload.get("action")) or hypothesis.action,
+        hypothesis=hypothesis,
+        patch=None,
+        rationale_summary=str(payload.get("rationale_summary") or ""),
+        evidence_used=_evidence_refs_from_payload(payload.get("evidence_used")),
+        transcript=_transcript_from_payload(payload.get("compact_transcript")),
+        self_check=_self_check_from_payload(payload.get("self_check")),
+        tainted_artifact_refs=_string_tuple(payload.get("tainted_artifact_refs") or ()),
+        termination_reason=AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL,
+        tool_loop_config=dict(payload.get("tool_loop_config") or {}),
+        tool_budget_used=dict(payload.get("tool_budget_used") or {}),
+        transcript_digest=str(payload.get("transcript_digest") or ""),
+        failure_detail=_optional_text(payload.get("failure_detail")),
+        failure_category=_optional_text(payload.get("failure_category")),
+        structured_rejection=(
+            dict(payload.get("structured_rejection") or {})
+            if isinstance(payload.get("structured_rejection"), Mapping)
+            else None
+        ),
+        failure_ledger=(
+            dict(payload.get("failure_ledger") or {})
+            if isinstance(payload.get("failure_ledger"), Mapping)
+            else {}
+        ),
+        observation_ledger=(
+            dict(payload.get("observation_ledger") or {})
+            if isinstance(payload.get("observation_ledger"), Mapping)
+            else {}
+        ),
+        tool_selection_ledger=(
+            dict(payload.get("tool_selection_ledger") or {})
+            if isinstance(payload.get("tool_selection_ledger"), Mapping)
+            else {}
+        ),
+        phase=_optional_text(payload.get("phase")),
+    )
+
+
+def _hypothesis_from_payload(payload: Mapping[str, Any]) -> HypothesisProposal:
+    kwargs: dict[str, Any] = {}
+    field_names = {field.name for field in fields(HypothesisProposal)}
+    for key, value in payload.items():
+        if key in field_names:
+            kwargs[key] = value
+    for key in ("target_objectives", "protected_objectives"):
+        if key in kwargs:
+            kwargs[key] = tuple(str(item) for item in _as_iterable(kwargs[key]))
+    for key in (
+        "expected_telemetry",
+        "novelty_signature",
+        "material_difference",
+        "branch_lesson_usage",
+    ):
+        if key in kwargs:
+            kwargs[key] = dict(kwargs[key]) if isinstance(kwargs[key], Mapping) else {}
+    if "mechanism_changes" in kwargs:
+        kwargs["mechanism_changes"] = tuple(
+            _mechanism_change_from_payload(item)
+            for item in _as_iterable(kwargs["mechanism_changes"])
+        )
+    if "schema_repair_attribution" in kwargs:
+        kwargs["schema_repair_attribution"] = tuple(
+            dict(item)
+            for item in _as_iterable(kwargs["schema_repair_attribution"])
+            if isinstance(item, Mapping)
+        )
+    return HypothesisProposal(**kwargs)
+
+
+def _mechanism_change_from_payload(value: Any) -> MechanismChange:
+    if isinstance(value, MechanismChange):
+        return value
+    if isinstance(value, Mapping):
+        return MechanismChange(
+            id=str(value.get("id") or ""),
+            change_type=value.get("change_type") or "modify",
+        )
+    return MechanismChange(
+        id=str(getattr(value, "id", "") or ""),
+        change_type=getattr(value, "change_type", "modify") or "modify",
+    )
+
+
+def _evidence_refs_from_payload(value: Any) -> tuple[AgenticEvidenceRef, ...]:
+    refs: list[AgenticEvidenceRef] = []
+    for item in _as_iterable(value):
+        if not isinstance(item, Mapping):
+            continue
+        refs.append(
+            AgenticEvidenceRef(
+                observation_id=str(item.get("observation_id") or ""),
+                exposure_level=str(item.get("exposure_level") or ""),
+                summary=str(item.get("summary") or ""),
+            )
+        )
+    return tuple(refs)
+
+
+def _transcript_from_payload(value: Any) -> tuple[AgenticTranscriptEvent, ...]:
+    events: list[AgenticTranscriptEvent] = []
+    for item in _as_iterable(value):
+        if not isinstance(item, Mapping):
+            continue
+        metadata = item.get("metadata")
+        events.append(
+            AgenticTranscriptEvent(
+                phase=str(item.get("phase") or ""),
+                message=str(item.get("message") or ""),
+                created_at=str(item.get("created_at") or datetime.now().isoformat()),
+                metadata=(
+                    dict(_sanitize_agentic_value(metadata))
+                    if isinstance(metadata, Mapping)
+                    else {}
+                ),
+            )
+        )
+    return tuple(events)
+
+
+def _self_check_from_payload(value: Any) -> AgenticSelfCheck:
+    if not isinstance(value, Mapping):
+        return AgenticSelfCheck()
+    return AgenticSelfCheck(
+        schema_valid=bool(value.get("schema_valid", False)),
+        schema_preview_codes=tuple(
+            str(item) for item in _as_iterable(value.get("schema_preview_codes"))
+        ),
+        schema_preview_full_refs=tuple(
+            str(item)
+            for item in _as_iterable(value.get("schema_preview_full_refs"))
+        ),
+        contract_preview_passed=(
+            None
+            if value.get("contract_preview_passed") is None
+            else bool(value.get("contract_preview_passed"))
+        ),
+        contract_preview_codes=tuple(
+            str(item)
+            for item in _as_iterable(value.get("contract_preview_codes"))
+        ),
+        contract_preview_full_refs=tuple(
+            str(item)
+            for item in _as_iterable(value.get("contract_preview_full_refs"))
+        ),
+        diagnostics=(
+            dict(value.get("diagnostics") or {})
+            if isinstance(value.get("diagnostics"), Mapping)
+            else {}
+        ),
+    )
+
+
+def _as_iterable(value: Any) -> tuple[Any, ...]:
+    if value in (None, ""):
+        return ()
+    if isinstance(value, tuple):
+        return value
+    if isinstance(value, list):
+        return tuple(value)
+    return (value,)
+
+
+def _optional_text(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
 
 
 def resume_from_artifact(
