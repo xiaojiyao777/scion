@@ -211,6 +211,89 @@ def research_focus_prompt_summary(
         for token in PROBLEM_MEASUREMENT_DIAGNOSTICS_FORBIDDEN_PROMPT_TOKENS
         if token in rendered_lower
     ]
+    required_evidence_counts = _rendered_sequence_item_counts(
+        rendered_prompt,
+        research_focus.get("required_evidence"),
+    )
+    default_avoid_counts = _rendered_sequence_item_counts(
+        rendered_prompt,
+        research_focus.get("default_avoid_directions"),
+    )
+    measurable_opportunity_counts = _rendered_sequence_item_counts(
+        rendered_prompt,
+        research_focus.get("measurable_opportunity_classes"),
+    )
+    large_twoopt = _mapping_or_empty(
+        research_focus.get("large_instance_two_opt_constraints")
+    )
+    large_twoopt_implementation_counts = _rendered_sequence_item_counts(
+        rendered_prompt,
+        large_twoopt.get("implementation_constraints"),
+    )
+    large_twoopt_pair_evidence_counts = _rendered_sequence_item_counts(
+        rendered_prompt,
+        large_twoopt.get("required_pair_evidence"),
+    )
+    large_twoopt_reject_counts = _rendered_sequence_item_counts(
+        rendered_prompt,
+        large_twoopt.get("default_reject_directions"),
+    )
+    case_protection = _mapping_or_empty(
+        research_focus.get("case_protection_requirements")
+    )
+    case_protection_rule_counts = _rendered_sequence_item_counts(
+        rendered_prompt,
+        case_protection.get("rules"),
+    )
+    case_protection_evidence_counts = _rendered_sequence_item_counts(
+        rendered_prompt,
+        case_protection.get("required_evidence"),
+    )
+    empty_sequence_counts = {
+        "item_count": 0,
+        "rendered_count": 0,
+        "all_present": False,
+    }
+    warehouse_required_evidence_counts = (
+        required_evidence_counts
+        if problem_family == "warehouse_delivery"
+        else empty_sequence_counts
+    )
+    warehouse_default_avoid_counts = (
+        default_avoid_counts
+        if problem_family == "warehouse_delivery"
+        else empty_sequence_counts
+    )
+    cvrp_measurable_opportunity_counts = (
+        measurable_opportunity_counts
+        if problem_family == "cvrp"
+        else empty_sequence_counts
+    )
+    cvrp_large_twoopt_implementation_counts = (
+        large_twoopt_implementation_counts
+        if problem_family == "cvrp"
+        else empty_sequence_counts
+    )
+    cvrp_large_twoopt_pair_evidence_counts = (
+        large_twoopt_pair_evidence_counts
+        if problem_family == "cvrp"
+        else empty_sequence_counts
+    )
+    cvrp_large_twoopt_reject_counts = (
+        large_twoopt_reject_counts
+        if problem_family == "cvrp"
+        else empty_sequence_counts
+    )
+    cvrp_case_protection_rule_counts = (
+        case_protection_rule_counts
+        if problem_family == "cvrp"
+        else empty_sequence_counts
+    )
+    cvrp_case_protection_evidence_counts = (
+        case_protection_evidence_counts
+        if problem_family == "cvrp"
+        else empty_sequence_counts
+    )
     summary = {
         **base,
         "launch_focus_schema_present": (
@@ -247,10 +330,28 @@ def research_focus_prompt_summary(
             problem_family == "warehouse_delivery"
             and "required_evidence" in rendered_prompt
         ),
+        "warehouse_required_evidence_item_count": warehouse_required_evidence_counts[
+            "item_count"
+        ],
+        "warehouse_required_evidence_rendered_count": warehouse_required_evidence_counts[
+            "rendered_count"
+        ],
+        "warehouse_required_evidence_all_present": warehouse_required_evidence_counts[
+            "all_present"
+        ],
         "warehouse_avoid_directions_present": (
             problem_family == "warehouse_delivery"
             and "default_avoid_directions" in rendered_prompt
         ),
+        "warehouse_default_avoid_direction_item_count": warehouse_default_avoid_counts[
+            "item_count"
+        ],
+        "warehouse_default_avoid_direction_rendered_count": warehouse_default_avoid_counts[
+            "rendered_count"
+        ],
+        "warehouse_default_avoid_direction_all_present": warehouse_default_avoid_counts[
+            "all_present"
+        ],
         "warehouse_measurement_handoff_present": (
             problem_family == "warehouse_delivery"
             and "measurement_opportunity_diagnostics" in rendered_prompt
@@ -279,6 +380,60 @@ def research_focus_prompt_summary(
             problem_family == "cvrp"
             and "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in rendered_prompt
         ),
+        "cvrp_measurable_opportunity_class_item_count": (
+            cvrp_measurable_opportunity_counts["item_count"]
+        ),
+        "cvrp_measurable_opportunity_class_rendered_count": (
+            cvrp_measurable_opportunity_counts["rendered_count"]
+        ),
+        "cvrp_measurable_opportunity_class_all_present": (
+            cvrp_measurable_opportunity_counts["all_present"]
+        ),
+        "cvrp_large_twoopt_implementation_constraint_item_count": (
+            cvrp_large_twoopt_implementation_counts["item_count"]
+        ),
+        "cvrp_large_twoopt_implementation_constraint_rendered_count": (
+            cvrp_large_twoopt_implementation_counts["rendered_count"]
+        ),
+        "cvrp_large_twoopt_implementation_constraint_all_present": (
+            cvrp_large_twoopt_implementation_counts["all_present"]
+        ),
+        "cvrp_large_twoopt_required_pair_evidence_item_count": (
+            cvrp_large_twoopt_pair_evidence_counts["item_count"]
+        ),
+        "cvrp_large_twoopt_required_pair_evidence_rendered_count": (
+            cvrp_large_twoopt_pair_evidence_counts["rendered_count"]
+        ),
+        "cvrp_large_twoopt_required_pair_evidence_all_present": (
+            cvrp_large_twoopt_pair_evidence_counts["all_present"]
+        ),
+        "cvrp_large_twoopt_default_reject_direction_item_count": (
+            cvrp_large_twoopt_reject_counts["item_count"]
+        ),
+        "cvrp_large_twoopt_default_reject_direction_rendered_count": (
+            cvrp_large_twoopt_reject_counts["rendered_count"]
+        ),
+        "cvrp_large_twoopt_default_reject_direction_all_present": (
+            cvrp_large_twoopt_reject_counts["all_present"]
+        ),
+        "cvrp_case_protection_rule_item_count": (
+            cvrp_case_protection_rule_counts["item_count"]
+        ),
+        "cvrp_case_protection_rule_rendered_count": (
+            cvrp_case_protection_rule_counts["rendered_count"]
+        ),
+        "cvrp_case_protection_rule_all_present": (
+            cvrp_case_protection_rule_counts["all_present"]
+        ),
+        "cvrp_case_protection_required_evidence_item_count": (
+            cvrp_case_protection_evidence_counts["item_count"]
+        ),
+        "cvrp_case_protection_required_evidence_rendered_count": (
+            cvrp_case_protection_evidence_counts["rendered_count"]
+        ),
+        "cvrp_case_protection_required_evidence_all_present": (
+            cvrp_case_protection_evidence_counts["all_present"]
+        ),
     }
     required_true_fields = [
         "launch_focus_schema_present",
@@ -296,8 +451,10 @@ def research_focus_prompt_summary(
             required_true_fields.append("warehouse_current_question_present")
         if research_focus.get("required_evidence") not in ({}, [], "", None):
             required_true_fields.append("warehouse_required_evidence_present")
+            required_true_fields.append("warehouse_required_evidence_all_present")
         if research_focus.get("default_avoid_directions") not in ({}, [], "", None):
             required_true_fields.append("warehouse_avoid_directions_present")
+            required_true_fields.append("warehouse_default_avoid_direction_all_present")
         if (
             research_focus.get("measurement_opportunity_diagnostics")
             not in ({}, [], "", None)
@@ -311,6 +468,10 @@ def research_focus_prompt_summary(
             None,
         ):
             required_true_fields.append("cvrp_case_protection_present")
+            required_true_fields.append("cvrp_case_protection_rule_all_present")
+            required_true_fields.append(
+                "cvrp_case_protection_required_evidence_all_present"
+            )
         if research_focus.get("large_instance_two_opt_constraints") not in (
             {},
             [],
@@ -318,6 +479,24 @@ def research_focus_prompt_summary(
             None,
         ):
             required_true_fields.append("cvrp_bounded_twoopt_present")
+            required_true_fields.append(
+                "cvrp_large_twoopt_implementation_constraint_all_present"
+            )
+            required_true_fields.append(
+                "cvrp_large_twoopt_required_pair_evidence_all_present"
+            )
+            required_true_fields.append(
+                "cvrp_large_twoopt_default_reject_direction_all_present"
+            )
+        if research_focus.get("measurable_opportunity_classes") not in (
+            {},
+            [],
+            "",
+            None,
+        ):
+            required_true_fields.append(
+                "cvrp_measurable_opportunity_class_all_present"
+            )
         if (
             research_focus.get("route_merge_exception_rule")
             not in ({}, [], "", None)
@@ -756,6 +935,20 @@ def _path_value(value: dict[str, Any], path: str) -> Any:
 def _prompt_contains_path(rendered_prompt: str, path: str) -> bool:
     parts = [part for part in path.split(".") if part]
     return bool(parts) and all(part in rendered_prompt for part in parts)
+
+
+def _rendered_sequence_item_counts(
+    rendered_prompt: str,
+    value: Any,
+) -> dict[str, Any]:
+    sequence = value if isinstance(value, (list, tuple)) else []
+    items = [str(item).strip() for item in sequence if str(item).strip()]
+    rendered_count = sum(1 for item in items if item in rendered_prompt)
+    return {
+        "item_count": len(items),
+        "rendered_count": rendered_count,
+        "all_present": rendered_count == len(items),
+    }
 
 
 def _mapping_or_empty(value: Any) -> dict[str, Any]:
