@@ -44,15 +44,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `73063089`;
-the corresponding local framework repair commit is `00559a6b`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `fb03204b`;
+the corresponding local framework repair commit is `197ee67f`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-73063089-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-feedbacksem-preflight-6r-gpt55-20260620T143930Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-fb03204b-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-runtimebrief-preflight-6r-gpt55-20260620T144847Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-73063089-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-feedbacksem-preflight-4r-gpt55-20260620T143930Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-fb03204b-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-runtimebrief-preflight-4r-gpt55-20260620T144847Z-claw`
 
 Readiness snapshot:
 
@@ -60,7 +60,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `73063089`; strict readiness
+- Runtime guard status: prepared runtime commit `fb03204b`; strict readiness
   must keep reporting runtime guard OK. Doc/status-only commits after prepare
   are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -115,6 +115,10 @@ Prepared run shape:
 - Low-SNR runtime semantics: budget-exhausting runtime ratios do not block
   trajectory-divergent low-SNR expansion or same-branch follow-up; comparative
   runtime slowdown still remains actionable.
+- Postrun runtime budget summaries preserve saturated-side and repairable
+  counts plus side-specific top diagnostics, so delegated review can distinguish
+  candidate repair signals from champion-only or observational budget
+  saturation.
 - Screening gate/Decision semantics: high-win-rate, non-negative,
   sub-practical-delta screening evidence is reported as
   `SCREENING_PASS_MARGINAL_DELTA` and routed as a diagnostic validation
@@ -275,6 +279,8 @@ Prepared run shape:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current screening marginal gate/Decision alignment:
   `scion/docs/experiments/v0.4/v04-screening-marginal-gate-decision-alignment-20260620.md`.
+- Current postrun runtime budget side summary:
+  `scion/docs/experiments/v0.4/v04-postrun-runtime-budget-side-summary-20260620.md`.
 - Current launch/readiness and code-prompt 96k source-projection evidence:
   `scion/docs/experiments/v0.4/v04-code-prompt-solver-source-96k-projection-repair-20260620.md`.
 - Disabled mandatory code-surface full-read repair evidence:

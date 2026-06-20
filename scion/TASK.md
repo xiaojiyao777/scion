@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `73063089`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `fb03204b`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -249,9 +249,9 @@ Current checkpoint:
   a bounded, deadline-aware mechanism with CMT2/CMT4 protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-73063089-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-feedbacksem-preflight-6r-gpt55-20260620T143930Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-fb03204b-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-runtimebrief-preflight-6r-gpt55-20260620T144847Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-73063089-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-feedbacksem-preflight-4r-gpt55-20260620T143930Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-fb03204b-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-runtimebrief-preflight-4r-gpt55-20260620T144847Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -272,7 +272,10 @@ Current checkpoint:
   - Budget-exhausting runtime semantics suppress stale fresh-runtime replay
     markers/pressure and comparative runtime-ratio slowdown blockers for
     low-SNR follow-up. Low-SNR trajectory-divergent lifecycle continuation and
-    hard-negative fail-closed behavior are covered by focused tests.
+    hard-negative fail-closed behavior are covered by focused tests. Postrun
+    runtime budget diagnostics preserve saturated-side and repairable counts so
+    delegated review can distinguish candidate repair signals from champion-only
+    or observational saturation.
   - Screening gate reporting and Decision routing agree on marginal evidence:
     high-win-rate, non-negative, sub-practical-delta screening evidence is a
     diagnostic validation candidate (`SCREENING_PASS_MARGINAL_DELTA`) and is
