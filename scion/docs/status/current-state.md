@@ -100,10 +100,12 @@ Readiness snapshot:
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
 - Runtime guard status: `runtime_guard_status=ok`,
-  `runtime_guard_reason=runtime_guard_commit_matches`,
-  `prepared_runtime_commit=actual_runtime_commit=0f0f4473`. Treat all earlier
-  prepared roots as superseded because runtime-guarded launcher,
-  prompt-context, and postrun artifact-identity paths changed.
+  `prepared_runtime_commit=0f0f4473`, and either
+  `runtime_guard_reason=runtime_guard_commit_matches` or
+  `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare` after
+  doc-only commits. Treat all earlier prepared roots as superseded because
+  runtime-guarded launcher, prompt-context, and postrun artifact-identity paths
+  changed.
 - `launch_env_secret_permissions=ok`; each current root reports
   `launch_env_mode=0o600`.
 - Completion auth status is exposed by launch readiness in

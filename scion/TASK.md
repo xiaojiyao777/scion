@@ -269,9 +269,10 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok`,
-  `runtime_guard_reason=runtime_guard_commit_matches`,
-  `prepared_runtime_commit=actual_runtime_commit=0f0f4473`,
-  `launch_env_secret_permissions=ok`, and `launch_env_mode=0o600`.
+  `prepared_runtime_commit=0f0f4473`, and either
+  `runtime_guard_reason=runtime_guard_commit_matches` or
+  `runtime_guard_paths_unchanged_since_prepare` after doc-only commits. They
+  also report `launch_env_secret_permissions=ok` and `launch_env_mode=0o600`.
   Disabled proposal/APS caps, code-source visibility, source-read headroom,
   item-level `research_focus` prompt visibility, and CVRP/warehouse
   adapter-derived opportunity diagnostics are covered by current evidence
