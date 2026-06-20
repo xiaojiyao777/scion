@@ -27,8 +27,8 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. `/v1/models` can list `gpt-5.5`, but the strict completion
   preflight currently fails with HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`; latest strict preflight has auth pool `active=0`,
-  `expired=1`, `total=1`.
+  `code=invalid_api_key`. The auth pool has `active=0`, `total=1`; repeated
+  strict preflights currently alternate between `expired=1` and `refreshing=1`.
 - Do not launch a prepared root until:
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.

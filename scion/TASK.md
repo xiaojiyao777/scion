@@ -255,8 +255,9 @@ Current checkpoint:
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
-  HTTP `401`, `classification=not_authenticated`, `code=invalid_api_key`;
-  latest auth pool is `active=0`, `expired=1`, `total=1`.
+  HTTP `401`, `classification=not_authenticated`, `code=invalid_api_key`.
+  The auth pool has `active=0`, `total=1`; repeated strict preflights currently
+  alternate between `expired=1` and `refreshing=1`.
   Do not launch either root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
