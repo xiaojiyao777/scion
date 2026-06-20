@@ -43,6 +43,14 @@ LAUNCHER_STATUS_KEYS = (
     "warehouse_data_root_missing",
     "git_runtime_dirty",
     "git_runtime_commit_mismatch",
+    "campaign_wrapper_exit_status",
+    "postrun_acceptance_failed",
+    "postrun_acceptance_readiness_file",
+    "postrun_acceptance_readiness_path",
+    "postrun_acceptance_report_dir",
+    "postrun_acceptance_status",
+    "postrun_readiness_exit_status",
+    "postrun_reports_exit_status",
 )
 PRE_CAMPAIGN_INFRA_FAILURE_KEYS = (
     "api_key_env_missing",
@@ -65,12 +73,17 @@ RUN_LOG_MARKERS = (
     "POSTRUN_REPORTS_FINISHED_AT",
     "POSTRUN_REPORTS_STARTED_AT",
     "POSTRUN_READINESS_EXIT_STATUS",
+    "POSTRUN_STATUS_WRITE_EXIT_STATUS",
     "SCION_DIR_MISSING",
 )
 EXIT_MARKERS = (
     "POSTRUN_ACCEPTANCE_DIR",
+    "POSTRUN_ACCEPTANCE_FAILED",
+    "POSTRUN_READINESS_EFFECTIVE_EXIT_STATUS",
+    "POSTRUN_REPORTS_EFFECTIVE_EXIT_STATUS",
     "PRE_CAMPAIGN_COMPLETION_PREFLIGHT_FAILED",
     "WRAPPER_EXIT_STATUS",
+    "WRAPPER_EXIT_STATUS_EFFECTIVE",
 )
 POSTRUN_REPORT_DIRS = (
     "summaries",

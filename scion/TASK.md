@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `9f353314` after agentic partial-hypothesis recovery, research-context actionability, runtime-evidence consistency, formal hypothesis prompt trace, problem-summary evidence-payload, prepared research-focus nested projection readiness, CVRP CMT2/CMT4 case-protection prompt projection, CVRP seed-only bounded two-opt, and launch runtime-guard contract checks. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `9f353314` after agentic partial-hypothesis recovery, research-context actionability, runtime-evidence consistency, formal hypothesis prompt trace, problem-summary evidence-payload, prepared research-focus nested projection readiness, CVRP CMT2/CMT4 case-protection prompt projection, CVRP seed-only bounded two-opt, launch runtime-guard contract checks, and postrun acceptance wrapper-status escalation. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -315,6 +315,10 @@ Current checkpoint:
     no-early-stop semantics, strict postrun rebuild/readiness, committed
     runtime-guard drift, and wrapper/manifest runtime-guard contract
     consistency.
+  - Launcher wrappers now promote strict postrun rebuild/readiness failure to
+    an effective wrapper failure and annotate top-level `run_status.json`, so a
+    campaign that finishes but lacks current-run-ready postrun acceptance cannot
+    look like a successful analysis-ready launch.
 - Current operational truth lives in `scion/docs/status/current-state.md`.
   Detailed repair evidence lives in `scion/docs/experiments/v0.4/`; do not read
   historical experiment reports by default unless the current task explicitly

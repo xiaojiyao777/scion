@@ -116,6 +116,10 @@ Prepared manifests record:
 - Postrun acceptance readiness emits top-level failed-check summaries, so
   delegated reviewers can distinguish missing current-run analysis inputs from
   optional markers without scanning the full check table.
+- Launcher wrappers promote strict postrun report rebuild/readiness failure to
+  an effective wrapper failure and annotate top-level `run_status.json` with
+  `postrun_acceptance_failed`, so a completed campaign cannot silently look
+  analysis-ready when current-run postrun acceptance is unready.
 - Current-run warehouse/CVRP problem summaries must carry an explicit
   `evidence` payload before postrun delegated review can accept
   protocol-evaluated, plateau, positive-effect, or bounded two-opt conclusions;

@@ -2212,8 +2212,28 @@ def _run_script_postrun_reports_after_campaign(run_sh: Path) -> tuple[str, Any]:
         else -1
     )
     call_pos = (
-        _find_line_after(text, "write_postrun_acceptance_reports", status_pos)
+        text.find("write_postrun_acceptance_reports", status_pos)
         if status_pos >= 0
+        else -1
+    )
+    postrun_status_pos = (
+        _find_line_after(text, "POSTRUN_ACCEPTANCE_STATUS=0", status_pos)
+        if status_pos >= 0
+        else -1
+    )
+    postrun_failed_marker_pos = (
+        text.find("POSTRUN_ACCEPTANCE_FAILED", call_pos)
+        if call_pos >= 0
+        else -1
+    )
+    status_writer_pos = (
+        text.find("tools/write_postrun_wrapper_status.py", call_pos)
+        if call_pos >= 0
+        else -1
+    )
+    wrapper_effective_pos = (
+        text.find("WRAPPER_EXIT_STATUS_EFFECTIVE", call_pos)
+        if call_pos >= 0
         else -1
     )
     exit_pos = (
@@ -2233,17 +2253,33 @@ def _run_script_postrun_reports_after_campaign(run_sh: Path) -> tuple[str, Any]:
         failures.append({"reason": "missing_campaign_status_capture"})
     if call_pos < 0:
         failures.append({"reason": "missing_postrun_report_call_after_campaign"})
+    if postrun_status_pos < 0:
+        failures.append({"reason": "missing_postrun_acceptance_status_capture"})
+    if call_pos >= 0 and postrun_status_pos >= 0 and postrun_status_pos > call_pos:
+        failures.append({"reason": "postrun_acceptance_status_capture_after_call"})
+    if call_pos >= 0 and postrun_failed_marker_pos < 0:
+        failures.append({"reason": "missing_postrun_acceptance_failure_marker"})
+    if call_pos >= 0 and wrapper_effective_pos < 0:
+        failures.append({"reason": "missing_postrun_wrapper_effective_status_marker"})
+    if call_pos >= 0 and status_writer_pos < 0:
+        failures.append({"reason": "missing_postrun_wrapper_status_writer"})
     if exit_pos < 0:
         failures.append({"reason": "missing_campaign_status_exit"})
     if call_pos >= 0 and exit_pos >= 0 and call_pos > exit_pos:
         failures.append({"reason": "postrun_report_call_after_exit"})
+    if status_writer_pos >= 0 and exit_pos >= 0 and status_writer_pos > exit_pos:
+        failures.append({"reason": "postrun_wrapper_status_writer_after_exit"})
 
     detail = {
         "run_script": str(run_sh),
         "campaign_command_marker": RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER,
         "campaign_command_position": campaign_pos,
         "campaign_status_position": status_pos,
+        "postrun_acceptance_status_position": postrun_status_pos,
         "postrun_report_call_position": call_pos,
+        "postrun_acceptance_failure_marker_position": postrun_failed_marker_pos,
+        "postrun_wrapper_effective_status_marker_position": wrapper_effective_pos,
+        "postrun_wrapper_status_writer_position": status_writer_pos,
         "campaign_status_exit_position": exit_pos,
         "failures": failures,
     }

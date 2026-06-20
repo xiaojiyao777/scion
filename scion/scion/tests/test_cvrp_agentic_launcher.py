@@ -302,6 +302,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "postrun_acceptance" in run_sh_text
     assert "tools/rebuild_postrun_acceptance.py" in run_sh_text
     assert "tools/check_postrun_acceptance.py" in run_sh_text
+    assert "tools/write_postrun_wrapper_status.py" in run_sh_text
     assert "--strict" in run_sh_text
     assert "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json" in (
         run_sh_text
@@ -313,6 +314,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert 'rebuild_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text
     assert "POSTRUN_REPORTS_EXIT_STATUS:$POSTRUN_STATUS" in run_sh_text
     assert "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS" in run_sh_text
+    assert "POSTRUN_ACCEPTANCE_FAILED:$POSTRUN_ACCEPTANCE_STATUS" in run_sh_text
     assert "SCION_BASE_URL=http://127.0.0.1:8080" in command_txt
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in command_txt
     assert "AGENTIC_SESSION_TIMEOUT_SEC=3600" in command_txt
@@ -945,6 +947,90 @@ def test_cvrp_agentic_launcher_api_key_env_missing_fails_before_campaign(
     assert "POSTRUN_READINESS_EXIT_STATUS:" in run_log
     readiness_dir = run_root / "postrun_acceptance" / "readiness"
     assert list(readiness_dir.glob("*.postrun_acceptance_readiness.v1.json"))
+
+
+def test_cvrp_agentic_launcher_fails_on_postrun_readiness_failure(
+    tmp_path: Path,
+) -> None:
+    fake_python = tmp_path / "fake-python"
+    fake_python.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -u\n"
+        "if [[ \"${1:-}\" == \"-m\" ]]; then\n"
+        "  exit 0\n"
+        "fi\n"
+        "case \"${1:-}\" in\n"
+        "  */rebuild_postrun_acceptance.py)\n"
+        "    exit 0\n"
+        "    ;;\n"
+        "  */check_postrun_acceptance.py)\n"
+        "    if [[ \"$*\" == *\"--require-current-run-ready\"* ]]; then\n"
+        "      printf '{\"current_run_analysis_ready\":false}\\n'\n"
+        "      exit 64\n"
+        "    fi\n"
+        "    printf '# not ready\\n'\n"
+        "    exit 0\n"
+        "    ;;\n"
+        "  */write_postrun_wrapper_status.py)\n"
+        f"    exec {sys.executable} \"$@\"\n"
+        "    ;;\n"
+        "esac\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "unit-cvrp-postrun-not-ready",
+            "--experiments-root",
+            str(tmp_path / "runs"),
+            "--python",
+            str(fake_python),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    run_root_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
+    )
+    run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(
+        launch_env.read_text(encoding="utf-8").replace(
+            "GIT_RUNTIME_GUARD_PATHS="
+            "'scion/scion :(exclude)scion/scion/tests "
+            "scion/tools scion/problems/cvrp vrp'",
+            "GIT_RUNTIME_GUARD_PATHS=scion/design/scion-architecture-v3.md",
+        ),
+        encoding="utf-8",
+    )
+
+    run_result = subprocess.run(
+        ["bash", str(run_root / "run.sh")],
+        text=True,
+        capture_output=True,
+    )
+
+    assert run_result.returncode == 64
+    exit_text = (run_root / "exit.txt").read_text(encoding="utf-8")
+    assert "WRAPPER_EXIT_STATUS:0" in exit_text
+    assert "POSTRUN_ACCEPTANCE_FAILED:64" in exit_text
+    assert "WRAPPER_EXIT_STATUS_EFFECTIVE:64" in exit_text
+    status = json.loads((run_root / "run_status.json").read_text(encoding="utf-8"))
+    assert status["wrapper_exit_status"] == 64
+    assert status["campaign_wrapper_exit_status"] == 0
+    assert status["postrun_acceptance_failed"] is True
+    assert status["postrun_acceptance_status"] == "failed"
+    assert status["postrun_reports_exit_status"] == 0
+    assert status["postrun_readiness_exit_status"] == 64
 
 
 def test_cvrp_agentic_launcher_api_key_env_preserves_inherited_scion_key(

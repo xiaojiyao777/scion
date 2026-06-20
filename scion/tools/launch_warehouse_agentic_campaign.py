@@ -183,6 +183,13 @@ write_postrun_acceptance_reports() {
     echo "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS"
     echo "POSTRUN_REPORTS_FINISHED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   } >> "$RUN_ROOT/run.log"
+  if [[ "$POSTRUN_STATUS" -ne 0 ]]; then
+    return "$POSTRUN_STATUS"
+  fi
+  if [[ "$POSTRUN_READINESS_STATUS" -ne 0 ]]; then
+    return "$POSTRUN_READINESS_STATUS"
+  fi
+  return 0
 }
 '''
 
@@ -755,6 +762,7 @@ fi
   --agentic-proposal \\
   >> "$RUN_ROOT/run.log" 2>&1
 STATUS=$?
+CAMPAIGN_STATUS=$STATUS
 {{
   echo "WRAPPER_EXIT_STATUS:$STATUS"
   echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -770,7 +778,38 @@ if [[ -f "$CAMPAIGN_DIR/run_status.json" ]]; then
 else
   printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s}}\\n' "$STATUS" > "$RUN_ROOT/run_status.json"
 fi
-{POSTRUN_REPORT_SNIPPET}
+POSTRUN_ACCEPTANCE_STATUS=0
+write_postrun_acceptance_reports || POSTRUN_ACCEPTANCE_STATUS=$?
+if [[ "${{POSTRUN_REPORTS:-1}}" == "1" ]]; then
+  if [[ "$POSTRUN_ACCEPTANCE_STATUS" -ne 0 ]]; then
+    {{
+      echo "POSTRUN_ACCEPTANCE_FAILED:$POSTRUN_ACCEPTANCE_STATUS"
+      echo "POSTRUN_REPORTS_EFFECTIVE_EXIT_STATUS:$POSTRUN_STATUS"
+      echo "POSTRUN_READINESS_EFFECTIVE_EXIT_STATUS:$POSTRUN_READINESS_STATUS"
+    }} >> "$RUN_ROOT/exit.txt"
+    if [[ "$STATUS" -eq 0 ]]; then
+      STATUS="$POSTRUN_ACCEPTANCE_STATUS"
+      echo "WRAPPER_EXIT_STATUS_EFFECTIVE:$STATUS" >> "$RUN_ROOT/exit.txt"
+    fi
+  fi
+  POSTRUN_STATUS_WRITE_STATUS=0
+  "$PY" "$SCION_DIR/tools/write_postrun_wrapper_status.py" \
+    --output "$RUN_ROOT/run_status.json" \
+    --wrapper-exit-code "$STATUS" \
+    --campaign-exit-code "$CAMPAIGN_STATUS" \
+    --postrun-reports-exit-code "$POSTRUN_STATUS" \
+    --postrun-readiness-exit-code "$POSTRUN_READINESS_STATUS" \
+    --postrun-report-dir "$REPORT_DIR" \
+    --postrun-readiness-path "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json" \
+    >> "$RUN_ROOT/run.log" 2>&1 || POSTRUN_STATUS_WRITE_STATUS=$?
+  if [[ "$POSTRUN_STATUS_WRITE_STATUS" -ne 0 ]]; then
+    echo "POSTRUN_STATUS_WRITE_EXIT_STATUS:$POSTRUN_STATUS_WRITE_STATUS" >> "$RUN_ROOT/run.log"
+    if [[ "$STATUS" -eq 0 ]]; then
+      STATUS="$POSTRUN_STATUS_WRITE_STATUS"
+      echo "WRAPPER_EXIT_STATUS_EFFECTIVE:$STATUS" >> "$RUN_ROOT/exit.txt"
+    fi
+  fi
+fi
 exit "$STATUS"
 """
     run_sh = run_root / "run.sh"

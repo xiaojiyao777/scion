@@ -1940,8 +1940,8 @@ def test_launch_readiness_rejects_run_script_without_postrun_call_after_campaign
     run_sh = run_root / "run.sh"
     run_sh.write_text(
         run_sh.read_text(encoding="utf-8").replace(
-            'STATUS=$?\nwrite_postrun_acceptance_reports\nexit "$STATUS"',
-            'STATUS=$?\nexit "$STATUS"',
+            "write_postrun_acceptance_reports || POSTRUN_ACCEPTANCE_STATUS=$?\n",
+            "",
         ),
         encoding="utf-8",
     )
@@ -1956,6 +1956,32 @@ def test_launch_readiness_rejects_run_script_without_postrun_call_after_campaign
     assert postrun_check["detail"]["failures"] == [
         {"reason": "missing_postrun_report_call_after_campaign"}
     ]
+
+
+def test_launch_readiness_rejects_postrun_without_wrapper_status_writer(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            "tools/write_postrun_wrapper_status.py",
+            "tools/write_postrun_wrapper_status_disabled.py",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    postrun_check = report["checks"]["run_script_postrun_reports_after_campaign"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert postrun_check["required"] is True
+    assert postrun_check["status"] == "failed"
+    assert {"reason": "missing_postrun_wrapper_status_writer"} in postrun_check[
+        "detail"
+    ]["failures"]
 
 
 def test_launch_readiness_rejects_disabled_run_script_completion_preflight(
@@ -2912,6 +2938,7 @@ GIT_RUNTIME_GUARD_PATHS={json.dumps(runtime_guard_paths)}
 PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}
 export RUN_ROOT REPO_ROOT SCION_DIR PY PYTHONPATH SCION_MODEL SCION_BASE_URL GIT_COMMIT GIT_RUNTIME_GUARD_PATHS PREPARED_RUN_MANIFEST
 write_postrun_acceptance_reports() {{
+  POSTRUN_REBUILD_STATUS=0
   POSTRUN_READINESS_STATUS=0
   "$PY" "$SCION_DIR/tools/rebuild_postrun_acceptance.py" "$RUN_ROOT" \
     --report-stem fixture \
@@ -2923,6 +2950,13 @@ write_postrun_acceptance_reports() {{
     > "$RUN_ROOT/postrun_acceptance/readiness/fixture.postrun_acceptance_readiness.v1.json" \
     || POSTRUN_READINESS_STATUS=$?
   echo "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS" >> "$RUN_ROOT/run.log"
+  if [[ "$POSTRUN_REBUILD_STATUS" -ne 0 ]]; then
+    return "$POSTRUN_REBUILD_STATUS"
+  fi
+  if [[ "$POSTRUN_READINESS_STATUS" -ne 0 ]]; then
+    return "$POSTRUN_READINESS_STATUS"
+  fi
+  return 0
 }}
 if [[ ! -r "$RUN_ROOT/launch.env" ]]; then
   echo "LAUNCH_ENV_MISSING:$RUN_ROOT/launch.env"
@@ -2969,7 +3003,24 @@ if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
 fi
 {sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" --agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS" --agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS" --agentic-code-tool-max-calls "$AGENTIC_CODE_TOOL_MAX_CALLS" --agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS" --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" --agentic-proposal --disable-early-stop
 STATUS=$?
-write_postrun_acceptance_reports
+CAMPAIGN_STATUS=$STATUS
+POSTRUN_ACCEPTANCE_STATUS=0
+write_postrun_acceptance_reports || POSTRUN_ACCEPTANCE_STATUS=$?
+if [[ "$POSTRUN_ACCEPTANCE_STATUS" -ne 0 ]]; then
+  echo "POSTRUN_ACCEPTANCE_FAILED:$POSTRUN_ACCEPTANCE_STATUS" >> "$RUN_ROOT/exit.txt"
+  if [[ "$STATUS" -eq 0 ]]; then
+    STATUS="$POSTRUN_ACCEPTANCE_STATUS"
+    echo "WRAPPER_EXIT_STATUS_EFFECTIVE:$STATUS" >> "$RUN_ROOT/exit.txt"
+  fi
+fi
+"$PY" "$SCION_DIR/tools/write_postrun_wrapper_status.py" \
+  --output "$RUN_ROOT/run_status.json" \
+  --wrapper-exit-code "$STATUS" \
+  --campaign-exit-code "$CAMPAIGN_STATUS" \
+  --postrun-reports-exit-code "$POSTRUN_REBUILD_STATUS" \
+  --postrun-readiness-exit-code "$POSTRUN_READINESS_STATUS" \
+  --postrun-report-dir "$RUN_ROOT/postrun_acceptance" \
+  --postrun-readiness-path "$RUN_ROOT/postrun_acceptance/readiness/fixture.postrun_acceptance_readiness.v1.json"
 exit "$STATUS"
 """,
         encoding="utf-8",
