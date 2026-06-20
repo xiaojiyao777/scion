@@ -74,7 +74,12 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 Results: compile clean and `53 passed`.
 
-## Current Prepared Roots
+## Prepared Roots From This Repair
+
+These roots captured the prepared state immediately after the disabled
+code-surface full-read repair. They are no longer the active launch roots; the
+current launch-authoritative roots live in
+`scion/docs/status/current-state.md`.
 
 Generated on WSL at launch-authoritative runtime commit `9a81e10b`; the local
 runtime-equivalent commit is `dcbc0d57`. Both roots are mirrored under

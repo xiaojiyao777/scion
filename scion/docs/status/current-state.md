@@ -44,15 +44,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `9a81e10b`
-after local runtime-equivalent commit `dcbc0d57`; local mirrors exist under
+Generated on WSL at launch-authoritative prepared runtime commit `480e6fd9`
+after local runtime-equivalent commit `8471fcdc`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names for
 inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-9a81e10b-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-preflight-6r-gpt55-20260620T130253Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-480e6fd9-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-preflight-6r-gpt55-20260620T132115Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-9a81e10b-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-preflight-4r-gpt55-20260620T130255Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-480e6fd9-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-preflight-4r-gpt55-20260620T132116Z-claw`
 
 Readiness snapshot:
 
@@ -60,7 +60,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `9a81e10b`; strict readiness
+- Runtime guard status: prepared runtime commit `480e6fd9`; strict readiness
   must keep reporting runtime guard OK. Doc/status-only commits after prepare
   are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -99,7 +99,11 @@ Prepared run shape:
   code-phase surface fallback also stays full under disabled observation caps;
   a prior 96k target-file read no longer downgrades the required solver surface
   read to `code_phase_required_compact`/800 characters unless a real positive
-  observation budget is active.
+  observation budget is active. Code-generation prompt projection now preserves
+  the 96k source window for `context.read_algorithm_file` and
+  `context.read_algorithm_symbol`; dedicated full-file and symbol-source prompt
+  sections prevent generic observation compaction or receipt-only projection
+  from hiding targeted solver source.
 - Runtime replay semantics: budget-exhausting summaries suppress stale
   fresh-runtime replay markers, materialization, and pressure reports. Runtime
   tie fresh replay remains available only for comparative runtime semantics.
@@ -160,7 +164,8 @@ Prepared run shape:
   headroom must remain aligned so `context.read_algorithm_file`,
   `context.read_algorithm_symbol`, and `context.read_surface` can carry the
   96k source-window used by current solver-design/code prompts without
-  `RESULT_TOO_LARGE` or shallow-preview misses.
+  `RESULT_TOO_LARGE`, shallow-preview misses, code-prompt projection shrinkage,
+  or symbol-read receipt-only visibility.
 - Postrun acceptance cannot silently pass when strict rebuild/readiness fails:
   launcher wrappers promote strict postrun acceptance failure to an effective
   wrapper failure and annotate top-level `run_status.json`.
@@ -250,7 +255,9 @@ Prepared run shape:
   `scion/design/v0.5-evidence-uplift-roadmap.md`.
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
-- Current launch/readiness evidence:
+- Current launch/readiness and code-prompt 96k source-projection evidence:
+  `scion/docs/experiments/v0.4/v04-code-prompt-solver-source-96k-projection-repair-20260620.md`.
+- Disabled mandatory code-surface full-read repair evidence:
   `scion/docs/experiments/v0.4/v04-disabled-code-surface-full-read-repair-20260620.md`.
 - Current disabled proposal/APS research-cap semantics:
   `scion/docs/experiments/v0.4/v04-disabled-proposal-research-caps-20260620.md`.
