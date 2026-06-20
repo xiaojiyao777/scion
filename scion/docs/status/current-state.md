@@ -41,13 +41,13 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at prepared runtime commit `55c1aaf9`; local mirrors exist under
+Generated on WSL at prepared runtime commit `d32b2101`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70guard-55c1aaf9-preflight-6r-gpt55-20260620T075129Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-d32b2101-preflight-6r-gpt55-20260620T081449Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70guard-55c1aaf9-preflight-4r-gpt55-20260620T075146Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-d32b2101-preflight-4r-gpt55-20260620T081449Z-claw`
 
 Readiness snapshot:
 
@@ -55,7 +55,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `55c1aaf9`; launch-critical
+- Runtime guard status: prepared runtime commit `d32b2101`; launch-critical
   runtime guard paths are clean. Later doc/status-only commits are acceptable
   only when readiness reports `runtime_guard_paths_unchanged_since_prepare`.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -119,9 +119,13 @@ Prepared run shape:
   aggregate failure counts, proposal-quality counts, run-status counts, entries,
   and top examples. Prompt context/source visibility summaries must match the
   current proposal trajectory manifests for trace counts, source visibility,
-  block-family totals, signal density, and per-report entries. CVRP bounded
-  two-opt ready summaries must match recomputed direct-evidence counters,
-  family lists, rejection counts, and top-row signal count from current
+  block-family totals, signal density, hypothesis-generation block-family
+  totals/signal density, and per-report entries. Formal hypothesis-generation
+  readiness cannot be proved by code-only, target-intent, or aggregate-only
+  prompt context; when current continuity signals exist, the hypothesis trace
+  itself must carry research or cross-branch lesson signal. CVRP bounded two-opt
+  ready summaries must match recomputed direct-evidence counters, family lists,
+  rejection counts, and top-row signal count from current
   measurement/continuity inputs. Measurement evidence must match current
   interpretation counts and `max_effect_to_mde_ratio`; CVRP bounded two-opt
   ready summaries must also match current mechanism-family mapped/unmapped row

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `55c1aaf9` and pass static launch readiness for the warehouse 6R champion-v2 follow-up and the CVRP 4R Phase 4 bounded two-opt follow-up. They include current evidence-payload, analysis-brief boundary checks, protocol-detail consistency, runtime-consistency, research-actionability, review-input current-run evidence/artifact consistency, failure-taxonomy current-input consistency, prompt/source visibility current-manifest consistency, quality-block reason-count consistency, warehouse continuity, CVRP intra-large-two-opt/direct-evidence-detail guards including `size70_two_opt_*` fallback rejection, measurement-detail consistency guards, and campaign launch command contract consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `d32b2101` and pass static launch readiness for the warehouse 6R champion-v2 follow-up and the CVRP 4R Phase 4 bounded two-opt follow-up. They include current evidence-payload, analysis-brief boundary checks, protocol-detail consistency, runtime-consistency, research-actionability, review-input current-run evidence/artifact consistency, failure-taxonomy current-input consistency, prompt/source visibility current-manifest consistency, hypothesis-generation prompt-context signal consistency, quality-block reason-count consistency, warehouse continuity, CVRP intra-large-two-opt/direct-evidence-detail guards including `size70_two_opt_*` fallback rejection, measurement-detail consistency guards, and campaign launch command contract consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -249,9 +249,9 @@ Current checkpoint:
   a bounded, deadline-aware mechanism with CMT2/CMT4 protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70guard-55c1aaf9-preflight-6r-gpt55-20260620T075129Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-d32b2101-preflight-6r-gpt55-20260620T081449Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70guard-55c1aaf9-preflight-4r-gpt55-20260620T075146Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-d32b2101-preflight-4r-gpt55-20260620T081449Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -332,7 +332,10 @@ Current checkpoint:
   - Current-run warehouse/CVRP research-context readiness requires a formal
     hypothesis-generation prompt trace. Code-only prompt manifests and
     target-intent prompts cannot prove that branch-depth, continuity, or
-    cross-branch research signals reached the next proposal prompt.
+    cross-branch research signals reached the next proposal prompt. When
+    current continuity signals exist, readiness now also requires the formal
+    hypothesis-generation trace itself, not only aggregate prompt manifests, to
+    carry research or cross-branch lesson signal.
   - Prepared prompt-context readiness now checks the deterministic
     `research_focus` projection path and required nested projected paths, so
     problem-owned launch guidance such as CVRP CMT2/CMT4 protected cases,

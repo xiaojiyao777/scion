@@ -24,7 +24,8 @@ pytest scion/scion/tests/test_postrun_analysis_brief.py scion/scion/tests/test_c
 pytest scion/scion/tests/test_launch_readiness.py scion/scion/tests/test_rebuild_prepared_handoff.py
 ```
 
-Result: `102 passed`; `96 passed`.
+Result after the hypothesis prompt-context evidence refresh:
+`103 passed`; `96 passed`.
 
 WSL:
 
@@ -37,16 +38,16 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
   scion/scion/tests/test_rebuild_prepared_handoff.py
 ```
 
-Result: `198 passed`.
+Result after the hypothesis prompt-context evidence refresh: `199 passed`.
 
 ## Prepared Roots
 
-Regenerated on WSL at runtime commit `55c1aaf9`.
+Regenerated on WSL at runtime commit `d32b2101`.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70guard-55c1aaf9-preflight-6r-gpt55-20260620T075129Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-d32b2101-preflight-6r-gpt55-20260620T081449Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70guard-55c1aaf9-preflight-4r-gpt55-20260620T075146Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-d32b2101-preflight-4r-gpt55-20260620T081449Z-claw`
 
 Strict launch readiness for both roots:
 
@@ -58,3 +59,10 @@ Strict launch readiness for both roots:
   `code=invalid_api_key`, auth pool `active=0`, `total=1`, `expired=1`
 
 No campaign was launched.
+
+The refreshed roots also include the postrun prompt-context guard that tracks
+hypothesis-generation block-family totals and signal density separately from
+aggregate prompt context. Current-run warehouse/CVRP research-context readiness
+cannot be proven by code-only, target-intent, or aggregate-only prompt traces
+when continuity signals require research or cross-branch lesson signal to reach
+the formal hypothesis prompt.
