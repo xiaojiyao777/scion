@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `3c7fbb5d`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `46c3d1d3`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -250,9 +250,9 @@ Current checkpoint:
   protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-3c7fbb5d-whdiag-6r-gpt55-20260620T172117Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-46c3d1d-postid-6r-gpt55-20260620T173536Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-3c7fbb5d-whdiag-4r-gpt55-20260620T172117Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-46c3d1d-postid-4r-gpt55-20260620T173536Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -341,16 +341,17 @@ Current checkpoint:
   - Current-run warehouse/CVRP failure-taxonomy summaries must be recomputable
     from the current research-efficiency reports, including aggregate failure
     counts, proposal-quality counts, run-status counts, entries, and top
-    examples; a shape-correct but stale taxonomy summary is not delegated-review
-    evidence.
+    examples; entry paths must match current artifact identity through a
+    local/WSL-safe path-tail signature. A shape-correct but stale taxonomy
+    summary is not delegated-review evidence.
   - Current-run warehouse/CVRP review-input summaries must be current-run when
     required by the interpretation or when present in the brief, so optional
     measurement/runtime/continuity summaries cannot carry stale report-only
     material or stale entry path identity into delegated review.
   - Current-run warehouse/CVRP research-context actionability must be a fresh
     projection of prompt visibility and research-continuity inputs; stale
-    prompt token, continuity, gap, or recommendation projections fail postrun
-    readiness before delegated review.
+    prompt token, continuity, gap, recommendation, or prompt-context entry-path
+    projections fail postrun readiness before delegated review.
   - Agentic proposal recovery can reuse a persisted
     `partial_hypothesis_only` / `hypothesis_awaiting_approval` artifact for the
     same branch and code-phase idempotency key, avoiding duplicate hypothesis
