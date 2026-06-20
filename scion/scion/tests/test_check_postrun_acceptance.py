@@ -2985,6 +2985,132 @@ def test_postrun_acceptance_rejects_cvrp_ready_summary_with_stale_direct_evidenc
     )
 
 
+def test_postrun_acceptance_rejects_cvrp_ready_summary_with_stale_measurement_family_counts(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "cvrp-run-stale-family-counts")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "cvrp"
+    evidence = _cvrp_problem_evidence()
+    evidence["measurement_effect"].update(
+        {
+            "rows_at_or_above_mde": 1,
+            "rows_with_ci_high_below_mde": 0,
+            "max_effect_to_mde_ratio": 1.2,
+            "interpretation_counts": {"above_mde": 1},
+            "mechanism_family_mapped_row_count": 99,
+            "mechanism_family_unmapped_row_count": 0,
+        }
+    )
+    evidence["large_twoopt_mechanism"] = {
+        "available": True,
+        "mechanism_family_available": True,
+        "direct_evidence_ready": True,
+        "direct_evidence": {
+            "ready": True,
+            "missing": [],
+            "top_rows_checked": 1,
+            "complete_direct_evidence_row_count": 1,
+            "positive_effect_row_count": 1,
+            "activation_observed_count": 1,
+            "objective_effect_observed_count": 1,
+            "phase_telemetry_observed_count": 1,
+        },
+        "families": ["bounded_large_twoopt"],
+        "protocol_families": ["bounded_large_twoopt"],
+        "continuity_families": [],
+        "rejected_protocol_families": [],
+        "rejected_continuity_families": [],
+        "rejection_reason_counts": {},
+        "protocol_row_count": 1,
+        "top_row_signal_count": 1,
+    }
+    brief["cvrp_large_twoopt_summary"] = {
+        "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": evidence,
+        "evidence_gaps": [],
+        "interpretation": "bounded_twoopt_review_ready",
+        "problem_family": "cvrp",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    measurement = brief["measurement_effect_summary"]
+    assert isinstance(measurement, dict)
+    aggregate = measurement["aggregate"]
+    assert isinstance(aggregate, dict)
+    aggregate.update(
+        {
+            "interpretation_counts": {"above_mde": 1},
+            "rows_at_or_above_mde": 1,
+            "rows_with_ci_high_below_mde": 0,
+            "max_effect_to_mde_ratio": 1.2,
+            "mechanism_family_mapped_row_count": 1,
+            "mechanism_family_unmapped_row_count": 0,
+            "mechanism_family_effects": {
+                "bounded_large_twoopt": {
+                    "protocol_row_count": 1,
+                    "rows_at_or_above_mde": 1,
+                    "max_effect_to_mde_ratio": 1.2,
+                }
+            },
+        }
+    )
+    measurement["entries"] = [
+        {
+            "protocol_effects_vs_mde": {
+                "top_rows_by_effect_to_mde": [
+                    {
+                        "mechanism_family": "bounded_large_twoopt",
+                        "positive_effect_at_or_above_mde": True,
+                        "mechanism_evidence": {
+                            "primary_mechanism": "bounded_large_twoopt",
+                            "primary_activation_status": "observed",
+                            "primary_effect_status": "positive",
+                            "activation_evidence_status": "activation_observed",
+                            "objective_effect_status": "mixed_objective_effect",
+                        },
+                        "candidate_phase_telemetry_summary": {
+                            "selected_surface": "solver_design",
+                            "runtime_observed_pairs": 8,
+                            "buckets": {"two_opt": {"weighted_sum_ms": 120.0}},
+                        },
+                    }
+                ]
+            }
+        }
+    ]
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    consistency = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert consistency["status"] == "failed"
+    failures = consistency["detail"]["failures"]
+    assert "problem_summary_measurement_mechanism_family_mapped_row_count_mismatch" in (
+        failures
+    )
+    assert "problem_summary_large_twoopt_direct_evidence_mismatch" not in failures
+    assert (
+        consistency["detail"]["summary_measurement_mechanism_family_mapped_row_count"]
+        == 99
+    )
+    assert (
+        consistency["detail"]["input_measurement_mechanism_family_mapped_row_count"]
+        == 1
+    )
+
+
 def test_postrun_acceptance_rejects_cvrp_ready_summary_with_unrelated_mechanism_evidence(
     tmp_path: Path,
 ) -> None:
@@ -3719,6 +3845,69 @@ def test_postrun_acceptance_rejects_warehouse_positive_ready_without_positive_me
         in failures
     )
     assert "review_input_warehouse_positive_effect_missing" in failures
+
+
+def test_postrun_acceptance_rejects_warehouse_ready_summary_with_stale_measurement_ratio(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-stale-ratio")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    _add_prompt_source_visibility_summary(brief)
+    evidence = _warehouse_problem_evidence()
+    evidence["measurement_effect"].update(
+        {
+            "rows_at_or_above_mde": 1,
+            "rows_with_ci_high_below_mde": 0,
+            "max_effect_to_mde_ratio": 0.25,
+            "interpretation_counts": {"above_mde": 1},
+            "effect_signal": "positive_effect_at_or_above_mde",
+            "positive_effect_at_or_above_mde": True,
+            "plateau_consistent": False,
+            "all_ci_high_below_mde": False,
+        }
+    )
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": evidence,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_positive_effect_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    brief["measurement_effect_summary"]["aggregate"].update(
+        {
+            "interpretation_counts": {"above_mde": 1},
+            "rows_at_or_above_mde": 1,
+            "rows_with_ci_high_below_mde": 0,
+            "max_effect_to_mde_ratio": 1.2,
+        }
+    )
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    consistency = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert consistency["status"] == "failed"
+    failures = consistency["detail"]["failures"]
+    assert "problem_summary_measurement_max_effect_to_mde_ratio_mismatch" in failures
+    assert "review_input_warehouse_positive_effect_missing" not in failures
+    assert consistency["detail"]["summary_measurement_max_effect_to_mde_ratio"] == 0.25
+    assert consistency["detail"]["input_measurement_max_effect_to_mde_ratio"] == 1.2
 
 
 def test_postrun_acceptance_rejects_warehouse_plateau_ready_with_inconclusive_measurement_effect(

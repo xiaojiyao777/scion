@@ -1166,6 +1166,15 @@ def _problem_summary_input_consistency(
             measurement_aggregate.get(field)
         ):
             failures.append(f"problem_summary_measurement_{field}_mismatch")
+    if _int_mapping(measurement_evidence.get("interpretation_counts")) != _int_mapping(
+        measurement_aggregate.get("interpretation_counts")
+    ):
+        failures.append("problem_summary_measurement_interpretation_counts_mismatch")
+    if not _numeric_or_value_equal(
+        measurement_evidence.get("max_effect_to_mde_ratio"),
+        measurement_aggregate.get("max_effect_to_mde_ratio"),
+    ):
+        failures.append("problem_summary_measurement_max_effect_to_mde_ratio_mismatch")
     runtime_ready = runtime_summary.get("review_ready") is True
     runtime_evidence_ready = (
         runtime_evidence.get("review_ready")
@@ -1322,6 +1331,16 @@ def _problem_summary_input_consistency(
             ):
                 failures.append("problem_summary_large_twoopt_protocol_rows_mismatch")
             if interpretation == "bounded_twoopt_review_ready":
+                for field in (
+                    "mechanism_family_mapped_row_count",
+                    "mechanism_family_unmapped_row_count",
+                ):
+                    if _int_or_zero(measurement_evidence.get(field)) != _int_or_zero(
+                        measurement_aggregate.get(field)
+                    ):
+                        failures.append(
+                            f"problem_summary_measurement_{field}_mismatch"
+                        )
                 if _large_twoopt_direct_evidence_signature(
                     large_twoopt_evidence.get("direct_evidence")
                 ) != _large_twoopt_direct_evidence_signature(
@@ -1399,6 +1418,30 @@ def _problem_summary_input_consistency(
             ),
             "input_measurement_rows_with_ci_high_below_mde": measurement_aggregate.get(
                 "rows_with_ci_high_below_mde"
+            ),
+            "summary_measurement_interpretation_counts": _int_mapping(
+                measurement_evidence.get("interpretation_counts")
+            ),
+            "input_measurement_interpretation_counts": _int_mapping(
+                measurement_aggregate.get("interpretation_counts")
+            ),
+            "summary_measurement_max_effect_to_mde_ratio": measurement_evidence.get(
+                "max_effect_to_mde_ratio"
+            ),
+            "input_measurement_max_effect_to_mde_ratio": measurement_aggregate.get(
+                "max_effect_to_mde_ratio"
+            ),
+            "summary_measurement_mechanism_family_mapped_row_count": _int_or_zero(
+                measurement_evidence.get("mechanism_family_mapped_row_count")
+            ),
+            "input_measurement_mechanism_family_mapped_row_count": _int_or_zero(
+                measurement_aggregate.get("mechanism_family_mapped_row_count")
+            ),
+            "summary_measurement_mechanism_family_unmapped_row_count": _int_or_zero(
+                measurement_evidence.get("mechanism_family_unmapped_row_count")
+            ),
+            "input_measurement_mechanism_family_unmapped_row_count": _int_or_zero(
+                measurement_aggregate.get("mechanism_family_unmapped_row_count")
             ),
             "summary_measurement_effect_signal": measurement_evidence.get(
                 "effect_signal"
