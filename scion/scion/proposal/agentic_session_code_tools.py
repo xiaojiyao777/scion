@@ -39,14 +39,23 @@ class AgenticSessionCodeToolsMixin:
 
             observations: list[ProposalObservation] = []
             allowed_tools = self._code_phase_allowed_tools(context)
-            max_calls = max(0, int(self._tool_loop_config.max_code_tool_calls))
+            configured_max_calls = max(
+                0,
+                int(self._tool_loop_config.max_code_tool_calls),
+            )
+            max_calls = _code_tool_call_limit_for_config(self._tool_loop_config)
+            code_tool_call_limit_enabled = _code_tool_call_limit_enabled_for_config(
+                self._tool_loop_config
+            )
             state.note(
                 AgenticProposalPhase.INSPECT_INTERFACE,
                 "Starting code-phase proposal tool loop for approved hypothesis.",
                 metadata={
                     "selected_surface": hypothesis.change_locus,
                     "target_file": hypothesis.target_file,
+                    "configured_max_code_tool_calls": configured_max_calls,
                     "max_code_tool_calls": max_calls,
+                    "max_code_tool_calls_enabled": code_tool_call_limit_enabled,
                     "allowed_tools": allowed_tools,
                 },
             )
@@ -218,6 +227,7 @@ class AgenticSessionCodeToolsMixin:
                     "remaining_steps": self._remaining_tool_steps(state),
                     "remaining_tool_calls": self._remaining_tool_calls(state),
                     "remaining_code_tool_calls": max(0, max_calls - len(observations)),
+                    "max_code_tool_calls_enabled": code_tool_call_limit_enabled,
                     "reserved_for_self_check": {
                         "tool_calls": 4,
                         "steps": 4,

@@ -25,6 +25,16 @@ def _tool_call_limit_enabled(config: AgenticToolLoopConfig) -> bool:
     return int(config.max_tool_calls) > 0
 
 
+def _code_tool_call_limit_enabled(config: AgenticToolLoopConfig) -> bool:
+    return int(config.max_code_tool_calls) > 0
+
+
+def _code_tool_call_limit(config: AgenticToolLoopConfig) -> int:
+    if not _code_tool_call_limit_enabled(config):
+        return _DISABLED_LIMIT_REMAINING
+    return max(0, int(config.max_code_tool_calls))
+
+
 def _observation_limit_enabled(config: AgenticToolLoopConfig) -> bool:
     return int(config.max_observation_chars) > 0
 

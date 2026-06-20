@@ -202,6 +202,104 @@ def test_code_phase_solver_module_read_uses_target_preview_budget(
     )
 
 
+def test_zero_code_tool_call_budget_does_not_disable_code_phase_planner(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/config.py"
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file=target_file,
+    )
+    module_code = (
+        Path(context.champion.code_snapshot_path) / target_file
+    ).read_text(encoding="utf-8") + "\n" + "\n".join(
+        f"# no cap filler {idx}" for idx in range(12)
+    )
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file=target_file,
+            target_objectives=["total_distance"],
+        )
+    )
+    creative = PlanningCreative(
+        [
+            {
+                "tool_name": "context.read_surface",
+                "code_phase": True,
+                "args": {
+                    "surface": "solver_design",
+                    "target_file": target_file,
+                    "detail": "full",
+                },
+            },
+            {"stop": True},
+        ],
+        hypothesis=hypothesis,
+        patch=PatchProposal(
+            file_path=target_file,
+            action="modify",
+            code_content=module_code,
+        ),
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=AgenticToolLoopConfig(
+            max_steps=0,
+            max_tool_calls=0,
+            max_code_tool_calls=0,
+            max_observation_chars=0,
+            max_wall_time_sec=3600,
+        ),
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-code-cap-disabled",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-cvrp",
+    )
+
+    observations = session._run_code_context_tool_loop(
+        context,
+        state,
+        hypothesis,
+        prior_observations=[],
+        code_context={"kind": "code"},
+    )
+    read_surface_events = [
+        event.metadata
+        for event in state.transcript
+        if event.metadata.get("tool_name") == "context.read_surface"
+        and event.metadata.get("step_id")
+    ]
+    start_events = [
+        event.metadata
+        for event in state.transcript
+        if event.metadata.get("max_code_tool_calls_enabled") is False
+    ]
+
+    assert any(
+        observation.tool_name == "context.read_surface"
+        for observation in observations
+    )
+    assert any(
+        event["selection_source"] == "code_phase_planner"
+        for event in read_surface_events
+    )
+    assert start_events
+    assert any(
+        context.get("max_code_tool_calls_enabled") is False
+        and context.get("remaining_code_tool_calls", 0) > 0
+        for context in creative.planner_contexts
+    )
+    assert not any(
+        event.metadata.get("skip_reason") == "code_tool_loop_limit_reached"
+        for event in state.transcript
+    )
+
+
 def test_planner_nonexistent_surface_falls_back_and_generates_patch(
     tmp_path: Path,
 ) -> None:

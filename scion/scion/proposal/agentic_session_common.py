@@ -128,6 +128,8 @@ from scion.proposal.agentic_preview import (
     _self_check_required,
 )
 from scion.proposal.agentic_session_budget import (
+    _code_tool_call_limit as _code_tool_call_limit_for_config,
+    _code_tool_call_limit_enabled as _code_tool_call_limit_enabled_for_config,
     _code_phase_budget_reserved as _code_phase_budget_reserved_for_config,
     _diagnosis_budget_reserved as _diagnosis_budget_reserved_for_config,
     _diagnosis_feedback_budget_reserved as _diagnosis_feedback_budget_reserved_for_config,
@@ -321,6 +323,8 @@ __all__ = (
     "_champion_weight_revision",
     "_code_context_tool_summary",
     "_code_observation_prompt_payload",
+    "_code_tool_call_limit_enabled_for_config",
+    "_code_tool_call_limit_for_config",
     "_code_phase_budget_reserved_for_config",
     "_code_prompt_observations",
     "_code_timeout_retry_context",
