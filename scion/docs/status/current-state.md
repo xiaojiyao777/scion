@@ -34,7 +34,10 @@ conclusions instead of appending history. Detailed repair notes belong in
 Do not launch a prepared root until:
 
 ```bash
-scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json
+PY=/home/xjy-ubuntu/miniconda3/envs/scion/bin/python
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  "$PY" /home/xjy-ubuntu/research/or-autoresearch-agent/scion/tools/check_launch_readiness.py \
+  <prepared-root> --require-launch-ready --format json
 ```
 
 reports `launch_ready=true`.
@@ -240,7 +243,7 @@ Prepared run shape:
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-cvrp-size70-direct-evidence-guard-20260620.md`.
+  `scion/docs/experiments/v0.4/v04-disabled-self-check-preview-budget-repair-20260620.md`.
 - Current disabled proposal/APS research-cap semantics:
   `scion/docs/experiments/v0.4/v04-disabled-proposal-research-caps-20260620.md`.
 - Current source-read result/headroom alignment:
