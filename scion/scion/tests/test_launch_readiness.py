@@ -974,6 +974,113 @@ def test_launch_readiness_rejects_dirty_runtime_guard_worktree(
     assert detail["dirty_entries"] == [" M scion/tools/runtime.py"]
 
 
+def test_launch_readiness_rejects_committed_runtime_guard_drift(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    guarded = repo / "scion" / "tools" / "runtime.py"
+    guarded.parent.mkdir(parents=True)
+    guarded.write_text("value = 1\n", encoding="utf-8")
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=repo, check=True)
+    prepared_commit = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+    guarded.write_text("value = 2\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "runtime change"], cwd=repo, check=True)
+
+    original_repo_dir = readiness_tool.REPO_DIR
+    readiness_tool.REPO_DIR = repo
+    try:
+        status, detail = readiness_tool._git_runtime_guard_commit_consistent(
+            {
+                "git": {
+                    "commit": prepared_commit,
+                    "runtime_guard_paths": "scion/tools",
+                }
+            }
+        )
+    finally:
+        readiness_tool.REPO_DIR = original_repo_dir
+
+    assert status == "failed"
+    assert detail["reason"] == "runtime_guard_paths_changed_since_prepare"
+    assert detail["prepared_commit"] == prepared_commit
+    assert detail["actual_commit"] != prepared_commit
+    assert detail["git_diff_exit_code"] == 1
+
+
+def test_launch_readiness_allows_committed_docs_only_drift(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    guarded = repo / "scion" / "tools" / "runtime.py"
+    docs = repo / "scion" / "docs" / "note.md"
+    guarded.parent.mkdir(parents=True)
+    docs.parent.mkdir(parents=True)
+    guarded.write_text("value = 1\n", encoding="utf-8")
+    docs.write_text("before\n", encoding="utf-8")
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=repo, check=True)
+    prepared_commit = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+    docs.write_text("after\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "docs change"], cwd=repo, check=True)
+
+    original_repo_dir = readiness_tool.REPO_DIR
+    readiness_tool.REPO_DIR = repo
+    try:
+        status, detail = readiness_tool._git_runtime_guard_commit_consistent(
+            {
+                "git": {
+                    "commit": prepared_commit,
+                    "runtime_guard_paths": "scion/tools",
+                }
+            }
+        )
+    finally:
+        readiness_tool.REPO_DIR = original_repo_dir
+
+    assert status == "ok"
+    assert detail["reason"] == "runtime_guard_paths_unchanged_since_prepare"
+    assert detail["prepared_commit"] == prepared_commit
+    assert detail["actual_commit"] != prepared_commit
+    assert detail["git_diff_exit_code"] == 0
+
+
 def test_launch_readiness_rejects_missing_matching_prepared_problem_summary(
     tmp_path: Path,
 ) -> None:

@@ -296,6 +296,10 @@ def build_readiness(
         *_git_runtime_worktree_clean(prepared_contract),
     )
     add_check(
+        "git_runtime_guard_commit_consistent",
+        *_git_runtime_guard_commit_consistent(prepared_contract),
+    )
+    add_check(
         "runtime_guard_paths_cover_launch_tools",
         *_runtime_guard_paths_cover_launch_tools(prepared_contract),
     )
@@ -653,6 +657,70 @@ def _git_runtime_worktree_clean(prepared_contract: Any) -> tuple[str, Any]:
         detail["reason"] = "runtime_guard_worktree_dirty"
         return "failed", detail
     return "ok", detail
+
+
+def _git_runtime_guard_commit_consistent(prepared_contract: Any) -> tuple[str, Any]:
+    if not isinstance(prepared_contract, dict):
+        return "failed", {"reason": "missing_prepared_contract"}
+    git = prepared_contract.get("git")
+    git_dict = git if isinstance(git, dict) else {}
+    prepared_commit = str(git_dict.get("commit") or "").strip()
+    raw_paths = str(git_dict.get("runtime_guard_paths") or "").strip()
+    pathspecs = _runtime_guard_pathspecs(raw_paths)
+    detail: dict[str, Any] = {
+        "repo_dir": str(REPO_DIR),
+        "prepared_commit": prepared_commit,
+        "runtime_guard_paths": raw_paths,
+        "pathspecs": pathspecs,
+    }
+    if not prepared_commit:
+        detail["reason"] = "missing_prepared_git_commit"
+        return "failed", detail
+    if not pathspecs:
+        detail["reason"] = "missing_runtime_guard_paths"
+        return "failed", detail
+    head_result = subprocess.run(
+        ["git", "-C", str(REPO_DIR), "rev-parse", "--short", "HEAD"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    detail["git_rev_parse_exit_code"] = head_result.returncode
+    if head_result.returncode != 0:
+        detail["reason"] = "git_rev_parse_failed"
+        detail["stderr"] = head_result.stderr[-2000:]
+        return "failed", detail
+    actual_commit = head_result.stdout.strip()
+    detail["actual_commit"] = actual_commit
+    if actual_commit == prepared_commit:
+        detail["reason"] = "runtime_guard_commit_matches"
+        return "ok", detail
+    diff_result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(REPO_DIR),
+            "diff",
+            "--quiet",
+            prepared_commit,
+            "HEAD",
+            "--",
+            *pathspecs,
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    detail["git_diff_exit_code"] = diff_result.returncode
+    if diff_result.returncode == 0:
+        detail["reason"] = "runtime_guard_paths_unchanged_since_prepare"
+        return "ok", detail
+    if diff_result.returncode == 1:
+        detail["reason"] = "runtime_guard_paths_changed_since_prepare"
+        return "failed", detail
+    detail["reason"] = "git_diff_failed"
+    detail["stderr"] = diff_result.stderr[-2000:]
+    return "failed", detail
 
 
 def _runtime_guard_paths_cover_problem_runtime(
