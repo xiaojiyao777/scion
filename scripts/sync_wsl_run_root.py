@@ -19,6 +19,9 @@ DEFAULT_WSL_USER = "xjy-ubuntu"
 DEFAULT_WSL_HOST = "127.0.0.1"
 DEFAULT_WSL_PORT = 2222
 DEFAULT_SSH_KEY = Path("/home/clawd/.ssh/id_ed25519_codex_wsl")
+SSH_CONNECT_TIMEOUT_SEC = 10
+SSH_SERVER_ALIVE_INTERVAL_SEC = 5
+SSH_SERVER_ALIVE_COUNT_MAX = 3
 DEFAULT_LOCAL_EXPERIMENTS_ROOT = Path(
     os.environ.get(
         "SCION_LOCAL_EXPERIMENTS_ROOT",
@@ -27,6 +30,21 @@ DEFAULT_LOCAL_EXPERIMENTS_ROOT = Path(
 )
 POSTRUN_UNREADY_EXIT = 64
 SOURCE_CHECK_FAILED_EXIT = 65
+
+
+def _ssh_options() -> list[str]:
+    return [
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        f"ConnectTimeout={SSH_CONNECT_TIMEOUT_SEC}",
+        "-o",
+        f"ServerAliveInterval={SSH_SERVER_ALIVE_INTERVAL_SEC}",
+        "-o",
+        f"ServerAliveCountMax={SSH_SERVER_ALIVE_COUNT_MAX}",
+        "-o",
+        "StrictHostKeyChecking=no",
+    ]
 
 
 def build_source_check_command(
@@ -55,10 +73,7 @@ def build_source_check_command(
         str(ssh_key),
         "-p",
         str(int(wsl_port)),
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "StrictHostKeyChecking=no",
+        *_ssh_options(),
         f"{wsl_user}@{wsl_host}",
         remote_script,
     ]
@@ -82,7 +97,7 @@ def build_rsync_command(
             "-e",
             (
                 f"ssh -i {ssh_key} -p {int(wsl_port)} "
-                "-o BatchMode=yes -o StrictHostKeyChecking=no"
+                + " ".join(shlex.quote(option) for option in _ssh_options())
             ),
             f"{wsl_user}@{wsl_host}:{_remote_dir(wsl_run_root)}",
             f"{local_run_root}/",

@@ -34,9 +34,17 @@ def test_sync_wsl_run_root_dry_run_builds_safe_commands(tmp_path: Path) -> None:
     assert report["local_run_root"] == str(tmp_path / "run-a")
     assert report["source_check_command"][0] == "ssh"
     assert "run-a" in report["source_check_command"][-1]
+    source_command = report["source_check_command"]
+    assert "ConnectTimeout=10" in source_command
+    assert "ServerAliveInterval=5" in source_command
+    assert "ServerAliveCountMax=3" in source_command
     assert report["source_check_exit_status"] is None
     assert report["rsync_command"][:2] == ["rsync", "-a"]
     assert "--delete" in report["rsync_command"]
+    ssh_transport = report["rsync_command"][report["rsync_command"].index("-e") + 1]
+    assert "ConnectTimeout=10" in ssh_transport
+    assert "ServerAliveInterval=5" in ssh_transport
+    assert "ServerAliveCountMax=3" in ssh_transport
     assert report["rsync_command"][-2] == (
         "xjy-ubuntu@127.0.0.1:"
         "/home/xjy-ubuntu/research/scion-experiments/run-a/"
