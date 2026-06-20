@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `576209e8` after launch readiness began checking committed runtime-guard drift before launch. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `45cbec3a` after launch readiness began checking committed runtime-guard drift and wrapper/manifest runtime-guard contract consistency before launch. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -395,9 +395,9 @@ Current checkpoint:
   readiness command.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runtimeguard-576209e8-preflight-6r-gpt55-20260620T000946Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runguardcontract-45cbec3a-preflight-6r-gpt55-20260620T002429Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-runtimeguard-576209e8-preflight-4r-gpt55-20260620T000948Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-runguardcontract-45cbec3a-preflight-4r-gpt55-20260620T002429Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -415,6 +415,7 @@ Current checkpoint:
   `PYTHONPATH`,
   `run_script_postrun_reports_after_campaign=ok`, `git_runtime_consistent=ok`,
   `git_runtime_guard_commit_consistent=ok`,
+  `run_script_runtime_guard_contract_consistency=ok`,
   `run_script_data_root_failure_reports=ok`,
   `run_script_api_key_env_failure_reports=ok`,
   `run_script_model_route_enforced=ok`,
@@ -443,8 +444,9 @@ Current checkpoint:
   (`64`/`64`) plus APS tool-loop headroom: session timeout `3600`, max steps
   `240`, max total tool calls `200`, max code-phase tool calls `200`, and max
   observation chars `2000000`. Both current roots record WSL runtime commit
-  `576209e8`, whose runtime guard paths match after launch readiness began
-  checking committed runtime-guard drift before launch.
+  `45cbec3a`, whose runtime guard paths and effective launch wrapper contract
+  match after launch readiness began checking committed runtime-guard drift and
+  wrapper/manifest runtime-guard consistency before launch.
   Solver-design
   target file and code-phase surface reads now use `96000` char source
   headroom, while bounded algorithm slices remain at `24000`. Current

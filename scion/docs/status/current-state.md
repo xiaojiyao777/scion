@@ -36,13 +36,14 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 ## Prepared Roots
 
 The active prepared roots were generated on WSL after launch readiness began
-checking committed runtime-guard drift before launch. WSL static readiness
-passes; launch readiness fails only at completion preflight auth.
+checking both committed runtime-guard drift and wrapper/manifest runtime-guard
+contract consistency before launch. WSL static readiness passes; launch
+readiness fails only at completion preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runtimeguard-576209e8-preflight-6r-gpt55-20260620T000946Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runguardcontract-45cbec3a-preflight-6r-gpt55-20260620T002429Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-runtimeguard-576209e8-preflight-4r-gpt55-20260620T000948Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-runguardcontract-45cbec3a-preflight-4r-gpt55-20260620T002429Z-claw`
 
 Prepared manifests record:
 
@@ -50,7 +51,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `576209e8`; CVRP `576209e8`.
+- Runtime commits: warehouse `45cbec3a`; CVRP `45cbec3a`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -72,6 +73,9 @@ Prepared manifests record:
 - Launch readiness recomputes committed drift for the prepared
   `runtime_guard_paths`: test/docs-only commit drift is allowed, but committed
   changes to runtime/control-plane/problem paths fail readiness before launch.
+- Launch readiness also verifies the effective wrapper runtime guard contract:
+  manifest `git.commit` and `runtime_guard_paths` must match `launch.env` and
+  any executable pre-guard `run.sh` override before static readiness can pass.
 - CVRP and warehouse prepared measurement handoffs are derived from
   `problem-v1.yaml` declarations and the declared A/A `calibration_ref`; stale
   or undeclared MDE/practical-delta values fail readiness.
@@ -174,6 +178,7 @@ Prepared manifests record:
   `scion/docs/experiments/v0.4/v04-launch-readiness-failed-check-summary-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-readiness-failed-check-summary-20260619.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-runtime-guard-commit-drift-20260620.md`,
+  `scion/docs/experiments/v0.4/v04-launch-readiness-runtime-guard-contract-consistency-20260620.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-mechanism-bound-direct-evidence-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-positive-effect-plateau-readiness-20260619.md`,
