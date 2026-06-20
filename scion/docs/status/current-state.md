@@ -41,13 +41,13 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at prepared runtime commit `f43f360b`; local mirrors exist under
+Generated on WSL at prepared runtime commit `80164e50`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-promptvis-f43f360b-preflight-6r-gpt55-20260620T065638Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-reviewinputs-80164e50-preflight-6r-gpt55-20260620T071223Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-promptvis-f43f360b-preflight-4r-gpt55-20260620T065638Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-reviewinputs-80164e50-preflight-4r-gpt55-20260620T071223Z-claw`
 
 Readiness snapshot:
 
@@ -55,7 +55,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared commit `f43f360b`, actual commit `f43f360b`;
+- Runtime guard status: prepared commit `80164e50`, actual commit `80164e50`;
   launch-critical runtime guard paths are clean and commit-consistent.
 
 Prepared run shape:
@@ -99,8 +99,12 @@ Prepared run shape:
   measurement/runtime/continuity summaries cannot make a delegated review look
   analysis-ready. Protocol-evaluated conclusions must also match current
   protocol-accounting detail for formal-screened candidates, metric rows,
-  artifact rows, and stage rows. Quality-blocked no-protocol conclusions must
-  also match current failure-taxonomy quality-block counts,
+  artifact rows, and stage rows. Review-input summaries for
+  protocol/measurement/runtime/continuity must also match current
+  research-efficiency artifacts for aggregate and entry detail, so a stale
+  optional or required review-input summary cannot be paired with a current
+  problem conclusion. Quality-blocked no-protocol conclusions must also match
+  current failure-taxonomy quality-block counts,
   reports-with-quality-blocks, and reason-count distribution. Failure-taxonomy
   summaries must also match the current research-efficiency reports for
   aggregate failure counts, proposal-quality counts, run-status counts, entries,
