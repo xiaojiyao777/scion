@@ -127,6 +127,60 @@ def test_postrun_acceptance_rejects_top_level_postrun_acceptance_failure(
     ]
 
 
+def test_postrun_acceptance_rejects_postrun_status_writer_failure_marker(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "run-root")
+    (run_root / "run.log").write_text(
+        "POSTRUN_STATUS_WRITE_EXIT_STATUS:1\n",
+        encoding="utf-8",
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+
+    readiness = check_tool.build_readiness(run_root)
+    marker_check = readiness["checks"]["launcher_wrapper_marker_status_ok"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert "launcher_wrapper_marker_status_ok" in readiness["failed_required_checks"]
+    assert marker_check["status"] == "failed"
+    assert "postrun_status_write_exit_status_marker_present" in marker_check[
+        "detail"
+    ]["failures"]
+
+
+def test_postrun_acceptance_rejects_effective_wrapper_exit_marker(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "run-root")
+    (run_root / "exit.txt").write_text(
+        "WRAPPER_EXIT_STATUS:0\nWRAPPER_EXIT_STATUS_EFFECTIVE:64\n",
+        encoding="utf-8",
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+
+    readiness = check_tool.build_readiness(run_root)
+    marker_check = readiness["checks"]["launcher_wrapper_marker_status_ok"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert "launcher_wrapper_marker_status_ok" in readiness["failed_required_checks"]
+    assert marker_check["status"] == "failed"
+    assert "wrapper_exit_status_effective_marker_present" in marker_check[
+        "detail"
+    ]["failures"]
+
+
 def test_postrun_acceptance_infers_legacy_warehouse_run_family(
     tmp_path: Path,
 ) -> None:

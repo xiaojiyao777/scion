@@ -288,6 +288,12 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         wrapper_status,
         wrapper_detail,
     )
+    marker_status, marker_detail = _launcher_wrapper_marker_status_ok(inventory)
+    add_check(
+        "launcher_wrapper_marker_status_ok",
+        marker_status,
+        marker_detail,
+    )
     phase4_status, phase4_detail = _phase4_evidence_coverage_actionability(
         analysis_brief,
         inventory,
@@ -814,6 +820,29 @@ def _launcher_wrapper_status_ok(
         {
             "failures": failures,
             "status_fields": status_fields,
+        },
+    )
+
+
+def _launcher_wrapper_marker_status_ok(
+    inventory: Mapping[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    launcher = _mapping_or_empty(inventory.get("launcher"))
+    run_log_markers = _mapping_or_empty(launcher.get("run_log_markers"))
+    exit_markers = _mapping_or_empty(launcher.get("exit_markers"))
+    failures: list[str] = []
+
+    if _int_or_zero(run_log_markers.get("POSTRUN_STATUS_WRITE_EXIT_STATUS")) > 0:
+        failures.append("postrun_status_write_exit_status_marker_present")
+    if _int_or_zero(exit_markers.get("WRAPPER_EXIT_STATUS_EFFECTIVE")) > 0:
+        failures.append("wrapper_exit_status_effective_marker_present")
+
+    return (
+        "ok" if not failures else "failed",
+        {
+            "failures": failures,
+            "run_log_markers": run_log_markers,
+            "exit_markers": exit_markers,
         },
     )
 
