@@ -1817,12 +1817,18 @@ def _prompt_source_visibility_actionability(
     summary = _mapping_or_empty(brief.get("prompt_context_visibility_summary"))
     aggregate = _mapping_or_empty(summary.get("aggregate"))
     source_visibility = _mapping_or_empty(aggregate.get("source_visibility"))
+    hypothesis_density = _mapping_or_empty(
+        aggregate.get("hypothesis_generation_signal_density")
+    )
     expected = _prompt_context_visibility_summary(run_root, inventory)
     expected_aggregate = _mapping_or_empty(expected.get("aggregate"))
     expected_source_visibility = _mapping_or_empty(
         expected_aggregate.get("source_visibility")
     )
     expected_density = _mapping_or_empty(expected_aggregate.get("signal_density"))
+    expected_hypothesis_density = _mapping_or_empty(
+        expected_aggregate.get("hypothesis_generation_signal_density")
+    )
     failures: list[str] = []
     if summary.get("schema_version") != PROMPT_CONTEXT_VISIBILITY_SCHEMA:
         failures.append("prompt_context_visibility_schema_stale")
@@ -1949,6 +1955,18 @@ def _prompt_source_visibility_actionability(
             "block_family_trace_count": aggregate.get("block_family_trace_count"),
             "expected_block_family_trace_count": expected_aggregate.get(
                 "block_family_trace_count"
+            ),
+            "hypothesis_generation_trace_count": aggregate.get(
+                "hypothesis_generation_trace_count"
+            ),
+            "expected_hypothesis_generation_trace_count": expected_aggregate.get(
+                "hypothesis_generation_trace_count"
+            ),
+            "hypothesis_generation_block_family_trace_count": aggregate.get(
+                "hypothesis_generation_block_family_trace_count"
+            ),
+            "expected_hypothesis_generation_block_family_trace_count": (
+                expected_aggregate.get("hypothesis_generation_block_family_trace_count")
             ),
             "call_kind_counts": aggregate.get("call_kind_counts"),
             "expected_call_kind_counts": expected_aggregate.get("call_kind_counts"),
@@ -2081,6 +2099,18 @@ def _prompt_source_visibility_actionability(
             "expected_signal_density_interpretation": expected_density.get(
                 "interpretation"
             ),
+            "hypothesis_generation_signal_density_total_token_estimate": (
+                hypothesis_density.get("total_token_estimate")
+            ),
+            "expected_hypothesis_generation_signal_density_total_token_estimate": (
+                expected_hypothesis_density.get("total_token_estimate")
+            ),
+            "hypothesis_generation_signal_density_interpretation": (
+                hypothesis_density.get("interpretation")
+            ),
+            "expected_hypothesis_generation_signal_density_interpretation": (
+                expected_hypothesis_density.get("interpretation")
+            ),
         },
     )
 
@@ -2108,6 +2138,8 @@ def _prompt_context_visibility_consistency_failures(
         "trace_count",
         "visibility_digest_count",
         "block_family_trace_count",
+        "hypothesis_generation_trace_count",
+        "hypothesis_generation_block_family_trace_count",
         "omitted_section_trace_count",
         "truncated_section_trace_count",
     ):
@@ -2130,6 +2162,14 @@ def _prompt_context_visibility_consistency_failures(
         aggregate.get("block_family_totals")
     ) != _block_family_totals_signature(expected_aggregate.get("block_family_totals")):
         failures.append("prompt_context_visibility_block_family_totals_mismatch")
+    if _block_family_totals_signature(
+        aggregate.get("hypothesis_generation_block_family_totals")
+    ) != _block_family_totals_signature(
+        expected_aggregate.get("hypothesis_generation_block_family_totals")
+    ):
+        failures.append(
+            "prompt_context_visibility_hypothesis_generation_block_family_totals_mismatch"
+        )
 
     failures.extend(
         _prompt_source_visibility_consistency_failures(
@@ -2141,6 +2181,15 @@ def _prompt_context_visibility_consistency_failures(
         _prompt_signal_density_consistency_failures(
             _mapping_or_empty(aggregate.get("signal_density")),
             _mapping_or_empty(expected_aggregate.get("signal_density")),
+        )
+    )
+    failures.extend(
+        _prompt_signal_density_consistency_failures(
+            _mapping_or_empty(aggregate.get("hypothesis_generation_signal_density")),
+            _mapping_or_empty(
+                expected_aggregate.get("hypothesis_generation_signal_density")
+            ),
+            prefix="prompt_hypothesis_generation_signal_density",
         )
     )
     if _prompt_context_entries_signature(summary.get("entries")) != (
@@ -2200,6 +2249,8 @@ def _prompt_source_visibility_consistency_failures(
 def _prompt_signal_density_consistency_failures(
     density: Mapping[str, Any],
     expected: Mapping[str, Any],
+    *,
+    prefix: str = "prompt_signal_density",
 ) -> list[str]:
     failures: list[str] = []
     for field in (
@@ -2210,7 +2261,7 @@ def _prompt_signal_density_consistency_failures(
         "governance_tokens",
     ):
         if _int_or_zero(density.get(field)) != _int_or_zero(expected.get(field)):
-            failures.append(f"prompt_signal_density_{field}_mismatch")
+            failures.append(f"{prefix}_{field}_mismatch")
     for field in (
         "research_signal_share",
         "source_code_share",
@@ -2219,9 +2270,9 @@ def _prompt_signal_density_consistency_failures(
         "research_plus_source_to_governance_ratio",
     ):
         if not _numeric_or_value_equal(density.get(field), expected.get(field)):
-            failures.append(f"prompt_signal_density_{field}_mismatch")
+            failures.append(f"{prefix}_{field}_mismatch")
     if density.get("interpretation") != expected.get("interpretation"):
-        failures.append("prompt_signal_density_interpretation_mismatch")
+        failures.append(f"{prefix}_interpretation_mismatch")
     return failures
 
 
@@ -2249,6 +2300,12 @@ def _prompt_context_entries_signature(value: Any) -> list[dict[str, Any]]:
                 "block_family_trace_count": _int_or_zero(
                     entry.get("block_family_trace_count")
                 ),
+                "hypothesis_generation_trace_count": _int_or_zero(
+                    entry.get("hypothesis_generation_trace_count")
+                ),
+                "hypothesis_generation_block_family_trace_count": _int_or_zero(
+                    entry.get("hypothesis_generation_block_family_trace_count")
+                ),
                 "omitted_section_trace_count": _int_or_zero(
                     entry.get("omitted_section_trace_count")
                 ),
@@ -2258,6 +2315,11 @@ def _prompt_context_entries_signature(value: Any) -> list[dict[str, Any]]:
                 "call_kind_counts": _int_mapping(entry.get("call_kind_counts")),
                 "block_family_totals": _block_family_totals_signature(
                     entry.get("block_family_totals")
+                ),
+                "hypothesis_generation_block_family_totals": (
+                    _block_family_totals_signature(
+                        entry.get("hypothesis_generation_block_family_totals")
+                    )
                 ),
                 "omitted_section_counts": _int_mapping(
                     entry.get("omitted_section_counts")
@@ -2396,9 +2458,13 @@ def _research_context_actionability(
         brief.get("prompt_context_visibility_summary")
     )
     continuity_summary = _mapping_or_empty(brief.get("research_continuity_summary"))
+    continuity_aggregate = _mapping_or_empty(continuity_summary.get("aggregate"))
     prompt_aggregate = _mapping_or_empty(prompt_summary.get("aggregate"))
     call_kind_counts = _mapping_or_empty(prompt_aggregate.get("call_kind_counts"))
     density = _mapping_or_empty(prompt_aggregate.get("signal_density"))
+    hypothesis_density = _mapping_or_empty(
+        prompt_aggregate.get("hypothesis_generation_signal_density")
+    )
     actionability = _mapping_or_empty(
         brief.get("research_context_actionability_summary")
     )
@@ -2407,6 +2473,7 @@ def _research_context_actionability(
         prompt_context_visibility_summary=prompt_summary,
         research_continuity_summary=continuity_summary,
     )
+    expected_indicators = _mapping_or_empty(expected_actionability.get("indicators"))
     failures: list[str] = []
     if actionability.get("schema_version") != RESEARCH_CONTEXT_ACTIONABILITY_SCHEMA:
         failures.append("research_context_actionability_schema_stale")
@@ -2420,8 +2487,18 @@ def _research_context_actionability(
     if _int_or_zero(prompt_aggregate.get("block_family_trace_count")) <= 0:
         failures.append("prompt_block_family_trace_accounting_missing")
     hypothesis_trace_count = _hypothesis_generation_trace_count(call_kind_counts)
+    projected_hypothesis_trace_count = _int_or_zero(
+        prompt_aggregate.get("hypothesis_generation_trace_count")
+    )
+    hypothesis_block_family_trace_count = _int_or_zero(
+        prompt_aggregate.get("hypothesis_generation_block_family_trace_count")
+    )
     if hypothesis_trace_count <= 0:
         failures.append("prompt_hypothesis_research_context_trace_missing")
+    if projected_hypothesis_trace_count != hypothesis_trace_count:
+        failures.append("prompt_hypothesis_generation_trace_count_mismatch")
+    if hypothesis_trace_count > 0 and hypothesis_block_family_trace_count <= 0:
+        failures.append("prompt_hypothesis_generation_block_family_missing")
     if density.get("schema_version") != PROMPT_SIGNAL_DENSITY_SCHEMA:
         failures.append("prompt_signal_density_schema_stale")
     failures.extend(
@@ -2433,6 +2510,47 @@ def _research_context_actionability(
     )
     if _int_or_zero(density.get("total_token_estimate")) <= 0:
         failures.append("prompt_signal_density_token_accounting_missing")
+    if hypothesis_density.get("schema_version") != PROMPT_SIGNAL_DENSITY_SCHEMA:
+        failures.append("prompt_hypothesis_generation_signal_density_schema_stale")
+    failures.extend(
+        _boundary_marker_failures(
+            "prompt_hypothesis_generation_signal_density",
+            hypothesis_density,
+            require_quality=False,
+        )
+    )
+    if (
+        hypothesis_trace_count > 0
+        and _int_or_zero(hypothesis_density.get("total_token_estimate")) <= 0
+    ):
+        failures.append(
+            "prompt_hypothesis_generation_signal_density_token_accounting_missing"
+        )
+    continuity_signal_observed = (
+        continuity_summary.get("available") is True
+        and (
+            _int_or_zero(continuity_aggregate.get("max_branch_depth")) > 1
+            or _int_or_zero(expected_indicators.get("same_mechanism_observed")) > 0
+            or _int_or_zero(expected_indicators.get("branch_lessons_required")) > 0
+            or _int_or_zero(expected_indicators.get("weak_positive_observed")) > 0
+        )
+    )
+    hypothesis_research_tokens = _int_or_zero(
+        hypothesis_density.get("research_signal_tokens")
+    )
+    hypothesis_cross_branch_tokens = _int_or_zero(
+        hypothesis_density.get("cross_branch_tokens")
+    )
+    if (
+        continuity_signal_observed
+        and hypothesis_research_tokens + hypothesis_cross_branch_tokens <= 0
+    ):
+        failures.append("prompt_hypothesis_generation_research_signal_missing")
+    if (
+        _int_or_zero(expected_indicators.get("branch_lessons_required")) > 0
+        and hypothesis_cross_branch_tokens <= 0
+    ):
+        failures.append("prompt_hypothesis_generation_cross_branch_signal_missing")
     if (
         actionability.get("guidance_status")
         == "no_prompt_or_continuity_actionability_evidence"
@@ -2475,17 +2593,47 @@ def _research_context_actionability(
             ),
             "call_kind_counts": call_kind_counts,
             "hypothesis_generation_trace_count": hypothesis_trace_count,
+            "projected_hypothesis_generation_trace_count": (
+                projected_hypothesis_trace_count
+            ),
+            "hypothesis_generation_block_family_trace_count": (
+                hypothesis_block_family_trace_count
+            ),
             "signal_density_schema_version": density.get("schema_version"),
             "signal_density_report_only": density.get("report_only"),
             "signal_density_decision_features_excluded": density.get(
                 "decision_features_excluded"
             ),
             "signal_density_interpretation": density.get("interpretation"),
+            "hypothesis_generation_signal_density_schema_version": (
+                hypothesis_density.get("schema_version")
+            ),
+            "hypothesis_generation_signal_density_report_only": (
+                hypothesis_density.get("report_only")
+            ),
+            "hypothesis_generation_signal_density_decision_features_excluded": (
+                hypothesis_density.get("decision_features_excluded")
+            ),
+            "hypothesis_generation_signal_density_interpretation": (
+                hypothesis_density.get("interpretation")
+            ),
             "total_token_estimate": density.get("total_token_estimate"),
             "research_signal_tokens": density.get("research_signal_tokens"),
             "source_code_tokens": density.get("source_code_tokens"),
             "cross_branch_tokens": density.get("cross_branch_tokens"),
             "governance_tokens": density.get("governance_tokens"),
+            "hypothesis_generation_research_signal_tokens": (
+                hypothesis_density.get("research_signal_tokens")
+            ),
+            "hypothesis_generation_source_code_tokens": (
+                hypothesis_density.get("source_code_tokens")
+            ),
+            "hypothesis_generation_cross_branch_tokens": (
+                hypothesis_density.get("cross_branch_tokens")
+            ),
+            "hypothesis_generation_governance_tokens": (
+                hypothesis_density.get("governance_tokens")
+            ),
             "research_plus_source_to_governance_ratio": density.get(
                 "research_plus_source_to_governance_ratio"
             ),
@@ -2550,6 +2698,7 @@ def _research_context_actionability_consistency_failures(
         failures.append("research_context_actionability_indicators_schema_mismatch")
 
     for field in (
+        "research_continuity_max_branch_depth",
         "same_mechanism_selected",
         "same_mechanism_observed",
         "same_mechanism_missed",
@@ -2567,6 +2716,12 @@ def _research_context_actionability_consistency_failures(
         "governance_tokens",
         "omitted_section_trace_count",
         "truncated_section_trace_count",
+        "hypothesis_generation_trace_count",
+        "hypothesis_generation_block_family_trace_count",
+        "hypothesis_generation_research_signal_tokens",
+        "hypothesis_generation_source_code_tokens",
+        "hypothesis_generation_cross_branch_tokens",
+        "hypothesis_generation_governance_tokens",
     ):
         if _int_or_zero(indicators.get(field)) != _int_or_zero(
             expected_indicators.get(field)
@@ -2582,12 +2737,15 @@ def _research_context_actionability_consistency_failures(
         ):
             failures.append(f"research_context_actionability_{field}_mismatch")
 
-    field = "research_plus_source_to_governance_ratio"
-    if not _numeric_or_value_equal(
-        indicators.get(field),
-        expected_indicators.get(field),
+    for field in (
+        "research_plus_source_to_governance_ratio",
+        "hypothesis_generation_research_plus_source_to_governance_ratio",
     ):
-        failures.append(f"research_context_actionability_{field}_mismatch")
+        if not _numeric_or_value_equal(
+            indicators.get(field),
+            expected_indicators.get(field),
+        ):
+            failures.append(f"research_context_actionability_{field}_mismatch")
 
     return failures
 

@@ -789,6 +789,8 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert aggregate["trace_count"] == 2
     assert aggregate["visibility_digest_count"] == 2
     assert aggregate["block_family_trace_count"] == 2
+    assert aggregate["hypothesis_generation_trace_count"] == 1
+    assert aggregate["hypothesis_generation_block_family_trace_count"] == 1
     assert aggregate["omitted_section_trace_count"] == 1
     assert aggregate["truncated_section_trace_count"] == 1
     assert aggregate["call_kind_counts"] == {"code": 1, "hypothesis": 1}
@@ -805,6 +807,19 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             "trace_count": 1,
         },
         "source_code": {"char_count": 60, "token_estimate": 15, "trace_count": 1},
+    }
+    assert aggregate["hypothesis_generation_block_family_totals"] == {
+        "cross_branch_lesson": {
+            "char_count": 20,
+            "token_estimate": 5,
+            "trace_count": 1,
+        },
+        "governance": {"char_count": 40, "token_estimate": 10, "trace_count": 1},
+        "research_signal": {
+            "char_count": 80,
+            "token_estimate": 20,
+            "trace_count": 1,
+        },
     }
     assert aggregate["source_visibility"] == {
         "schema_version": "scion.postrun_prompt_source_visibility_summary.v1",
@@ -858,6 +873,22 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "research_plus_source_to_governance_ratio": 2.333333,
         "interpretation": "research_and_source_signal_at_least_governance",
     }
+    assert aggregate["hypothesis_generation_signal_density"] == {
+        "schema_version": "scion.postrun_prompt_signal_density.v1",
+        "report_only": True,
+        "decision_features_excluded": True,
+        "total_token_estimate": 35,
+        "research_signal_tokens": 20,
+        "source_code_tokens": 0,
+        "cross_branch_tokens": 5,
+        "governance_tokens": 10,
+        "research_signal_share": 0.571429,
+        "source_code_share": 0.0,
+        "cross_branch_share": 0.142857,
+        "governance_share": 0.285714,
+        "research_plus_source_to_governance_ratio": 2.0,
+        "interpretation": "research_and_source_signal_at_least_governance",
+    }
     continuity = brief["research_continuity_summary"]
     assert continuity["schema_version"] == (
         "scion.postrun_research_continuity_summary.v1"
@@ -909,6 +940,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "guidance_status": "context_actionability_review_required",
         "indicators": {
             "schema_version": "scion.research_context_actionability_indicators.v1",
+            "research_continuity_max_branch_depth": 3,
             "same_mechanism_selected": 1,
             "same_mechanism_observed": 1,
             "same_mechanism_missed": 0,
@@ -933,6 +965,13 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             "research_plus_source_to_governance_ratio": 2.333333,
             "omitted_section_trace_count": 1,
             "truncated_section_trace_count": 1,
+            "hypothesis_generation_trace_count": 1,
+            "hypothesis_generation_block_family_trace_count": 1,
+            "hypothesis_generation_research_signal_tokens": 20,
+            "hypothesis_generation_source_code_tokens": 0,
+            "hypothesis_generation_cross_branch_tokens": 5,
+            "hypothesis_generation_governance_tokens": 10,
+            "hypothesis_generation_research_plus_source_to_governance_ratio": 2.0,
         },
         "actionability_gaps": [
             "branch_lesson_semantic_gap_despite_cross_branch_prompt_signal",
@@ -1134,7 +1173,16 @@ def test_research_context_actionability_flags_unselected_same_mechanism_opportun
                     "source_code_tokens": 5,
                     "cross_branch_tokens": 0,
                     "governance_tokens": 3,
-                }
+                },
+                "hypothesis_generation_trace_count": 1,
+                "hypothesis_generation_block_family_trace_count": 1,
+                "hypothesis_generation_signal_density": {
+                    "research_signal_tokens": 12,
+                    "source_code_tokens": 0,
+                    "cross_branch_tokens": 0,
+                    "governance_tokens": 3,
+                    "research_plus_source_to_governance_ratio": 4.0,
+                },
             },
         },
         research_continuity_summary={

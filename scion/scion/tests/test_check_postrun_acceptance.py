@@ -1251,6 +1251,8 @@ def test_postrun_acceptance_rejects_code_only_research_context_trace(
     prompt_context = _current_prompt_context_visibility_summary(brief)
     assert prompt_context
     brief["prompt_context_visibility_summary"] = prompt_context
+    _ensure_review_input_fixture_artifacts(brief)
+    _refresh_review_input_summaries(brief)
     _refresh_research_context_actionability_summary(brief)
     brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -1267,6 +1269,66 @@ def test_postrun_acceptance_rejects_code_only_research_context_trace(
     ]["failures"]
     assert context_check["detail"]["call_kind_counts"] == {"code": 2}
     assert context_check["detail"]["hypothesis_generation_trace_count"] == 0
+
+
+def test_postrun_acceptance_rejects_hypothesis_trace_without_research_signal(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(
+        tmp_path / "warehouse-run-hypothesis-context-misaligned"
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": _warehouse_problem_evidence(),
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _ensure_prompt_context_fixture_artifact(brief)
+    _move_research_signal_from_hypothesis_to_code_fixture(brief)
+    prompt_context = _current_prompt_context_visibility_summary(brief)
+    assert prompt_context
+    brief["prompt_context_visibility_summary"] = prompt_context
+    _ensure_review_input_fixture_artifacts(brief)
+    _refresh_review_input_summaries(brief)
+    _refresh_research_context_actionability_summary(brief)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
+    context_check = readiness["checks"]["research_context_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert prompt_check["status"] == "ok"
+    assert context_check["required"] is True
+    assert context_check["status"] == "failed"
+    failures = context_check["detail"]["failures"]
+    assert "prompt_hypothesis_generation_research_signal_missing" in failures
+    assert "prompt_hypothesis_generation_block_family_missing" not in failures
+    assert context_check["detail"]["hypothesis_generation_trace_count"] == 1
+    assert (
+        context_check["detail"]["hypothesis_generation_block_family_trace_count"]
+        == 1
+    )
+    assert context_check["detail"]["research_signal_tokens"] > 0
+    assert context_check["detail"]["hypothesis_generation_research_signal_tokens"] == 0
+    assert (
+        "formal_hypothesis_prompt_missing_research_or_lesson_signal"
+        in context_check["detail"]["actionability_gaps"]
+    )
 
 
 def test_postrun_acceptance_rejects_stale_research_context_actionability_projection(
@@ -4731,6 +4793,57 @@ def _rewrite_prompt_fixture_call_kinds(
         for trace in traces:
             if isinstance(trace, dict):
                 trace["call_kind"] = call_kind
+    path.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _move_research_signal_from_hypothesis_to_code_fixture(
+    brief: dict[str, object],
+) -> None:
+    run_root_text = str(brief.get("run_root") or "")
+    if not run_root_text:
+        return
+    manifest_dir = Path(run_root_text) / "postrun_acceptance" / "manifests"
+    paths = sorted(manifest_dir.glob("*.proposal_trajectory_manifest.v1.json"))
+    if not paths:
+        paths = sorted(manifest_dir.glob("*.json"))
+    if not paths:
+        return
+    path = paths[-1]
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(doc, dict):
+        return
+    sessions = doc.get("sessions")
+    if not isinstance(sessions, list):
+        return
+    for session in sessions:
+        if not isinstance(session, dict):
+            continue
+        traces = session.get("trace_fingerprints")
+        if not isinstance(traces, list):
+            continue
+        for trace in traces:
+            if not isinstance(trace, dict):
+                continue
+            block_summary = trace.setdefault("block_family_summary", {})
+            if not isinstance(block_summary, dict):
+                continue
+            families = block_summary.setdefault("families", {})
+            if not isinstance(families, dict):
+                continue
+            if trace.get("call_kind") == "hypothesis":
+                families.clear()
+                families["governance"] = {
+                    "char_count": 100,
+                    "token_estimate": 25,
+                }
+            elif trace.get("call_kind") == "code":
+                families["research_signal"] = {
+                    "char_count": 2000,
+                    "token_estimate": 500,
+                }
     path.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8")
 
 

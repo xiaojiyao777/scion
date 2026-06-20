@@ -2927,14 +2927,18 @@ def _empty_prompt_context_aggregate() -> dict[str, Any]:
         "trace_count": 0,
         "visibility_digest_count": 0,
         "block_family_trace_count": 0,
+        "hypothesis_generation_trace_count": 0,
+        "hypothesis_generation_block_family_trace_count": 0,
         "omitted_section_trace_count": 0,
         "truncated_section_trace_count": 0,
         "call_kind_counts": {},
         "block_family_totals": {},
+        "hypothesis_generation_block_family_totals": {},
         "omitted_section_counts": {},
         "truncated_section_counts": {},
         "source_visibility": _empty_prompt_source_visibility_aggregate(),
         "signal_density": {},
+        "hypothesis_generation_signal_density": {},
     }
 
 
@@ -2978,10 +2982,13 @@ def _proposal_trajectory_context_entry(path: Path) -> dict[str, Any]:
         "trace_count": 0,
         "visibility_digest_count": 0,
         "block_family_trace_count": 0,
+        "hypothesis_generation_trace_count": 0,
+        "hypothesis_generation_block_family_trace_count": 0,
         "omitted_section_trace_count": 0,
         "truncated_section_trace_count": 0,
         "call_kind_counts": {},
         "block_family_totals": {},
+        "hypothesis_generation_block_family_totals": {},
         "omitted_section_counts": {},
         "truncated_section_counts": {},
         "source_visibility": _empty_prompt_source_visibility_aggregate(),
@@ -3003,6 +3010,9 @@ def _add_prompt_trace_context(entry: dict[str, Any], trace: Mapping[str, Any]) -
     entry["trace_count"] = _int_or_zero(entry.get("trace_count")) + 1
     call_kind = str(trace.get("call_kind") or "unknown")
     _increment_count(entry["call_kind_counts"], call_kind)
+    is_hypothesis_generation = _is_hypothesis_generation_call_kind(call_kind)
+    if is_hypothesis_generation:
+        entry["hypothesis_generation_trace_count"] += 1
     if trace.get("visibility_ledger_digest"):
         entry["visibility_digest_count"] += 1
     _add_prompt_source_visibility(
@@ -3014,9 +3024,17 @@ def _add_prompt_trace_context(entry: dict[str, Any], trace: Mapping[str, Any]) -
     families = _mapping_or_empty(block_summary.get("families"))
     if families:
         entry["block_family_trace_count"] += 1
+        if is_hypothesis_generation:
+            entry["hypothesis_generation_block_family_trace_count"] += 1
     for family, raw in sorted(families.items()):
         if isinstance(raw, Mapping):
             _add_block_family(entry["block_family_totals"], str(family), raw)
+            if is_hypothesis_generation:
+                _add_block_family(
+                    entry["hypothesis_generation_block_family_totals"],
+                    str(family),
+                    raw,
+                )
 
     omitted = _string_items(trace.get("omitted_sections"))
     if omitted:
@@ -3040,6 +3058,8 @@ def _merge_prompt_context_aggregate(
         "trace_count",
         "visibility_digest_count",
         "block_family_trace_count",
+        "hypothesis_generation_trace_count",
+        "hypothesis_generation_block_family_trace_count",
         "omitted_section_trace_count",
         "truncated_section_trace_count",
     ):
@@ -3062,6 +3082,15 @@ def _merge_prompt_context_aggregate(
         for family, raw in sorted(families.items()):
             if isinstance(raw, Mapping):
                 _add_block_family(aggregate["block_family_totals"], str(family), raw)
+    hypothesis_families = entry.get("hypothesis_generation_block_family_totals")
+    if isinstance(hypothesis_families, Mapping):
+        for family, raw in sorted(hypothesis_families.items()):
+            if isinstance(raw, Mapping):
+                _add_block_family(
+                    aggregate["hypothesis_generation_block_family_totals"],
+                    str(family),
+                    raw,
+                )
 
 
 def _with_prompt_signal_density(aggregate: dict[str, Any]) -> dict[str, Any]:
@@ -3073,7 +3102,17 @@ def _with_prompt_signal_density(aggregate: dict[str, Any]) -> dict[str, Any]:
     enriched["signal_density"] = _prompt_signal_density(
         _mapping_or_empty(enriched.get("block_family_totals"))
     )
+    enriched["hypothesis_generation_signal_density"] = _prompt_signal_density(
+        _mapping_or_empty(enriched.get("hypothesis_generation_block_family_totals"))
+    )
     return enriched
+
+
+def _is_hypothesis_generation_call_kind(value: Any) -> bool:
+    text = str(value or "")
+    return text == "hypothesis" or (
+        text.startswith("hypothesis_") and text != "hypothesis_target_intent"
+    )
 
 
 def _empty_prompt_source_visibility_aggregate() -> dict[str, Any]:
@@ -3558,8 +3597,15 @@ def _research_context_actionability_summary(
         continuity_aggregate.get("branch_lesson_semantic_block_counts")
     )
     density = _mapping_or_empty(prompt_aggregate.get("signal_density"))
+    hypothesis_density = _mapping_or_empty(
+        prompt_aggregate.get("hypothesis_generation_signal_density")
+    )
+    continuity_max_branch_depth = _int_or_zero(
+        continuity_aggregate.get("max_branch_depth")
+    )
     indicators = {
         "schema_version": "scion.research_context_actionability_indicators.v1",
+        "research_continuity_max_branch_depth": continuity_max_branch_depth,
         "same_mechanism_selected": continuity_counts["same_mechanism_selected"],
         "same_mechanism_observed": continuity_counts["same_mechanism_observed"],
         "same_mechanism_missed": max(
@@ -3599,6 +3645,27 @@ def _research_context_actionability_summary(
         ),
         "truncated_section_trace_count": _int_or_zero(
             prompt_aggregate.get("truncated_section_trace_count")
+        ),
+        "hypothesis_generation_trace_count": _int_or_zero(
+            prompt_aggregate.get("hypothesis_generation_trace_count")
+        ),
+        "hypothesis_generation_block_family_trace_count": _int_or_zero(
+            prompt_aggregate.get("hypothesis_generation_block_family_trace_count")
+        ),
+        "hypothesis_generation_research_signal_tokens": _int_or_zero(
+            hypothesis_density.get("research_signal_tokens")
+        ),
+        "hypothesis_generation_source_code_tokens": _int_or_zero(
+            hypothesis_density.get("source_code_tokens")
+        ),
+        "hypothesis_generation_cross_branch_tokens": _int_or_zero(
+            hypothesis_density.get("cross_branch_tokens")
+        ),
+        "hypothesis_generation_governance_tokens": _int_or_zero(
+            hypothesis_density.get("governance_tokens")
+        ),
+        "hypothesis_generation_research_plus_source_to_governance_ratio": (
+            hypothesis_density.get("research_plus_source_to_governance_ratio")
         ),
     }
     actionability_gaps = _research_context_actionability_gaps(
@@ -3702,6 +3769,31 @@ def _research_context_actionability_gaps(
     source_tokens = _int_or_zero(indicators.get("source_code_tokens"))
     governance_tokens = _int_or_zero(indicators.get("governance_tokens"))
     research_plus_source = research_tokens + source_tokens
+    hypothesis_research_tokens = _int_or_zero(
+        indicators.get("hypothesis_generation_research_signal_tokens")
+    )
+    hypothesis_cross_branch_tokens = _int_or_zero(
+        indicators.get("hypothesis_generation_cross_branch_tokens")
+    )
+    continuity_signal_observed = (
+        _int_or_zero(indicators.get("research_continuity_max_branch_depth")) > 1
+        or _int_or_zero(indicators.get("same_mechanism_observed")) > 0
+        or _int_or_zero(indicators.get("branch_lessons_required")) > 0
+        or _int_or_zero(indicators.get("weak_positive_observed")) > 0
+    )
+
+    if continuity_signal_observed:
+        if _int_or_zero(indicators.get("hypothesis_generation_trace_count")) <= 0:
+            gaps.append("research_continuity_without_formal_hypothesis_prompt_trace")
+        elif (
+            _int_or_zero(
+                indicators.get("hypothesis_generation_block_family_trace_count")
+            )
+            <= 0
+        ):
+            gaps.append("formal_hypothesis_prompt_without_context_block_families")
+        elif hypothesis_research_tokens + hypothesis_cross_branch_tokens <= 0:
+            gaps.append("formal_hypothesis_prompt_missing_research_or_lesson_signal")
 
     if semantic_gap > 0 and cross_branch_tokens <= 0:
         gaps.append("branch_lesson_semantic_gap_without_cross_branch_prompt_signal")
@@ -3798,6 +3890,14 @@ def _research_context_actionability_recommendations(
         elif "no_current_run" in gap:
             recommendations.append(
                 "launch or rebuild current-run evidence before research-quality conclusions"
+            )
+        elif "formal_hypothesis_prompt" in gap:
+            recommendations.append(
+                "inspect hypothesis-generation prompt manifests for missing research_signal or cross_branch_lesson blocks"
+            )
+        elif "without_formal_hypothesis" in gap:
+            recommendations.append(
+                "rebuild proposal trajectory manifests before delegated review"
             )
     semantic_reasons = _int_mapping(
         indicators.get("branch_lesson_semantic_failure_counts")
