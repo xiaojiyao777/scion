@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `5dea325d`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `6352d201`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -250,9 +250,9 @@ Current checkpoint:
   protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-5dea325-continuity-6r-gpt55-20260620T184607Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6352d20-readyscope-6r-gpt55-20260620T185751Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-5dea325-continuity-4r-gpt55-20260620T184619Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6352d20-readyscope-4r-gpt55-20260620T185752Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -261,7 +261,11 @@ Current checkpoint:
   available. Ignore volatile substate changes such as expired versus refreshing
   unless active auth becomes available. Launch readiness exposes these fields in
   top-level `completion_preflight_summary` and compatible flat fields, so status
-  refreshes do not need to know nested check paths.
+  refreshes do not need to know nested check paths. Prepared static handoff
+  reports now expose `readiness_scope=static_only_completion_preflight_not_run`
+  and `launch_blockers=["completion_preflight_not_run"]`; only strict launch
+  checks with `readiness_scope=launch_with_completion_preflight` can approve
+  launch.
   Disabled proposal/APS caps, code-source visibility, source-read headroom,
   item-level `research_focus` prompt visibility, and CVRP/warehouse
   adapter-derived opportunity diagnostics are covered by current evidence

@@ -46,14 +46,14 @@ After strict readiness passes, launch from WSL by running the prepared wrapper
 itself, not by reconstructing the long `scion run` command:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-5dea325-continuity-6r-gpt55-20260620T184607Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6352d20-readyscope-6r-gpt55-20260620T185751Z-claw/run.sh
 ```
 
 Run the CVRP wrapper only after the warehouse run is underway or accepted for
 launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-5dea325-continuity-4r-gpt55-20260620T184619Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6352d20-readyscope-4r-gpt55-20260620T185752Z-claw/run.sh
 ```
 
 The wrappers already enforce completion preflight, runtime guards, campaign
@@ -78,17 +78,17 @@ mirror root. Without `--execute`, it prints the planned commands only.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `5dea325d`;
-the corresponding local framework repair commit is `fd0311f9`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `6352d201`;
+the corresponding local framework repair commit is `211d5c2c`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection only. Run launch readiness on WSL, because prepared
 contracts and wrapper scripts intentionally contain WSL absolute paths and will
 fail identity checks if evaluated from the server-side mirror.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-5dea325-continuity-6r-gpt55-20260620T184607Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6352d20-readyscope-6r-gpt55-20260620T185751Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-5dea325-continuity-4r-gpt55-20260620T184619Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6352d20-readyscope-4r-gpt55-20260620T185752Z-claw`
 
 Readiness snapshot:
 
@@ -96,7 +96,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `5dea325d`; strict readiness
+- Runtime guard status: prepared runtime commit `6352d201`; strict readiness
   must keep reporting runtime guard OK. Treat all earlier prepared roots as
   superseded because runtime-guarded launcher, prompt-context, and postrun
   artifact-identity paths changed.
@@ -104,6 +104,11 @@ Readiness snapshot:
   `completion_preflight_summary` plus flat `completion_http_status`,
   `completion_classification`, `completion_code`, and `completion_auth_pool`
   fields.
+- Prepared static handoff reports expose
+  `readiness_scope=static_only_completion_preflight_not_run` and
+  `launch_blockers=["completion_preflight_not_run"]`; their legacy
+  `ready=true` means static audit readiness only. Strict launch checks must use
+  `readiness_scope=launch_with_completion_preflight`.
 - CVRP prepared research-focus prompt bridge now carries adapter-derived
   `screening_headroom`, `mechanism_effect_ranking`, and
   `opportunity_diagnostics`; the current CVRP root reports
