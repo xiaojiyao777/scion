@@ -155,7 +155,10 @@ def test_postrun_acceptance_readiness_requires_expected_problem_summary(
     brief["prepared_run_contract"]["problem_family"] = "cvrp"
     _add_prompt_source_visibility_summary(brief)
     brief.pop("cvrp_large_twoopt_summary", None)
-    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+    brief_path.write_text(
+        json.dumps(brief, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
     readiness = check_tool.build_readiness(run_root)
     problem_check = readiness["checks"]["problem_summary_actionability"]
@@ -1468,6 +1471,84 @@ def test_postrun_acceptance_rejects_problem_summary_input_mismatch(
     ]["failures"]
     assert consistency_check["detail"]["summary_protocol_evaluated_candidates"] == 1
     assert consistency_check["detail"]["input_protocol_evaluated_candidates"] == 0
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
+def test_postrun_acceptance_rejects_stale_runtime_evidence_in_problem_summary(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-stale-runtime")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    evidence = _warehouse_problem_evidence()
+    runtime_evidence = evidence["runtime"]
+    assert isinstance(runtime_evidence, dict)
+    runtime_evidence["available"] = False
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": evidence,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "launch_required_before_plateau_conclusion": False,
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    runtime_summary = brief["runtime_feedback_summary"]
+    assert isinstance(runtime_summary, dict)
+    aggregate = runtime_summary["aggregate"]
+    assert isinstance(aggregate, dict)
+    runtime_budget = {
+        "source_count": 1,
+        "diagnostic_count": 1,
+        "code_counts": {"SCREENING_RUNTIME_BUDGET_SATURATION": 1},
+        "severity_counts": {"info": 1},
+        "stage_counts": {"screening": 1},
+        "runtime_model_counts": {"budget_exhausting": 1},
+        "top_diagnostics": [],
+    }
+    aggregate["runtime_budget_diagnostics"] = runtime_budget
+    runtime_summary["runtime_budget_diagnostics"] = runtime_budget
+    runtime_summary["budget_diagnostic_source_count"] = 1
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+    input_check = readiness["checks"]["review_input_summaries_actionability"]
+    consistency_check = readiness["checks"]["problem_summary_input_consistency"]
+    failures = consistency_check["detail"]["failures"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert problem_check["status"] == "ok"
+    assert input_check["status"] == "ok"
+    assert consistency_check["status"] == "failed"
+    assert "problem_summary_runtime_raw_available_mismatch" in failures
+    assert "problem_summary_runtime_model_counts_mismatch" in failures
+    assert "problem_summary_runtime_budget_diagnostic_count_mismatch" in failures
+    assert consistency_check["detail"]["summary_runtime_raw_available"] is False
+    assert consistency_check["detail"]["input_runtime_raw_available"] is True
+    assert consistency_check["detail"]["summary_runtime_model_counts"] == {}
+    assert consistency_check["detail"]["input_runtime_model_counts"] == {
+        "budget_exhausting": 1
+    }
+    assert consistency_check["detail"]["summary_runtime_budget_diagnostic_count"] == 0
+    assert consistency_check["detail"]["input_runtime_budget_diagnostic_count"] == 1
     assert (
         check_tool.main([str(run_root), "--require-current-run-ready"])
         == check_tool.UNREADY_EXIT

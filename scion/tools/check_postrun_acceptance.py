@@ -1141,13 +1141,33 @@ def _problem_summary_input_consistency(
         if "review_ready" in runtime_evidence
         else runtime_evidence.get("available")
     )
+    runtime_raw_available = runtime_summary.get("available") is True
+    runtime_evidence_raw_available = (
+        runtime_evidence.get("raw_available")
+        if "raw_available" in runtime_evidence
+        else runtime_evidence.get("available")
+    )
+    runtime_aggregate = _mapping_or_empty(runtime_summary.get("aggregate"))
+    runtime_budget = _mapping_or_empty(
+        runtime_aggregate.get("runtime_budget_diagnostics")
+    )
     if runtime_evidence_ready is not runtime_ready:
         failures.append("problem_summary_runtime_review_ready_mismatch")
+    if runtime_evidence_raw_available is not runtime_raw_available:
+        failures.append("problem_summary_runtime_raw_available_mismatch")
     if (
         runtime_evidence.get("drain_status_complete")
         is not runtime_summary.get("drain_status_complete")
     ):
         failures.append("problem_summary_runtime_drain_status_mismatch")
+    if _int_mapping(runtime_evidence.get("runtime_model_counts")) != _int_mapping(
+        runtime_budget.get("runtime_model_counts")
+    ):
+        failures.append("problem_summary_runtime_model_counts_mismatch")
+    if _int_or_zero(
+        runtime_evidence.get("runtime_budget_diagnostic_count")
+    ) != _int_or_zero(runtime_budget.get("diagnostic_count")):
+        failures.append("problem_summary_runtime_budget_diagnostic_count_mismatch")
     if (
         continuity_evidence.get("available")
         is not continuity_summary.get("available")
@@ -1329,11 +1349,25 @@ def _problem_summary_input_consistency(
             ),
             "summary_runtime_review_ready": runtime_evidence_ready,
             "input_runtime_review_ready": runtime_summary.get("review_ready"),
+            "summary_runtime_raw_available": runtime_evidence_raw_available,
+            "input_runtime_raw_available": runtime_summary.get("available"),
             "summary_runtime_drain_status_complete": runtime_evidence.get(
                 "drain_status_complete"
             ),
             "input_runtime_drain_status_complete": runtime_summary.get(
                 "drain_status_complete"
+            ),
+            "summary_runtime_model_counts": _int_mapping(
+                runtime_evidence.get("runtime_model_counts")
+            ),
+            "input_runtime_model_counts": _int_mapping(
+                runtime_budget.get("runtime_model_counts")
+            ),
+            "summary_runtime_budget_diagnostic_count": _int_or_zero(
+                runtime_evidence.get("runtime_budget_diagnostic_count")
+            ),
+            "input_runtime_budget_diagnostic_count": _int_or_zero(
+                runtime_budget.get("diagnostic_count")
             ),
             "summary_continuity_available": continuity_evidence.get("available"),
             "input_continuity_available": continuity_summary.get("available"),
