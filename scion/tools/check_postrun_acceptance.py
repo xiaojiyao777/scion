@@ -3065,14 +3065,21 @@ def _research_context_actionability_consistency_failures(
     return failures
 
 
+_FORMAL_HYPOTHESIS_GENERATION_CALL_KINDS = frozenset(
+    {
+        "hypothesis",
+        "hypothesis_retry",
+        "hypothesis_preview_retry",
+        "hypothesis_grounding_retry",
+        "hypothesis_semantic_retry",
+    }
+)
+
+
 def _hypothesis_generation_trace_count(call_kind_counts: Mapping[str, Any]) -> int:
     total = 0
     for key, value in call_kind_counts.items():
-        text = str(key)
-        if text == "hypothesis" or (
-            text.startswith("hypothesis_")
-            and text != "hypothesis_target_intent"
-        ):
+        if str(key) in _FORMAL_HYPOTHESIS_GENERATION_CALL_KINDS:
             total += _int_or_zero(value)
     return total
 

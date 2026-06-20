@@ -16,6 +16,26 @@ assert SPEC.loader is not None
 SPEC.loader.exec_module(brief_tool)
 
 
+def test_formal_hypothesis_generation_call_kind_classification() -> None:
+    formal_kinds = {
+        "hypothesis",
+        "hypothesis_retry",
+        "hypothesis_preview_retry",
+        "hypothesis_grounding_retry",
+        "hypothesis_semantic_retry",
+    }
+    for call_kind in formal_kinds:
+        assert brief_tool._is_hypothesis_generation_call_kind(call_kind) is True
+    for call_kind in (
+        "hypothesis_target_intent",
+        "hypothesis_diagnostic",
+        "code",
+        "tool_selection",
+        "",
+    ):
+        assert brief_tool._is_hypothesis_generation_call_kind(call_kind) is False
+
+
 def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     run_root = tmp_path / "run-a"
     campaign_dir = run_root / "campaign"

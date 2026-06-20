@@ -1552,6 +1552,53 @@ def test_postrun_acceptance_rejects_code_only_research_context_trace(
     assert context_check["detail"]["hypothesis_generation_trace_count"] == 0
 
 
+def test_postrun_acceptance_rejects_unknown_hypothesis_prefixed_context_trace(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-unknown-hyp-context")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": _warehouse_problem_evidence(),
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _ensure_prompt_context_fixture_artifact(brief)
+    _rewrite_prompt_fixture_call_kinds(brief, call_kind="hypothesis_diagnostic")
+    prompt_context = _current_prompt_context_visibility_summary(brief)
+    assert prompt_context
+    brief["prompt_context_visibility_summary"] = prompt_context
+    _ensure_review_input_fixture_artifacts(brief)
+    _refresh_review_input_summaries(brief)
+    _refresh_research_context_actionability_summary(brief)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    context_check = readiness["checks"]["research_context_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert context_check["required"] is True
+    assert context_check["status"] == "failed"
+    assert "prompt_hypothesis_research_context_trace_missing" in context_check[
+        "detail"
+    ]["failures"]
+    assert context_check["detail"]["call_kind_counts"] == {"hypothesis_diagnostic": 2}
+    assert context_check["detail"]["hypothesis_generation_trace_count"] == 0
+
+
 def test_postrun_acceptance_rejects_hypothesis_trace_without_research_signal(
     tmp_path: Path,
 ) -> None:

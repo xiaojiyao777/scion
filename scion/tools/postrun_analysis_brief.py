@@ -3140,11 +3140,19 @@ def _with_prompt_signal_density(aggregate: dict[str, Any]) -> dict[str, Any]:
     return enriched
 
 
+_FORMAL_HYPOTHESIS_GENERATION_CALL_KINDS = frozenset(
+    {
+        "hypothesis",
+        "hypothesis_retry",
+        "hypothesis_preview_retry",
+        "hypothesis_grounding_retry",
+        "hypothesis_semantic_retry",
+    }
+)
+
+
 def _is_hypothesis_generation_call_kind(value: Any) -> bool:
-    text = str(value or "")
-    return text == "hypothesis" or (
-        text.startswith("hypothesis_") and text != "hypothesis_target_intent"
-    )
+    return str(value or "") in _FORMAL_HYPOTHESIS_GENERATION_CALL_KINDS
 
 
 def _empty_prompt_source_visibility_aggregate() -> dict[str, Any]:
