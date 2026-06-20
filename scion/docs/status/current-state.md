@@ -193,24 +193,9 @@ Prepared manifests record:
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-postrun-launch-required-flag-guard-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-proxy-format-alias-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-legacy-run-problem-family-inference-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-launch-readiness-failed-check-summary-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-postrun-readiness-failed-check-summary-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-launch-readiness-runtime-guard-commit-drift-20260620.md`,
-  `scion/docs/experiments/v0.4/v04-launch-readiness-runtime-guard-contract-consistency-20260620.md`,
-  `scion/docs/experiments/v0.4/v04-agentic-partial-hypothesis-recovery-20260620.md`,
-  `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-agentic-partial-recovery-20260620.md`,
-  `scion/docs/experiments/v0.4/v04-postrun-runtime-evidence-consistency-guard-20260620.md`,
-  `scion/docs/experiments/v0.4/v04-cvrp-seed-only-twoopt-readiness-guard-20260620.md`,
-  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-mechanism-bound-direct-evidence-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-warehouse-positive-effect-plateau-readiness-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-warehouse-measurement-note-root-readiness-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-cvrp-phase4-four-round-root-readiness-20260619.md`
-  and
-  `scion/docs/experiments/v0.4/v04-solver-source-read-headroom-readiness-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-agentic-partial-recovery-20260620.md`.
+- Repair-detail reports remain under `scion/docs/experiments/v0.4/`; do not
+  read them by default unless a specific guarantee above needs source evidence.
 - Current WSL access:
   `ssh -i ~/.ssh/id_ed25519_codex_wsl -p 2222 -o BatchMode=yes -o StrictHostKeyChecking=no xjy-ubuntu@127.0.0.1`.
   WSL repo is `/home/xjy-ubuntu/research/or-autoresearch-agent`, WSL
