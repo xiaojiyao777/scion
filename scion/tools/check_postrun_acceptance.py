@@ -20,8 +20,12 @@ from postrun_analysis_brief import (  # noqa: E402
     _champion_progress_summary,
     _cvrp_large_twoopt_mechanism_signal,
     _failure_taxonomy_summary,
+    _measurement_effect_summary,
     _prompt_context_visibility_summary,
+    _protocol_accounting_summary,
+    _research_continuity_summary,
     _research_context_actionability_summary,
+    _runtime_feedback_summary,
     _warehouse_followup_continuity_signal,
     _warehouse_followup_measurement_signal,
 )
@@ -310,6 +314,7 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
     )
     review_input_status, review_input_detail = (
         _review_input_summaries_actionability(
+            root,
             analysis_brief,
             inventory,
         )
@@ -973,6 +978,7 @@ def _summary_actionability_status(summaries: list[dict[str, Any]]) -> str:
 
 
 def _review_input_summaries_actionability(
+    run_root: Path,
     brief: Mapping[str, Any],
     inventory: Mapping[str, Any],
 ) -> tuple[str, Any]:
@@ -988,15 +994,43 @@ def _review_input_summaries_actionability(
     required_summaries = _required_review_input_summaries_for_interpretation(
         interpretation,
     )
+    expected_summaries = {
+        "protocol_accounting_summary": _protocol_accounting_summary(
+            run_root,
+            inventory,
+        ),
+        "measurement_effect_summary": _measurement_effect_summary(
+            run_root,
+            inventory,
+        ),
+        "runtime_feedback_summary": _runtime_feedback_summary(
+            run_root,
+            inventory,
+        ),
+        "research_continuity_summary": _research_continuity_summary(
+            run_root,
+            inventory,
+        ),
+    }
     details = []
     for key, (schema, count_field) in REVIEW_INPUT_SUMMARIES.items():
         required_for_interpretation = key in required_summaries
         summary = _mapping_or_empty(brief.get(key))
+        expected = _mapping_or_empty(expected_summaries.get(key))
         count_value = _int_or_zero(summary.get(count_field))
+        expected_count_value = _int_or_zero(expected.get(count_field))
         summary_present = (
             summary.get("available") is True
             or _int_or_zero(summary.get("report_count")) > 0
             or summary.get("schema_version") is not None
+        )
+        expected_present = (
+            expected.get("available") is True
+            or _int_or_zero(expected.get("report_count")) > 0
+            or _int_or_zero(expected.get(count_field)) > 0
+        )
+        consistency_required = (
+            required_for_interpretation or summary_present or expected_present
         )
         failures: list[str] = []
         if (required_for_interpretation or summary_present) and (
@@ -1033,11 +1067,21 @@ def _review_input_summaries_actionability(
                 failures.append("runtime_feedback_summary_drain_status_incomplete")
             if summary.get("review_ready") is not True:
                 failures.append("runtime_feedback_summary_not_review_ready")
+        consistency_failures: list[str] = []
+        if consistency_required:
+            consistency_failures = _review_input_summary_consistency_failures(
+                key=key,
+                summary=summary,
+                expected=expected,
+                count_field=count_field,
+            )
+            failures.extend(consistency_failures)
         details.append(
             {
                 "summary": key,
                 "required_for_interpretation": required_for_interpretation,
                 "failures": failures,
+                "consistency_failures": consistency_failures,
                 "schema_version": summary.get("schema_version"),
                 "expected_schema_version": schema,
                 "report_only": summary.get("report_only"),
@@ -1046,11 +1090,21 @@ def _review_input_summaries_actionability(
                     "decision_features_excluded"
                 ),
                 "current_run_evidence": summary.get("current_run_evidence"),
+                "expected_current_run_evidence": expected.get(
+                    "current_run_evidence"
+                ),
                 "available": summary.get("available"),
+                "expected_available": expected.get("available"),
                 "report_count": summary.get("report_count"),
+                "expected_report_count": expected.get("report_count"),
                 count_field: summary.get(count_field),
+                f"expected_{count_field}": expected_count_value,
                 "drain_status_complete": summary.get("drain_status_complete"),
+                "expected_drain_status_complete": expected.get(
+                    "drain_status_complete"
+                ),
                 "review_ready": summary.get("review_ready"),
+                "expected_review_ready": expected.get("review_ready"),
             }
         )
     return (
@@ -1063,6 +1117,45 @@ def _review_input_summaries_actionability(
             "summaries": details,
         },
     )
+
+
+def _review_input_summary_consistency_failures(
+    *,
+    key: str,
+    summary: Mapping[str, Any],
+    expected: Mapping[str, Any],
+    count_field: str,
+) -> list[str]:
+    failures: list[str] = []
+    for field in (
+        "current_run_evidence",
+        "available",
+        "report_count",
+        count_field,
+    ):
+        if summary.get(field) != expected.get(field):
+            failures.append(f"{key}_{field}_mismatch")
+    if key == "runtime_feedback_summary":
+        for field in (
+            "drain_status_complete",
+            "review_ready",
+            "budget_diagnostic_source_count",
+        ):
+            if summary.get(field) != expected.get(field):
+                failures.append(f"{key}_{field}_mismatch")
+    if _summary_without_paths(summary.get("aggregate")) != _summary_without_paths(
+        expected.get("aggregate")
+    ):
+        failures.append(f"{key}_aggregate_mismatch")
+    if _summary_without_paths(summary.get("entries")) != _summary_without_paths(
+        expected.get("entries")
+    ):
+        failures.append(f"{key}_entries_mismatch")
+    if key == "runtime_feedback_summary" and _summary_without_paths(
+        summary.get("runtime_budget_diagnostics")
+    ) != _summary_without_paths(expected.get("runtime_budget_diagnostics")):
+        failures.append("runtime_feedback_summary_budget_diagnostics_mismatch")
+    return failures
 
 
 def _problem_summary_input_consistency(
@@ -3097,6 +3190,18 @@ def _json_comparison_value(value: Any) -> Any:
         return json.loads(json.dumps(value, sort_keys=True))
     except (TypeError, ValueError):
         return str(value)
+
+
+def _summary_without_paths(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _summary_without_paths(item)
+            for key, item in sorted(value.items())
+            if str(key) != "path"
+        }
+    if isinstance(value, list):
+        return [_summary_without_paths(item) for item in value]
+    return _json_comparison_value(value)
 
 
 def _large_twoopt_direct_evidence_signature(value: Any) -> dict[str, Any]:

@@ -1267,7 +1267,6 @@ def test_postrun_acceptance_rejects_stale_research_context_actionability_project
     assert context_check["required"] is True
     assert context_check["status"] == "failed"
     failures = context_check["detail"]["failures"]
-    assert "research_context_actionability_guidance_status_mismatch" in failures
     assert "research_context_actionability_gaps_mismatch" in failures
     assert "research_context_actionability_recommendations_mismatch" in failures
     assert "research_context_actionability_same_mechanism_selected_mismatch" in (
@@ -1658,7 +1657,15 @@ def test_postrun_acceptance_rejects_problem_summary_input_mismatch(
 
     assert readiness["current_run_analysis_ready"] is False
     assert problem_check["status"] == "ok"
-    assert input_check["status"] == "ok"
+    assert input_check["status"] == "failed"
+    protocol_detail = next(
+        item
+        for item in input_check["detail"]["summaries"]
+        if item["summary"] == "protocol_accounting_summary"
+    )
+    assert "protocol_accounting_summary_aggregate_mismatch" in protocol_detail[
+        "failures"
+    ]
     assert consistency_check["required"] is True
     assert consistency_check["status"] == "failed"
     assert "problem_summary_protocol_evaluated_mismatch" in consistency_check[
@@ -1800,7 +1807,15 @@ def test_postrun_acceptance_rejects_stale_runtime_evidence_in_problem_summary(
 
     assert readiness["current_run_analysis_ready"] is False
     assert problem_check["status"] == "ok"
-    assert input_check["status"] == "ok"
+    assert input_check["status"] == "failed"
+    runtime_detail = next(
+        item
+        for item in input_check["detail"]["summaries"]
+        if item["summary"] == "runtime_feedback_summary"
+    )
+    assert "runtime_feedback_summary_aggregate_mismatch" in runtime_detail[
+        "failures"
+    ]
     assert consistency_check["status"] == "failed"
     assert "problem_summary_runtime_raw_available_mismatch" in failures
     assert "problem_summary_runtime_model_counts_mismatch" in failures
@@ -4528,6 +4543,8 @@ def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
     prompt_context = _current_prompt_context_visibility_summary(brief)
     if prompt_context:
         brief["prompt_context_visibility_summary"] = prompt_context
+    _ensure_review_input_fixture_artifacts(brief)
+    _refresh_review_input_summaries(brief)
     _refresh_research_context_actionability_summary(brief)
     _refresh_failure_taxonomy_summary(brief)
 
@@ -4682,6 +4699,181 @@ def _current_prompt_context_visibility_summary(
     return summary if isinstance(summary, dict) else {}
 
 
+def _refresh_review_input_summaries(brief: dict[str, object]) -> None:
+    run_root_value = brief.get("run_root")
+    assert isinstance(run_root_value, str)
+    run_root = Path(run_root_value)
+    inventory = check_tool.build_inventory(run_root)
+    brief["protocol_accounting_summary"] = check_tool._protocol_accounting_summary(
+        run_root,
+        inventory,
+    )
+    brief["measurement_effect_summary"] = check_tool._measurement_effect_summary(
+        run_root,
+        inventory,
+    )
+    brief["runtime_feedback_summary"] = check_tool._runtime_feedback_summary(
+        run_root,
+        inventory,
+    )
+    brief["research_continuity_summary"] = check_tool._research_continuity_summary(
+        run_root,
+        inventory,
+    )
+
+
+def _ensure_review_input_fixture_artifacts(brief: dict[str, object]) -> None:
+    for path in _research_efficiency_report_paths(brief):
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        protocol_rows = doc.setdefault("protocol_rows", {})
+        assert isinstance(protocol_rows, dict)
+        protocol_rows.update(
+            {
+                "protocol_evaluated_candidates": 1,
+                "protocol_metric_results": 1,
+                "stage_counts": {"screening": 1},
+            }
+        )
+        formal_candidates = doc.setdefault("formal_candidates", {})
+        assert isinstance(formal_candidates, dict)
+        formal_candidates.update(
+            {
+                "formal_screened_candidates": 1,
+                "protocol_evaluated_candidates": 1,
+            }
+        )
+        formal_artifacts = doc.setdefault("formal_candidate_artifacts", {})
+        assert isinstance(formal_artifacts, dict)
+        formal_artifacts.update(
+            {
+                "index_status": "available",
+                "row_count": 1,
+                "unreadable_rows": 0,
+            }
+        )
+        stage_rows = doc.setdefault("stage_rows", {})
+        assert isinstance(stage_rows, dict)
+        stage_rows.update(
+            {
+                "screening": 1,
+                "validation": 0,
+                "frozen": 0,
+                "fresh_runtime_replay": 0,
+            }
+        )
+        doc["measurement_readiness"] = {
+            "decision_features_excluded": True,
+            "mde_at_power_80": 9.9,
+            "status": "ready",
+        }
+        doc["protocol_effects_vs_mde"] = {
+            "decision_features_excluded": True,
+            "interpretation": "below_mde",
+            "max_effect_to_mde_ratio": 0.25,
+            "mde_at_power_80": 9.9,
+            "measurement_readiness_status": "ready",
+            "mechanism_family_effect_summary": {
+                "by_family": {},
+                "mapped_row_count": 0,
+                "unmapped_row_count": 0,
+            },
+            "nonpositive_rows": 1,
+            "positive_rows": 0,
+            "protocol_row_count": 1,
+            "rows_at_or_above_mde": 0,
+            "rows_below_mde": 1,
+            "rows_with_ci_high_below_mde": 1,
+        }
+        doc["fresh_runtime_replay_drain"] = {
+            "attempts": 1,
+            "blocked": 0,
+            "counts_toward_max_rounds": False,
+            "executed": 1,
+            "protocol_results": 1,
+            "skipped": 0,
+            "status": "complete",
+            "stopped_reason": "complete",
+        }
+        doc["stage_transition_drain"] = {
+            "attempts": 1,
+            "counts_toward_max_rounds": False,
+            "executed": 1,
+            "generates_new_hypothesis": False,
+            "skipped": 0,
+            "status": "complete",
+            "stopped_reason": "complete",
+        }
+        doc["research_shape"] = {
+            "max_branch_depth": 2,
+            "mean_branch_depth": 2.0,
+            "branch_depth_distribution": {"2": 1},
+            "active_research_shape_signal": {
+                "active_branch_count": 1,
+                "active_mechanism_family_count": 1,
+                "shape": "continue",
+            },
+            "mechanism_family_breadth": {
+                "family_count": 1,
+                "families": {"fixture_mechanism": 1},
+            },
+        }
+        doc["research_continuity"] = {
+            "same_mechanism_followup": {
+                "observed_opportunity_count": 1,
+                "selected_same_branch_refinement_count": 1,
+            },
+            "branch_lesson_usage": {
+                "requirement_count": 0,
+                "satisfied_count": 0,
+                "semantic_gap_count": 0,
+            },
+            "weak_positive_transfer": {
+                "observed_opportunity_count": 0,
+                "accepted_count": 0,
+            },
+            "lesson_action_counts": {},
+            "research_shape_summary": {
+                "active_branch_count": 1,
+                "active_mechanism_family_count": 1,
+                "active_shape": "continue",
+                "branch_depth_distribution": {"2": 1},
+                "max_branch_depth": 2,
+                "mean_branch_depth": 2.0,
+                "mechanism_family_count": 1,
+            },
+        }
+        path.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _set_quality_blocked_review_input_artifacts(brief: dict[str, object]) -> None:
+    for path in _research_efficiency_report_paths(brief):
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        protocol_rows = doc.setdefault("protocol_rows", {})
+        assert isinstance(protocol_rows, dict)
+        protocol_rows.update(
+            {
+                "protocol_evaluated_candidates": 0,
+                "protocol_metric_results": 0,
+                "stage_counts": {},
+            }
+        )
+        formal_candidates = doc.setdefault("formal_candidates", {})
+        assert isinstance(formal_candidates, dict)
+        formal_candidates.update(
+            {
+                "formal_screened_candidates": 1,
+                "protocol_evaluated_candidates": 0,
+            }
+        )
+        doc["measurement_readiness"] = {}
+        doc["protocol_effects_vs_mde"] = {}
+        doc["fresh_runtime_replay_drain"] = {}
+        doc["stage_transition_drain"] = {}
+        doc["research_shape"] = {}
+        doc["research_continuity"] = {}
+        path.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8")
+
+
 def _add_champion_progress_summary(brief: dict[str, object]) -> None:
     if isinstance(brief.get("champion_progress_summary"), dict):
         return
@@ -4807,21 +4999,8 @@ def _apply_quality_blocked_review_inputs(
     *,
     quality_block_count: int,
 ) -> None:
-    protocol = brief["protocol_accounting_summary"]
-    assert isinstance(protocol, dict)
-    protocol["aggregate"] = {
-        "formal_screened_candidates": 0,
-        "formal_protocol_evaluated_candidates": 0,
-        "protocol_rows": {
-            "protocol_evaluated_candidates": 0,
-            "protocol_metric_results": 0,
-        },
-        "formal_candidate_artifacts": {"row_count": 0},
-        "stage_rows": {},
-    }
-    _mark_measurement_effect_unavailable(brief["measurement_effect_summary"])
-    _mark_runtime_feedback_unavailable(brief["runtime_feedback_summary"])
-    _mark_research_continuity_unavailable(brief["research_continuity_summary"])
+    _set_quality_blocked_review_input_artifacts(brief)
+    _refresh_review_input_summaries(brief)
     _refresh_research_context_actionability_summary(brief)
     _set_failure_taxonomy_quality_blocks(brief, quality_block_count)
 
@@ -4987,7 +5166,12 @@ def _warehouse_problem_evidence() -> dict[str, object]:
             "protocol_evaluated_candidates": 1,
             "protocol_metric_results": 1,
             "formal_candidate_artifact_rows": 1,
-            "stage_rows": {},
+            "stage_rows": {
+                "fresh_runtime_replay": 0,
+                "frozen": 0,
+                "screening": 1,
+                "validation": 0,
+            },
         },
         "measurement_effect": {
             "available": True,
@@ -5040,7 +5224,12 @@ def _cvrp_problem_evidence() -> dict[str, object]:
             "protocol_evaluated_candidates": 1,
             "protocol_metric_results": 1,
             "formal_candidate_artifact_rows": 1,
-            "stage_rows": {},
+            "stage_rows": {
+                "fresh_runtime_replay": 0,
+                "frozen": 0,
+                "screening": 1,
+                "validation": 0,
+            },
         },
         "measurement_effect": {
             "available": True,
