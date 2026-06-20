@@ -277,6 +277,8 @@ def render_text(report: dict[str, Any]) -> str:
             "postrun_status_write_exit_status_markers",
             "wrapper_exit_status_effective_markers",
             "postrun_acceptance_failed_markers",
+            "postrun_reports_effective_exit_status_markers",
+            "postrun_readiness_effective_exit_status_markers",
         ):
             if key in run_status_summary:
                 lines.append(
@@ -450,6 +452,14 @@ def _run_status_summary(path: Path) -> dict[str, Any]:
     summary["postrun_acceptance_failed_markers"] = _line_marker_count(
         run_root / "exit.txt",
         "POSTRUN_ACCEPTANCE_FAILED:",
+    )
+    summary["postrun_reports_effective_exit_status_markers"] = _line_marker_count(
+        run_root / "exit.txt",
+        "POSTRUN_REPORTS_EFFECTIVE_EXIT_STATUS:",
+    )
+    summary["postrun_readiness_effective_exit_status_markers"] = _line_marker_count(
+        run_root / "exit.txt",
+        "POSTRUN_READINESS_EFFECTIVE_EXIT_STATUS:",
     )
     return summary
 

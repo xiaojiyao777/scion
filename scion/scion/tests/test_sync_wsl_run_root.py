@@ -134,6 +134,8 @@ def test_sync_wsl_run_root_execute_runs_rsync_then_postrun_check(
         "postrun_status_write_exit_status_markers": 0,
         "wrapper_exit_status_effective_markers": 0,
         "postrun_acceptance_failed_markers": 0,
+        "postrun_reports_effective_exit_status_markers": 0,
+        "postrun_readiness_effective_exit_status_markers": 0,
     }
     assert report["postrun_check_exit_status"] == 0
     assert report["postrun_current_run_ready"] is True
@@ -142,6 +144,14 @@ def test_sync_wsl_run_root_execute_runs_rsync_then_postrun_check(
     assert "LOCAL_RUN_STATUS_POSTRUN_ACCEPTANCE_STATUS=ready" in rendered
     assert "LOCAL_RUN_STATUS_POSTRUN_READINESS_EXIT_STATUS=0" in rendered
     assert "LOCAL_RUN_STATUS_POSTRUN_STATUS_WRITE_EXIT_STATUS_MARKERS=0" in rendered
+    assert (
+        "LOCAL_RUN_STATUS_POSTRUN_REPORTS_EFFECTIVE_EXIT_STATUS_MARKERS=0"
+        in rendered
+    )
+    assert (
+        "LOCAL_RUN_STATUS_POSTRUN_READINESS_EFFECTIVE_EXIT_STATUS_MARKERS=0"
+        in rendered
+    )
 
 
 def test_sync_wsl_run_root_skips_postrun_check_when_requested(
@@ -175,6 +185,8 @@ def test_sync_wsl_run_root_skips_postrun_check_when_requested(
             (local_dir / "exit.txt").write_text(
                 "WRAPPER_EXIT_STATUS:0\n"
                 "POSTRUN_ACCEPTANCE_FAILED:64\n"
+                "POSTRUN_REPORTS_EFFECTIVE_EXIT_STATUS:64\n"
+                "POSTRUN_READINESS_EFFECTIVE_EXIT_STATUS:64\n"
                 "WRAPPER_EXIT_STATUS_EFFECTIVE:64\n",
                 encoding="utf-8",
             )
@@ -210,6 +222,18 @@ def test_sync_wsl_run_root_skips_postrun_check_when_requested(
         == 1
     )
     assert report["local_run_status_summary"]["postrun_acceptance_failed_markers"] == 1
+    assert (
+        report["local_run_status_summary"][
+            "postrun_reports_effective_exit_status_markers"
+        ]
+        == 1
+    )
+    assert (
+        report["local_run_status_summary"][
+            "postrun_readiness_effective_exit_status_markers"
+        ]
+        == 1
+    )
 
 
 def test_sync_wsl_run_root_preserves_postrun_unready_status(
