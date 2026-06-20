@@ -1620,6 +1620,98 @@ def test_postrun_acceptance_rejects_stale_runtime_evidence_in_problem_summary(
     )
 
 
+def test_postrun_acceptance_rejects_warehouse_plateau_ready_without_runtime_drain_input(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(
+        tmp_path / "warehouse-run-plateau-runtime-budget-only"
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    evidence = _warehouse_problem_evidence()
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": evidence,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "launch_required_before_plateau_conclusion": False,
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    runtime_summary = brief["runtime_feedback_summary"]
+    assert isinstance(runtime_summary, dict)
+    runtime_summary["drain_status_complete"] = False
+    runtime_summary["review_ready"] = False
+    aggregate = runtime_summary["aggregate"]
+    assert isinstance(aggregate, dict)
+    fresh_drain = aggregate["fresh_runtime_replay_drain"]
+    stage_drain = aggregate["stage_transition_drain"]
+    assert isinstance(fresh_drain, dict)
+    assert isinstance(stage_drain, dict)
+    fresh_drain["status_counts"] = {}
+    stage_drain["status_counts"] = {}
+    runtime_budget = {
+        "source_count": 1,
+        "diagnostic_count": 1,
+        "code_counts": {"SCREENING_RUNTIME_BUDGET_SATURATION": 1},
+        "severity_counts": {"info": 1},
+        "stage_counts": {"screening": 1},
+        "runtime_model_counts": {"budget_exhausting": 1},
+        "top_diagnostics": [],
+    }
+    aggregate["runtime_budget_diagnostics"] = runtime_budget
+    runtime_summary["runtime_budget_diagnostics"] = runtime_budget
+    runtime_summary["budget_diagnostic_source_count"] = 1
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+    input_check = readiness["checks"]["review_input_summaries_actionability"]
+    consistency_check = readiness["checks"]["problem_summary_input_consistency"]
+    failures_by_summary = {
+        item["summary"]: item["failures"]
+        for item in input_check["detail"]["summaries"]
+    }
+    failures = consistency_check["detail"]["failures"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert problem_check["status"] == "ok"
+    assert input_check["status"] == "failed"
+    assert consistency_check["status"] == "failed"
+    assert "runtime_feedback_summary_drain_status_incomplete" in failures_by_summary[
+        "runtime_feedback_summary"
+    ]
+    assert "runtime_feedback_summary_not_review_ready" in failures_by_summary[
+        "runtime_feedback_summary"
+    ]
+    assert "problem_summary_runtime_review_ready_mismatch" in failures
+    assert "problem_summary_runtime_drain_status_mismatch" in failures
+    assert "problem_summary_runtime_model_counts_mismatch" in failures
+    assert "problem_summary_runtime_budget_diagnostic_count_mismatch" in failures
+    assert consistency_check["detail"]["summary_runtime_review_ready"] is True
+    assert consistency_check["detail"]["input_runtime_review_ready"] is False
+    assert consistency_check["detail"]["summary_runtime_drain_status_complete"] is True
+    assert consistency_check["detail"]["input_runtime_drain_status_complete"] is False
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_requires_review_inputs_boundary_markers(
     tmp_path: Path,
 ) -> None:
