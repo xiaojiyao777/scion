@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `9f353314` after agentic partial-hypothesis recovery, research-context actionability, runtime-evidence consistency, formal hypothesis prompt trace, problem-summary evidence-payload, prepared research-focus nested projection readiness, CVRP CMT2/CMT4 case-protection prompt projection, CVRP seed-only bounded two-opt, launch runtime-guard contract checks, and postrun acceptance wrapper-status escalation. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `cf365584` after agentic partial-hypothesis recovery, research-context actionability, runtime-evidence consistency, formal hypothesis prompt trace, problem-summary evidence-payload, prepared research-focus nested projection readiness, CVRP CMT2/CMT4 case-protection prompt projection, CVRP seed-only bounded two-opt, launch runtime-guard contract checks, and postrun acceptance wrapper-status escalation. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -249,15 +249,15 @@ Current checkpoint:
   a bounded, deadline-aware mechanism with CMT2/CMT4 protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-nestedproj-9f353314-preflight-6r-gpt55-20260620T034239Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunstatus-cf365584-preflight-6r-gpt55-20260620T040959Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-nestedproj-9f353314-preflight-4r-gpt55-20260620T034239Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-postrunstatus-cf365584-preflight-4r-gpt55-20260620T040959Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
   HTTP `401`, `classification=not_authenticated`, `code=invalid_api_key`.
-  The auth pool has `active=0`, `total=1`; repeated strict preflights currently
-  alternate between `expired=1` and `refreshing=1`.
+  The auth pool has `active=0`, `total=1`; the exact `expired`/`refreshing`
+  substate may move during refresh attempts, but there is no active account.
   Do not launch either root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.

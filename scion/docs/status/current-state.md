@@ -27,29 +27,30 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. `/v1/models` can list `gpt-5.5`, but the strict completion
   preflight currently fails with HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`. The auth pool has `active=0`, `total=1`; repeated
-  strict preflights currently alternate between `expired=1` and `refreshing=1`.
+  `code=invalid_api_key`. The auth pool has `active=0`, `total=1`; the exact
+  `expired`/`refreshing` substate may move during refresh attempts, but there
+  is no active account.
 - Do not launch a prepared root until:
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL at runtime commit `9f353314`
-after prepared `research_focus` projection readiness was extended to required
-nested fields. CVRP CMT2/CMT4 case-protection requirements now pass manifest,
-top-level projection, and nested projected-path checks before launch. Agentic
-partial-hypothesis recovery, research-context actionability,
-runtime-evidence consistency, the formal hypothesis prompt-trace,
-problem-summary `evidence` payload, and CVRP seed-only large two-opt rejection
-guards remain in force. WSL static readiness passes; launch readiness fails
-only at completion preflight auth. Local mirrors exist under
+The active prepared roots were generated on WSL at runtime commit `cf365584`
+after prepared `research_focus` nested projection readiness and postrun
+acceptance wrapper-status escalation were both in place. CVRP CMT2/CMT4
+case-protection requirements pass manifest, top-level projection, and nested
+projected-path checks before launch. Agentic partial-hypothesis recovery,
+research-context actionability, runtime-evidence consistency, the formal
+hypothesis prompt-trace, problem-summary `evidence` payload, and CVRP seed-only
+large two-opt rejection guards remain in force. WSL static readiness passes;
+launch readiness fails only at completion preflight auth. Local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-nestedproj-9f353314-preflight-6r-gpt55-20260620T034239Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunstatus-cf365584-preflight-6r-gpt55-20260620T040959Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-nestedproj-9f353314-preflight-4r-gpt55-20260620T034239Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-postrunstatus-cf365584-preflight-4r-gpt55-20260620T040959Z-claw`
 
 Prepared manifests record:
 
@@ -57,7 +58,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `9f353314`; CVRP `9f353314`.
+- Runtime commits: warehouse `cf365584`; CVRP `cf365584`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -210,6 +211,8 @@ Prepared manifests record:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-prepared-research-focus-projection-readiness-20260620.md`.
+- Current postrun wrapper-status evidence:
+  `scion/docs/experiments/v0.4/v04-postrun-wrapper-status-escalation-20260620.md`.
 - Repair-detail reports remain under `scion/docs/experiments/v0.4/`; do not
   read them by default unless a specific guarantee above needs source evidence.
 - Current WSL access:

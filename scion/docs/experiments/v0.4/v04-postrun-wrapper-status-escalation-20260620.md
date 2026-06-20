@@ -36,3 +36,29 @@ pytest -q scion/scion/tests/test_postrun_artifact_inventory.py -k 'launcher or s
 
 Observed result: py_compile passed; launcher tests `25 passed`; postrun
 acceptance tests `58 passed`; focused inventory tests `14 passed`.
+
+WSL verification after synchronizing commit `cf365584`:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q scion/scion/tests/test_launch_readiness.py scion/scion/tests/test_warehouse_agentic_launcher.py scion/scion/tests/test_cvrp_agentic_launcher.py
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q scion/scion/tests/test_check_postrun_acceptance.py scion/scion/tests/test_rebuild_postrun_acceptance.py
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q scion/scion/tests/test_postrun_artifact_inventory.py scion/scion/tests/test_postrun_analysis_brief.py -k 'launcher or status or postrun or current_run or preflight or wrapper'
+```
+
+Observed result: launch/readiness plus launcher tests `116 passed`; postrun
+acceptance tests `58 passed`; focused inventory/analysis tests `46 passed`.
+
+## Prepared Roots
+
+Prepared on WSL from commit `cf365584`; mirrored locally under
+`/home/clawd/research/scion-experiments/`.
+
+- Warehouse:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunstatus-cf365584-preflight-6r-gpt55-20260620T040959Z-claw`
+- CVRP:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-postrunstatus-cf365584-preflight-4r-gpt55-20260620T040959Z-claw`
+
+Strict launch readiness on both roots reports `static_ready=true`,
+`failed_static_required_checks=[]`, `launch_ready=false`, and the sole required
+failure `completion_preflight` with HTTP `401`, `classification=not_authenticated`,
+and `code=invalid_api_key`.
