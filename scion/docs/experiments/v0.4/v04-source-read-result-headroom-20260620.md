@@ -84,7 +84,10 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 Result: `125 passed`.
 
-## Current Prepared Roots
+## Prepared Roots From This Repair
+
+These roots are superseded by the later disabled code-tool-call cap runtime
+repair. See `scion/docs/status/current-state.md` for the current launch roots.
 
 Generated on WSL at launch-authoritative runtime commit `37feae79`; the local
 runtime-equivalent commit is `f7745a8e`. Both roots are mirrored under

@@ -88,7 +88,10 @@ WSL focused results:
 - APS-cap and launcher/CLI/readiness suite: `180 passed`.
 - Final readiness suite after disabled-warning cleanup: `101 passed`.
 
-## Current Prepared Roots
+## Prepared Roots From This Repair
+
+These roots are superseded by the later disabled code-tool-call cap runtime
+repair. See `scion/docs/status/current-state.md` for the current launch roots.
 
 Generated on WSL at launch-authoritative runtime commit `37feae79`; the local
 runtime-equivalent commit is `f7745a8e`. Both roots are mirrored under
