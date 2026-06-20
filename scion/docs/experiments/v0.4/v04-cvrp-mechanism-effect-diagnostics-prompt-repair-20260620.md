@@ -75,7 +75,7 @@ python -m py_compile \
 # clean
 ```
 
-WSL after applying the same patch as commit `330b90e2`:
+WSL verification for the CVRP prompt-bridge repair patch at commit `330b90e2`:
 
 ```bash
 PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
@@ -91,13 +91,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 ## Prepared Roots
 
-The runtime-guarded prepared roots were regenerated from WSL commit `330b90e2`
-and mirrored locally.
+The runtime-guarded prepared roots were refreshed from WSL commit `63b8b353`
+after the later warehouse postrun-readiness guard and mirrored locally.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-330b90e2-preflight-6r-gpt55-20260620T091333Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-63b8b353-preflight-6r-gpt55-20260620T092950Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-330b90e2-preflight-4r-gpt55-20260620T091333Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-63b8b353-preflight-4r-gpt55-20260620T092950Z-claw`
 
 Strict launch readiness for both roots reports:
 

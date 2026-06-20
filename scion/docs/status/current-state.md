@@ -41,15 +41,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `330b90e2`
-after local equivalent commit `4544a0d4`; local mirrors exist under
+Generated on WSL at launch-authoritative prepared runtime commit `63b8b353`
+after local equivalent commit `995dad7b`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names for
 inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-330b90e2-preflight-6r-gpt55-20260620T091333Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-63b8b353-preflight-6r-gpt55-20260620T092950Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-330b90e2-preflight-4r-gpt55-20260620T091333Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-63b8b353-preflight-4r-gpt55-20260620T092950Z-claw`
 
 Readiness snapshot:
 
@@ -57,10 +57,9 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `330b90e2`; strict readiness
-  currently reports runtime guard OK because later status/doc commits leave
-  runtime guard paths unchanged. Future doc/status-only commits are acceptable
-  only when readiness keeps reporting unchanged runtime guard paths.
+- Runtime guard status: prepared runtime commit `63b8b353`; strict readiness
+  must keep reporting runtime guard OK. Doc/status-only commits after prepare
+  are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
   `prepared_run_manifest.v1.json` agree on the problem/protocol/split/seeds,
   campaign directory, rounds, time limit, measurement-governance mode, and
