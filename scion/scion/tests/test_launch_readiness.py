@@ -94,6 +94,23 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["checks"]["run_script_data_root_failure_reports"]["status"] == "ok"
     assert report["checks"]["run_script_api_key_env_failure_reports"]["status"] == "ok"
     assert report["checks"]["completion_preflight"]["status"] == "skipped"
+    assert report["completion_preflight_summary"] == {
+        "status": "skipped",
+        "required": False,
+        "ok": False,
+        "http_status": None,
+        "classification": None,
+        "code": None,
+        "message": None,
+        "auth_pool": None,
+        "model": None,
+        "base_url": None,
+        "login_url": None,
+    }
+    assert report["completion_http_status"] is None
+    assert report["completion_classification"] is None
+    assert report["completion_code"] is None
+    assert report["completion_auth_pool"] is None
     markdown = readiness_tool.render_markdown(report)
     assert markdown.startswith("# Launch Readiness:")
     assert "Launch only after rerunning this tool" in markdown
@@ -1815,7 +1832,24 @@ def test_launch_readiness_keeps_static_ready_when_completion_preflight_fails(
     run_root = _write_prepared_root(tmp_path)
 
     def fail_preflight(**_: object) -> tuple[str, object]:
-        return "failed", {"chat": {"classification": "not_authenticated"}}
+        return "failed", {
+            "auth_status": {
+                "authenticated": False,
+                "pool": {"active": 0, "total": 1, "expired": 1},
+            },
+            "chat": {
+                "http_status": 401,
+                "classification": "not_authenticated",
+                "code": "invalid_api_key",
+                "message": "Not authenticated.",
+            },
+            "operator_action": {
+                "classification": "not_authenticated",
+                "model": "gpt-5.5",
+                "base_url": "http://127.0.0.1:8080",
+                "next_step": "Refresh the local proxy login.",
+            },
+        }
 
     monkeypatch.setattr(
         readiness_tool,
@@ -1831,6 +1865,27 @@ def test_launch_readiness_keeps_static_ready_when_completion_preflight_fails(
     assert report["failed_required_checks"] == ["completion_preflight"]
     assert report["failed_static_required_checks"] == []
     assert report["checks"]["completion_preflight"]["status"] == "failed"
+    assert report["completion_preflight_summary"]["status"] == "failed"
+    assert report["completion_preflight_summary"]["required"] is True
+    assert report["completion_preflight_summary"]["ok"] is False
+    assert report["completion_preflight_summary"]["http_status"] == 401
+    assert report["completion_preflight_summary"]["classification"] == (
+        "not_authenticated"
+    )
+    assert report["completion_preflight_summary"]["code"] == "invalid_api_key"
+    assert report["completion_preflight_summary"]["auth_pool"] == {
+        "active": 0,
+        "total": 1,
+        "expired": 1,
+    }
+    assert report["completion_http_status"] == 401
+    assert report["completion_classification"] == "not_authenticated"
+    assert report["completion_code"] == "invalid_api_key"
+    assert report["completion_auth_pool"] == {
+        "active": 0,
+        "total": 1,
+        "expired": 1,
+    }
 
 
 def test_launch_readiness_accepts_helper_preflight_failure_report_path(
@@ -3163,7 +3218,14 @@ def test_launch_readiness_cli_require_launch_ready_implies_completion_preflight(
     run_root = _write_prepared_root(tmp_path)
 
     def fail_preflight(**_: object) -> tuple[str, object]:
-        return "failed", {"chat": {"classification": "not_authenticated"}}
+        return "failed", {
+            "chat": {
+                "http_status": 401,
+                "classification": "not_authenticated",
+                "code": "invalid_api_key",
+            },
+            "auth_status": {"pool": {"active": 0, "total": 1}},
+        }
 
     monkeypatch.setattr(
         readiness_tool,
@@ -3184,6 +3246,18 @@ def test_launch_readiness_cli_require_launch_ready_implies_completion_preflight(
     assert payload["failed_required_checks"] == ["completion_preflight"]
     assert payload["failed_static_required_checks"] == []
     assert payload["checks"]["completion_preflight"]["status"] == "failed"
+    assert payload["completion_preflight_summary"]["http_status"] == 401
+    assert payload["completion_preflight_summary"]["classification"] == (
+        "not_authenticated"
+    )
+    assert payload["completion_preflight_summary"]["code"] == "invalid_api_key"
+    assert payload["completion_preflight_summary"]["auth_pool"] == {
+        "active": 0,
+        "total": 1,
+    }
+    assert payload["completion_http_status"] == 401
+    assert payload["completion_classification"] == "not_authenticated"
+    assert payload["completion_code"] == "invalid_api_key"
 
 
 def test_launch_readiness_cli_require_launch_ready_accepts_real_preflight_success(
@@ -3213,6 +3287,9 @@ def test_launch_readiness_cli_require_launch_ready_accepts_real_preflight_succes
     assert payload["launch_ready"] is True
     assert payload["ready"] is True
     assert payload["checks"]["completion_preflight"]["status"] == "ok"
+    assert payload["completion_preflight_summary"]["status"] == "ok"
+    assert payload["completion_preflight_summary"]["ok"] is True
+    assert payload["completion_http_status"] == 200
 
 
 def _write_prepared_root(

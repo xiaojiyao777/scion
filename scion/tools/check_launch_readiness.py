@@ -527,6 +527,9 @@ def build_readiness(
         name for name in failed_required_checks if name != "completion_preflight"
     ]
     failed_optional_checks = _failed_check_names(checks, required=False)
+    completion_summary = _completion_preflight_summary(
+        checks.get("completion_preflight")
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "report_only": True,
@@ -540,6 +543,11 @@ def build_readiness(
         "launch_ready": launch_ready,
         "ready": ready,
         "completion_preflight_required": completion_preflight,
+        "completion_preflight_summary": completion_summary,
+        "completion_http_status": completion_summary.get("http_status"),
+        "completion_classification": completion_summary.get("classification"),
+        "completion_code": completion_summary.get("code"),
+        "completion_auth_pool": completion_summary.get("auth_pool"),
         "failed_required_checks": failed_required_checks,
         "failed_static_required_checks": failed_static_required_checks,
         "failed_optional_checks": failed_optional_checks,
@@ -558,6 +566,41 @@ def _failed_check_names(
         if item.get("required") is required
         and item.get("status") not in {"ok", "skipped"}
     ]
+
+
+def _completion_preflight_summary(item: Any) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {
+            "status": "missing",
+            "required": False,
+            "ok": False,
+        }
+    detail = item.get("detail")
+    detail_map = detail if isinstance(detail, dict) else {}
+    chat = detail_map.get("chat")
+    chat_map = chat if isinstance(chat, dict) else {}
+    auth_status = detail_map.get("auth_status")
+    auth_status_map = auth_status if isinstance(auth_status, dict) else {}
+    auth_pool = auth_status_map.get("pool")
+    action = detail_map.get("operator_action")
+    action_map = action if isinstance(action, dict) else {}
+
+    summary: dict[str, Any] = {
+        "status": item.get("status"),
+        "required": bool(item.get("required")),
+        "ok": item.get("status") == "ok",
+        "http_status": chat_map.get("http_status"),
+        "classification": chat_map.get("classification"),
+        "code": chat_map.get("code"),
+        "message": chat_map.get("message"),
+        "auth_pool": auth_pool if isinstance(auth_pool, dict) else None,
+        "model": action_map.get("model"),
+        "base_url": action_map.get("base_url"),
+        "login_url": detail_map.get("login_url") or action_map.get("login_url"),
+    }
+    if action_map:
+        summary["operator_action"] = action_map
+    return summary
 
 
 def render_markdown(report: dict[str, Any]) -> str:
