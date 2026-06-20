@@ -292,6 +292,51 @@ def test_postrun_acceptance_readiness_rejects_prepared_only_root(
     )
 
 
+def test_postrun_acceptance_readiness_rejects_missing_campaign_execution_artifacts(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "missing-campaign-execution"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_campaign_db(campaign_dir)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "outer-wrapper.v1",
+            "status": "finished",
+            "wrapper_exit_status": 0,
+            "campaign_wrapper_exit_status": 0,
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "execution": {"rounds": 2},
+        },
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="missing_campaign_execution",
+        strict=True,
+    )
+
+    readiness = check_tool.build_readiness(run_root)
+
+    assert readiness["delegation_ready"] is True
+    assert readiness["current_run_analysis_ready"] is False
+    assert "current_run_evidence" in readiness["failed_required_checks"]
+    assert readiness["checks"]["current_run_evidence"]["status"] == "failed"
+    assert (
+        readiness["checks"]["analysis_brief_current_run_evidence"]["status"]
+        == "failed"
+    )
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_readiness_requires_expected_problem_summary(
     tmp_path: Path,
 ) -> None:
