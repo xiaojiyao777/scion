@@ -198,7 +198,10 @@ WAREHOUSE_REQUIRED_MEASUREMENT_REASON_CODES = frozenset(
 def build_inventory(run_root: Path | str) -> dict[str, Any]:
     run_root = Path(run_root)
     campaign_dir = run_root / "campaign"
-    run_status = _read_json(run_root / "run_status.json")
+    run_status_path = run_root / "run_status.json"
+    run_status_present = run_status_path.exists()
+    run_status = _read_json(run_status_path)
+    run_status_valid = isinstance(run_status, dict)
     prepared_manifest = _read_json(run_root / "prepared_run_manifest.v1.json")
     campaign_run_status = _read_json(campaign_dir / "run_status.json")
     campaign_status = _read_json(campaign_dir / "status.json")
@@ -209,6 +212,8 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         campaign_run_status,
         campaign_status,
         summary,
+        run_status_present=run_status_present,
+        run_status_valid=run_status_valid,
     )
     trace_index = _read_json(
         campaign_dir / "agentic_sessions" / "agentic_session_trace_index.json"
@@ -277,7 +282,8 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         if lifecycle["prepared_only"]
         else _pre_campaign_failure_validity(lifecycle)
         if (
-            lifecycle["pre_campaign_completion_preflight_failed"]
+            lifecycle.get("launcher_status_unavailable") is True
+            or lifecycle["pre_campaign_completion_preflight_failed"]
             or lifecycle.get("pre_campaign_infra_failed") is True
         )
         else _validity(run_status, campaign_run_status, campaign_status, summary),
@@ -323,6 +329,12 @@ def render_markdown(inventory: dict[str, Any]) -> str:
         lines.append(
             "- PREPARED-ONLY ROOT: copied campaign artifacts are launch input, "
             "not current-run postrun evidence."
+        )
+    if lifecycle.get("launcher_status_unavailable") is True:
+        lines.append(
+            "- LAUNCHER STATUS UNAVAILABLE: root `run_status.json` is missing "
+            "or unreadable, so copied campaign artifacts are not current-run "
+            "postrun evidence."
         )
     if lifecycle.get("pre_campaign_completion_preflight_failed") is True:
         lines.append(
@@ -700,10 +712,20 @@ def _lifecycle_inventory(
     run_status: Any,
     prepared_manifest: Any,
     *campaign_docs: Any,
+    run_status_present: bool = True,
+    run_status_valid: bool = True,
 ) -> dict[str, Any]:
     status_doc = run_status if isinstance(run_status, dict) else {}
     manifest = prepared_manifest if isinstance(prepared_manifest, dict) else {}
     manifest_is_prepared = manifest.get("schema_version") == PREPARED_RUN_MANIFEST_SCHEMA
+    launcher_status_unavailable = not run_status_present or not run_status_valid
+    launcher_status_failure_key = (
+        "root_run_status_missing"
+        if not run_status_present
+        else "root_run_status_invalid"
+        if not run_status_valid
+        else None
+    )
     prepared_only = (
         status_doc.get("prepared_only") is True
         or (
@@ -721,12 +743,14 @@ def _lifecycle_inventory(
     pre_campaign_infra_failed = bool(pre_campaign_infra_failure_keys)
     invalid_infra_only = any(
         _doc_says_invalid_infra_only(doc) for doc in (status_doc, *campaign_docs)
-    )
+    ) or launcher_status_unavailable
     resume_from = status_doc.get("resume_from_campaign")
     if resume_from is None:
         resume_from = manifest.get("resume_from_campaign")
     if prepared_only:
         evidence_scope = "prepared_launch_root_with_resume_snapshot"
+    elif launcher_status_unavailable:
+        evidence_scope = "launcher_status_unavailable_with_resume_snapshot"
     elif preflight_failed:
         evidence_scope = "pre_campaign_preflight_failed_with_resume_snapshot"
     elif pre_campaign_infra_failed:
@@ -744,10 +768,15 @@ def _lifecycle_inventory(
         "invalid_infra_only": bool(invalid_infra_only),
         "current_run_evidence": not (
             prepared_only
+            or launcher_status_unavailable
             or preflight_failed
             or pre_campaign_infra_failed
             or invalid_infra_only
         ),
+        "launcher_status_unavailable": launcher_status_unavailable,
+        "launcher_status_failure_key": launcher_status_failure_key,
+        "root_run_status_present": run_status_present,
+        "root_run_status_valid": run_status_valid,
         "status": _string_or_none(status_doc.get("status")),
         "prepared_status_schema": _string_or_none(status_doc.get("schema")),
         "resume_from_campaign": _string_or_none(resume_from),
@@ -764,6 +793,7 @@ def _lifecycle_inventory(
 def _launch_root_without_current_run(lifecycle: Mapping[str, Any]) -> bool:
     return (
         lifecycle.get("prepared_only") is True
+        or lifecycle.get("launcher_status_unavailable") is True
         or lifecycle.get("pre_campaign_completion_preflight_failed") is True
         or lifecycle.get("pre_campaign_infra_failed") is True
         or lifecycle.get("invalid_infra_only") is True
@@ -781,6 +811,9 @@ def _prepared_only_validity(lifecycle: Mapping[str, Any]) -> dict[str, Any]:
 
 def _pre_campaign_failure_validity(lifecycle: Mapping[str, Any]) -> dict[str, Any]:
     last_stop_reason = "pre_campaign_completion_preflight_failed"
+    launcher_status_failure_key = lifecycle.get("launcher_status_failure_key")
+    if isinstance(launcher_status_failure_key, str) and launcher_status_failure_key:
+        last_stop_reason = launcher_status_failure_key
     keys = lifecycle.get("pre_campaign_infra_failure_keys")
     if isinstance(keys, list) and keys:
         last_stop_reason = f"pre_campaign_{keys[0]}"
@@ -1717,6 +1750,12 @@ def _phase4_evidence_coverage(
             ),
             "pre_campaign_infra_failure_keys": (
                 lifecycle.get("pre_campaign_infra_failure_keys") or []
+            ),
+            "launcher_status_unavailable": (
+                lifecycle.get("launcher_status_unavailable") is True
+            ),
+            "launcher_status_failure_key": lifecycle.get(
+                "launcher_status_failure_key"
             ),
             "invalid_infra_only": lifecycle.get("invalid_infra_only") is True,
             "current_run_evidence": False,

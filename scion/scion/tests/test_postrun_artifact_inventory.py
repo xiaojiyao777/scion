@@ -562,6 +562,21 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     config_dir.mkdir()
     for name in ("problem.yaml", "protocol.yaml", "split.yaml", "seeds.yaml"):
         (config_dir / name).write_text("ok: true\n", encoding="utf-8")
+    (config_dir / "split.yaml").write_text(
+        "\n".join(
+            [
+                "version: fixture",
+                "screening:",
+                "- cvrplib/CMT/CMT2.vrp",
+                "- cvrplib/CMT/CMT4.vrp",
+                "validation: []",
+                "frozen: []",
+                "canary: []",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
     remote_root = f"/home/xjy-ubuntu/research/scion-experiments/{run_root.name}"
     command = (
@@ -1071,6 +1086,85 @@ def test_inventory_marks_prepared_only_resume_snapshot_not_current_run(
     assert data["phase4_evidence_coverage"]["prepared_only"] is True
     assert "PREPARED-ONLY ROOT" in markdown
     assert "not current-run postrun evidence" in markdown
+
+
+def test_inventory_marks_missing_or_invalid_root_status_not_current_run(
+    tmp_path: Path,
+) -> None:
+    cases = (
+        ("missing-root-status", None, "root_run_status_missing"),
+        ("invalid-root-status", "{not-json", "root_run_status_invalid"),
+    )
+    for run_name, root_status_text, expected_failure_key in cases:
+        run_root = tmp_path / run_name
+        campaign_dir = run_root / "campaign"
+        campaign_dir.mkdir(parents=True)
+        if root_status_text is not None:
+            (run_root / "run_status.json").write_text(
+                root_status_text,
+                encoding="utf-8",
+            )
+        _write_json(
+            run_root / "prepared_run_manifest.v1.json",
+            {
+                "schema_version": "scion.launcher_prepared_run_manifest.v1",
+                "execution": {"rounds": 3},
+                "resume_from_campaign": "/tmp/source-campaign",
+            },
+        )
+        _write_json(
+            campaign_dir / "run_status.json",
+            {
+                "run_validity_status": "valid",
+                "run_completeness_status": "complete",
+                "effective_rounds_completed": 7,
+            },
+        )
+        _write_json(
+            campaign_dir / "campaign_summary.json",
+            {
+                "formal_screened_candidates": 7,
+                "protocol_evaluated_candidates": 7,
+            },
+        )
+        _write_db(campaign_dir / "scion.db")
+
+        data = inventory_tool.build_inventory(run_root)
+        markdown = inventory_tool.render_markdown(data)
+
+        lifecycle = data["lifecycle"]
+        assert lifecycle["launcher_status_unavailable"] is True
+        assert lifecycle["launcher_status_failure_key"] == expected_failure_key
+        assert lifecycle["current_run_evidence"] is False
+        assert lifecycle["invalid_infra_only"] is True
+        assert lifecycle["evidence_scope"] == (
+            "launcher_status_unavailable_with_resume_snapshot"
+        )
+        assert data["validity"] == {
+            "run_validity_status": "invalid_infra_only",
+            "run_completeness_status": "incomplete",
+            "last_stop_reason": expected_failure_key,
+            "invalid_infra_only": True,
+        }
+        assert data["counters"] == {
+            "requested_rounds": 3,
+            "effective_rounds_completed": 0,
+            "formal_screened_candidates": 0,
+            "protocol_evaluated_candidates": 0,
+            "screened_experiments": 0,
+            "proposal_attempts_total": 0,
+        }
+        assert data["resume_snapshot"]["present"] is True
+        assert data["resume_snapshot"]["current_run_evidence"] is False
+        assert data["phase4_evidence_coverage"]["current_run_evidence"] is False
+        assert data["phase4_evidence_coverage"][
+            "launcher_status_unavailable"
+        ] is True
+        assert data["phase4_evidence_coverage"][
+            "launcher_status_failure_key"
+        ] == expected_failure_key
+        assert "LAUNCHER STATUS UNAVAILABLE" in markdown
+        assert "not current-run postrun evidence" in markdown
 
 
 def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
