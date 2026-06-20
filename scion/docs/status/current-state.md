@@ -41,15 +41,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `cb41c3c5`
-after local equivalent commit `4928b207`; local mirrors exist under
+Generated on WSL at launch-authoritative prepared runtime commit `2827b672`
+after local equivalent commit `2c3e409d`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names for
 inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-cb41c3c5-preflight-6r-gpt55-20260620T101240Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-2827b672-preflight-6r-gpt55-20260620T103302Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-cb41c3c5-preflight-4r-gpt55-20260620T101240Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-2827b672-preflight-4r-gpt55-20260620T103302Z-claw`
 
 Readiness snapshot:
 
@@ -57,7 +57,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `cb41c3c5`; strict readiness
+- Runtime guard status: prepared runtime commit `2827b672`; strict readiness
   must keep reporting runtime guard OK. Doc/status-only commits after prepare
   are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -71,6 +71,9 @@ Prepared run shape:
 - CVRP: 4 rounds, bounded/deadline-aware large two-opt follow-up from external
   seed guidance.
 - Proposal headroom: `max_attempts=64`, `max_quality_loops=64`.
+- Launch readiness treats missing or command-disconnected headroom fields as
+  launch blockers, but values below the current prepared-run recommendation are
+  audit warnings, not a new v0.4 research gate.
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
@@ -221,6 +224,8 @@ Prepared run shape:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-cvrp-size70-direct-evidence-guard-20260620.md`.
+- Current prepared headroom readiness semantics:
+  `scion/docs/experiments/v0.4/v04-prepared-headroom-readiness-gate-relaxation-20260620.md`.
 - Current CVRP prompt-diagnostic repair:
   `scion/docs/experiments/v0.4/v04-cvrp-mechanism-effect-diagnostics-prompt-repair-20260620.md`.
 - Current warehouse prompt-diagnostic repair:
