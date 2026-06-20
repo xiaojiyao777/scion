@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `dc83a2ca`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `6b83f554`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -250,9 +250,9 @@ Current checkpoint:
   protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-dc83a2ca-launchsummary-6r-gpt55-20260620T165031Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6b83f554-cvrpdiag-6r-gpt55-20260620T170829Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-dc83a2ca-launchsummary-4r-gpt55-20260620T165032Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6b83f554-cvrpdiag-4r-gpt55-20260620T170829Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -262,9 +262,10 @@ Current checkpoint:
   unless active auth becomes available. Launch readiness exposes these fields in
   top-level `completion_preflight_summary` and compatible flat fields, so status
   refreshes do not need to know nested check paths.
-  Disabled proposal/APS caps, code-source visibility, source-read headroom, and
-  item-level `research_focus` prompt visibility are covered by current evidence
-  reports rather than repeated here.
+  Disabled proposal/APS caps, code-source visibility, source-read headroom,
+  item-level `research_focus` prompt visibility, and CVRP adapter-derived
+  opportunity diagnostics are covered by current evidence reports rather than
+  repeated here.
   Do not launch either root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
