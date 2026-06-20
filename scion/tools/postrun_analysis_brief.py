@@ -780,6 +780,10 @@ def render_markdown(brief: dict[str, Any]) -> str:
             f"{_mapping_text(budget.get('severity_counts'))}",
             "- Runtime budget diagnostic stages: "
             f"{_mapping_text(budget.get('stage_counts'))}",
+            "- Runtime budget diagnostic sides: "
+            f"{_mapping_text(budget.get('side_counts'))}",
+            "- Runtime budget diagnostic repairable flags: "
+            f"{_mapping_text(budget.get('repairable_counts'))}",
         ]
     )
     runtime_entries = runtime_feedback.get("entries")
@@ -2593,6 +2597,8 @@ def _runtime_budget_diagnostics_summary(
         "code_counts": {},
         "severity_counts": {},
         "stage_counts": {},
+        "side_counts": {},
+        "repairable_counts": {},
         "runtime_model_counts": {},
         "top_diagnostics": [],
     }
@@ -2614,6 +2620,18 @@ def _runtime_budget_diagnostics_summary(
                 summary["stage_counts"],
                 str(raw.get("stage") or "unknown"),
             )
+            _increment_count(
+                summary["side_counts"],
+                str(raw.get("saturated_side") or "unknown"),
+            )
+            repairable_key = (
+                "true"
+                if raw.get("repairable") is True
+                else "false"
+                if raw.get("repairable") is False
+                else "unknown"
+            )
+            _increment_count(summary["repairable_counts"], repairable_key)
             runtime_model = raw.get("runtime_model")
             if runtime_model:
                 _increment_count(summary["runtime_model_counts"], str(runtime_model))
@@ -2632,6 +2650,10 @@ def _compact_runtime_budget_diagnostic(raw: Mapping[str, Any]) -> dict[str, Any]
             "code": raw.get("code"),
             "severity": raw.get("severity"),
             "runtime_model": raw.get("runtime_model"),
+            "saturated_side": raw.get("saturated_side"),
+            "repairable": raw.get("repairable"),
+            "candidate_saturated": raw.get("candidate_saturated"),
+            "champion_saturated": raw.get("champion_saturated"),
             "saturation_ratio": raw.get("saturation_ratio"),
             "threshold_ratio": raw.get("threshold_ratio"),
             "total_pairs": raw.get("total_pairs"),

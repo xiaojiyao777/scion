@@ -53,6 +53,11 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                     "stage": "screening",
                     "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
                     "severity": "info",
+                    "runtime_model": "budget_exhausting",
+                    "saturated_side": "champion",
+                    "repairable": False,
+                    "candidate_saturated": False,
+                    "champion_saturated": True,
                     "saturation_ratio": 0.99,
                     "threshold_ratio": 0.9,
                     "total_pairs": 32,
@@ -708,19 +713,28 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "code_counts": {"SCREENING_RUNTIME_BUDGET_SATURATION": 1},
         "severity_counts": {"info": 1},
         "stage_counts": {"screening": 1},
-        "runtime_model_counts": {},
+        "side_counts": {"champion": 1},
+        "repairable_counts": {"false": 1},
+        "runtime_model_counts": {"budget_exhausting": 1},
         "top_diagnostics": [
             {
                 "branch_id": "branch-1",
                 "stage": "screening",
                 "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
                 "severity": "info",
+                "runtime_model": "budget_exhausting",
+                "saturated_side": "champion",
+                "repairable": False,
+                "candidate_saturated": False,
+                "champion_saturated": True,
                 "saturation_ratio": 0.99,
                 "threshold_ratio": 0.9,
                 "total_pairs": 32,
             }
         ],
     }
+    assert "Runtime budget diagnostic sides: champion=1" in markdown
+    assert "Runtime budget diagnostic repairable flags: false=1" in markdown
     failure_summary = brief["failure_taxonomy_summary"]
     assert failure_summary["schema_version"] == (
         "scion.postrun_failure_taxonomy_summary.v1"
