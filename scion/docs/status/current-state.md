@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-06-19
+Last updated: 2026-06-20
 
 This is the operational resume point, not a run log. Replace stale conclusions
 instead of appending history. Detailed commands, repair evidence, counters, and
@@ -35,15 +35,14 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL after the CVRP two-opt
-direct-evidence mechanism-binding repair touched `scion/tools`, which is
-covered by the runtime guard. WSL static readiness passes; launch readiness
-fails only at completion preflight auth.
+The active prepared roots were generated on WSL after launch readiness began
+checking committed runtime-guard drift before launch. WSL static readiness
+passes; launch readiness fails only at completion preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-mechanismbind-1c2c1bbb-preflight-6r-gpt55-20260619T234940Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runtimeguard-576209e8-preflight-6r-gpt55-20260620T000946Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-mechanismbind-1c2c1bbb-preflight-4r-gpt55-20260619T234941Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-runtimeguard-576209e8-preflight-4r-gpt55-20260620T000948Z-claw`
 
 Prepared manifests record:
 
@@ -51,7 +50,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `1c2c1bbb`; CVRP `1c2c1bbb`.
+- Runtime commits: warehouse `576209e8`; CVRP `576209e8`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -70,6 +69,9 @@ Prepared manifests record:
   preflight, strict postrun rebuild/readiness, and prepared/postrun
   rebuild-manifest identity. It also emits top-level failed-check summaries so
   operators can distinguish static failures from the completion preflight.
+- Launch readiness recomputes committed drift for the prepared
+  `runtime_guard_paths`: test/docs-only commit drift is allowed, but committed
+  changes to runtime/control-plane/problem paths fail readiness before launch.
 - CVRP and warehouse prepared measurement handoffs are derived from
   `problem-v1.yaml` declarations and the declared A/A `calibration_ref`; stale
   or undeclared MDE/practical-delta values fail readiness.
@@ -171,6 +173,7 @@ Prepared manifests record:
   `scion/docs/experiments/v0.4/v04-legacy-run-problem-family-inference-20260619.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-failed-check-summary-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-readiness-failed-check-summary-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-launch-readiness-runtime-guard-commit-drift-20260620.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-mechanism-bound-direct-evidence-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-positive-effect-plateau-readiness-20260619.md`,
