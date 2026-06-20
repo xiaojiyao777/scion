@@ -939,7 +939,7 @@ def test_branch_lesson_context_is_compact_and_prioritized_before_cross_branch_ma
     assert "old target/action/mechanism family" in user_prompt
 
 
-def test_stress_verbose_branch_lessons_render_as_dense_untruncated_prompt_signals():
+def test_stress_verbose_branch_lessons_render_as_distilled_prompt_signals():
     records = []
     for idx in range(18):
         records.append(
@@ -1142,6 +1142,9 @@ def test_stress_verbose_branch_lessons_render_as_dense_untruncated_prompt_signal
     assert "... [truncated]" not in rendered_prompt
     assert "[truncated]" not in rendered_prompt
     assert "..." not in rendered_prompt
+    assert "omitted_chars=" in rendered_prompt
+    assert "text_digest=" in rendered_prompt
+    assert "omitted_item_count" in rendered_prompt
     for forbidden in (
         "raw_text",
         "raw_rows",
@@ -1175,10 +1178,6 @@ def test_stress_verbose_branch_lessons_render_as_dense_untruncated_prompt_signal
         "stress_mechanism_17",
         "stress_family_2",
         "outcome summary 0",
-        "summary-tail-marker-17",
-        "basis-tail-marker-17",
-        "case-marker-17-09",
-        "branch-stress-17-extra-09",
         "no_effect",
         "weak_positive",
         "clean_fork_new_branch",
@@ -1187,11 +1186,19 @@ def test_stress_verbose_branch_lessons_render_as_dense_untruncated_prompt_signal
         "mechanism_family",
         "runtime_budget_strategy",
         "Avoid replaying saturated stress families.",
-        "opportunity-tail-marker-09",
+        "opportunity-tail-marker-07",
         "cluster-stress-family",
         "class ChampionOperator",
     ):
         assert expected in rendered_prompt
+    for distilled_detail in (
+        "summary-tail-marker-17",
+        "basis-tail-marker-17",
+        "case-marker-17-09",
+        "branch-stress-17-extra-09",
+        "opportunity-tail-marker-09",
+    ):
+        assert distilled_detail not in rendered_prompt
 
     manifest = build_api_visible_prompt_manifest(
         session_id="session-stress-branch-lessons",

@@ -7,6 +7,7 @@ agentic hypothesis generation.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from typing import Any, Literal, Mapping
@@ -85,6 +86,9 @@ _REPAIR_TRIGGER_KEYS = frozenset(
 _COMPACT_LEARNING_SCHEMA = "compact_cross_branch_learning.v1"
 _PROFILE_METADATA_SCHEMA = "hypothesis_context_profile.v1"
 _COMPACT_MEASUREMENT_DIAGNOSTICS_KEY = "compact_problem_measurement_diagnostics"
+_COMPACT_SIGNAL_ITEM_LIMIT = 8
+_COMPACT_SIGNAL_SEQUENCE_LIMIT = 6
+_COMPACT_SIGNAL_TEXT_CHARS = 220
 _OPPORTUNITY_STATUS_RE = re.compile(r"\s+opportunity_status=\S+")
 _PROMOTED_ADAPTER_DIAGNOSTIC_KEYS = frozenset(
     {
@@ -326,6 +330,16 @@ def _mechanism_signal_items(
         projected = _mechanism_signal_item(raw)
         if projected:
             items.append(projected)
+    effective_limit = _COMPACT_SIGNAL_ITEM_LIMIT if limit is None else limit
+    if effective_limit and len(items) > effective_limit:
+        omitted = len(items) - effective_limit
+        items = items[:effective_limit]
+        items.append(
+            {
+                "omitted_item_count": omitted,
+                "omitted_reason": "additional_mechanism_signals_distilled",
+            }
+        )
     return items
 
 
@@ -495,11 +509,17 @@ def _short_sequence(
 ) -> list[Any]:
     if not isinstance(value, (list, tuple)):
         return []
-    return [
+    items = [
         _short_signal_text(item)
         for item in value
         if _present(item)
     ]
+    effective_limit = _COMPACT_SIGNAL_SEQUENCE_LIMIT if limit is None else limit
+    if effective_limit and len(items) > effective_limit:
+        omitted = len(items) - effective_limit
+        items = items[:effective_limit]
+        items.append(f"omitted_item_count={omitted}")
+    return items
 
 
 def _short_signal_text(
@@ -513,6 +533,12 @@ def _short_signal_text(
     else:
         rendered = str(value or "")
     text = re.sub(r"\s+", " ", rendered).strip()
+    effective_max = _COMPACT_SIGNAL_TEXT_CHARS if max_chars is None else max_chars
+    if effective_max and len(text) > effective_max:
+        head = text[:effective_max].rstrip()
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+        omitted = len(text) - len(head)
+        return f"{head} [omitted_chars={omitted} text_digest={digest}]"
     return text
 
 
@@ -695,6 +721,16 @@ def _project_items(
         projected = _project_mapping(raw, fields=fields)
         if projected:
             items.append(projected)
+    effective_limit = _COMPACT_SIGNAL_ITEM_LIMIT if limit is None else limit
+    if effective_limit and len(items) > effective_limit:
+        omitted = len(items) - effective_limit
+        items = items[:effective_limit]
+        items.append(
+            {
+                "omitted_item_count": omitted,
+                "omitted_reason": "additional_problem_diagnostics_distilled",
+            }
+        )
     return items
 
 
@@ -737,8 +773,18 @@ def _project_generic_value(value: Any) -> Any:
             }
         )
     if isinstance(value, (list, tuple)):
-        projected = [_project_generic_value(item) for item in value]
-        return [item for item in projected if _present(item)]
+        projected = [
+            _project_generic_value(item)
+            for item in list(value)[:_COMPACT_SIGNAL_SEQUENCE_LIMIT]
+        ]
+        result = [item for item in projected if _present(item)]
+        if len(value) > _COMPACT_SIGNAL_SEQUENCE_LIMIT:
+            result.append(
+                {"omitted_item_count": len(value) - _COMPACT_SIGNAL_SEQUENCE_LIMIT}
+            )
+        return result
+    if isinstance(value, str):
+        return _short_signal_text(value)
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     return str(value)

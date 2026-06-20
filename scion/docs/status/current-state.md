@@ -189,6 +189,11 @@ reports.
 - Code-phase prompts must retain direct champion/current-branch/target source
   visibility and declared integration-file visibility; compression may remove
   boilerplate, not the research object code.
+- Hypothesis prompts must render cross-branch maps and branch-lesson context as
+  mechanism-level distilled signals with lesson ids, signatures, maturity,
+  evidence counts/statuses, and explicit `omitted_*`/digest audit markers
+  instead of default-visible raw long lesson prose, raw rows, or large
+  branch/case enumerations.
 - Postrun acceptance must fail closed unless warehouse/CVRP conclusions,
   review-input summaries, failure taxonomy, prompt/source visibility,
   Phase 4 evidence coverage, runtime-budget evidence, continuity evidence, and

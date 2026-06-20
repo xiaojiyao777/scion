@@ -314,6 +314,11 @@ Current checkpoint:
     postrun readiness audits prompt/source visibility, branch state, champion
     progress, failure taxonomy, research-context actionability, signal density,
     runtime drain readiness, and interpretation-specific review inputs.
+    Hypothesis prompts render cross-branch maps and branch-lesson context as
+    mechanism-level distilled signals with lesson ids, signatures, maturity,
+    evidence counts/statuses, and explicit `omitted_*`/digest audit markers
+    instead of default-visible raw long lesson prose, raw rows, or large
+    branch/case enumerations.
   - Warehouse positive-at-or-above-MDE evidence routes to
     `protocol_evaluated_positive_effect_review_ready`; plateau conclusions
     require plateau-consistent measurement, review-ready runtime feedback, and

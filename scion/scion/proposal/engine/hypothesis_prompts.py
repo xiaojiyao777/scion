@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from typing import Any, Dict, Mapping
@@ -23,6 +24,8 @@ _PROMPT_SAME_MECHANISM_ALLOWED_ACTIONS = (
     "parameterize",
     "telemetry_wiring",
 )
+_BRANCH_LESSON_SEQUENCE_LIMIT = 8
+_BRANCH_LESSON_TEXT_CHARS = 220
 
 
 def _split_hypothesis_context(
@@ -1121,9 +1124,22 @@ def _compact_branch_lesson_value(value: Any) -> Any:
         }
         return result
     if isinstance(value, (list, tuple)):
-        return [_compact_branch_lesson_value(item) for item in value]
+        projected = [
+            _compact_branch_lesson_value(item)
+            for item in list(value)[:_BRANCH_LESSON_SEQUENCE_LIMIT]
+        ]
+        if len(value) > _BRANCH_LESSON_SEQUENCE_LIMIT:
+            projected.append(
+                {"omitted_item_count": len(value) - _BRANCH_LESSON_SEQUENCE_LIMIT}
+            )
+        return projected
     if isinstance(value, str):
         text = re.sub(r"\s+", " ", value).strip()
+        if len(text) > _BRANCH_LESSON_TEXT_CHARS:
+            head = text[:_BRANCH_LESSON_TEXT_CHARS].rstrip()
+            digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+            omitted = len(text) - len(head)
+            return f"{head} [omitted_chars={omitted} text_digest={digest}]"
         return text
     return value
 
