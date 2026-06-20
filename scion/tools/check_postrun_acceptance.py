@@ -1011,9 +1011,8 @@ def _review_input_summaries_actionability(
             summary.get("decision_features_excluded") is not True
         ):
             failures.append(f"{key}_decision_features_not_excluded")
-        if (
-            required_for_interpretation
-            and summary.get("current_run_evidence") is not True
+        if (required_for_interpretation or summary_present) and (
+            summary.get("current_run_evidence") is not True
         ):
             failures.append(f"{key}_not_current_run_evidence")
         if required_for_interpretation and summary.get("available") is not True:

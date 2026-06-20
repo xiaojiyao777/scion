@@ -295,6 +295,10 @@ Current checkpoint:
     runtime-feedback raw availability, drain/review readiness, runtime model
     counts, and runtime budget diagnostic counts before delegated review can
     accept the summary as current-run analysis evidence.
+  - Current-run warehouse/CVRP review-input summaries must be current-run when
+    required by the interpretation or when present in the brief, so optional
+    measurement/runtime/continuity summaries cannot carry stale report-only
+    material into delegated review.
   - Current-run warehouse/CVRP research-context actionability must be a fresh
     projection of prompt visibility and research-continuity inputs; stale
     prompt token, continuity, gap, or recommendation projections fail postrun

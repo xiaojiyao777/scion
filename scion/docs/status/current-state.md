@@ -92,7 +92,10 @@ Prepared run shape:
   runtime-evidence consistency, formal hypothesis prompt traces, and
   problem-owned review rules; summary prose alone is not acceptance evidence.
   Problem-summary `current_run_evidence` must match the analysis brief
-  lifecycle and Phase 4 current-run state.
+  lifecycle and Phase 4 current-run state. Required or present review-input
+  summaries must also be current-run, so stale optional
+  measurement/runtime/continuity summaries cannot make a delegated review look
+  analysis-ready.
 
 ## Warehouse
 

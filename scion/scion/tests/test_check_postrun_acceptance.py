@@ -2283,6 +2283,65 @@ def test_postrun_acceptance_accepts_warehouse_quality_blocked_no_protocol_conclu
     assert check_tool.main([str(run_root), "--require-current-run-ready"]) == 0
 
 
+def test_postrun_acceptance_rejects_present_stale_optional_review_input_summary(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(
+        tmp_path / "warehouse-run-stale-optional-input"
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": _warehouse_quality_blocked_problem_evidence(),
+        "evidence_gaps": [
+            "quality_blocked_before_protocol_evaluation",
+            "missing_measurement_effect_summary",
+            "missing_runtime_feedback_summary",
+            "missing_research_continuity_summary",
+        ],
+        "interpretation": "quality_blocked_no_protocol_plateau_conclusion",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    _apply_warehouse_quality_blocked_review_inputs(brief, quality_block_count=2)
+    measurement_summary = brief["measurement_effect_summary"]
+    assert isinstance(measurement_summary, dict)
+    measurement_summary["current_run_evidence"] = False
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    input_check = readiness["checks"]["review_input_summaries_actionability"]
+    measurement_detail = next(
+        item
+        for item in input_check["detail"]["summaries"]
+        if item["summary"] == "measurement_effect_summary"
+    )
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert input_check["status"] == "failed"
+    assert measurement_detail["required_for_interpretation"] is False
+    assert measurement_detail["current_run_evidence"] is False
+    assert "measurement_effect_summary_not_current_run_evidence" in measurement_detail[
+        "failures"
+    ]
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_rejects_warehouse_quality_blocked_without_taxonomy_signal(
     tmp_path: Path,
 ) -> None:
