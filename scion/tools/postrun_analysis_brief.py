@@ -4345,6 +4345,8 @@ def _is_cvrp_large_twoopt_phase_name(value: str) -> bool:
         "two_opt_star",
         "twooptstar",
         "2optstar",
+        "size70_two_opt",
+        "size70twoopt",
         "unbounded",
         "vns",
         "fallback",
@@ -4465,7 +4467,6 @@ def _cvrp_large_twoopt_family_match(value: str) -> dict[str, Any]:
         or "time_bounded" in normalized
         or "guarded" in normalized
         or "capped" in normalized
-        or "size70" in compact
     )
     if large_scope and bounded_or_deadline_scope:
         return {
