@@ -160,7 +160,9 @@ Prepared run shape:
 - A plateau conclusion is accepted only when protocol evidence shows no
   positive effect at or above MDE, runtime evidence is review-ready, and
   continuity evidence is substantive without fully missed same-mechanism
-  follow-up opportunities.
+  follow-up opportunities. Problem-summary continuity evidence must also match
+  the current recomputed `same_mechanism_missed` count, so a stale or hand-written
+  plateau summary cannot hide missed same-mechanism follow-up.
 
 ## CVRP/VRP
 

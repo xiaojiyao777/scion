@@ -1425,6 +1425,7 @@ def _problem_summary_input_consistency(
             "max_branch_depth",
             "same_mechanism_selected",
             "same_mechanism_observed",
+            "same_mechanism_missed",
             "branch_lessons_satisfied",
             "branch_lessons_required",
             "weak_positive_accepted",
@@ -1693,6 +1694,12 @@ def _problem_summary_input_consistency(
             ),
             "input_continuity_same_mechanism_selected": (
                 input_warehouse_continuity_signal.get("same_mechanism_selected")
+            ),
+            "summary_continuity_same_mechanism_missed": continuity_evidence.get(
+                "same_mechanism_missed"
+            ),
+            "input_continuity_same_mechanism_missed": (
+                input_warehouse_continuity_signal.get("same_mechanism_missed")
             ),
             "summary_continuity_branch_lessons_satisfied": continuity_evidence.get(
                 "branch_lessons_satisfied"

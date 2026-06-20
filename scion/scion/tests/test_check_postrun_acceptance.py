@@ -3994,6 +3994,11 @@ def test_postrun_acceptance_rejects_warehouse_plateau_ready_with_missed_same_mec
         consistency["detail"]["input_continuity_same_mechanism_selected"]
         == 0
     )
+    assert "problem_summary_warehouse_continuity_same_mechanism_missed_mismatch" in (
+        failures
+    )
+    assert consistency["detail"]["summary_continuity_same_mechanism_missed"] is None
+    assert consistency["detail"]["input_continuity_same_mechanism_missed"] == 1
 
 
 def test_postrun_acceptance_rejects_warehouse_plateau_ready_with_positive_measurement_effect(
