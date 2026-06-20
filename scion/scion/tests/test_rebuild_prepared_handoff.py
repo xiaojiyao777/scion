@@ -406,9 +406,39 @@ def test_rebuild_prepared_handoff_adds_warehouse_code_constraint_bridge(
     code_bridge = prompt_context["signals"][
         "warehouse_active_subject_code_constraints_prompt_bridge"
     ]
+    diagnostic_bridge = prompt_context["signals"][
+        "warehouse_problem_measurement_diagnostics_prompt_bridge"
+    ]
 
     assert manifest["complete"] is True
     assert prompt_context["problem_family"] == "warehouse_delivery"
+    assert diagnostic_bridge["available"] is True
+    assert diagnostic_bridge["required"] is True
+    assert diagnostic_bridge["runtime_generated_after_launch"] is False
+    assert diagnostic_bridge["detail"]["source_markers"] == {
+        "adapter_hook": True,
+        "context_payload": True,
+        "profile_projection": True,
+        "prompt_renderer": True,
+    }
+    diagnostic_summary = diagnostic_bridge["detail"]["diagnostic_summary"]
+    assert diagnostic_summary["schema_version"] == (
+        "scion.problem_measurement_diagnostics_prompt_summary.v1"
+    )
+    assert diagnostic_summary["available"] is True
+    assert diagnostic_summary["report_only"] is True
+    assert diagnostic_summary["decision_features_excluded"] is True
+    assert diagnostic_summary["raw_payload_excluded"] is True
+    assert diagnostic_summary["raw_prompt_excluded"] is True
+    assert diagnostic_summary["adapter_schema_present"] is True
+    assert diagnostic_summary["prompt_section_present"] is True
+    assert diagnostic_summary["warehouse_transfer_risk_present"] is True
+    assert diagnostic_summary["warehouse_required_diagnostics_present"] is True
+    assert diagnostic_summary["warehouse_followup_opportunity_present"] is True
+    assert diagnostic_summary["warehouse_plateau_guard_present"] is True
+    assert diagnostic_summary["warehouse_v2_followup_present"] is True
+    assert diagnostic_summary["opportunity_diagnostic_count"] >= 1
+    assert diagnostic_summary["forbidden_prompt_tokens_present"] == []
     assert code_bridge["available"] is True
     assert code_bridge["required"] is True
     assert code_bridge["runtime_generated_after_launch"] is False

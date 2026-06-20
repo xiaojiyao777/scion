@@ -106,6 +106,32 @@ CVRP_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS = {
         "Problem Measurement Diagnostics",
     ),
 }
+WAREHOUSE_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS = {
+    "adapter_hook": (
+        "scion/scion/problems/warehouse_delivery/adapter.py",
+        "def render_problem_measurement_diagnostics",
+    ),
+    "context_payload": (
+        "scion/scion/proposal/context_manager/manager.py",
+        "problem_measurement_diagnostics",
+    ),
+    "profile_projection": (
+        "scion/scion/proposal/engine/hypothesis_context_profiles.py",
+        "adapter_diagnostics",
+    ),
+    "prompt_renderer": (
+        "scion/scion/proposal/engine/hypothesis_prompts.py",
+        "Problem Measurement Diagnostics",
+    ),
+}
+PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS_BY_FAMILY = {
+    "cvrp": CVRP_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS,
+    "warehouse_delivery": WAREHOUSE_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS,
+}
+PROBLEM_MEASUREMENT_DIAGNOSTICS_SIGNAL_NAMES = {
+    "cvrp": "cvrp_problem_measurement_diagnostics_prompt_bridge",
+    "warehouse_delivery": "warehouse_problem_measurement_diagnostics_prompt_bridge",
+}
 CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS = {
     "provider_hook": (
         "scion/scion/problems/cvrp/solver_design_provider.py",
@@ -993,7 +1019,9 @@ def _add_problem_measurement_diagnostics_prompt_signal(
     problem_family: Any,
 ) -> None:
     family = str(problem_family or "")
-    if family != "cvrp":
+    markers = PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS_BY_FAMILY.get(family)
+    signal_name = PROBLEM_MEASUREMENT_DIAGNOSTICS_SIGNAL_NAMES.get(family)
+    if not markers or not signal_name:
         return
     problem_v1 = _resolve_problem_v1_path(
         root=root,
@@ -1006,28 +1034,32 @@ def _add_problem_measurement_diagnostics_prompt_signal(
     )
     source_marker_results = {
         name: _source_contains(relative_path, marker)
-        for name, (relative_path, marker) in (
-            CVRP_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS.items()
-        )
+        for name, (relative_path, marker) in markers.items()
     }
+    bridge_scope = (
+        "mechanism effect ranking"
+        if family == "cvrp"
+        else "validation-transfer follow-up diagnostics"
+    )
     _add_signal(
         signals,
-        "cvrp_problem_measurement_diagnostics_prompt_bridge",
+        signal_name,
         available=(
             all(source_marker_results.values())
             and diagnostic_summary.get("available") is True
         ),
         required=True,
         source=(
-            "current checkout CVRP problem measurement diagnostics adapter, "
+            f"current checkout {family} problem measurement diagnostics adapter, "
             "context projection, and hypothesis prompt renderer"
         ),
         detail={
             "source_markers": source_marker_results,
             "diagnostic_summary": diagnostic_summary,
             "boundary": (
-                "report-only problem-owned diagnostics bridge; mechanism effect "
-                "ranking guides proposal planning and stays out of DecisionFeatures"
+                "report-only problem-owned diagnostics bridge; "
+                f"{bridge_scope} guide proposal planning and stay out of "
+                "DecisionFeatures"
             ),
         },
     )

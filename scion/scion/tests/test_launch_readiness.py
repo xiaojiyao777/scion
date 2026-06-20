@@ -1561,6 +1561,78 @@ def test_launch_readiness_rejects_stale_cvrp_problem_measurement_diagnostics_sum
     )
 
 
+def test_launch_readiness_rejects_missing_warehouse_problem_measurement_diagnostics_bridge(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(
+        tmp_path,
+        problem_family="warehouse_delivery",
+        research_focus=_warehouse_research_focus(),
+    )
+    artifact_path = (
+        run_root
+        / "prepared_handoff"
+        / "prompt_context_readiness"
+        / "cvrp_on_full.prepared_prompt_context_readiness.v1.json"
+    )
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["signals"].pop("warehouse_problem_measurement_diagnostics_prompt_bridge")
+    artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert any(
+        failure["reason"]
+        == "warehouse_problem_measurement_diagnostics_bridge_missing"
+        for failure in prompt_check["detail"]["failures"]
+    )
+
+
+def test_launch_readiness_rejects_stale_warehouse_problem_measurement_diagnostics_summary(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(
+        tmp_path,
+        problem_family="warehouse_delivery",
+        research_focus=_warehouse_research_focus(),
+    )
+    artifact_path = (
+        run_root
+        / "prepared_handoff"
+        / "prompt_context_readiness"
+        / "cvrp_on_full.prepared_prompt_context_readiness.v1.json"
+    )
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    diagnostic_summary = payload["signals"][
+        "warehouse_problem_measurement_diagnostics_prompt_bridge"
+    ]["detail"]["diagnostic_summary"]
+    diagnostic_summary["warehouse_plateau_guard_present"] = False
+    diagnostic_summary["opportunity_diagnostic_count"] = 0
+    artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert any(
+        failure["reason"]
+        == (
+            "warehouse_problem_measurement_diagnostics_bridge_"
+            "diagnostic_summary_field_mismatch"
+        )
+        and failure["field"] == "warehouse_plateau_guard_present"
+        and failure["expected"] is True
+        and failure["actual"] is False
+        for failure in prompt_check["detail"]["failures"]
+    )
+
+
 def test_launch_readiness_rejects_missing_warehouse_code_constraint_bridge(
     tmp_path: Path,
 ) -> None:
@@ -3637,6 +3709,39 @@ def _write_prompt_context_readiness(
             "source": "fixture",
         },
     }
+    if problem_family in {"cvrp", "warehouse_delivery"}:
+        problem_v1 = readiness_tool._resolve_problem_v1_path(
+            root=run_root,
+            manifest=manifest,
+            problem_family=problem_family,
+        )
+        diagnostic_summary = (
+            readiness_tool.problem_measurement_diagnostics_prompt_summary(
+                problem_v1_path=problem_v1,
+                problem_family=problem_family,
+            )
+        )
+        diagnostic_signal_name = (
+            "cvrp_problem_measurement_diagnostics_prompt_bridge"
+            if problem_family == "cvrp"
+            else "warehouse_problem_measurement_diagnostics_prompt_bridge"
+        )
+        diagnostic_markers = {
+            "adapter_hook": True,
+            "context_payload": True,
+            "profile_projection": True,
+            "prompt_renderer": True,
+        }
+        signals[diagnostic_signal_name] = {
+            "available": diagnostic_summary["available"] is True,
+            "detail": {
+                "diagnostic_summary": diagnostic_summary,
+                "source_markers": diagnostic_markers,
+            },
+            "required": True,
+            "runtime_generated_after_launch": False,
+            "source": "fixture",
+        }
     if include_code_constraint_bridge:
         if problem_family == "warehouse_delivery":
             signals["warehouse_active_subject_code_constraints_prompt_bridge"] = {
@@ -3684,32 +3789,6 @@ def _write_prompt_context_readiness(
                 "source": "fixture",
             }
         elif problem_family == "cvrp":
-            problem_v1 = readiness_tool._resolve_problem_v1_path(
-                root=run_root,
-                manifest=manifest,
-                problem_family=problem_family,
-            )
-            diagnostic_summary = (
-                readiness_tool.problem_measurement_diagnostics_prompt_summary(
-                    problem_v1_path=problem_v1,
-                    problem_family=problem_family,
-                )
-            )
-            signals["cvrp_problem_measurement_diagnostics_prompt_bridge"] = {
-                "available": diagnostic_summary["available"] is True,
-                "detail": {
-                    "diagnostic_summary": diagnostic_summary,
-                    "source_markers": {
-                        "adapter_hook": True,
-                        "context_payload": True,
-                        "profile_projection": True,
-                        "prompt_renderer": True,
-                    },
-                },
-                "required": True,
-                "runtime_generated_after_launch": False,
-                "source": "fixture",
-            }
             signals["cvrp_active_subject_code_constraints_prompt_bridge"] = {
                 "available": True,
                 "detail": {

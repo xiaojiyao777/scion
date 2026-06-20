@@ -144,7 +144,7 @@ def problem_measurement_diagnostics_prompt_summary(
         "raw_payload_excluded": True,
         "raw_prompt_excluded": True,
     }
-    if family != "cvrp":
+    if family not in {"cvrp", "warehouse_delivery"}:
         return {**base, "available": False, "reason": "unsupported_problem_family"}
     if problem_path is None:
         return {**base, "available": False, "reason": "problem_v1_not_found"}
@@ -199,11 +199,12 @@ def problem_measurement_diagnostics_prompt_summary(
         for token in PROBLEM_MEASUREMENT_DIAGNOSTICS_FORBIDDEN_PROMPT_TOKENS
         if token in rendered_lower
     ]
+    adapter_schema = _expected_adapter_diagnostic_schema(family)
     summary = {
         **base,
         "payload_schema_version": str(payload.get("schema_version") or ""),
-        "adapter_schema_present": (
-            "cvrp_measurement_opportunity_diagnostic.v1" in rendered_prompt
+        "adapter_schema_present": bool(
+            adapter_schema and adapter_schema in rendered_prompt
         ),
         "prompt_section_present": "## Problem Measurement Diagnostics" in rendered_prompt,
         "compact_prompt_value_present": bool(compact.strip()),
@@ -227,22 +228,69 @@ def problem_measurement_diagnostics_prompt_summary(
         "mechanism_rank_count": _sequence_count(
             payload.get("mechanism_effect_ranking")
         ),
+        "opportunity_diagnostic_count": _sequence_count(
+            payload.get("opportunity_diagnostics")
+        ),
+        "warehouse_transfer_risk_present": "transfer_risk" in rendered_prompt,
+        "warehouse_required_diagnostics_present": all(
+            token in rendered_prompt
+            for token in (
+                "operator_invocations",
+                "split_delta_sum",
+                "cost_delta_sum",
+            )
+        ),
+        "warehouse_followup_opportunity_present": (
+            "validation_transfer_continuation" in rendered_prompt
+        ),
+        "warehouse_plateau_guard_present": all(
+            token in rendered_prompt
+            for token in (
+                "WAREHOUSE_V2_FOLLOWUP_CONTINUOUS_RESEARCH",
+                "PLATEAU_REQUIRES_PROTOCOL_EVIDENCE",
+                "SCREENING_ONLY_NOT_PLATEAU_EVIDENCE",
+            )
+        ),
+        "warehouse_v2_followup_present": (
+            "champion-v2 validation-transfer checkpoint" in rendered_prompt
+        ),
         "forbidden_prompt_tokens_present": forbidden_present,
     }
-    required_true_fields = (
+    required_true_fields = [
         "adapter_schema_present",
         "prompt_section_present",
         "compact_prompt_value_present",
         "problem_measurement_diagnostics_key_present",
-        "screening_headroom_present",
         "measurable_opportunity_classes_present",
-        "mechanism_effect_ranking_present",
-        "highest_current_followup_present",
         "decision_features_exclusion_present",
-    )
+    ]
+    if family == "cvrp":
+        required_true_fields.extend(
+            [
+                "screening_headroom_present",
+                "mechanism_effect_ranking_present",
+                "highest_current_followup_present",
+            ]
+        )
+    elif family == "warehouse_delivery":
+        required_true_fields.extend(
+            [
+                "warehouse_transfer_risk_present",
+                "warehouse_required_diagnostics_present",
+                "warehouse_followup_opportunity_present",
+                "warehouse_plateau_guard_present",
+                "warehouse_v2_followup_present",
+            ]
+        )
     available = (
         bool(payload)
-        and summary["mechanism_rank_count"] > 0
+        and (
+            (family == "cvrp" and summary["mechanism_rank_count"] > 0)
+            or (
+                family == "warehouse_delivery"
+                and summary["opportunity_diagnostic_count"] > 0
+            )
+        )
         and not forbidden_present
         and all(summary[field] is True for field in required_true_fields)
     )
@@ -254,6 +302,18 @@ def problem_measurement_diagnostics_prompt_summary(
 
 
 def _minimal_hypothesis_context(payload: dict[str, Any]) -> dict[str, Any]:
+    family = str(payload.get("problem_family") or "")
+    if family == "warehouse_delivery":
+        return {
+            "problem_summary": "Warehouse prepared prompt diagnostics audit.",
+            "research_surfaces": "Research surfaces: warehouse_operator",
+            "operator_categories": "warehouse_operator",
+            "available_actions": "modify, create_new",
+            "targetable_files": "operators/*.py",
+            "champion_operators_code": "class MergeVehicles:\n    pass\n",
+            "champion_stats": "champion_v2",
+            "problem_measurement_diagnostics": payload,
+        }
     return {
         "problem_summary": "CVRP prepared prompt diagnostics audit.",
         "research_surfaces": "Research surfaces: solver_design",
@@ -264,6 +324,14 @@ def _minimal_hypothesis_context(payload: dict[str, Any]) -> dict[str, Any]:
         "champion_stats": "prepared_prompt_audit",
         "problem_measurement_diagnostics": payload,
     }
+
+
+def _expected_adapter_diagnostic_schema(problem_family: str) -> str:
+    if problem_family == "cvrp":
+        return "cvrp_measurement_opportunity_diagnostic.v1"
+    if problem_family == "warehouse_delivery":
+        return "warehouse_validation_transfer_diagnostic.v1"
+    return ""
 
 
 def _required_research_focus_projection_keys(

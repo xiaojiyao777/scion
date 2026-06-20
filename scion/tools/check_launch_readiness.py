@@ -88,6 +88,36 @@ CVRP_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS = {
         "Problem Measurement Diagnostics",
     ),
 }
+WAREHOUSE_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS = {
+    "adapter_hook": (
+        "scion/scion/problems/warehouse_delivery/adapter.py",
+        "def render_problem_measurement_diagnostics",
+    ),
+    "context_payload": (
+        "scion/scion/proposal/context_manager/manager.py",
+        "problem_measurement_diagnostics",
+    ),
+    "profile_projection": (
+        "scion/scion/proposal/engine/hypothesis_context_profiles.py",
+        "adapter_diagnostics",
+    ),
+    "prompt_renderer": (
+        "scion/scion/proposal/engine/hypothesis_prompts.py",
+        "Problem Measurement Diagnostics",
+    ),
+}
+PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS_BY_FAMILY = {
+    "cvrp": CVRP_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS,
+    "warehouse_delivery": WAREHOUSE_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS,
+}
+PROBLEM_MEASUREMENT_DIAGNOSTICS_SIGNAL_NAMES = {
+    "cvrp": "cvrp_problem_measurement_diagnostics_prompt_bridge",
+    "warehouse_delivery": "warehouse_problem_measurement_diagnostics_prompt_bridge",
+}
+PROBLEM_MEASUREMENT_DIAGNOSTICS_FAILURE_PREFIXES = {
+    "cvrp": "cvrp_problem_measurement_diagnostics_bridge",
+    "warehouse_delivery": "warehouse_problem_measurement_diagnostics_bridge",
+}
 CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS = {
     "provider_hook": (
         "scion/scion/problems/cvrp/solver_design_provider.py",
@@ -3229,12 +3259,15 @@ def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:
                 | provider_markers
             ).items()
         }
-    if family == "cvrp":
-        live_markers["cvrp_problem_measurement_diagnostics_source_markers"] = {
+    problem_measurement_markers = (
+        PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS_BY_FAMILY.get(family)
+    )
+    if problem_measurement_markers:
+        live_markers[
+            f"{family}_problem_measurement_diagnostics_source_markers"
+        ] = {
             name: _repo_path_contains(relative_path, marker)
-            for name, (relative_path, marker) in (
-                CVRP_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS.items()
-            )
+            for name, (relative_path, marker) in problem_measurement_markers.items()
         }
     detail["live_markers"] = live_markers
     missing_live = [
@@ -3458,11 +3491,10 @@ def _prompt_context_artifact_failures(
                 )
             )
 
-    if family == "cvrp":
-        failure_prefix = "cvrp_problem_measurement_diagnostics_bridge"
-        diagnostics_bridge = signals_dict.get(
-            "cvrp_problem_measurement_diagnostics_prompt_bridge"
-        )
+    diagnostics_signal_name = PROBLEM_MEASUREMENT_DIAGNOSTICS_SIGNAL_NAMES.get(family)
+    if diagnostics_signal_name:
+        failure_prefix = PROBLEM_MEASUREMENT_DIAGNOSTICS_FAILURE_PREFIXES[family]
+        diagnostics_bridge = signals_dict.get(diagnostics_signal_name)
         if not isinstance(diagnostics_bridge, dict):
             failures.append({"reason": f"{failure_prefix}_missing"})
         else:
@@ -3637,7 +3669,7 @@ def _problem_measurement_diagnostics_prompt_summary_failures(
         )
         return failures
 
-    compare_fields = (
+    compare_fields = [
         "problem_family",
         "problem_v1_path",
         "payload_schema_version",
@@ -3645,13 +3677,29 @@ def _problem_measurement_diagnostics_prompt_summary_failures(
         "prompt_section_present",
         "compact_prompt_value_present",
         "problem_measurement_diagnostics_key_present",
-        "screening_headroom_present",
         "measurable_opportunity_classes_present",
-        "mechanism_effect_ranking_present",
-        "highest_current_followup_present",
         "decision_features_exclusion_present",
-        "mechanism_rank_count",
-    )
+    ]
+    if problem_family == "cvrp":
+        compare_fields.extend(
+            [
+                "screening_headroom_present",
+                "mechanism_effect_ranking_present",
+                "highest_current_followup_present",
+                "mechanism_rank_count",
+            ]
+        )
+    elif problem_family == "warehouse_delivery":
+        compare_fields.extend(
+            [
+                "opportunity_diagnostic_count",
+                "warehouse_transfer_risk_present",
+                "warehouse_required_diagnostics_present",
+                "warehouse_followup_opportunity_present",
+                "warehouse_plateau_guard_present",
+                "warehouse_v2_followup_present",
+            ]
+        )
     for field in compare_fields:
         if payload.get(field) != expected.get(field):
             failures.append(
@@ -3662,7 +3710,15 @@ def _problem_measurement_diagnostics_prompt_summary_failures(
                     "actual": payload.get(field),
                 }
             )
-    if _int_or_zero(payload.get("mechanism_rank_count")) <= 0:
+    if (
+        problem_family == "cvrp"
+        and _int_or_zero(payload.get("mechanism_rank_count")) <= 0
+    ):
+        failures.append({"reason": f"{failure_prefix}_diagnostic_summary_empty"})
+    if (
+        problem_family == "warehouse_delivery"
+        and _int_or_zero(payload.get("opportunity_diagnostic_count")) <= 0
+    ):
         failures.append({"reason": f"{failure_prefix}_diagnostic_summary_empty"})
     return failures
 
