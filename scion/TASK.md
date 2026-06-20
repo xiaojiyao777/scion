@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `0f0f4473`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `d8cc212c`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -252,9 +252,9 @@ Current checkpoint:
   considered static-ready.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-0f0f447-runtimefields-6r-gpt55-20260620T205546Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-d8cc212-statusfailclosed-6r-gpt55-20260620T210805Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-0f0f447-runtimefields-4r-gpt55-20260620T205547Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-d8cc212-statusfailclosed-4r-gpt55-20260620T210806Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -269,7 +269,7 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok`,
-  `prepared_runtime_commit=0f0f4473`, and either
+  `prepared_runtime_commit=d8cc212c`, and either
   `runtime_guard_reason=runtime_guard_commit_matches` or
   `runtime_guard_paths_unchanged_since_prepare` after doc-only commits. They
   also report `launch_env_secret_permissions=ok` and `launch_env_mode=0o600`.
@@ -405,6 +405,11 @@ Current checkpoint:
     an effective wrapper failure and annotate top-level `run_status.json`, so a
     campaign that finishes but lacks current-run-ready postrun acceptance cannot
     look like a successful analysis-ready launch.
+  - Postrun inventory fails closed when root launcher `run_status.json` is
+    missing or unreadable: copied campaign artifacts remain resume snapshots,
+    lifecycle/Phase 4 current-run evidence is false, and the run is marked
+    invalid infra-only before delegated review can treat it as research
+    evidence.
   - Current-run postrun readiness also fails closed on missing or nonzero root
     wrapper exit status, nonzero campaign wrapper exit status, top-level
     postrun acceptance failure markers, and nonzero postrun readiness/report
