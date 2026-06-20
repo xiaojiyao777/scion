@@ -2,10 +2,10 @@
 
 Last updated: 2026-06-20
 
-This is the operational resume point, not a run log. Replace stale conclusions
-instead of appending history. Detailed commands, repair evidence, counters, and
-failed intermediate roots belong in `scion/docs/experiments/v0.4/`; sparse
-milestones belong in `scion/docs/status/v0.4-history.md`.
+This file is the operational resume point, not a run log. Replace stale
+conclusions instead of appending history. Detailed repair notes belong in
+`scion/docs/experiments/v0.4/`; sparse milestones belong in
+`scion/docs/status/v0.4-history.md`.
 
 ## Operating Frame
 
@@ -14,37 +14,33 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 - v0.4 closeout goal: Scion must be stable enough for warehouse to recover
   continuous useful research and for CVRP/VRP to produce evidence-backed
   solver-design hypotheses before v0.5 broad experiment matrices.
-- Current posture: do not add broad budgets, generic truncation/compression, or
-  meaningless gates. Keep CVRP/warehouse semantics problem-owned and keep
+- Current posture: avoid broad budgets, generic truncation/compression, and
+  decorative gates. Keep CVRP/warehouse semantics problem-owned and keep
   `DecisionFeatures` problem-neutral.
 
 ## Current Decision
 
 - Framework/readiness/launcher repairs are accepted enough for focused
-  warehouse and CVRP follow-up, but v0.4 is not closed until live runs show
-  effective research behavior.
+  warehouse and CVRP follow-up.
+- v0.4 is not closed until live runs show effective research behavior.
 - No LLM campaign is currently running.
-- The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
-  readiness. `/v1/models` can list `gpt-5.5`, but the strict completion
-  preflight currently fails with HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`. The auth pool has `active=0`, `total=1`; the exact
-  `expired`/`refreshing` substate may move during refresh attempts, but there
-  is no active account.
-- Do not launch a prepared root until:
-  `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
-  reports `launch_ready=true`.
+- Current blocker: external WSL `gpt-5.5` provider auth, not Scion static
+  readiness. `/v1/models` can list `gpt-5.5`, but strict completion preflight
+  fails with HTTP `401`, `classification=not_authenticated`,
+  `code=invalid_api_key`. The auth pool has `active=0`, `total=1`; no active
+  account is available.
 
-## Prepared Roots
+Do not launch a prepared root until:
 
-The active prepared roots were generated on WSL at runtime commit `cf365584`
-after prepared `research_focus` nested projection readiness and postrun
-acceptance wrapper-status escalation were both in place. CVRP CMT2/CMT4
-case-protection requirements pass manifest, top-level projection, and nested
-projected-path checks before launch. Agentic partial-hypothesis recovery,
-research-context actionability, runtime-evidence consistency, the formal
-hypothesis prompt-trace, problem-summary `evidence` payload, and CVRP seed-only
-large two-opt rejection guards remain in force. WSL static readiness passes;
-launch readiness fails only at completion preflight auth. Local mirrors exist under
+```bash
+scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json
+```
+
+reports `launch_ready=true`.
+
+## Active Prepared Roots
+
+Generated on WSL at runtime commit `cf365584`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
@@ -52,152 +48,84 @@ launch readiness fails only at completion preflight auth. Local mirrors exist un
 - CVRP:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-postrunstatus-cf365584-preflight-4r-gpt55-20260620T040959Z-claw`
 
-Prepared manifests record:
+Readiness snapshot:
 
+- `static_ready=true`
+- `launch_ready=false`
+- `failed_static_required_checks=[]`
+- Required failure: completion preflight auth only
+- Runtime guard status: clean for prepared runtime paths; docs/test-only drift
+  after prepare is allowed by readiness
+
+Prepared run shape:
+
+- Warehouse: 6 rounds, champion-v2 follow-up.
+- CVRP: 4 rounds, bounded/deadline-aware large two-opt follow-up from external
+  seed guidance.
 - Proposal headroom: `max_attempts=64`, `max_quality_loops=64`.
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `cf365584`; CVRP `cf365584`.
-- Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
-  more than a one-off branch attempt.
-- Problem-owned measurement source:
-  `problem_v1.measurement.calibration_ref`.
-- Absolute WSL `SCION_DIR`/`PYTHONPATH`, clean runtime guard paths, and strict
-  postrun rebuild/readiness reporting in `run.sh`.
 
-## Framework Guarantees
+## Framework Guarantees To Preserve
 
-- Current repair signals remain report-only, control-plane, or problem-owned
-  proposal diagnostics. They must not enter Decision, `DecisionFeatures`,
-  promotion, scheduler state, or solver semantics.
-- Launch readiness is the operator-facing authority for prepared roots. It now
+- LLM output, repair diagnostics, branch lessons, prompt ratios, and
+  problem-owned research diagnostics remain tainted proposal material. They must
+  not enter Decision, `DecisionFeatures`, promotion, scheduler state, or solver
+  semantics.
+- Launch readiness is the operator-facing authority for prepared roots. It
   checks prepared contract/brief identity, prompt-context bridge, problem
   handoff, runtime guards, model route, absolute launch paths, completion
-  preflight, strict postrun rebuild/readiness, and prepared/postrun
-  rebuild-manifest identity. It also emits top-level failed-check summaries so
-  operators can distinguish static failures from the completion preflight.
-- Launch readiness recomputes committed drift for the prepared
-  `runtime_guard_paths`: test/docs-only commit drift is allowed, but committed
-  changes to runtime/control-plane/problem paths fail readiness before launch.
-- Launch readiness also verifies the effective wrapper runtime guard contract:
-  manifest `git.commit` and `runtime_guard_paths` must match `launch.env` and
-  any executable pre-guard `run.sh` override before static readiness can pass.
-- CVRP and warehouse prepared measurement handoffs are derived from
-  `problem-v1.yaml` declarations and the declared A/A `calibration_ref`; stale
-  or undeclared MDE/practical-delta values fail readiness.
-- Prepared prompt context carries problem-owned active-subject code constraints,
-  and readiness verifies the current provider payload summary before static
-  readiness can pass.
-- Prepared prompt-context readiness also verifies that prepared
-  `research_focus` fields and required nested payload paths project through the
-  current checkout's launch prompt projection path. Required fields such as
-  CVRP CMT2/CMT4 `protected_cases`, rules, and required evidence may not remain
-  only in manifest/report artifacts.
-- Prepared handoff rebuild and launch readiness self-locate the current
-  checkout's `scion/` package path before importing problem-owned providers, so
-  static readiness does not depend on ambient `PYTHONPATH`.
-- Code-phase source visibility has two protections: final code prompts include
-  approved target source as full `target_file_code`, and prompt manifests audit
-  target, integration, and full algorithm-read visibility before postrun
-  delegated review accepts source-grounding conclusions. Current CVRP declared
-  integration full files are `baseline_algorithm.py`, `scheduler.py`, and
-  `state.py`; the active champion sizes fit inside the dedicated integration
-  prompt budget. Solver-design target file and code-phase surface reads now use
-  `96000` char headroom, while bounded algorithm slices remain capped at
-  `24000`.
-- Solver subprocesses normalize inherited relative `PYTHONPATH` entries before
-  entering solver workspaces, so smoke/protocol runs load the active checkout
-  rather than an older installed package.
-- Postrun inventory infers missing legacy launched-run problem family only from
-  deterministic artifacts such as `run.log` `Starting campaign` markers or the
-  warehouse `campaign/weight_opt_v2` tree. It keeps the prepared contract
-  incomplete, but forces warehouse/CVRP delegated-review checks instead of
-  silently skipping problem-specific summaries.
-- Postrun acceptance readiness emits top-level failed-check summaries, so
-  delegated reviewers can distinguish missing current-run analysis inputs from
-  optional markers without scanning the full check table.
-- Launcher wrappers promote strict postrun report rebuild/readiness failure to
-  an effective wrapper failure and annotate top-level `run_status.json` with
-  `postrun_acceptance_failed`, so a completed campaign cannot silently look
-  analysis-ready when current-run postrun acceptance is unready.
-- Current-run warehouse/CVRP problem summaries must carry an explicit
-  `evidence` payload before postrun delegated review can accept
-  protocol-evaluated, plateau, positive-effect, or bounded two-opt conclusions;
-  summary text alone is not accepted as current-run evidence.
-- Problem-summary runtime evidence must match the runtime-feedback input for
-  raw availability, drain/review readiness, runtime model counts, and runtime
-  budget diagnostic counts before delegated review can accept it.
-- Current-run warehouse/CVRP research-context readiness must include a formal
-  hypothesis-generation prompt trace. Code-only prompt manifests and target
-  intent prompts are not sufficient evidence that branch-depth, continuity, or
-  cross-branch research signals reached the next proposal prompt.
-- Agentic proposal recovery may reuse a valid waiting-approval partial
-  hypothesis artifact for the same branch and code-phase idempotency key after
-  restart. The recovered hypothesis remains tainted, passes through normal
-  anchor/problem/follow-up/ContractGate checks, and never restores a
-  pre-approval patch.
-- CVRP bounded two-opt postrun review readiness requires co-located positive
-  effect, activation, objective-effect, and two-opt-specific phase telemetry on
-  the same matching top effect row. Activation/effect evidence must be
-  attributed to a matching bounded or deadline-aware large two-opt mechanism;
-  unrelated `mechanism_evidence`, generic/intra-only two-opt labels, and the
-  external `large_instance_intra_route_two_opt_seed` guidance label cannot
-  satisfy direct evidence.
-- Warehouse protocol-evaluated follow-up review distinguishes positive
-  at-or-above-MDE effects from plateau-consistent no-positive-MDE effects.
-  Plateau-ready summaries require the measurement signal to be
-  plateau-consistent, meaning all protocol effect rows have available CI high
-  below MDE; positive or measurement-inconclusive effects route out of plateau
-  review instead of being mislabeled as plateau.
+  preflight, strict postrun rebuild/readiness, and prepared/postrun rebuild
+  identity.
+- Prepared prompt context must project required `research_focus` fields into
+  the actual launch prompt path, including CVRP CMT2/CMT4 protection
+  requirements.
+- Current hypothesis prompts carry compact proposal-only research-shape
+  diagnostics before broader feedback, and prompt manifest accounting classifies
+  this block as `research_signal`.
+- Code-phase prompts must retain direct source visibility for champion/current
+  branch/target files and declared integration files.
+- Postrun acceptance cannot silently pass when strict rebuild/readiness fails:
+  launcher wrappers promote strict postrun acceptance failure to an effective
+  wrapper failure and annotate top-level `run_status.json`.
+- Warehouse/CVRP postrun conclusions require current-run evidence payloads,
+  runtime-evidence consistency, formal hypothesis prompt traces, and
+  problem-owned review rules; summary prose alone is not acceptance evidence.
 
 ## Warehouse
 
 - Positive checkpoint: champion `v2` promoted in the validation-transfer rerun.
-  Warehouse is not blocked on basic viability.
-- The next warehouse run must test whether Scion can produce useful follow-up
-  research from `v2` or correctly diagnose a real post-v2 plateau.
-- The prepared handoff exposes the `v2` checkpoint, plateau question,
-  default-avoid directions, required evidence, decision-boundary coverage, and
-  problem-owned measurement/runtime diagnostics. Prepare-only roots do not yet
-  have current-run specialist review evidence.
+- Next live question: can Scion produce useful follow-up research from `v2`, or
+  correctly diagnose a real post-v2 plateau?
+- A plateau conclusion is accepted only when protocol evidence shows no
+  positive effect at or above MDE and the runtime/continuity evidence supports
+  that interpretation.
 
 ## CVRP/VRP
 
 - CVRP can now steer target intent, carry branch lessons into prompts, generate
-  material solver code, complete formal screening, preserve mechanism
-  telemetry, and reject weak or negative hypotheses with evidence.
-- CVRP has still not met v0.4 effective-research acceptance because no current
-  solver-design branch has produced continuous improvement or promotion.
-- The current follow-up seed is the external-control large-instance intra-route
-  two-opt result. The prepared handoff treats it only as proposal guidance and
-  requires a bounded, deadline-aware implementation with pair-level objective,
-  feasibility, route-count, wall-clock, and CMT2/CMT4 protection evidence.
-- Prepared prompt-context readiness now verifies
-  `cvrp_case_protection_requirements` as required, available, and projected
-  into launch research focus with required nested paths, so the CMT2/CMT4
-  protection plan is not merely a report artifact.
-- Generic, cross-route, unbounded/fallback, VNS, and two-opt-star family labels
-  are not enough for bounded two-opt review readiness; current-run protocol
-  effect and co-located activation/effect/phase telemetry are required.
+  material solver code, complete formal screening, preserve mechanism telemetry,
+  and reject weak or negative hypotheses with evidence.
+- CVRP is still not v0.4-accepted because no current solver-design branch has
+  produced continuous improvement or promotion.
+- The active follow-up treats the external large-instance intra-route two-opt
+  result only as proposal guidance. Review readiness requires a bounded,
+  deadline-aware implementation with co-located positive effect, activation,
+  objective-effect, phase telemetry, and CMT2/CMT4 protection evidence.
 
 ## Next Actions
 
-1. Refresh the WSL/local proxy login, then rerun strict launch readiness on the
-   current prepared root to be started. `/v1/models` is not enough; the
-   completion preflight must pass.
+1. Refresh WSL/local proxy login, then rerun strict launch readiness on the
+   current prepared root. `/v1/models` is not enough; completion preflight must
+   pass.
 2. Run warehouse `v2` follow-up first as the simpler continuous-improvement
-   proof. Then run the CVRP large-two-opt follow-up.
-3. After warehouse launch, classify the result as taxonomy-backed
-   quality-blocked, protocol-evaluated positive-effect opportunity,
-   protocol-evaluated no-effect/plateau, or missed continuity opportunity.
-   Only protocol-evaluated plateau conclusions can use measurement-effect,
-   runtime-feedback, and substantive continuity as plateau evidence.
-4. After CVRP launch, inspect target intent, bounded two-opt mechanism design,
-   branch-lesson transfer, effect-vs-MDE, runtime budget behavior, source
-   visibility, and research-efficiency artifacts.
-5. Keep this file short. Update it only when the operating truth or next action
-   changes.
+   proof.
+3. Run the CVRP bounded large-two-opt follow-up after warehouse is underway or
+   accepted for launch.
+4. After each run, classify current-run evidence through the problem-owned
+   postrun review rules before treating promotion/no-promotion as a research
+   conclusion.
 
 ## Evidence Pointers
 
@@ -213,14 +141,12 @@ Prepared manifests record:
   `scion/docs/experiments/v0.4/v04-prepared-research-focus-projection-readiness-20260620.md`.
 - Current postrun wrapper-status evidence:
   `scion/docs/experiments/v0.4/v04-postrun-wrapper-status-escalation-20260620.md`.
-- Repair-detail reports remain under `scion/docs/experiments/v0.4/`; do not
-  read them by default unless a specific guarantee above needs source evidence.
 - Current WSL access:
   `ssh -i ~/.ssh/id_ed25519_codex_wsl -p 2222 -o BatchMode=yes -o StrictHostKeyChecking=no xjy-ubuntu@127.0.0.1`.
-  WSL repo is `/home/xjy-ubuntu/research/or-autoresearch-agent`, WSL
-  experiments root is `/home/xjy-ubuntu/research/scion-experiments`, and the
-  Scion Python is `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`.
-  For ad hoc WSL tests, set
-  `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion` or verify
-  `inspect.getsourcefile(...)` points at this repo, because the conda env also
-  has an editable install for `/home/xjy-ubuntu/projects/scion`.
+- WSL repo: `/home/xjy-ubuntu/research/or-autoresearch-agent`.
+- WSL experiments root: `/home/xjy-ubuntu/research/scion-experiments`.
+- WSL Python: `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`.
+- For ad hoc WSL tests, set
+  `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion` because the
+  conda env also has a stale editable install under
+  `/home/xjy-ubuntu/projects/scion`.

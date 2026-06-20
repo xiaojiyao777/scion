@@ -766,7 +766,14 @@ def test_hypothesis_prompt_surfaces_research_signal_and_manifest_ratio():
             "decision_input_policy": "excluded_from_decision_features",
             "branch_count": 3,
             "current_branch_depth": 2,
+            "branch_depth_distribution": {"0": 1, "1": 1, "2": 1},
+            "mechanism_family_counts": {"route_merge_reinsertion": 2},
+            "repeated_mechanism_families": ["route_merge_reinsertion"],
             "shape_label": "repeated_non_positive_family",
+            "proposal_guidance": [
+                "Prefer a materially different mechanism family or a narrow "
+                "same-branch refinement with explicit effect-path evidence."
+            ],
         },
         "launch_research_focus": {
             "schema_version": "scion.launch_research_focus_prompt.v1",
@@ -802,8 +809,18 @@ def test_hypothesis_prompt_surfaces_research_signal_and_manifest_ratio():
     assert "route-merge absorption" in rendered_system
     assert "bounded_local_search_variant" in rendered_system
     assert "current_branch_depth" in rendered_system
+    assert "branch_depth_distribution" in rendered_system
+    assert "mechanism_family_counts" in rendered_system
+    assert "route_merge_reinsertion" in rendered_system
     assert "repeated_non_positive_family" in rendered_system
+    assert "materially different mechanism family" in rendered_system
     assert "branch b1: route_merge_reinsertion lost" in rendered_system
+    assert rendered_system.index("## Compact Research Signals") < (
+        rendered_system.index("## Cross-Branch Research Map")
+    )
+    assert rendered_system.index("## Compact Research Signals") < (
+        rendered_system.index("## Runtime Feedback")
+    )
     assert "## Compact Safety and Output Invariants" in user_prompt
     assert "Telemetry contract:" in user_prompt
     assert "Objective field contract:" in user_prompt
@@ -822,6 +839,12 @@ def test_hypothesis_prompt_surfaces_research_signal_and_manifest_ratio():
     )
     accounting = manifest["block_family_accounting"]
 
+    assert manifest["section_statuses"]["compact_research_signals"][
+        "block_family"
+    ] == "research_signal"
+    assert manifest["section_statuses"]["compact_research_signals"][
+        "status"
+    ] == "included"
     assert accounting["decision_features_excluded"] is True
     assert accounting["research_signal_chars"] > 0
     assert accounting["governance_chars"] > 0
