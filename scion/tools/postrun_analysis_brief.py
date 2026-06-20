@@ -1015,7 +1015,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
     if isinstance(entries, list) and entries:
         lines.extend(
             [
-                "| Report | Same-mechanism selected/observed | "
+                "| Report | Same-mechanism selected/observed/missed | "
                 "Branch lessons satisfied/required | Semantic gaps | "
                 "Weak-positive accepted/observed | Max depth | Depth distribution | "
                 "Active shape | Families |",
@@ -1039,7 +1039,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 "branch_depth_distribution"
             ) or full_shape.get("branch_depth_distribution")
             lines.append(
-                "| {report} | {same_selected}/{same_observed} | "
+                "| {report} | {same_selected}/{same_observed}/{same_missed} | "
                 "{lesson_satisfied}/{lesson_required} | {semantic_gap} | "
                 "{transfer_accepted}/{transfer_observed} | {max_depth} | "
                 "{depth_distribution} | {active_shape} | {families} |".format(
@@ -1051,6 +1051,19 @@ def render_markdown(brief: dict[str, Any]) -> str:
                     ),
                     same_observed=_display(
                         same_mechanism.get("observed_opportunity_count")
+                    ),
+                    same_missed=_display(
+                        max(
+                            0,
+                            _int_or_zero(
+                                same_mechanism.get("observed_opportunity_count")
+                            )
+                            - _int_or_zero(
+                                same_mechanism.get(
+                                    "selected_same_branch_refinement_count"
+                                )
+                            ),
+                        )
                     ),
                     lesson_satisfied=_display(lessons.get("satisfied_count")),
                     lesson_required=_display(lessons.get("requirement_count")),
@@ -1091,6 +1104,8 @@ def render_markdown(brief: dict[str, Any]) -> str:
             "- Continuity selected/observed same-mechanism follow-up: "
             f"{_display(actionability_indicators.get('same_mechanism_selected'))} / "
             f"{_display(actionability_indicators.get('same_mechanism_observed'))}",
+            "- Continuity missed same-mechanism follow-up: "
+            f"{_display(actionability_indicators.get('same_mechanism_missed'))}",
             "- Branch lessons satisfied/required/semantic gap: "
             f"{_display(actionability_indicators.get('branch_lessons_satisfied'))} / "
             f"{_display(actionability_indicators.get('branch_lessons_required'))} / "
@@ -1184,6 +1199,14 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 "- Research continuity available/reports: "
                 f"`{_display(continuity_evidence.get('available'))}` / "
                 f"{_display(continuity_evidence.get('continuity_report_count'))}",
+                "- Research continuity substantive/depth: "
+                f"`{_display(continuity_evidence.get('substantive'))}` / "
+                f"{_display(continuity_evidence.get('max_branch_depth'))}",
+                "- Research continuity same-mechanism selected/observed: "
+                f"{_display(continuity_evidence.get('same_mechanism_selected'))} / "
+                f"{_display(continuity_evidence.get('same_mechanism_observed'))}",
+                "- Research continuity same-mechanism missed: "
+                f"{_display(continuity_evidence.get('same_mechanism_missed'))}",
             ]
         )
         requirements = cvrp_large_twoopt.get("handoff_requirements")
@@ -1292,6 +1315,8 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 "- Research continuity same-mechanism selected/observed: "
                 f"{_display(continuity_evidence.get('same_mechanism_selected'))} / "
                 f"{_display(continuity_evidence.get('same_mechanism_observed'))}",
+                "- Research continuity same-mechanism missed: "
+                f"{_display(continuity_evidence.get('same_mechanism_missed'))}",
                 "- Research continuity branch lessons satisfied/required: "
                 f"{_display(continuity_evidence.get('branch_lessons_satisfied'))} / "
                 f"{_display(continuity_evidence.get('branch_lessons_required'))}",

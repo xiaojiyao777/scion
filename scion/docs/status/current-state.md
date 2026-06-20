@@ -196,7 +196,11 @@ reports.
   matching local/WSL-safe artifact identity. CVRP summaries now carry
   branch-depth, same-mechanism, branch-lesson, weak-positive, and
   mechanism-family continuity signals in their evidence payload and readiness
-  rejects stale copies of those signals. It also requires clean launcher status:
+  rejects stale copies of those signals. The human-readable postrun brief must
+  also surface missed same-mechanism follow-up directly in continuity,
+  research-context actionability, warehouse follow-up, and CVRP bounded
+  two-opt summaries, rather than requiring manual selected/observed inference.
+  It also requires clean launcher status:
   missing or nonzero root wrapper exit status, nonzero campaign wrapper exit
   status, top-level postrun acceptance failure markers, or nonzero postrun
   readiness/report exit status fail readiness before delegated review. Launcher

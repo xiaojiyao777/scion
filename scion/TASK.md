@@ -371,6 +371,10 @@ Current checkpoint:
     projection of prompt visibility and research-continuity inputs; stale
     prompt token, continuity, gap, recommendation, or prompt-context entry-path
     projections fail postrun readiness before delegated review.
+    Human-readable postrun briefs must expose missed same-mechanism follow-up
+    directly in continuity/actionability and problem-specific review summaries,
+    so plateau or bounded two-opt review cannot depend on a reviewer manually
+    subtracting selected from observed opportunities.
   - Agentic proposal recovery can reuse a persisted
     `partial_hypothesis_only` / `hypothesis_awaiting_approval` artifact for the
     same branch and code-phase idempotency key, avoiding duplicate hypothesis

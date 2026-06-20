@@ -1095,7 +1095,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "- Research+source/governance ratio: 2.333333" in markdown
     assert "| source_code | 1 | 15 | 60 |" in markdown
     assert (
-        "| normal.research_efficiency.v1.json | 1/1 | 2/3 | 1 | 1/1 | "
+        "| normal.research_efficiency.v1.json | 1/1/0 | 2/3 | 1 | 1/1 | "
         "3 | 1=1, 3=1 | deep_focused | 2 |"
         in markdown
     )
@@ -1105,6 +1105,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "## Research Context Actionability Summary" in markdown
     assert "- Guidance status: context_actionability_review_required" in markdown
     assert "- Continuity selected/observed same-mechanism follow-up: 1 / 1" in markdown
+    assert "- Continuity missed same-mechanism follow-up: 0" in markdown
     assert "- Branch lessons satisfied/required/semantic gap: 2 / 3 / 1" in markdown
     assert "- Branch lesson semantic failure mix: semantic_mismatch=1" in markdown
     assert "- Branch lesson semantic block mix: semantic_mismatch=1" in markdown
@@ -2258,6 +2259,7 @@ def test_cvrp_large_twoopt_summary_marks_bounded_twoopt_review_ready(
     assert mechanism["continuity_families"] == ["bounded_large_twoopt"]
     assert mechanism["protocol_row_count"] == 2
     assert mechanism["mechanism_family_available"] is True
+    assert "- Research continuity same-mechanism missed: 0" in markdown
     assert mechanism["direct_evidence_ready"] is True
     assert mechanism["direct_evidence"]["complete_direct_evidence_row_count"] == 1
     assert mechanism["direct_evidence"]["protected_case_complete_row_count"] == 1
@@ -2486,6 +2488,7 @@ def test_warehouse_followup_summary_marks_protocol_evaluated_plateau_review_read
     assert "- Research continuity same-mechanism selected/observed: 1 / 1" in (
         markdown
     )
+    assert "- Research continuity same-mechanism missed: 0" in markdown
     progress = brief["champion_progress_summary"]
     assert progress["schema_version"] == (
         "scion.postrun_champion_progress_summary.v1"
@@ -2949,6 +2952,7 @@ def test_warehouse_followup_summary_rejects_shallow_continuity_for_plateau_ready
     assert "- Research continuity same-mechanism selected/observed: 0 / 0" in (
         markdown
     )
+    assert "- Research continuity same-mechanism missed: 0" in markdown
     assert "- Interpretation: protocol_evaluated_research_continuity_too_shallow" in (
         markdown
     )
@@ -3149,6 +3153,7 @@ def test_warehouse_followup_summary_rejects_depth_only_unselected_same_mechanism
     )
 
     brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
 
     summary = brief["warehouse_followup_summary"]
     assert summary["interpretation"] == (
@@ -3165,6 +3170,7 @@ def test_warehouse_followup_summary_rejects_depth_only_unselected_same_mechanism
     assert continuity["same_mechanism_missed"] == 1
     assert continuity["branch_lessons_satisfied"] == 1
     assert continuity["weak_positive_accepted"] == 1
+    assert "- Research continuity same-mechanism missed: 1" in markdown
 
 
 def test_warehouse_followup_summary_requires_handoff_before_plateau_ready(
