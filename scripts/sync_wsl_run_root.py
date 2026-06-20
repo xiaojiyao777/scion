@@ -177,6 +177,7 @@ def sync_and_check(
         "source_check_exit_status": None,
         "rsync_exit_status": None,
         "postrun_check_exit_status": None,
+        "local_run_status_summary": None,
     }
     if not execute:
         return report
@@ -194,7 +195,13 @@ def sync_and_check(
     report["rsync_exit_status"] = rsync_result.returncode
     report["rsync_stdout"] = rsync_result.stdout
     report["rsync_stderr"] = rsync_result.stderr
-    if rsync_result.returncode != 0 or not check_postrun:
+    if rsync_result.returncode != 0:
+        return report
+
+    report["local_run_status_summary"] = _run_status_summary(
+        resolved_local / "run_status.json"
+    )
+    if not check_postrun:
         return report
 
     postrun_result = _run(postrun_command)
@@ -252,6 +259,25 @@ def render_text(report: dict[str, Any]) -> str:
         lines.append(
             f"POSTRUN_CURRENT_RUN_READY={int(bool(report['postrun_current_run_ready']))}"
         )
+    run_status_summary = report.get("local_run_status_summary")
+    if isinstance(run_status_summary, dict):
+        for key in (
+            "status",
+            "prepared_only",
+            "wrapper_exit_status",
+            "campaign_wrapper_exit_status",
+            "pre_campaign_completion_preflight",
+            "pre_campaign_infra_failure",
+            "git_runtime_dirty",
+            "git_runtime_commit_mismatch",
+            "postrun_acceptance_status",
+            "postrun_acceptance_failed",
+            "postrun_acceptance_exit_status",
+        ):
+            if key in run_status_summary:
+                lines.append(
+                    f"LOCAL_RUN_STATUS_{key.upper()}={run_status_summary[key]}"
+                )
     postrun_summary = report.get("postrun_check_summary")
     if isinstance(postrun_summary, dict):
         failed_required = postrun_summary.get("failed_required_checks")
@@ -376,6 +402,46 @@ def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
 def _postrun_ready_from_stdout(stdout: str) -> bool | None:
     value = _postrun_summary_from_stdout(stdout).get("current_run_analysis_ready")
     return value if isinstance(value, bool) else None
+
+
+def _run_status_summary(path: Path) -> dict[str, Any]:
+    status = _read_json_object(path)
+    if not status:
+        return {
+            "available": False,
+            "path": str(path),
+        }
+    keys = (
+        "status",
+        "prepared_only",
+        "wrapper_exit_status",
+        "campaign_wrapper_exit_status",
+        "pre_campaign_completion_preflight",
+        "pre_campaign_infra_failure",
+        "git_runtime_dirty",
+        "git_runtime_commit_mismatch",
+        "postrun_acceptance_status",
+        "postrun_acceptance_failed",
+        "postrun_acceptance_exit_status",
+        "postrun_acceptance_readiness_path",
+        "postrun_report_dir",
+    )
+    summary = {
+        "available": True,
+        "path": str(path),
+    }
+    for key in keys:
+        if key in status:
+            summary[key] = status.get(key)
+    return summary
+
+
+def _read_json_object(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def _postrun_summary_from_stdout(stdout: str) -> dict[str, Any]:

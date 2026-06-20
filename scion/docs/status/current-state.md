@@ -73,8 +73,10 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 The helper mirrors the WSL root with rsync and then reruns
 `check_postrun_acceptance.py --require-current-run-ready` against the local
 mirror. With `--execute`, it first verifies that the WSL source has Scion run
-root markers and refuses destructive rsync targets outside the local experiment
-mirror root. Without `--execute`, it prints the planned commands only.
+root markers, refuses destructive rsync targets outside the local experiment
+mirror root, and includes a `local_run_status_summary` with wrapper,
+pre-campaign, and postrun status fields. Without `--execute`, it prints the
+planned commands only.
 
 ## Active Prepared Roots
 

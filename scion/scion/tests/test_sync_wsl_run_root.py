@@ -73,6 +73,21 @@ def test_sync_wsl_run_root_execute_runs_rsync_then_postrun_check(
                 command, 0, "source_root_ok\n", ""
             )
         if command[0] == "rsync":
+            local_dir = Path(command[-1])
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / "run_status.json").write_text(
+                json.dumps(
+                    {
+                        "status": "finished",
+                        "prepared_only": False,
+                        "wrapper_exit_status": 0,
+                        "campaign_wrapper_exit_status": 0,
+                        "postrun_acceptance_status": "ready",
+                        "postrun_acceptance_failed": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
             return subprocess.CompletedProcess(command, 0, "synced", "")
         return subprocess.CompletedProcess(
             command,
@@ -95,8 +110,21 @@ def test_sync_wsl_run_root_execute_runs_rsync_then_postrun_check(
     assert calls[2][0] == sys.executable
     assert report["source_check_exit_status"] == 0
     assert report["rsync_exit_status"] == 0
+    assert report["local_run_status_summary"] == {
+        "available": True,
+        "path": str(tmp_path / "run-b" / "run_status.json"),
+        "status": "finished",
+        "prepared_only": False,
+        "wrapper_exit_status": 0,
+        "campaign_wrapper_exit_status": 0,
+        "postrun_acceptance_status": "ready",
+        "postrun_acceptance_failed": False,
+    }
     assert report["postrun_check_exit_status"] == 0
     assert report["postrun_current_run_ready"] is True
+    rendered = sync_tool.render_text(report)
+    assert "LOCAL_RUN_STATUS_WRAPPER_EXIT_STATUS=0" in rendered
+    assert "LOCAL_RUN_STATUS_POSTRUN_ACCEPTANCE_STATUS=ready" in rendered
 
 
 def test_sync_wsl_run_root_skips_postrun_check_when_requested(
@@ -107,6 +135,20 @@ def test_sync_wsl_run_root_skips_postrun_check_when_requested(
 
     def fake_run(command: list[str]) -> subprocess.CompletedProcess[str]:
         calls.append(command)
+        if command[0] == "rsync":
+            local_dir = Path(command[-1])
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / "run_status.json").write_text(
+                json.dumps(
+                    {
+                        "status": "finished",
+                        "prepared_only": False,
+                        "wrapper_exit_status": 64,
+                        "pre_campaign_completion_preflight": "failed",
+                    }
+                ),
+                encoding="utf-8",
+            )
         return subprocess.CompletedProcess(command, 0, "", "")
 
     monkeypatch.setattr(sync_tool, "_run", fake_run)
@@ -123,6 +165,10 @@ def test_sync_wsl_run_root_skips_postrun_check_when_requested(
     assert calls[1][0] == "rsync"
     assert report["postrun_check_command"] == []
     assert report["postrun_check_exit_status"] is None
+    assert report["local_run_status_summary"]["wrapper_exit_status"] == 64
+    assert report["local_run_status_summary"][
+        "pre_campaign_completion_preflight"
+    ] == "failed"
 
 
 def test_sync_wsl_run_root_preserves_postrun_unready_status(
