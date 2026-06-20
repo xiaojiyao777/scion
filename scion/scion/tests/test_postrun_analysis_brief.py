@@ -1582,6 +1582,52 @@ def test_cvrp_large_twoopt_summary_rejects_default_avoid_twoopt_protocol_signal(
         assert "- Rejected two-opt-like protocol/continuity families:" in markdown
 
 
+def test_cvrp_large_twoopt_summary_rejects_seed_or_intra_only_family_without_deadline(
+    tmp_path: Path,
+) -> None:
+    cases = (
+        (
+            "large_instance_intra_route_two_opt_seed",
+            "seed_guidance_requires_bounded_implementation",
+        ),
+        (
+            "large_instance_intra_route_two_opt",
+            "missing_bounded_deadline_twoopt_scope",
+        ),
+    )
+    for mechanism_family, reason in cases:
+        run_root = tmp_path / mechanism_family
+        campaign_dir = run_root / "campaign"
+        campaign_dir.mkdir(parents=True)
+        _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
+        _write_cvrp_protocol_run(
+            run_root,
+            campaign_dir,
+            mechanism_family=mechanism_family,
+        )
+
+        brief = brief_tool.build_brief(run_root)
+        markdown = brief_tool.render_markdown(brief)
+
+        summary = brief["cvrp_large_twoopt_summary"]
+        assert summary["current_run_evidence"] is True
+        assert summary["handoff_complete"] is True
+        assert (
+            summary["interpretation"]
+            == "protocol_evaluated_without_large_twoopt_signal"
+        )
+        assert "missing_large_twoopt_mechanism_signal" in summary["evidence_gaps"]
+        mechanism = summary["evidence"]["large_twoopt_mechanism"]
+        assert mechanism["available"] is False
+        assert mechanism["protocol_families"] == []
+        assert mechanism["rejected_protocol_families"] == [mechanism_family]
+        assert mechanism["rejection_reason_counts"][reason] >= 1
+        assert "- Interpretation: protocol_evaluated_without_large_twoopt_signal" in (
+            markdown
+        )
+        assert mechanism_family in markdown
+
+
 def test_cvrp_large_twoopt_summary_rejects_continuity_only_twoopt_signal(
     tmp_path: Path,
 ) -> None:

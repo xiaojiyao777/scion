@@ -4420,8 +4420,17 @@ def _cvrp_large_twoopt_family_match(value: str) -> dict[str, Any]:
             "reason": "excluded_default_avoid_twoopt_family",
         }
 
-    canonical = {
+    seed_guidance = {
         "large_instance_intra_route_two_opt_seed",
+    }
+    if normalized in seed_guidance:
+        return {
+            "matches": False,
+            "twoopt_candidate": True,
+            "reason": "seed_guidance_requires_bounded_implementation",
+        }
+
+    canonical = {
         "bounded_large_twoopt",
     }
     if normalized in canonical:
@@ -4436,18 +4445,29 @@ def _cvrp_large_twoopt_family_match(value: str) -> dict[str, Any]:
         or "xl" in normalized
         or "size70" in compact
     )
-    bounded_or_intra_scope = (
+    bounded_or_deadline_scope = (
         "bounded" in normalized
         or "deadline" in normalized
-        or "intra" in normalized
-        or "route_internal" in normalized
+        or "time_guard" in normalized
+        or "time_bounded" in normalized
+        or "guarded" in normalized
+        or "capped" in normalized
         or "size70" in compact
     )
-    if large_scope and bounded_or_intra_scope:
+    if large_scope and bounded_or_deadline_scope:
         return {
             "matches": True,
             "twoopt_candidate": True,
             "reason": "matched_scoped_large_twoopt_family",
+        }
+    if large_scope and (
+        "intra" in normalized
+        or "route_internal" in normalized
+    ):
+        return {
+            "matches": False,
+            "twoopt_candidate": True,
+            "reason": "missing_bounded_deadline_twoopt_scope",
         }
     return {
         "matches": False,
