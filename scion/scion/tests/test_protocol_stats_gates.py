@@ -144,6 +144,27 @@ def test_screening_gate_pass():
     assert result.outcome == "pass"
 
 
+def test_screening_gate_marginal_delta_aligns_with_decision_path():
+    stats = _make_stats(win_rate=0.7, median_delta=0.01)
+    config = ProtocolConfig.model_validate({"practical_delta_screen": 2.0})
+
+    result = screening_gate(stats, config)
+
+    assert result.outcome == "pass"
+    assert result.reason_codes == ("SCREENING_PASS_MARGINAL_DELTA",)
+
+
+def test_screening_gate_high_win_negative_effect_is_not_pass():
+    stats = _make_stats(win_rate=0.7, median_delta=-0.01)
+
+    result = screening_gate(stats, _cfg)
+
+    assert result.outcome == "unclear"
+    assert result.reason_codes == (
+        "SCREENING_INCONCLUSIVE_HIGH_WIN_NEGATIVE_EFFECT",
+    )
+
+
 def test_screening_gate_fail():
     stats = _make_stats(win_rate=0.4)
     result = screening_gate(stats, _cfg)
@@ -471,10 +492,11 @@ def test_trajectory_divergent_candidate_failure_still_fails_screening():
     assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
-def test_screening_gate_unclear_delta_small():
+def test_screening_gate_small_nonnegative_delta_is_marginal_screening_pass():
     stats = _make_stats(win_rate=0.7, median_delta=0.0001)
     result = screening_gate(stats, _cfg)
-    assert result.outcome == "unclear"
+    assert result.outcome == "pass"
+    assert result.reason_codes == ("SCREENING_PASS_MARGINAL_DELTA",)
 
 
 def test_validation_gate_pass():

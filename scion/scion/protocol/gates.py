@@ -16,9 +16,12 @@ def screening_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
     """
     Screening gate:
     - pass:   win_rate >= threshold AND median_delta >= min_practical_delta
-    - expand: 0.5 <= win_rate < threshold  (promising, needs more data)
-    - fail:   win_rate < 0.5
-    - unclear: win_rate >= threshold but delta too small
+    - pass:   win_rate >= threshold AND median_delta is non-negative but below
+              min_practical_delta (diagnostic validation candidate)
+    - expand: 0.5 <= win_rate < threshold, or low-SNR trajectory-divergent
+              evidence with non-negative/tie-heavy signal
+    - fail:   negative/loss-heavy low-SNR evidence or win_rate < 0.5
+    - unclear: win_rate >= threshold but median_delta is negative
     """
     wr = stats.win_rate
     threshold = config.screening_win_rate_threshold
@@ -44,9 +47,16 @@ def screening_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
         return GateResult(outcome="fail", reason_codes=("SCREENING_FAIL_WIN_RATE",))
     elif wr < threshold:
         return GateResult(outcome="expand", reason_codes=("SCREENING_EXPAND",))
+    elif stats.median_delta >= 0:
+        return GateResult(
+            outcome="pass",
+            reason_codes=("SCREENING_PASS_MARGINAL_DELTA",),
+        )
     else:
-        # win_rate >= threshold but practical delta too small
-        return GateResult(outcome="unclear", reason_codes=("SCREENING_DELTA_TOO_SMALL",))
+        return GateResult(
+            outcome="unclear",
+            reason_codes=("SCREENING_INCONCLUSIVE_HIGH_WIN_NEGATIVE_EFFECT",),
+        )
 
 
 def validation_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
