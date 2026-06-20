@@ -734,6 +734,8 @@ def test_code_phase_projects_algorithm_symbol_source_to_96k_window() -> None:
     assert tail_marker in compact_source
     assert "Solver-Design Algorithm Symbol Reads" in rendered
     assert tail_marker in rendered
+    assert "Solver-Design Algorithm Symbol Reads" in system_blocks[0]["text"]
+    assert tail_marker in system_blocks[0]["text"]
 
 
 def test_latest_preview_repair_feedback_preserves_retry_diagnostics() -> None:

@@ -566,6 +566,7 @@ _CACHEABLE_CODE_AGENTIC_CONTEXT_HEADINGS = frozenset(
         "active algorithm facts",
         "active solver mechanism digest",
         "solver-design full algorithm file reads",
+        "solver-design algorithm symbol reads",
     }
 )
 
