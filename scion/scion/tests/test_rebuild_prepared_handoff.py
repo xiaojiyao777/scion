@@ -160,6 +160,30 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
                     "traces/branch-a/code_prompt_manifest.json"
                 ),
             },
+            "cross_branch_research_summary": {
+                "schema_version": "cross_branch_research_summary.v1",
+                "research_shape_diagnostics": {
+                    "schema_version": "campaign_research_shape_diagnostics.v1",
+                    "policy": "summary_status_observability_only",
+                    "advisory_only": True,
+                    "decision_features_excluded": True,
+                    "decision_input_policy": "excluded_from_decision_features",
+                    "max_branch_depth": 2,
+                    "mean_branch_depth": 1.5,
+                    "branch_depth_distribution": {"1": 1, "2": 1},
+                    "mechanism_family_breadth": {
+                        "family_count": 1,
+                        "families": {"prepared_audit_family": 2},
+                    },
+                    "active_research_shape_signal": {
+                        "shape": "low_followup_depth",
+                        "active_branch_count": 1,
+                        "active_mechanism_families": [
+                            "prepared_audit_family"
+                        ],
+                    },
+                },
+            },
         },
     )
     stale = run_root / "prepared_handoff" / "analysis_brief" / (
@@ -245,6 +269,34 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
     assert (
         prompt_context["signals"]["research_shape_prompt_signal"]["available"] is True
     )
+    shape_detail = prompt_context["signals"]["research_shape_prompt_signal"]["detail"]
+    shape_summary = shape_detail["prompt_summary"]
+    assert shape_detail["markers"] == {
+        "context_builder": True,
+        "prompt_renderer": True,
+        "shape_builder": True,
+    }
+    assert shape_summary["schema_version"] == (
+        "scion.prepared_research_shape_prompt_summary.v1"
+    )
+    assert shape_summary["available"] is True
+    assert shape_summary["report_only"] is True
+    assert shape_summary["decision_features_excluded"] is True
+    assert shape_summary["raw_prompt_excluded"] is True
+    assert shape_summary["copied_campaign_payload_present"] is True
+    assert shape_summary["payload_source"] == "copied_campaign_status"
+    assert shape_summary["payload_schema_version"] == (
+        "campaign_research_shape_diagnostics.v1"
+    )
+    assert shape_summary["prompt_section_present"] is True
+    assert shape_summary["compact_prompt_value_present"] is True
+    assert shape_summary["research_shape_key_present"] is True
+    assert shape_summary["payload_schema_present"] is True
+    assert shape_summary["branch_depth_signal_present"] is True
+    assert shape_summary["mechanism_family_signal_present"] is True
+    assert shape_summary["shape_guidance_present"] is True
+    assert shape_summary["decision_features_exclusion_present"] is True
+    assert shape_summary["forbidden_prompt_tokens_present"] == []
     assert (
         prompt_context["signals"]["prepared_research_focus_prompt_bridge"][
             "available"
@@ -738,6 +790,30 @@ def _write_rebuild_fixture_root(
                 "last_code_prompt_manifest": (
                     "traces/branch-a/code_prompt_manifest.json"
                 ),
+            },
+            "cross_branch_research_summary": {
+                "schema_version": "cross_branch_research_summary.v1",
+                "research_shape_diagnostics": {
+                    "schema_version": "campaign_research_shape_diagnostics.v1",
+                    "policy": "summary_status_observability_only",
+                    "advisory_only": True,
+                    "decision_features_excluded": True,
+                    "decision_input_policy": "excluded_from_decision_features",
+                    "max_branch_depth": 2,
+                    "mean_branch_depth": 1.5,
+                    "branch_depth_distribution": {"1": 1, "2": 1},
+                    "mechanism_family_breadth": {
+                        "family_count": 1,
+                        "families": {"prepared_audit_family": 2},
+                    },
+                    "active_research_shape_signal": {
+                        "shape": "low_followup_depth",
+                        "active_branch_count": 1,
+                        "active_mechanism_families": [
+                            "prepared_audit_family"
+                        ],
+                    },
+                },
             },
         },
     )

@@ -410,6 +410,11 @@ Current checkpoint:
     hypothesis prompt summary in memory and stores only safe boolean/count/path
     evidence, proving warehouse renders 33 required `research_focus` paths and
     CVRP renders 50 required paths with `missing_rendered_paths=[]`.
+    Prepared prompt-context readiness now also verifies that copied
+    campaign-status research-shape diagnostics render into default-visible
+    compact research signals with branch-depth, mechanism-family, and
+    `DecisionFeatures` exclusion evidence, rather than accepting only source
+    marker presence.
   - CVRP prepared-run contract checks the same protected cases against the
     configured split manifest's formal screening set; the current root reports
     CMT2 and CMT4 in `screening`, preventing prompt-only CMT2/CMT4 protection

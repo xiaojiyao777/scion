@@ -235,7 +235,10 @@ reports.
 - Research-context actionability requires an allowlisted formal
   hypothesis-generation prompt trace; code, target intent, and unknown
   `hypothesis_*` call kinds cannot prove continuity signals reached the next
-  proposal prompt.
+  proposal prompt. Prepared prompt-context readiness now also requires copied
+  campaign research-shape diagnostics to render into compact proposal-visible
+  research signals with branch-depth, mechanism-family, and
+  `DecisionFeatures` exclusion evidence, not just source-marker presence.
 - Screening gate, Decision, proposal feedback, and search memory must agree on
   marginal evidence: high-win-rate, non-negative, sub-practical-delta screening
   evidence is diagnostic follow-up material, not a promotable signal.

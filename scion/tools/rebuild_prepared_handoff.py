@@ -34,6 +34,7 @@ from postrun_artifact_inventory import (  # noqa: E402
 )
 from prepared_prompt_context import (  # noqa: E402
     problem_measurement_diagnostics_prompt_summary,
+    research_shape_prompt_summary,
     research_focus_prompt_summary,
     research_focus_projection_summary,
 )
@@ -498,7 +499,11 @@ def build_prepared_prompt_context_readiness(run_root: Path | str) -> dict[str, A
     )
     _add_focus_signals(signals, manifest_dict, research_focus)
     _add_campaign_state_signals(signals, summary_dict, status_dict)
-    _add_research_shape_prompt_signal(signals)
+    _add_research_shape_prompt_signal(
+        signals,
+        campaign_summary=summary_dict,
+        campaign_status=status_dict,
+    )
     _add_launch_research_focus_prompt_signal(
         signals,
         root=root,
@@ -930,18 +935,41 @@ def _add_campaign_state_signals(
     )
 
 
-def _add_research_shape_prompt_signal(signals: dict[str, dict[str, Any]]) -> None:
+def _add_research_shape_prompt_signal(
+    signals: dict[str, dict[str, Any]],
+    *,
+    campaign_summary: dict[str, Any],
+    campaign_status: dict[str, Any],
+) -> None:
     marker_results = {
         name: _source_contains(relative_path, marker)
         for name, (relative_path, marker) in RESEARCH_SHAPE_PROMPT_MARKERS.items()
     }
+    prompt_summary = research_shape_prompt_summary(
+        campaign_summary=campaign_summary,
+        campaign_status=campaign_status,
+    )
     _add_signal(
         signals,
         "research_shape_prompt_signal",
-        available=all(marker_results.values()),
+        available=(
+            all(marker_results.values())
+            and prompt_summary.get("available") is True
+        ),
         required=True,
-        source="current checkout proposal context and hypothesis prompt code",
-        detail={"markers": marker_results},
+        source=(
+            "copied campaign research-shape diagnostics plus current checkout "
+            "hypothesis prompt renderer"
+        ),
+        detail={
+            "markers": marker_results,
+            "prompt_summary": prompt_summary,
+            "boundary": (
+                "report-only research continuity signal; branch-depth and "
+                "mechanism-family shape guide proposal planning and stay out "
+                "of DecisionFeatures"
+            ),
+        },
     )
 
 
