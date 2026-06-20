@@ -443,6 +443,10 @@ def build_readiness(
         *_run_script_completion_preflight_enforced(root, run_sh),
     )
     add_check(
+        "run_script_campaign_execution_marker_enforced",
+        *_run_script_campaign_execution_marker_enforced(run_sh),
+    )
+    add_check(
         "run_script_pythonpath_enforced",
         *_run_script_pythonpath_enforced(root, run_sh),
     )
@@ -1718,6 +1722,88 @@ def _run_script_completion_preflight_enforced(
         "preflight_guard_position": preflight_pos,
         "proxy_call_position": proxy_pos,
         "campaign_command_position": campaign_pos,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
+
+
+def _run_script_campaign_execution_marker_enforced(run_sh: Path) -> tuple[str, Any]:
+    failures: list[dict[str, Any]] = []
+    try:
+        run_text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        run_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_run_script",
+                "run_script": str(run_sh),
+                "error": str(exc),
+            }
+        )
+
+    campaign_pos = _campaign_command_position(run_text)
+    preflight_proxy_pos, _proxy_block = _shell_command_block_containing_marker(
+        run_text,
+        "tools/check_gpt55_proxy.py",
+    )
+    marker_file_pos, ignored_marker_file_count = _find_executable_marker_position(
+        run_text,
+        "campaign_execution_marker.v1.json",
+    )
+    marker_schema_pos, ignored_marker_schema_count = _find_executable_marker_position(
+        run_text,
+        "scion.launcher_campaign_execution_marker.v1",
+    )
+    marker_log_pos, ignored_marker_log_count = _find_executable_marker_position(
+        run_text,
+        "CAMPAIGN_EXECUTION_MARKER:",
+    )
+
+    if campaign_pos < 0:
+        failures.append(
+            {
+                "reason": "missing_campaign_command_marker",
+                "marker": RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER,
+            }
+        )
+    if marker_file_pos < 0:
+        failures.append({"reason": "campaign_execution_marker_file_write_missing"})
+    if marker_schema_pos < 0:
+        failures.append({"reason": "campaign_execution_marker_schema_missing"})
+    if marker_log_pos < 0:
+        failures.append({"reason": "campaign_execution_marker_log_marker_missing"})
+
+    marker_positions = [
+        pos
+        for pos in (marker_file_pos, marker_schema_pos, marker_log_pos)
+        if pos >= 0
+    ]
+    earliest_marker_pos = min(marker_positions) if marker_positions else -1
+    if (
+        preflight_proxy_pos >= 0
+        and earliest_marker_pos >= 0
+        and earliest_marker_pos < preflight_proxy_pos
+    ):
+        failures.append({"reason": "campaign_execution_marker_before_preflight"})
+    if (
+        campaign_pos >= 0
+        and earliest_marker_pos >= 0
+        and earliest_marker_pos > campaign_pos
+    ):
+        failures.append({"reason": "campaign_execution_marker_after_campaign"})
+
+    detail = {
+        "run_script": str(run_sh),
+        "preflight_proxy_position": preflight_proxy_pos,
+        "campaign_command_position": campaign_pos,
+        "marker_file_position": marker_file_pos,
+        "marker_schema_position": marker_schema_pos,
+        "marker_log_position": marker_log_pos,
+        "ignored_non_executable_marker_counts": {
+            "file": ignored_marker_file_count,
+            "schema": ignored_marker_schema_count,
+            "log": ignored_marker_log_count,
+        },
         "failures": failures,
     }
     return ("ok" if not failures else "failed"), detail

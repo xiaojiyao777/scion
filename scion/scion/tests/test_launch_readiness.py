@@ -1708,6 +1708,55 @@ def test_launch_readiness_rejects_key_only_cvrp_large_twoopt_pair_evidence(
     )
 
 
+def test_launch_readiness_rejects_missing_campaign_execution_marker(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    marker_start = run_text.index("CAMPAIGN_EXECUTION_MARKER_STARTED_AT=")
+    marker_end = run_text.index(f"{sys.executable} -m scion.cli.main run", marker_start)
+    run_sh.write_text(
+        run_text[:marker_start] + run_text[marker_end:],
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    marker_check = report["checks"]["run_script_campaign_execution_marker_enforced"]
+    assert marker_check["status"] == "failed"
+    reasons = {failure["reason"] for failure in marker_check["detail"]["failures"]}
+    assert "campaign_execution_marker_file_write_missing" in reasons
+    assert "campaign_execution_marker_schema_missing" in reasons
+    assert "campaign_execution_marker_log_marker_missing" in reasons
+
+
+def test_launch_readiness_rejects_campaign_execution_marker_after_campaign(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    marker_start = run_text.index("CAMPAIGN_EXECUTION_MARKER_STARTED_AT=")
+    campaign_start = run_text.index(f"{sys.executable} -m scion.cli.main run")
+    marker_block = run_text[marker_start:campaign_start]
+    run_text = run_text[:marker_start] + run_text[campaign_start:]
+    run_text = run_text.replace("\nSTATUS=$?\n", "\n" + marker_block + "STATUS=$?\n", 1)
+    run_sh.write_text(run_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    marker_check = report["checks"]["run_script_campaign_execution_marker_enforced"]
+    assert marker_check["status"] == "failed"
+    assert {"reason": "campaign_execution_marker_after_campaign"} in marker_check[
+        "detail"
+    ]["failures"]
+
+
 def test_launch_readiness_rejects_missing_cvrp_code_constraint_bridge(
     tmp_path: Path,
 ) -> None:
@@ -3702,6 +3751,11 @@ if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
     exit "$PREFLIGHT_STATUS"
   fi
 fi
+CAMPAIGN_EXECUTION_MARKER_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf '{{"schema":"scion.launcher_campaign_execution_marker.v1","started_at":"%s","run_root":"%s","campaign_dir":"%s"}}\n' \
+  "$CAMPAIGN_EXECUTION_MARKER_STARTED_AT" "$RUN_ROOT" "$CAMPAIGN_DIR" \
+  > "$RUN_ROOT/campaign_execution_marker.v1.json"
+echo "CAMPAIGN_EXECUTION_MARKER:$RUN_ROOT/campaign_execution_marker.v1.json" >> "$RUN_ROOT/run.log"
 {sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --time-limit-sec 30 --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" --agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS" --agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS" --agentic-code-tool-max-calls "$AGENTIC_CODE_TOOL_MAX_CALLS" --agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS" --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" --measurement-governance "$MEASUREMENT_GOVERNANCE" --proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION" --agentic-proposal --disable-early-stop
 STATUS=$?
 CAMPAIGN_STATUS=$STATUS

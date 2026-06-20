@@ -283,6 +283,9 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "--json" in run_sh_text
     assert "pre_campaign_completion_preflight.v1.json" in run_sh_text
     assert "tools/write_completion_preflight_status.py" in run_sh_text
+    assert "campaign_execution_marker.v1.json" in run_sh_text
+    assert "scion.launcher_campaign_execution_marker.v1" in run_sh_text
+    assert "CAMPAIGN_EXECUTION_MARKER:" in run_sh_text
     assert "write_postrun_acceptance_reports() {" in run_sh_text
     assert "--output \"$RUN_ROOT/run_status.json\"" in run_sh_text
     assert "--exit-code \"$PREFLIGHT_STATUS\"" in run_sh_text
