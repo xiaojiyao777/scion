@@ -385,6 +385,17 @@ def test_rebuild_postrun_acceptance_skips_current_run_reports_without_campaign_e
         "campaign_execution_artifacts_missing"
     )
     assert brief["phase4_evidence_coverage"]["current_run_evidence"] is False
+    try:
+        rebuild_tool.rebuild_postrun_acceptance(
+            run_root,
+            report_stem="missing_campaign_execution_strict",
+            strict=True,
+        )
+    except RuntimeError as exc:
+        assert "postrun acceptance rebuild incomplete" in str(exc)
+        assert "summaries" in str(exc)
+    else:
+        raise AssertionError("strict rebuild unexpectedly accepted missing campaign docs")
 
 
 def test_rebuild_postrun_acceptance_skips_current_run_reports_after_runtime_guard_failure(
