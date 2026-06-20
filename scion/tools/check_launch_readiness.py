@@ -346,6 +346,14 @@ def build_readiness(
     run_sh = root / "run.sh"
     add_check("run_script_present", "ok" if run_sh.is_file() else "failed", str(run_sh))
     add_check(
+        "run_script_runtime_guard_contract_consistency",
+        *_run_script_runtime_guard_contract_consistency(
+            root,
+            run_sh,
+            prepared_contract,
+        ),
+    )
+    add_check(
         "run_script_syntax",
         *_run_script_syntax(run_sh),
     )
@@ -902,6 +910,216 @@ def _run_script_syntax(run_sh: Path) -> tuple[str, Any]:
     )
     detail = (result.stderr or result.stdout or "").strip()
     return ("ok" if result.returncode == 0 else "failed"), detail
+
+
+def _run_script_runtime_guard_contract_consistency(
+    root: Path,
+    run_sh: Path,
+    prepared_contract: Any,
+) -> tuple[str, Any]:
+    if not isinstance(prepared_contract, dict):
+        return "failed", {"reason": "missing_prepared_contract"}
+    git = prepared_contract.get("git")
+    git_dict = git if isinstance(git, dict) else {}
+    manifest_commit = str(git_dict.get("commit") or "").strip()
+    manifest_paths = _normalize_runtime_guard_paths(
+        str(git_dict.get("runtime_guard_paths") or "")
+    )
+    launch_env = root / "launch.env"
+    failures: list[dict[str, Any]] = []
+    try:
+        launch_env_text = launch_env.read_text(encoding="utf-8")
+    except OSError as exc:
+        launch_env_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_launch_env",
+                "launch_env": str(launch_env),
+                "error": str(exc),
+            }
+        )
+    try:
+        run_text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        run_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_run_script",
+                "run_script": str(run_sh),
+                "error": str(exc),
+            }
+        )
+
+    launch_env_commit = _shell_assignment_value(launch_env_text, "GIT_COMMIT")
+    launch_env_paths = _normalize_runtime_guard_paths(
+        _shell_assignment_value(launch_env_text, "GIT_RUNTIME_GUARD_PATHS")
+    )
+    run_script_commit = _shell_assignment_value(run_text, "GIT_COMMIT")
+    run_script_paths = _normalize_runtime_guard_paths(
+        _shell_assignment_value(run_text, "GIT_RUNTIME_GUARD_PATHS")
+    )
+    run_script_commit_pos = _shell_assignment_position(run_text, "GIT_COMMIT")
+    run_script_paths_pos = _shell_assignment_position(
+        run_text,
+        "GIT_RUNTIME_GUARD_PATHS",
+    )
+    source_pos = _first_launch_env_source_position(run_text)
+    guard_pos = _runtime_guard_start_position(run_text)
+
+    effective_commit, effective_commit_source = _runtime_guard_effective_value(
+        launch_env_commit,
+        run_script_commit,
+        run_script_commit_pos,
+        source_pos,
+        guard_pos,
+    )
+    effective_paths, effective_paths_source = _runtime_guard_effective_value(
+        launch_env_paths,
+        run_script_paths,
+        run_script_paths_pos,
+        source_pos,
+        guard_pos,
+    )
+
+    if not manifest_commit:
+        failures.append({"reason": "missing_manifest_git_commit"})
+    if not manifest_paths:
+        failures.append({"reason": "missing_manifest_runtime_guard_paths"})
+    if launch_env_commit and launch_env_commit != manifest_commit:
+        failures.append(
+            {
+                "reason": "launch_env_git_commit_mismatch",
+                "expected": manifest_commit,
+                "actual": launch_env_commit,
+            }
+        )
+    if launch_env_paths and launch_env_paths != manifest_paths:
+        failures.append(
+            {
+                "reason": "launch_env_runtime_guard_paths_mismatch",
+                "expected": manifest_paths,
+                "actual": launch_env_paths,
+            }
+        )
+    if (
+        run_script_commit
+        and _runtime_guard_assignment_effective(
+            run_script_commit_pos,
+            source_pos,
+            guard_pos,
+        )
+        and run_script_commit != manifest_commit
+    ):
+        failures.append(
+            {
+                "reason": "run_script_git_commit_mismatch",
+                "expected": manifest_commit,
+                "actual": run_script_commit,
+            }
+        )
+    if (
+        run_script_paths
+        and _runtime_guard_assignment_effective(
+            run_script_paths_pos,
+            source_pos,
+            guard_pos,
+        )
+        and run_script_paths != manifest_paths
+    ):
+        failures.append(
+            {
+                "reason": "run_script_runtime_guard_paths_mismatch",
+                "expected": manifest_paths,
+                "actual": run_script_paths,
+            }
+        )
+    if effective_commit is None:
+        failures.append({"reason": "missing_effective_git_commit"})
+    elif effective_commit != manifest_commit:
+        failures.append(
+            {
+                "reason": "effective_git_commit_mismatch",
+                "expected": manifest_commit,
+                "actual": effective_commit,
+                "source": effective_commit_source,
+            }
+        )
+    if effective_paths is None:
+        failures.append({"reason": "missing_effective_runtime_guard_paths"})
+    elif effective_paths != manifest_paths:
+        failures.append(
+            {
+                "reason": "effective_runtime_guard_paths_mismatch",
+                "expected": manifest_paths,
+                "actual": effective_paths,
+                "source": effective_paths_source,
+            }
+        )
+
+    detail = {
+        "manifest_git_commit": manifest_commit,
+        "manifest_runtime_guard_paths": manifest_paths,
+        "launch_env": str(launch_env),
+        "run_script": str(run_sh),
+        "launch_env_git_commit": launch_env_commit,
+        "launch_env_runtime_guard_paths": launch_env_paths,
+        "run_script_git_commit": run_script_commit,
+        "run_script_runtime_guard_paths": run_script_paths,
+        "run_script_git_commit_position": run_script_commit_pos,
+        "run_script_runtime_guard_paths_position": run_script_paths_pos,
+        "launch_env_source_position": source_pos,
+        "runtime_guard_position": guard_pos,
+        "effective_git_commit": effective_commit,
+        "effective_git_commit_source": effective_commit_source,
+        "effective_runtime_guard_paths": effective_paths,
+        "effective_runtime_guard_paths_source": effective_paths_source,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
+
+
+def _normalize_runtime_guard_paths(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return " ".join(str(value).strip().split())
+
+
+def _runtime_guard_start_position(run_text: str) -> int:
+    marker = 'read -r -a _GIT_RUNTIME_GUARD_PATHS <<< "$GIT_RUNTIME_GUARD_PATHS"'
+    position = run_text.find(marker)
+    if position >= 0:
+        return position
+    return run_text.find(
+        'git -C "$REPO_ROOT" status --porcelain -- "${_GIT_RUNTIME_GUARD_PATHS[@]}"'
+    )
+
+
+def _runtime_guard_assignment_effective(
+    assignment_pos: int,
+    source_pos: int,
+    guard_pos: int,
+) -> bool:
+    if assignment_pos < 0:
+        return False
+    if guard_pos >= 0 and assignment_pos > guard_pos:
+        return False
+    return source_pos < 0 or assignment_pos > source_pos
+
+
+def _runtime_guard_effective_value(
+    launch_env_value: str | None,
+    run_script_value: str | None,
+    run_script_pos: int,
+    source_pos: int,
+    guard_pos: int,
+) -> tuple[str | None, str]:
+    if _runtime_guard_assignment_effective(run_script_pos, source_pos, guard_pos):
+        return run_script_value, "run_script"
+    if launch_env_value is not None:
+        return launch_env_value, "launch_env"
+    if run_script_value is not None and (source_pos < 0 or run_script_pos < source_pos):
+        return run_script_value, "run_script_fallback"
+    return None, "missing"
 
 
 def _run_script_runtime_guard_enforced(run_sh: Path) -> tuple[str, Any]:
@@ -1828,6 +2046,17 @@ def _shell_assignment_value(text: str, key: str) -> str | None:
             value = value[1:-1]
         return value
     return None
+
+
+def _shell_assignment_position(text: str, key: str) -> int:
+    prefix = f"{key}="
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and stripped.startswith(prefix):
+            return offset + line.find(prefix)
+        offset += len(line)
+    return -1
 
 
 def _parse_positive_int(value: Any) -> int | None:

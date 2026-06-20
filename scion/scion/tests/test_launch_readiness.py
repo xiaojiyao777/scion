@@ -38,6 +38,10 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert (
         report["checks"]["runtime_guard_paths_cover_launch_tools"]["status"] == "ok"
     )
+    assert (
+        report["checks"]["run_script_runtime_guard_contract_consistency"]["status"]
+        == "ok"
+    )
     assert report["checks"]["run_script_runtime_guard_enforced"]["status"] == "ok"
     problem_specific = report["checks"]["problem_specific_prepared_handoff"]
     assert problem_specific["status"] == "ok"
@@ -450,6 +454,115 @@ def test_launch_readiness_rejects_run_script_without_runtime_guard(
     assert report["static_ready"] is False
     assert guard_check["status"] == "failed"
     assert "dirty_failure_marker" in guard_check["detail"]["missing_markers"]
+
+
+def test_launch_readiness_rejects_run_script_git_commit_contract_mismatch(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    run_sh.write_text(
+        "\n".join(
+            "GIT_COMMIT=deadbeef"
+            if line.startswith("GIT_COMMIT=")
+            else line
+            for line in run_text.splitlines()
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    contract_check = report["checks"][
+        "run_script_runtime_guard_contract_consistency"
+    ]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert contract_check["status"] == "failed"
+    assert {
+        "reason": "run_script_git_commit_mismatch",
+        "expected": _git_head_short(),
+        "actual": "deadbeef",
+    } in contract_check["detail"]["failures"]
+    assert {
+        "reason": "effective_git_commit_mismatch",
+        "expected": _git_head_short(),
+        "actual": "deadbeef",
+        "source": "run_script",
+    } in contract_check["detail"]["failures"]
+
+
+def test_launch_readiness_rejects_run_script_runtime_guard_paths_contract_mismatch(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    run_sh.write_text(
+        "\n".join(
+            "GIT_RUNTIME_GUARD_PATHS=scion/tools"
+            if line.startswith("GIT_RUNTIME_GUARD_PATHS=")
+            else line
+            for line in run_text.splitlines()
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    contract_check = report["checks"][
+        "run_script_runtime_guard_contract_consistency"
+    ]
+    expected_paths = _default_runtime_guard_paths("cvrp")
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert contract_check["status"] == "failed"
+    assert {
+        "reason": "run_script_runtime_guard_paths_mismatch",
+        "expected": expected_paths,
+        "actual": "scion/tools",
+    } in contract_check["detail"]["failures"]
+    assert {
+        "reason": "effective_runtime_guard_paths_mismatch",
+        "expected": expected_paths,
+        "actual": "scion/tools",
+        "source": "run_script",
+    } in contract_check["detail"]["failures"]
+
+
+def test_launch_readiness_rejects_launch_env_runtime_guard_contract_mismatch(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    launch_env = run_root / "launch.env"
+    launch_env_text = launch_env.read_text(encoding="utf-8")
+    launch_env.write_text(
+        "\n".join(
+            "GIT_RUNTIME_GUARD_PATHS=scion/tools"
+            if line.startswith("GIT_RUNTIME_GUARD_PATHS=")
+            else line
+            for line in launch_env_text.splitlines()
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    contract_check = report["checks"][
+        "run_script_runtime_guard_contract_consistency"
+    ]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert contract_check["status"] == "failed"
+    assert {
+        "reason": "launch_env_runtime_guard_paths_mismatch",
+        "expected": _default_runtime_guard_paths("cvrp"),
+        "actual": "scion/tools",
+    } in contract_check["detail"]["failures"]
 
 
 def test_launch_readiness_rejects_run_script_guard_after_campaign_command(
@@ -2711,6 +2824,8 @@ def _write_prepared_root(
                 "PROPOSAL_ATTEMPT_LIMIT=64",
                 "PROPOSAL_QUALITY_LOOP_LIMIT=64",
                 "DISABLE_EARLY_STOP=1",
+                f"GIT_COMMIT={_git_head_short()}",
+                f"GIT_RUNTIME_GUARD_PATHS={json.dumps(runtime_guard_paths)}",
                 "",
             ]
         ),
