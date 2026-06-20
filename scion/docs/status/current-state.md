@@ -35,17 +35,17 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL after current-run postrun
-research-context readiness began requiring a formal hypothesis prompt trace,
-so code-only prompt manifests cannot prove next-proposal research signal
-visibility. The earlier problem-summary `evidence` payload and CVRP seed-only
-large two-opt rejection guards remain in force. WSL static readiness passes;
-launch readiness fails only at completion preflight auth.
+The active prepared roots were generated on WSL after postrun acceptance began
+checking runtime-evidence consistency between problem summaries and runtime
+feedback inputs. The formal hypothesis prompt-trace, problem-summary
+`evidence` payload, and CVRP seed-only large two-opt rejection guards remain in
+force. WSL static readiness passes; launch readiness fails only at completion
+preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-hyptrace-3b7a116b-preflight-6r-gpt55-20260620T012745Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runtimeev-3e0512f1-preflight-6r-gpt55-20260620T014618Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-hyptrace-3b7a116b-preflight-4r-gpt55-20260620T012800Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-runtimeev-3e0512f1-preflight-4r-gpt55-20260620T014619Z-claw`
 
 Prepared manifests record:
 
@@ -53,7 +53,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `3b7a116b`; CVRP `3b7a116b`.
+- Runtime commits: warehouse `3e0512f1`; CVRP `3e0512f1`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -111,6 +111,9 @@ Prepared manifests record:
   `evidence` payload before postrun delegated review can accept
   protocol-evaluated, plateau, positive-effect, or bounded two-opt conclusions;
   summary text alone is not accepted as current-run evidence.
+- Problem-summary runtime evidence must match the runtime-feedback input for
+  raw availability, drain/review readiness, runtime model counts, and runtime
+  budget diagnostic counts before delegated review can accept it.
 - Current-run warehouse/CVRP research-context readiness must include a formal
   hypothesis-generation prompt trace. Code-only prompt manifests and target
   intent prompts are not sufficient evidence that branch-depth, continuity, or
@@ -191,6 +194,7 @@ Prepared manifests record:
   `scion/docs/experiments/v0.4/v04-postrun-readiness-failed-check-summary-20260619.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-runtime-guard-commit-drift-20260620.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-runtime-guard-contract-consistency-20260620.md`,
+  `scion/docs/experiments/v0.4/v04-postrun-runtime-evidence-consistency-guard-20260620.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-seed-only-twoopt-readiness-guard-20260620.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-mechanism-bound-direct-evidence-20260619.md`,
