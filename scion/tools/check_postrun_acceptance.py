@@ -2294,6 +2294,7 @@ def _prompt_context_entries_signature(value: Any) -> list[dict[str, Any]]:
         entries.append(
             {
                 "report": str(entry.get("report") or ""),
+                "path": _path_tail_signature(entry.get("path")),
                 "prompt_manifest_ref_count": _int_or_zero(
                     entry.get("prompt_manifest_ref_count")
                 ),
@@ -3238,6 +3239,7 @@ def _failure_taxonomy_entry_signature(value: Any) -> list[dict[str, Any]]:
         entries.append(
             {
                 "report": str(item.get("report") or ""),
+                "path": _path_tail_signature(item.get("path")),
                 "proposal_quality": _failure_taxonomy_proposal_signature(
                     item.get("proposal_quality")
                 ),

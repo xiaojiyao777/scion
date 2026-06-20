@@ -1160,6 +1160,63 @@ def test_postrun_acceptance_rejects_stale_prompt_context_visibility_projection(
     assert prompt_check["detail"]["expected_trace_count"] == 2
 
 
+def test_postrun_acceptance_rejects_stale_prompt_context_entry_path(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(
+        tmp_path / "warehouse-run-stale-prompt-entry-path"
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    prompt_summary = brief["prompt_context_visibility_summary"]
+    assert isinstance(prompt_summary, dict)
+    entries = prompt_summary["entries"]
+    assert isinstance(entries, list)
+    assert entries
+    entry = entries[0]
+    assert isinstance(entry, dict)
+    original_path = Path(str(entry["path"]))
+    entry["path"] = str(
+        run_root.parent
+        / "stale-warehouse-run"
+        / "postrun_acceptance"
+        / "manifests"
+        / original_path.name
+    )
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert prompt_check["status"] == "failed"
+    assert "prompt_context_visibility_entries_mismatch" in prompt_check["detail"][
+        "failures"
+    ]
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_requires_research_context_actionability(
     tmp_path: Path,
 ) -> None:
@@ -1620,6 +1677,64 @@ def test_postrun_acceptance_rejects_stale_failure_taxonomy_summary(
     assert taxonomy_check["detail"]["expected_run_validity_status_counts"] == {
         "valid": 1
     }
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
+def test_postrun_acceptance_rejects_stale_failure_taxonomy_entry_path(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(
+        tmp_path / "warehouse-run-stale-taxonomy-entry-path"
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    taxonomy = brief["failure_taxonomy_summary"]
+    assert isinstance(taxonomy, dict)
+    entries = taxonomy["entries"]
+    assert isinstance(entries, list)
+    assert entries
+    entry = entries[0]
+    assert isinstance(entry, dict)
+    original_path = Path(str(entry["path"]))
+    entry["path"] = str(
+        run_root.parent
+        / "stale-warehouse-run"
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / original_path.name
+    )
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    taxonomy_check = readiness["checks"]["failure_taxonomy_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert taxonomy_check["required"] is True
+    assert taxonomy_check["status"] == "failed"
+    assert "failure_taxonomy_entries_mismatch" in taxonomy_check["detail"][
+        "failures"
+    ]
     assert (
         check_tool.main([str(run_root), "--require-current-run-ready"])
         == check_tool.UNREADY_EXIT
