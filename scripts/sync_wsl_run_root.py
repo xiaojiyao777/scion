@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
@@ -25,6 +26,42 @@ DEFAULT_LOCAL_EXPERIMENTS_ROOT = Path(
     )
 )
 POSTRUN_UNREADY_EXIT = 64
+SOURCE_CHECK_FAILED_EXIT = 65
+
+
+def build_source_check_command(
+    *,
+    wsl_run_root: str,
+    wsl_user: str = DEFAULT_WSL_USER,
+    wsl_host: str = DEFAULT_WSL_HOST,
+    wsl_port: int = DEFAULT_WSL_PORT,
+    ssh_key: Path = DEFAULT_SSH_KEY,
+) -> list[str]:
+    root = _remote_path(wsl_run_root)
+    remote_script = (
+        f"root={shlex.quote(root)}; "
+        f"fail() {{ printf '%s\\n' \"$1\" >&2; exit {SOURCE_CHECK_FAILED_EXIT}; }}; "
+        "test -d \"$root\" || fail \"missing WSL run root directory: $root\"; "
+        "test -f \"$root/run_status.json\" || fail \"missing root run_status.json: $root\"; "
+        "( test -f \"$root/prepared_run_manifest.v1.json\" || "
+        "test -f \"$root/campaign/run_status.json\" || "
+        "test -f \"$root/campaign/status.json\" ) || "
+        "fail \"missing Scion run markers under: $root\"; "
+        "printf 'source_root_ok\\n'"
+    )
+    return [
+        "ssh",
+        "-i",
+        str(ssh_key),
+        "-p",
+        str(int(wsl_port)),
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=no",
+        f"{wsl_user}@{wsl_host}",
+        remote_script,
+    ]
 
 
 def build_rsync_command(
@@ -76,6 +113,7 @@ def sync_and_check(
     ssh_key: Path = DEFAULT_SSH_KEY,
     delete: bool = True,
     execute: bool = False,
+    check_source: bool = True,
     check_postrun: bool = True,
 ) -> dict[str, Any]:
     resolved_local = (
@@ -83,13 +121,27 @@ def sync_and_check(
         if local_run_root is not None
         else local_experiments_root / run_root_name(wsl_run_root)
     ).expanduser()
+    resolved_experiments_root = Path(local_experiments_root).expanduser()
+    if execute and delete:
+        _ensure_safe_delete_destination(
+            local_run_root=resolved_local,
+            local_experiments_root=resolved_experiments_root,
+        )
+    expanded_ssh_key = ssh_key.expanduser()
+    source_check_command = build_source_check_command(
+        wsl_run_root=wsl_run_root,
+        wsl_user=wsl_user,
+        wsl_host=wsl_host,
+        wsl_port=wsl_port,
+        ssh_key=expanded_ssh_key,
+    )
     rsync_command = build_rsync_command(
         wsl_run_root=wsl_run_root,
         local_run_root=resolved_local,
         wsl_user=wsl_user,
         wsl_host=wsl_host,
         wsl_port=wsl_port,
-        ssh_key=ssh_key.expanduser(),
+        ssh_key=expanded_ssh_key,
         delete=delete,
     )
     postrun_command = build_postrun_check_command(resolved_local)
@@ -104,13 +156,23 @@ def sync_and_check(
         "wsl_run_root": wsl_run_root,
         "local_run_root": str(resolved_local),
         "execute": bool(execute),
+        "source_check_command": source_check_command if check_source else [],
         "rsync_command": rsync_command,
         "postrun_check_command": postrun_command if check_postrun else [],
+        "source_check_exit_status": None,
         "rsync_exit_status": None,
         "postrun_check_exit_status": None,
     }
     if not execute:
         return report
+
+    if check_source:
+        source_result = _run(source_check_command)
+        report["source_check_exit_status"] = source_result.returncode
+        report["source_check_stdout"] = source_result.stdout
+        report["source_check_stderr"] = source_result.stderr
+        if source_result.returncode != 0:
+            return report
 
     resolved_local.parent.mkdir(parents=True, exist_ok=True)
     rsync_result = _run(rsync_command)
@@ -146,12 +208,21 @@ def render_text(report: dict[str, Any]) -> str:
         f"WSL_RUN_ROOT={report['wsl_run_root']}",
         f"LOCAL_RUN_ROOT={report['local_run_root']}",
         f"EXECUTE={int(bool(report['execute']))}",
-        "RSYNC_COMMAND=" + _shell_join(report["rsync_command"]),
     ]
+    if report.get("source_check_command"):
+        lines.append(
+            "SOURCE_CHECK_COMMAND="
+            + _shell_join(report["source_check_command"])
+        )
+    lines.append("RSYNC_COMMAND=" + _shell_join(report["rsync_command"]))
     if report.get("postrun_check_command"):
         lines.append(
             "POSTRUN_CHECK_COMMAND="
             + _shell_join(report["postrun_check_command"])
+        )
+    if report.get("source_check_exit_status") is not None:
+        lines.append(
+            f"SOURCE_CHECK_EXIT_STATUS={report['source_check_exit_status']}"
         )
     if report.get("rsync_exit_status") is not None:
         lines.append(f"RSYNC_EXIT_STATUS={report['rsync_exit_status']}")
@@ -180,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--wsl-port", type=int, default=DEFAULT_WSL_PORT)
     parser.add_argument("--ssh-key", type=Path, default=DEFAULT_SSH_KEY)
     parser.add_argument("--no-delete", action="store_true")
+    parser.add_argument("--skip-source-check", action="store_true")
     parser.add_argument("--skip-postrun-check", action="store_true")
     parser.add_argument(
         "--execute",
@@ -204,6 +276,7 @@ def main(argv: list[str] | None = None) -> int:
             ssh_key=args.ssh_key,
             delete=not args.no_delete,
             execute=args.execute,
+            check_source=not args.skip_source_check,
             check_postrun=not args.skip_postrun_check,
         )
     except Exception as exc:
@@ -217,6 +290,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.execute:
         return 0
+    source_exit = report.get("source_check_exit_status")
+    if source_exit not in (None, 0):
+        return int(source_exit)
     rsync_exit = report.get("rsync_exit_status")
     if rsync_exit not in (None, 0):
         return int(rsync_exit)
@@ -228,10 +304,38 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _remote_dir(path: str) -> str:
+    value = _remote_path(path)
+    return value + "/"
+
+
+def _remote_path(path: str) -> str:
     value = path.rstrip("/")
     if not value:
         raise ValueError("wsl_run_root must not be empty")
-    return value + "/"
+    return value
+
+
+def _ensure_safe_delete_destination(
+    *,
+    local_run_root: Path,
+    local_experiments_root: Path,
+) -> None:
+    if not _path_is_relative_to(
+        local_run_root.absolute(),
+        local_experiments_root.absolute(),
+    ):
+        raise ValueError(
+            "local_run_root must be inside local_experiments_root "
+            "when --execute and --delete are enabled"
+        )
+
+
+def _path_is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
 
 
 def _run(command: list[str]) -> subprocess.CompletedProcess[str]:

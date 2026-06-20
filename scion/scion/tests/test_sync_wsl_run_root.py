@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 REPO_DIR = Path(__file__).parents[3]
 SCION_DIR = REPO_DIR / "scion"
@@ -30,6 +32,9 @@ def test_sync_wsl_run_root_dry_run_builds_safe_commands(tmp_path: Path) -> None:
     assert report["campaign_state_mutated"] is False
     assert report["execute"] is False
     assert report["local_run_root"] == str(tmp_path / "run-a")
+    assert report["source_check_command"][0] == "ssh"
+    assert "run-a" in report["source_check_command"][-1]
+    assert report["source_check_exit_status"] is None
     assert report["rsync_command"][:2] == ["rsync", "-a"]
     assert "--delete" in report["rsync_command"]
     assert report["rsync_command"][-2] == (
@@ -55,6 +60,10 @@ def test_sync_wsl_run_root_execute_runs_rsync_then_postrun_check(
 
     def fake_run(command: list[str]) -> subprocess.CompletedProcess[str]:
         calls.append(command)
+        if command[0] == "ssh":
+            return subprocess.CompletedProcess(
+                command, 0, "source_root_ok\n", ""
+            )
         if command[0] == "rsync":
             return subprocess.CompletedProcess(command, 0, "synced", "")
         return subprocess.CompletedProcess(
@@ -72,9 +81,11 @@ def test_sync_wsl_run_root_execute_runs_rsync_then_postrun_check(
         execute=True,
     )
 
-    assert len(calls) == 2
-    assert calls[0][0] == "rsync"
-    assert calls[1][0] == sys.executable
+    assert len(calls) == 3
+    assert calls[0][0] == "ssh"
+    assert calls[1][0] == "rsync"
+    assert calls[2][0] == sys.executable
+    assert report["source_check_exit_status"] == 0
     assert report["rsync_exit_status"] == 0
     assert report["postrun_check_exit_status"] == 0
     assert report["postrun_current_run_ready"] is True
@@ -99,8 +110,9 @@ def test_sync_wsl_run_root_skips_postrun_check_when_requested(
         check_postrun=False,
     )
 
-    assert len(calls) == 1
-    assert calls[0][0] == "rsync"
+    assert len(calls) == 2
+    assert calls[0][0] == "ssh"
+    assert calls[1][0] == "rsync"
     assert report["postrun_check_command"] == []
     assert report["postrun_check_exit_status"] is None
 
@@ -110,6 +122,10 @@ def test_sync_wsl_run_root_preserves_postrun_unready_status(
     monkeypatch,
 ) -> None:
     def fake_run(command: list[str]) -> subprocess.CompletedProcess[str]:
+        if command[0] == "ssh":
+            return subprocess.CompletedProcess(
+                command, 0, "source_root_ok\n", ""
+            )
         if command[0] == "rsync":
             return subprocess.CompletedProcess(command, 0, "synced", "")
         return subprocess.CompletedProcess(
@@ -131,6 +147,49 @@ def test_sync_wsl_run_root_preserves_postrun_unready_status(
     assert report["postrun_check_exit_status"] == sync_tool.POSTRUN_UNREADY_EXIT
     assert report["postrun_current_run_ready"] is False
     assert "current_run_analysis_ready" in report["postrun_check_stdout"]
+
+
+def test_sync_wsl_run_root_source_check_failure_stops_before_rsync(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            sync_tool.SOURCE_CHECK_FAILED_EXIT,
+            "",
+            "missing root run_status.json",
+        )
+
+    monkeypatch.setattr(sync_tool, "_run", fake_run)
+
+    report = sync_tool.sync_and_check(
+        wsl_run_root="/wsl/experiments/not-a-run",
+        local_experiments_root=tmp_path,
+        execute=True,
+    )
+
+    assert len(calls) == 1
+    assert calls[0][0] == "ssh"
+    assert report["source_check_exit_status"] == sync_tool.SOURCE_CHECK_FAILED_EXIT
+    assert "missing root run_status" in report["source_check_stderr"]
+    assert report["rsync_exit_status"] is None
+    assert report["postrun_check_exit_status"] is None
+
+
+def test_sync_wsl_run_root_rejects_delete_outside_experiments(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="local_run_root must be inside"):
+        sync_tool.sync_and_check(
+            wsl_run_root="/wsl/experiments/run-outside",
+            local_run_root=tmp_path.parent / "outside-run",
+            local_experiments_root=tmp_path,
+            execute=True,
+        )
 
 
 def test_sync_wsl_run_root_cli_returns_postrun_unready_exit(
