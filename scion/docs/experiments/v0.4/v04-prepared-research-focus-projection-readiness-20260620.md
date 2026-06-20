@@ -43,7 +43,7 @@ Strict readiness for both roots:
 - `failed_static_required_checks=[]`
 - `failed_required_checks=["completion_preflight"]`
 - completion auth: HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`, auth pool `active=0`, `expired=1`, `total=1`
+  `code=invalid_api_key`, auth pool `active=0`, `refreshing=1`, `total=1`
 
 Projection readiness:
 
