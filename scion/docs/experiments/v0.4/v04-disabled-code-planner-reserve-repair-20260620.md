@@ -71,11 +71,14 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 Results: `33 passed`, `20 passed`.
 
-## Current Prepared Roots
+## Prepared Roots From This Repair
 
 Generated on WSL at launch-authoritative runtime commit `8427fc84`; the local
 runtime-equivalent commit is `5bc05de0`. Both roots are mirrored under
 `/home/clawd/research/scion-experiments/` with the same directory names.
+
+These roots were superseded after the disabled code-surface full-read repair.
+Use `scion/docs/status/current-state.md` for the current launch roots.
 
 - Warehouse:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-8427fc84-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-preflight-6r-gpt55-20260620T124740Z-claw`
