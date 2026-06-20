@@ -41,13 +41,13 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at prepared runtime commit `0ed9559b`; local mirrors exist under
+Generated on WSL at prepared runtime commit `df871c55`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-briefboundary-0ed9559b-preflight-6r-gpt55-20260620T072205Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-campaigncontract-df871c55-preflight-6r-gpt55-20260620T073437Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-briefboundary-0ed9559b-preflight-4r-gpt55-20260620T072205Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-campaigncontract-df871c55-preflight-4r-gpt55-20260620T073451Z-claw`
 
 Readiness snapshot:
 
@@ -55,8 +55,12 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared commit `0ed9559b`, actual commit `0ed9559b`;
+- Runtime guard status: prepared commit `df871c55`, actual commit `df871c55`;
   launch-critical runtime guard paths are clean and commit-consistent.
+- Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
+  `prepared_run_manifest.v1.json` agree on the problem/protocol/split/seeds,
+  campaign directory, rounds, time limit, measurement-governance mode, and
+  proposal-context ablation used by the actual `scion.cli.main run` command.
 
 Prepared run shape:
 
@@ -76,9 +80,9 @@ Prepared run shape:
   semantics.
 - Launch readiness is the operator-facing authority for prepared roots. It
   checks prepared contract/brief identity, prompt-context bridge, problem
-  handoff, runtime guards, model route, absolute launch paths, completion
-  preflight, strict postrun rebuild/readiness, and prepared/postrun rebuild
-  identity.
+  handoff, runtime guards, model route, campaign launch command consistency,
+  absolute launch paths, completion preflight, strict postrun rebuild/readiness,
+  and prepared/postrun rebuild identity.
 - Prepared prompt context must project required `research_focus` fields into
   the actual launch prompt path, including CVRP CMT2/CMT4 protection
   requirements.
