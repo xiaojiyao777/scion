@@ -45,6 +45,13 @@ _RUNTIME_REGRESSION_RATE = 0.90
 _RUNTIME_CONFIDENCE_MIN_PAIRS = 4
 _RUNTIME_SEVERE_SLOW_RATIO = 1.50
 _RUNTIME_SEVERE_SLOW_DELTA_MS = 100.0
+_SCREENING_MARGINAL_PASS_CODES = frozenset(
+    {
+        "SCREENING_PASS_MARGINAL_DELTA",
+        "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE",
+        "SCREENING_EXPAND_EXHAUSTED_PAIR_SIGNAL_POLICY_PASS",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -247,12 +254,19 @@ def screening_feedback_summary(
         existing=str(getattr(protocol, "opportunity_status", "") or ""),
     )
 
+    marginal_diagnostic_pass = _is_marginal_diagnostic_screening_pass(
+        protocol,
+        reason_codes=reason_codes,
+    )
+
     if invalid:
         tier: ScreeningFeedbackTier = "invalid"
-    elif protocol.gate_outcome == "pass":
-        tier = "promotable"
     elif quality_negative:
         tier = "quality_regression"
+    elif marginal_diagnostic_pass:
+        tier = "marginal"
+    elif protocol.gate_outcome == "pass":
+        tier = "promotable"
     elif case_marginal_positive:
         tier = "marginal"
     elif objective_positive:
@@ -569,6 +583,18 @@ def _why_not_promoted(
     if tier == "runtime_regression":
         return primary or "no objective effect and runtime regressed"
     return primary or f"screening outcome remained {gate_outcome}"
+
+
+def _is_marginal_diagnostic_screening_pass(
+    protocol: ProtocolResult,
+    *,
+    reason_codes: tuple[str, ...],
+) -> bool:
+    if getattr(protocol, "stage", None) != ExperimentStage.SCREENING:
+        return False
+    if str(getattr(protocol, "gate_outcome", "") or "") != "pass":
+        return False
+    return any(code in _SCREENING_MARGINAL_PASS_CODES for code in reason_codes)
 
 
 def _phase_causal_summary(

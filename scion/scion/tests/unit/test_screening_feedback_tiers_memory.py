@@ -83,6 +83,8 @@ def _protocol(
     ci_high: float = 0.0,
     candidate_operator_attempts: int = 1,
     candidate_surface_runtime_summary: dict | None = None,
+    gate_outcome: str = "fail",
+    reason_codes: tuple[str, ...] = ("SCREENING_FAIL_WIN_RATE",),
 ) -> ProtocolResult:
     pair_wins = case_wins if pair_wins is None else pair_wins
     pair_losses = case_losses if pair_losses is None else pair_losses
@@ -101,8 +103,8 @@ def _protocol(
             ci_low=ci_low,
             ci_high=ci_high,
         ),
-        gate_outcome="fail",
-        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        gate_outcome=gate_outcome,
+        reason_codes=reason_codes,
         exposed_summary="screening aggregate summary",
         raw_metrics_ref="/SECRET/raw/screening_metrics.json",
         pair_feedback=_pairs(pair_wins, pair_losses, pair_ties),
@@ -138,6 +140,43 @@ def test_screening_feedback_tiers_classify_external_aps_patterns() -> None:
     assert screening_feedback_summary(
         _protocol(case_wins=2, case_losses=1, case_ties=5)
     ).tier == "weak_positive"
+
+    marginal_pass = screening_feedback_summary(
+        _protocol(
+            case_wins=7,
+            case_losses=1,
+            case_ties=2,
+            median_delta=0.0,
+            gate_outcome="pass",
+            reason_codes=("SCREENING_PASS_MARGINAL_DELTA",),
+        ),
+        decision_reason_codes=("SCREENING_PASS_MARGINAL_DELTA",),
+    )
+    assert marginal_pass.tier == "marginal"
+    assert marginal_pass.repeat_unchanged_allowed is False
+    assert marginal_pass.allowed_followup_variants == (
+        "trigger",
+        "schedule",
+        "threshold",
+        "composition",
+    )
+    assert "SCREENING_PASS_MARGINAL_DELTA" in marginal_pass.why_not_promoted
+    assert marginal_pass.gate_observation_reason_codes == (
+        "SCREENING_PASS_MARGINAL_DELTA",
+    )
+
+    stale_negative_marginal_pass = screening_feedback_summary(
+        _protocol(
+            case_wins=7,
+            case_losses=1,
+            case_ties=2,
+            median_delta=-0.01,
+            gate_outcome="pass",
+            reason_codes=("SCREENING_PASS_MARGINAL_DELTA",),
+        ),
+        decision_reason_codes=("SCREENING_PASS_MARGINAL_DELTA",),
+    )
+    assert stale_negative_marginal_pass.tier == "quality_regression"
 
     weak_positive = screening_feedback_summary(
         _protocol(
@@ -414,3 +453,36 @@ def test_branch_local_memory_blocks_unchanged_weak_positive_repeat() -> None:
     assert "allowed_followup_variants=trigger,schedule,threshold,composition" in rendered
     assert "raw_metrics" not in rendered
     assert "SECRET" not in rendered
+
+
+def test_branch_local_memory_keeps_marginal_diagnostic_pass() -> None:
+    memory = CampaignSearchMemory()
+    step = _step(
+        _protocol(
+            case_wins=7,
+            case_losses=1,
+            case_ties=2,
+            pair_wins=7,
+            pair_losses=1,
+            pair_ties=2,
+            median_delta=0.0,
+            gate_outcome="pass",
+            reason_codes=("SCREENING_PASS_MARGINAL_DELTA",),
+        )
+    )
+
+    memory.update(step)
+    entry = memory.branch_mechanism_memory["branch-tier"][-1]
+    rendered = memory.render(view="hypothesis", branch_id="branch-tier")
+
+    assert entry.tier == "marginal"
+    assert entry.case_wins == 7
+    assert entry.repeat_unchanged_allowed is False
+    assert entry.allowed_followup_variants == (
+        "trigger",
+        "schedule",
+        "threshold",
+        "composition",
+    )
+    assert "SCREENING_PASS_MARGINAL_DELTA" in entry.why_not_promoted
+    assert "screening_gate_reason=SCREENING_PASS_MARGINAL_DELTA" in rendered
