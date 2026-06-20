@@ -263,10 +263,23 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
     assert projection_detail["raw_prompt_excluded"] is True
     assert projection_detail["decision_features_excluded"] is True
     assert projection_detail["missing_projected_keys"] == []
+    assert projection_detail["missing_projected_paths"] == []
     assert "case_protection_requirements" in projection_detail["projected_keys"]
     assert (
         "case_protection_requirements"
         in projection_detail["required_projected_keys"]
+    )
+    assert (
+        "case_protection_requirements.protected_cases"
+        in projection_detail["projected_paths"]
+    )
+    assert (
+        "case_protection_requirements.protected_cases"
+        in projection_detail["required_projected_paths"]
+    )
+    assert (
+        "case_protection_requirements.required_evidence"
+        in projection_detail["required_projected_paths"]
     )
     case_protection = prompt_context["signals"]["cvrp_case_protection_requirements"]
     assert case_protection["available"] is True

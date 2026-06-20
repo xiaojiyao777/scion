@@ -3130,6 +3130,7 @@ def _research_focus_projection_summary_failures(
         "available": True,
         "reason": "ok",
         "missing_projected_keys": [],
+        "missing_projected_paths": [],
     }
     for field, expected_value in boundary_expectations.items():
         if payload.get(field) != expected_value:
@@ -3157,6 +3158,9 @@ def _research_focus_projection_summary_failures(
         "manifest_keys",
         "projected_keys",
         "required_projected_keys",
+        "projected_paths",
+        "required_projected_paths",
+        "projected_path_count",
         "projected_field_count",
         "manifest_field_count",
     )

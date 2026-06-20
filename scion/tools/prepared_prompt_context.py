@@ -38,6 +38,10 @@ def research_focus_projection_summary(
             "projected_keys": [],
             "required_projected_keys": [],
             "missing_projected_keys": [],
+            "projected_paths": [],
+            "required_projected_paths": [],
+            "missing_projected_paths": [],
+            "projected_path_count": 0,
         }
     try:
         from scion.proposal.context_manager.manager import (
@@ -56,6 +60,10 @@ def research_focus_projection_summary(
             "projected_keys": [],
             "required_projected_keys": [],
             "missing_projected_keys": [],
+            "projected_paths": [],
+            "required_projected_paths": [],
+            "missing_projected_paths": [],
+            "projected_path_count": 0,
         }
 
     projected_dict = projected if isinstance(projected, dict) else {}
@@ -68,14 +76,32 @@ def research_focus_projection_summary(
         for key in required_keys
         if key not in projected_dict or projected_dict.get(key) in ({}, [], "", None)
     ]
+    required_paths = _required_research_focus_projection_paths(
+        problem_family,
+        research_focus,
+    )
+    projected_paths = _non_empty_leaf_paths(projected_dict)
+    missing_paths = [
+        path
+        for path in required_paths
+        if _path_value(projected_dict, path) in ({}, [], "", None)
+    ]
     return {
         **base,
-        "available": bool(projected_dict) and not missing_keys,
-        "reason": "ok" if projected_dict and not missing_keys else "missing_projection",
+        "available": bool(projected_dict) and not missing_keys and not missing_paths,
+        "reason": (
+            "ok"
+            if projected_dict and not missing_keys and not missing_paths
+            else "missing_projection"
+        ),
         "manifest_keys": sorted(research_focus),
         "projected_keys": sorted(projected_dict),
         "required_projected_keys": required_keys,
         "missing_projected_keys": missing_keys,
+        "projected_paths": projected_paths,
+        "required_projected_paths": required_paths,
+        "missing_projected_paths": missing_paths,
+        "projected_path_count": len(projected_paths),
         "projected_field_count": len(projected_dict),
         "manifest_field_count": len(research_focus),
     }
@@ -119,6 +145,108 @@ def _required_research_focus_projection_keys(
             if key in research_focus
         )
     return sorted(dict.fromkeys(common))
+
+
+def _required_research_focus_projection_paths(
+    problem_family: str,
+    research_focus: dict[str, Any],
+) -> list[str]:
+    paths: list[str] = [
+        key
+        for key in _required_research_focus_projection_keys(
+            problem_family,
+            research_focus,
+        )
+        if key in research_focus
+    ]
+    paths.extend(
+        _supported_nested_paths(
+            "measurement_opportunity_diagnostics",
+            research_focus,
+            (
+                "schema_version",
+                "metric",
+                "runtime_model",
+                "pairing_validity",
+                "practical_screen_delta",
+                "screening_mde_at_power_80",
+                "recommended_min_seeds",
+                "reason_codes",
+                "summary",
+                "decision_features_excluded",
+                "proposal_visibility_only",
+            ),
+        )
+    )
+    if problem_family == "cvrp":
+        paths.extend(
+            _supported_nested_paths(
+                "large_instance_two_opt_constraints",
+                research_focus,
+                (
+                    "schema_version",
+                    "scope",
+                    "seed_report",
+                    "proposal_visibility_only",
+                    "decision_features_excluded",
+                    "implementation_constraints",
+                    "required_pair_evidence",
+                    "default_reject_directions",
+                ),
+            )
+        )
+        paths.extend(
+            _supported_nested_paths(
+                "case_protection_requirements",
+                research_focus,
+                (
+                    "schema_version",
+                    "scope",
+                    "proposal_visibility_only",
+                    "decision_features_excluded",
+                    "protected_cases",
+                    "rules",
+                    "required_evidence",
+                ),
+            )
+        )
+    return sorted(dict.fromkeys(paths))
+
+
+def _supported_nested_paths(
+    parent_key: str,
+    research_focus: dict[str, Any],
+    child_keys: tuple[str, ...],
+) -> list[str]:
+    value = research_focus.get(parent_key)
+    if not isinstance(value, dict):
+        return []
+    return [
+        f"{parent_key}.{child_key}"
+        for child_key in child_keys
+        if value.get(child_key) not in ({}, [], "", None)
+    ]
+
+
+def _non_empty_leaf_paths(value: Any, *, prefix: str = "") -> list[str]:
+    if isinstance(value, dict):
+        paths: list[str] = []
+        for key, child in value.items():
+            child_prefix = f"{prefix}.{key}" if prefix else str(key)
+            paths.extend(_non_empty_leaf_paths(child, prefix=child_prefix))
+        return sorted(paths)
+    if value in ({}, [], "", None):
+        return []
+    return [prefix] if prefix else []
+
+
+def _path_value(value: dict[str, Any], path: str) -> Any:
+    current: Any = value
+    for part in path.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
 
 
 def _mapping_or_empty(value: Any) -> dict[str, Any]:
