@@ -35,20 +35,18 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL after postrun acceptance began
-checking research-context actionability projections against prompt visibility
-and research-continuity inputs. Runtime-evidence consistency, the formal
-hypothesis prompt-trace, problem-summary `evidence` payload, and CVRP seed-only
-large two-opt rejection guards remain in force. Agentic partial-hypothesis
-recovery landed after these roots were prepared; refresh prepared roots before
-launch once auth is restored so restart/recovery behavior matches the active
-checkout. WSL static readiness passes; launch readiness fails only at
-completion preflight auth.
+The active prepared roots were generated on WSL at runtime commit `cec86a07`
+after agentic partial-hypothesis recovery landed. Research-context actionability,
+runtime-evidence consistency, the formal hypothesis prompt-trace, problem-summary
+`evidence` payload, and CVRP seed-only large two-opt rejection guards remain in
+force. WSL static readiness passes; launch readiness fails only at completion
+preflight auth. Local mirrors exist under
+`/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ctxproj-7c80f84b-preflight-6r-gpt55-20260620T020853Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-partialrec-cec86a07-preflight-6r-gpt55-20260620T030033Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-ctxproj-7c80f84b-preflight-4r-gpt55-20260620T020854Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-partialrec-cec86a07-preflight-4r-gpt55-20260620T030045Z-claw`
 
 Prepared manifests record:
 
@@ -56,7 +54,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `7c80f84b`; CVRP `7c80f84b`.
+- Runtime commits: warehouse `cec86a07`; CVRP `cec86a07`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -169,8 +167,8 @@ Prepared manifests record:
 ## Next Actions
 
 1. Refresh the WSL/local proxy login, then rerun strict launch readiness on the
-   prepared root to be started. `/v1/models` is not enough; the completion
-   preflight must pass.
+   current prepared root to be started. `/v1/models` is not enough; the
+   completion preflight must pass.
 2. Run warehouse `v2` follow-up first as the simpler continuous-improvement
    proof. Then run the CVRP large-two-opt follow-up.
 3. After warehouse launch, classify the result as taxonomy-backed
@@ -203,6 +201,7 @@ Prepared manifests record:
   `scion/docs/experiments/v0.4/v04-launch-readiness-runtime-guard-commit-drift-20260620.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-runtime-guard-contract-consistency-20260620.md`,
   `scion/docs/experiments/v0.4/v04-agentic-partial-hypothesis-recovery-20260620.md`,
+  `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-agentic-partial-recovery-20260620.md`,
   `scion/docs/experiments/v0.4/v04-postrun-runtime-evidence-consistency-guard-20260620.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-seed-only-twoopt-readiness-guard-20260620.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`,

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `7c80f84b` after postrun readiness began checking research-context actionability projections against prompt visibility and research-continuity inputs; earlier runtime-evidence consistency, formal hypothesis prompt trace, problem-summary evidence-payload, CVRP seed-only bounded two-opt, launch runtime-guard contract checks, and agentic partial-hypothesis recovery remain in force. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `cec86a07` after agentic partial-hypothesis recovery, research-context actionability, runtime-evidence consistency, formal hypothesis prompt trace, problem-summary evidence-payload, CVRP seed-only bounded two-opt, and launch runtime-guard contract checks. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -249,9 +249,9 @@ Current checkpoint:
   a bounded, deadline-aware mechanism with CMT2/CMT4 protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ctxproj-7c80f84b-preflight-6r-gpt55-20260620T020853Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-partialrec-cec86a07-preflight-6r-gpt55-20260620T030033Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-ctxproj-7c80f84b-preflight-4r-gpt55-20260620T020854Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-partialrec-cec86a07-preflight-4r-gpt55-20260620T030045Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
