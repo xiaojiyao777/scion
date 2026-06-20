@@ -46,14 +46,14 @@ After strict readiness passes, launch from WSL by running the prepared wrapper
 itself, not by reconstructing the long `scion run` command:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-dd65747-statusmark-6r-gpt55-20260620T192501Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-66b5345-splitcase-6r-gpt55-20260620T194243Z-claw/run.sh
 ```
 
 Run the CVRP wrapper only after the warehouse run is underway or accepted for
 launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-dd65747-statusmark-4r-gpt55-20260620T192502Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-66b5345-splitcase-4r-gpt55-20260620T194243Z-claw/run.sh
 ```
 
 The wrappers already enforce completion preflight, runtime guards, campaign
@@ -81,17 +81,17 @@ the planned commands only.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `dd657475`;
-the corresponding local framework repair commit is `808b4095`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `66b53454`;
+the corresponding local framework repair commit is `094c86dc`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection only. Run launch readiness on WSL, because prepared
 contracts and wrapper scripts intentionally contain WSL absolute paths and will
 fail identity checks if evaluated from the server-side mirror.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-dd65747-statusmark-6r-gpt55-20260620T192501Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-66b5345-splitcase-6r-gpt55-20260620T194243Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-dd65747-statusmark-4r-gpt55-20260620T192502Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-66b5345-splitcase-4r-gpt55-20260620T194243Z-claw`
 
 Readiness snapshot:
 
@@ -99,7 +99,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `dd657475`; strict readiness
+- Runtime guard status: prepared runtime commit `66b53454`; strict readiness
   must keep reporting runtime guard OK. Treat all earlier prepared roots as
   superseded because runtime-guarded launcher, prompt-context, and postrun
   artifact-identity paths changed.
@@ -127,6 +127,9 @@ Readiness snapshot:
   `prepared_run_manifest.v1.json` agree on the problem/protocol/split/seeds,
   campaign directory, rounds, time limit, measurement-governance mode, and
   proposal-context ablation used by the actual `scion.cli.main run` command.
+- CVRP prepared contract now verifies that protected cases named by
+  `research_focus.case_protection_requirements` are present in the selected
+  split; the current root reports CMT2 and CMT4 in `screening`.
 
 Prepared run shape:
 
@@ -158,6 +161,10 @@ reports.
   guard prepared contract identity, prompt-context bridge, runtime paths, model
   route, completion preflight, wrapper command consistency, and strict postrun
   rebuild/readiness before launch.
+- CVRP launch readiness must reject prepared roots whose prompt-visible
+  CMT2/CMT4 protection requirements are absent from the configured split. This
+  remains a problem-owned prepared-handoff contract and does not enter
+  `DecisionFeatures`.
 - Runtime semantics must keep budget-exhausting solver saturation and cached
   runtime ties from creating meaningless fresh-replay pressure, lifecycle churn,
   or proposal feedback noise.
