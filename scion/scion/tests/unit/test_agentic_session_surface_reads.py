@@ -294,6 +294,14 @@ def test_zero_code_tool_call_budget_does_not_disable_code_phase_planner(
         and context.get("remaining_code_tool_calls", 0) > 0
         for context in creative.planner_contexts
     )
+    assert any(
+        context.get("max_code_tool_calls_enabled") is False
+        and context.get("reserved_for_self_check", {}).get("enabled") is False
+        and context.get("reserved_for_self_check", {}).get("tool_calls") == 0
+        and context.get("reserved_for_self_check", {}).get("steps") == 0
+        and context.get("reserved_for_self_check", {}).get("observation_chars") == 0
+        for context in creative.planner_contexts
+    )
     assert not any(
         event.metadata.get("skip_reason") == "code_tool_loop_limit_reached"
         for event in state.transcript

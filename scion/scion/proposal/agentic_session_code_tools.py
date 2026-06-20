@@ -200,6 +200,11 @@ class AgenticSessionCodeToolsMixin:
                     break
 
                 all_observations = [*prior_observations, *observations]
+                self_check_reserve = {
+                    "tool_calls": self._self_check_tool_call_reserve(),
+                    "steps": self._self_check_step_reserve(),
+                    "observation_chars": self._self_check_observation_reserve_chars(),
+                }
                 planner_context = {
                     "session_id": state.session_id,
                     "phase": AgenticProposalPhase.DRAFT_PATCH.value,
@@ -229,8 +234,8 @@ class AgenticSessionCodeToolsMixin:
                     "remaining_code_tool_calls": max(0, max_calls - len(observations)),
                     "max_code_tool_calls_enabled": code_tool_call_limit_enabled,
                     "reserved_for_self_check": {
-                        "tool_calls": 4,
-                        "steps": 4,
+                        **self_check_reserve,
+                        "enabled": any(value > 0 for value in self_check_reserve.values()),
                         "purpose": (
                             "final Contract preview and algorithm smoke after patch "
                             "generation"
