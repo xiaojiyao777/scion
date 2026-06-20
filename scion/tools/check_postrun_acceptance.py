@@ -834,6 +834,12 @@ def _launcher_wrapper_marker_status_ok(
 
     if _int_or_zero(run_log_markers.get("POSTRUN_STATUS_WRITE_EXIT_STATUS")) > 0:
         failures.append("postrun_status_write_exit_status_marker_present")
+    if _int_or_zero(exit_markers.get("POSTRUN_ACCEPTANCE_FAILED")) > 0:
+        failures.append("postrun_acceptance_failed_marker_present")
+    if _int_or_zero(exit_markers.get("POSTRUN_REPORTS_EFFECTIVE_EXIT_STATUS")) > 0:
+        failures.append("postrun_reports_effective_exit_status_marker_present")
+    if _int_or_zero(exit_markers.get("POSTRUN_READINESS_EFFECTIVE_EXIT_STATUS")) > 0:
+        failures.append("postrun_readiness_effective_exit_status_marker_present")
     if _int_or_zero(exit_markers.get("WRAPPER_EXIT_STATUS_EFFECTIVE")) > 0:
         failures.append("wrapper_exit_status_effective_marker_present")
 
