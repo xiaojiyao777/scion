@@ -239,358 +239,55 @@ not for every prepared root, wrapper failure, or repair-detail checkpoint.
 Current checkpoint:
 
 - Warehouse is the accepted v0.4 positive research-path checkpoint. Champion
-  `v2` promoted in the validation-transfer rerun; the open question is whether
-  Scion can produce additional useful research from `v2` or correctly diagnose a
-  real post-v2 plateau.
-- CVRP/VRP continuation is repaired enough for a focused solver-design follow-up:
-  the current prepared root carries the large-instance intra-route two-opt seed
-  only as proposal guidance, requires deadline-aware bounded implementation, and
-  keeps the unbounded fallback as default-avoid. CVRP and warehouse
-  code-generation prompts now receive provider-owned active subject code
-  constraints, and launch readiness checks the family-specific code-constraint
-  prompt bridge plus the current provider payload summary before static
-  readiness can pass. Current-run postrun analysis
-  can audit whether actual code prompt traces carried that constraints section,
-  using section status, digest, and count fingerprints rather than raw prompt
-  text; CVRP and warehouse delegated-analysis readiness now require that trace
-  to be present and full-visible whenever a matching code trace exists. Code
-  traces also require protected target/integration/algorithm source visibility;
-  code-phase required target/surface source reads now outrank final-preview slot
-  reservation whenever hard tool-loop capacity remains. Missing required source
-  paths and partial required hypothesis target-source visibility prevent
-  delegated current-run review readiness. CVRP bounded
-  two-opt review readiness now rejects generic, cross-route,
-  unbounded/fallback, VNS, and two-opt-star protocol family labels as
-  two-opt-like but non-qualifying signals, and requires direct
-  activation/effect/two-opt-specific phase telemetry co-located on the same
-  matching top effect row. Activation/effect must also be attributed to a
-  matching large/bounded two-opt mechanism rather than unrelated
-  `mechanism_evidence` before calling the follow-up
-  `bounded_twoopt_review_ready`.
-- Solver smoke/protocol subprocesses now resolve inherited relative
-  `PYTHONPATH` entries against the parent checkout before changing into the
-  solver workspace, preventing stale installed Scion imports during current-run
-  runtime checks.
-- Launch readiness now rejects prepared roots whose `launch.env` sets
-  `SCION_DIR` as a relative path. `PYTHONPATH` must include that absolute active
-  checkout before `run.sh` can be static-ready, so `SCION_DIR=scion` /
-  `PYTHONPATH=scion` cannot mask stale installed Scion imports.
-- Prepared handoff rebuild and launch readiness also self-locate the current
-  checkout package path before importing problem-owned providers, so operator
-  prepare/readiness commands do not silently use an installed stale Scion
-  package when ambient `PYTHONPATH` is missing.
-- Protocol-evaluated CVRP/warehouse postrun review requires runtime feedback to
-  be review-ready: runtime budget diagnostics remain reportable, but
-  fresh-runtime replay drain status and stage-transition drain status must both
-  be present before runtime evidence can support delegated conclusions.
-- Postrun acceptance readiness rejects stale problem-specific summary contracts:
-  `warehouse_followup_summary` and `cvrp_large_twoopt_summary` must use their
-  current schema, match the prepared problem family, and use a current
-  delegated-review interpretation while remaining report-only,
-  non-quality-judgment, and `DecisionFeatures`-excluded before a current run
-  can be called analysis-ready.
-- Launch readiness applies the same boundary to prepared-only analysis briefs:
-  the matching warehouse/CVRP prepared summary must be present, use the current
-  schema, and remain report-only, non-quality-judgment, and
-  `DecisionFeatures`-excluded before a prepared root can be static-ready.
-- Postrun acceptance readiness now validates every output declared by
-  `postrun_acceptance/rebuild/rebuild_manifest.v1.json`; stale directory
-  counts or lexically later replacement files cannot make current-run delegated
-  review ready when a manifest-declared artifact is missing.
-- Postrun acceptance readiness now also requires current-run
-  `research_context_actionability_summary`, prompt block-family accounting, and
-  prompt signal-density token accounting for warehouse/CVRP delegated review.
-  This makes branch-transfer and same-mechanism gaps auditable without turning
-  research-context quality into Decision or promotion input.
-- Postrun acceptance readiness now also requires current-run
-  `failure_taxonomy_summary` evidence for warehouse/CVRP delegated review.
-  Missing, stale, non-current, or empty failure taxonomy no longer allows a
-  hand-written problem summary to make a run analysis-ready.
-- Postrun acceptance readiness now also requires prompt/source visibility,
-  research-context, signal-density, and failure-taxonomy review surfaces to
-  preserve current schemas, report-only/non-quality-judgment boundary markers
-  where applicable, `DecisionFeatures` exclusion, and raw prompt/response/patch
-  body/log exclusions. Hand-written review surfaces can no longer provide
-  plausible counts while bypassing the v3 tainted-material boundary.
-- Postrun acceptance readiness now also requires interpretation-specific
-  current-run review-input summaries for warehouse/CVRP delegated review.
-  Protocol-evaluated conclusions require protocol accounting,
-  measurement-effect, runtime-feedback, and research-continuity summaries;
-  taxonomy-backed quality-blocked no-protocol conclusions require protocol
-  accounting and matching failure-taxonomy quality-block evidence, while
-  missing plateau evidence inputs remain nonblocking for that negative
-  conclusion only. A hand-written problem-specific summary can no longer bypass
-  required review-input summaries, those summaries must preserve report-only,
-  non-quality-judgment, `DecisionFeatures`-excluded boundary markers, and
-  runtime feedback must still be review-ready with drain status complete when
-  the interpretation requires runtime evidence.
-- CVRP quality-blocked no-protocol conclusions now expose quality-block counts
-  and reason mix in the postrun brief, and acceptance requires matching
-  current-run `failure_taxonomy_summary` evidence before that negative
-  conclusion is analysis-ready.
-- Warehouse/CVRP quality-blocked no-protocol conclusions now fail readiness if
-  either the problem summary or review-input protocol accounting reports any
-  protocol-evaluated candidate, so hand-written summaries cannot bypass
-  protocol-evaluated measurement/runtime/continuity requirements.
-- Measurement-governed `pairing_validity: trajectory_divergent` lifecycle now
-  keeps non-regressive low-SNR screening branches researching instead of parking
-  them via fixed no-effect, repeated-signature, rollback-budget, or zero-win
-  lifecycle counters. Negative median delta, loss-heavy evidence, candidate
-  runtime failure, verification failure, canary failure, timeout, and true
-  runtime regression still fail closed; default/trajectory-stable lifecycle
-  behavior is unchanged.
-- Postrun acceptance readiness now also requires current-run
-  `branch_research_state_summary` actionability for warehouse/CVRP delegated
-  review. The summary is report-only, excludes raw prompts/responses/patch
-  bodies, and makes branch/hypothesis/event/trace coverage auditable without
-  requiring a positive result or changing Decision/Protocol/promotion state.
-  It is recomputed from current-run inventory before readiness accepts it, so a
-  hand-written or stale branch summary cannot disagree with branch, hypothesis,
-  event, session, or trace counts.
-- Postrun acceptance readiness also recomputes current-run
-  `champion_progress_summary` from inventory before accepting it, so a stale or
-  hand-written champion-progress summary cannot claim champion advancement,
-  version counts, or promotion signals that the current-run champion table and
-  event/hypothesis evidence do not support.
-- Postrun acceptance readiness also cross-checks the problem-specific summary's
-  protocol, measurement, runtime, continuity, and quality-block evidence against
-  those input summaries. A stale or hand-written problem summary can no longer
-  claim a protocol-evaluated conclusion when the input summaries disagree.
-- Postrun acceptance readiness also requires the analysis brief
-  `prepared_run_contract` to match the inventory/launcher prepared contract,
-  and problem-family routing now prefers the inventory contract over a
-  brief-local value. A stale or hand-written brief can no longer steer
-  warehouse/CVRP readiness through the wrong problem family.
-- Postrun acceptance rebuild now removes stale generated `.json/.md` outputs
-  from the standard postrun family directories before writing a fresh bundle, so
-  old research-efficiency, trajectory-manifest, analysis-brief, or inventory
-  files cannot be aggregated into the new delegated-review brief.
-- Postrun acceptance readiness also rejects undeclared generated `.json/.md`
-  files in standard ok family directories, so a stale file added after rebuild
-  cannot make the directory view or inventory counts look like current-run
-  evidence. It also rejects rebuild manifest outputs that point outside their
-  declared family directory, and postrun analysis brief selection is confined to
-  `postrun_acceptance/analysis_brief`. It also rejects postrun rebuild
-  manifests whose artifact identity or report-only boundary flags drift.
-- Prepared handoff rebuild now removes stale generated `.json/.md` outputs from
-  standard handoff family directories and launch readiness rejects undeclared
-  generated handoff outputs, so delegated launch reviewers consume only the
-  manifest-declared prepared bundle. Launch readiness now also rejects prepared
-  handoff rebuild manifest outputs that point outside their declared family
-  directory.
-- Launch readiness also validates prepared-handoff rebuild manifest identity,
-  report-only boundary flags, completion status, prepared manifest commit, root,
-  handoff directory, and problem family before treating the prepared bundle as
-  static-ready.
-- Launch readiness now also recomputes committed drift for prepared
-  `runtime_guard_paths`, matching `run.sh`: test/docs-only commit drift is
-  allowed, but committed runtime/control-plane/problem-path drift fails
-  readiness before launch.
-- Launch scripts now run `rebuild_postrun_acceptance.py --strict`, and launch
-  readiness requires `run_script_strict_postrun_rebuild=ok` before the postrun
-  readiness command, so incomplete postrun bundle rebuilds cannot leave
-  `POSTRUN_REPORTS_EXIT_STATUS` looking successful while delegated-readiness
-  JSON fails later. Launch readiness also requires
-  `POSTRUN_READINESS_EXIT_STATUS` to be emitted after the strict postrun
-  readiness command.
-- Current WSL prepared roots:
+  `v2` promoted in the validation-transfer rerun; the open empirical question is
+  whether Scion can produce additional useful research from `v2` or correctly
+  diagnose a real post-v2 plateau.
+- CVRP/VRP continuation is repaired enough for the next focused solver-design
+  follow-up, but v0.4 is not yet accepted because no current CVRP branch has
+  shown continuous improvement or promotion. The active CVRP root uses the
+  large-instance intra-route two-opt seed only as proposal guidance and requires
+  a bounded, deadline-aware mechanism with CMT2/CMT4 protection evidence.
+- Active WSL prepared roots:
   - Warehouse:
     `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runguardcontract-45cbec3a-preflight-6r-gpt55-20260620T002429Z-claw`
   - CVRP:
     `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-runguardcontract-45cbec3a-preflight-4r-gpt55-20260620T002429Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
-  `launch_ready=false`, `prepared_analysis_brief_current=ok`,
-  `analysis_brief_prepared_contract_consistency=ok`,
-  `prompt_context_readiness_complete=ok`,
-  `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`,
-  `prepared_handoff_rebuild_declared_outputs_present=ok` with no manifest
-  identity/boundary failures and no out-of-scope declared outputs,
-  `run_script_strict_postrun_rebuild=ok`,
-  `run_script_strict_postrun_readiness=ok`,
-  `run_script_launch_env_failure_reports=ok`,
-  `run_script_scion_dir_failure_reports=ok`,
-  `run_script_runtime_guard_failure_reports=ok`,
-  `run_script_runtime_guard_enforced=ok`,
-  `run_script_pythonpath_enforced=ok` with absolute WSL `SCION_DIR` and
-  `PYTHONPATH`,
-  `run_script_postrun_reports_after_campaign=ok`, `git_runtime_consistent=ok`,
-  `git_runtime_guard_commit_consistent=ok`,
-  `run_script_runtime_guard_contract_consistency=ok`,
-  `run_script_data_root_failure_reports=ok`,
-  `run_script_api_key_env_failure_reports=ok`,
-  `run_script_model_route_enforced=ok`,
-  `run_script_pythonpath_enforced=ok`,
-  `run_script_completion_preflight_enforced=ok`,
-  `run_script_preflight_failure_reports=ok`,
-  `run_script_no_early_stop_enforced=ok`,
-  `git_runtime_worktree_clean=ok`,
-  `run_script_proposal_headroom_enforced=ok`, prepared contract
-  `execution.disable_early_stop=true` and `command_disable_early_stop=true`,
-  and runtime guard coverage for
-  `scion/tools`, `scion/scion/cli`, `scion/scion/core`, `scion/scion/lineage`,
-  and the matching CVRP/warehouse problem package/assets/data paths. The
-  warehouse root reports
-  `warehouse_active_subject_code_constraint_source_markers` all true plus
-  provider payload version
-  `warehouse_operator_validation_transfer_code_constraints.v1` with total
-  guidance items `10`; the CVRP root reports
-  `cvrp_active_subject_code_constraint_source_markers` all true plus provider
-  payload version `cvrp_solver_design_code_constraints.v1` with total guidance
-  items `13`, and `cvrp_cmt_case_protection_present=true` with protected cases
-  `CMT2` and `CMT4`. The strict postrun rebuild order check confirms the
-  rebuild command precedes the postrun readiness command and
-  `POSTRUN_REPORTS_EXIT_STATUS` is emitted after the rebuild command. The roots
-  were prepared with explicit proposal-attempt/proposal-quality-loop headroom
-  (`64`/`64`) plus APS tool-loop headroom: session timeout `3600`, max steps
-  `240`, max total tool calls `200`, max code-phase tool calls `200`, and max
-  observation chars `2000000`. Both current roots record WSL runtime commit
-  `45cbec3a`, whose runtime guard paths and effective launch wrapper contract
-  match after launch readiness began checking committed runtime-guard drift and
-  wrapper/manifest runtime-guard consistency before launch.
-  Solver-design
-  target file and code-phase surface reads now use `96000` char source
-  headroom, while bounded algorithm slices remain at `24000`. Current
-  readiness also verifies executable `launch.env` sourcing, executable
-  completion preflight, GPT-5.5 model/base routing, active-checkout
-  absolute `SCION_DIR`/`PYTHONPATH`, no-early-stop launch semantics, executable
-  pre-campaign failure reporting, strict postrun readiness, runtime guard
-  command markers, normal campaign-exit postrun reporting, postrun
-  review-surface boundary markers, co-located CVRP two-opt direct evidence, and
-  warehouse/CVRP problem-summary consistency recomputed from review inputs.
-  Launch readiness and postrun
-  acceptance both check analysis-brief prepared-contract consistency against
-  the inventory/launcher contract before a root can be launch-ready or
-  current-run delegated review can be ready.
-  Both roots additionally verify that prepared measurement diagnostics are
-  derived from `problem_v1.measurement.calibration_ref`, with measurement
-  readiness `ready`, calibration schema `scion.aa_noise_floor.v1`, and
-  `DecisionFeatures` exclusion. The warehouse handoff exposes raw
-  `total_cost` MDE `577.5`, related create-new MDE `1725.0`, and the
-  comparative/trajectory-divergent runtime interpretation as report-only
-  proposal guidance.
-- The blocker is external WSL `gpt-5.5` provider auth, not Scion static
-  readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
-  `/v1/chat/completions` preflight returns HTTP `401`,
-  `classification=not_authenticated`, `code=invalid_api_key`. Latest strict
-  launch-readiness preflight reports auth pool `active=0` with no launch-usable
-  account; the sole account may appear as `expired` or `refreshing`. Do not
-  launch either root until
+  `launch_ready=false`, and `failed_static_required_checks=[]`. The only
+  required failure is external completion auth:
+  HTTP `401`, `classification=not_authenticated`, `code=invalid_api_key`.
+  Do not launch either root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
-- Current postrun/delegated-review boundary: postrun readiness is report-only and
-  requires the matching warehouse/CVRP problem-specific summary before a current
-  run can be called `current_run_analysis_ready=true`; launchers propagate that
-  readiness result into `POSTRUN_READINESS_EXIT_STATUS`, and launch readiness
-  rejects prepared scripts that omit the strict marker path. It also binds the
-  selected analysis brief to the rebuild manifest and checks run identity, so
-  stale or lexically later brief artifacts cannot make delegated review ready.
-  It also requires manifest-declared family outputs to still exist, so stale
-  directory contents cannot mask a missing report artifact. It emits top-level
-  `failed_required_checks` and `failed_optional_checks` so delegated reviewers
-  can identify missing current-run analysis inputs without scanning every check.
-  For warehouse/CVRP
-  current runs it additionally requires research-context actionability, prompt
-  signal-density accounting, failure-taxonomy evidence, and review-input
-  summaries to be present, report-only/`DecisionFeatures`-excluded, and
-  internally consistent with the problem summary. Review-input requirements are
-  interpretation-specific: protocol-evaluated conclusions still require the
-  measurement/runtime/continuity inputs, while taxonomy-backed quality-blocked
-  no-protocol conclusions can be analysis-ready without plateau evidence
-  inputs.
-  CVRP bounded
-  two-opt review readiness also requires a qualifying large/two-opt
-  protocol-effect row signal in measurement evidence plus direct
-  activation/effect/phase telemetry co-located on a matching top effect row.
-  The activation/effect evidence must belong to a matching large/bounded
-  two-opt mechanism, so unrelated `mechanism_evidence` cannot complete direct
-  evidence; postrun acceptance recomputes that signal from review inputs before
-  accepting `bounded_twoopt_review_ready`. Continuity-only family mentions
-  remain context, and generic/default-avoid two-opt-like labels are explicitly
-  rejected, not mechanism-effect evidence.
-  This does not change
-  Decision, `DecisionFeatures`, Protocol gates, promotion, scheduler state, or
-  solver behavior.
-- Current proposal-diagnostic boundary: adapter-owned measurement/opportunity
-  diagnostics are redacted before prompt exposure for raw pair/calibration rows,
-  BKS/gap details, holdout/case details, prompt ratios, and LLM text; the
-  remaining payload stays tainted proposal context and does not enter
-  `DecisionFeatures`.
-- Current launch/runtime boundary: prepared roots must guard `scion/tools`,
-  postrun/report package paths, and matching problem runtime paths as
-  runtime/control-plane code, so launcher, postrun rebuild, postrun readiness,
-  research-efficiency report, trajectory manifest, problem provider, problem
-  asset, baseline data, and launch-readiness changes after prepare time require
-  a new prepared root.
-  Launch readiness also rejects a prepared root whose `run.sh` declares the
-  guard contract but does not execute dirty/head-mismatch checks before
-  `scion.cli.main run`, or whose normal campaign-exit path skips the postrun
-  report/readiness bundle before exiting with campaign status. Warehouse roots
-  also fail readiness if their data-root-missing pre-campaign failure path skips
-  the postrun report/readiness bundle. Warehouse and CVRP roots also fail
-  readiness if the API-key-env-missing pre-campaign failure path skips the same
-  report/readiness bundle, if missing/unreadable `launch.env` or missing
-  `SCION_DIR` pre-campaign failure paths skip the same report/readiness bundle,
-  or if dirty/head-mismatch runtime guard failure paths skip the same
-  report/readiness bundle. Both warehouse and CVRP roots also fail readiness if
-  generated `launch.env` disables completion preflight or generated `run.sh`
-  does not run `tools/check_gpt55_proxy.py` before the real campaign command, or
-  if generated `launch.env/run.sh` do not export the active Scion checkout on
-  `PYTHONPATH` before campaign start, or if manifest and launch-env model route
-  diverge from `gpt-5.5`, or if launch-env/manifest/run-script no-early-stop
-  semantics are missing.
-  Older prepared roots before the launchcontract roots above are not current
-  because launch/readiness runtime paths changed after prepare time. Exact
-  supersession details belong in the
-  launch/readiness evidence docs, not in this current checkpoint.
-- Current warehouse delegated-review boundary: plateau-review readiness requires
-  protocol-evaluated current-run evidence plus measurement-effect,
-  runtime-feedback, and substantive realized research-continuity signals.
-  Measurement must be plateau-consistent through all available protocol-effect
-  CI highs below MDE; no-positive-MDE but CI-inconclusive effects are not a
-  plateau conclusion. A shallow continuity block or unrealized continuity
-  opportunity alone cannot distinguish a real post-v2 plateau from missed
-  continuous-optimization opportunity. Postrun acceptance recomputes the
-  warehouse measurement and continuity signals from review inputs before
-  accepting
-  `protocol_evaluated_plateau_review_ready`.
-- Current warehouse negative-conclusion boundary: a
-  `quality_blocked_no_protocol_plateau_conclusion` is analysis-ready only when
-  the problem summary and `failure_taxonomy_summary` agree on current-run
-  proposal quality-block evidence. Missing measurement-effect,
-  runtime-feedback, and research-continuity summaries are nonblocking only for
-  that quality-blocked no-protocol interpretation, not for
-  protocol-evaluated plateau conclusions.
-- Current postrun readiness boundary: blocking problem-summary gaps such as
-  missing interpretation-required review inputs, incomplete handoff, launch-only
-  or infra-only status, and unsupported no-protocol evidence prevent
-  `current_run_analysis_ready=true`; taxonomy-backed valid negative conclusions
-  remain analysis-ready. Warehouse/CVRP readiness also requires current-run
-  prompt/source visibility trace accounting, including
-  hypothesis target-source visibility, in the analysis brief, so delegated
-  review can audit branch transfer and source grounding instead of inferring
-  them from final status.
-- Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-warehouse-positive-effect-plateau-readiness-20260619.md`
-  supersedes the current-root pointer in
-  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`,
-  which itself
-  supersedes the current-root pointer in
-  `scion/docs/experiments/v0.4/v04-cvrp-phase4-four-round-root-readiness-20260619.md`
-  and
-  `scion/docs/experiments/v0.4/v04-solver-source-read-headroom-readiness-20260619.md`.
-  Earlier run-script guard, proposal-headroom, and APS tool-loop details remain
-  in `scion/docs/experiments/v0.4/`; they are not the current prepared-root
-  pointer.
-- Current CVRP CMT case-protection handoff evidence:
-  `scion/docs/experiments/v0.4/v04-cvrp-cmt-case-protection-handoff-20260619.md`.
+- Current framework guarantees, all report-only/control-plane or problem-owned
+  unless explicitly part of Protocol:
+  - Measurement declarations and A/A calibration are problem-owned and excluded
+    from `DecisionFeatures`.
+  - Budget-exhausting runtime semantics, low-SNR trajectory-divergent lifecycle
+    continuation, and hard-negative fail-closed behavior are covered by focused
+    tests.
+  - Code-phase prompts preserve target/integration/algorithm source visibility;
+    current-run postrun readiness audits prompt/source visibility, branch state,
+    champion progress, failure taxonomy, research-context actionability, signal
+    density, runtime drain readiness, and interpretation-specific review inputs.
+  - Warehouse positive-at-or-above-MDE evidence routes to
+    `protocol_evaluated_positive_effect_review_ready`; plateau conclusions
+    require plateau-consistent measurement, runtime feedback, and substantive
+    continuity evidence. Quality-blocked no-protocol negative conclusions require
+    matching current-run failure-taxonomy evidence.
+  - CVRP bounded two-opt review readiness requires a qualifying large/bounded
+    two-opt protocol-effect signal plus co-located activation/effect/phase
+    telemetry on a matching top effect row; generic two-opt-like, VNS,
+    unbounded, fallback, and continuity-only mentions are not sufficient.
+  - Launch readiness guards the active checkout, absolute WSL `SCION_DIR` /
+    `PYTHONPATH`, prepared-handoff identity, completion preflight, model route,
+    no-early-stop semantics, strict postrun rebuild/readiness, committed
+    runtime-guard drift, and wrapper/manifest runtime-guard contract
+    consistency.
 - Current operational truth lives in `scion/docs/status/current-state.md`.
-  Historical repair details live in `scion/docs/status/v0.4-history.md` and
-  `scion/docs/experiments/v0.4/`; do not read historical experiment reports by
-  default unless the current task explicitly needs one.
-- Future WSL campaign launches must set
-  `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
-  it, WSL may import stale Scion core modules from
-  `/home/xjy-ubuntu/projects/scion/scion`.
+  Detailed repair evidence lives in `scion/docs/experiments/v0.4/`; do not read
+  historical experiment reports by default unless the current task explicitly
+  needs one.
 
 ## Phase 1 - A/A Calibration and Measurement Power
 
