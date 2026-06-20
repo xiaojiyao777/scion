@@ -318,7 +318,6 @@ def test_postrun_acceptance_readiness_rejects_missing_campaign_execution_artifac
     rebuild_tool.rebuild_postrun_acceptance(
         run_root,
         report_stem="missing_campaign_execution",
-        strict=True,
     )
 
     readiness = check_tool.build_readiness(run_root)

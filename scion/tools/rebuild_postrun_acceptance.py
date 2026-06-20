@@ -37,16 +37,6 @@ DEFAULT_FAMILIES = (
     "inventory",
 )
 OBSERVED_CONTROL_ARMS = {"on", "record_only"}
-PRE_CAMPAIGN_INFRA_FAILURE_KEYS = (
-    "api_key_env_missing",
-    "launch_env_missing",
-    "scion_dir_missing",
-    "warehouse_data_root_missing",
-    "git_runtime_dirty",
-    "git_runtime_commit_mismatch",
-)
-
-
 def rebuild_postrun_acceptance(
     run_root: Path | str,
     *,
@@ -65,12 +55,29 @@ def rebuild_postrun_acceptance(
     root = resolved["run_root"]
     campaign_dir = resolved["campaign_dir"]
     prepared_manifest = _read_json(root / "prepared_run_manifest.v1.json")
-    prepared_only = _is_prepared_only_root(root)
-    preflight_failed = _is_pre_campaign_preflight_failed_root(root)
-    pre_campaign_infra_failure_keys = _pre_campaign_infra_failure_keys(root)
-    skip_current_run_reports = (
-        prepared_only or preflight_failed or bool(pre_campaign_infra_failure_keys)
+    initial_inventory = build_inventory(root)
+    lifecycle = initial_inventory.get("lifecycle")
+    if not isinstance(lifecycle, dict):
+        lifecycle = {}
+    prepared_only = lifecycle.get("prepared_only") is True
+    preflight_failed = (
+        lifecycle.get("pre_campaign_completion_preflight_failed") is True
     )
+    pre_campaign_infra_failure_keys = lifecycle.get(
+        "pre_campaign_infra_failure_keys"
+    )
+    if not isinstance(pre_campaign_infra_failure_keys, list):
+        pre_campaign_infra_failure_keys = []
+    launcher_status_unavailable = (
+        lifecycle.get("launcher_status_unavailable") is True
+    )
+    launcher_status_failure_key = lifecycle.get("launcher_status_failure_key")
+    campaign_execution_artifacts_unavailable = (
+        lifecycle.get("campaign_execution_artifacts_unavailable") is True
+    )
+    campaign_execution_failure_key = lifecycle.get("campaign_execution_failure_key")
+    current_run_evidence = lifecycle.get("current_run_evidence") is True
+    skip_current_run_reports = not current_run_evidence
     stem = _resolve_report_stem(
         explicit=report_stem,
         run_root=root,
@@ -96,6 +103,13 @@ def rebuild_postrun_acceptance(
             prepared_only=prepared_only,
             preflight_failed=preflight_failed,
             pre_campaign_infra_failure_keys=pre_campaign_infra_failure_keys,
+            launcher_status_unavailable=launcher_status_unavailable,
+            launcher_status_failure_key=launcher_status_failure_key,
+            campaign_execution_artifacts_unavailable=(
+                campaign_execution_artifacts_unavailable
+            ),
+            campaign_execution_failure_key=campaign_execution_failure_key,
+            current_run_evidence=current_run_evidence,
         )
         family_results["summaries"] = _skipped_family("summary", skip_reason)
         family_results["failures"] = _skipped_family("failures", skip_reason)
@@ -199,12 +213,26 @@ def rebuild_postrun_acceptance(
         "pre_campaign_completion_preflight_failed": preflight_failed,
         "pre_campaign_infra_failed": bool(pre_campaign_infra_failure_keys),
         "pre_campaign_infra_failure_keys": pre_campaign_infra_failure_keys,
+        "launcher_status_unavailable": launcher_status_unavailable,
+        "launcher_status_failure_key": launcher_status_failure_key,
+        "campaign_execution_artifacts_unavailable": (
+            campaign_execution_artifacts_unavailable
+        ),
+        "campaign_execution_failure_key": campaign_execution_failure_key,
+        "current_run_evidence": current_run_evidence,
         "current_run_reports_skipped": skip_current_run_reports,
         "current_run_skip_reason": (
             _current_run_skip_reason(
                 prepared_only=prepared_only,
                 preflight_failed=preflight_failed,
                 pre_campaign_infra_failure_keys=pre_campaign_infra_failure_keys,
+                launcher_status_unavailable=launcher_status_unavailable,
+                launcher_status_failure_key=launcher_status_failure_key,
+                campaign_execution_artifacts_unavailable=(
+                    campaign_execution_artifacts_unavailable
+                ),
+                campaign_execution_failure_key=campaign_execution_failure_key,
+                current_run_evidence=current_run_evidence,
             )
             if skip_current_run_reports
             else ""
@@ -321,53 +349,16 @@ def _clear_generated_family_outputs(
                 path.unlink()
 
 
-def _is_prepared_only_root(run_root: Path) -> bool:
-    status = _read_json(run_root / "run_status.json")
-    if not isinstance(status, dict):
-        return False
-    return (
-        status.get("prepared_only") is True
-        or (
-            status.get("schema") == "scion.launcher_prepare.v1"
-            and status.get("status") == "prepared"
-        )
-    )
-
-
-def _is_pre_campaign_preflight_failed_root(run_root: Path) -> bool:
-    status = _read_json(run_root / "run_status.json")
-    manifest = _read_json(run_root / "prepared_run_manifest.v1.json")
-    if not isinstance(status, dict) or not isinstance(manifest, dict):
-        return False
-    return (
-        status.get("pre_campaign_completion_preflight") == "failed"
-        and manifest.get("schema_version") == "scion.launcher_prepared_run_manifest.v1"
-    )
-
-
-def _pre_campaign_infra_failure_keys(run_root: Path) -> list[str]:
-    status = _read_json(run_root / "run_status.json")
-    manifest = _read_json(run_root / "prepared_run_manifest.v1.json")
-    if not isinstance(status, dict) or not isinstance(manifest, dict):
-        return []
-    if manifest.get("schema_version") != "scion.launcher_prepared_run_manifest.v1":
-        return []
-    return [
-        key
-        for key in PRE_CAMPAIGN_INFRA_FAILURE_KEYS
-        if _status_value_present(status.get(key))
-    ]
-
-
-def _status_value_present(value: Any) -> bool:
-    return value not in (None, False, "", 0)
-
-
 def _current_run_skip_reason(
     *,
     prepared_only: bool,
     preflight_failed: bool,
     pre_campaign_infra_failure_keys: list[str] | tuple[str, ...] = (),
+    launcher_status_unavailable: bool = False,
+    launcher_status_failure_key: Any = None,
+    campaign_execution_artifacts_unavailable: bool = False,
+    campaign_execution_failure_key: Any = None,
+    current_run_evidence: bool = True,
 ) -> str:
     if preflight_failed:
         return (
@@ -380,11 +371,29 @@ def _current_run_skip_reason(
             f"pre_campaign_infra_failure({keys}): copied campaign artifacts "
             "are resume input, not current-run postrun evidence"
         )
+    if launcher_status_unavailable:
+        key = str(launcher_status_failure_key or "launcher_status_unavailable")
+        return (
+            f"launcher_status_unavailable({key}): copied campaign artifacts "
+            "are resume snapshots, not current-run postrun evidence"
+        )
+    if campaign_execution_artifacts_unavailable:
+        key = str(
+            campaign_execution_failure_key
+            or "campaign_execution_artifacts_unavailable"
+        )
+        return (
+            f"campaign_execution_artifacts_unavailable({key}): copied or partial "
+            "campaign artifacts are resume snapshots, not current-run postrun "
+            "evidence"
+        )
     if prepared_only:
         return (
             "prepared_only_not_launched: copied campaign artifacts are launch "
             "input, not current-run postrun evidence"
         )
+    if not current_run_evidence:
+        return "not_current_run_evidence: current-run report families skipped"
     return ""
 
 

@@ -319,6 +319,74 @@ def test_rebuild_postrun_acceptance_skips_current_run_reports_after_preflight_fa
     assert any("INVALID INFRA-ONLY RUN" in item for item in brief["stop_conditions"])
 
 
+def test_rebuild_postrun_acceptance_skips_current_run_reports_without_campaign_execution_artifacts(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "missing-campaign-execution-root"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_campaign_db(campaign_dir)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "outer-wrapper.v1",
+            "status": "finished",
+            "wrapper_exit_status": 0,
+            "campaign_wrapper_exit_status": 0,
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "problem_family": "cvrp",
+            "execution": {"rounds": 2},
+        },
+    )
+
+    manifest = rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="missing_campaign_execution",
+    )
+
+    report_dir = run_root / "postrun_acceptance"
+    assert manifest["current_run_evidence"] is False
+    assert manifest["campaign_execution_artifacts_unavailable"] is True
+    assert manifest["campaign_execution_failure_key"] == (
+        "campaign_execution_artifacts_missing"
+    )
+    assert manifest["current_run_reports_skipped"] is True
+    assert "campaign_execution_artifacts_unavailable" in manifest[
+        "current_run_skip_reason"
+    ]
+    assert manifest["complete"] is False
+    assert manifest["families"]["summaries"]["status"] == "skipped"
+    assert manifest["families"]["research_efficiency"]["status"] == "skipped"
+    assert manifest["families"]["manifests"]["status"] == "skipped"
+    assert not (
+        report_dir
+        / "research_efficiency"
+        / "missing_campaign_execution.research_efficiency.v1.json"
+    ).exists()
+    assert not (
+        report_dir
+        / "manifests"
+        / "missing_campaign_execution.proposal_trajectory_manifest.v1.json"
+    ).exists()
+    brief = json.loads(
+        (
+            report_dir
+            / "analysis_brief"
+            / "missing_campaign_execution.postrun_analysis_brief.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert brief["validity"]["run_validity_status"] == "invalid_infra_only"
+    assert brief["validity"]["last_stop_reason"] == (
+        "campaign_execution_artifacts_missing"
+    )
+    assert brief["phase4_evidence_coverage"]["current_run_evidence"] is False
+
+
 def test_rebuild_postrun_acceptance_skips_current_run_reports_after_runtime_guard_failure(
     tmp_path: Path,
 ) -> None:
