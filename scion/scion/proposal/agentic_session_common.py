@@ -133,6 +133,7 @@ from scion.proposal.agentic_session_budget import (
     _diagnosis_feedback_budget_reserved as _diagnosis_feedback_budget_reserved_for_config,
     _minimum_budgeted_observation_chars,
     _observation_budget_exhausted as _observation_budget_exhausted_for_config,
+    _observation_limit_enabled as _observation_limit_enabled_for_config,
     _optional_surface_read_budget_floor as _optional_surface_read_budget_floor_for_config,
     _remaining_observation_chars as _remaining_observation_chars_for_config,
     _remaining_tool_calls as _remaining_tool_calls_for_config,
@@ -141,6 +142,8 @@ from scion.proposal.agentic_session_budget import (
     _self_check_step_reserve as _self_check_step_reserve_for_config,
     _self_check_tool_call_reserve as _self_check_tool_call_reserve_for_config,
     _should_deny_optional_tool_for_budget as _should_deny_optional_tool_for_budget_config,
+    _tool_call_limit_enabled as _tool_call_limit_enabled_for_config,
+    _tool_step_limit_enabled as _tool_step_limit_enabled_for_config,
 )
 from scion.proposal.agentic_session_feedback import (
     _canonical_feedback_observations,
@@ -370,6 +373,7 @@ __all__ = (
     "_next_prompt_manifest_index",
     "_normalized_structured_rejection",
     "_observation_budget_exhausted_for_config",
+    "_observation_limit_enabled_for_config",
     "_observation_prompt_payload",
     "_observation_satisfies_compact_requirement",
     "_observation_selection_payload",
@@ -415,6 +419,8 @@ __all__ = (
     "_self_check_tool_call_reserve_for_config",
     "_should_defer_diagnosis_tool_to_code_phase",
     "_should_deny_optional_tool_for_budget_config",
+    "_tool_call_limit_enabled_for_config",
+    "_tool_step_limit_enabled_for_config",
     "_solver_design_code_algorithm_file_read_budget_exhausted",
     "_solver_design_planner_algorithm_file_read_budget_exhausted",
     "_solver_design_target_file_read_args",

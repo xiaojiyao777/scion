@@ -2749,6 +2749,70 @@ def test_launch_readiness_warns_on_low_manifest_agentic_tool_headroom(
     } in warnings
 
 
+def test_launch_readiness_accepts_disabled_agentic_tool_headroom_caps(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    manifest_path = run_root / "prepared_run_manifest.v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    replacements = {
+        "agentic_tool_max_steps": (
+            "AGENTIC_TOOL_MAX_STEPS",
+            "--agentic-tool-max-steps",
+            "240",
+        ),
+        "agentic_tool_max_calls": (
+            "AGENTIC_TOOL_MAX_CALLS",
+            "--agentic-tool-max-calls",
+            "200",
+        ),
+        "agentic_code_tool_max_calls": (
+            "AGENTIC_CODE_TOOL_MAX_CALLS",
+            "--agentic-code-tool-max-calls",
+            "200",
+        ),
+        "agentic_observation_max_chars": (
+            "AGENTIC_OBSERVATION_MAX_CHARS",
+            "--agentic-observation-max-chars",
+            "2000000",
+        ),
+    }
+    launch_env_text = (run_root / "launch.env").read_text(encoding="utf-8")
+    for field, (env_key, option, old_value) in replacements.items():
+        manifest["execution"][field] = 0
+        manifest["command"] = manifest["command"].replace(
+            f"{option} {old_value}",
+            f"{option} 0",
+        )
+        launch_env_text = launch_env_text.replace(
+            f"{env_key}={old_value}",
+            f"{env_key}=0",
+        )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    (run_root / "launch.env").write_text(launch_env_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    headroom_check = report["checks"]["run_script_proposal_headroom_enforced"]
+    assert headroom_check["status"] == "ok"
+    assert headroom_check["detail"]["failures"] == []
+    warnings = headroom_check["detail"]["warnings"]
+    assert {
+        "reason": "agentic_tool_max_steps_launch_env_below_minimum",
+        "field": "agentic_tool_max_steps",
+        "source": "launch_env",
+        "recommended_min": 240,
+        "actual": 0,
+    } in warnings
+    assert {
+        "reason": "agentic_observation_max_chars_manifest_execution_below_minimum",
+        "field": "agentic_observation_max_chars",
+        "source": "manifest_execution",
+        "recommended_min": 2000000,
+        "actual": 0,
+    } in warnings
+
+
 def test_launch_readiness_rejects_run_script_without_proposal_headroom_flags(
     tmp_path: Path,
 ) -> None:

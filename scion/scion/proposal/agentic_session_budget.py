@@ -14,12 +14,27 @@ _SELF_CHECK_TOOL_CALL_RESERVE = 4
 _SELF_CHECK_OBSERVATION_RESERVE_CHARS = 16000
 _IMPLEMENTATION_FINAL_PREVIEW_TOOL_RESERVE = 2
 _IMPLEMENTATION_OBSERVATION_RESERVE_CHARS = 16000
+_DISABLED_LIMIT_REMAINING = 10**12
+
+
+def _tool_step_limit_enabled(config: AgenticToolLoopConfig) -> bool:
+    return int(config.max_steps) > 0
+
+
+def _tool_call_limit_enabled(config: AgenticToolLoopConfig) -> bool:
+    return int(config.max_tool_calls) > 0
+
+
+def _observation_limit_enabled(config: AgenticToolLoopConfig) -> bool:
+    return int(config.max_observation_chars) > 0
 
 
 def _remaining_observation_chars(
     config: AgenticToolLoopConfig,
     state: AgenticProposalSessionState,
 ) -> int:
+    if not _observation_limit_enabled(config):
+        return _DISABLED_LIMIT_REMAINING
     return max(
         0,
         int(config.max_observation_chars) - int(state.observation_chars_used),
@@ -30,6 +45,8 @@ def _remaining_tool_calls(
     config: AgenticToolLoopConfig,
     state: AgenticProposalSessionState,
 ) -> int:
+    if not _tool_call_limit_enabled(config):
+        return _DISABLED_LIMIT_REMAINING
     return max(0, int(config.max_tool_calls) - int(state.tool_call_count))
 
 
@@ -37,10 +54,14 @@ def _remaining_tool_steps(
     config: AgenticToolLoopConfig,
     state: AgenticProposalSessionState,
 ) -> int:
+    if not _tool_step_limit_enabled(config):
+        return _DISABLED_LIMIT_REMAINING
     return max(0, int(config.max_steps) - int(state.tool_step_count))
 
 
 def _self_check_tool_call_reserve(config: AgenticToolLoopConfig) -> int:
+    if not _tool_call_limit_enabled(config):
+        return 0
     max_calls = max(0, int(config.max_tool_calls))
     if max_calls < 8:
         return 0
@@ -48,6 +69,8 @@ def _self_check_tool_call_reserve(config: AgenticToolLoopConfig) -> int:
 
 
 def _self_check_step_reserve(config: AgenticToolLoopConfig) -> int:
+    if not _tool_step_limit_enabled(config):
+        return 0
     max_steps = max(0, int(config.max_steps))
     if max_steps < 8:
         return 0
@@ -55,6 +78,8 @@ def _self_check_step_reserve(config: AgenticToolLoopConfig) -> int:
 
 
 def _self_check_observation_reserve_chars(config: AgenticToolLoopConfig) -> int:
+    if not _observation_limit_enabled(config):
+        return 0
     max_chars = max(0, int(config.max_observation_chars))
     if max_chars < _SELF_CHECK_OBSERVATION_RESERVE_CHARS * 2:
         return 0
@@ -100,6 +125,8 @@ def _observation_budget_exhausted(
     config: AgenticToolLoopConfig,
     state: AgenticProposalSessionState,
 ) -> bool:
+    if not _observation_limit_enabled(config):
+        return False
     remaining = _remaining_observation_chars(config, state)
     if remaining <= 0:
         return True
@@ -107,6 +134,8 @@ def _observation_budget_exhausted(
 
 
 def _optional_surface_read_budget_floor(config: AgenticToolLoopConfig) -> int:
+    if not _observation_limit_enabled(config):
+        return 0
     self_check_reserve = _self_check_observation_reserve_chars(config)
     minimum = _minimum_budgeted_observation_chars()
     optional_floor = min(
@@ -141,16 +170,18 @@ def _code_phase_budget_reserved(
     config: AgenticToolLoopConfig,
     state: AgenticProposalSessionState,
 ) -> bool:
-    if (
+    if _tool_call_limit_enabled(config) and (
         _remaining_tool_calls(config, state)
         <= _IMPLEMENTATION_FINAL_PREVIEW_TOOL_RESERVE
     ):
         return True
-    if (
+    if _tool_step_limit_enabled(config) and (
         _remaining_tool_steps(config, state)
         <= _IMPLEMENTATION_FINAL_PREVIEW_TOOL_RESERVE
     ):
         return True
+    if not _observation_limit_enabled(config):
+        return False
     reserve = max(
         _minimum_budgeted_observation_chars(),
         min(

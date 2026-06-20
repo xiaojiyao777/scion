@@ -466,22 +466,31 @@ def register_init_run_commands(app: typer.Typer) -> None:
         agentic_tool_max_steps: Optional[int] = typer.Option(
             None,
             "--agentic-tool-max-steps",
-            help="APS max planning/code loop steps per proposal session",
+            help=(
+                "APS max planning/code loop steps per proposal session; use 0 "
+                "to disable this cap"
+            ),
         ),
         agentic_tool_max_calls: Optional[int] = typer.Option(
             None,
             "--agentic-tool-max-calls",
-            help="APS max tool calls per proposal session",
+            help="APS max tool calls per proposal session; use 0 to disable this cap",
         ),
         agentic_code_tool_max_calls: Optional[int] = typer.Option(
             None,
             "--agentic-code-tool-max-calls",
-            help="APS max code-phase tool calls per proposal session",
+            help=(
+                "APS max code-phase tool calls per proposal session; use 0 to "
+                "disable this cap"
+            ),
         ),
         agentic_observation_max_chars: Optional[int] = typer.Option(
             None,
             "--agentic-observation-max-chars",
-            help="APS max retained observation characters per proposal session",
+            help=(
+                "APS max retained observation characters per proposal session; "
+                "use 0 to disable this cap"
+            ),
         ),
         allow_skeleton: bool = typer.Option(
             False,
@@ -523,15 +532,20 @@ def register_init_run_commands(app: typer.Typer) -> None:
             )
             raise typer.Exit(code=1)
         for option_name, option_value in (
-            ("--agentic-session-timeout-sec", agentic_session_timeout_sec),
             ("--agentic-tool-max-steps", agentic_tool_max_steps),
             ("--agentic-tool-max-calls", agentic_tool_max_calls),
             ("--agentic-code-tool-max-calls", agentic_code_tool_max_calls),
             ("--agentic-observation-max-chars", agentic_observation_max_chars),
         ):
-            if option_value is not None and option_value < 1:
-                typer.echo(f"ERROR: {option_name} must be >= 1", err=True)
+            if option_value is not None and option_value < 0:
+                typer.echo(f"ERROR: {option_name} must be >= 0", err=True)
                 raise typer.Exit(code=1)
+        if (
+            agentic_session_timeout_sec is not None
+            and agentic_session_timeout_sec < 1
+        ):
+            typer.echo("ERROR: --agentic-session-timeout-sec must be >= 1", err=True)
+            raise typer.Exit(code=1)
 
         from scion.config.problem import (
             ProblemSpec,

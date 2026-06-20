@@ -16,8 +16,8 @@ class AgenticSessionBudgetRuntimeMixin:
             ignore_observation_budget: bool = False,
         ) -> bool:
             return (
-                state.tool_step_count >= self._tool_loop_config.max_steps
-                or state.tool_call_count >= self._tool_loop_config.max_tool_calls
+                self._remaining_tool_steps(state) <= 0
+                or self._remaining_tool_calls(state) <= 0
                 or (
                     not ignore_observation_budget
                     and self._observation_budget_exhausted(state)
@@ -130,8 +130,8 @@ class AgenticSessionBudgetRuntimeMixin:
             if self._session_timeout_reached(state):
                 return "session_timeout"
             if (
-                state.tool_step_count >= self._tool_loop_config.max_steps
-                or state.tool_call_count >= self._tool_loop_config.max_tool_calls
+                self._remaining_tool_steps(state) <= 0
+                or self._remaining_tool_calls(state) <= 0
             ):
                 return "tool_loop_limit"
             if self._observation_budget_exhausted(state):
@@ -169,6 +169,8 @@ class AgenticSessionBudgetRuntimeMixin:
             *,
             preserve_observation_chars: int = 0,
         ) -> ProposalObservation:
+            if not _observation_limit_enabled_for_config(self._tool_loop_config):
+                return observation
             observation = _compact_feedback_observation_for_budget(observation)
             compact_preview = _compact_self_check_preview_observation(observation)
             if compact_preview is not None and (
@@ -224,6 +226,8 @@ class AgenticSessionBudgetRuntimeMixin:
             self,
             observation: ProposalObservation,
         ) -> ProposalObservation:
+            if not _observation_limit_enabled_for_config(self._tool_loop_config):
+                return observation
             limit = self._self_check_preview_budget_chars()
             if _json_size(_observation_prompt_payload(observation)) <= limit:
                 return observation

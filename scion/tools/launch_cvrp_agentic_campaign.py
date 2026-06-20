@@ -24,10 +24,10 @@ DEFAULT_BASE_URL = "http://127.0.0.1:8080"
 DEFAULT_LOCAL_PROXY_API_KEY = "pwd"
 DEFAULT_TIME_LIMIT_SEC = 30
 DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC = 3600
-DEFAULT_AGENTIC_TOOL_MAX_STEPS = 240
-DEFAULT_AGENTIC_TOOL_MAX_CALLS = 200
+DEFAULT_AGENTIC_TOOL_MAX_STEPS = 0
+DEFAULT_AGENTIC_TOOL_MAX_CALLS = 0
 DEFAULT_AGENTIC_CODE_TOOL_MAX_CALLS = DEFAULT_AGENTIC_TOOL_MAX_CALLS
-DEFAULT_AGENTIC_OBSERVATION_MAX_CHARS = 2_000_000
+DEFAULT_AGENTIC_OBSERVATION_MAX_CHARS = 0
 DEFAULT_STAGE_TRANSITION_DRAIN_LIMIT = 4
 DEFAULT_PROPOSAL_ATTEMPT_LIMIT = 0
 DEFAULT_PROPOSAL_QUALITY_LOOP_LIMIT = 0
@@ -1346,25 +1346,37 @@ def parse_args() -> argparse.Namespace:
         "--agentic-tool-max-steps",
         type=int,
         default=DEFAULT_AGENTIC_TOOL_MAX_STEPS,
-        help="APS per-session step headroom for focused v0.4 agentic research.",
+        help=(
+            "APS per-session step cap for focused v0.4 agentic research. "
+            "Defaults to 0, which disables this cap."
+        ),
     )
     parser.add_argument(
         "--agentic-tool-max-calls",
         type=int,
         default=DEFAULT_AGENTIC_TOOL_MAX_CALLS,
-        help="APS per-session tool-call headroom for focused v0.4 agentic research.",
+        help=(
+            "APS per-session tool-call cap for focused v0.4 agentic research. "
+            "Defaults to 0, which disables this cap."
+        ),
     )
     parser.add_argument(
         "--agentic-code-tool-max-calls",
         type=int,
         default=DEFAULT_AGENTIC_CODE_TOOL_MAX_CALLS,
-        help="APS code-phase tool-call headroom for focused v0.4 agentic research.",
+        help=(
+            "APS code-phase tool-call cap for focused v0.4 agentic research. "
+            "Defaults to 0, which disables this cap."
+        ),
     )
     parser.add_argument(
         "--agentic-observation-max-chars",
         type=int,
         default=DEFAULT_AGENTIC_OBSERVATION_MAX_CHARS,
-        help="APS retained observation-character headroom for focused v0.4 runs.",
+        help=(
+            "APS retained observation-character cap for focused v0.4 runs. "
+            "Defaults to 0, which disables this cap."
+        ),
     )
     parser.add_argument(
         "--proposal-attempt-limit",
@@ -1422,14 +1434,14 @@ def parse_args() -> argparse.Namespace:
         raise SystemExit("--time-limit-sec must be >= 1")
     if args.agentic_session_timeout_sec < 1:
         raise SystemExit("--agentic-session-timeout-sec must be >= 1")
-    if args.agentic_tool_max_steps < 1:
-        raise SystemExit("--agentic-tool-max-steps must be >= 1")
-    if args.agentic_tool_max_calls < 1:
-        raise SystemExit("--agentic-tool-max-calls must be >= 1")
-    if args.agentic_code_tool_max_calls < 1:
-        raise SystemExit("--agentic-code-tool-max-calls must be >= 1")
-    if args.agentic_observation_max_chars < 1:
-        raise SystemExit("--agentic-observation-max-chars must be >= 1")
+    if args.agentic_tool_max_steps < 0:
+        raise SystemExit("--agentic-tool-max-steps must be >= 0")
+    if args.agentic_tool_max_calls < 0:
+        raise SystemExit("--agentic-tool-max-calls must be >= 0")
+    if args.agentic_code_tool_max_calls < 0:
+        raise SystemExit("--agentic-code-tool-max-calls must be >= 0")
+    if args.agentic_observation_max_chars < 0:
+        raise SystemExit("--agentic-observation-max-chars must be >= 0")
     if args.proposal_attempt_limit < 0:
         raise SystemExit("--proposal-attempt-limit must be >= 0")
     if args.proposal_quality_loop_limit < 0:

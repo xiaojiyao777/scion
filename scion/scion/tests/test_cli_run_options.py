@@ -398,6 +398,63 @@ def test_run_agentic_proposal_threads_config_to_campaign_manager(
     assert kwargs["max_rounds"] == 1
 
 
+def test_run_agentic_proposal_accepts_zero_tool_budget_caps(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    problem_yaml = _write_minimal_problem(tmp_path)
+    captured: list[dict[str, object]] = []
+
+    class FakeCampaignManager:
+        def __init__(self, **kwargs: object) -> None:
+            captured.append(kwargs)
+
+        def run(self, max_rounds: int = 1000) -> None:
+            captured[-1]["max_rounds"] = max_rounds
+
+        def get_state(self) -> dict[str, object]:
+            return {
+                "n_experiments": 0,
+                "champion_version": 1,
+                "n_active_branches": 0,
+            }
+
+    import scion.core.campaign as campaign_module
+
+    monkeypatch.setattr(campaign_module, "CampaignManager", FakeCampaignManager)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--mock-llm",
+            "--rounds",
+            "1",
+            "--campaign-dir",
+            str(tmp_path / "campaign"),
+            "--problem",
+            str(problem_yaml),
+            "--agentic-proposal",
+            "--agentic-tool-max-steps",
+            "0",
+            "--agentic-tool-max-calls",
+            "0",
+            "--agentic-code-tool-max-calls",
+            "0",
+            "--agentic-observation-max-chars",
+            "0",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    kwargs = captured[0]
+    assert kwargs["agentic_tool_max_steps"] == 0
+    assert kwargs["agentic_tool_max_calls"] == 0
+    assert kwargs["agentic_code_tool_max_calls"] == 0
+    assert kwargs["agentic_observation_max_chars"] == 0
+    assert kwargs["max_rounds"] == 1
+
+
 def test_run_agentic_proposal_defaults_to_campaign_subdir(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -253,20 +253,23 @@ class AgenticSessionToolCallMixin:
                 projected_observation_chars = (
                     previous_observation_chars + prompt_payload_chars
                 )
-                charge_ceiling = max(
-                    0,
-                    self._tool_loop_config.max_observation_chars
-                    - max(0, int(preserve_observation_chars)),
-                )
-                if preserve_observation_chars > 0:
-                    projected_observation_chars = min(
-                        projected_observation_chars,
-                        max(previous_observation_chars, charge_ceiling),
+                if _observation_limit_enabled_for_config(self._tool_loop_config):
+                    charge_ceiling = max(
+                        0,
+                        self._tool_loop_config.max_observation_chars
+                        - max(0, int(preserve_observation_chars)),
                     )
-                state.observation_chars_used = min(
-                    projected_observation_chars,
-                    self._tool_loop_config.max_observation_chars,
-                )
+                    if preserve_observation_chars > 0:
+                        projected_observation_chars = min(
+                            projected_observation_chars,
+                            max(previous_observation_chars, charge_ceiling),
+                        )
+                    state.observation_chars_used = min(
+                        projected_observation_chars,
+                        self._tool_loop_config.max_observation_chars,
+                    )
+                else:
+                    state.observation_chars_used = projected_observation_chars
             if not authoritative_preview and self._observation_budget_exhausted(state):
                 self._record_loop_stop(
                     state,

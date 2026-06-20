@@ -370,3 +370,53 @@ def test_budget_denial_does_not_apply_to_mandatory_code_surface_read(
         selection_source="code_phase_required_compact",
         state=state,
     )
+
+
+def test_zero_agentic_tool_budgets_disable_budget_cutoffs(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    config = AgenticToolLoopConfig(
+        max_steps=0,
+        max_tool_calls=0,
+        max_code_tool_calls=0,
+        max_observation_chars=0,
+        max_wall_time_sec=3600,
+    )
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-no-budget-caps",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
+        observation_chars_used=9_000_000,
+        tool_call_count=900,
+        tool_step_count=900,
+    )
+    observation = ProposalObservation(
+        observation_id="obs-no-budget-cap",
+        session_id=state.session_id,
+        tool_name="context.read_surface",
+        tool_call_id="tool-0001",
+        observation_type="surface",
+        summary="large source observation",
+        structured_payload={"content": "x" * 100_000},
+    )
+
+    assert session._remaining_tool_calls(state) > 900
+    assert session._remaining_tool_steps(state) > 900
+    assert session._remaining_observation_chars(state) > 9_000_000
+    assert not session._tool_loop_limit_reached(state)
+    assert not session._observation_budget_exhausted(state)
+    assert not session._should_deny_optional_tool_for_budget(
+        "context.read_surface",
+        selection_source="planner_selected",
+        state=state,
+    )
+    assert (
+        session._enforce_observation_budget(context, state, observation)
+        is observation
+    )
