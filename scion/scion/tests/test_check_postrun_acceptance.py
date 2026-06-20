@@ -1069,6 +1069,50 @@ def test_postrun_acceptance_readiness_rejects_missing_prompt_source_visibility(
     )
 
 
+def test_postrun_acceptance_rejects_stale_prompt_context_visibility_projection(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-stale-prompt")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    _add_prompt_source_visibility_summary(brief)
+    prompt_summary = brief["prompt_context_visibility_summary"]
+    assert isinstance(prompt_summary, dict)
+    aggregate = prompt_summary["aggregate"]
+    assert isinstance(aggregate, dict)
+    aggregate["trace_count"] = 99
+    source_visibility = aggregate["source_visibility"]
+    assert isinstance(source_visibility, dict)
+    source_visibility["hypothesis_target_source_visible_count"] = 0
+    density = aggregate["signal_density"]
+    assert isinstance(density, dict)
+    density["total_token_estimate"] = 9999
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert prompt_check["status"] == "failed"
+    failures = prompt_check["detail"]["failures"]
+    assert "prompt_context_visibility_trace_count_mismatch" in failures
+    assert (
+        "prompt_source_visibility_hypothesis_target_source_visible_count_mismatch"
+        in failures
+    )
+    assert "prompt_signal_density_total_token_estimate_mismatch" in failures
+    assert prompt_check["detail"]["trace_count"] == 99
+    assert prompt_check["detail"]["expected_trace_count"] == 2
+
+
 def test_postrun_acceptance_requires_research_context_actionability(
     tmp_path: Path,
 ) -> None:
@@ -1092,37 +1136,22 @@ def test_postrun_acceptance_requires_research_context_actionability(
         "problem_family": "warehouse_delivery",
         "review_axes_actionability": "actionable_current_run_evidence_present",
     }
-    brief["prompt_context_visibility_summary"] = {
-        "schema_version": "scion.postrun_prompt_context_visibility_summary.v1",
+    _add_prompt_source_visibility_summary(brief)
+    brief["research_context_actionability_summary"] = {
+        "schema_version": "scion.postrun_research_context_actionability_summary.v1",
         "report_only": True,
         "quality_judgment": False,
         "decision_features_excluded": True,
-        "raw_prompt_excluded": True,
-        "raw_response_excluded": True,
-        "patch_body_excluded": True,
-        "available": True,
         "current_run_evidence": True,
-        "aggregate": {
-            "trace_count": 2,
-            "source_visibility": {
-                "schema_version": "scion.postrun_prompt_source_visibility_summary.v1",
-                "report_only": True,
-                "decision_features_excluded": True,
-                "trace_count": 2,
-                "code_trace_count": 1,
-                "code_protected_source_visible_count": 1,
-                "code_protected_source_missing_count": 0,
-                "code_missing_required_source_trace_count": 0,
-                "code_missing_required_source_path_counts": {},
-                "hypothesis_target_source_trace_count": 1,
-                "hypothesis_target_source_required_count": 1,
-                "hypothesis_target_source_visible_count": 1,
-                "hypothesis_target_source_not_visible_count": 0,
-                "active_subject_code_constraints_trace_count": 1,
-                "active_subject_code_constraints_required_count": 1,
-                "active_subject_code_constraints_full_visible_count": 1,
-            },
+        "available": False,
+        "prompt_context_available": False,
+        "research_continuity_available": False,
+        "guidance_status": "no_prompt_or_continuity_actionability_evidence",
+        "indicators": {
+            "schema_version": "scion.research_context_actionability_indicators.v1",
         },
+        "actionability_gaps": [],
+        "recommendations": [],
     }
     brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -1137,18 +1166,6 @@ def test_postrun_acceptance_requires_research_context_actionability(
     assert "research_context_actionability_unavailable" in context_check["detail"][
         "failures"
     ]
-    assert "prompt_block_family_trace_accounting_missing" in context_check["detail"][
-        "failures"
-    ]
-    assert "prompt_hypothesis_research_context_trace_missing" in context_check[
-        "detail"
-    ]["failures"]
-    assert "prompt_signal_density_schema_stale" in context_check["detail"][
-        "failures"
-    ]
-    assert "prompt_signal_density_token_accounting_missing" in context_check[
-        "detail"
-    ]["failures"]
     assert "research_context_actionability_no_evidence" in context_check["detail"][
         "failures"
     ]
@@ -1182,9 +1199,12 @@ def test_postrun_acceptance_rejects_code_only_research_context_trace(
         "problem_family": "warehouse_delivery",
         "review_axes_actionability": "actionable_current_run_evidence_present",
     }
-    _add_prompt_source_visibility_summary(brief)
-    aggregate = brief["prompt_context_visibility_summary"]["aggregate"]
-    aggregate["call_kind_counts"] = {"code": 2}
+    _ensure_prompt_context_fixture_artifact(brief)
+    _rewrite_prompt_fixture_call_kinds(brief, call_kind="code")
+    prompt_context = _current_prompt_context_visibility_summary(brief)
+    assert prompt_context
+    brief["prompt_context_visibility_summary"] = prompt_context
+    _refresh_research_context_actionability_summary(brief)
     brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
 
     readiness = check_tool.build_readiness(run_root)
@@ -4504,8 +4524,162 @@ def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
         "actionability_gaps": [],
         "recommendations": [],
     }
+    _ensure_prompt_context_fixture_artifact(brief)
+    prompt_context = _current_prompt_context_visibility_summary(brief)
+    if prompt_context:
+        brief["prompt_context_visibility_summary"] = prompt_context
     _refresh_research_context_actionability_summary(brief)
     _refresh_failure_taxonomy_summary(brief)
+
+
+def _ensure_prompt_context_fixture_artifact(brief: dict[str, object]) -> None:
+    run_root_text = str(brief.get("run_root") or "")
+    if not run_root_text:
+        return
+    manifest_dir = Path(run_root_text) / "postrun_acceptance" / "manifests"
+    paths = sorted(manifest_dir.glob("*.proposal_trajectory_manifest.v1.json"))
+    if not paths:
+        paths = sorted(manifest_dir.glob("*.json"))
+    if not paths:
+        return
+    path = paths[-1]
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(doc, dict):
+        return
+    sessions = doc.get("sessions")
+    if isinstance(sessions, list):
+        for session in sessions:
+            if isinstance(session, dict) and session.get("trace_fingerprints"):
+                return
+    doc["sessions"] = [
+        {
+            "session_id": "fixture-session",
+            "trace_fingerprints": [
+                {
+                    "call_kind": "hypothesis",
+                    "visibility_ledger_digest": "fixture-hypothesis-digest",
+                    "source_visibility_summary": {
+                        "hypothesis_target_source_visibility": {
+                            "target_source_required": True,
+                            "visibility_status": "owner_source_visible",
+                            "owner_source_visible": True,
+                            "placeholder_visible": False,
+                        }
+                    },
+                    "block_family_summary": {
+                        "families": {
+                            "research_signal": {
+                                "char_count": 2000,
+                                "token_estimate": 500,
+                            }
+                        }
+                    },
+                },
+                {
+                    "call_kind": "code",
+                    "visibility_ledger_digest": "fixture-code-digest",
+                    "source_visibility_summary": {
+                        "code_phase_guarantees": {
+                            "target_source_visible": True,
+                            "protected_source_visible": True,
+                            "required_integration_source_visible": True,
+                            "algorithm_file_read_source_visible": True,
+                            "missing_required_source_paths": [],
+                        },
+                        "code_file_visibility": {
+                            "target_source_status": "available",
+                            "target_prompt_visibility_status": "visible",
+                        },
+                        "active_subject_code_constraints_visibility": {
+                            "required": True,
+                            "section_visible": True,
+                            "full_section_visible": True,
+                            "constraint_count": 1,
+                            "forbidden_pattern_count": 0,
+                            "section_status": "included",
+                            "missing_reason": "none",
+                        },
+                    },
+                    "block_family_summary": {
+                        "families": {
+                            "source_code": {
+                                "char_count": 1200,
+                                "token_estimate": 300,
+                            },
+                            "governance": {
+                                "char_count": 400,
+                                "token_estimate": 100,
+                            },
+                        }
+                    },
+                },
+            ],
+        }
+    ]
+    counts = doc.get("counts")
+    if not isinstance(counts, dict):
+        counts = {}
+    counts.update(
+        {
+            "session_count": 1,
+            "trace_count": 2,
+            "prompt_manifest_ref_count": 2,
+            "prompt_manifest_loaded_count": 2,
+        }
+    )
+    doc["counts"] = counts
+    path.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _rewrite_prompt_fixture_call_kinds(
+    brief: dict[str, object],
+    *,
+    call_kind: str,
+) -> None:
+    run_root_text = str(brief.get("run_root") or "")
+    if not run_root_text:
+        return
+    manifest_dir = Path(run_root_text) / "postrun_acceptance" / "manifests"
+    paths = sorted(manifest_dir.glob("*.proposal_trajectory_manifest.v1.json"))
+    if not paths:
+        paths = sorted(manifest_dir.glob("*.json"))
+    if not paths:
+        return
+    path = paths[-1]
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(doc, dict):
+        return
+    sessions = doc.get("sessions")
+    if not isinstance(sessions, list):
+        return
+    for session in sessions:
+        if not isinstance(session, dict):
+            continue
+        traces = session.get("trace_fingerprints")
+        if not isinstance(traces, list):
+            continue
+        for trace in traces:
+            if isinstance(trace, dict):
+                trace["call_kind"] = call_kind
+    path.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _current_prompt_context_visibility_summary(
+    brief: dict[str, object],
+) -> dict[str, object]:
+    run_root_text = str(brief.get("run_root") or "")
+    if not run_root_text:
+        return {}
+    run_root = Path(run_root_text)
+    inventory = check_tool.build_inventory(run_root)
+    summary = check_tool._prompt_context_visibility_summary(run_root, inventory)
+    return summary if isinstance(summary, dict) else {}
 
 
 def _add_champion_progress_summary(brief: dict[str, object]) -> None:

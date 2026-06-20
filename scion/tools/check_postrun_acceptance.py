@@ -20,6 +20,7 @@ from postrun_analysis_brief import (  # noqa: E402
     _champion_progress_summary,
     _cvrp_large_twoopt_mechanism_signal,
     _failure_taxonomy_summary,
+    _prompt_context_visibility_summary,
     _research_context_actionability_summary,
     _warehouse_followup_continuity_signal,
     _warehouse_followup_measurement_signal,
@@ -330,6 +331,7 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         required=consistency_status != "skipped",
     )
     prompt_status, prompt_detail = _prompt_source_visibility_actionability(
+        root,
         analysis_brief,
         inventory,
     )
@@ -1677,6 +1679,7 @@ def _required_review_input_summaries_for_interpretation(
 
 
 def _prompt_source_visibility_actionability(
+    run_root: Path,
     brief: Mapping[str, Any],
     inventory: Mapping[str, Any],
 ) -> tuple[str, Any]:
@@ -1689,6 +1692,12 @@ def _prompt_source_visibility_actionability(
     summary = _mapping_or_empty(brief.get("prompt_context_visibility_summary"))
     aggregate = _mapping_or_empty(summary.get("aggregate"))
     source_visibility = _mapping_or_empty(aggregate.get("source_visibility"))
+    expected = _prompt_context_visibility_summary(run_root, inventory)
+    expected_aggregate = _mapping_or_empty(expected.get("aggregate"))
+    expected_source_visibility = _mapping_or_empty(
+        expected_aggregate.get("source_visibility")
+    )
+    expected_density = _mapping_or_empty(expected_aggregate.get("signal_density"))
     failures: list[str] = []
     if summary.get("schema_version") != PROMPT_CONTEXT_VISIBILITY_SCHEMA:
         failures.append("prompt_context_visibility_schema_stale")
@@ -1779,12 +1788,19 @@ def _prompt_source_visibility_actionability(
             failures.append(
                 f"{failure_prefix}_active_subject_code_constraints_not_full_visible"
             )
+    consistency_failures = _prompt_context_visibility_consistency_failures(
+        summary=summary,
+        expected=expected,
+    )
+    failures.extend(consistency_failures)
     return (
         "ok" if not failures else "failed",
         {
             "problem_family": problem_family,
             "failures": failures,
+            "consistency_failures": consistency_failures,
             "current_run_evidence": summary.get("current_run_evidence"),
+            "expected_current_run_evidence": expected.get("current_run_evidence"),
             "schema_version": summary.get("schema_version"),
             "expected_schema_version": PROMPT_CONTEXT_VISIBILITY_SCHEMA,
             "report_only": summary.get("report_only"),
@@ -1794,7 +1810,23 @@ def _prompt_source_visibility_actionability(
             "raw_response_excluded": summary.get("raw_response_excluded"),
             "patch_body_excluded": summary.get("patch_body_excluded"),
             "available": summary.get("available"),
+            "expected_available": expected.get("available"),
+            "manifest_report_count": summary.get("manifest_report_count"),
+            "expected_manifest_report_count": expected.get("manifest_report_count"),
+            "context_report_count": summary.get("context_report_count"),
+            "expected_context_report_count": expected.get("context_report_count"),
             "trace_count": aggregate.get("trace_count"),
+            "expected_trace_count": expected_aggregate.get("trace_count"),
+            "visibility_digest_count": aggregate.get("visibility_digest_count"),
+            "expected_visibility_digest_count": expected_aggregate.get(
+                "visibility_digest_count"
+            ),
+            "block_family_trace_count": aggregate.get("block_family_trace_count"),
+            "expected_block_family_trace_count": expected_aggregate.get(
+                "block_family_trace_count"
+            ),
+            "call_kind_counts": aggregate.get("call_kind_counts"),
+            "expected_call_kind_counts": expected_aggregate.get("call_kind_counts"),
             "source_visibility_schema_version": source_visibility.get(
                 "schema_version"
             ),
@@ -1803,27 +1835,64 @@ def _prompt_source_visibility_actionability(
                 "decision_features_excluded"
             ),
             "source_visibility_trace_count": source_visibility.get("trace_count"),
+            "expected_source_visibility_trace_count": (
+                expected_source_visibility.get("trace_count")
+            ),
             "code_trace_count": source_visibility.get("code_trace_count"),
+            "expected_code_trace_count": expected_source_visibility.get(
+                "code_trace_count"
+            ),
             "code_protected_source_visible_count": source_visibility.get(
                 "code_protected_source_visible_count"
+            ),
+            "expected_code_protected_source_visible_count": (
+                expected_source_visibility.get("code_protected_source_visible_count")
             ),
             "code_protected_source_missing_count": source_visibility.get(
                 "code_protected_source_missing_count"
             ),
+            "expected_code_protected_source_missing_count": (
+                expected_source_visibility.get("code_protected_source_missing_count")
+            ),
             "code_missing_required_source_trace_count": source_visibility.get(
                 "code_missing_required_source_trace_count"
+            ),
+            "expected_code_missing_required_source_trace_count": (
+                expected_source_visibility.get(
+                    "code_missing_required_source_trace_count"
+                )
             ),
             "code_missing_required_source_path_counts": source_visibility.get(
                 "code_missing_required_source_path_counts"
             ),
+            "expected_code_missing_required_source_path_counts": (
+                expected_source_visibility.get(
+                    "code_missing_required_source_path_counts"
+                )
+            ),
             "active_subject_code_constraints_trace_count": source_visibility.get(
                 "active_subject_code_constraints_trace_count"
+            ),
+            "expected_active_subject_code_constraints_trace_count": (
+                expected_source_visibility.get(
+                    "active_subject_code_constraints_trace_count"
+                )
             ),
             "active_subject_code_constraints_required_count": source_visibility.get(
                 "active_subject_code_constraints_required_count"
             ),
+            "expected_active_subject_code_constraints_required_count": (
+                expected_source_visibility.get(
+                    "active_subject_code_constraints_required_count"
+                )
+            ),
             "active_subject_code_constraints_full_visible_count": (
                 source_visibility.get(
+                    "active_subject_code_constraints_full_visible_count"
+                )
+            ),
+            "expected_active_subject_code_constraints_full_visible_count": (
+                expected_source_visibility.get(
                     "active_subject_code_constraints_full_visible_count"
                 )
             ),
@@ -1832,23 +1901,360 @@ def _prompt_source_visibility_actionability(
                     "active_subject_code_constraints_not_full_visible_count"
                 )
             ),
+            "expected_active_subject_code_constraints_not_full_visible_count": (
+                expected_source_visibility.get(
+                    "active_subject_code_constraints_not_full_visible_count"
+                )
+            ),
             "active_subject_code_constraints_status_counts": source_visibility.get(
                 "active_subject_code_constraints_status_counts"
+            ),
+            "expected_active_subject_code_constraints_status_counts": (
+                expected_source_visibility.get(
+                    "active_subject_code_constraints_status_counts"
+                )
             ),
             "hypothesis_target_source_trace_count": source_visibility.get(
                 "hypothesis_target_source_trace_count"
             ),
+            "expected_hypothesis_target_source_trace_count": (
+                expected_source_visibility.get("hypothesis_target_source_trace_count")
+            ),
             "hypothesis_target_source_required_count": source_visibility.get(
                 "hypothesis_target_source_required_count"
+            ),
+            "expected_hypothesis_target_source_required_count": (
+                expected_source_visibility.get(
+                    "hypothesis_target_source_required_count"
+                )
             ),
             "hypothesis_target_source_visible_count": source_visibility.get(
                 "hypothesis_target_source_visible_count"
             ),
+            "expected_hypothesis_target_source_visible_count": (
+                expected_source_visibility.get(
+                    "hypothesis_target_source_visible_count"
+                )
+            ),
             "hypothesis_target_source_not_visible_count": source_visibility.get(
                 "hypothesis_target_source_not_visible_count"
             ),
+            "expected_hypothesis_target_source_not_visible_count": (
+                expected_source_visibility.get(
+                    "hypothesis_target_source_not_visible_count"
+                )
+            ),
+            "signal_density_total_token_estimate": _mapping_or_empty(
+                aggregate.get("signal_density")
+            ).get("total_token_estimate"),
+            "expected_signal_density_total_token_estimate": (
+                expected_density.get("total_token_estimate")
+            ),
+            "signal_density_interpretation": _mapping_or_empty(
+                aggregate.get("signal_density")
+            ).get("interpretation"),
+            "expected_signal_density_interpretation": expected_density.get(
+                "interpretation"
+            ),
         },
     )
+
+
+def _prompt_context_visibility_consistency_failures(
+    *,
+    summary: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> list[str]:
+    failures: list[str] = []
+    for field in (
+        "current_run_evidence",
+        "available",
+        "manifest_report_count",
+        "context_report_count",
+    ):
+        if summary.get(field) != expected.get(field):
+            failures.append(f"prompt_context_visibility_{field}_mismatch")
+
+    aggregate = _mapping_or_empty(summary.get("aggregate"))
+    expected_aggregate = _mapping_or_empty(expected.get("aggregate"))
+    for field in (
+        "prompt_manifest_ref_count",
+        "prompt_manifest_loaded_count",
+        "trace_count",
+        "visibility_digest_count",
+        "block_family_trace_count",
+        "omitted_section_trace_count",
+        "truncated_section_trace_count",
+    ):
+        if _int_or_zero(aggregate.get(field)) != _int_or_zero(
+            expected_aggregate.get(field)
+        ):
+            failures.append(f"prompt_context_visibility_{field}_mismatch")
+
+    for field in (
+        "call_kind_counts",
+        "omitted_section_counts",
+        "truncated_section_counts",
+    ):
+        if _int_mapping(aggregate.get(field)) != _int_mapping(
+            expected_aggregate.get(field)
+        ):
+            failures.append(f"prompt_context_visibility_{field}_mismatch")
+
+    if _block_family_totals_signature(
+        aggregate.get("block_family_totals")
+    ) != _block_family_totals_signature(expected_aggregate.get("block_family_totals")):
+        failures.append("prompt_context_visibility_block_family_totals_mismatch")
+
+    failures.extend(
+        _prompt_source_visibility_consistency_failures(
+            _mapping_or_empty(aggregate.get("source_visibility")),
+            _mapping_or_empty(expected_aggregate.get("source_visibility")),
+        )
+    )
+    failures.extend(
+        _prompt_signal_density_consistency_failures(
+            _mapping_or_empty(aggregate.get("signal_density")),
+            _mapping_or_empty(expected_aggregate.get("signal_density")),
+        )
+    )
+    if _prompt_context_entries_signature(summary.get("entries")) != (
+        _prompt_context_entries_signature(expected.get("entries"))
+    ):
+        failures.append("prompt_context_visibility_entries_mismatch")
+    return failures
+
+
+def _prompt_source_visibility_consistency_failures(
+    source_visibility: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> list[str]:
+    failures: list[str] = []
+    for field in (
+        "trace_count",
+        "code_trace_count",
+        "code_target_source_visible_count",
+        "code_target_source_missing_count",
+        "code_protected_source_visible_count",
+        "code_protected_source_missing_count",
+        "code_required_integration_source_visible_count",
+        "code_algorithm_file_read_source_visible_count",
+        "code_missing_required_source_trace_count",
+        "hypothesis_target_source_trace_count",
+        "hypothesis_target_source_required_count",
+        "hypothesis_target_source_visible_count",
+        "hypothesis_target_source_not_visible_count",
+        "active_subject_code_constraints_trace_count",
+        "active_subject_code_constraints_required_count",
+        "active_subject_code_constraints_full_visible_count",
+        "active_subject_code_constraints_partial_visible_count",
+        "active_subject_code_constraints_not_full_visible_count",
+        "active_subject_code_constraints_not_required_count",
+        "active_subject_code_constraints_constraint_count_total",
+        "active_subject_code_constraints_forbidden_pattern_count_total",
+    ):
+        if _int_or_zero(source_visibility.get(field)) != _int_or_zero(
+            expected.get(field)
+        ):
+            failures.append(f"prompt_source_visibility_{field}_mismatch")
+    for field in (
+        "code_missing_required_source_path_counts",
+        "code_target_source_status_counts",
+        "code_target_visibility_status_counts",
+        "hypothesis_target_visibility_status_counts",
+        "active_subject_code_constraints_status_counts",
+        "active_subject_code_constraints_missing_reason_counts",
+    ):
+        if _int_mapping(source_visibility.get(field)) != _int_mapping(
+            expected.get(field)
+        ):
+            failures.append(f"prompt_source_visibility_{field}_mismatch")
+    return failures
+
+
+def _prompt_signal_density_consistency_failures(
+    density: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> list[str]:
+    failures: list[str] = []
+    for field in (
+        "total_token_estimate",
+        "research_signal_tokens",
+        "source_code_tokens",
+        "cross_branch_tokens",
+        "governance_tokens",
+    ):
+        if _int_or_zero(density.get(field)) != _int_or_zero(expected.get(field)):
+            failures.append(f"prompt_signal_density_{field}_mismatch")
+    for field in (
+        "research_signal_share",
+        "source_code_share",
+        "cross_branch_share",
+        "governance_share",
+        "research_plus_source_to_governance_ratio",
+    ):
+        if not _numeric_or_value_equal(density.get(field), expected.get(field)):
+            failures.append(f"prompt_signal_density_{field}_mismatch")
+    if density.get("interpretation") != expected.get("interpretation"):
+        failures.append("prompt_signal_density_interpretation_mismatch")
+    return failures
+
+
+def _prompt_context_entries_signature(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    entries: list[dict[str, Any]] = []
+    for raw in value:
+        entry = _mapping_or_empty(raw)
+        if not entry:
+            continue
+        entries.append(
+            {
+                "report": str(entry.get("report") or ""),
+                "prompt_manifest_ref_count": _int_or_zero(
+                    entry.get("prompt_manifest_ref_count")
+                ),
+                "prompt_manifest_loaded_count": _int_or_zero(
+                    entry.get("prompt_manifest_loaded_count")
+                ),
+                "trace_count": _int_or_zero(entry.get("trace_count")),
+                "visibility_digest_count": _int_or_zero(
+                    entry.get("visibility_digest_count")
+                ),
+                "block_family_trace_count": _int_or_zero(
+                    entry.get("block_family_trace_count")
+                ),
+                "omitted_section_trace_count": _int_or_zero(
+                    entry.get("omitted_section_trace_count")
+                ),
+                "truncated_section_trace_count": _int_or_zero(
+                    entry.get("truncated_section_trace_count")
+                ),
+                "call_kind_counts": _int_mapping(entry.get("call_kind_counts")),
+                "block_family_totals": _block_family_totals_signature(
+                    entry.get("block_family_totals")
+                ),
+                "omitted_section_counts": _int_mapping(
+                    entry.get("omitted_section_counts")
+                ),
+                "truncated_section_counts": _int_mapping(
+                    entry.get("truncated_section_counts")
+                ),
+                "source_visibility": _prompt_source_visibility_signature(
+                    entry.get("source_visibility")
+                ),
+            }
+        )
+    return sorted(entries, key=lambda item: item["report"])
+
+
+def _prompt_source_visibility_signature(value: Any) -> dict[str, Any]:
+    source_visibility = _mapping_or_empty(value)
+    return {
+        "trace_count": _int_or_zero(source_visibility.get("trace_count")),
+        "code_trace_count": _int_or_zero(source_visibility.get("code_trace_count")),
+        "code_target_source_visible_count": _int_or_zero(
+            source_visibility.get("code_target_source_visible_count")
+        ),
+        "code_target_source_missing_count": _int_or_zero(
+            source_visibility.get("code_target_source_missing_count")
+        ),
+        "code_protected_source_visible_count": _int_or_zero(
+            source_visibility.get("code_protected_source_visible_count")
+        ),
+        "code_protected_source_missing_count": _int_or_zero(
+            source_visibility.get("code_protected_source_missing_count")
+        ),
+        "code_required_integration_source_visible_count": _int_or_zero(
+            source_visibility.get("code_required_integration_source_visible_count")
+        ),
+        "code_algorithm_file_read_source_visible_count": _int_or_zero(
+            source_visibility.get("code_algorithm_file_read_source_visible_count")
+        ),
+        "code_missing_required_source_trace_count": _int_or_zero(
+            source_visibility.get("code_missing_required_source_trace_count")
+        ),
+        "code_missing_required_source_path_counts": _int_mapping(
+            source_visibility.get("code_missing_required_source_path_counts")
+        ),
+        "code_target_source_status_counts": _int_mapping(
+            source_visibility.get("code_target_source_status_counts")
+        ),
+        "code_target_visibility_status_counts": _int_mapping(
+            source_visibility.get("code_target_visibility_status_counts")
+        ),
+        "hypothesis_target_source_trace_count": _int_or_zero(
+            source_visibility.get("hypothesis_target_source_trace_count")
+        ),
+        "hypothesis_target_source_required_count": _int_or_zero(
+            source_visibility.get("hypothesis_target_source_required_count")
+        ),
+        "hypothesis_target_source_visible_count": _int_or_zero(
+            source_visibility.get("hypothesis_target_source_visible_count")
+        ),
+        "hypothesis_target_source_not_visible_count": _int_or_zero(
+            source_visibility.get("hypothesis_target_source_not_visible_count")
+        ),
+        "hypothesis_target_visibility_status_counts": _int_mapping(
+            source_visibility.get("hypothesis_target_visibility_status_counts")
+        ),
+        "active_subject_code_constraints_trace_count": _int_or_zero(
+            source_visibility.get("active_subject_code_constraints_trace_count")
+        ),
+        "active_subject_code_constraints_required_count": _int_or_zero(
+            source_visibility.get("active_subject_code_constraints_required_count")
+        ),
+        "active_subject_code_constraints_full_visible_count": _int_or_zero(
+            source_visibility.get("active_subject_code_constraints_full_visible_count")
+        ),
+        "active_subject_code_constraints_partial_visible_count": _int_or_zero(
+            source_visibility.get(
+                "active_subject_code_constraints_partial_visible_count"
+            )
+        ),
+        "active_subject_code_constraints_not_full_visible_count": _int_or_zero(
+            source_visibility.get(
+                "active_subject_code_constraints_not_full_visible_count"
+            )
+        ),
+        "active_subject_code_constraints_not_required_count": _int_or_zero(
+            source_visibility.get("active_subject_code_constraints_not_required_count")
+        ),
+        "active_subject_code_constraints_constraint_count_total": _int_or_zero(
+            source_visibility.get(
+                "active_subject_code_constraints_constraint_count_total"
+            )
+        ),
+        "active_subject_code_constraints_forbidden_pattern_count_total": _int_or_zero(
+            source_visibility.get(
+                "active_subject_code_constraints_forbidden_pattern_count_total"
+            )
+        ),
+        "active_subject_code_constraints_status_counts": _int_mapping(
+            source_visibility.get("active_subject_code_constraints_status_counts")
+        ),
+        "active_subject_code_constraints_missing_reason_counts": _int_mapping(
+            source_visibility.get(
+                "active_subject_code_constraints_missing_reason_counts"
+            )
+        ),
+    }
+
+
+def _block_family_totals_signature(value: Any) -> dict[str, dict[str, int]]:
+    if not isinstance(value, Mapping):
+        return {}
+    families: dict[str, dict[str, int]] = {}
+    for family, raw in value.items():
+        item = _mapping_or_empty(raw)
+        if not item:
+            continue
+        families[str(family)] = {
+            "trace_count": _int_or_zero(item.get("trace_count")),
+            "char_count": _int_or_zero(item.get("char_count")),
+            "token_estimate": _int_or_zero(item.get("token_estimate")),
+        }
+    return families
 
 
 def _research_context_actionability(
