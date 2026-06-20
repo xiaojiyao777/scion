@@ -71,6 +71,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
         "CMT2": ["screening"],
         "CMT4": ["screening"],
     }
+    assert split_check["detail"]["required_stage"] == "screening"
     assert (
         report["checks"]["prepared_handoff_rebuild_declared_outputs_present"][
             "status"
@@ -351,6 +352,51 @@ def test_launch_readiness_rejects_cvrp_protected_cases_absent_from_split(
         "CMT2": [],
         "CMT4": [],
     }
+
+
+def test_launch_readiness_rejects_cvrp_protected_cases_outside_screening(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    (run_root / "config" / "split.yaml").write_text(
+        "\n".join(
+            [
+                "version: fixture",
+                "screening:",
+                "- cvrplib/A/A-n64-k9.vrp",
+                "validation:",
+                "- cvrplib/CMT/CMT2.vrp",
+                "- cvrplib/CMT/CMT4.vrp",
+                "frozen: []",
+                "canary: []",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _write_prepared_handoff_rebuild_manifest(run_root)
+
+    report = readiness_tool.build_readiness(run_root)
+    inventory = readiness_tool.build_inventory(run_root)
+    contract = inventory["launcher"]["prepared_run_contract"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert report["checks"]["prepared_contract_complete"]["status"] == "failed"
+    problem_specific = report["checks"]["problem_specific_prepared_handoff"]
+    assert problem_specific["status"] == "failed"
+    assert "cvrp_protected_cases_in_split" in problem_specific["detail"][
+        "failed_checks"
+    ]
+    split_check = contract["checks"]["cvrp_protected_cases_in_split"]
+    assert split_check["passed"] is False
+    assert split_check["detail"]["missing_cases"] == []
+    assert split_check["detail"]["missing_screening_cases"] == ["CMT2", "CMT4"]
+    assert split_check["detail"]["stage_membership"] == {
+        "CMT2": ["validation"],
+        "CMT4": ["validation"],
+    }
+    assert split_check["detail"]["required_stage"] == "screening"
 
 
 def test_launch_readiness_problem_specific_helper_reports_warehouse_failures() -> None:

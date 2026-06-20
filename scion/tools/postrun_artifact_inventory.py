@@ -2087,6 +2087,7 @@ def _cvrp_protected_cases_split_status(
         else None
     )
     if split_path is None:
+        missing_tokens = sorted(set(protected_case_tokens))
         return {
             "complete": False,
             "split": split_value,
@@ -2094,15 +2095,18 @@ def _cvrp_protected_cases_split_status(
             "split_readable": False,
             "protected_cases": protected_cases,
             "present_cases": [],
-            "missing_cases": sorted(set(protected_case_tokens)),
+            "missing_cases": missing_tokens,
+            "missing_screening_cases": missing_tokens,
             "stage_membership": {},
             "case_count": 0,
+            "required_stage": "screening",
             "error": "split_path_unresolvable",
         }
 
     try:
         data = yaml.safe_load(split_path.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError) as exc:
+        missing_tokens = sorted(set(protected_case_tokens))
         return {
             "complete": False,
             "split": split_value,
@@ -2110,13 +2114,16 @@ def _cvrp_protected_cases_split_status(
             "split_readable": False,
             "protected_cases": protected_cases,
             "present_cases": [],
-            "missing_cases": sorted(set(protected_case_tokens)),
+            "missing_cases": missing_tokens,
+            "missing_screening_cases": missing_tokens,
             "stage_membership": {},
             "case_count": 0,
+            "required_stage": "screening",
             "error": f"{type(exc).__name__}: {exc}",
         }
 
     if not isinstance(data, dict):
+        missing_tokens = sorted(set(protected_case_tokens))
         return {
             "complete": False,
             "split": split_value,
@@ -2124,9 +2131,11 @@ def _cvrp_protected_cases_split_status(
             "split_readable": True,
             "protected_cases": protected_cases,
             "present_cases": [],
-            "missing_cases": sorted(set(protected_case_tokens)),
+            "missing_cases": missing_tokens,
+            "missing_screening_cases": missing_tokens,
             "stage_membership": {},
             "case_count": 0,
+            "required_stage": "screening",
             "error": f"split_yaml_not_mapping:{type(data).__name__}",
         }
 
@@ -2150,17 +2159,26 @@ def _cvrp_protected_cases_split_status(
     present_cases = sorted(
         case for case in set(protected_case_tokens) if case in split_case_tokens
     )
+    missing_screening_cases = sorted(
+        case
+        for case, stages in stage_membership.items()
+        if "screening" not in stages
+    )
     return {
-        "complete": bool(protected_case_tokens) and not missing_cases,
+        "complete": bool(protected_case_tokens)
+        and not missing_cases
+        and not missing_screening_cases,
         "split": split_value,
         "split_path": str(split_path),
         "split_readable": True,
         "protected_cases": protected_cases,
         "present_cases": present_cases,
         "missing_cases": missing_cases,
+        "missing_screening_cases": missing_screening_cases,
         "stage_membership": stage_membership,
         "case_count": len(split_case_tokens),
         "stages_checked": list(CVRP_SPLIT_CASE_STAGES),
+        "required_stage": "screening",
         "error": None,
     }
 
