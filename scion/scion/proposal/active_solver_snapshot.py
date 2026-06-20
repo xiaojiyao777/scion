@@ -17,7 +17,7 @@ from scion.problem.providers import (
 if TYPE_CHECKING:
     from scion.proposal.tools.models import ProposalToolContext
 
-_SOURCE_PREVIEW_CHARS = 12000
+_SOURCE_PREVIEW_CHARS = 96000
 _DIGEST_CHARS = 16
 
 

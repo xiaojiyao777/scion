@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from scion.proposal.agentic_observation_ledger.digests import normalize_tool_args
 from scion.proposal.agentic_observation_ledger.reuse import (
     already_observed_from_inherited_ledger,
 )
@@ -10,6 +11,23 @@ from scion.proposal.agentic_observation_ledger.payloads import (
 )
 from scion.tests.unit.agentic_session_test_support import *
 from scion.tests.unit.test_active_solver_map import _FullProvider, _context as _map_context
+
+
+def test_algorithm_source_ledger_defaults_match_tool_headroom() -> None:
+    file_args = normalize_tool_args(
+        "context.read_algorithm_file",
+        {"file_path": "policies/baseline_modules/scheduler.py"},
+    )
+    symbol_args = normalize_tool_args(
+        "context.read_algorithm_symbol",
+        {
+            "file_path": "policies/baseline_modules/scheduler.py",
+            "symbol": "solve",
+        },
+    )
+
+    assert file_args["max_chars"] == 96000
+    assert symbol_args["max_chars"] == 96000
 
 
 def test_code_phase_reuses_hypothesis_algorithm_file_ledger_receipt(

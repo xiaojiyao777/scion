@@ -24,6 +24,8 @@ from scion.proposal.agentic_observation_ledger.utils import (
     normalize_path,
 )
 
+_SOLVER_SOURCE_READ_HEADROOM_CHARS = 96000
+
 
 def normalize_tool_args(tool_name: str, args: Mapping[str, Any]) -> dict[str, Any]:
     raw = dict(args or {})
@@ -52,7 +54,7 @@ def normalize_tool_args(tool_name: str, args: Mapping[str, Any]) -> dict[str, An
         raw.setdefault("include_inactive", True)
     elif tool_name in {"context.read_algorithm_file", "context.read_algorithm_symbol"}:
         raw["file_path"] = normalize_path(raw.get("file_path"))
-        raw.setdefault("max_chars", 12000)
+        raw.setdefault("max_chars", _SOLVER_SOURCE_READ_HEADROOM_CHARS)
     elif tool_name == "context.read_surface":
         raw.setdefault("detail", "compact")
         raw.setdefault("section", "all")

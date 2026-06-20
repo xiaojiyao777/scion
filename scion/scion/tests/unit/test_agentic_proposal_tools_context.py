@@ -149,6 +149,43 @@ def test_read_surface_full_and_explicit_max_code_chars(tmp_path: Path) -> None:
     assert len(capped_artifact["content_preview"]) <= 80
 
 
+def test_read_surface_full_source_headroom_survives_registry_result_boundary(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    policy_file = (
+        Path(context.champion.code_snapshot_path) / "policies" / "search_policy.py"
+    )
+    large_code = (
+        "def baseline_time_fraction(instance, time_limit_sec):\n"
+        "    return 0.50\n\n"
+        + "\n".join(f"# surface source visibility filler {idx}" for idx in range(1700))
+        + "\n\ndef late_surface_sentinel():\n"
+        "    return 'visible beyond old registry result cap'\n"
+    )
+    assert len(large_code) > 40000
+    assert len(large_code) < 96000
+    policy_file.write_text(large_code, encoding="utf-8")
+
+    observation = registry.call(
+        "context.read_surface",
+        {
+            "surface": "search_policy",
+            "detail": "full",
+            "max_code_chars": 96000,
+        },
+        context,
+    )
+
+    artifact = observation.structured_payload["current_artifact"]
+    assert observation.is_error is False
+    assert observation.structured_payload["detail"] == "full"
+    assert artifact["max_chars"] == 96000
+    assert artifact["truncated"] is False
+    assert "visible beyond old registry result cap" in artifact["content_preview"]
+
+
 def test_read_surface_prefers_branch_workspace_code_when_available(
     tmp_path: Path,
 ) -> None:

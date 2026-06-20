@@ -41,11 +41,14 @@ from scion.proposal.tools.surface.readers import (
 from scion.proposal.tools.surface.support_artifacts import _read_solver_design_support_artifacts
 from scion.proposal.tools.utils import _attr
 
+_SURFACE_SOURCE_RESULT_HEADROOM_CHARS = 180000
+
 
 class ContextReadSurfaceTool(_BaseReadOnlyTool):
     name = "context.read_surface"
     input_schema = ReadSurfaceInput
     permission = ProposalToolPermission.READ_CHAMPION_ARTIFACT
+    max_result_chars = _SURFACE_SOURCE_RESULT_HEADROOM_CHARS
 
     def call(
         self,

@@ -185,6 +185,55 @@ def test_active_solver_algorithm_file_tools_are_allowlisted_with_provenance(
     assert "vrp/solver.py" not in denied_payload["allowed_files"]
 
 
+def test_active_solver_source_reads_fit_default_source_headroom(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+    scheduler = (
+        Path(context.champion.code_snapshot_path)
+        / "policies"
+        / "baseline_modules"
+        / "scheduler.py"
+    )
+    large_source = (
+        "def early_symbol():\n"
+        "    return 'early'\n\n"
+        + "\n".join(f"# source visibility filler {idx}" for idx in range(1700))
+        + "\n\ndef late_symbol():\n"
+        "    return 'late sentinel beyond old 12k preview'\n"
+    )
+    assert len(large_source) > 40000
+    assert len(large_source) < 96000
+    scheduler.write_text(large_source, encoding="utf-8")
+
+    read_file = registry.call(
+        "context.read_algorithm_file",
+        {"file_path": "policies/baseline_modules/scheduler.py"},
+        context,
+    )
+    read_symbol = registry.call(
+        "context.read_algorithm_symbol",
+        {
+            "file_path": "policies/baseline_modules/scheduler.py",
+            "symbol": "late_symbol",
+            "max_chars": 200,
+        },
+        context,
+    )
+
+    file_payload = read_file.structured_payload
+    symbol_payload = read_symbol.structured_payload
+    assert read_file.is_error is False
+    assert file_payload["max_chars"] == 96000
+    assert file_payload["truncated"] is False
+    assert "late sentinel beyond old 12k preview" in file_payload["content_preview"]
+    assert read_symbol.is_error is False
+    assert symbol_payload["readable"] is True
+    assert symbol_payload["symbol"] == "late_symbol"
+    assert "late sentinel beyond old 12k preview" in symbol_payload["content_preview"]
+
+
 @pytest.mark.parametrize(
     "bad_path",
     (

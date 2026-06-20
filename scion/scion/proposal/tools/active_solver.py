@@ -25,6 +25,7 @@ from scion.proposal.tools.models import (
 
 _REJECTED_FILE_PATH = "<path_rejected>"
 _SOLVER_SOURCE_READ_HEADROOM_CHARS = 96000
+_SOLVER_SOURCE_RESULT_HEADROOM_CHARS = 160000
 _ALGORITHM_FILE_LIST_TOOL = "context.list_algorithm_files"
 _ALGORITHM_FILE_READ_TOOLS = frozenset(
     {"context.read_algorithm_file", "context.read_algorithm_symbol"}
@@ -209,6 +210,7 @@ class ContextReadAlgorithmFileTool(_BaseReadOnlyTool):
     name = "context.read_algorithm_file"
     input_schema = ReadAlgorithmFileInput
     permission = ProposalToolPermission.READ_CHAMPION_ARTIFACT
+    max_result_chars = _SOLVER_SOURCE_RESULT_HEADROOM_CHARS
 
     def call(
         self,
@@ -243,6 +245,7 @@ class ContextReadAlgorithmSymbolTool(_BaseReadOnlyTool):
     name = "context.read_algorithm_symbol"
     input_schema = ReadAlgorithmSymbolInput
     permission = ProposalToolPermission.READ_CHAMPION_ARTIFACT
+    max_result_chars = _SOLVER_SOURCE_RESULT_HEADROOM_CHARS
 
     def call(
         self,
