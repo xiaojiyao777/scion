@@ -28,7 +28,7 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
   readiness. `/v1/models` can list `gpt-5.5`, but the strict completion
   preflight currently fails with HTTP `401`, `classification=not_authenticated`,
   `code=invalid_api_key`; latest strict preflight has auth pool `active=0`,
-  `expired=1`, `total=1`.
+  `refreshing=1`, `total=1`.
 - Do not launch a prepared root until:
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -36,16 +36,16 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 ## Prepared Roots
 
 The active prepared roots were generated on WSL after postrun acceptance began
-checking runtime-evidence consistency between problem summaries and runtime
-feedback inputs. The formal hypothesis prompt-trace, problem-summary
-`evidence` payload, and CVRP seed-only large two-opt rejection guards remain in
-force. WSL static readiness passes; launch readiness fails only at completion
-preflight auth.
+checking research-context actionability projections against prompt visibility
+and research-continuity inputs. Runtime-evidence consistency, the formal
+hypothesis prompt-trace, problem-summary `evidence` payload, and CVRP seed-only
+large two-opt rejection guards remain in force. WSL static readiness passes;
+launch readiness fails only at completion preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runtimeev-3e0512f1-preflight-6r-gpt55-20260620T014618Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ctxproj-7c80f84b-preflight-6r-gpt55-20260620T020853Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-runtimeev-3e0512f1-preflight-4r-gpt55-20260620T014619Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-ctxproj-7c80f84b-preflight-4r-gpt55-20260620T020854Z-claw`
 
 Prepared manifests record:
 
@@ -53,7 +53,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `3e0512f1`; CVRP `3e0512f1`.
+- Runtime commits: warehouse `7c80f84b`; CVRP `7c80f84b`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
