@@ -74,80 +74,11 @@ Prepared run shape:
 - CVRP: 4 rounds, bounded/deadline-aware large two-opt follow-up from external
   seed guidance.
 - Proposal research caps are disabled for the current prepared roots:
-  `proposal_attempt_limit=0`, `proposal_quality_loop_limit=0`. The core
-  campaign loop still has a high-water `campaign_safety_step_limit` and the
-  normal circuit breaker.
-- Launch readiness treats missing or command-disconnected proposal-cap fields
-  as launch blockers. Exact `0` values for disabled proposal/APS caps are
-  recorded as disabled details, not warnings or gates; positive values below
-  the historical recommendation remain audit warnings only.
-- APS research caps are disabled for the current prepared roots while the
-  wall-time guard remains enabled: `agentic_session_timeout_sec=3600`,
-  `agentic_tool_max_steps=0`, `agentic_tool_max_calls=0`,
-  `agentic_code_tool_max_calls=0`, `agentic_observation_max_chars=0`.
-  Runtime semantics now match readiness semantics: `agentic_code_tool_max_calls=0`
-  uses a disabled effective limit and must not suppress code-phase
-  planner-selected source reads. `agentic_tool_max_steps=0` and
-  `agentic_tool_max_calls=0` also no longer derive a one-decision diagnosis
-  planner cap. `agentic_observation_max_chars=0` also preserves authoritative
-  self-check preview payloads instead of applying the small preview fallback
-  budget. APS artifact replay validation also treats zero step/tool/observation
-  caps as disabled, so a valid no-cap research trajectory is not later rejected
-  as over budget. Code-phase planner prompts derive their self-check reserve
-  fields from the same runtime helpers, so disabled step/tool/observation caps
-  no longer appear to the planner as fixed 4/4 reserve slots. Mandatory
-  code-phase surface fallback also stays full under disabled observation caps;
-  a prior 96k target-file read no longer downgrades the required solver surface
-  read to `code_phase_required_compact`/800 characters unless a real positive
-  observation budget is active. Code-generation prompt projection now preserves
-  the 96k source window for `context.read_algorithm_file` and
-  `context.read_algorithm_symbol`; dedicated full-file and symbol-source prompt
-  sections prevent generic observation compaction or receipt-only projection
-  from hiding targeted solver source. Both full-file and symbol-source sections
-  are kept in the stable code-source cache block for solver-design code prompts.
-  Cacheable active algorithm facts and related agentic context are also kept in
-  the stable system block for non-solver/operator code prompts, so warehouse
-  and generic code surfaces do not drop the active research facts when no
-  solver-design source block is present.
-- Runtime replay semantics: budget-exhausting summaries suppress stale
-  fresh-runtime replay markers, materialization, and pressure reports. Runtime
-  tie fresh replay remains available only for comparative runtime semantics.
-- Low-SNR runtime semantics: budget-exhausting runtime ratios do not block
-  trajectory-divergent low-SNR expansion or same-branch follow-up; comparative
-  runtime slowdown still remains actionable.
-- Postrun runtime budget summaries preserve saturated-side and repairable
-  counts plus side-specific top diagnostics, so delegated review can distinguish
-  candidate repair signals from champion-only or observational budget
-  saturation.
-- Runtime telemetry guard summaries preserve explicit inactive observations
-  (`candidate_false`, activation status `inactive`) separately from numeric
-  zero counters. Delegated review and proposal feedback can now distinguish
-  a mechanism that did not trigger from a mechanism that ran but produced no
-  positive effect or only zero/sub-ms runtime evidence.
-- Screening gate/Decision semantics: high-win-rate, non-negative,
-  sub-practical-delta screening evidence is reported as
-  `SCREENING_PASS_MARGINAL_DELTA` and routed as a diagnostic validation
-  candidate. Proposal feedback/search memory records this as `marginal`, not
-  `promotable`, so later prompts can learn from it without treating it as a
-  promotion-quality signal. High-win-rate negative median effect remains
-  inconclusive and is not a screening pass.
-- CVRP prompt diagnostics: hypothesis context exposes problem-owned
-  `screening_headroom`, `measurable_opportunity_classes`, and
-  `mechanism_effect_ranking` as proposal-only research signals while raw BKS,
-  validation, frozen, calibration-row, and pair-row details remain hidden from
-  prompts and excluded from `DecisionFeatures`. Prepared prompt readiness now
-  carries a `cvrp_problem_measurement_diagnostics_prompt_bridge` summary and
-  launch readiness recomputes it from the current checkout, so missing or stale
-  ranking projection blocks static launch readiness before a campaign starts.
-- Warehouse prompt diagnostics: hypothesis context exposes problem-owned
-  validation-transfer follow-up diagnostics, including transfer risk,
-  activation/effect counters, `validation_transfer_continuation`, and
-  plateau-vs-continuous-follow-up reason codes as proposal-only research
-  signals while raw prompts/payloads remain excluded. Prepared prompt readiness
-  now carries a `warehouse_problem_measurement_diagnostics_prompt_bridge`
-  summary and launch readiness recomputes it from the current checkout, so
-  missing or stale warehouse diagnostic projection blocks static readiness
-  before a campaign starts.
+  `proposal_attempt_limit=0`, `proposal_quality_loop_limit=0`. APS step/tool
+  caps and observation truncation are disabled with exact `0` values while the
+  wall-time guard remains enabled. Launch readiness treats missing or
+  command-disconnected cap fields as blockers and treats exact disabled values
+  as disabled details, not warnings or gates.
 
 ## Framework Guarantees To Preserve
 
@@ -155,44 +86,24 @@ Prepared run shape:
   problem-owned research diagnostics remain tainted proposal material. They must
   not enter Decision, `DecisionFeatures`, promotion, scheduler state, or solver
   semantics.
+- Measurement declarations, A/A calibration, practical-delta resolution,
+  runtime-model semantics, low-SNR lifecycle behavior, prompt diagnostics, and
+  prepared `research_focus` projection stay problem-owned or deterministic
+  control-plane inputs.
 - Launch readiness is the operator-facing authority for prepared roots. It
   checks prepared contract/brief identity, prompt-context bridge, problem
   handoff, runtime guards, model route, campaign launch command consistency,
   absolute launch paths, completion preflight, strict postrun rebuild/readiness,
   and prepared/postrun rebuild identity.
-- Prepared prompt context must project required `research_focus` fields into
-  the actual launch prompt path, including CVRP CMT2/CMT4 protection
-  requirements. The current prepared roots carry
-  `prepared_research_focus_prompt_bridge.detail.prompt_summary` with
-  schema `scion.prepared_research_focus_prompt_summary.v1`: warehouse renders
-  19 required `research_focus` paths and all 5 warehouse required-evidence
-  items plus all 6 default-avoid items; CVRP renders 36 required paths, all 5
-  measurable opportunity classes, all 5 large-two-opt required-pair-evidence
-  items, and all 3 CMT2/CMT4 case-protection evidence items. Both roots report
-  `missing_rendered_paths=[]`, no forbidden prompt tokens, raw prompts excluded,
-  and `DecisionFeatures` excluded.
-- CVRP prepared prompt context must also prove that problem-owned measurement
-  diagnostics reach the hypothesis prompt through a safe summary, including the
-  mechanism-effect ranking, without persisting raw prompts or raw diagnostic
-  payloads.
-- Warehouse prepared prompt context must also prove that problem-owned
-  validation-transfer diagnostics reach the hypothesis prompt through a safe
-  summary, including the continuous-follow-up and plateau-guard signals, without
-  persisting raw prompts or raw diagnostic payloads.
-- Current hypothesis prompts carry compact proposal-only research-shape
-  diagnostics before broader feedback, and prompt manifest accounting classifies
-  this block as `research_signal`.
+- Runtime semantics distinguish comparative runtime evidence from
+  budget-exhausting solver behavior. Budget-exhausting saturation and cached
+  runtime ties must not create meaningless fresh-replay pressure, lifecycle
+  fragmentation, or proposal feedback noise.
 - Code-phase prompts must retain direct source visibility for champion/current
-  branch/target files and declared integration files. Source-read tool schemas,
-  registry result caps, ledger normalization, and active solver preview
-  headroom must remain aligned so `context.read_algorithm_file`,
-  `context.read_algorithm_symbol`, and `context.read_surface` can carry the
-  96k source-window used by current solver-design/code prompts without
-  `RESULT_TOO_LARGE`, shallow-preview misses, code-prompt projection shrinkage,
-  symbol-read receipt-only visibility, or unstable retry-block placement.
-  Non-solver code prompts must also retain cacheable active algorithm facts in
-  the stable system block rather than discarding them outside solver-design
-  surfaces.
+  branch/target files and declared integration files. Source-read schemas,
+  registry caps, prompt projection, symbol reads, and retry-block placement must
+  keep the current 96k source-window path available for solver-design/code
+  prompts.
 - Postrun acceptance cannot silently pass when strict rebuild/readiness fails:
   launcher wrappers promote strict postrun acceptance failure to an effective
   wrapper failure and annotate top-level `run_status.json`.
@@ -201,36 +112,23 @@ Prepared run shape:
   `decision_features_excluded=true`, and no campaign/scheduler/promotion
   mutation claims.
 - Warehouse/CVRP postrun conclusions require current-run evidence payloads,
-  runtime-evidence consistency, formal hypothesis prompt traces, and
-  problem-owned review rules; summary prose alone is not acceptance evidence.
-  Problem-summary `current_run_evidence` must match the analysis brief
-  lifecycle and Phase 4 current-run state. Required or present review-input
-  summaries must also be current-run, so stale optional
-  measurement/runtime/continuity summaries cannot make a delegated review look
-  analysis-ready. Protocol-evaluated conclusions must also match current
-  protocol-accounting detail for formal-screened candidates, metric rows,
-  artifact rows, and stage rows. Review-input summaries for
-  protocol/measurement/runtime/continuity must also match current
-  research-efficiency artifacts for aggregate and entry detail, so a stale
-  optional or required review-input summary cannot be paired with a current
-  problem conclusion. Quality-blocked no-protocol conclusions must also match
-  current failure-taxonomy quality-block counts,
-  reports-with-quality-blocks, and reason-count distribution. Failure-taxonomy
-  summaries must also match the current research-efficiency reports for
-  aggregate failure counts, proposal-quality counts, run-status counts, entries,
-  and top examples. Prompt context/source visibility summaries must match the
-  current proposal trajectory manifests for trace counts, source visibility,
-  block-family totals, signal density, hypothesis-generation block-family
-  totals/signal density, and per-report entries. Formal hypothesis-generation
-  readiness cannot be proved by code-only, target-intent, or aggregate-only
-  prompt context; when current continuity signals exist, the hypothesis trace
-  itself must carry research or cross-branch lesson signal. CVRP bounded two-opt
-  ready summaries must match recomputed direct-evidence counters, family lists,
-  rejection counts, and top-row signal count from current
-  measurement/continuity inputs. Measurement evidence must match current
-  interpretation counts and `max_effect_to_mde_ratio`; CVRP bounded two-opt
-  ready summaries must also match current mechanism-family mapped/unmapped row
-  counts.
+  formal hypothesis prompt traces, runtime-evidence consistency, and
+  problem-owned review rules. Free-text summary claims alone are never
+  acceptance evidence.
+- Current-run warehouse/CVRP problem summaries, review-input summaries,
+  failure-taxonomy summaries, prompt/source visibility summaries, measurement
+  evidence, runtime-budget evidence, continuity evidence, and CVRP bounded
+  two-opt direct-evidence summaries must match recomputed current-run artifacts
+  before delegated review can mark the analysis ready. Review-input entry paths
+  must also match current artifact identity through a local/WSL-safe path-tail
+  signature.
+- Runtime telemetry summaries preserve explicit inactive observations
+  (`candidate_false`, activation status `inactive`) separately from numeric zero
+  counters, so delegated review and proposal feedback do not confuse a
+  non-triggered mechanism with a no-effect mechanism.
+- Screening gate, Decision, proposal feedback, and search memory agree on
+  marginal evidence: high-win-rate, non-negative, sub-practical-delta screening
+  evidence is a diagnostic validation candidate, not a promotable signal.
 
 ## Warehouse
 
@@ -240,9 +138,7 @@ Prepared run shape:
 - A plateau conclusion is accepted only when protocol evidence shows no
   positive effect at or above MDE, runtime evidence is review-ready, and
   continuity evidence is substantive without fully missed same-mechanism
-  follow-up opportunities. Problem-summary continuity evidence must also match
-  the current recomputed `same_mechanism_missed` count, so a stale or hand-written
-  plateau summary cannot hide missed same-mechanism follow-up.
+  follow-up opportunities.
 
 ## CVRP/VRP
 
@@ -255,15 +151,15 @@ Prepared run shape:
   result only as proposal guidance. Review readiness requires a bounded,
   deadline-aware implementation with co-located positive effect, activation,
   objective-effect, intra-large-two-opt phase telemetry, and CMT2/CMT4
-  protection evidence; `two_opt_star`, cross-route, VNS, unbounded,
-  `size70_two_opt_*`, and fallback phase telemetry do not satisfy this
-  direct-evidence rule.
+  protection evidence. `two_opt_star`, cross-route, VNS, unbounded,
+  `size70_two_opt_*`, fallback phase telemetry, and continuity-only mentions do
+  not satisfy this direct-evidence rule.
 
 ## Next Actions
 
 1. Refresh WSL/local proxy login, then rerun strict launch readiness on the
-   current prepared root. `/v1/models` is not enough; completion preflight must
-   pass.
+   current prepared roots. `/v1/models` is not enough; completion preflight
+   must pass.
 2. Run warehouse `v2` follow-up first as the simpler continuous-improvement
    proof.
 3. Run the CVRP bounded large-two-opt follow-up after warehouse is underway or
@@ -282,28 +178,19 @@ Prepared run shape:
   `scion/design/v0.5-evidence-uplift-roadmap.md`.
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
-- Current screening marginal gate/Decision alignment:
-  `scion/docs/experiments/v0.4/v04-screening-marginal-gate-decision-alignment-20260620.md`.
-- Current postrun runtime budget side summary:
-  `scion/docs/experiments/v0.4/v04-postrun-runtime-budget-side-summary-20260620.md`.
-- Current runtime telemetry inactive-observation repair:
-  `scion/docs/experiments/v0.4/v04-runtime-telemetry-inactive-observation-repair-20260620.md`.
-- Current launch/readiness and code-prompt 96k source-projection evidence:
-  `scion/docs/experiments/v0.4/v04-code-prompt-solver-source-96k-projection-repair-20260620.md`.
-- Disabled mandatory code-surface full-read repair evidence:
-  `scion/docs/experiments/v0.4/v04-disabled-code-surface-full-read-repair-20260620.md`.
-- Current disabled proposal/APS research-cap semantics:
-  `scion/docs/experiments/v0.4/v04-disabled-proposal-research-caps-20260620.md`.
-- Current source-read result/headroom alignment:
-  `scion/docs/experiments/v0.4/v04-source-read-result-headroom-20260620.md`.
-- Current CVRP prompt-diagnostic repair:
-  `scion/docs/experiments/v0.4/v04-cvrp-mechanism-effect-diagnostics-prompt-repair-20260620.md`.
-- Current warehouse prompt-diagnostic repair:
-  `scion/docs/experiments/v0.4/v04-warehouse-diagnostics-prompt-bridge-20260620.md`.
-- Current prepared `research_focus` prompt bridge:
-  `scion/docs/experiments/v0.4/v04-research-focus-prompt-bridge-20260620.md`.
-- Current postrun wrapper-status evidence:
-  `scion/docs/experiments/v0.4/v04-postrun-wrapper-status-escalation-20260620.md`.
+- Current repair/readiness evidence:
+  - `scion/docs/experiments/v0.4/v04-disabled-proposal-research-caps-20260620.md`
+  - `scion/docs/experiments/v0.4/v04-source-read-result-headroom-20260620.md`
+  - `scion/docs/experiments/v0.4/v04-disabled-code-surface-full-read-repair-20260620.md`
+  - `scion/docs/experiments/v0.4/v04-code-prompt-solver-source-96k-projection-repair-20260620.md`
+  - `scion/docs/experiments/v0.4/v04-screening-marginal-gate-decision-alignment-20260620.md`
+  - `scion/docs/experiments/v0.4/v04-postrun-review-input-path-identity-repair-20260620.md`
+  - `scion/docs/experiments/v0.4/v04-postrun-runtime-budget-side-summary-20260620.md`
+  - `scion/docs/experiments/v0.4/v04-runtime-telemetry-inactive-observation-repair-20260620.md`
+  - `scion/docs/experiments/v0.4/v04-cvrp-mechanism-effect-diagnostics-prompt-repair-20260620.md`
+  - `scion/docs/experiments/v0.4/v04-warehouse-diagnostics-prompt-bridge-20260620.md`
+  - `scion/docs/experiments/v0.4/v04-research-focus-prompt-bridge-20260620.md`
+  - `scion/docs/experiments/v0.4/v04-postrun-wrapper-status-escalation-20260620.md`
 - Current WSL access:
   `ssh -i ~/.ssh/id_ed25519_codex_wsl -p 2222 -o BatchMode=yes -o StrictHostKeyChecking=no xjy-ubuntu@127.0.0.1`.
 - WSL repo: `/home/xjy-ubuntu/research/or-autoresearch-agent`.

@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
 
@@ -3392,13 +3392,24 @@ def _json_comparison_value(value: Any) -> Any:
 def _summary_without_paths(value: Any) -> Any:
     if isinstance(value, Mapping):
         return {
-            str(key): _summary_without_paths(item)
+            str(key): (
+                _path_tail_signature(item)
+                if str(key) == "path"
+                else _summary_without_paths(item)
+            )
             for key, item in sorted(value.items())
-            if str(key) != "path"
         }
     if isinstance(value, list):
         return [_summary_without_paths(item) for item in value]
     return _json_comparison_value(value)
+
+
+def _path_tail_signature(value: Any) -> Any:
+    if not isinstance(value, str) or not value:
+        return _json_comparison_value(value)
+    normalized = value.replace("\\", "/")
+    parts = [part for part in PurePosixPath(normalized).parts if part not in {"", "/"}]
+    return {"path_tail": parts[-4:]}
 
 
 def _large_twoopt_direct_evidence_signature(value: Any) -> dict[str, Any]:

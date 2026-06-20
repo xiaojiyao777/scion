@@ -1791,6 +1791,73 @@ def test_postrun_acceptance_rejects_problem_summary_input_mismatch(
     )
 
 
+def test_postrun_acceptance_rejects_stale_review_input_entry_path(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(
+        tmp_path / "warehouse-run-stale-input-entry-path"
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": _warehouse_problem_evidence(),
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "launch_required_before_plateau_conclusion": False,
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    protocol = brief["protocol_accounting_summary"]
+    assert isinstance(protocol, dict)
+    entries = protocol["entries"]
+    assert isinstance(entries, list)
+    assert entries
+    entry = entries[0]
+    assert isinstance(entry, dict)
+    original_path = Path(str(entry["path"]))
+    entry["path"] = str(
+        run_root.parent
+        / "stale-warehouse-run"
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / original_path.name
+    )
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    input_check = readiness["checks"]["review_input_summaries_actionability"]
+    protocol_detail = next(
+        item
+        for item in input_check["detail"]["summaries"]
+        if item["summary"] == "protocol_accounting_summary"
+    )
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert input_check["status"] == "failed"
+    assert "protocol_accounting_summary_entries_mismatch" in protocol_detail[
+        "failures"
+    ]
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_rejects_stale_protocol_detail_in_problem_summary(
     tmp_path: Path,
 ) -> None:

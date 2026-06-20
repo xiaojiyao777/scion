@@ -342,7 +342,7 @@ Current checkpoint:
   - Current-run warehouse/CVRP review-input summaries must be current-run when
     required by the interpretation or when present in the brief, so optional
     measurement/runtime/continuity summaries cannot carry stale report-only
-    material into delegated review.
+    material or stale entry path identity into delegated review.
   - Current-run warehouse/CVRP research-context actionability must be a fresh
     projection of prompt visibility and research-continuity inputs; stale
     prompt token, continuity, gap, or recommendation projections fail postrun
