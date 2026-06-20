@@ -42,6 +42,26 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 reports `launch_ready=true`.
 
+After strict readiness passes, launch from WSL by running the prepared wrapper
+itself, not by reconstructing the long `scion run` command:
+
+```bash
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-f22ad5f4-pathidentity-6r-gpt55-20260620T153154Z-claw/run.sh
+```
+
+Run the CVRP wrapper only after the warehouse run is underway or accepted for
+launch:
+
+```bash
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-f22ad5f4-pathidentity-4r-gpt55-20260620T153155Z-claw/run.sh
+```
+
+The wrappers already enforce completion preflight, runtime guards, campaign
+execution, strict postrun rebuild/readiness, and top-level wrapper-status
+escalation. After each run, inspect `exit.txt`, `run_status.json`, and
+`postrun_acceptance/readiness/`, then rsync the WSL run root back to the
+same-named local mirror before server-side analysis.
+
 ## Active Prepared Roots
 
 Generated on WSL at launch-authoritative prepared runtime commit `f22ad5f4`;
