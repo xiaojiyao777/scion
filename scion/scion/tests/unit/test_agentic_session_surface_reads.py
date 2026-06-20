@@ -308,6 +308,71 @@ def test_zero_code_tool_call_budget_does_not_disable_code_phase_planner(
     )
 
 
+def test_disabled_observation_budget_keeps_required_solver_surface_full(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_algorithm.py"
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file=target_file,
+    )
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file=target_file,
+            target_objectives=["total_distance"],
+        )
+    )
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=AgenticToolLoopConfig(
+            max_steps=0,
+            max_tool_calls=0,
+            max_code_tool_calls=0,
+            max_observation_chars=0,
+            max_wall_time_sec=3600,
+        ),
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-no-cap-required-surface",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-cvrp",
+    )
+
+    observations = session._run_code_context_fixed_tools(
+        context,
+        state,
+        hypothesis,
+        prior_observations=[],
+        selection_source="code_phase_required",
+    )
+    algorithm_read = next(
+        observation
+        for observation in observations
+        if observation.tool_name == "context.read_algorithm_file"
+    )
+    surface_read = next(
+        observation
+        for observation in observations
+        if observation.tool_name == "context.read_surface"
+    )
+    surface_artifact = surface_read.structured_payload["current_artifact"]
+
+    assert algorithm_read.structured_payload["file_path"] == target_file
+    assert algorithm_read.structured_payload["max_chars"] == 96000
+    assert surface_read.structured_payload["detail"] == "full"
+    assert surface_read.structured_payload["target_file"] == target_file
+    assert surface_artifact["max_chars"] == 96000
+    assert surface_artifact["truncated"] is False
+    assert not any(
+        event.metadata.get("selection_source") == "code_phase_required_compact"
+        for event in state.transcript
+    )
+
+
 def test_planner_nonexistent_surface_falls_back_and_generates_patch(
     tmp_path: Path,
 ) -> None:

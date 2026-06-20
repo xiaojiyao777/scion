@@ -689,8 +689,14 @@ class AgenticSessionCodeToolsMixin:
                         },
                     )
                     continue
+                observation_budget_enabled = _observation_limit_enabled_for_config(
+                    self._tool_loop_config
+                )
                 if mandatory_surface_read or mandatory_target_read:
-                    preserve_observation_chars = self._minimum_budgeted_observation_chars()
+                    if observation_budget_enabled:
+                        preserve_observation_chars = (
+                            self._minimum_budgeted_observation_chars()
+                        )
                     remaining_chars = self._remaining_observation_chars(state)
                     if remaining_chars <= preserve_observation_chars:
                         if (
@@ -741,14 +747,16 @@ class AgenticSessionCodeToolsMixin:
                         "context.read_surface",
                     )
                     surface_context_budget_pressure = (
-                        surface_context_available
+                        observation_budget_enabled
+                        and surface_context_available
                         and remaining_chars <= _SELF_CHECK_PREVIEW_OBSERVATION_BUDGET_CHARS
                     )
-                    if mandatory_surface_read and (
+                    should_compact_surface_for_budget = observation_budget_enabled and (
                         self._code_phase_budget_reserved(state)
                         or target_read_available
                         or surface_context_budget_pressure
-                    ):
+                    )
+                    if mandatory_surface_read and should_compact_surface_for_budget:
                         compact_chars = max(
                             0,
                             min(
