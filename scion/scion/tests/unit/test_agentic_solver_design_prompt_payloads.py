@@ -624,6 +624,118 @@ def test_code_phase_renders_compact_receipts_for_read_observations() -> None:
     assert ledger_item["omitted"] is False
 
 
+def test_code_phase_projects_full_algorithm_file_source_to_96k_window() -> None:
+    tail_marker = "TAIL_MARKER_VISIBLE_AFTER_24K"
+    source = "def solve(instance, rng, time_limit_sec, context):\n" + (
+        "# source filler\n" * 3800
+    ) + tail_marker
+    assert len(source) > 24000
+    assert len(source) < 96000
+    read_observation = ProposalObservation(
+        observation_id="full-source-read",
+        session_id="session-full-source",
+        tool_name="context.read_algorithm_file",
+        tool_call_id="call-full-source",
+        observation_type="algorithm_file",
+        summary="Returned full algorithm source.",
+        structured_payload={
+            "surface": "solver_design",
+            "file_path": "policies/baseline_algorithm.py",
+            "readable": True,
+            "source": "champion_snapshot",
+            "content_preview": source,
+            "truncated": False,
+            "size_chars": len(source),
+            "max_chars": 96000,
+        },
+    )
+    prompt_observations = [
+        _code_observation_prompt_payload(observation)
+        for observation in _code_prompt_observations([read_observation])
+    ]
+    compact_source = prompt_observations[0]["structured_payload"]["content_preview"]
+    context = {
+        "problem_summary": "Synthetic problem.",
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "target_file": "policies/baseline_algorithm.py",
+        "action": "modify",
+        "hypothesis_text": "Modify solver body.",
+        "target_file_code": "File: policies/baseline_algorithm.py\n```python\n"
+        "def solve():\n    pass\n```\n",
+        "operator_interface_spec": "def solve()",
+        "import_whitelist": "math",
+        "editable_patterns": "policies/baseline_algorithm.py",
+        "frozen_patterns": "adapter.py",
+        "agentic_tool_observations": prompt_observations,
+    }
+
+    system_blocks, user_prompt = _split_code_context(context)
+    rendered = "\n".join(block["text"] for block in system_blocks) + "\n" + user_prompt
+
+    assert len(compact_source) == len(source)
+    assert tail_marker in compact_source
+    assert "Solver-Design Full Algorithm File Reads" in rendered
+    assert tail_marker in rendered
+
+
+def test_code_phase_projects_algorithm_symbol_source_to_96k_window() -> None:
+    tail_marker = "SYMBOL_TAIL_VISIBLE_AFTER_12K"
+    source = "def improve(instance, rng, context):\n" + (
+        "    score += 1\n" * 1500
+    ) + tail_marker
+    assert len(source) > 12000
+    assert len(source) < 96000
+    read_observation = ProposalObservation(
+        observation_id="symbol-source-read",
+        session_id="session-symbol-source",
+        tool_name="context.read_algorithm_symbol",
+        tool_call_id="call-symbol-source",
+        observation_type="algorithm_symbol",
+        summary="Returned algorithm symbol source.",
+        structured_payload={
+            "surface": "solver_design",
+            "file_path": "policies/baseline_algorithm.py",
+            "symbol": "improve",
+            "readable": True,
+            "source": "champion_snapshot",
+            "content_preview": source,
+            "truncated": False,
+            "max_chars": 96000,
+        },
+    )
+    prompt_observations = [
+        _code_observation_prompt_payload(observation)
+        for observation in _code_prompt_observations([read_observation])
+    ]
+    compact_source = prompt_observations[0]["structured_payload"]["content_preview"]
+    context = {
+        "problem_summary": "Synthetic problem.",
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "target_file": "policies/baseline_algorithm.py",
+        "action": "modify",
+        "hypothesis_text": "Modify solver body.",
+        "target_file_code": "File: policies/baseline_algorithm.py\n```python\n"
+        "def solve():\n    pass\n```\n",
+        "operator_interface_spec": "def solve()",
+        "import_whitelist": "math",
+        "editable_patterns": "policies/baseline_algorithm.py",
+        "frozen_patterns": "adapter.py",
+        "agentic_tool_observations": prompt_observations,
+    }
+
+    system_blocks, user_prompt = _split_code_context(context)
+    rendered = "\n".join(block["text"] for block in system_blocks) + "\n" + user_prompt
+
+    assert len(compact_source) == len(source)
+    assert tail_marker in compact_source
+    assert "Solver-Design Algorithm Symbol Reads" in rendered
+    assert tail_marker in rendered
+
+
 def test_latest_preview_repair_feedback_preserves_retry_diagnostics() -> None:
     previous_patch = {
         "file_path": "solver_body.py",

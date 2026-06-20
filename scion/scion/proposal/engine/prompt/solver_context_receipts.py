@@ -164,6 +164,55 @@ def _solver_design_full_algorithm_file_reads(observations: Any) -> list[dict[str
     return reads
 
 
+def _solver_design_algorithm_symbol_reads(observations: Any) -> list[dict[str, Any]]:
+    if not isinstance(observations, list):
+        return []
+    reads: list[dict[str, Any]] = []
+    for observation in observations:
+        if not isinstance(observation, dict):
+            continue
+        if observation.get("tool_name") != "context.read_algorithm_symbol":
+            continue
+        if bool(observation.get("is_error")):
+            continue
+        payload = observation.get("structured_payload")
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("readable") is not True:
+            continue
+        if payload.get("already_observed"):
+            continue
+        if payload.get("active") is False:
+            continue
+        content = payload.get("content_preview")
+        if not isinstance(content, str) or not content:
+            continue
+        reads.append(
+            _drop_empty(
+                {
+                    "observation_id": observation.get("observation_id"),
+                    "tool_name": observation.get("tool_name"),
+                    "observation_digest": observation.get("digest"),
+                    "file_path": payload.get("file_path"),
+                    "symbol": payload.get("symbol"),
+                    "active": payload.get("active"),
+                    "role": payload.get("role"),
+                    "module": payload.get("module"),
+                    "readable": payload.get("readable"),
+                    "source": payload.get("source"),
+                    "source_digest": _canonical_symbol_source_digest(payload),
+                    "source_digest_hash": _noncanonical_source_digest_hash(payload)
+                    or payload.get("digest"),
+                    "sha256": payload.get("sha256"),
+                    "truncated": payload.get("truncated"),
+                    "max_chars": payload.get("max_chars"),
+                    "content_preview": content,
+                }
+            )
+        )
+    return reads
+
+
 def _canonical_full_source_digest(payload: dict[str, Any]) -> str:
     for key in ("source_digest", "sha256"):
         value = payload.get(key)
@@ -171,6 +220,22 @@ def _canonical_full_source_digest(payload: dict[str, Any]) -> str:
             return str(value)
     content = payload.get("content_preview")
     if isinstance(content, str) and content and _is_full_algorithm_file_payload(payload):
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return ""
+
+
+def _canonical_symbol_source_digest(payload: dict[str, Any]) -> str:
+    for key in ("source_digest", "sha256"):
+        value = payload.get(key)
+        if _looks_like_sha256(value):
+            return str(value)
+    content = payload.get("content_preview")
+    if (
+        isinstance(content, str)
+        and content
+        and payload.get("readable") is True
+        and not bool(payload.get("truncated"))
+    ):
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
     return ""
 

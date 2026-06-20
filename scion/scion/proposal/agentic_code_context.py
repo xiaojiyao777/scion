@@ -14,12 +14,15 @@ from scion.proposal.agentic_utils import (
     _limit_string,
     _sanitize_agentic_value,
 )
+from scion.proposal.agentic_session_tools_config import (
+    _ACTIVE_SOLVER_SOURCE_READ_HEADROOM_CHARS,
+)
 from scion.proposal.llm_client import LLMRetryExhaustedError, LLMTimeoutError
 from scion.proposal.tools import ProposalObservation
 
 _CODE_PROMPT_STRING_CHARS = 1600
-_CODE_PROMPT_ALGORITHM_FILE_CHARS = 24000
-_CODE_PROMPT_ALGORITHM_SYMBOL_CHARS = 12000
+_CODE_PROMPT_ALGORITHM_FILE_CHARS = _ACTIVE_SOLVER_SOURCE_READ_HEADROOM_CHARS
+_CODE_PROMPT_ALGORITHM_SYMBOL_CHARS = _ACTIVE_SOLVER_SOURCE_READ_HEADROOM_CHARS
 _CODE_PROMPT_LIST_ITEMS = 12
 _CODE_PROMPT_MAP_ITEMS = 32
 _CODE_PROMPT_MAX_ALGORITHM_READS = 3

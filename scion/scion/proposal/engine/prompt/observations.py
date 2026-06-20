@@ -21,6 +21,7 @@ from scion.proposal.engine.prompt.solver_context_receipts import (
     _compact_source_digest,
     _is_full_algorithm_file_payload,
     _looks_like_sha256,
+    _solver_design_algorithm_symbol_reads,
     _same_fact_packet,
     _solver_design_full_algorithm_file_reads,
 )

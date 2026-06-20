@@ -20,6 +20,7 @@ from scion.proposal.engine.prompt.observations import (
     _active_solver_map_receipts_projection,
     _dedupe_tool_observations,
     _same_fact_packet,
+    _solver_design_algorithm_symbol_reads,
     _solver_design_full_algorithm_file_reads,
     _tool_observations_model_projection as _tool_observations_model_projection_base,
 )
@@ -299,9 +300,10 @@ def _agentic_research_context_block(
         )
     if observations:
         full_algorithm_reads = _solver_design_full_algorithm_file_reads(observations)
-        full_algorithm_read_ids = {
+        algorithm_symbol_reads = _solver_design_algorithm_symbol_reads(observations)
+        dedicated_source_observation_ids = {
             str(item.get("observation_id") or "")
-            for item in full_algorithm_reads
+            for item in [*full_algorithm_reads, *algorithm_symbol_reads]
             if str(item.get("observation_id") or "")
         }
         if full_algorithm_reads:
@@ -324,11 +326,31 @@ def _agentic_research_context_block(
                 "section when grounding a solver_design hypothesis.\n\n"
                 f"{_bounded_json(full_read_projection, _full_algorithm_read_chars(code_phase))}"
             )
+        if algorithm_symbol_reads:
+            symbol_read_projection = {
+                "projection_kind": "solver_design_algorithm_symbol_reads.v1",
+                "source_section": "agentic_tool_observations",
+                "prompt_contract": (
+                    "Successful context.read_algorithm_symbol observations for "
+                    "active solver-design files are projected here before the "
+                    "generic tool-observation section so section-level compaction "
+                    "cannot hide targeted source that a patch may need."
+                ),
+                "reads": algorithm_symbol_reads,
+            }
+            parts.append(
+                "## Solver-Design Algorithm Symbol Reads\n"
+                "These successful `context.read_algorithm_symbol` observations "
+                "are API-visible targeted source content for active solver-design "
+                "files. Use them when the selected symbol is sufficient; request "
+                "a full file read only when the surrounding file context is needed.\n\n"
+                f"{_bounded_json(symbol_read_projection, _full_algorithm_read_chars(code_phase))}"
+            )
         observations = _dedupe_tool_observations(
             observations,
             active_algorithm_facts=active_algorithm_facts,
             resume_context=resume_context,
-            full_read_observation_ids=full_algorithm_read_ids,
+            full_read_observation_ids=dedicated_source_observation_ids,
         )
         observations = _tool_observations_model_projection(
             observations,
@@ -339,9 +361,10 @@ def _agentic_research_context_block(
             "These are exposure-controlled tool observations gathered before "
             "generation. This section is a bounded semantic projection, not a "
             "raw append-only transcript; full algorithm file reads, active "
-            "facts, and preview repair details are projected into dedicated "
-            "sections above. Use the receipts and digests to decide what to "
-            "reread through tools when exact detail is needed.\n\n"
+            "algorithm symbol reads, active facts, and preview repair details "
+            "are projected into dedicated sections above. Use the receipts and "
+            "digests to decide what to reread through tools when exact detail "
+            "is needed.\n\n"
             f"{_bounded_json(observations, _agentic_observation_chars(code_phase))}"
         )
     return "\n\n".join(parts)
