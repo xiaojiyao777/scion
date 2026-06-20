@@ -46,14 +46,14 @@ After strict readiness passes, launch from WSL by running the prepared wrapper
 itself, not by reconstructing the long `scion run` command:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-9a4c985-hyptrace-6r-gpt55-20260620T202208Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-82824cc-postmarkers-6r-gpt55-20260620T203832Z-claw/run.sh
 ```
 
 Run the CVRP wrapper only after the warehouse run is underway or accepted for
 launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-9a4c985-hyptrace-4r-gpt55-20260620T202222Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-82824cc-postmarkers-4r-gpt55-20260620T203850Z-claw/run.sh
 ```
 
 The wrappers already enforce completion preflight, runtime guards, campaign
@@ -81,17 +81,17 @@ the planned commands only.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `9a4c985e`;
-the corresponding local framework repair commit is `1180f802`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `82824cc9`;
+the corresponding local framework repair commit is `ec700bb7`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection only. Run launch readiness on WSL, because prepared
 contracts and wrapper scripts intentionally contain WSL absolute paths and will
 fail identity checks if evaluated from the server-side mirror.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-9a4c985-hyptrace-6r-gpt55-20260620T202208Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-82824cc-postmarkers-6r-gpt55-20260620T203832Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-9a4c985-hyptrace-4r-gpt55-20260620T202222Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-82824cc-postmarkers-4r-gpt55-20260620T203850Z-claw`
 
 Readiness snapshot:
 
@@ -99,7 +99,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `9a4c985e`; strict readiness
+- Runtime guard status: prepared runtime commit `82824cc9`; strict readiness
   must keep reporting runtime guard OK. Treat all earlier prepared roots as
   superseded because runtime-guarded launcher, prompt-context, and postrun
   artifact-identity paths changed.
@@ -186,10 +186,13 @@ reports.
   readiness/report exit status fail readiness before delegated review. Launcher
   status-writer failure markers in `run.log` and effective wrapper-exit markers
   in `exit.txt` also fail readiness, so stale clean `run_status.json` cannot
-  hide failed postrun annotation. Research-context actionability also requires
-  an allowlisted formal hypothesis-generation prompt trace; code, target
-  intent, and unknown `hypothesis_*` call kinds cannot prove continuity signals
-  reached the next proposal prompt.
+  hide failed postrun annotation. Postrun acceptance/readiness/report failure
+  markers in `exit.txt` fail readiness as well, covering interrupted status
+  updates before `run_status.json` is refreshed.
+- Research-context actionability requires an allowlisted formal
+  hypothesis-generation prompt trace; code, target intent, and unknown
+  `hypothesis_*` call kinds cannot prove continuity signals reached the next
+  proposal prompt.
 - Screening gate, Decision, proposal feedback, and search memory must agree on
   marginal evidence: high-win-rate, non-negative, sub-practical-delta screening
   evidence is diagnostic follow-up material, not a promotable signal.
