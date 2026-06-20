@@ -1607,6 +1607,7 @@ def _research_context_actionability(
         brief.get("prompt_context_visibility_summary")
     )
     prompt_aggregate = _mapping_or_empty(prompt_summary.get("aggregate"))
+    call_kind_counts = _mapping_or_empty(prompt_aggregate.get("call_kind_counts"))
     density = _mapping_or_empty(prompt_aggregate.get("signal_density"))
     actionability = _mapping_or_empty(
         brief.get("research_context_actionability_summary")
@@ -1624,6 +1625,9 @@ def _research_context_actionability(
         failures.append("research_context_actionability_unavailable")
     if _int_or_zero(prompt_aggregate.get("block_family_trace_count")) <= 0:
         failures.append("prompt_block_family_trace_accounting_missing")
+    hypothesis_trace_count = _hypothesis_generation_trace_count(call_kind_counts)
+    if hypothesis_trace_count <= 0:
+        failures.append("prompt_hypothesis_research_context_trace_missing")
     if density.get("schema_version") != PROMPT_SIGNAL_DENSITY_SCHEMA:
         failures.append("prompt_signal_density_schema_stale")
     failures.extend(
@@ -1659,6 +1663,8 @@ def _research_context_actionability(
             "block_family_trace_count": prompt_aggregate.get(
                 "block_family_trace_count"
             ),
+            "call_kind_counts": call_kind_counts,
+            "hypothesis_generation_trace_count": hypothesis_trace_count,
             "signal_density_schema_version": density.get("schema_version"),
             "signal_density_report_only": density.get("report_only"),
             "signal_density_decision_features_excluded": density.get(
@@ -1683,6 +1689,18 @@ def _research_context_actionability(
             "weak_positive_missed": indicators.get("weak_positive_missed"),
         },
     )
+
+
+def _hypothesis_generation_trace_count(call_kind_counts: Mapping[str, Any]) -> int:
+    total = 0
+    for key, value in call_kind_counts.items():
+        text = str(key)
+        if text == "hypothesis" or (
+            text.startswith("hypothesis_")
+            and text != "hypothesis_target_intent"
+        ):
+            total += _int_or_zero(value)
+    return total
 
 
 def _branch_research_state_actionability(

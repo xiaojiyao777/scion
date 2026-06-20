@@ -1081,6 +1081,9 @@ def test_postrun_acceptance_requires_research_context_actionability(
     assert "prompt_block_family_trace_accounting_missing" in context_check["detail"][
         "failures"
     ]
+    assert "prompt_hypothesis_research_context_trace_missing" in context_check[
+        "detail"
+    ]["failures"]
     assert "prompt_signal_density_schema_stale" in context_check["detail"][
         "failures"
     ]
@@ -1094,6 +1097,50 @@ def test_postrun_acceptance_requires_research_context_actionability(
         check_tool.main([str(run_root), "--require-current-run-ready"])
         == check_tool.UNREADY_EXIT
     )
+
+
+def test_postrun_acceptance_rejects_code_only_research_context_trace(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-code-only-context")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": _warehouse_problem_evidence(),
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    aggregate = brief["prompt_context_visibility_summary"]["aggregate"]
+    aggregate["call_kind_counts"] = {"code": 2}
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
+    context_check = readiness["checks"]["research_context_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert prompt_check["status"] == "ok"
+    assert context_check["required"] is True
+    assert context_check["status"] == "failed"
+    assert "prompt_hypothesis_research_context_trace_missing" in context_check[
+        "detail"
+    ]["failures"]
+    assert context_check["detail"]["call_kind_counts"] == {"code": 2}
+    assert context_check["detail"]["hypothesis_generation_trace_count"] == 0
 
 
 def test_postrun_acceptance_rejects_review_surface_boundary_marker_gaps(
@@ -3199,6 +3246,7 @@ def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
         "aggregate": {
             "trace_count": 2,
             "block_family_trace_count": 2,
+            "call_kind_counts": {"hypothesis": 1, "code": 1},
             "block_family_totals": {
                 "research_signal": {
                     "trace_count": 2,
