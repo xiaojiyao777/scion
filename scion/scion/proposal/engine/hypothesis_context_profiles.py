@@ -86,6 +86,20 @@ _COMPACT_LEARNING_SCHEMA = "compact_cross_branch_learning.v1"
 _PROFILE_METADATA_SCHEMA = "hypothesis_context_profile.v1"
 _COMPACT_MEASUREMENT_DIAGNOSTICS_KEY = "compact_problem_measurement_diagnostics"
 _OPPORTUNITY_STATUS_RE = re.compile(r"\s+opportunity_status=\S+")
+_PROMOTED_ADAPTER_DIAGNOSTIC_KEYS = frozenset(
+    {
+        "measurement_context",
+        "screening_headroom",
+        "default_avoid_directions",
+        "measurable_opportunity_classes",
+        "mechanism_effect_ranking",
+        "opportunity_diagnostics",
+        "policy",
+        "taint",
+        "proposal_visibility_only",
+        "decision_features_excluded",
+    }
+)
 
 
 def derive_hypothesis_context_profile(
@@ -574,6 +588,61 @@ def _compact_problem_measurement_diagnostics(payload: Any) -> str:
                     "runtime_model",
                 ),
             ),
+            "measurement_context": _project_mapping(
+                payload.get("measurement_context"),
+                fields=(
+                    "runtime_model",
+                    "pairing_validity",
+                    "metric",
+                    "practical_screen_delta",
+                    "practical_validate_delta",
+                    "screening_mde_at_power_80",
+                    "recommended_min_seeds",
+                    "false_pass_rate_at_current_gate",
+                    "interpretation",
+                ),
+            ),
+            "screening_headroom": _project_mapping(
+                payload.get("screening_headroom"),
+                fields=(
+                    "scope",
+                    "metric",
+                    "case_count",
+                    "gap_pct_min",
+                    "gap_pct_max",
+                    "case_count_gap_pct_at_least_3",
+                    "case_details_omitted",
+                    "planning_use",
+                ),
+            ),
+            "default_avoid_directions": _short_sequence(
+                payload.get("default_avoid_directions")
+            ),
+            "measurable_opportunity_classes": _project_items(
+                payload.get("measurable_opportunity_classes"),
+                fields=(
+                    "mechanism_family",
+                    "required_evidence",
+                    "seed_report",
+                    "confidence",
+                    "reason_codes",
+                ),
+            ),
+            "mechanism_effect_ranking": _project_items(
+                payload.get("mechanism_effect_ranking"),
+                fields=(
+                    "rank",
+                    "mechanism_family",
+                    "evidence_status",
+                    "opportunity_status",
+                    "effect_status",
+                    "objective_effect_status",
+                    "summary",
+                    "recommended_action",
+                    "confidence",
+                    "reason_codes",
+                ),
+            ),
             "opportunity_diagnostics": _project_items(
                 payload.get("opportunity_diagnostics")
                 or payload.get("opportunity_hints"),
@@ -588,7 +657,7 @@ def _compact_problem_measurement_diagnostics(payload: Any) -> str:
                     "reason_codes",
                 ),
             ),
-            "adapter_diagnostics": _project_generic_value(
+            "adapter_diagnostics": _project_adapter_diagnostics(
                 payload.get("adapter_diagnostics")
             ),
             "policy": _project_generic_value(payload.get("policy")),
@@ -643,6 +712,19 @@ def _project_mapping(
             field: _project_generic_value(value.get(field))
             for field in fields
             if field in value
+        }
+    )
+
+
+def _project_adapter_diagnostics(value: Any) -> Any:
+    projected = _project_generic_value(value)
+    if not isinstance(projected, Mapping):
+        return projected
+    return _drop_empty(
+        {
+            key: child
+            for key, child in projected.items()
+            if key not in _PROMOTED_ADAPTER_DIAGNOSTIC_KEYS
         }
     )
 

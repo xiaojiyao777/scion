@@ -37,6 +37,10 @@ def test_cvrp_adapter_renders_proposal_only_measurement_opportunities() -> None:
     assert "unchanged_demand_slack_regret_insertion" in (
         payload["default_avoid_directions"]
     )
+    ranking = payload["mechanism_effect_ranking"]
+    assert ranking[0]["mechanism_family"] == "large_instance_intra_route_two_opt_seed"
+    assert ranking[0]["opportunity_status"] == "highest_current_followup"
+    assert "bks" not in json.dumps(ranking, sort_keys=True).lower()
     reason_codes = {
         code
         for item in payload["opportunity_diagnostics"]
@@ -77,8 +81,19 @@ def test_context_manager_projects_cvrp_adapter_opportunities_top_level() -> None
     assert payload["opportunity_diagnostics"][0]["diagnostic_type"] == (
         "measurement_power"
     )
+    assert payload["screening_headroom"]["case_count"] == 16
+    assert payload["measurable_opportunity_classes"][0]["mechanism_family"] == (
+        "construction_seed_portfolio"
+    )
+    assert payload["mechanism_effect_ranking"][0]["mechanism_family"] == (
+        "large_instance_intra_route_two_opt_seed"
+    )
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in compact
     assert "TRAJECTORY_DIVERGENT_LOW_SNR" in compact
+    assert "mechanism_effect_ranking" in compact
+    assert "highest_current_followup" in compact
+    assert "measurable_opportunity_classes" in compact
+    assert "case_count_gap_pct_at_least_3" in compact
     assert "construction seed" in compact.lower()
     assert "excluded_from_decision_features" in compact
     assert "hidden" not in compact.lower()
@@ -148,7 +163,20 @@ def test_adapter_opportunity_projection_drops_unapproved_fields() -> None:
                         "validation_case_details": "hidden",
                         "frozen_case_details": "hidden",
                     }
-                ]
+                ],
+                "mechanism_effect_ranking": [
+                    {
+                        "rank": 1,
+                        "mechanism_family": "safe_family",
+                        "effect_status": "positive_seed",
+                        "summary": "safe ranking summary",
+                        "recommended_action": "safe ranking action",
+                        "reason_codes": ["SAFE_RANKING"],
+                        "raw_pair_rows": [{"case": "hidden-ranking-row"}],
+                        "bks_gap_details": "hidden-ranking-bks-gap",
+                        "validation_case_details": "hidden-ranking-validation",
+                    }
+                ],
             }
 
     payload = _problem_measurement_diagnostics(
@@ -176,6 +204,8 @@ def test_adapter_opportunity_projection_drops_unapproved_fields() -> None:
         "recommended_action": "use direct objective-effect evidence",
         "reason_codes": ["LOW_SNR"],
     }
+    assert payload["mechanism_effect_ranking"][0]["mechanism_family"] == "safe_family"
+    assert "SAFE_RANKING" in compact
     assert "safe proposal planning summary" in rendered_payload
     assert "keep this adapter note" in rendered_payload
     assert "LOW_SNR" in compact
@@ -186,6 +216,9 @@ def test_adapter_opportunity_projection_drops_unapproved_fields() -> None:
         "hidden-pair-evidence",
         "bks_gap_details",
         "hidden-bks-gap",
+        "hidden-ranking-row",
+        "hidden-ranking-bks-gap",
+        "hidden-ranking-validation",
         "prompt_ratios",
         "research_signal_ratio",
         "llm_text",

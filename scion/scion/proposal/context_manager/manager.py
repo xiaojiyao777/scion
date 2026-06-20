@@ -411,6 +411,7 @@ def _problem_measurement_diagnostics(
             "decision_features_excluded": True,
             "adapter_diagnostics": adapter_payload,
         }
+        payload.update(_adapter_proposal_diagnostic_signals(adapter_payload))
         if adapter_opportunities:
             payload["opportunity_diagnostics"] = adapter_opportunities
         return payload
@@ -466,6 +467,7 @@ def _problem_measurement_diagnostics(
     adapter_payload = _adapter_problem_measurement_diagnostics(adapter)
     if adapter_payload:
         adapter_opportunities = _adapter_opportunity_diagnostics(adapter_payload)
+        payload.update(_adapter_proposal_diagnostic_signals(adapter_payload))
         if adapter_opportunities:
             payload["opportunity_diagnostics"] = adapter_opportunities
         payload["adapter_diagnostics"] = adapter_payload
@@ -574,6 +576,23 @@ def _adapter_opportunity_diagnostics(
         if projected:
             items.append(projected)
     return items[:8]
+
+
+def _adapter_proposal_diagnostic_signals(
+    adapter_payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    fields = (
+        "measurement_context",
+        "screening_headroom",
+        "default_avoid_directions",
+        "measurable_opportunity_classes",
+        "mechanism_effect_ranking",
+    )
+    return {
+        field: adapter_payload[field]
+        for field in fields
+        if adapter_payload.get(field) not in ("", None, [], {}, ())
+    }
 
 
 def _proposal_branch_lesson_usage_requirement(

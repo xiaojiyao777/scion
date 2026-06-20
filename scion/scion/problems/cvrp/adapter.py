@@ -232,6 +232,92 @@ class CvrpAdapter:
                     ),
                 },
             ],
+            "mechanism_effect_ranking": [
+                {
+                    "rank": 1,
+                    "mechanism_family": "large_instance_intra_route_two_opt_seed",
+                    "evidence_status": "external_seed_positive_current_run_required",
+                    "opportunity_status": "highest_current_followup",
+                    "effect_status": "proposal_seed_positive_not_promotion_evidence",
+                    "summary": (
+                        "External-control replay is the strongest current "
+                        "mechanism seed, but it is proposal guidance only "
+                        "until a bounded/deadline-aware current run shows "
+                        "direct objective effect and wall-clock evidence."
+                    ),
+                    "recommended_action": (
+                        "Prefer this family only with bounded intra-route "
+                        "two-opt phase telemetry and pair-level objective, "
+                        "feasibility, route-count, and elapsed-time evidence."
+                    ),
+                    "reason_codes": [
+                        "CVRP_LARGE_INSTANCE_TWO_OPT_SEED",
+                        "BOUNDED_DEADLINE_REQUIRED",
+                    ],
+                },
+                {
+                    "rank": 2,
+                    "mechanism_family": "bounded_local_search_variant",
+                    "evidence_status": "measurable_but_needs_direct_effect",
+                    "opportunity_status": "eligible_if_causal_path_changes",
+                    "effect_status": "unknown_current_effect",
+                    "summary": (
+                        "Bounded local-search variants remain plausible only "
+                        "when they change a specific causal path and report "
+                        "direct route-level objective deltas under the budget."
+                    ),
+                    "recommended_action": (
+                        "Avoid broad VNS removal or unbounded polish; declare "
+                        "the bounded trigger, budget poll, and direct effect "
+                        "field before formal screening."
+                    ),
+                    "reason_codes": [
+                        "BOUNDED_SEARCH_REQUIRED",
+                        "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
+                    ],
+                },
+                {
+                    "rank": 3,
+                    "mechanism_family": "destroy_repair_selection",
+                    "evidence_status": "plausible_but_prior_variants_weak",
+                    "opportunity_status": "eligible_if_materially_different",
+                    "effect_status": "prior_weak_or_no_accepted_effect",
+                    "summary": (
+                        "Destroy/repair selection can be revisited only with "
+                        "a materially different selection rule and per-case "
+                        "total_distance attribution."
+                    ),
+                    "recommended_action": (
+                        "Do not repeat unchanged demand-slack, route-merge, "
+                        "or cluster-biased removal variants without a new "
+                        "causal path."
+                    ),
+                    "reason_codes": [
+                        "DEFAULT_AVOID_PRIOR_WEAK_OR_NEGATIVE",
+                        "MATERIAL_DIFFERENCE_REQUIRED",
+                    ],
+                },
+                {
+                    "rank": 4,
+                    "mechanism_family": "construction_seed_portfolio",
+                    "evidence_status": "requires_same_run_seed_baseline",
+                    "opportunity_status": "lower_until_seed_effect_is_isolated",
+                    "effect_status": "activation_not_objective_effect",
+                    "summary": (
+                        "Seed or portfolio expansion has not been useful when "
+                        "it only increases activation or fallback diversity."
+                    ),
+                    "recommended_action": (
+                        "Use only with a same-run seed baseline or accepted "
+                        "same-mechanism delta showing objective-changing seed "
+                        "effect."
+                    ),
+                    "reason_codes": [
+                        "CONSTRUCTION_SEED_NEEDS_DIRECT_EFFECT",
+                        "ACTIVATION_IS_NOT_OBJECTIVE_EFFECT",
+                    ],
+                },
+            ],
             "opportunity_diagnostics": [
                 {
                     "diagnostic_type": "measurement_power",
