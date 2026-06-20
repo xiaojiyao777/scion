@@ -134,58 +134,36 @@ Prepared run shape:
 
 ## Framework Guarantees To Preserve
 
-- LLM output, repair diagnostics, branch lessons, prompt ratios, and
-  problem-owned research diagnostics remain tainted proposal material. They must
-  not enter Decision, `DecisionFeatures`, promotion, scheduler state, or solver
-  semantics.
-- Measurement declarations, A/A calibration, practical-delta resolution,
-  runtime-model semantics, low-SNR lifecycle behavior, prompt diagnostics, and
-  prepared `research_focus` projection stay problem-owned or deterministic
-  control-plane inputs.
-- Launch readiness is the operator-facing authority for prepared roots. It
-  checks prepared contract/brief identity, prompt-context bridge, problem
-  handoff, runtime guards, model route, campaign launch command consistency,
-  absolute launch paths, completion preflight, strict postrun rebuild/readiness,
-  and prepared/postrun rebuild identity.
-- Runtime semantics distinguish comparative runtime evidence from
-  budget-exhausting solver behavior. Budget-exhausting saturation and cached
-  runtime ties must not create meaningless fresh-replay pressure, lifecycle
-  fragmentation, or proposal feedback noise.
-- Code-phase prompts must retain direct source visibility for champion/current
-  branch/target files and declared integration files. Source-read schemas,
-  registry caps, prompt projection, symbol reads, and retry-block placement must
-  keep the current 96k source-window path available for solver-design/code
-  prompts.
-- Postrun acceptance cannot silently pass when strict rebuild/readiness fails:
-  launcher wrappers promote strict postrun acceptance failure to an effective
-  wrapper failure and annotate top-level `run_status.json`.
-- The top-level analysis brief must preserve report-only boundary markers:
-  `report_only=true`, `quality_judgment=false`,
-  `decision_features_excluded=true`, and no campaign/scheduler/promotion
-  mutation claims.
-- Warehouse/CVRP postrun conclusions require current-run evidence payloads,
-  formal hypothesis prompt traces, runtime-evidence consistency, and
-  problem-owned review rules. Free-text summary claims alone are never
-  acceptance evidence.
-- Current-run warehouse/CVRP problem summaries, review-input summaries,
-  failure-taxonomy summaries, prompt/source visibility summaries, measurement
-  evidence, runtime-budget evidence, continuity evidence, and CVRP bounded
-  two-opt direct-evidence summaries must match recomputed current-run artifacts
-  before delegated review can mark the analysis ready. Review-input entry paths
-  plus prompt-context and failure-taxonomy entry paths must also match current
-  artifact identity through a local/WSL-safe path-tail signature.
-- Problem-summary `interpretation`, `evidence_gaps`,
-  `review_axes_actionability`, and launch-required flags must also match the
-  recomputed warehouse/CVRP summary from the current review-input summaries;
-  stale or overly optimistic delegated-review conclusions are rejected even
-  when their gaps would otherwise be nonblocking.
-- Runtime telemetry summaries preserve explicit inactive observations
-  (`candidate_false`, activation status `inactive`) separately from numeric zero
-  counters, so delegated review and proposal feedback do not confuse a
-  non-triggered mechanism with a no-effect mechanism.
-- Screening gate, Decision, proposal feedback, and search memory agree on
+Keep this section as a compact invariant checklist. Detailed repair evidence
+and exact guard fields live in `scion/TASK.md` and the focused v0.4 experiment
+reports.
+
+- v3 boundary stays hard: LLM output, repair diagnostics, branch lessons,
+  prompt ratios, and problem-owned research diagnostics remain tainted proposal
+  material and excluded from Decision, `DecisionFeatures`, promotion, scheduler
+  state, and solver semantics.
+- Measurement/runtime/lifecycle/context repairs stay problem-owned or
+  deterministic control-plane inputs. CVRP/warehouse diagnostics may guide
+  readiness, proposal context, and postrun review only through schema-validated
+  fields.
+- Launch readiness is the operator-facing authority for prepared roots. It must
+  guard prepared contract identity, prompt-context bridge, runtime paths, model
+  route, completion preflight, wrapper command consistency, and strict postrun
+  rebuild/readiness before launch.
+- Runtime semantics must keep budget-exhausting solver saturation and cached
+  runtime ties from creating meaningless fresh-replay pressure, lifecycle churn,
+  or proposal feedback noise.
+- Code-phase prompts must retain direct champion/current-branch/target source
+  visibility and declared integration-file visibility; compression may remove
+  boilerplate, not the research object code.
+- Postrun acceptance must fail closed unless warehouse/CVRP conclusions,
+  review-input summaries, failure taxonomy, prompt/source visibility,
+  runtime-budget evidence, continuity evidence, and bounded two-opt direct
+  evidence recompute from current-run artifacts with matching local/WSL-safe
+  artifact identity.
+- Screening gate, Decision, proposal feedback, and search memory must agree on
   marginal evidence: high-win-rate, non-negative, sub-practical-delta screening
-  evidence is a diagnostic validation candidate, not a promotable signal.
+  evidence is diagnostic follow-up material, not a promotable signal.
 
 ## Warehouse
 
