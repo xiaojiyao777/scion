@@ -545,6 +545,9 @@ def build_readiness(
     launch_env_summary = _launch_env_permissions_summary(
         checks.get("launch_env_secret_permissions")
     )
+    campaign_marker_summary = _campaign_execution_marker_summary(
+        checks.get("run_script_campaign_execution_marker_enforced")
+    )
     launch_blockers = _launch_blockers(
         static_ready=static_ready,
         completion_preflight=completion_preflight,
@@ -588,6 +591,21 @@ def build_readiness(
         "runtime_guard_paths": runtime_guard_summary.get("runtime_guard_paths"),
         "launch_env_secret_permissions": launch_env_summary.get("status"),
         "launch_env_mode": launch_env_summary.get("mode"),
+        "campaign_execution_marker_summary": campaign_marker_summary,
+        "campaign_execution_marker_status": campaign_marker_summary.get("status"),
+        "campaign_execution_marker_ok": campaign_marker_summary.get("ok"),
+        "campaign_execution_marker_failure_reasons": campaign_marker_summary.get(
+            "failure_reasons"
+        ),
+        "campaign_execution_marker_position": campaign_marker_summary.get(
+            "marker_position"
+        ),
+        "campaign_execution_marker_preflight_failure_exit_position": (
+            campaign_marker_summary.get("preflight_failure_exit_position")
+        ),
+        "campaign_execution_marker_campaign_command_position": (
+            campaign_marker_summary.get("campaign_command_position")
+        ),
         "failed_required_checks": failed_required_checks,
         "failed_static_required_checks": failed_static_required_checks,
         "failed_optional_checks": failed_optional_checks,
@@ -694,6 +712,53 @@ def _launch_env_permissions_summary(item: Any) -> dict[str, Any]:
     }
 
 
+def _campaign_execution_marker_summary(item: Any) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {
+            "status": "missing",
+            "ok": False,
+            "failure_reasons": [],
+            "marker_position": None,
+            "preflight_failure_exit_position": None,
+            "campaign_command_position": None,
+        }
+    detail = item.get("detail")
+    detail_map = detail if isinstance(detail, dict) else {}
+    raw_failures = detail_map.get("failures")
+    failures = raw_failures if isinstance(raw_failures, list) else []
+    failure_reasons = [
+        str(failure.get("reason"))
+        for failure in failures
+        if isinstance(failure, dict) and failure.get("reason")
+    ]
+    marker_positions = {
+        "file": detail_map.get("marker_file_position"),
+        "schema": detail_map.get("marker_schema_position"),
+        "log": detail_map.get("marker_log_position"),
+    }
+    executable_positions = [
+        value
+        for value in marker_positions.values()
+        if isinstance(value, int) and value >= 0
+    ]
+    return {
+        "status": item.get("status"),
+        "required": bool(item.get("required")),
+        "ok": item.get("status") == "ok",
+        "failure_reasons": failure_reasons,
+        "marker_position": min(executable_positions) if executable_positions else None,
+        "marker_positions": marker_positions,
+        "preflight_proxy_position": detail_map.get("preflight_proxy_position"),
+        "preflight_failure_exit_position": detail_map.get(
+            "preflight_failure_exit_position"
+        ),
+        "campaign_command_position": detail_map.get("campaign_command_position"),
+        "ignored_non_executable_marker_counts": detail_map.get(
+            "ignored_non_executable_marker_counts"
+        ),
+    }
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     lines = [
         f"# Launch Readiness: {Path(str(report['run_root'])).name}",
@@ -708,6 +773,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Legacy `ready` meaning: {_display(report.get('ready_meaning'))}",
         f"- Launch blockers: `{_display(report.get('launch_blockers'))}`",
         f"- Completion preflight required: `{_display(report.get('completion_preflight_required'))}`",
+        "- Campaign execution marker: "
+        f"`{_display(report.get('campaign_execution_marker_status'))}`",
+        "- Campaign execution marker failures: "
+        f"`{_display(report.get('campaign_execution_marker_failure_reasons'))}`",
         f"- Failed required checks: `{_display(report.get('failed_required_checks'))}`",
         "",
         "## Checks",

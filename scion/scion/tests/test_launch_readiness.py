@@ -128,6 +128,26 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     ]
     assert report["launch_env_secret_permissions"] == "ok"
     assert report["launch_env_mode"] == "0o600"
+    marker_summary = report["campaign_execution_marker_summary"]
+    assert marker_summary["status"] == "ok"
+    assert marker_summary["required"] is True
+    assert marker_summary["ok"] is True
+    assert marker_summary["failure_reasons"] == []
+    assert report["campaign_execution_marker_status"] == "ok"
+    assert report["campaign_execution_marker_ok"] is True
+    assert report["campaign_execution_marker_failure_reasons"] == []
+    assert isinstance(report["campaign_execution_marker_position"], int)
+    assert isinstance(
+        report["campaign_execution_marker_preflight_failure_exit_position"], int
+    )
+    assert isinstance(
+        report["campaign_execution_marker_campaign_command_position"], int
+    )
+    assert (
+        report["campaign_execution_marker_preflight_failure_exit_position"]
+        < report["campaign_execution_marker_position"]
+        < report["campaign_execution_marker_campaign_command_position"]
+    )
     assert report["checks"]["run_script_data_root_failure_reports"]["status"] == "ok"
     assert report["checks"]["run_script_api_key_env_failure_reports"]["status"] == "ok"
     assert report["checks"]["completion_preflight"]["status"] == "skipped"
@@ -150,6 +170,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["completion_auth_pool"] is None
     markdown = readiness_tool.render_markdown(report)
     assert markdown.startswith("# Launch Readiness:")
+    assert "Campaign execution marker: `ok`" in markdown
     assert "Launch only after rerunning this tool" in markdown
 
 
@@ -1727,10 +1748,17 @@ def test_launch_readiness_rejects_missing_campaign_execution_marker(
     assert report["static_ready"] is False
     marker_check = report["checks"]["run_script_campaign_execution_marker_enforced"]
     assert marker_check["status"] == "failed"
+    assert report["campaign_execution_marker_status"] == "failed"
+    assert report["campaign_execution_marker_ok"] is False
     reasons = {failure["reason"] for failure in marker_check["detail"]["failures"]}
     assert "campaign_execution_marker_file_write_missing" in reasons
     assert "campaign_execution_marker_schema_missing" in reasons
     assert "campaign_execution_marker_log_marker_missing" in reasons
+    assert set(report["campaign_execution_marker_failure_reasons"]) >= {
+        "campaign_execution_marker_file_write_missing",
+        "campaign_execution_marker_schema_missing",
+        "campaign_execution_marker_log_marker_missing",
+    }
 
 
 def test_launch_readiness_rejects_campaign_execution_marker_after_campaign(
@@ -1752,9 +1780,14 @@ def test_launch_readiness_rejects_campaign_execution_marker_after_campaign(
     assert report["static_ready"] is False
     marker_check = report["checks"]["run_script_campaign_execution_marker_enforced"]
     assert marker_check["status"] == "failed"
+    assert report["campaign_execution_marker_status"] == "failed"
+    assert report["campaign_execution_marker_ok"] is False
     assert {"reason": "campaign_execution_marker_after_campaign"} in marker_check[
         "detail"
     ]["failures"]
+    assert "campaign_execution_marker_after_campaign" in report[
+        "campaign_execution_marker_failure_reasons"
+    ]
 
 
 def test_launch_readiness_rejects_campaign_execution_marker_before_preflight_exit(
@@ -1777,9 +1810,14 @@ def test_launch_readiness_rejects_campaign_execution_marker_before_preflight_exi
     assert report["static_ready"] is False
     marker_check = report["checks"]["run_script_campaign_execution_marker_enforced"]
     assert marker_check["status"] == "failed"
+    assert report["campaign_execution_marker_status"] == "failed"
+    assert report["campaign_execution_marker_ok"] is False
     assert {
         "reason": "campaign_execution_marker_before_preflight_failure_exit"
     } in marker_check["detail"]["failures"]
+    assert "campaign_execution_marker_before_preflight_failure_exit" in report[
+        "campaign_execution_marker_failure_reasons"
+    ]
 
 
 def test_launch_readiness_rejects_missing_cvrp_code_constraint_bridge(
@@ -3485,6 +3523,9 @@ def test_launch_readiness_cli_require_launch_ready_implies_completion_preflight(
     assert payload["completion_http_status"] == 401
     assert payload["completion_classification"] == "not_authenticated"
     assert payload["completion_code"] == "invalid_api_key"
+    assert payload["campaign_execution_marker_status"] == "ok"
+    assert payload["campaign_execution_marker_ok"] is True
+    assert payload["campaign_execution_marker_failure_reasons"] == []
 
 
 def test_launch_readiness_cli_require_launch_ready_accepts_real_preflight_success(
