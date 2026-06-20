@@ -81,7 +81,7 @@ Strict launch readiness for both roots reports:
 - `failed_static_required_checks=[]`
 - `failed_required_checks=["completion_preflight"]`
 - completion preflight HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`, auth pool `active=0`, `refreshing=1`, `total=1`
+  `code=invalid_api_key`, auth pool `active=0`, `expired=1`, `total=1`
 
 No campaign was launched. Refresh the WSL/local proxy login and rerun strict
 launch readiness before starting warehouse, then CVRP.
