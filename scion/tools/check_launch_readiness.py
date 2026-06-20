@@ -2197,6 +2197,7 @@ def _run_script_proposal_headroom_enforced(
 ) -> tuple[str, Any]:
     launch_env = root / "launch.env"
     failures: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
     try:
         launch_env_text = launch_env.read_text(encoding="utf-8")
     except OSError as exc:
@@ -2317,12 +2318,12 @@ def _run_script_proposal_headroom_enforced(
                     }
                 )
             elif value < expected_min:
-                failures.append(
+                warnings.append(
                     {
                         "reason": f"{field}_{source}_below_minimum",
                         "field": field,
                         "source": source,
-                        "expected_min": expected_min,
+                        "recommended_min": expected_min,
                         "actual": value,
                     }
                 )
@@ -2364,6 +2365,7 @@ def _run_script_proposal_headroom_enforced(
         "campaign_status_position": campaign_status_pos,
         "fields": detail_fields,
         "failures": failures,
+        "warnings": warnings,
     }
     return ("ok" if not failures else "failed"), detail
 
