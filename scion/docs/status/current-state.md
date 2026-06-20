@@ -41,13 +41,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at prepared runtime commit `00e8e07b`; local mirrors exist under
-`/home/clawd/research/scion-experiments/` with the same directory names.
+Generated on WSL at launch-authoritative prepared runtime commit `330b90e2`
+after local equivalent commit `4544a0d4`; local mirrors exist under
+`/home/clawd/research/scion-experiments/` with the same directory names for
+inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-00e8e07b-preflight-6r-gpt55-20260620T085531Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-330b90e2-preflight-6r-gpt55-20260620T091333Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-00e8e07b-preflight-4r-gpt55-20260620T085532Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-330b90e2-preflight-4r-gpt55-20260620T091333Z-claw`
 
 Readiness snapshot:
 
@@ -55,8 +57,8 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `00e8e07b`; later
-  doc/status-only commits are acceptable only when readiness reports
+- Runtime guard status: WSL checkout matches prepared runtime commit `330b90e2`.
+  Later doc/status-only commits are acceptable only when readiness reports
   `runtime_guard_paths_unchanged_since_prepare`.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
   `prepared_run_manifest.v1.json` agree on the problem/protocol/split/seeds,

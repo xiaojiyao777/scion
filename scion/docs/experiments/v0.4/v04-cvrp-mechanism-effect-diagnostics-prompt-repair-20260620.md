@@ -75,7 +75,7 @@ python -m py_compile \
 # clean
 ```
 
-WSL after applying the same patch as commit `00e8e07b`:
+WSL after applying the same patch as commit `330b90e2`:
 
 ```bash
 PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
@@ -91,13 +91,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 ## Prepared Roots
 
-The runtime-guarded prepared roots were regenerated from WSL commit `00e8e07b`
+The runtime-guarded prepared roots were regenerated from WSL commit `330b90e2`
 and mirrored locally.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-00e8e07b-preflight-6r-gpt55-20260620T085531Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-330b90e2-preflight-6r-gpt55-20260620T091333Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-00e8e07b-preflight-4r-gpt55-20260620T085532Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-330b90e2-preflight-4r-gpt55-20260620T091333Z-claw`
 
 Strict launch readiness for both roots reports:
 
