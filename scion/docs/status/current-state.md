@@ -40,13 +40,13 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at runtime commit `7647b1d6`; local mirrors exist under
+Generated on WSL at prepared runtime commit `bb629c12`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postruninput-7647b1d6-preflight-6r-gpt55-20260620T053307Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-qualityreason-bb629c12-preflight-6r-gpt55-20260620T054452Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-postruninput-7647b1d6-preflight-4r-gpt55-20260620T053307Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-qualityreason-bb629c12-preflight-4r-gpt55-20260620T054506Z-claw`
 
 Readiness snapshot:
 
@@ -54,7 +54,8 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared/runtime commit matches `7647b1d6`
+- Runtime guard status: prepared commit `bb629c12`, with launch-critical
+  runtime guard paths unchanged after any docs-only snapshot commits.
 
 Prepared run shape:
 
