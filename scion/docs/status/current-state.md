@@ -44,15 +44,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `febeaf11`;
-the corresponding local framework repair commit is `e4a30277`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `f22ad5f4`;
+the corresponding local framework repair commit is `b2d19a59`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-febeaf11-runtimeinactive-6r-gpt55-20260620T150740Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-f22ad5f4-pathidentity-6r-gpt55-20260620T153154Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-febeaf11-runtimeinactive-4r-gpt55-20260620T150741Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-f22ad5f4-pathidentity-4r-gpt55-20260620T153155Z-claw`
 
 Readiness snapshot:
 
@@ -60,9 +60,10 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `febeaf11`; strict readiness
-  must keep reporting runtime guard OK. Doc/status-only commits after prepare
-  are acceptable only when readiness reports unchanged runtime guard paths.
+- Runtime guard status: prepared runtime commit `f22ad5f4`; strict readiness
+  must keep reporting runtime guard OK. The previous `febeaf11-runtimeinactive`
+  roots are superseded because the postrun acceptance path-identity repair
+  changed a runtime-guarded tool path.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
   `prepared_run_manifest.v1.json` agree on the problem/protocol/split/seeds,
   campaign directory, rounds, time limit, measurement-governance mode, and
@@ -185,6 +186,7 @@ Prepared run shape:
   - `scion/docs/experiments/v0.4/v04-code-prompt-solver-source-96k-projection-repair-20260620.md`
   - `scion/docs/experiments/v0.4/v04-screening-marginal-gate-decision-alignment-20260620.md`
   - `scion/docs/experiments/v0.4/v04-postrun-review-input-path-identity-repair-20260620.md`
+  - `scion/docs/experiments/v0.4/v04-pathidentity-prepared-root-refresh-20260620.md`
   - `scion/docs/experiments/v0.4/v04-postrun-runtime-budget-side-summary-20260620.md`
   - `scion/docs/experiments/v0.4/v04-runtime-telemetry-inactive-observation-repair-20260620.md`
   - `scion/docs/experiments/v0.4/v04-cvrp-mechanism-effect-diagnostics-prompt-repair-20260620.md`
