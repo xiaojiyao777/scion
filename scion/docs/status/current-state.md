@@ -41,13 +41,13 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at prepared runtime commit `80164e50`; local mirrors exist under
+Generated on WSL at prepared runtime commit `0ed9559b`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-reviewinputs-80164e50-preflight-6r-gpt55-20260620T071223Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-briefboundary-0ed9559b-preflight-6r-gpt55-20260620T072205Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-reviewinputs-80164e50-preflight-4r-gpt55-20260620T071223Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-briefboundary-0ed9559b-preflight-4r-gpt55-20260620T072205Z-claw`
 
 Readiness snapshot:
 
@@ -55,7 +55,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared commit `80164e50`, actual commit `80164e50`;
+- Runtime guard status: prepared commit `0ed9559b`, actual commit `0ed9559b`;
   launch-critical runtime guard paths are clean and commit-consistent.
 
 Prepared run shape:
@@ -90,6 +90,10 @@ Prepared run shape:
 - Postrun acceptance cannot silently pass when strict rebuild/readiness fails:
   launcher wrappers promote strict postrun acceptance failure to an effective
   wrapper failure and annotate top-level `run_status.json`.
+- The top-level analysis brief must preserve report-only boundary markers:
+  `report_only=true`, `quality_judgment=false`,
+  `decision_features_excluded=true`, and no campaign/scheduler/promotion
+  mutation claims.
 - Warehouse/CVRP postrun conclusions require current-run evidence payloads,
   runtime-evidence consistency, formal hypothesis prompt traces, and
   problem-owned review rules; summary prose alone is not acceptance evidence.
