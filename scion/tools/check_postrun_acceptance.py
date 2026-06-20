@@ -18,6 +18,7 @@ from postrun_artifact_inventory import build_inventory  # noqa: E402
 from postrun_analysis_brief import (  # noqa: E402
     _branch_research_state_summary,
     _champion_progress_summary,
+    _cvrp_large_twoopt_summary,
     _cvrp_large_twoopt_mechanism_signal,
     _failure_taxonomy_summary,
     _measurement_effect_summary,
@@ -26,6 +27,7 @@ from postrun_analysis_brief import (  # noqa: E402
     _research_continuity_summary,
     _research_context_actionability_summary,
     _runtime_feedback_summary,
+    _warehouse_followup_summary,
     _warehouse_followup_continuity_signal,
     _warehouse_followup_measurement_signal,
 )
@@ -1259,6 +1261,15 @@ def _problem_summary_input_consistency(
     runtime_summary = _mapping_or_empty(brief.get("runtime_feedback_summary"))
     continuity_summary = _mapping_or_empty(brief.get("research_continuity_summary"))
     failure_summary = _mapping_or_empty(brief.get("failure_taxonomy_summary"))
+    expected_problem_summary = _expected_problem_summary_from_inputs(
+        expected_key,
+        inventory,
+        protocol_accounting_summary=protocol_summary,
+        measurement_effect_summary=measurement_summary,
+        runtime_feedback_summary=runtime_summary,
+        failure_taxonomy_summary=failure_summary,
+        research_continuity_summary=continuity_summary,
+    )
     failure_aggregate = _mapping_or_empty(failure_summary.get("aggregate"))
     proposal_quality = _mapping_or_empty(failure_aggregate.get("proposal_quality"))
     input_quality_block_signal = max(
@@ -1286,6 +1297,27 @@ def _problem_summary_input_consistency(
 
     failures: list[str] = []
     interpretation = str(summary.get("interpretation") or "")
+    expected_interpretation = str(expected_problem_summary.get("interpretation") or "")
+    summary_evidence_gaps = _string_list(summary.get("evidence_gaps"))
+    expected_evidence_gaps = _string_list(expected_problem_summary.get("evidence_gaps"))
+    if interpretation != expected_interpretation:
+        failures.append("problem_summary_interpretation_mismatch")
+    if sorted(summary_evidence_gaps) != sorted(expected_evidence_gaps):
+        failures.append("problem_summary_evidence_gaps_mismatch")
+    if summary.get("review_axes_actionability") != expected_problem_summary.get(
+        "review_axes_actionability"
+    ):
+        failures.append("problem_summary_review_axes_actionability_mismatch")
+    launch_required_field = {
+        "warehouse_followup_summary": "launch_required_before_plateau_conclusion",
+        "cvrp_large_twoopt_summary": "launch_required_before_twoopt_conclusion",
+    }.get(expected_key)
+    if (
+        launch_required_field is not None
+        and summary.get(launch_required_field)
+        != expected_problem_summary.get(launch_required_field)
+    ):
+        failures.append("problem_summary_launch_required_flag_mismatch")
     if not evidence:
         failures.append("problem_summary_evidence_missing")
     if summary_protocol_evaluated != input_protocol_evaluated:
@@ -1560,6 +1592,26 @@ def _problem_summary_input_consistency(
             "problem_family": problem_family,
             "summary": expected_key,
             "interpretation": interpretation,
+            "expected_interpretation": expected_interpretation,
+            "summary_evidence_gaps": summary_evidence_gaps,
+            "expected_evidence_gaps": expected_evidence_gaps,
+            "summary_review_axes_actionability": summary.get(
+                "review_axes_actionability"
+            ),
+            "expected_review_axes_actionability": expected_problem_summary.get(
+                "review_axes_actionability"
+            ),
+            "launch_required_field": launch_required_field,
+            "summary_launch_required_before_conclusion": (
+                summary.get(launch_required_field)
+                if launch_required_field is not None
+                else None
+            ),
+            "expected_launch_required_before_conclusion": (
+                expected_problem_summary.get(launch_required_field)
+                if launch_required_field is not None
+                else None
+            ),
             "failures": failures,
             "summary_protocol_evaluated_candidates": summary_protocol_evaluated,
             "input_protocol_evaluated_candidates": input_protocol_evaluated,
@@ -1789,6 +1841,30 @@ def _problem_summary_input_consistency(
             ),
         },
     )
+
+
+def _expected_problem_summary_from_inputs(
+    expected_key: str,
+    inventory: Mapping[str, Any],
+    *,
+    protocol_accounting_summary: Mapping[str, Any],
+    measurement_effect_summary: Mapping[str, Any],
+    runtime_feedback_summary: Mapping[str, Any],
+    failure_taxonomy_summary: Mapping[str, Any],
+    research_continuity_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    kwargs = {
+        "protocol_accounting_summary": protocol_accounting_summary,
+        "measurement_effect_summary": measurement_effect_summary,
+        "runtime_feedback_summary": runtime_feedback_summary,
+        "failure_taxonomy_summary": failure_taxonomy_summary,
+        "research_continuity_summary": research_continuity_summary,
+    }
+    if expected_key == "warehouse_followup_summary":
+        return _warehouse_followup_summary(inventory, **kwargs)
+    if expected_key == "cvrp_large_twoopt_summary":
+        return _cvrp_large_twoopt_summary(inventory, **kwargs)
+    return {}
 
 
 def _is_protocol_evaluated_interpretation(interpretation: str) -> bool:

@@ -3169,6 +3169,90 @@ def test_postrun_acceptance_readiness_accepts_nonblocking_problem_summary_gaps(
     assert prompt_check["status"] == "ok"
 
 
+def test_postrun_acceptance_rejects_stale_problem_summary_interpretation(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-stale-interpretation")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": _warehouse_problem_evidence(),
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_positive_effect_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    consistency_check = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert consistency_check["status"] == "failed"
+    failures = consistency_check["detail"]["failures"]
+    assert "problem_summary_interpretation_mismatch" in failures
+    assert consistency_check["detail"]["interpretation"] == (
+        "protocol_evaluated_positive_effect_review_ready"
+    )
+    assert consistency_check["detail"]["expected_interpretation"] == (
+        "protocol_evaluated_plateau_review_ready"
+    )
+
+
+def test_postrun_acceptance_rejects_stale_problem_summary_evidence_gaps(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "cvrp-run-stale-evidence-gaps")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "cvrp"
+    brief["cvrp_large_twoopt_summary"] = {
+        "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": _cvrp_problem_evidence(),
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_without_large_twoopt_signal",
+        "problem_family": "cvrp",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+    consistency_check = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert problem_check["status"] == "ok"
+    assert consistency_check["status"] == "failed"
+    failures = consistency_check["detail"]["failures"]
+    assert "problem_summary_evidence_gaps_mismatch" in failures
+    assert consistency_check["detail"]["summary_evidence_gaps"] == []
+    assert consistency_check["detail"]["expected_evidence_gaps"] == [
+        "missing_large_twoopt_mechanism_signal"
+    ]
+
+
 def test_postrun_acceptance_rejects_problem_summary_without_evidence_payload(
     tmp_path: Path,
 ) -> None:
@@ -3225,10 +3309,48 @@ def test_postrun_acceptance_accepts_cvrp_missing_direct_evidence_conclusion(
     brief_path = _latest_analysis_brief_path(run_root)
     brief = json.loads(brief_path.read_text(encoding="utf-8"))
     brief["prepared_run_contract"]["problem_family"] = "cvrp"
+    evidence = _cvrp_problem_evidence()
+    evidence["measurement_effect"].update(
+        {
+            "mechanism_family_mapped_row_count": 1,
+            "mechanism_family_unmapped_row_count": 0,
+        }
+    )
+    evidence["large_twoopt_mechanism"].update(
+        {
+            "mechanism_family_available": True,
+            "direct_evidence_ready": False,
+            "protocol_row_count": 1,
+            "top_row_signal_count": 1,
+            "families": ["bounded_large_twoopt"],
+            "protocol_families": ["bounded_large_twoopt"],
+            "direct_evidence": {
+                "ready": False,
+                "missing": [
+                    "missing_positive_effect_at_or_above_mde",
+                    "missing_activation_observed",
+                    "missing_objective_effect_telemetry",
+                    "missing_phase_telemetry",
+                    "missing_cmt_case_protection_evidence",
+                ],
+                "required_protected_cases": ["CMT2", "CMT4"],
+                "protected_cases_observed": [],
+                "top_rows_checked": 1,
+                "complete_direct_evidence_row_count": 0,
+                "positive_effect_row_count": 0,
+                "activation_observed_count": 0,
+                "objective_effect_observed_count": 0,
+                "phase_telemetry_observed_count": 0,
+                "protected_case_evidence_row_count": 0,
+                "protected_case_complete_row_count": 0,
+            },
+        }
+    )
     brief["cvrp_large_twoopt_summary"] = {
         "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
         "available": True,
         "current_run_evidence": True,
+        "evidence": evidence,
         "evidence_gaps": ["missing_large_twoopt_direct_evidence"],
         "interpretation": (
             "protocol_evaluated_without_large_twoopt_direct_evidence"
@@ -3237,6 +3359,10 @@ def test_postrun_acceptance_accepts_cvrp_missing_direct_evidence_conclusion(
         "review_axes_actionability": "actionable_current_run_evidence_present",
     }
     _add_prompt_source_visibility_summary(brief)
+    _set_bounded_large_twoopt_family_artifact(brief)
+    _refresh_review_input_summaries(brief)
+    _refresh_research_context_actionability_summary(brief)
+    _refresh_failure_taxonomy_summary(brief)
     brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
 
     readiness = check_tool.build_readiness(run_root)
@@ -4554,6 +4680,7 @@ def _write_prepared_manifest_fixture(run_root: Path, problem_family: str) -> Non
             "campaign_dir": str(campaign_dir),
             "command": command,
             "problem_family": problem_family,
+            "research_focus": _prepared_research_focus_fixture(problem_family),
             "model": {
                 "name": "gpt-5.5",
                 "completion_preflight": True,
@@ -4596,6 +4723,124 @@ def _write_prepared_manifest_fixture(run_root: Path, problem_family: str) -> Non
         ),
         encoding="utf-8",
     )
+
+
+def _prepared_research_focus_fixture(problem_family: str) -> dict[str, object]:
+    measurement = {
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "screening_mde_at_power_80": 9.9,
+        "practical_screen_delta": 1.0,
+        "measurement_readiness": {
+            "status": "ready",
+            "reason_code": "ok",
+        },
+        "calibration": {
+            "schema": "scion.aa_noise_floor.v1",
+            "ref": "fixture-calibration",
+            "decision_features_excluded": True,
+        },
+        "source": "problem_v1.measurement.calibration_ref",
+    }
+    if problem_family == "warehouse_delivery":
+        return {
+            "scope": "report_only_prepared_handoff",
+            "accepted_checkpoint": "warehouse champion v2 checkpoint",
+            "current_question": "warehouse v2 continuous plateau question",
+            "decision_boundary": (
+                "DecisionFeatures excluded; protocol evidence only; no scheduler "
+                "or promotion mutation"
+            ),
+            "required_evidence": [
+                "promotion behavior evidence",
+                "branch transfer evidence",
+                "quality-blocked versus protocol-evaluated separation",
+                "cost_delta and split_delta comparison",
+                "fast completion runtime evidence",
+            ],
+            "default_avoid_directions": [
+                "baseline",
+                "proposal-quality",
+                "fast completion",
+                "split_delta_sum==0",
+                "broad warehouse matrix",
+            ],
+            "measurement_opportunity_diagnostics": {
+                **measurement,
+                "reason_codes": [
+                    "WAREHOUSE_MDE_EXCEEDS_PRACTICAL_DELTA",
+                    "TRAJECTORY_DIVERGENT_LOW_SNR",
+                ],
+            },
+        }
+    if problem_family == "cvrp":
+        return {
+            "decision_boundary": (
+                "DecisionFeatures excluded; protocol evidence only; no promotion "
+                "or scheduler mutation"
+            ),
+            "measurement_opportunity_diagnostics": {
+                **measurement,
+                "reason_codes": [
+                    "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
+                    "TRAJECTORY_DIVERGENT_LOW_SNR",
+                ],
+            },
+            "measurable_opportunity_classes": [
+                "construction_seed_portfolio",
+                "destroy_repair_selection",
+                "bounded_local_search_variant",
+                "large_instance_intra_route_two_opt_seed",
+                "acceptance_or_adaptive_weighting",
+            ],
+            "default_avoid_directions": [
+                "broad vns removal",
+                "pure alns",
+                "initial-vns",
+                "unbounded large-instance two-opt fallback",
+                "cadence-2",
+                "share70",
+                "route-merge",
+                "demand-slack",
+                "cross-route 2-opt",
+                "cluster-biased",
+                "route-limit",
+            ],
+            "route_merge_exception_rule": (
+                "Require direct objective evidence before route merge exceptions."
+            ),
+            "construction_seed_rule": (
+                "Use same-run seed baseline and same-mechanism comparison."
+            ),
+            "case_protection_requirements": {
+                "proposal_visibility_only": True,
+                "decision_features_excluded": True,
+                "protected_cases": ["CMT2", "CMT4"],
+                "rules": [
+                    "cmt2 cmt4 target intent hypothesis formal coverage "
+                    "materially different do not hardcode"
+                ],
+                "required_evidence": [
+                    "target-intent hypothesis formal screening case-level "
+                    "total_distance cmt2 cmt4"
+                ],
+            },
+            "large_instance_two_opt_constraints": {
+                "proposal_visibility_only": True,
+                "decision_features_excluded": True,
+                "seed_report": "fixture.seed-report.json",
+                "implementation_constraints": [
+                    "deadline wall-clock route sweep unbounded two_opt_intra"
+                ],
+                "required_pair_evidence": [
+                    "total_distance case seed feasibility route count wall-clock"
+                ],
+                "default_reject_directions": [
+                    "unbounded two_opt_intra activation wall-clock"
+                ],
+            },
+        }
+    return {}
 
 
 def _write_campaign_db(campaign_dir: Path) -> None:
@@ -5217,6 +5462,50 @@ def _ensure_review_input_fixture_artifacts(brief: dict[str, object]) -> None:
                 "mechanism_family_count": 1,
             },
         }
+        path.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _set_bounded_large_twoopt_family_artifact(brief: dict[str, object]) -> None:
+    for path in _research_efficiency_report_paths(brief):
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        effect = doc.setdefault("protocol_effects_vs_mde", {})
+        assert isinstance(effect, dict)
+        effect.update(
+            {
+                "decision_features_excluded": True,
+                "interpretation": "below_mde",
+                "max_effect_to_mde_ratio": 0.25,
+                "protocol_row_count": 1,
+                "rows_at_or_above_mde": 0,
+                "rows_with_ci_high_below_mde": 1,
+                "positive_rows": 0,
+                "nonpositive_rows": 1,
+                "mechanism_family_effect_summary": {
+                    "decision_features_excluded": True,
+                    "mapping_status": "mapped",
+                    "mapped_row_count": 1,
+                    "unmapped_row_count": 0,
+                    "mechanism_family_count": 1,
+                    "by_family": {
+                        "bounded_large_twoopt": {
+                            "protocol_row_count": 1,
+                            "rows_at_or_above_mde": 0,
+                            "rows_below_mde": 1,
+                            "rows_with_ci_high_below_mde": 1,
+                            "positive_rows": 0,
+                            "nonpositive_rows": 1,
+                            "max_effect_to_mde_ratio": 0.25,
+                        }
+                    },
+                },
+                "top_rows_by_effect_to_mde": [
+                    {
+                        "mechanism_family": "bounded_large_twoopt",
+                        "positive_effect_at_or_above_mde": False,
+                    }
+                ],
+            }
+        )
         path.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8")
 
 
