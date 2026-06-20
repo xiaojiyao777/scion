@@ -596,6 +596,9 @@ def test_postrun_acceptance_readiness_accepts_actionable_problem_summary(
     assert problem_check["detail"][0]["blocking_evidence_gaps"] == []
     assert prompt_check["required"] is True
     assert prompt_check["status"] == "ok"
+    phase4_check = readiness["checks"]["phase4_evidence_coverage_actionability"]
+    assert phase4_check["required"] is True
+    assert phase4_check["status"] == "ok"
     branch_check = readiness["checks"]["branch_research_state_actionability"]
     assert branch_check["required"] is True
     assert branch_check["status"] == "ok"
@@ -604,6 +607,110 @@ def test_postrun_acceptance_readiness_accepts_actionable_problem_summary(
     assert champion_check["required"] is True
     assert champion_check["status"] == "ok"
     assert champion_check["detail"]["consistency_failures"] == []
+
+
+def test_postrun_acceptance_requires_phase4_coverage_boundary(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-stale-phase4")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    phase4 = brief["phase4_evidence_coverage"]
+    assert isinstance(phase4, dict)
+    phase4["schema_version"] = "scion.postrun_phase4_evidence_coverage.v0"
+    phase4["report_only"] = False
+    phase4["decision_features_excluded"] = False
+    phase4["current_run_evidence"] = False
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    phase4_check = readiness["checks"]["phase4_evidence_coverage_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert phase4_check["required"] is True
+    assert phase4_check["status"] == "failed"
+    failures = phase4_check["detail"]["failures"]
+    assert "phase4_evidence_coverage_schema_stale" in failures
+    assert "phase4_evidence_coverage_not_report_only" in failures
+    assert "phase4_evidence_coverage_decision_features_not_excluded" in failures
+    assert "phase4_evidence_coverage_not_current_run_evidence" in failures
+    assert "phase4_evidence_coverage_inventory_mismatch" in failures
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
+def test_postrun_acceptance_requires_phase4_problem_specific_handoff(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(
+        tmp_path / "warehouse-run-missing-phase4-handoff"
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    problem_specific = brief["phase4_evidence_coverage"][
+        "problem_specific_requirements"
+    ]
+    assert isinstance(problem_specific, dict)
+    handoff = problem_specific["warehouse_v2_checkpoint_handoff"]
+    assert isinstance(handoff, dict)
+    handoff["available"] = False
+    handoff["count"] = 0
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    phase4_check = readiness["checks"]["phase4_evidence_coverage_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert phase4_check["required"] is True
+    assert phase4_check["status"] == "failed"
+    failures = phase4_check["detail"]["failures"]
+    assert "phase4_problem_specific_requirements_mismatch" in failures
+    assert "phase4_problem_specific_requirements_unavailable" in failures
+    assert phase4_check["detail"]["problem_specific_unavailable"] == [
+        "warehouse_v2_checkpoint_handoff"
+    ]
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
 
 
 def test_postrun_acceptance_requires_branch_research_state_actionability(

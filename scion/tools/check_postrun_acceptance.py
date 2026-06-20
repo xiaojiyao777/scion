@@ -71,6 +71,7 @@ PROMPT_CONTEXT_VISIBILITY_SCHEMA = (
 )
 PROMPT_SOURCE_VISIBILITY_SCHEMA = "scion.postrun_prompt_source_visibility_summary.v1"
 PROMPT_SIGNAL_DENSITY_SCHEMA = "scion.postrun_prompt_signal_density.v1"
+PHASE4_EVIDENCE_COVERAGE_SCHEMA = "scion.postrun_phase4_evidence_coverage.v1"
 RESEARCH_CONTEXT_ACTIONABILITY_SCHEMA = (
     "scion.postrun_research_context_actionability_summary.v1"
 )
@@ -108,6 +109,13 @@ REVIEW_INPUT_SUMMARIES = {
         "continuity_report_count",
     ),
 }
+PHASE4_COVERAGE_IDENTITY_FIELDS = (
+    "evidence_scope",
+    "prepared_only",
+    "pre_campaign_completion_preflight_failed",
+    "invalid_infra_only",
+    "current_run_evidence",
+)
 
 
 def build_readiness(run_root: Path | str) -> dict[str, Any]:
@@ -272,6 +280,15 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
                 analysis_brief.get("phase4_evidence_coverage")
             ),
         },
+    )
+    phase4_status, phase4_detail = _phase4_evidence_coverage_actionability(
+        analysis_brief,
+        inventory,
+    )
+    add_check(
+        "phase4_evidence_coverage_actionability",
+        phase4_status,
+        phase4_detail,
     )
     contract_status, contract_detail = _prepared_contract_consistency(
         analysis_brief,
@@ -756,6 +773,79 @@ def _brief_current_run_evidence(brief: Mapping[str, Any]) -> bool:
         lifecycle.get("current_run_evidence") is True
         and phase4.get("current_run_evidence") is True
     )
+
+
+def _phase4_evidence_coverage_actionability(
+    brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> tuple[str, Any]:
+    summary = _mapping_or_empty(brief.get("phase4_evidence_coverage"))
+    expected = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
+    failures: list[str] = []
+
+    if summary.get("schema_version") != PHASE4_EVIDENCE_COVERAGE_SCHEMA:
+        failures.append("phase4_evidence_coverage_schema_stale")
+    failures.extend(_boundary_marker_failures("phase4_evidence_coverage", summary))
+    if summary.get("current_run_evidence") is not True:
+        failures.append("phase4_evidence_coverage_not_current_run_evidence")
+
+    field_mismatches: list[dict[str, Any]] = []
+    for field in PHASE4_COVERAGE_IDENTITY_FIELDS:
+        expected_value = expected.get(field)
+        actual_value = summary.get(field)
+        if actual_value != expected_value:
+            field_mismatches.append(
+                {
+                    "field": field,
+                    "expected": expected_value,
+                    "actual": actual_value,
+                }
+            )
+    if field_mismatches:
+        failures.append("phase4_evidence_coverage_inventory_mismatch")
+
+    expected_problem_specific = _phase4_requirement_signature_map(
+        expected.get("problem_specific_requirements")
+    )
+    actual_problem_specific = _phase4_requirement_signature_map(
+        summary.get("problem_specific_requirements")
+    )
+    if actual_problem_specific != expected_problem_specific:
+        failures.append("phase4_problem_specific_requirements_mismatch")
+    unavailable_problem_specific = sorted(
+        key
+        for key, item in actual_problem_specific.items()
+        if item.get("available") is not True
+    )
+    if unavailable_problem_specific:
+        failures.append("phase4_problem_specific_requirements_unavailable")
+
+    return (
+        "ok" if not failures else "failed",
+        {
+            "failures": failures,
+            "schema_version": summary.get("schema_version"),
+            "current_run_evidence": summary.get("current_run_evidence"),
+            "expected_current_run_evidence": expected.get("current_run_evidence"),
+            "coverage_field_mismatches": field_mismatches,
+            "problem_specific_keys": sorted(actual_problem_specific),
+            "expected_problem_specific_keys": sorted(expected_problem_specific),
+            "problem_specific_unavailable": unavailable_problem_specific,
+        },
+    )
+
+
+def _phase4_requirement_signature_map(value: Any) -> dict[str, dict[str, Any]]:
+    requirements = _mapping_or_empty(value)
+    return {
+        str(key): {
+            "available": item.get("available") is True,
+            "count": _int_or_zero(item.get("count")),
+            "source": str(item.get("source") or ""),
+        }
+        for key, item in sorted(requirements.items())
+        if isinstance(item, Mapping)
+    }
 
 
 def _analysis_brief_boundary(brief: Mapping[str, Any]) -> tuple[str, Any]:
