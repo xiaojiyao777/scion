@@ -90,8 +90,8 @@ WSL focused results:
 
 ## Current Prepared Roots
 
-Generated on WSL at launch-authoritative runtime commit `27de4218`; local
-equivalent HEAD is `9c284940`. Both roots are mirrored under
+Generated on WSL at launch-authoritative runtime commit `27de4218`; the local
+runtime-equivalent commit is `9c284940`. Both roots are mirrored under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:

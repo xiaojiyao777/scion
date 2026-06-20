@@ -42,7 +42,7 @@ reports `launch_ready=true`.
 ## Active Prepared Roots
 
 Generated on WSL at launch-authoritative prepared runtime commit `27de4218`
-after local equivalent HEAD `9c284940`; local mirrors exist under
+after local runtime-equivalent commit `9c284940`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names for
 inspection.
 
