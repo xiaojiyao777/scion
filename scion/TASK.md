@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `66b53454`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `f995674b`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -248,13 +248,13 @@ Current checkpoint:
   large-instance intra-route two-opt seed only as proposal guidance and requires
   a bounded, deadline-aware mechanism with current-run CMT2/CMT4 case-level
   protection evidence. Launch readiness also verifies that those protected
-  cases are present in the selected split before the prepared root can be
+  cases are present in formal screening before the prepared root can be
   considered static-ready.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-66b5345-splitcase-6r-gpt55-20260620T194243Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-f995674-screening-6r-gpt55-20260620T195352Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-66b5345-splitcase-4r-gpt55-20260620T194243Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-f995674-screening-4r-gpt55-20260620T195352Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -383,10 +383,11 @@ Current checkpoint:
     rules, and required evidence cannot pass only as manifest/report data while
     being absent from proposal prompt focus. It also renders the compact
     hypothesis prompt summary in memory and stores only safe boolean/count/path
-    evidence, proving warehouse renders 19 required `research_focus` paths and
-    CVRP renders 36 required paths with `missing_rendered_paths=[]`.
+    evidence, proving warehouse renders 33 required `research_focus` paths and
+    CVRP renders 50 required paths with `missing_rendered_paths=[]`.
   - CVRP prepared-run contract checks the same protected cases against the
-    configured split manifest; the current root reports CMT2 and CMT4 in
+    configured split manifest's formal screening set; the current root reports
+    CMT2 and CMT4 in
     `screening`, preventing prompt-only CMT2/CMT4 protection from becoming a
     false-ready launch state.
   - Launch readiness guards the active checkout, absolute WSL `SCION_DIR` /
