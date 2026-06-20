@@ -2607,6 +2607,63 @@ def test_postrun_acceptance_rejects_warehouse_plateau_ready_with_positive_measur
     assert "review_input_warehouse_positive_effect_not_plateau" in failures
 
 
+def test_postrun_acceptance_rejects_warehouse_positive_ready_without_positive_measurement_effect(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-false-positive-ready")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    _add_prompt_source_visibility_summary(brief)
+    evidence = _warehouse_problem_evidence()
+    evidence["measurement_effect"].update(
+        {
+            "rows_at_or_above_mde": 1,
+            "rows_with_ci_high_below_mde": 0,
+            "max_effect_to_mde_ratio": 1.2,
+            "interpretation_counts": {"above_mde": 1},
+            "effect_signal": "positive_effect_at_or_above_mde",
+            "positive_effect_at_or_above_mde": True,
+            "plateau_consistent": False,
+            "all_ci_high_below_mde": False,
+        }
+    )
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": evidence,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_positive_effect_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    consistency = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert consistency["status"] == "failed"
+    failures = consistency["detail"]["failures"]
+    assert "problem_summary_warehouse_measurement_effect_signal_mismatch" in failures
+    assert (
+        "problem_summary_warehouse_measurement_positive_effect_at_or_above_mde_mismatch"
+        in failures
+    )
+    assert "review_input_warehouse_positive_effect_missing" in failures
+
+
 def test_postrun_acceptance_rejects_warehouse_plateau_ready_with_inconclusive_measurement_effect(
     tmp_path: Path,
 ) -> None:

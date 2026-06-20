@@ -23,6 +23,10 @@ effect at or above MDE cannot be mislabeled as
 - Postrun acceptance recomputes the warehouse measurement signal from
   `measurement_effect_summary.aggregate` and rejects summaries whose
   interpretation disagrees with the review inputs.
+- Postrun acceptance now has explicit regression coverage for both directions:
+  plateau-ready summaries fail when review inputs show a positive effect, and
+  positive-effect-ready summaries fail when review inputs only show
+  plateau-consistent/no-positive measurement evidence.
 
 All signals remain report-only postrun readiness evidence. They do not enter
 Decision, `DecisionFeatures`, promotion, scheduler state, or solver semantics.
@@ -43,6 +47,19 @@ Result:
 
 ```text
 161 passed in 40.18s
+```
+
+Additional local acceptance regression:
+
+```bash
+PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q \
+  scion/scion/tests/test_check_postrun_acceptance.py
+```
+
+Result:
+
+```text
+47 passed in 38.72s
 ```
 
 WSL command:
