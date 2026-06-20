@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `82824cc9`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `0f0f4473`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -252,9 +252,9 @@ Current checkpoint:
   considered static-ready.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-82824cc-postmarkers-6r-gpt55-20260620T203832Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-0f0f447-runtimefields-6r-gpt55-20260620T205546Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-82824cc-postmarkers-4r-gpt55-20260620T203850Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-0f0f447-runtimefields-4r-gpt55-20260620T205547Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -267,8 +267,11 @@ Current checkpoint:
   reports now expose `readiness_scope=static_only_completion_preflight_not_run`
   and `launch_blockers=["completion_preflight_not_run"]`; only strict launch
   checks with `readiness_scope=launch_with_completion_preflight` can approve
-  launch. The current roots also pass `launch_env_secret_permissions` with
-  `launch.env` mode `0o600`.
+  launch. Launch readiness also exposes top-level runtime/env status fields for
+  status refreshes; the current roots report `runtime_guard_status=ok`,
+  `runtime_guard_reason=runtime_guard_commit_matches`,
+  `prepared_runtime_commit=actual_runtime_commit=0f0f4473`,
+  `launch_env_secret_permissions=ok`, and `launch_env_mode=0o600`.
   Disabled proposal/APS caps, code-source visibility, source-read headroom,
   item-level `research_focus` prompt visibility, and CVRP/warehouse
   adapter-derived opportunity diagnostics are covered by current evidence
