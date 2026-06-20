@@ -282,6 +282,12 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
             ),
         },
     )
+    wrapper_status, wrapper_detail = _launcher_wrapper_status_ok(inventory)
+    add_check(
+        "launcher_wrapper_status_ok",
+        wrapper_status,
+        wrapper_detail,
+    )
     phase4_status, phase4_detail = _phase4_evidence_coverage_actionability(
         analysis_brief,
         inventory,
@@ -773,6 +779,42 @@ def _brief_current_run_evidence(brief: Mapping[str, Any]) -> bool:
     return (
         lifecycle.get("current_run_evidence") is True
         and phase4.get("current_run_evidence") is True
+    )
+
+
+def _launcher_wrapper_status_ok(
+    inventory: Mapping[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    launcher = _mapping_or_empty(inventory.get("launcher"))
+    status_fields = _mapping_or_empty(launcher.get("status_fields"))
+    failures: list[str] = []
+
+    wrapper_exit = _int_or_none(status_fields.get("wrapper_exit_status"))
+    if wrapper_exit is None:
+        failures.append("wrapper_exit_status_missing")
+    elif wrapper_exit != 0:
+        failures.append("wrapper_exit_status_nonzero")
+
+    campaign_exit = _int_or_none(status_fields.get("campaign_wrapper_exit_status"))
+    if campaign_exit not in (None, 0):
+        failures.append("campaign_wrapper_exit_status_nonzero")
+
+    if status_fields.get("postrun_acceptance_failed") is True:
+        failures.append("postrun_acceptance_failed")
+    if str(status_fields.get("postrun_acceptance_status") or "").lower() == "failed":
+        failures.append("postrun_acceptance_status_failed")
+
+    for key in ("postrun_readiness_exit_status", "postrun_reports_exit_status"):
+        value = _int_or_none(status_fields.get(key))
+        if value not in (None, 0):
+            failures.append(f"{key}_nonzero")
+
+    return (
+        "ok" if not failures else "failed",
+        {
+            "failures": failures,
+            "status_fields": status_fields,
+        },
     )
 
 

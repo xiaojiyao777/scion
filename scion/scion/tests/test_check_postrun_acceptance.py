@@ -64,6 +64,69 @@ def test_postrun_acceptance_readiness_accepts_complete_current_run(
     assert check_tool.main([str(run_root), "--require-current-run-ready"]) == 0
 
 
+def test_postrun_acceptance_rejects_nonzero_wrapper_exit_status(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "run-root")
+    status_path = run_root / "run_status.json"
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status["wrapper_exit_status"] = 64
+    status_path.write_text(json.dumps(status), encoding="utf-8")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+
+    readiness = check_tool.build_readiness(run_root)
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert "launcher_wrapper_status_ok" in readiness["failed_required_checks"]
+    wrapper_check = readiness["checks"]["launcher_wrapper_status_ok"]
+    assert wrapper_check["status"] == "failed"
+    assert "wrapper_exit_status_nonzero" in wrapper_check["detail"]["failures"]
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
+def test_postrun_acceptance_rejects_top_level_postrun_acceptance_failure(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "run-root")
+    status_path = run_root / "run_status.json"
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status.update(
+        {
+            "postrun_acceptance_failed": True,
+            "postrun_acceptance_status": "failed",
+            "postrun_readiness_exit_status": 64,
+        }
+    )
+    status_path.write_text(json.dumps(status), encoding="utf-8")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+
+    readiness = check_tool.build_readiness(run_root)
+    wrapper_check = readiness["checks"]["launcher_wrapper_status_ok"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert "launcher_wrapper_status_ok" in readiness["failed_required_checks"]
+    assert "postrun_acceptance_failed" in wrapper_check["detail"]["failures"]
+    assert "postrun_acceptance_status_failed" in wrapper_check["detail"]["failures"]
+    assert "postrun_readiness_exit_status_nonzero" in wrapper_check["detail"][
+        "failures"
+    ]
+
+
 def test_postrun_acceptance_infers_legacy_warehouse_run_family(
     tmp_path: Path,
 ) -> None:
