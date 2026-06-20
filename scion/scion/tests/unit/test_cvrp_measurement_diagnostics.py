@@ -12,6 +12,8 @@ from scion.proposal.context_manager.manager import _problem_measurement_diagnost
 from scion.proposal.engine.hypothesis_context_profiles import (
     filter_hypothesis_context_for_prompt,
 )
+from scion.proposal.engine.hypothesis_prompts import _split_hypothesis_context
+from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 
 
 _CVRP_PROBLEM = (
@@ -55,18 +57,18 @@ def test_context_manager_projects_cvrp_adapter_opportunities_top_level() -> None
     adapter = CvrpAdapter(spec_v1)
 
     payload = _problem_measurement_diagnostics(legacy, adapter=adapter)
-    compact = filter_hypothesis_context_for_prompt(
-        {
-            "problem_summary": "CVRP formal solver-design objective.",
-            "research_surfaces": "Research surfaces: solver_design",
-            "operator_categories": "solver_design",
-            "available_actions": "modify, create_new",
-            "targetable_files": "policies/baseline_algorithm.py",
-            "champion_operators_code": "def solve():\n    return best\n",
-            "champion_stats": "champion_v1",
-            "problem_measurement_diagnostics": payload,
-        }
-    )["problem_measurement_diagnostics"]
+    context = {
+        "problem_summary": "CVRP formal solver-design objective.",
+        "research_surfaces": "Research surfaces: solver_design",
+        "operator_categories": "solver_design",
+        "available_actions": "modify, create_new",
+        "targetable_files": "policies/baseline_algorithm.py",
+        "champion_operators_code": "def solve():\n    return best\n",
+        "champion_stats": "champion_v1",
+        "problem_measurement_diagnostics": payload,
+    }
+    filtered = filter_hypothesis_context_for_prompt(context)
+    compact = filtered["problem_measurement_diagnostics"]
 
     assert payload["decision_features_excluded"] is True
     assert payload["runtime_model"] == "budget_exhausting"
@@ -83,6 +85,40 @@ def test_context_manager_projects_cvrp_adapter_opportunities_top_level() -> None
     assert "raw_pair_rows" not in compact
     assert "validation_case_details" not in compact
     assert "frozen_case_details" not in compact
+
+    system_blocks, user_prompt = _split_hypothesis_context(filtered)
+    rendered_prompt = "\n".join(str(block["text"]) for block in system_blocks)
+    rendered_prompt += "\n" + user_prompt
+    rendered_lower = rendered_prompt.lower()
+
+    assert "## Problem Measurement Diagnostics" in rendered_prompt
+    assert "cvrp_measurement_opportunity_diagnostic.v1" in rendered_prompt
+    assert "screening_headroom" in rendered_prompt
+    assert "large_instance_intra_route_two_opt_seed" in rendered_prompt
+    assert "CVRP_LARGE_INSTANCE_TWO_OPT_SEED" in rendered_prompt
+    assert "excluded from DecisionFeatures" in rendered_prompt
+    assert "bks_gap_details" not in rendered_lower
+    assert "hidden-bks" not in rendered_lower
+    assert "validation_case_details" not in rendered_prompt
+    assert "frozen_case_details" not in rendered_prompt
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-cvrp-adapter-measurement-diagnostics",
+        phase="hypothesis",
+        call_kind="hypothesis",
+        prompt_context=filtered,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+    assert manifest["section_statuses"]["problem_measurement_diagnostics"][
+        "block_family"
+    ] == "research_signal"
+    assert manifest["section_statuses"]["problem_measurement_diagnostics"][
+        "status"
+    ] == "included"
+    assert manifest["block_family_accounting"]["decision_features_excluded"] is True
 
 
 def test_adapter_opportunity_projection_drops_unapproved_fields() -> None:
