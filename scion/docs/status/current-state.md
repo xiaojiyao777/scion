@@ -78,6 +78,9 @@ mirror root, and includes a `local_run_status_summary` with wrapper,
 pre-campaign, postrun readiness/report exit status, and launcher marker counts
 for status-writer, postrun acceptance/readiness/report, and effective-wrapper
 failures. Without `--execute`, it prints the planned commands only.
+After rsync, the helper also requires the mirrored root `run_status.json` to be
+present and readable before it returns success. `--skip-postrun-check` skips
+current-run readiness only; it does not skip root-status validation.
 
 ## Active Prepared Roots
 

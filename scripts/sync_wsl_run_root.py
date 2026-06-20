@@ -30,6 +30,7 @@ DEFAULT_LOCAL_EXPERIMENTS_ROOT = Path(
 )
 POSTRUN_UNREADY_EXIT = 64
 SOURCE_CHECK_FAILED_EXIT = 65
+LOCAL_STATUS_FAILED_EXIT = 66
 
 
 def _ssh_options() -> list[str]:
@@ -177,6 +178,7 @@ def sync_and_check(
         "source_check_exit_status": None,
         "rsync_exit_status": None,
         "postrun_check_exit_status": None,
+        "local_status_check_exit_status": None,
         "local_run_status_summary": None,
     }
     if not execute:
@@ -201,6 +203,11 @@ def sync_and_check(
     report["local_run_status_summary"] = _run_status_summary(
         resolved_local / "run_status.json"
     )
+    if not report["local_run_status_summary"].get("available"):
+        report["local_status_check_exit_status"] = LOCAL_STATUS_FAILED_EXIT
+        report["local_status_check_error"] = "local root run_status.json missing or unreadable"
+        return report
+    report["local_status_check_exit_status"] = 0
     if not check_postrun:
         return report
 
@@ -251,6 +258,13 @@ def render_text(report: dict[str, Any]) -> str:
         )
     if report.get("rsync_exit_status") is not None:
         lines.append(f"RSYNC_EXIT_STATUS={report['rsync_exit_status']}")
+    if report.get("local_status_check_exit_status") is not None:
+        lines.append(
+            "LOCAL_STATUS_CHECK_EXIT_STATUS="
+            f"{report['local_status_check_exit_status']}"
+        )
+    if report.get("local_status_check_error"):
+        lines.append(f"LOCAL_STATUS_CHECK_ERROR={report['local_status_check_error']}")
     if report.get("postrun_check_exit_status") is not None:
         lines.append(
             f"POSTRUN_CHECK_EXIT_STATUS={report['postrun_check_exit_status']}"
@@ -354,6 +368,9 @@ def main(argv: list[str] | None = None) -> int:
     rsync_exit = report.get("rsync_exit_status")
     if rsync_exit not in (None, 0):
         return int(rsync_exit)
+    local_status_exit = report.get("local_status_check_exit_status")
+    if local_status_exit not in (None, 0):
+        return int(local_status_exit)
     if not args.skip_postrun_check:
         postrun_exit = report.get("postrun_check_exit_status")
         if postrun_exit not in (None, 0):

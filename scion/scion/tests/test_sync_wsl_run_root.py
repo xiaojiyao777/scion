@@ -120,6 +120,7 @@ def test_sync_wsl_run_root_execute_runs_rsync_then_postrun_check(
     assert calls[2][0] == sys.executable
     assert report["source_check_exit_status"] == 0
     assert report["rsync_exit_status"] == 0
+    assert report["local_status_check_exit_status"] == 0
     assert report["local_run_status_summary"] == {
         "available": True,
         "path": str(tmp_path / "run-b" / "run_status.json"),
@@ -206,6 +207,7 @@ def test_sync_wsl_run_root_skips_postrun_check_when_requested(
     assert calls[1][0] == "rsync"
     assert report["postrun_check_command"] == []
     assert report["postrun_check_exit_status"] is None
+    assert report["local_status_check_exit_status"] == 0
     assert report["local_run_status_summary"]["wrapper_exit_status"] == 64
     assert report["local_run_status_summary"][
         "pre_campaign_completion_preflight"
@@ -246,6 +248,12 @@ def test_sync_wsl_run_root_preserves_postrun_unready_status(
                 command, 0, "source_root_ok\n", ""
             )
         if command[0] == "rsync":
+            local_dir = Path(command[-1])
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / "run_status.json").write_text(
+                json.dumps({"status": "finished", "wrapper_exit_status": 0}),
+                encoding="utf-8",
+            )
             return subprocess.CompletedProcess(command, 0, "synced", "")
         return subprocess.CompletedProcess(
             command,
@@ -272,6 +280,7 @@ def test_sync_wsl_run_root_preserves_postrun_unready_status(
     )
 
     assert report["rsync_exit_status"] == 0
+    assert report["local_status_check_exit_status"] == 0
     assert report["postrun_check_exit_status"] == sync_tool.POSTRUN_UNREADY_EXIT
     assert report["postrun_current_run_ready"] is False
     assert report["postrun_check_summary"] == {
@@ -322,6 +331,43 @@ def test_sync_wsl_run_root_source_check_failure_stops_before_rsync(
     assert report["postrun_check_exit_status"] is None
 
 
+def test_sync_wsl_run_root_rejects_unreadable_local_run_status_after_rsync(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        if command[0] == "rsync":
+            local_dir = Path(command[-1])
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / "run_status.json").write_text("{not-json", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(sync_tool, "_run", fake_run)
+
+    report = sync_tool.sync_and_check(
+        wsl_run_root="/wsl/experiments/run-bad-status",
+        local_experiments_root=tmp_path,
+        execute=True,
+        check_postrun=False,
+    )
+
+    assert len(calls) == 2
+    assert calls[0][0] == "ssh"
+    assert calls[1][0] == "rsync"
+    assert report["rsync_exit_status"] == 0
+    assert report["local_status_check_exit_status"] == (
+        sync_tool.LOCAL_STATUS_FAILED_EXIT
+    )
+    assert report["local_run_status_summary"]["available"] is False
+    assert "run_status.json" in report["local_status_check_error"]
+    assert report["postrun_check_exit_status"] is None
+    rendered = sync_tool.render_text(report)
+    assert "LOCAL_STATUS_CHECK_EXIT_STATUS=66" in rendered
+
+
 def test_sync_wsl_run_root_rejects_delete_outside_experiments(
     tmp_path: Path,
 ) -> None:
@@ -362,6 +408,40 @@ def test_sync_wsl_run_root_cli_returns_postrun_unready_exit(
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == sync_tool.POSTRUN_UNREADY_EXIT
     assert payload["postrun_check_exit_status"] == sync_tool.POSTRUN_UNREADY_EXIT
+
+
+def test_sync_wsl_run_root_cli_returns_local_status_failure_exit(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    def fake_sync_and_check(**_: object) -> dict[str, object]:
+        return {
+            "execute": True,
+            "rsync_exit_status": 0,
+            "local_status_check_exit_status": sync_tool.LOCAL_STATUS_FAILED_EXIT,
+            "postrun_check_exit_status": None,
+        }
+
+    monkeypatch.setattr(sync_tool, "sync_and_check", fake_sync_and_check)
+
+    exit_code = sync_tool.main(
+        [
+            "/wsl/experiments/run-bad-status",
+            "--local-experiments-root",
+            str(tmp_path),
+            "--execute",
+            "--skip-postrun-check",
+            "--format",
+            "json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == sync_tool.LOCAL_STATUS_FAILED_EXIT
+    assert payload["local_status_check_exit_status"] == (
+        sync_tool.LOCAL_STATUS_FAILED_EXIT
+    )
 
 
 def test_sync_wsl_run_root_cli_dry_run_json(tmp_path: Path, capsys) -> None:
