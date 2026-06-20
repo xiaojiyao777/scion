@@ -44,14 +44,18 @@ Additional runtime replay semantics check after the budget-exhausting stale
 marker suppression: local and WSL adjacent runtime/finalizer/scheduler suites
 each report `224 passed`.
 
+Additional low-SNR runtime-ratio check after the budget-exhausting follow-up
+suppression: local and WSL decision/protocol/lifecycle suites each report
+`130 passed`.
+
 ## Prepared Roots
 
-Regenerated on WSL at runtime commit `7389bba6`.
+Regenerated on WSL at runtime commit `5ae79470`.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-7389bba6-preflight-6r-gpt55-20260620T083153Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-5ae79470-preflight-6r-gpt55-20260620T084135Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-7389bba6-preflight-4r-gpt55-20260620T083209Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-5ae79470-preflight-4r-gpt55-20260620T084150Z-claw`
 
 Strict launch readiness for both roots:
 
@@ -74,3 +78,7 @@ the formal hypothesis prompt.
 They also include budget-exhausting runtime replay suppression: stale
 fresh-runtime markers, materialization, and pressure reports no longer force a
 runtime replay path under a budget-exhausting measurement model.
+
+Budget-exhausting runtime ratios also no longer block trajectory-divergent
+low-SNR expansion or same-branch low-SNR follow-up; comparative runtime slowdown
+remains actionable.

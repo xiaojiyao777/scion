@@ -41,13 +41,13 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at prepared runtime commit `7389bba6`; local mirrors exist under
+Generated on WSL at prepared runtime commit `5ae79470`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-7389bba6-preflight-6r-gpt55-20260620T083153Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-5ae79470-preflight-6r-gpt55-20260620T084135Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-7389bba6-preflight-4r-gpt55-20260620T083209Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-5ae79470-preflight-4r-gpt55-20260620T084150Z-claw`
 
 Readiness snapshot:
 
@@ -55,7 +55,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `7389bba6`; later
+- Runtime guard status: prepared runtime commit `5ae79470`; later
   doc/status-only commits are acceptable only when readiness reports
   `runtime_guard_paths_unchanged_since_prepare`.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -75,6 +75,9 @@ Prepared run shape:
 - Runtime replay semantics: budget-exhausting summaries suppress stale
   fresh-runtime replay markers, materialization, and pressure reports. Runtime
   tie fresh replay remains available only for comparative runtime semantics.
+- Low-SNR runtime semantics: budget-exhausting runtime ratios do not block
+  trajectory-divergent low-SNR expansion or same-branch follow-up; comparative
+  runtime slowdown still remains actionable.
 
 ## Framework Guarantees To Preserve
 
