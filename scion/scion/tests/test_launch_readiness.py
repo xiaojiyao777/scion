@@ -76,6 +76,9 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     )
     assert report["checks"]["run_script_pythonpath_enforced"]["status"] == "ok"
     assert report["checks"]["run_script_model_route_enforced"]["status"] == "ok"
+    assert (
+        report["checks"]["run_script_campaign_contract_consistency"]["status"] == "ok"
+    )
     assert report["checks"]["run_script_no_early_stop_enforced"]["status"] == "ok"
     assert (
         report["checks"]["run_script_proposal_headroom_enforced"]["status"] == "ok"
@@ -2177,6 +2180,63 @@ def test_launch_readiness_rejects_prefixed_proxy_model_route_env_tokens(
     assert {"reason": "completion_preflight_base_url_env_missing"} in failures
 
 
+def test_launch_readiness_rejects_launch_env_campaign_contract_mismatch(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    launch_env = run_root / "launch.env"
+    other_problem = run_root / "config" / "other_problem.yaml"
+    other_problem.write_text("ok: false\n", encoding="utf-8")
+    launch_env.write_text(
+        launch_env.read_text(encoding="utf-8").replace(
+            f"PROBLEM={run_root / 'config' / 'problem.yaml'}",
+            f"PROBLEM={other_problem}",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    contract_check = report["checks"]["run_script_campaign_contract_consistency"]
+    assert contract_check["status"] == "failed"
+    assert {
+        "reason": "problem_launch_env_manifest_mismatch",
+        "expected": str(run_root / "config" / "problem.yaml"),
+        "actual": str(other_problem),
+    } in contract_check["detail"]["failures"]
+
+
+def test_launch_readiness_rejects_run_script_campaign_option_drift(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    other_split = run_root / "config" / "other_split.yaml"
+    other_split.write_text("ok: false\n", encoding="utf-8")
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            f"--split {run_root / 'config' / 'split.yaml'}",
+            f"--split {other_split}",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    contract_check = report["checks"]["run_script_campaign_contract_consistency"]
+    assert contract_check["status"] == "failed"
+    failures = contract_check["detail"]["failures"]
+    assert any(
+        failure.get("reason") == "split_run_script_option_mismatch"
+        and failure.get("actual") == str(other_split)
+        for failure in failures
+    )
+
+
 def test_launch_readiness_rejects_disabled_early_stop(
     tmp_path: Path,
 ) -> None:
@@ -2803,12 +2863,14 @@ def _write_prepared_root(
         f"--split {config_dir / 'split.yaml'} "
         f"--seeds {config_dir / 'seeds.yaml'} "
         f"--campaign-dir {campaign_dir} --rounds 1 "
+        "--time-limit-sec 30 "
         "--agentic-session-timeout-sec 3600 "
         "--agentic-tool-max-steps 240 "
         "--agentic-tool-max-calls 200 "
         "--agentic-code-tool-max-calls 200 "
         "--agentic-observation-max-chars 2000000 "
         "--proposal-attempt-limit 64 --proposal-quality-loop-limit 64 "
+        "--measurement-governance on --proposal-context-ablation full "
         f"--agentic-proposal --disable-early-stop"
     )
     _write_json(
@@ -2904,12 +2966,22 @@ def _write_prepared_root(
     (run_root / "launch.env").write_text(
         "\n".join(
             [
+                f"RUN_ROOT={run_root}",
+                f"CAMPAIGN_DIR={campaign_dir}",
                 f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}",
                 f"SCION_DIR={SCION_DIR}",
                 f"PYTHONPATH={SCION_DIR}",
                 "SCION_MODEL=gpt-5.5",
                 "SCION_BASE_URL=http://127.0.0.1:8080",
                 "COMPLETION_PREFLIGHT=1",
+                f"PROBLEM={config_dir / 'problem.yaml'}",
+                f"PROTOCOL={config_dir / 'protocol.yaml'}",
+                f"SPLIT={config_dir / 'split.yaml'}",
+                f"SEEDS={config_dir / 'seeds.yaml'}",
+                "ROUNDS=1",
+                "TIME_LIMIT_SEC=30",
+                "MEASUREMENT_GOVERNANCE=on",
+                "PROPOSAL_CONTEXT_ABLATION=full",
                 "AGENTIC_SESSION_TIMEOUT_SEC=3600",
                 "AGENTIC_TOOL_MAX_STEPS=240",
                 "AGENTIC_TOOL_MAX_CALLS=200",
@@ -3001,7 +3073,7 @@ if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
     exit "$PREFLIGHT_STATUS"
   fi
 fi
-{sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" --agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS" --agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS" --agentic-code-tool-max-calls "$AGENTIC_CODE_TOOL_MAX_CALLS" --agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS" --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" --agentic-proposal --disable-early-stop
+{sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --time-limit-sec 30 --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" --agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS" --agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS" --agentic-code-tool-max-calls "$AGENTIC_CODE_TOOL_MAX_CALLS" --agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS" --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" --measurement-governance "$MEASUREMENT_GOVERNANCE" --proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION" --agentic-proposal --disable-early-stop
 STATUS=$?
 CAMPAIGN_STATUS=$STATUS
 POSTRUN_ACCEPTANCE_STATUS=0

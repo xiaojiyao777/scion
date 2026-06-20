@@ -394,6 +394,10 @@ def build_readiness(
         *_run_script_model_route_enforced(root, run_sh, prepared_contract),
     )
     add_check(
+        "run_script_campaign_contract_consistency",
+        *_run_script_campaign_contract_consistency(root, run_sh, prepared_contract),
+    )
+    add_check(
         "run_script_no_early_stop_enforced",
         *_run_script_no_early_stop_enforced(root, run_sh, prepared_contract),
     )
@@ -1747,6 +1751,294 @@ def _run_script_model_route_enforced(
         "proxy_model_position": proxy_model_pos,
         "proxy_base_url_position": proxy_base_pos,
         "campaign_command_position": campaign_pos,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
+
+
+def _run_script_campaign_contract_consistency(
+    root: Path,
+    run_sh: Path,
+    prepared_contract: Any,
+) -> tuple[str, Any]:
+    launch_env = root / "launch.env"
+    failures: list[dict[str, Any]] = []
+    try:
+        launch_env_text = launch_env.read_text(encoding="utf-8")
+    except OSError as exc:
+        launch_env_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_launch_env",
+                "launch_env": str(launch_env),
+                "error": str(exc),
+            }
+        )
+    try:
+        run_text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        run_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_run_script",
+                "run_script": str(run_sh),
+                "error": str(exc),
+            }
+        )
+
+    manifest = _prepared_manifest_from_contract(root, prepared_contract)
+    config = _mapping_or_empty(manifest.get("config"))
+    execution = _mapping_or_empty(manifest.get("execution"))
+    manifest_command = manifest.get("command")
+    manifest_command_text = manifest_command if isinstance(manifest_command, str) else ""
+    manifest_run_root = str(manifest.get("run_root") or "")
+    manifest_campaign_dir = str(manifest.get("campaign_dir") or "")
+    manifest_path_from_root = (
+        str(Path(manifest_run_root) / "prepared_run_manifest.v1.json")
+        if manifest_run_root
+        else ""
+    )
+
+    identity_fields = {
+        "run_root": {
+            "env": "RUN_ROOT",
+            "expected": manifest_run_root,
+        },
+        "campaign_dir": {
+            "env": "CAMPAIGN_DIR",
+            "expected": manifest_campaign_dir,
+            "option": "--campaign-dir",
+        },
+        "prepared_run_manifest": {
+            "env": "PREPARED_RUN_MANIFEST",
+            "expected": manifest_path_from_root,
+        },
+    }
+    config_fields = {
+        "problem": {"env": "PROBLEM", "option": "--problem"},
+        "protocol": {"env": "PROTOCOL", "option": "--protocol"},
+        "split": {"env": "SPLIT", "option": "--split"},
+        "seeds": {"env": "SEEDS", "option": "--seeds"},
+    }
+    execution_fields = {
+        "rounds": {"env": "ROUNDS", "option": "--rounds", "kind": "int"},
+        "time_limit_sec": {
+            "env": "TIME_LIMIT_SEC",
+            "option": "--time-limit-sec",
+            "kind": "int",
+        },
+        "measurement_governance": {
+            "env": "MEASUREMENT_GOVERNANCE",
+            "option": "--measurement-governance",
+            "kind": "string",
+        },
+        "proposal_context_ablation": {
+            "env": "PROPOSAL_CONTEXT_ABLATION",
+            "option": "--proposal-context-ablation",
+            "kind": "string",
+        },
+    }
+
+    field_details: dict[str, Any] = {}
+
+    for field, spec in identity_fields.items():
+        env_key = str(spec["env"])
+        expected = str(spec.get("expected") or "")
+        env_value = _shell_assignment_value(launch_env_text, env_key)
+        field_details[field] = {
+            "env_key": env_key,
+            "expected": expected,
+            "launch_env_value": env_value,
+        }
+        if not expected:
+            failures.append({"reason": f"{field}_manifest_missing"})
+        if not env_value:
+            failures.append({"reason": f"{field}_launch_env_missing"})
+        elif expected and env_value != expected:
+            failures.append(
+                {
+                    "reason": f"{field}_launch_env_manifest_mismatch",
+                    "expected": expected,
+                    "actual": env_value,
+                }
+            )
+
+    source_pos = _first_launch_env_source_position(run_text)
+    campaign_pos = _campaign_command_position(run_text)
+    campaign_status_pos = run_text.find("STATUS=$?", campaign_pos)
+    campaign_end_pos = (
+        campaign_status_pos
+        if campaign_status_pos >= 0
+        else len(run_text)
+    )
+    campaign_command_block = (
+        run_text[campaign_pos:campaign_end_pos] if campaign_pos >= 0 else ""
+    )
+    if source_pos < 0:
+        failures.append({"reason": "run_script_does_not_source_launch_env"})
+    if campaign_pos < 0:
+        failures.append(
+            {
+                "reason": "missing_campaign_command_marker",
+                "marker": RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER,
+            }
+        )
+    if source_pos >= 0 and campaign_pos >= 0 and source_pos > campaign_pos:
+        failures.append({"reason": "launch_env_sourced_after_campaign"})
+
+    run_script_option_fields: dict[str, Any] = {}
+    for field, spec in {
+        "campaign_dir": identity_fields["campaign_dir"],
+        **config_fields,
+        **execution_fields,
+    }.items():
+        env_key = str(spec["env"])
+        option = str(spec["option"])
+        env_value = _shell_assignment_value(launch_env_text, env_key)
+        manifest_value: Any
+        if field in config_fields:
+            manifest_value = config.get(field)
+        elif field in execution_fields:
+            manifest_value = execution.get(field)
+        else:
+            manifest_value = manifest_campaign_dir
+        command_value = _shell_command_option_value(manifest_command_text, option)
+        run_script_value = _shell_command_option_value(campaign_command_block, option)
+        kind = str(spec.get("kind") or "string")
+
+        field_detail = {
+            "env_key": env_key,
+            "option": option,
+            "launch_env_value": env_value,
+            "manifest_value": manifest_value,
+            "manifest_command_value": command_value,
+            "run_script_value": run_script_value,
+        }
+        run_script_option_fields[field] = field_detail
+
+        if kind == "int":
+            manifest_parsed = _parse_positive_int(manifest_value)
+            env_parsed = _parse_positive_int(env_value)
+            command_parsed = _parse_positive_int(command_value)
+            run_script_parsed = _parse_positive_int(run_script_value)
+            field_detail.update(
+                {
+                    "launch_env_int": env_parsed,
+                    "manifest_int": manifest_parsed,
+                    "manifest_command_int": command_parsed,
+                    "run_script_int": run_script_parsed,
+                }
+            )
+            if manifest_parsed is None:
+                failures.append(
+                    {
+                        "reason": f"{field}_manifest_missing_or_invalid",
+                        "actual": manifest_value,
+                    }
+                )
+            if env_parsed is None:
+                failures.append(
+                    {
+                        "reason": f"{field}_launch_env_missing_or_invalid",
+                        "actual": env_value,
+                    }
+                )
+            elif manifest_parsed is not None and env_parsed != manifest_parsed:
+                failures.append(
+                    {
+                        "reason": f"{field}_launch_env_manifest_mismatch",
+                        "expected": manifest_parsed,
+                        "actual": env_parsed,
+                    }
+                )
+            if command_parsed is None:
+                failures.append(
+                    {
+                        "reason": f"{field}_manifest_command_missing_or_invalid",
+                        "option": option,
+                        "actual": command_value,
+                    }
+                )
+            elif manifest_parsed is not None and command_parsed != manifest_parsed:
+                failures.append(
+                    {
+                        "reason": f"{field}_manifest_command_mismatch",
+                        "option": option,
+                        "expected": manifest_parsed,
+                        "actual": command_parsed,
+                    }
+                )
+            if run_script_value in {f"${env_key}", f"${{{env_key}}}"}:
+                continue
+            if run_script_parsed is None:
+                failures.append(
+                    {
+                        "reason": f"{field}_run_script_option_missing_or_invalid",
+                        "option": option,
+                        "actual": run_script_value,
+                    }
+                )
+            elif manifest_parsed is not None and run_script_parsed != manifest_parsed:
+                failures.append(
+                    {
+                        "reason": f"{field}_run_script_option_mismatch",
+                        "option": option,
+                        "expected": manifest_parsed,
+                        "actual": run_script_parsed,
+                    }
+                )
+            continue
+
+        expected_text = str(manifest_value or "")
+        if not expected_text:
+            failures.append({"reason": f"{field}_manifest_missing"})
+        if not env_value:
+            failures.append({"reason": f"{field}_launch_env_missing"})
+        elif expected_text and env_value != expected_text:
+            failures.append(
+                {
+                    "reason": f"{field}_launch_env_manifest_mismatch",
+                    "expected": expected_text,
+                    "actual": env_value,
+                }
+            )
+        if command_value != expected_text:
+            failures.append(
+                {
+                    "reason": f"{field}_manifest_command_mismatch",
+                    "option": option,
+                    "expected": expected_text,
+                    "actual": command_value,
+                }
+            )
+        accepted_run_values = {
+            f"${env_key}",
+            f"${{{env_key}}}",
+        }
+        if env_value:
+            accepted_run_values.add(env_value)
+        if expected_text:
+            accepted_run_values.add(expected_text)
+        if run_script_value not in accepted_run_values:
+            failures.append(
+                {
+                    "reason": f"{field}_run_script_option_mismatch",
+                    "option": option,
+                    "expected": sorted(accepted_run_values),
+                    "actual": run_script_value,
+                }
+            )
+
+    detail = {
+        "launch_env": str(launch_env),
+        "run_script": str(run_sh),
+        "manifest_path": manifest.get("manifest_path"),
+        "manifest_command_present": bool(manifest_command_text),
+        "identity_fields": field_details,
+        "campaign_option_fields": run_script_option_fields,
+        "launch_env_source_position": source_pos,
+        "campaign_command_position": campaign_pos,
+        "campaign_status_position": campaign_status_pos,
         "failures": failures,
     }
     return ("ok" if not failures else "failed"), detail
