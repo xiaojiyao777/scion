@@ -530,6 +530,17 @@ def build_readiness(
     completion_summary = _completion_preflight_summary(
         checks.get("completion_preflight")
     )
+    launch_blockers = _launch_blockers(
+        static_ready=static_ready,
+        completion_preflight=completion_preflight,
+        completion_ready=completion_ready,
+        failed_static_required_checks=failed_static_required_checks,
+    )
+    readiness_scope = (
+        "launch_with_completion_preflight"
+        if completion_preflight
+        else "static_only_completion_preflight_not_run"
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "report_only": True,
@@ -542,6 +553,13 @@ def build_readiness(
         "static_ready": static_ready,
         "launch_ready": launch_ready,
         "ready": ready,
+        "ready_meaning": (
+            "static readiness only; not operator launch approval"
+            if not completion_preflight
+            else "launch readiness because completion preflight was required"
+        ),
+        "readiness_scope": readiness_scope,
+        "launch_blockers": launch_blockers,
         "completion_preflight_required": completion_preflight,
         "completion_preflight_summary": completion_summary,
         "completion_http_status": completion_summary.get("http_status"),
@@ -553,6 +571,23 @@ def build_readiness(
         "failed_optional_checks": failed_optional_checks,
         "checks": checks,
     }
+
+
+def _launch_blockers(
+    *,
+    static_ready: bool,
+    completion_preflight: bool,
+    completion_ready: bool,
+    failed_static_required_checks: list[str],
+) -> list[str]:
+    blockers = list(failed_static_required_checks)
+    if not completion_preflight:
+        blockers.append("completion_preflight_not_run")
+    elif not completion_ready:
+        blockers.append("completion_preflight")
+    if not static_ready and not blockers:
+        blockers.append("static_readiness_failed")
+    return blockers
 
 
 def _failed_check_names(
@@ -613,6 +648,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         "promotion state, `DecisionFeatures`, or Protocol evidence.",
         f"- Static ready: `{_display(report.get('static_ready'))}`",
         f"- Launch ready: `{_display(report.get('launch_ready'))}`",
+        f"- Readiness scope: `{_display(report.get('readiness_scope'))}`",
+        f"- Legacy `ready` meaning: {_display(report.get('ready_meaning'))}",
+        f"- Launch blockers: `{_display(report.get('launch_blockers'))}`",
         f"- Completion preflight required: `{_display(report.get('completion_preflight_required'))}`",
         f"- Failed required checks: `{_display(report.get('failed_required_checks'))}`",
         "",
@@ -640,6 +678,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         [
             "",
             "## Launch Rule",
+            "- A report with `readiness_scope=static_only_completion_preflight_not_run` "
+            "is a prepared-root audit, not launch approval.",
             "- Static readiness is not enough to start an LLM campaign.",
             "- Launch only after rerunning this tool with `--completion-preflight` "
             "and seeing `launch_ready=true`.",

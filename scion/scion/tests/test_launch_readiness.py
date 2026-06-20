@@ -26,8 +26,13 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["report_only"] is True
     assert report["decision_features_excluded"] is True
     assert report["ready"] is True
+    assert report["ready_meaning"] == (
+        "static readiness only; not operator launch approval"
+    )
+    assert report["readiness_scope"] == "static_only_completion_preflight_not_run"
     assert report["static_ready"] is True
     assert report["launch_ready"] is False
+    assert report["launch_blockers"] == ["completion_preflight_not_run"]
     assert report["failed_required_checks"] == []
     assert report["failed_static_required_checks"] == []
     assert report["failed_optional_checks"] == []
@@ -70,6 +75,9 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
         report["checks"]["analysis_brief_prepared_contract_consistency"]["status"]
         == "ok"
     )
+    markdown = readiness_tool.render_markdown(report)
+    assert "readiness_scope=static_only_completion_preflight_not_run" in markdown
+    assert "not launch approval" in markdown
     assert report["checks"]["run_script_preflight_failure_reports"]["status"] == "ok"
     assert (
         report["checks"]["run_script_completion_preflight_enforced"]["status"] == "ok"
@@ -3240,9 +3248,14 @@ def test_launch_readiness_cli_require_launch_ready_implies_completion_preflight(
 
     assert exit_code == 64
     assert payload["completion_preflight_required"] is True
+    assert payload["readiness_scope"] == "launch_with_completion_preflight"
     assert payload["static_ready"] is True
     assert payload["launch_ready"] is False
     assert payload["ready"] is False
+    assert payload["ready_meaning"] == (
+        "launch readiness because completion preflight was required"
+    )
+    assert payload["launch_blockers"] == ["completion_preflight"]
     assert payload["failed_required_checks"] == ["completion_preflight"]
     assert payload["failed_static_required_checks"] == []
     assert payload["checks"]["completion_preflight"]["status"] == "failed"
@@ -3283,9 +3296,11 @@ def test_launch_readiness_cli_require_launch_ready_accepts_real_preflight_succes
 
     assert exit_code == 0
     assert payload["completion_preflight_required"] is True
+    assert payload["readiness_scope"] == "launch_with_completion_preflight"
     assert payload["static_ready"] is True
     assert payload["launch_ready"] is True
     assert payload["ready"] is True
+    assert payload["launch_blockers"] == []
     assert payload["checks"]["completion_preflight"]["status"] == "ok"
     assert payload["completion_preflight_summary"]["status"] == "ok"
     assert payload["completion_preflight_summary"]["ok"] is True
