@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `17d11995`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `dd657475`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -250,9 +250,9 @@ Current checkpoint:
   protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-d2180d6-wrapstatus-6r-gpt55-20260620T191247Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-dd65747-statusmark-6r-gpt55-20260620T192501Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-d2180d6-wrapstatus-4r-gpt55-20260620T191248Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-dd65747-statusmark-4r-gpt55-20260620T192502Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -395,7 +395,10 @@ Current checkpoint:
   - Current-run postrun readiness also fails closed on missing or nonzero root
     wrapper exit status, nonzero campaign wrapper exit status, top-level
     postrun acceptance failure markers, and nonzero postrun readiness/report
-    exit status before delegated review.
+    exit status before delegated review. It also rejects launcher status-writer
+    failure markers in `run.log` and effective wrapper-exit markers in
+    `exit.txt`, so a failed status annotation cannot leave a stale clean
+    `run_status.json` looking review-ready.
 - Current operational truth lives in `scion/docs/status/current-state.md`.
   Detailed repair evidence lives in `scion/docs/experiments/v0.4/`; do not read
   historical experiment reports by default unless the current task explicitly
