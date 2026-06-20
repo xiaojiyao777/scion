@@ -108,14 +108,14 @@ prompt/protocol suite `119 passed`, and session grounding/planner suite
 
 ## Current Prepared Roots
 
-Generated on WSL at launch-authoritative runtime commit `3f75860f`; the local
-runtime-equivalent commit is `0e8bad42`. Both roots are mirrored under
+Generated on WSL at launch-authoritative runtime commit `8ba1f09d`; the local
+runtime-equivalent commit is `2a89ba30`. Both roots are mirrored under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-3f75860f-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-preflight-6r-gpt55-20260620T135256Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-8ba1f09d-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-preflight-6r-gpt55-20260620T140918Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-3f75860f-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-preflight-4r-gpt55-20260620T135257Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-8ba1f09d-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-preflight-4r-gpt55-20260620T140919Z-claw`
 
 Strict launch readiness for both reports:
 
@@ -125,7 +125,7 @@ Strict launch readiness for both reports:
 - `failed_static_required_checks=[]`
 - `failed_required_checks=["completion_preflight"]`
 - prompt context readiness `ok`
-- runtime guard `ok` for prepared commit `3f75860f`
+- runtime guard `ok` for prepared commit `8ba1f09d`
 
 The remaining blocker is external `gpt-5.5` completion auth:
 HTTP `401`, `classification=not_authenticated`, `code=invalid_api_key`;

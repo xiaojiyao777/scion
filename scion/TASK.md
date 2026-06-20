@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at WSL runtime commit `3f75860f` after local runtime-equivalent commit `0e8bad42` and pass static launch readiness for the warehouse 6R champion-v2 follow-up and the CVRP 4R Phase 4 bounded two-opt follow-up. Proposal and APS research caps are disabled in those roots (`proposal_attempt_limit=0`, `proposal_quality_loop_limit=0`, `agentic_tool_max_steps=0`, `agentic_tool_max_calls=0`, `agentic_code_tool_max_calls=0`, `agentic_observation_max_chars=0`) while the wall-time guard, core safety step guard, and circuit breaker remain active; disabled APS caps now preserve diagnosis planner decisions, code-phase planner source reads, authoritative self-check preview payloads, artifact replay validation, code-phase planner reserve prompts, mandatory code-phase surface reads, final code-prompt algorithm file/symbol source projection, stable source-block placement, and cacheable active algorithm facts in non-solver/operator code prompts instead of becoming derived zero/one-call/small-preview/over-budget/4-slot/compact-surface/24k-or-12k/dynamic-retry prompt bounds or dropped research facts. Code-source read result caps align with the 96k solver/source prompt window. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at WSL runtime commit `8ba1f09d` after local runtime-equivalent commit `2a89ba30` and pass static launch readiness for the warehouse 6R champion-v2 follow-up and the CVRP 4R Phase 4 bounded two-opt follow-up. Proposal and APS research caps are disabled in those roots (`proposal_attempt_limit=0`, `proposal_quality_loop_limit=0`, `agentic_tool_max_steps=0`, `agentic_tool_max_calls=0`, `agentic_code_tool_max_calls=0`, `agentic_observation_max_chars=0`) while the wall-time guard, core safety step guard, and circuit breaker remain active; disabled APS caps now preserve diagnosis planner decisions, code-phase planner source reads, authoritative self-check preview payloads, artifact replay validation, code-phase planner reserve prompts, mandatory code-phase surface reads, final code-prompt algorithm file/symbol source projection, stable source-block placement, cacheable active algorithm facts in non-solver/operator code prompts, and item-level prepared research-focus prompt visibility instead of becoming derived zero/one-call/small-preview/over-budget/4-slot/compact-surface/24k-or-12k/dynamic-retry prompt bounds, dropped research facts, or key-only launch guidance. Code-source read result caps align with the 96k solver/source prompt window. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-20*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -249,9 +249,9 @@ Current checkpoint:
   a bounded, deadline-aware mechanism with CMT2/CMT4 protection evidence.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-3f75860f-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-preflight-6r-gpt55-20260620T135256Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-8ba1f09d-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-preflight-6r-gpt55-20260620T140918Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-3f75860f-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-preflight-4r-gpt55-20260620T135257Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-8ba1f09d-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-preflight-4r-gpt55-20260620T140919Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -280,7 +280,11 @@ Current checkpoint:
   sections are also grouped into the stable code-source block for solver-design
   code prompts. Cacheable active algorithm facts and related agentic context are
   also preserved in the stable system block for non-solver/operator code prompts
-  instead of being dropped outside solver-design surfaces.
+  instead of being dropped outside solver-design surfaces. Prepared
+  `research_focus` prompt summaries also prove item-level visibility for
+  warehouse required evidence/default avoid guidance and CVRP opportunity,
+  large-two-opt, and CMT2/CMT4 case-protection evidence lists, so key-only
+  launch guidance cannot pass static readiness.
   Do not launch either root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.

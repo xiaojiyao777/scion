@@ -20,6 +20,12 @@ agent must actually see.
   `prepared_research_focus_prompt_bridge.detail.prompt_summary`.
 - `check_launch_readiness.py` recomputes the summary from the current checkout
   and rejects missing or stale summary fields before launch.
+- The prompt summary now records item counts and rendered-item counts for
+  prepared guidance lists: warehouse required evidence/default avoid directions,
+  CVRP measurable opportunity classes, large-two-opt implementation/evidence/
+  reject lists, and CMT2/CMT4 case-protection rules/evidence. Static readiness
+  rejects key-only prompt projections where the field name appears but the
+  actionable list items are missing.
 - The summary persists only schema, boolean, count, and path evidence. It does
   not persist raw provider prompts, raw problem diagnostics, quality judgments,
   campaign mutations, scheduler mutations, promotion mutations, or
@@ -27,8 +33,8 @@ agent must actually see.
 
 ## Verification
 
-Local code commit: `4928b207`.
-WSL launch-authoritative commit: `cb41c3c5`.
+Local code commit: `2a89ba30`.
+WSL launch-authoritative commit: `8ba1f09d`.
 
 Local:
 
@@ -52,7 +58,7 @@ PYTHONPATH=scion pytest scion/scion/tests/test_rebuild_prepared_handoff.py -q
 # 3 passed
 
 PYTHONPATH=scion pytest scion/scion/tests/test_launch_readiness.py -q
-# 99 passed
+# 142 passed
 ```
 
 WSL after applying the same patch:
@@ -83,26 +89,26 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
   /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest \
   scion/scion/tests/test_launch_readiness.py -q
-# 99 passed
+# 142 passed
 ```
 
 ## Prepared Roots
 
-Regenerated on WSL from commit `cb41c3c5` and mirrored locally.
+Regenerated on WSL from commit `8ba1f09d` and mirrored locally.
 
 Warehouse:
 
 - WSL:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-cb41c3c5-preflight-6r-gpt55-20260620T101240Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-8ba1f09d-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-preflight-6r-gpt55-20260620T140918Z-claw`
 - Local mirror:
-  `/home/clawd/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-cb41c3c5-preflight-6r-gpt55-20260620T101240Z-claw`
+  `/home/clawd/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-8ba1f09d-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-preflight-6r-gpt55-20260620T140918Z-claw`
 
 CVRP:
 
 - WSL:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-cb41c3c5-preflight-4r-gpt55-20260620T101240Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-8ba1f09d-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-preflight-4r-gpt55-20260620T140919Z-claw`
 - Local mirror:
-  `/home/clawd/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-cb41c3c5-preflight-4r-gpt55-20260620T101240Z-claw`
+  `/home/clawd/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-8ba1f09d-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-preflight-4r-gpt55-20260620T140919Z-claw`
 
 Strict launch readiness for both roots exits `64` because completion preflight
 is required and external auth is unavailable, but static launch readiness is
@@ -123,14 +129,21 @@ Prompt summary evidence:
   `missing_rendered_paths=[]`, `warehouse_v2_followup_present=true`,
   `warehouse_current_question_present=true`,
   `warehouse_required_evidence_present=true`,
+  `warehouse_required_evidence_item_count=5`,
+  `warehouse_required_evidence_rendered_count=5`,
   `warehouse_avoid_directions_present=true`, and
+  `warehouse_default_avoid_direction_item_count=6`,
+  `warehouse_default_avoid_direction_rendered_count=6`, and
   `warehouse_measurement_handoff_present=true`.
 - CVRP summary schema:
   `scion.prepared_research_focus_prompt_summary.v1`.
 - CVRP renders all 36 required `research_focus` paths with
   `missing_rendered_paths=[]`, `cvrp_case_protection_present=true`,
   `cvrp_bounded_twoopt_present=true`, `cvrp_direct_effect_rules_present=true`,
-  and `cvrp_measurement_handoff_present=true`.
+  `cvrp_measurement_handoff_present=true`,
+  `cvrp_measurable_opportunity_class_rendered_count=5`,
+  `cvrp_large_twoopt_required_pair_evidence_rendered_count=5`, and
+  `cvrp_case_protection_required_evidence_rendered_count=3`.
 - Both summaries report `launch_focus_schema_present=true`,
   `launch_focus_taint_present=true`, `prompt_section_present=true`,
   `compact_prompt_value_present=true`,

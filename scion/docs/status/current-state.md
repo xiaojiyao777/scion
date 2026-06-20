@@ -44,15 +44,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `3f75860f`
-after local runtime-equivalent commit `0e8bad42`; local mirrors exist under
+Generated on WSL at launch-authoritative prepared runtime commit `8ba1f09d`
+after local runtime-equivalent commit `2a89ba30`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names for
 inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-3f75860f-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-preflight-6r-gpt55-20260620T135256Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-8ba1f09d-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-preflight-6r-gpt55-20260620T140918Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-3f75860f-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-preflight-4r-gpt55-20260620T135257Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-8ba1f09d-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-preflight-4r-gpt55-20260620T140919Z-claw`
 
 Readiness snapshot:
 
@@ -60,7 +60,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `3f75860f`; strict readiness
+- Runtime guard status: prepared runtime commit `8ba1f09d`; strict readiness
   must keep reporting runtime guard OK. Doc/status-only commits after prepare
   are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -149,7 +149,10 @@ Prepared run shape:
   requirements. The current prepared roots carry
   `prepared_research_focus_prompt_bridge.detail.prompt_summary` with
   schema `scion.prepared_research_focus_prompt_summary.v1`: warehouse renders
-  19 required `research_focus` paths, CVRP renders 36, both with
+  19 required `research_focus` paths and all 5 warehouse required-evidence
+  items plus all 6 default-avoid items; CVRP renders 36 required paths, all 5
+  measurable opportunity classes, all 5 large-two-opt required-pair-evidence
+  items, and all 3 CMT2/CMT4 case-protection evidence items. Both roots report
   `missing_rendered_paths=[]`, no forbidden prompt tokens, raw prompts excluded,
   and `DecisionFeatures` excluded.
 - CVRP prepared prompt context must also prove that problem-owned measurement
