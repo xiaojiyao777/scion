@@ -3694,6 +3694,49 @@ def _cvrp_research_focus() -> dict[str, object]:
                 "n_pairs": 96,
                 "decision_features_excluded": True,
             },
+            "opportunity_projection_source": (
+                "problem_adapter.render_problem_measurement_diagnostics"
+            ),
+            "adapter_payload_schema": "cvrp_measurement_opportunity_diagnostic.v1",
+            "screening_headroom": {
+                "scope": "formal_screening_aggregate",
+                "metric": "distance_gap_pct_to_reference",
+                "case_count": 16,
+                "gap_pct_min": 2.5,
+                "gap_pct_max": 10.0,
+                "case_count_gap_pct_at_least_3": 12,
+                "case_details_omitted": True,
+                "planning_use": "proposal-only screening headroom",
+            },
+            "measurable_opportunity_classes": [
+                {
+                    "mechanism_family": "large_instance_intra_route_two_opt_seed",
+                    "required_evidence": "bounded direct objective-effect evidence",
+                    "reason_codes": ["BOUNDED_DEADLINE_REQUIRED"],
+                }
+            ],
+            "mechanism_effect_ranking": [
+                {
+                    "rank": 1,
+                    "mechanism_family": "large_instance_intra_route_two_opt_seed",
+                    "opportunity_status": "highest_current_followup",
+                    "summary": "strongest current proposal seed",
+                    "recommended_action": "use bounded deadline-aware two-opt",
+                    "reason_codes": ["CVRP_LARGE_INSTANCE_TWO_OPT_SEED"],
+                }
+            ],
+            "opportunity_diagnostics": [
+                {
+                    "diagnostic_type": "measurement_power",
+                    "surface": "solver_design",
+                    "mechanism_family": "all",
+                    "metric": "total_distance",
+                    "summary": "low-SNR proposal-only guidance",
+                    "recommended_action": "prefer direct objective-effect evidence",
+                    "confidence": "high",
+                    "reason_codes": ["CVRP_MDE_EXCEEDS_PRACTICAL_DELTA"],
+                }
+            ],
             "reason_codes": [
                 "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
                 "TRAJECTORY_DIVERGENT_LOW_SNR",

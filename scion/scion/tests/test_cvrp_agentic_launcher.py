@@ -134,6 +134,28 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert measurement["calibration"]["decision_features_excluded"] is True
     assert measurement["measurement_readiness"]["status"] == "ready"
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in measurement["reason_codes"]
+    assert measurement["opportunity_projection_source"] == (
+        "problem_adapter.render_problem_measurement_diagnostics"
+    )
+    assert measurement["adapter_payload_schema"] == (
+        "cvrp_measurement_opportunity_diagnostic.v1"
+    )
+    assert measurement["screening_headroom"]["case_count_gap_pct_at_least_3"] == 12
+    assert measurement["measurable_opportunity_classes"][0][
+        "mechanism_family"
+    ] == "construction_seed_portfolio"
+    assert measurement["mechanism_effect_ranking"][0]["mechanism_family"] == (
+        "large_instance_intra_route_two_opt_seed"
+    )
+    assert measurement["mechanism_effect_ranking"][0]["opportunity_status"] == (
+        "highest_current_followup"
+    )
+    assert measurement["opportunity_diagnostics"][0]["diagnostic_type"] == (
+        "measurement_power"
+    )
+    rendered_measurement = json.dumps(measurement, sort_keys=True)
+    assert "raw_pair" not in rendered_measurement
+    assert "bks" not in rendered_measurement.lower()
     assert any(
         "construction_seed_portfolio" in item
         for item in prepared_manifest["research_focus"][
@@ -228,6 +250,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "## Current Research Focus" in prepared_manifest_md
     assert "screening_mde_at_power_80: 9.9" in prepared_manifest_md
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prepared_manifest_md
+    assert "screening_headroom" in prepared_manifest_md
+    assert "mechanism_effect_ranking" in prepared_manifest_md
+    assert "highest_current_followup" in prepared_manifest_md
+    assert "opportunity_diagnostics" in prepared_manifest_md
     assert "route-merge absorption" in prepared_manifest_md
     assert "large_instance_intra_route_two_opt_seed" in prepared_manifest_md
     assert "unbounded large-instance two-opt fallback" in prepared_manifest_md
@@ -532,6 +558,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         ]
         is True
     )
+    measurement_signal = prepared_prompt_context["signals"][
+        "cvrp_measurement_opportunity_handoff"
+    ]
+    assert measurement_signal["detail"]["screening_headroom_present"] is True
+    assert measurement_signal["detail"]["mechanism_rank_count"] >= 1
+    assert measurement_signal["detail"]["opportunity_diagnostic_count"] >= 1
     assert (
         prepared_prompt_context["signals"]["cvrp_large_twoopt_bounded_constraints"][
             "available"

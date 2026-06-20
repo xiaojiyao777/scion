@@ -13,7 +13,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import yaml
 
@@ -80,6 +80,25 @@ CVRP_DEFAULT_AVOID_DIRECTIONS = (
     "cross-route 2-opt reconnect",
     "cluster-biased worst removal",
     "route-limit seed diversification",
+)
+CVRP_ADAPTER_OPPORTUNITY_FIELDS = (
+    "screening_headroom",
+    "measurable_opportunity_classes",
+    "mechanism_effect_ranking",
+    "opportunity_diagnostics",
+)
+CVRP_ADAPTER_FORBIDDEN_KEY_FRAGMENTS = (
+    "pair_evidence",
+    "pair_rows",
+    "raw_pair",
+    "raw_calibration",
+    "calibration_pair",
+    "bks",
+    "validation_case",
+    "frozen_case",
+    "holdout",
+    "prompt_ratio",
+    "llm_text",
 )
 CVRP_LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
     "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
@@ -512,9 +531,83 @@ def _cvrp_measurement_opportunity_diagnostics(
         ),
         "reason_codes": reason_codes,
     }
+    diagnostic.update(_cvrp_adapter_opportunity_projection(spec))
     if recommended_min_seeds is not None:
         diagnostic["recommended_min_seeds"] = recommended_min_seeds
     return diagnostic
+
+
+def _cvrp_adapter_opportunity_projection(spec: Any) -> dict[str, Any]:
+    """Project problem-owned CVRP opportunity diagnostics into launch focus."""
+
+    from scion.problem.loader import load_problem_adapter  # noqa: PLC0415
+
+    adapter = load_problem_adapter(spec)
+    hook = getattr(adapter, "render_problem_measurement_diagnostics", None)
+    if not callable(hook):
+        raise SystemExit(
+            "CVRP agentic launcher requires adapter measurement opportunity "
+            "diagnostics"
+        )
+    payload = hook()
+    if not isinstance(payload, Mapping):
+        raise SystemExit(
+            "CVRP adapter measurement opportunity diagnostics must be a mapping"
+        )
+    redacted = _redact_cvrp_adapter_opportunity_payload(dict(payload))
+    if not isinstance(redacted, Mapping):
+        raise SystemExit("CVRP adapter measurement opportunity diagnostics invalid")
+    projection: dict[str, Any] = {
+        "opportunity_projection_source": (
+            "problem_adapter.render_problem_measurement_diagnostics"
+        ),
+        "adapter_payload_schema": str(redacted.get("schema_version") or "").strip(),
+    }
+    for field in CVRP_ADAPTER_OPPORTUNITY_FIELDS:
+        value = redacted.get(field)
+        if value not in ("", None, [], {}, ()):
+            projection[field] = value
+    missing = [
+        field
+        for field in CVRP_ADAPTER_OPPORTUNITY_FIELDS
+        if projection.get(field) in ("", None, [], {}, ())
+    ]
+    if missing:
+        raise SystemExit(
+            "CVRP adapter measurement opportunity diagnostics missing fields: "
+            + ", ".join(missing)
+        )
+    return projection
+
+
+def _redact_cvrp_adapter_opportunity_payload(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        projected: dict[str, Any] = {}
+        for key, child in value.items():
+            key_text = str(key)
+            if not _cvrp_adapter_key_allowed(key_text):
+                continue
+            redacted = _redact_cvrp_adapter_opportunity_payload(child)
+            if redacted not in ("", None, [], {}, ()):
+                projected[key_text] = redacted
+        return projected
+    if isinstance(value, (list, tuple)):
+        projected_items = [
+            _redact_cvrp_adapter_opportunity_payload(item) for item in value
+        ]
+        return [
+            item
+            for item in projected_items
+            if item not in ("", None, [], {}, ())
+        ]
+    return value
+
+
+def _cvrp_adapter_key_allowed(key: str) -> bool:
+    lowered = key.lower()
+    return not any(
+        fragment in lowered for fragment in CVRP_ADAPTER_FORBIDDEN_KEY_FRAGMENTS
+    )
 
 
 def _resolve_calibration_ref(root_dir: str, calibration_ref: str) -> Path:
@@ -1015,6 +1108,8 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
             "practical_screen_delta",
             "screening_mde_at_power_80",
             "recommended_min_seeds",
+            "opportunity_projection_source",
+            "adapter_payload_schema",
             "summary",
         ):
             if key in measurement:
@@ -1022,6 +1117,47 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         reason_codes = measurement.get("reason_codes")
         if isinstance(reason_codes, list) and reason_codes:
             lines.append("  - reason_codes: " + ", ".join(map(str, reason_codes)))
+        screening_headroom = measurement.get("screening_headroom")
+        if isinstance(screening_headroom, dict) and screening_headroom:
+            lines.append("  - screening_headroom:")
+            for key in (
+                "scope",
+                "metric",
+                "case_count",
+                "gap_pct_min",
+                "gap_pct_max",
+                "case_count_gap_pct_at_least_3",
+                "planning_use",
+            ):
+                if key in screening_headroom:
+                    lines.append(f"    - {key}: {screening_headroom[key]}")
+        mechanism_ranking = measurement.get("mechanism_effect_ranking")
+        if isinstance(mechanism_ranking, list) and mechanism_ranking:
+            lines.append("  - mechanism_effect_ranking:")
+            for item in mechanism_ranking[:5]:
+                if not isinstance(item, dict):
+                    continue
+                rank = item.get("rank")
+                family = item.get("mechanism_family")
+                status = item.get("opportunity_status")
+                action = item.get("recommended_action")
+                lines.append(
+                    f"    - rank={rank}; mechanism_family={family}; "
+                    f"opportunity_status={status}; recommended_action={action}"
+                )
+        opportunity_diagnostics = measurement.get("opportunity_diagnostics")
+        if isinstance(opportunity_diagnostics, list) and opportunity_diagnostics:
+            lines.append("  - opportunity_diagnostics:")
+            for item in opportunity_diagnostics[:5]:
+                if not isinstance(item, dict):
+                    continue
+                dtype = item.get("diagnostic_type")
+                family = item.get("mechanism_family")
+                action = item.get("recommended_action")
+                lines.append(
+                    f"    - diagnostic_type={dtype}; "
+                    f"mechanism_family={family}; recommended_action={action}"
+                )
     else:
         lines.append("  - None recorded in the prepared manifest.")
     lines.append("- Measurable opportunity classes:")

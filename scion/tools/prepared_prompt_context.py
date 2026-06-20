@@ -249,6 +249,9 @@ def research_focus_prompt_summary(
         rendered_prompt,
         case_protection.get("required_evidence"),
     )
+    measurement = _mapping_or_empty(
+        research_focus.get("measurement_opportunity_diagnostics")
+    )
     empty_sequence_counts = {
         "item_count": 0,
         "rendered_count": 0,
@@ -380,6 +383,36 @@ def research_focus_prompt_summary(
             problem_family == "cvrp"
             and "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in rendered_prompt
         ),
+        "cvrp_measurement_screening_headroom_present": (
+            problem_family == "cvrp"
+            and "screening_headroom" in rendered_prompt
+            and "case_count_gap_pct_at_least_3" in rendered_prompt
+        ),
+        "cvrp_measurement_measurable_opportunities_present": (
+            problem_family == "cvrp"
+            and "measurement_opportunity_diagnostics" in rendered_prompt
+            and "measurable_opportunity_classes" in rendered_prompt
+        ),
+        "cvrp_measurement_mechanism_ranking_present": (
+            problem_family == "cvrp"
+            and "mechanism_effect_ranking" in rendered_prompt
+            and "highest_current_followup" in rendered_prompt
+        ),
+        "cvrp_measurement_opportunity_diagnostics_present": (
+            problem_family == "cvrp"
+            and "opportunity_diagnostics" in rendered_prompt
+            and "measurement_power" in rendered_prompt
+        ),
+        "cvrp_measurement_mechanism_rank_count": _sequence_count(
+            measurement.get("mechanism_effect_ranking")
+        )
+        if problem_family == "cvrp"
+        else 0,
+        "cvrp_measurement_opportunity_diagnostic_count": _sequence_count(
+            measurement.get("opportunity_diagnostics")
+        )
+        if problem_family == "cvrp"
+        else 0,
         "cvrp_measurable_opportunity_class_item_count": (
             cvrp_measurable_opportunity_counts["item_count"]
         ),
@@ -509,6 +542,37 @@ def research_focus_prompt_summary(
             not in ({}, [], "", None)
         ):
             required_true_fields.append("cvrp_measurement_handoff_present")
+            if measurement.get("screening_headroom") not in ({}, [], "", None):
+                required_true_fields.append(
+                    "cvrp_measurement_screening_headroom_present"
+                )
+            if measurement.get("measurable_opportunity_classes") not in (
+                {},
+                [],
+                "",
+                None,
+            ):
+                required_true_fields.append(
+                    "cvrp_measurement_measurable_opportunities_present"
+                )
+            if measurement.get("mechanism_effect_ranking") not in (
+                {},
+                [],
+                "",
+                None,
+            ):
+                required_true_fields.append(
+                    "cvrp_measurement_mechanism_ranking_present"
+                )
+            if measurement.get("opportunity_diagnostics") not in (
+                {},
+                [],
+                "",
+                None,
+            ):
+                required_true_fields.append(
+                    "cvrp_measurement_opportunity_diagnostics_present"
+                )
     available = (
         bool(projected_dict)
         and not missing_rendered_paths
@@ -854,14 +918,36 @@ def _required_research_focus_projection_paths(
                 "practical_screen_delta",
                 "screening_mde_at_power_80",
                 "recommended_min_seeds",
+                "opportunity_projection_source",
+                "adapter_payload_schema",
                 "reason_codes",
                 "summary",
+                "screening_headroom",
+                "measurable_opportunity_classes",
+                "mechanism_effect_ranking",
+                "opportunity_diagnostics",
                 "decision_features_excluded",
                 "proposal_visibility_only",
             ),
         )
     )
     if problem_family == "cvrp":
+        paths.extend(
+            _supported_measurement_nested_paths(
+                research_focus,
+                "screening_headroom",
+                (
+                    "scope",
+                    "metric",
+                    "case_count",
+                    "gap_pct_min",
+                    "gap_pct_max",
+                    "case_count_gap_pct_at_least_3",
+                    "case_details_omitted",
+                    "planning_use",
+                ),
+            )
+        )
         paths.extend(
             _supported_nested_paths(
                 "large_instance_two_opt_constraints",
@@ -894,6 +980,24 @@ def _required_research_focus_projection_paths(
             )
         )
     return sorted(dict.fromkeys(paths))
+
+
+def _supported_measurement_nested_paths(
+    research_focus: dict[str, Any],
+    child_key: str,
+    grandchild_keys: tuple[str, ...],
+) -> list[str]:
+    measurement = research_focus.get("measurement_opportunity_diagnostics")
+    if not isinstance(measurement, dict):
+        return []
+    value = measurement.get(child_key)
+    if not isinstance(value, dict):
+        return []
+    return [
+        f"measurement_opportunity_diagnostics.{child_key}.{grandchild_key}"
+        for grandchild_key in grandchild_keys
+        if value.get(grandchild_key) not in ({}, [], "", None)
+    ]
 
 
 def _supported_nested_paths(

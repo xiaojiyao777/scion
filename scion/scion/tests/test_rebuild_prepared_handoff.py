@@ -323,6 +323,12 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
     assert prompt_summary["cvrp_bounded_twoopt_present"] is True
     assert prompt_summary["cvrp_direct_effect_rules_present"] is True
     assert prompt_summary["cvrp_measurement_handoff_present"] is True
+    assert prompt_summary["cvrp_measurement_screening_headroom_present"] is True
+    assert prompt_summary["cvrp_measurement_measurable_opportunities_present"] is True
+    assert prompt_summary["cvrp_measurement_mechanism_ranking_present"] is True
+    assert prompt_summary["cvrp_measurement_opportunity_diagnostics_present"] is True
+    assert prompt_summary["cvrp_measurement_mechanism_rank_count"] == 1
+    assert prompt_summary["cvrp_measurement_opportunity_diagnostic_count"] == 1
     assert prompt_summary["missing_rendered_paths"] == []
     assert prompt_summary["forbidden_prompt_tokens_present"] == []
     code_bridge = prompt_context["signals"][
@@ -386,6 +392,10 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
         ]
         is True
     )
+    measurement_signal = prompt_context["signals"]["cvrp_measurement_opportunity_handoff"]
+    assert measurement_signal["detail"]["screening_headroom_present"] is True
+    assert measurement_signal["detail"]["mechanism_rank_count"] == 1
+    assert measurement_signal["detail"]["opportunity_diagnostic_count"] == 1
     assert (
         prompt_context["signals"]["cvrp_large_twoopt_bounded_constraints"][
             "available"
@@ -727,6 +737,49 @@ def _cvrp_research_focus() -> dict[str, object]:
             "decision_features_excluded": True,
             "practical_screen_delta": 2.0,
             "screening_mde_at_power_80": 9.9,
+            "opportunity_projection_source": (
+                "problem_adapter.render_problem_measurement_diagnostics"
+            ),
+            "adapter_payload_schema": "cvrp_measurement_opportunity_diagnostic.v1",
+            "screening_headroom": {
+                "scope": "formal_screening_aggregate",
+                "metric": "distance_gap_pct_to_reference",
+                "case_count": 16,
+                "gap_pct_min": 2.5,
+                "gap_pct_max": 10.0,
+                "case_count_gap_pct_at_least_3": 12,
+                "case_details_omitted": True,
+                "planning_use": "proposal-only screening headroom",
+            },
+            "measurable_opportunity_classes": [
+                {
+                    "mechanism_family": "large_instance_intra_route_two_opt_seed",
+                    "required_evidence": "bounded direct objective-effect evidence",
+                    "reason_codes": ["BOUNDED_DEADLINE_REQUIRED"],
+                }
+            ],
+            "mechanism_effect_ranking": [
+                {
+                    "rank": 1,
+                    "mechanism_family": "large_instance_intra_route_two_opt_seed",
+                    "opportunity_status": "highest_current_followup",
+                    "summary": "strongest current proposal seed",
+                    "recommended_action": "use bounded deadline-aware two-opt",
+                    "reason_codes": ["CVRP_LARGE_INSTANCE_TWO_OPT_SEED"],
+                }
+            ],
+            "opportunity_diagnostics": [
+                {
+                    "diagnostic_type": "measurement_power",
+                    "surface": "solver_design",
+                    "mechanism_family": "all",
+                    "metric": "total_distance",
+                    "summary": "low-SNR proposal-only guidance",
+                    "recommended_action": "prefer direct objective-effect evidence",
+                    "confidence": "high",
+                    "reason_codes": ["CVRP_MDE_EXCEEDS_PRACTICAL_DELTA"],
+                }
+            ],
             "reason_codes": [
                 "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
                 "TRAJECTORY_DIVERGENT_LOW_SNR",

@@ -248,8 +248,65 @@ def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
                     "screening_mde_at_power_80"
                 ),
                 "recommended_min_seeds": measurement.get("recommended_min_seeds"),
+                "opportunity_projection_source": _string_or_empty(
+                    measurement.get("opportunity_projection_source")
+                ),
+                "adapter_payload_schema": _string_or_empty(
+                    measurement.get("adapter_payload_schema")
+                ),
                 "reason_codes": _string_items(measurement.get("reason_codes")),
                 "summary": _string_or_empty(measurement.get("summary")),
+                "screening_headroom": _project_launch_focus_mapping(
+                    measurement.get("screening_headroom"),
+                    fields=(
+                        "scope",
+                        "metric",
+                        "case_count",
+                        "gap_pct_min",
+                        "gap_pct_max",
+                        "case_count_gap_pct_at_least_3",
+                        "case_details_omitted",
+                        "planning_use",
+                    ),
+                ),
+                "measurable_opportunity_classes": _project_launch_focus_items(
+                    measurement.get("measurable_opportunity_classes"),
+                    fields=(
+                        "mechanism_family",
+                        "required_evidence",
+                        "seed_report",
+                        "confidence",
+                        "reason_codes",
+                    ),
+                ),
+                "mechanism_effect_ranking": _project_launch_focus_items(
+                    measurement.get("mechanism_effect_ranking"),
+                    fields=(
+                        "rank",
+                        "mechanism_family",
+                        "evidence_status",
+                        "opportunity_status",
+                        "effect_status",
+                        "objective_effect_status",
+                        "summary",
+                        "recommended_action",
+                        "confidence",
+                        "reason_codes",
+                    ),
+                ),
+                "opportunity_diagnostics": _project_launch_focus_items(
+                    measurement.get("opportunity_diagnostics"),
+                    fields=(
+                        "diagnostic_type",
+                        "surface",
+                        "mechanism_family",
+                        "metric",
+                        "summary",
+                        "recommended_action",
+                        "confidence",
+                        "reason_codes",
+                    ),
+                ),
                 "decision_features_excluded": measurement.get(
                     "decision_features_excluded"
                 ),
@@ -313,6 +370,48 @@ def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
             if child not in ("", [], {}, None)
         }
     return projected
+
+
+def _project_launch_focus_mapping(
+    value: Any,
+    *,
+    fields: tuple[str, ...],
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    projected: dict[str, Any] = {}
+    for field in fields:
+        child = value.get(field)
+        if isinstance(child, str):
+            child = child.strip()
+        if child not in ("", [], {}, None):
+            projected[field] = child
+    return projected
+
+
+def _project_launch_focus_items(
+    value: Any,
+    *,
+    fields: tuple[str, ...],
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    items: list[dict[str, Any]] = []
+    for raw in value:
+        if not isinstance(raw, Mapping):
+            continue
+        projected = _project_launch_focus_mapping(raw, fields=fields)
+        reason_codes = raw.get("reason_codes")
+        if "reason_codes" in fields and isinstance(reason_codes, (list, tuple)):
+            codes = _string_items(reason_codes)
+            if codes:
+                projected["reason_codes"] = codes
+        if projected:
+            items.append(projected)
+        if len(items) >= limit:
+            break
+    return items
 
 
 def _string_or_empty(value: Any) -> str:

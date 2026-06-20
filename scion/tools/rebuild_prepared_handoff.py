@@ -639,14 +639,39 @@ def _add_focus_signals(
         measurement = _mapping_or_empty(
             research_focus.get("measurement_opportunity_diagnostics")
         )
+        screening_headroom = _mapping_or_empty(measurement.get("screening_headroom"))
+        mechanism_rank_count = _sequence_count(
+            measurement.get("mechanism_effect_ranking")
+        )
+        opportunity_diagnostic_count = _sequence_count(
+            measurement.get("opportunity_diagnostics")
+        )
+        measurable_opportunity_count = _sequence_count(
+            measurement.get("measurable_opportunity_classes")
+        )
         _add_signal(
             signals,
             "cvrp_measurement_opportunity_handoff",
-            available=bool(measurement),
+            available=(
+                bool(measurement)
+                and measurement.get("proposal_visibility_only") is True
+                and measurement.get("decision_features_excluded") is True
+                and bool(screening_headroom)
+                and measurable_opportunity_count > 0
+                and mechanism_rank_count > 0
+                and opportunity_diagnostic_count > 0
+            ),
             required=True,
             source="prepared_run_manifest.research_focus.measurement_opportunity_diagnostics",
             detail={
                 "schema_version": measurement.get("schema_version"),
+                "opportunity_projection_source": measurement.get(
+                    "opportunity_projection_source"
+                ),
+                "screening_headroom_present": bool(screening_headroom),
+                "measurable_opportunity_count": measurable_opportunity_count,
+                "mechanism_rank_count": mechanism_rank_count,
+                "opportunity_diagnostic_count": opportunity_diagnostic_count,
                 "reason_code_count": len(_string_items(measurement.get("reason_codes"))),
             },
         )
