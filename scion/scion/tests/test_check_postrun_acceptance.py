@@ -271,6 +271,53 @@ def test_postrun_acceptance_rejects_analysis_brief_prepared_contract_drift(
     )
 
 
+def test_postrun_acceptance_rejects_analysis_brief_boundary_drift(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-brief-boundary")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    brief["report_only"] = False
+    brief["quality_judgment"] = True
+    brief["decision_features_excluded"] = False
+    brief["campaign_state_mutated"] = True
+    brief["scheduler_state_mutated"] = True
+    brief["promotion_state_mutated"] = True
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    boundary_check = readiness["checks"]["analysis_brief_boundary"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert boundary_check["status"] == "failed"
+    assert boundary_check["required"] is True
+    failures = boundary_check["detail"]["failures"]
+    assert "analysis_brief_not_report_only" in failures
+    assert "analysis_brief_quality_judgment_not_false" in failures
+    assert "analysis_brief_decision_features_not_excluded" in failures
+    assert "analysis_brief_campaign_state_mutated_not_false" in failures
+    assert "analysis_brief_scheduler_state_mutated_not_false" in failures
+    assert "analysis_brief_promotion_state_mutated_not_false" in failures
+
+
 def test_postrun_acceptance_readiness_rejects_missing_manifest_declared_output(
     tmp_path: Path,
 ) -> None:

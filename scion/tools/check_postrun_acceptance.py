@@ -232,6 +232,14 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
             else "",
         },
     )
+    brief_boundary_status, brief_boundary_detail = _analysis_brief_boundary(
+        analysis_brief
+    )
+    add_check(
+        "analysis_brief_boundary",
+        brief_boundary_status,
+        brief_boundary_detail,
+    )
     add_check(
         "inventory_artifact_present",
         "ok" if _int_or_zero(postrun_counts.get("inventory")) > 0 else "failed",
@@ -745,6 +753,30 @@ def _brief_current_run_evidence(brief: Mapping[str, Any]) -> bool:
     return (
         lifecycle.get("current_run_evidence") is True
         and phase4.get("current_run_evidence") is True
+    )
+
+
+def _analysis_brief_boundary(brief: Mapping[str, Any]) -> tuple[str, Any]:
+    failures: list[str] = []
+    failures.extend(_boundary_marker_failures("analysis_brief", brief))
+    for mutation_field in (
+        "campaign_state_mutated",
+        "scheduler_state_mutated",
+        "promotion_state_mutated",
+    ):
+        if brief.get(mutation_field) is not False:
+            failures.append(f"analysis_brief_{mutation_field}_not_false")
+    return (
+        "ok" if not failures else "failed",
+        {
+            "failures": failures,
+            "report_only": brief.get("report_only"),
+            "quality_judgment": brief.get("quality_judgment"),
+            "decision_features_excluded": brief.get("decision_features_excluded"),
+            "campaign_state_mutated": brief.get("campaign_state_mutated"),
+            "scheduler_state_mutated": brief.get("scheduler_state_mutated"),
+            "promotion_state_mutated": brief.get("promotion_state_mutated"),
+        },
     )
 
 
