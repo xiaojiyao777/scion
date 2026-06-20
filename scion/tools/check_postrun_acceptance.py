@@ -891,6 +891,11 @@ def _summary_actionability_detail(
     problem_family = summary.get("problem_family")
     if expected_family is not None and problem_family != expected_family:
         summary_failures.append("problem_summary_family_mismatch")
+    if (
+        summary.get("current_run_evidence") is True
+        and not _mapping_or_empty(summary.get("evidence"))
+    ):
+        summary_failures.append("problem_summary_evidence_missing")
     launch_required_field = {
         "warehouse_followup_summary": "launch_required_before_plateau_conclusion",
         "cvrp_large_twoopt_summary": "launch_required_before_twoopt_conclusion",
