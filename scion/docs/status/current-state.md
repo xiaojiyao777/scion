@@ -57,9 +57,10 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: WSL checkout matches prepared runtime commit `330b90e2`.
-  Later doc/status-only commits are acceptable only when readiness reports
-  `runtime_guard_paths_unchanged_since_prepare`.
+- Runtime guard status: prepared runtime commit `330b90e2`; strict readiness
+  currently reports runtime guard OK because later status/doc commits leave
+  runtime guard paths unchanged. Future doc/status-only commits are acceptable
+  only when readiness keeps reporting unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
   `prepared_run_manifest.v1.json` agree on the problem/protocol/split/seeds,
   campaign directory, rounds, time limit, measurement-governance mode, and
