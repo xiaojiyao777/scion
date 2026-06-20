@@ -2198,6 +2198,7 @@ def _run_script_proposal_headroom_enforced(
     launch_env = root / "launch.env"
     failures: list[dict[str, Any]] = []
     warnings: list[dict[str, Any]] = []
+    disabled: list[dict[str, Any]] = []
     try:
         launch_env_text = launch_env.read_text(encoding="utf-8")
     except OSError as exc:
@@ -2244,31 +2245,37 @@ def _run_script_proposal_headroom_enforced(
             "env": "AGENTIC_TOOL_MAX_STEPS",
             "option": "--agentic-tool-max-steps",
             "min": MIN_PREPARED_AGENTIC_TOOL_MAX_STEPS,
+            "zero_disables": True,
         },
         "agentic_tool_max_calls": {
             "env": "AGENTIC_TOOL_MAX_CALLS",
             "option": "--agentic-tool-max-calls",
             "min": MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS,
+            "zero_disables": True,
         },
         "agentic_code_tool_max_calls": {
             "env": "AGENTIC_CODE_TOOL_MAX_CALLS",
             "option": "--agentic-code-tool-max-calls",
             "min": MIN_PREPARED_AGENTIC_CODE_TOOL_MAX_CALLS,
+            "zero_disables": True,
         },
         "agentic_observation_max_chars": {
             "env": "AGENTIC_OBSERVATION_MAX_CHARS",
             "option": "--agentic-observation-max-chars",
             "min": MIN_PREPARED_AGENTIC_OBSERVATION_MAX_CHARS,
+            "zero_disables": True,
         },
         "proposal_attempt_limit": {
             "env": "PROPOSAL_ATTEMPT_LIMIT",
             "option": "--proposal-attempt-limit",
             "min": MIN_PREPARED_PROPOSAL_HEADROOM,
+            "zero_disables": True,
         },
         "proposal_quality_loop_limit": {
             "env": "PROPOSAL_QUALITY_LOOP_LIMIT",
             "option": "--proposal-quality-loop-limit",
             "min": MIN_PREPARED_PROPOSAL_HEADROOM,
+            "zero_disables": True,
         },
     }
     detail_fields: dict[str, Any] = {}
@@ -2276,6 +2283,7 @@ def _run_script_proposal_headroom_enforced(
         env_key = str(spec["env"])
         option = str(spec["option"])
         expected_min = int(spec["min"])
+        zero_disables = bool(spec.get("zero_disables"))
         env_raw = _shell_assignment_value(launch_env_text, env_key)
         env_value = _parse_nonnegative_int(env_raw)
         manifest_value = _parse_nonnegative_int(execution.get(field))
@@ -2297,6 +2305,7 @@ def _run_script_proposal_headroom_enforced(
             "manifest_execution_value": manifest_value,
             "manifest_command_value": manifest_command_value,
             "run_script_campaign_uses_env": run_script_uses_env,
+            "zero_disables": zero_disables,
         }
         for source, value in (
             ("launch_env", env_value),
@@ -2315,6 +2324,15 @@ def _run_script_proposal_headroom_enforced(
                         else execution.get(field)
                         if source == "manifest_execution"
                         else manifest_command_raw,
+                    }
+                )
+            elif value == 0 and zero_disables:
+                disabled.append(
+                    {
+                        "field": field,
+                        "source": source,
+                        "actual": value,
+                        "semantic": "disabled",
                     }
                 )
             elif value < expected_min:
@@ -2364,6 +2382,7 @@ def _run_script_proposal_headroom_enforced(
         "campaign_command_position": campaign_pos,
         "campaign_status_position": campaign_status_pos,
         "fields": detail_fields,
+        "disabled": disabled,
         "failures": failures,
         "warnings": warnings,
     }

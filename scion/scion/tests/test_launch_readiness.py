@@ -2667,21 +2667,20 @@ def test_launch_readiness_accepts_disabled_proposal_headroom_caps(
     headroom_check = report["checks"]["run_script_proposal_headroom_enforced"]
     assert headroom_check["status"] == "ok"
     assert headroom_check["detail"]["failures"] == []
-    warnings = headroom_check["detail"]["warnings"]
+    assert headroom_check["detail"]["warnings"] == []
+    disabled = headroom_check["detail"]["disabled"]
     assert {
-        "reason": "proposal_attempt_limit_launch_env_below_minimum",
         "field": "proposal_attempt_limit",
         "source": "launch_env",
-        "recommended_min": 64,
         "actual": 0,
-    } in warnings
+        "semantic": "disabled",
+    } in disabled
     assert {
-        "reason": "proposal_quality_loop_limit_manifest_execution_below_minimum",
         "field": "proposal_quality_loop_limit",
         "source": "manifest_execution",
-        "recommended_min": 64,
         "actual": 0,
-    } in warnings
+        "semantic": "disabled",
+    } in disabled
 
 
 def test_launch_readiness_rejects_missing_agentic_tool_headroom_env(
@@ -2796,21 +2795,20 @@ def test_launch_readiness_accepts_disabled_agentic_tool_headroom_caps(
     headroom_check = report["checks"]["run_script_proposal_headroom_enforced"]
     assert headroom_check["status"] == "ok"
     assert headroom_check["detail"]["failures"] == []
-    warnings = headroom_check["detail"]["warnings"]
+    assert headroom_check["detail"]["warnings"] == []
+    disabled = headroom_check["detail"]["disabled"]
     assert {
-        "reason": "agentic_tool_max_steps_launch_env_below_minimum",
         "field": "agentic_tool_max_steps",
         "source": "launch_env",
-        "recommended_min": 240,
         "actual": 0,
-    } in warnings
+        "semantic": "disabled",
+    } in disabled
     assert {
-        "reason": "agentic_observation_max_chars_manifest_execution_below_minimum",
         "field": "agentic_observation_max_chars",
         "source": "manifest_execution",
-        "recommended_min": 2000000,
         "actual": 0,
-    } in warnings
+        "semantic": "disabled",
+    } in disabled
 
 
 def test_launch_readiness_rejects_run_script_without_proposal_headroom_flags(
