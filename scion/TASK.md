@@ -280,10 +280,11 @@ Current checkpoint:
     require matching current-run failure-taxonomy evidence.
   - CVRP bounded two-opt review readiness requires a qualifying bounded or
     deadline-aware large two-opt protocol-effect signal plus co-located
-    activation/effect/phase telemetry on a matching top effect row; seed-only
-    guidance labels, generic/intra-only two-opt-like labels, VNS, unbounded,
-    fallback, unrelated mechanism evidence, and continuity-only mentions are
-    not sufficient.
+    activation/effect/intra-large-two-opt phase telemetry on a matching top
+    effect row; seed-only guidance labels, generic/intra-only two-opt-like
+    labels, `two_opt_star`/cross-route phases, VNS, unbounded, fallback,
+    unrelated mechanism evidence, and continuity-only mentions are not
+    sufficient.
   - Current-run warehouse/CVRP problem summaries must carry an explicit
     `evidence` payload before delegated review can accept protocol-evaluated,
     plateau, positive-effect, or bounded two-opt conclusions; free-text summary

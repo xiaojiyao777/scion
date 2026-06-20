@@ -2787,6 +2787,117 @@ def test_postrun_acceptance_rejects_cvrp_ready_summary_with_unrelated_mechanism_
     assert "review_input_large_twoopt_direct_evidence_missing" in failures
 
 
+def test_postrun_acceptance_rejects_cvrp_ready_summary_with_cross_route_twoopt_star_phase(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "cvrp-run-twoopt-star-phase")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "cvrp"
+    evidence = _cvrp_problem_evidence()
+    evidence["measurement_effect"].update(
+        {
+            "rows_at_or_above_mde": 1,
+            "rows_with_ci_high_below_mde": 0,
+            "max_effect_to_mde_ratio": 1.2,
+            "interpretation_counts": {"above_mde": 1},
+            "mechanism_family_mapped_row_count": 1,
+            "mechanism_family_unmapped_row_count": 0,
+        }
+    )
+    evidence["large_twoopt_mechanism"] = {
+        "available": True,
+        "mechanism_family_available": True,
+        "direct_evidence_ready": True,
+        "direct_evidence": {
+            "ready": True,
+            "missing": [],
+            "complete_direct_evidence_row_count": 1,
+        },
+        "families": ["bounded_large_twoopt"],
+        "protocol_families": ["bounded_large_twoopt"],
+        "rejected_protocol_families": [],
+        "protocol_row_count": 1,
+    }
+    brief["cvrp_large_twoopt_summary"] = {
+        "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": evidence,
+        "evidence_gaps": [],
+        "interpretation": "bounded_twoopt_review_ready",
+        "problem_family": "cvrp",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    measurement = brief["measurement_effect_summary"]
+    assert isinstance(measurement, dict)
+    aggregate = measurement["aggregate"]
+    assert isinstance(aggregate, dict)
+    aggregate.update(
+        {
+            "interpretation_counts": {"above_mde": 1},
+            "rows_at_or_above_mde": 1,
+            "rows_with_ci_high_below_mde": 0,
+            "max_effect_to_mde_ratio": 1.2,
+            "mechanism_family_effects": {
+                "bounded_large_twoopt": {
+                    "protocol_row_count": 1,
+                    "rows_at_or_above_mde": 1,
+                    "max_effect_to_mde_ratio": 1.2,
+                }
+            },
+        }
+    )
+    measurement["entries"] = [
+        {
+            "protocol_effects_vs_mde": {
+                "top_rows_by_effect_to_mde": [
+                    {
+                        "mechanism_family": "bounded_large_twoopt",
+                        "positive_effect_at_or_above_mde": True,
+                        "mechanism_evidence": {
+                            "primary_mechanism": "bounded_large_twoopt",
+                            "primary_activation_status": "observed",
+                            "primary_effect_status": "positive",
+                            "activation_evidence_status": "activation_observed",
+                            "objective_effect_status": "mixed_objective_effect",
+                        },
+                        "candidate_phase_telemetry_summary": {
+                            "selected_surface": "solver_design",
+                            "runtime_observed_pairs": 8,
+                            "buckets": {
+                                "two_opt_star": {"weighted_sum_ms": 120.0},
+                            },
+                        },
+                    }
+                ]
+            }
+        }
+    ]
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    consistency = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert consistency["status"] == "failed"
+    failures = consistency["detail"]["failures"]
+    assert "problem_summary_large_twoopt_available_mismatch" in failures
+    assert "problem_summary_large_twoopt_direct_evidence_ready_mismatch" in failures
+    assert "review_input_large_twoopt_direct_evidence_missing" in failures
+    assert consistency["detail"]["input_large_twoopt_protocol_row_count"] == 1
+    assert consistency["detail"]["input_large_twoopt_mechanism_family_available"] is True
+    assert consistency["detail"]["input_large_twoopt_direct_evidence_ready"] is False
+
+
 def test_postrun_acceptance_rejects_cvrp_ready_summary_with_split_direct_evidence_rows(
     tmp_path: Path,
 ) -> None:

@@ -4339,6 +4339,18 @@ def _is_cvrp_large_twoopt_phase_name(value: str) -> bool:
         .replace("/", "_")
     )
     compact = normalized.replace("_", "")
+    excluded_markers = (
+        "cross_route",
+        "crossroute",
+        "two_opt_star",
+        "twooptstar",
+        "2optstar",
+        "unbounded",
+        "vns",
+        "fallback",
+    )
+    if any(marker in normalized or marker in compact for marker in excluded_markers):
+        return False
     return (
         "two_opt" in normalized
         or "twoopt" in compact

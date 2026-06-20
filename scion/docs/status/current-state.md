@@ -112,7 +112,9 @@ Prepared run shape:
 - The active follow-up treats the external large-instance intra-route two-opt
   result only as proposal guidance. Review readiness requires a bounded,
   deadline-aware implementation with co-located positive effect, activation,
-  objective-effect, phase telemetry, and CMT2/CMT4 protection evidence.
+  objective-effect, intra-large-two-opt phase telemetry, and CMT2/CMT4
+  protection evidence; `two_opt_star`, cross-route, VNS, unbounded, and
+  fallback phase telemetry do not satisfy this direct-evidence rule.
 
 ## Next Actions
 
