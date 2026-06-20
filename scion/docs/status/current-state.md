@@ -55,8 +55,9 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared commit `df871c55`, actual commit `df871c55`;
-  launch-critical runtime guard paths are clean and commit-consistent.
+- Runtime guard status: prepared runtime commit `df871c55`; launch-critical
+  runtime guard paths are clean. Later doc/status-only commits are acceptable
+  only when readiness reports `runtime_guard_paths_unchanged_since_prepare`.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
   `prepared_run_manifest.v1.json` agree on the problem/protocol/split/seeds,
   campaign directory, rounds, time limit, measurement-governance mode, and
