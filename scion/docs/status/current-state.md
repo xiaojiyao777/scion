@@ -41,13 +41,13 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at prepared runtime commit `5669a551`; local mirrors exist under
+Generated on WSL at prepared runtime commit `c822329d`; local mirrors exist under
 `/home/clawd/research/scion-experiments/` with the same directory names.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-twooptdetail-5669a551-preflight-6r-gpt55-20260620T055856Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-measurementdetail-c822329d-preflight-6r-gpt55-20260620T061140Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-twooptdetail-5669a551-preflight-4r-gpt55-20260620T055910Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-measurementdetail-c822329d-preflight-4r-gpt55-20260620T061155Z-claw`
 
 Readiness snapshot:
 
@@ -55,7 +55,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared commit `5669a551`; launch-critical runtime
+- Runtime guard status: prepared commit `c822329d`; launch-critical runtime
   guard paths are unchanged after docs-only snapshot commits.
 
 Prepared run shape:
@@ -101,7 +101,10 @@ Prepared run shape:
   current failure-taxonomy quality-block counts, reports-with-quality-blocks,
   and reason-count distribution. CVRP bounded two-opt ready summaries must
   match recomputed direct-evidence counters, family lists, rejection counts, and
-  top-row signal count from current measurement/continuity inputs.
+  top-row signal count from current measurement/continuity inputs. Measurement
+  evidence must match current interpretation counts and
+  `max_effect_to_mde_ratio`; CVRP bounded two-opt ready summaries must also
+  match current mechanism-family mapped/unmapped row counts.
 
 ## Warehouse
 
