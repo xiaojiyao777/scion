@@ -1321,6 +1321,44 @@ def _problem_summary_input_consistency(
                 _int_or_zero(input_large_twoopt_signal.get("protocol_row_count"))
             ):
                 failures.append("problem_summary_large_twoopt_protocol_rows_mismatch")
+            if interpretation == "bounded_twoopt_review_ready":
+                if _large_twoopt_direct_evidence_signature(
+                    large_twoopt_evidence.get("direct_evidence")
+                ) != _large_twoopt_direct_evidence_signature(
+                    input_large_twoopt_signal.get("direct_evidence")
+                ):
+                    failures.append(
+                        "problem_summary_large_twoopt_direct_evidence_mismatch"
+                    )
+                for field in (
+                    "families",
+                    "protocol_families",
+                    "continuity_families",
+                    "rejected_protocol_families",
+                    "rejected_continuity_families",
+                ):
+                    if _string_list(large_twoopt_evidence.get(field)) != _string_list(
+                        input_large_twoopt_signal.get(field)
+                    ):
+                        failures.append(
+                            f"problem_summary_large_twoopt_{field}_mismatch"
+                        )
+                if _int_mapping(
+                    large_twoopt_evidence.get("rejection_reason_counts")
+                ) != (
+                    _int_mapping(
+                        input_large_twoopt_signal.get("rejection_reason_counts")
+                    )
+                ):
+                    failures.append(
+                        "problem_summary_large_twoopt_rejection_reason_counts_mismatch"
+                    )
+                if _int_or_zero(large_twoopt_evidence.get("top_row_signal_count")) != (
+                    _int_or_zero(input_large_twoopt_signal.get("top_row_signal_count"))
+                ):
+                    failures.append(
+                        "problem_summary_large_twoopt_top_row_signal_count_mismatch"
+                    )
         if interpretation == "bounded_twoopt_review_ready":
             if large_twoopt_evidence.get("available") is not True:
                 failures.append("problem_summary_large_twoopt_available_missing")
@@ -1463,6 +1501,58 @@ def _problem_summary_input_consistency(
             ),
             "input_large_twoopt_protocol_row_count": (
                 input_large_twoopt_signal.get("protocol_row_count")
+            ),
+            "summary_large_twoopt_direct_evidence": (
+                _large_twoopt_direct_evidence_signature(
+                    large_twoopt_evidence.get("direct_evidence")
+                )
+            ),
+            "input_large_twoopt_direct_evidence": (
+                _large_twoopt_direct_evidence_signature(
+                    input_large_twoopt_signal.get("direct_evidence")
+                )
+            ),
+            "summary_large_twoopt_families": _string_list(
+                large_twoopt_evidence.get("families")
+            ),
+            "input_large_twoopt_families": _string_list(
+                input_large_twoopt_signal.get("families")
+            ),
+            "summary_large_twoopt_protocol_families": _string_list(
+                large_twoopt_evidence.get("protocol_families")
+            ),
+            "input_large_twoopt_protocol_families": _string_list(
+                input_large_twoopt_signal.get("protocol_families")
+            ),
+            "summary_large_twoopt_continuity_families": _string_list(
+                large_twoopt_evidence.get("continuity_families")
+            ),
+            "input_large_twoopt_continuity_families": _string_list(
+                input_large_twoopt_signal.get("continuity_families")
+            ),
+            "summary_large_twoopt_rejected_protocol_families": _string_list(
+                large_twoopt_evidence.get("rejected_protocol_families")
+            ),
+            "input_large_twoopt_rejected_protocol_families": _string_list(
+                input_large_twoopt_signal.get("rejected_protocol_families")
+            ),
+            "summary_large_twoopt_rejected_continuity_families": _string_list(
+                large_twoopt_evidence.get("rejected_continuity_families")
+            ),
+            "input_large_twoopt_rejected_continuity_families": _string_list(
+                input_large_twoopt_signal.get("rejected_continuity_families")
+            ),
+            "summary_large_twoopt_rejection_reason_counts": _int_mapping(
+                large_twoopt_evidence.get("rejection_reason_counts")
+            ),
+            "input_large_twoopt_rejection_reason_counts": _int_mapping(
+                input_large_twoopt_signal.get("rejection_reason_counts")
+            ),
+            "summary_large_twoopt_top_row_signal_count": _int_or_zero(
+                large_twoopt_evidence.get("top_row_signal_count")
+            ),
+            "input_large_twoopt_top_row_signal_count": _int_or_zero(
+                input_large_twoopt_signal.get("top_row_signal_count")
             ),
         },
     )
@@ -2308,6 +2398,30 @@ def _int_mapping(value: Any) -> dict[str, int]:
     if not isinstance(value, Mapping):
         return {}
     return {str(key): _int_or_zero(count) for key, count in value.items()}
+
+
+def _large_twoopt_direct_evidence_signature(value: Any) -> dict[str, Any]:
+    evidence = _mapping_or_empty(value)
+    return {
+        "ready": evidence.get("ready") is True,
+        "missing": _string_list(evidence.get("missing")),
+        "top_rows_checked": _int_or_zero(evidence.get("top_rows_checked")),
+        "complete_direct_evidence_row_count": _int_or_zero(
+            evidence.get("complete_direct_evidence_row_count")
+        ),
+        "positive_effect_row_count": _int_or_zero(
+            evidence.get("positive_effect_row_count")
+        ),
+        "activation_observed_count": _int_or_zero(
+            evidence.get("activation_observed_count")
+        ),
+        "objective_effect_observed_count": _int_or_zero(
+            evidence.get("objective_effect_observed_count")
+        ),
+        "phase_telemetry_observed_count": _int_or_zero(
+            evidence.get("phase_telemetry_observed_count")
+        ),
+    }
 
 
 def _string_list(value: Any) -> list[str]:
