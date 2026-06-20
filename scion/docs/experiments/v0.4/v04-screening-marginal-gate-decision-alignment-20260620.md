@@ -5,9 +5,9 @@ Branch: `codex/v04-evidence-repair-plan`
 
 ## Purpose
 
-Align protocol screening-gate reporting with Decision routing for marginal
-screening evidence. In v0.4, screening pass is a diagnostic validation
-candidate, not promotion.
+Align protocol screening-gate reporting, Decision routing, and proposal
+feedback/search-memory semantics for marginal screening evidence. In v0.4,
+screening pass is a diagnostic validation candidate, not promotion.
 
 ## Issue
 
@@ -21,6 +21,12 @@ screening result. It was especially harmful for v0.4 research recovery because
 low-SNR but non-negative solver-design ideas should be eligible for diagnostic
 validation, while clearly negative effects must still fail closed.
 
+After gate/Decision alignment, a second drift remained: proposal feedback
+classified any screening `gate_outcome="pass"` as `promotable`. That made
+`SCREENING_PASS_MARGINAL_DELTA` disappear from branch-local search memory and
+could tell later prompts that a low-SNR diagnostic validation candidate was a
+promotion-quality screening result.
+
 ## Repair
 
 - `scion/scion/protocol/gates.py`
@@ -32,6 +38,15 @@ validation, while clearly negative effects must still fail closed.
 - `scion/scion/tests/test_protocol_stats_gates.py`
   - Added regression coverage for marginal non-negative evidence and high-win
     negative median effect.
+- `scion/scion/proposal/screening_feedback.py`
+  - `SCREENING_PASS_MARGINAL_DELTA` and related diagnostic validation reason
+    codes are now feedback tier `marginal`, not `promotable`.
+  - Negative objective evidence takes precedence over stale marginal-pass
+    reason codes, preserving fail-closed feedback behavior.
+- `scion/scion/tests/unit/test_screening_feedback_tiers_memory.py`
+  - Added regression coverage that marginal diagnostic pass feedback forbids
+    unchanged repeats, keeps follow-up variants, and remains in branch-local
+    mechanism memory.
 
 ## Boundary Check
 
@@ -68,7 +83,25 @@ PYTHONPATH=scion pytest -q \
   scion/scion/tests/unit/core/test_decision_finalizer_lifecycle.py
 ```
 
-Results: `92 passed`, `156 passed`, `54 passed`, `50 passed`.
+Additional local feedback/search-memory verification:
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/unit/test_screening_feedback_tiers_memory.py \
+  scion/scion/tests/unit/test_agentic_feedback_screening.py
+
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/unit/core/test_decision_finalizer_lifecycle.py \
+  scion/scion/tests/unit/core/test_branch_hygiene_status.py \
+  scion/scion/tests/test_decision_screening.py
+
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/unit/test_hypothesis_context_profiles.py \
+  scion/scion/tests/unit/test_branch_prompt_projection.py
+```
+
+Results: `92 passed`, `156 passed`, `54 passed`, `50 passed`,
+`14 passed`, `85 passed`, `25 passed`.
 
 WSL:
 
@@ -89,21 +122,36 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
   scion/scion/tests/unit/core/test_decision_finalizer_lifecycle.py
 ```
 
-Result: `260 passed`.
+Additional WSL feedback/search-memory verification:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/unit/test_screening_feedback_tiers_memory.py \
+  scion/scion/tests/unit/test_agentic_feedback_screening.py \
+  scion/scion/tests/unit/core/test_decision_finalizer_lifecycle.py \
+  scion/scion/tests/unit/core/test_branch_hygiene_status.py \
+  scion/scion/tests/test_decision_screening.py \
+  scion/scion/tests/unit/test_hypothesis_context_profiles.py \
+  scion/scion/tests/unit/test_branch_prompt_projection.py
+```
+
+Results: `260 passed`, `124 passed`.
 
 ## Prepared Roots
 
-Because `scion/scion/protocol/gates.py` is a runtime-guard path, the previous
-prepared roots were superseded. New launch-authoritative WSL commit:
-`c6f4eac0`. Corresponding local repair commit: `6e59e5d5`.
+Because `scion/scion/protocol/gates.py` and
+`scion/scion/proposal/screening_feedback.py` are runtime-guard paths, the
+previous prepared roots were superseded. New launch-authoritative WSL commit:
+`73063089`. Corresponding local repair commit: `00559a6b`.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-c6f4eac0-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-gatesem-preflight-6r-gpt55-20260620T142827Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-73063089-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-feedbacksem-preflight-6r-gpt55-20260620T143930Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-c6f4eac0-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-gatesem-preflight-4r-gpt55-20260620T142827Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-73063089-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-feedbacksem-preflight-4r-gpt55-20260620T143930Z-claw`
 
 Strict readiness for both roots reports:
 

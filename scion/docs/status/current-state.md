@@ -44,15 +44,15 @@ reports `launch_ready=true`.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `c6f4eac0`;
-the corresponding local framework repair commit is `6e59e5d5`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `73063089`;
+the corresponding local framework repair commit is `00559a6b`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-c6f4eac0-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-gatesem-preflight-6r-gpt55-20260620T142827Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-size70hypctx-73063089-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-feedbacksem-preflight-6r-gpt55-20260620T143930Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-c6f4eac0-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-gatesem-preflight-4r-gpt55-20260620T142827Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-size70hypctx-73063089-nocaps-aps0-sourceheadroom-codecap0-plannercap0-previewcap0-artifactcap0-reserve0-fullsurf-prompt96k-symbolcache-nonsolverfacts-focusitems-feedbacksem-preflight-4r-gpt55-20260620T143930Z-claw`
 
 Readiness snapshot:
 
@@ -60,7 +60,7 @@ Readiness snapshot:
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
-- Runtime guard status: prepared runtime commit `c6f4eac0`; strict readiness
+- Runtime guard status: prepared runtime commit `73063089`; strict readiness
   must keep reporting runtime guard OK. Doc/status-only commits after prepare
   are acceptable only when readiness reports unchanged runtime guard paths.
 - Campaign launch contract status: `ok`; `run.sh`, `launch.env`, and
@@ -118,8 +118,10 @@ Prepared run shape:
 - Screening gate/Decision semantics: high-win-rate, non-negative,
   sub-practical-delta screening evidence is reported as
   `SCREENING_PASS_MARGINAL_DELTA` and routed as a diagnostic validation
-  candidate. High-win-rate negative median effect remains inconclusive and is
-  not a screening pass.
+  candidate. Proposal feedback/search memory records this as `marginal`, not
+  `promotable`, so later prompts can learn from it without treating it as a
+  promotion-quality signal. High-win-rate negative median effect remains
+  inconclusive and is not a screening pass.
 - CVRP prompt diagnostics: hypothesis context exposes problem-owned
   `screening_headroom`, `measurable_opportunity_classes`, and
   `mechanism_effect_ranking` as proposal-only research signals while raw BKS,
