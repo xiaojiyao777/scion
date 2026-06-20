@@ -287,6 +287,31 @@ def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
             }.items()
             if child not in ("", [], {}, None)
         }
+    case_protection = value.get("case_protection_requirements")
+    if isinstance(case_protection, Mapping):
+        projected["case_protection_requirements"] = {
+            key: child
+            for key, child in {
+                "schema_version": _string_or_empty(
+                    case_protection.get("schema_version")
+                ),
+                "scope": _string_or_empty(case_protection.get("scope")),
+                "proposal_visibility_only": case_protection.get(
+                    "proposal_visibility_only"
+                ),
+                "decision_features_excluded": case_protection.get(
+                    "decision_features_excluded"
+                ),
+                "protected_cases": _string_items(
+                    case_protection.get("protected_cases")
+                ),
+                "rules": _string_items(case_protection.get("rules")),
+                "required_evidence": _string_items(
+                    case_protection.get("required_evidence")
+                ),
+            }.items()
+            if child not in ("", [], {}, None)
+        }
     return projected
 
 

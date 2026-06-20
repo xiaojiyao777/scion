@@ -176,6 +176,16 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert any(
         "activation" in item for item in large_twoopt["default_reject_directions"]
     )
+    case_protection = prepared_manifest["research_focus"][
+        "case_protection_requirements"
+    ]
+    assert case_protection["schema_version"] == (
+        "scion.cvrp_case_protection_requirements.v1"
+    )
+    assert case_protection["proposal_visibility_only"] is True
+    assert case_protection["decision_features_excluded"] is True
+    assert case_protection["protected_cases"] == ["CMT2", "CMT4"]
+    assert any("CMT2/CMT4" in item for item in case_protection["rules"])
     assert "DecisionFeatures" in prepared_manifest["research_focus"][
         "decision_boundary"
     ]
@@ -525,6 +535,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert (
         prepared_prompt_context["signals"]["cvrp_large_twoopt_bounded_constraints"][
+            "available"
+        ]
+        is True
+    )
+    assert (
+        prepared_prompt_context["signals"]["cvrp_case_protection_requirements"][
             "available"
         ]
         is True

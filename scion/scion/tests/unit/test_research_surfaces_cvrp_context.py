@@ -116,6 +116,29 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
                             "activation claims without wall-clock evidence",
                         ],
                     },
+                    "case_protection_requirements": {
+                        "schema_version": (
+                            "scion.cvrp_case_protection_requirements.v1"
+                        ),
+                        "scope": "proposal_only_prepared_handoff",
+                        "proposal_visibility_only": True,
+                        "decision_features_excluded": True,
+                        "protected_cases": ["CMT2", "CMT4"],
+                        "rules": [
+                            (
+                                "Target intent or hypothesis must name the "
+                                "CMT2/CMT4 protection plan."
+                            ),
+                            (
+                                "Same-branch follow-up should keep CMT2 and "
+                                "CMT4 in formal coverage when available."
+                            ),
+                        ],
+                        "required_evidence": [
+                            "live target-intent or hypothesis trace mentions CMT2/CMT4 protection",
+                            "case-level total_distance deltas for CMT2 and CMT4",
+                        ],
+                    },
                     "measurement_opportunity_diagnostics": {
                         "schema_version": (
                             "cvrp_measurement_opportunity_handoff.v1"
@@ -181,6 +204,9 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
         "derive a deadline from solver time_limit",
         "do not call unbounded two_opt_intra",
     ]
+    assert focus["research_focus"]["case_protection_requirements"][
+        "protected_cases"
+    ] == ["CMT2", "CMT4"]
 
     system_blocks, user_prompt = _split_hypothesis_context(ctx)
     prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
@@ -189,6 +215,8 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
     assert "route-merge absorption" in prompt_text
     assert "bounded_local_search_variant" in prompt_text
     assert "large_instance_two_opt_constraints" in prompt_text
+    assert "case_protection_requirements" in prompt_text
+    assert "CMT2/CMT4 protection plan" in prompt_text
     assert "two_opt_intra" in prompt_text
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prompt_text
     assert "DecisionFeatures" in prompt_text

@@ -666,6 +666,32 @@ def _add_focus_signals(
                 "default_reject_direction_count": len(reject_items),
             },
         )
+        case_protection = _mapping_or_empty(
+            research_focus.get("case_protection_requirements")
+        )
+        protected_cases = _string_items(case_protection.get("protected_cases"))
+        case_rules = _string_items(case_protection.get("rules"))
+        case_evidence = _string_items(case_protection.get("required_evidence"))
+        _add_signal(
+            signals,
+            "cvrp_case_protection_requirements",
+            available=(
+                bool(case_protection)
+                and bool(protected_cases)
+                and bool(case_rules)
+                and bool(case_evidence)
+                and case_protection.get("proposal_visibility_only") is True
+                and case_protection.get("decision_features_excluded") is True
+            ),
+            required=True,
+            source="prepared_run_manifest.research_focus.case_protection_requirements",
+            detail={
+                "schema_version": case_protection.get("schema_version"),
+                "protected_cases": protected_cases,
+                "rule_count": len(case_rules),
+                "required_evidence_count": len(case_evidence),
+            },
+        )
     elif family == "warehouse_delivery":
         measurement = _mapping_or_empty(
             research_focus.get("measurement_opportunity_diagnostics")

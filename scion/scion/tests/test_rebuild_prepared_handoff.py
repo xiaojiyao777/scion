@@ -251,6 +251,10 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
         ]
         is True
     )
+    case_protection = prompt_context["signals"]["cvrp_case_protection_requirements"]
+    assert case_protection["available"] is True
+    assert case_protection["required"] is True
+    assert case_protection["detail"]["protected_cases"] == ["CMT2", "CMT4"]
     assert not stale_prompt.exists()
     assert not stale_readiness_md.exists()
     assert (
@@ -620,6 +624,7 @@ def _cvrp_research_focus() -> dict[str, object]:
             "route-limit seed diversification",
         ],
         "large_instance_two_opt_constraints": _large_twoopt_constraints(),
+        "case_protection_requirements": _cmt_case_protection_requirements(),
         "route_merge_exception_rule": (
             "Only continue route_merge_repair when the proposal names a causal "
             "path beyond tested variants and defines direct activation-to-objective-effect evidence."
@@ -687,6 +692,24 @@ def _large_twoopt_constraints() -> dict[str, object]:
         "default_reject_directions": [
             "unbounded two_opt_intra fallback",
             "activation claims without wall-clock evidence",
+        ],
+    }
+
+
+def _cmt_case_protection_requirements() -> dict[str, object]:
+    return {
+        "schema_version": "scion.cvrp_case_protection_requirements.v1",
+        "scope": "proposal_only_prepared_handoff",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "protected_cases": ["CMT2", "CMT4"],
+        "rules": [
+            "Target intent or hypothesis must name the CMT2/CMT4 protection plan.",
+            "Same-branch follow-up should keep CMT2 and CMT4 in formal coverage.",
+        ],
+        "required_evidence": [
+            "live target-intent or hypothesis trace mentions CMT2/CMT4 protection",
+            "case-level total_distance deltas for CMT2 and CMT4",
         ],
     }
 
