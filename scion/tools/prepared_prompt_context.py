@@ -360,6 +360,32 @@ def research_focus_prompt_summary(
             and "measurement_opportunity_diagnostics" in rendered_prompt
             and "runtime_model" in rendered_prompt
         ),
+        "warehouse_measurement_transfer_risk_present": (
+            problem_family == "warehouse_delivery"
+            and "transfer_risk" in rendered_prompt
+            and "latest_formal_no_gain_pattern" in rendered_prompt
+        ),
+        "warehouse_measurement_required_diagnostics_present": (
+            problem_family == "warehouse_delivery"
+            and "required_diagnostics" in rendered_prompt
+            and "operator_invocations" in rendered_prompt
+            and "cost_delta_sum" in rendered_prompt
+        ),
+        "warehouse_measurement_followup_opportunity_present": (
+            problem_family == "warehouse_delivery"
+            and "opportunity_diagnostics" in rendered_prompt
+            and "validation_transfer_continuation" in rendered_prompt
+        ),
+        "warehouse_measurement_plateau_guard_present": (
+            problem_family == "warehouse_delivery"
+            and "PLATEAU_REQUIRES_PROTOCOL_EVIDENCE" in rendered_prompt
+            and "SCREENING_ONLY_NOT_PLATEAU_EVIDENCE" in rendered_prompt
+        ),
+        "warehouse_measurement_opportunity_diagnostic_count": _sequence_count(
+            measurement.get("opportunity_diagnostics")
+        )
+        if problem_family == "warehouse_delivery"
+        else 0,
         "cvrp_case_protection_present": (
             problem_family == "cvrp"
             and "CMT2" in rendered_prompt
@@ -493,6 +519,21 @@ def research_focus_prompt_summary(
             not in ({}, [], "", None)
         ):
             required_true_fields.append("warehouse_measurement_handoff_present")
+            if measurement.get("transfer_risk") not in ({}, [], "", None):
+                required_true_fields.append(
+                    "warehouse_measurement_transfer_risk_present"
+                )
+            if measurement.get("required_diagnostics") not in ({}, [], "", None):
+                required_true_fields.append(
+                    "warehouse_measurement_required_diagnostics_present"
+                )
+            if measurement.get("opportunity_diagnostics") not in ({}, [], "", None):
+                required_true_fields.append(
+                    "warehouse_measurement_followup_opportunity_present"
+                )
+                required_true_fields.append(
+                    "warehouse_measurement_plateau_guard_present"
+                )
     elif problem_family == "cvrp":
         if research_focus.get("case_protection_requirements") not in (
             {},
@@ -922,10 +963,13 @@ def _required_research_focus_projection_paths(
                 "adapter_payload_schema",
                 "reason_codes",
                 "summary",
+                "transfer_risk",
+                "required_diagnostics",
                 "screening_headroom",
                 "measurable_opportunity_classes",
                 "mechanism_effect_ranking",
                 "opportunity_diagnostics",
+                "policy",
                 "decision_features_excluded",
                 "proposal_visibility_only",
             ),
@@ -977,6 +1021,27 @@ def _required_research_focus_projection_paths(
                     "rules",
                     "required_evidence",
                 ),
+            )
+        )
+    elif problem_family == "warehouse_delivery":
+        paths.extend(
+            _supported_measurement_nested_paths(
+                research_focus,
+                "transfer_risk",
+                (
+                    "risk_model",
+                    "historical_pattern",
+                    "latest_field_gate_pattern",
+                    "latest_formal_no_gain_pattern",
+                    "required_hypothesis_claims",
+                ),
+            )
+        )
+        paths.extend(
+            _supported_measurement_nested_paths(
+                research_focus,
+                "required_diagnostics",
+                ("activation", "effect"),
             )
         )
     return sorted(dict.fromkeys(paths))

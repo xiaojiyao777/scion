@@ -13,7 +13,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import yaml
 
@@ -65,6 +65,25 @@ WAREHOUSE_DEFAULT_AVOID_DIRECTIONS = (
     "treat split_delta_sum==0 as no effect when cost_delta_sum is positive",
     "repeat unbounded merge_vehicles or swap_orders variants without validation-transfer risk controls",
     "launch a broad warehouse matrix before the focused v2 follow-up is analyzed",
+)
+WAREHOUSE_ADAPTER_OPPORTUNITY_FIELDS = (
+    "transfer_risk",
+    "required_diagnostics",
+    "measurable_opportunity_classes",
+    "opportunity_diagnostics",
+    "policy",
+)
+WAREHOUSE_ADAPTER_FORBIDDEN_KEY_FRAGMENTS = (
+    "pair_evidence",
+    "pair_rows",
+    "raw_pair",
+    "raw_calibration",
+    "calibration_pair",
+    "validation_case",
+    "frozen_case",
+    "holdout",
+    "prompt_ratio",
+    "llm_text",
 )
 WAREHOUSE_CURRENT_RESEARCH_FOCUS = {
     "schema_version": "scion.warehouse_research_focus.v1",
@@ -455,11 +474,87 @@ def _warehouse_measurement_opportunity_diagnostics(
         ),
         "reason_codes": reason_codes,
     }
+    diagnostic.update(_warehouse_adapter_opportunity_projection(spec))
     if recommended_min_seeds is not None:
         diagnostic["recommended_min_seeds"] = recommended_min_seeds
     if related_calibrations:
         diagnostic["related_calibrations"] = related_calibrations
     return diagnostic
+
+
+def _warehouse_adapter_opportunity_projection(spec: Any) -> dict[str, Any]:
+    """Project problem-owned warehouse follow-up diagnostics into launch focus."""
+
+    from scion.problem.loader import load_problem_adapter  # noqa: PLC0415
+
+    adapter = load_problem_adapter(spec)
+    hook = getattr(adapter, "render_problem_measurement_diagnostics", None)
+    if not callable(hook):
+        raise SystemExit(
+            "Warehouse agentic launcher requires adapter measurement "
+            "follow-up diagnostics"
+        )
+    payload = hook()
+    if not isinstance(payload, Mapping):
+        raise SystemExit(
+            "Warehouse adapter measurement follow-up diagnostics must be a mapping"
+        )
+    redacted = _redact_warehouse_adapter_opportunity_payload(dict(payload))
+    if not isinstance(redacted, Mapping):
+        raise SystemExit("Warehouse adapter measurement diagnostics invalid")
+    projection: dict[str, Any] = {
+        "opportunity_projection_source": (
+            "problem_adapter.render_problem_measurement_diagnostics"
+        ),
+        "adapter_payload_schema": str(redacted.get("schema_version") or "").strip(),
+    }
+    for field in WAREHOUSE_ADAPTER_OPPORTUNITY_FIELDS:
+        value = redacted.get(field)
+        if value not in ("", None, [], {}, ()):
+            projection[field] = value
+    missing = [
+        field
+        for field in WAREHOUSE_ADAPTER_OPPORTUNITY_FIELDS
+        if projection.get(field) in ("", None, [], {}, ())
+    ]
+    if missing:
+        raise SystemExit(
+            "Warehouse adapter measurement follow-up diagnostics missing fields: "
+            + ", ".join(missing)
+        )
+    return projection
+
+
+def _redact_warehouse_adapter_opportunity_payload(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        projected: dict[str, Any] = {}
+        for key, child in value.items():
+            key_text = str(key)
+            if not _warehouse_adapter_key_allowed(key_text):
+                continue
+            redacted = _redact_warehouse_adapter_opportunity_payload(child)
+            if redacted not in ("", None, [], {}, ()):
+                projected[key_text] = redacted
+        return projected
+    if isinstance(value, (list, tuple)):
+        projected_items = [
+            _redact_warehouse_adapter_opportunity_payload(item)
+            for item in value
+        ]
+        return [
+            item
+            for item in projected_items
+            if item not in ("", None, [], {}, ())
+        ]
+    return value
+
+
+def _warehouse_adapter_key_allowed(key: str) -> bool:
+    lowered = key.lower()
+    return not any(
+        fragment in lowered
+        for fragment in WAREHOUSE_ADAPTER_FORBIDDEN_KEY_FRAGMENTS
+    )
 
 
 def _resolve_calibration_ref(root_dir: str, calibration_ref: str) -> Path:
@@ -1006,9 +1101,48 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
                 "  - Screening MDE at 80% power: "
                 f"`{measurement.get('screening_mde_at_power_80')}`",
                 f"  - Readiness: `{readiness.get('status')}`",
+                "  - Opportunity projection source: "
+                f"`{measurement.get('opportunity_projection_source')}`",
+                "  - Adapter payload schema: "
+                f"`{measurement.get('adapter_payload_schema')}`",
                 f"  - Summary: {measurement.get('summary')}",
             ]
         )
+        transfer_risk = measurement.get("transfer_risk")
+        if isinstance(transfer_risk, dict) and transfer_risk:
+            lines.append("  - transfer_risk:")
+            for key in (
+                "risk_model",
+                "latest_field_gate_pattern",
+                "latest_formal_no_gain_pattern",
+            ):
+                if key in transfer_risk:
+                    lines.append(f"    - {key}: {transfer_risk[key]}")
+        required_diagnostics = measurement.get("required_diagnostics")
+        if isinstance(required_diagnostics, dict) and required_diagnostics:
+            lines.append("  - required_diagnostics:")
+            for key in ("activation", "effect"):
+                values = required_diagnostics.get(key)
+                if isinstance(values, list) and values:
+                    lines.append(f"    - {key}: " + ", ".join(map(str, values)))
+        opportunity_diagnostics = measurement.get("opportunity_diagnostics")
+        if isinstance(opportunity_diagnostics, list) and opportunity_diagnostics:
+            lines.append("  - opportunity_diagnostics:")
+            for item in opportunity_diagnostics[:5]:
+                if not isinstance(item, dict):
+                    continue
+                dtype = item.get("diagnostic_type")
+                family = item.get("mechanism_family")
+                action = item.get("recommended_action")
+                reason_codes = item.get("reason_codes")
+                lines.append(
+                    f"    - diagnostic_type={dtype}; "
+                    f"mechanism_family={family}; recommended_action={action}"
+                )
+                if isinstance(reason_codes, list) and reason_codes:
+                    lines.append(
+                        "      reason_codes: " + ", ".join(map(str, reason_codes))
+                    )
     lines.extend([
         "",
         "## Config",

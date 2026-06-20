@@ -256,6 +256,20 @@ def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
                 ),
                 "reason_codes": _string_items(measurement.get("reason_codes")),
                 "summary": _string_or_empty(measurement.get("summary")),
+                "transfer_risk": _project_launch_focus_mapping(
+                    measurement.get("transfer_risk"),
+                    fields=(
+                        "risk_model",
+                        "historical_pattern",
+                        "latest_field_gate_pattern",
+                        "latest_formal_no_gain_pattern",
+                        "required_hypothesis_claims",
+                    ),
+                ),
+                "required_diagnostics": _project_launch_focus_mapping(
+                    measurement.get("required_diagnostics"),
+                    fields=("activation", "effect"),
+                ),
                 "screening_headroom": _project_launch_focus_mapping(
                     measurement.get("screening_headroom"),
                     fields=(
@@ -307,6 +321,7 @@ def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
                         "reason_codes",
                     ),
                 ),
+                "policy": _string_or_empty(measurement.get("policy")),
                 "decision_features_excluded": measurement.get(
                     "decision_features_excluded"
                 ),

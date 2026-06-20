@@ -778,6 +778,16 @@ def _add_focus_signals(
         )
         readiness = _mapping_or_empty(measurement.get("measurement_readiness"))
         calibration = _mapping_or_empty(measurement.get("calibration"))
+        transfer_risk = _mapping_or_empty(measurement.get("transfer_risk"))
+        required_diagnostics = _mapping_or_empty(
+            measurement.get("required_diagnostics")
+        )
+        opportunity_diagnostic_count = _sequence_count(
+            measurement.get("opportunity_diagnostics")
+        )
+        measurable_opportunity_count = _sequence_count(
+            measurement.get("measurable_opportunity_classes")
+        )
         _add_signal(
             signals,
             "warehouse_measurement_runtime_handoff",
@@ -789,11 +799,18 @@ def _add_focus_signals(
                 and measurement.get("decision_features_excluded") is True
                 and readiness.get("status") == "ready"
                 and calibration.get("schema") == "scion.aa_noise_floor.v1"
+                and bool(transfer_risk)
+                and bool(required_diagnostics)
+                and measurable_opportunity_count > 0
+                and opportunity_diagnostic_count > 0
             ),
             required=True,
             source="prepared_run_manifest.research_focus.measurement_opportunity_diagnostics",
             detail={
                 "schema_version": measurement.get("schema_version"),
+                "opportunity_projection_source": measurement.get(
+                    "opportunity_projection_source"
+                ),
                 "metric": measurement.get("metric"),
                 "runtime_model": measurement.get("runtime_model"),
                 "pairing_validity": measurement.get("pairing_validity"),
@@ -802,6 +819,10 @@ def _add_focus_signals(
                 ),
                 "measurement_readiness_status": readiness.get("status"),
                 "calibration_schema": calibration.get("schema"),
+                "transfer_risk_present": bool(transfer_risk),
+                "required_diagnostics_present": bool(required_diagnostics),
+                "measurable_opportunity_count": measurable_opportunity_count,
+                "opportunity_diagnostic_count": opportunity_diagnostic_count,
             },
         )
         required_evidence = _string_items(research_focus.get("required_evidence"))

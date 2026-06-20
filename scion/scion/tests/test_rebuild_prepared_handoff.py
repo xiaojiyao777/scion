@@ -461,8 +461,25 @@ def test_rebuild_prepared_handoff_adds_warehouse_code_constraint_bridge(
     assert focus_summary["warehouse_required_evidence_present"] is True
     assert focus_summary["warehouse_avoid_directions_present"] is True
     assert focus_summary["warehouse_measurement_handoff_present"] is True
+    assert focus_summary["warehouse_measurement_transfer_risk_present"] is True
+    assert (
+        focus_summary["warehouse_measurement_required_diagnostics_present"] is True
+    )
+    assert (
+        focus_summary["warehouse_measurement_followup_opportunity_present"] is True
+    )
+    assert focus_summary["warehouse_measurement_plateau_guard_present"] is True
+    assert focus_summary["warehouse_measurement_opportunity_diagnostic_count"] == 1
     assert focus_summary["missing_rendered_paths"] == []
     assert focus_summary["forbidden_prompt_tokens_present"] == []
+    measurement_signal = prompt_context["signals"][
+        "warehouse_measurement_runtime_handoff"
+    ]
+    assert measurement_signal["available"] is True
+    assert measurement_signal["detail"]["transfer_risk_present"] is True
+    assert measurement_signal["detail"]["required_diagnostics_present"] is True
+    assert measurement_signal["detail"]["measurable_opportunity_count"] == 1
+    assert measurement_signal["detail"]["opportunity_diagnostic_count"] == 1
     assert diagnostic_bridge["available"] is True
     assert diagnostic_bridge["required"] is True
     assert diagnostic_bridge["runtime_generated_after_launch"] is False
@@ -866,6 +883,63 @@ def _warehouse_research_focus() -> dict[str, object]:
                 "TRAJECTORY_DIVERGENT_LOW_SNR",
                 "WAREHOUSE_COMPARATIVE_RUNTIME_REPORT_ONLY",
             ],
+            "opportunity_projection_source": (
+                "problem_adapter.render_problem_measurement_diagnostics"
+            ),
+            "adapter_payload_schema": "warehouse_validation_transfer_diagnostic.v1",
+            "transfer_risk": {
+                "risk_model": "screening-positive changes can miss validation transfer",
+                "historical_pattern": "screening positive but no hierarchical gain",
+                "latest_field_gate_pattern": "cost-only compression can regress holdout",
+                "latest_formal_no_gain_pattern": "validation no-gain plateau caveat",
+                "required_hypothesis_claims": [
+                    "why the mechanism transfers beyond screening",
+                    "what activation counter becomes positive",
+                ],
+            },
+            "required_diagnostics": {
+                "activation": [
+                    "operator_invocations",
+                    "eligible_vehicle_or_order_groups_seen",
+                    "accepted_moves",
+                ],
+                "effect": [
+                    "split_delta_sum",
+                    "cost_delta_sum",
+                    "improving_move_count",
+                ],
+            },
+            "measurable_opportunity_classes": [
+                {
+                    "mechanism_family": "validation_transfer_continuation",
+                    "required_evidence": (
+                        "bounded operator activation/effect evidence before plateau"
+                    ),
+                }
+            ],
+            "opportunity_diagnostics": [
+                {
+                    "diagnostic_type": "post_promotion_followup",
+                    "surface": "warehouse_operator",
+                    "mechanism_family": "validation_transfer_continuation",
+                    "metric": "lexicographic_objective",
+                    "summary": "champion-v2 follow-up must test continuous improvement",
+                    "recommended_action": (
+                        "require protocol-evaluated split/cost, runtime-feedback, "
+                        "and branch-continuity evidence before plateau"
+                    ),
+                    "confidence": "medium",
+                    "reason_codes": [
+                        "WAREHOUSE_V2_FOLLOWUP_CONTINUOUS_RESEARCH",
+                        "PLATEAU_REQUIRES_PROTOCOL_EVIDENCE",
+                        "SCREENING_ONLY_NOT_PLATEAU_EVIDENCE",
+                    ],
+                }
+            ],
+            "policy": (
+                "Use these diagnostics to shape warehouse proposals before "
+                "code generation; they are not DecisionFeatures."
+            ),
             "recommended_min_seeds": 4,
             "related_calibrations": [
                 {

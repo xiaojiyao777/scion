@@ -145,6 +145,27 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "WAREHOUSE_MDE_EXCEEDS_PRACTICAL_DELTA" in measurement["reason_codes"]
     assert "TRAJECTORY_DIVERGENT_LOW_SNR" in measurement["reason_codes"]
     assert measurement["related_calibrations"][0]["action"] == "create_new"
+    assert measurement["opportunity_projection_source"] == (
+        "problem_adapter.render_problem_measurement_diagnostics"
+    )
+    assert measurement["adapter_payload_schema"] == (
+        "warehouse_validation_transfer_diagnostic.v1"
+    )
+    assert "latest_formal_no_gain_pattern" in measurement["transfer_risk"]
+    assert "operator_invocations" in measurement["required_diagnostics"][
+        "activation"
+    ]
+    assert "cost_delta_sum" in measurement["required_diagnostics"]["effect"]
+    assert measurement["measurable_opportunity_classes"][0][
+        "mechanism_family"
+    ] == "validation_transfer_continuation"
+    assert measurement["opportunity_diagnostics"][0]["diagnostic_type"] == (
+        "post_promotion_followup"
+    )
+    rendered_measurement = json.dumps(measurement, sort_keys=True)
+    assert "PLATEAU_REQUIRES_PROTOCOL_EVIDENCE" in rendered_measurement
+    assert "validation_case" not in rendered_measurement
+    assert "frozen_case" not in rendered_measurement
     assert prepared_manifest["execution"]["rounds"] == 6
     assert prepared_manifest["execution"]["agentic_session_timeout_sec"] == 3600
     assert prepared_manifest["execution"]["agentic_tool_max_steps"] == 0
@@ -183,6 +204,10 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     )
     assert "SCION_API_KEY" not in json.dumps(prepared_manifest, sort_keys=True)
     assert "Warehouse champion-v2" in prepared_manifest_md
+    assert "transfer_risk" in prepared_manifest_md
+    assert "required_diagnostics" in prepared_manifest_md
+    assert "opportunity_diagnostics" in prepared_manifest_md
+    assert "PLATEAU_REQUIRES_PROTOCOL_EVIDENCE" in prepared_manifest_md
     assert "## Current Research Focus" in prepared_manifest_md
     assert "split_delta_sum==0" in prepared_manifest_md
     assert "Measurement/runtime handoff" in prepared_manifest_md
@@ -487,6 +512,13 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         ]
         is True
     )
+    measurement_signal = prepared_prompt_context["signals"][
+        "warehouse_measurement_runtime_handoff"
+    ]
+    assert measurement_signal["detail"]["transfer_risk_present"] is True
+    assert measurement_signal["detail"]["required_diagnostics_present"] is True
+    assert measurement_signal["detail"]["measurable_opportunity_count"] >= 1
+    assert measurement_signal["detail"]["opportunity_diagnostic_count"] >= 1
     assert prepared_rebuild["schema_version"] == "scion.prepared_handoff_rebuild.v1"
     assert prepared_rebuild["complete"] is True
     assert prepared_rebuild["families"]["inventory"]["status"] == "ok"
