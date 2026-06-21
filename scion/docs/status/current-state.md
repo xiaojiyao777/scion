@@ -35,15 +35,15 @@ history when exact old chronology is needed.
 ## Active Prepared Roots
 
 These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `896b9c06`; the corresponding server repair commit is
-`e39300f4`. Local mirrors under `/home/clawd/research/scion-experiments/` are
+runtime commit `c7b06d9a`; the corresponding server repair commit is
+`b14eb332`. Local mirrors under `/home/clawd/research/scion-experiments/` are
 for inspection only. Run readiness and launch from WSL because the prepared
 contracts contain WSL absolute paths.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-896b9c06-scheddepth-6r-gpt55-6r-gpt55-20260621T020223Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-c7b06d9-resumecont-6r-gpt55-20260621T023211Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-896b9c06-scheddepth-resume-4r-gpt55-4r-gpt55-20260621T020237Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-c7b06d9-resumecont-4r-gpt55-20260621T023211Z-claw`
 
 Current readiness snapshot for both roots:
 
@@ -52,7 +52,7 @@ Current readiness snapshot for both roots:
 - `failed_static_required_checks=[]`
 - only required failure: completion preflight auth
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=896b9c06`, `actual_runtime_commit=896b9c06`,
+  `prepared_runtime_commit=c7b06d9a`, `actual_runtime_commit=c7b06d9a`,
   `runtime_guard_reason=runtime_guard_commit_matches`
 - campaign marker: `campaign_execution_marker_status=ok`
 - secret file permissions: `launch_env_secret_permissions=ok`,
@@ -85,13 +85,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 After strict readiness passes, launch the wrapper itself:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-896b9c06-scheddepth-6r-gpt55-6r-gpt55-20260621T020223Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-c7b06d9-resumecont-6r-gpt55-20260621T023211Z-claw/run.sh
 ```
 
 Run CVRP after warehouse is underway or accepted for launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-896b9c06-scheddepth-resume-4r-gpt55-4r-gpt55-20260621T020237Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-c7b06d9-resumecont-4r-gpt55-20260621T023211Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
@@ -175,6 +175,10 @@ CVRP/VRP:
   objective-effect, intra-large-two-opt telemetry, and CMT2/CMT4 protection
   evidence. `two_opt_star`, cross-route, VNS, unbounded fallback, and
   continuity-only mentions do not satisfy this direct-evidence rule.
+- The active CVRP prepared handoff now also carries proposal-only
+  `resume_continuity_requirements`, so the zero-branch-card sparse resume must
+  use copied target-intent or hypothesis trace evidence rather than being
+  treated as an empty campaign.
 
 ## Next Actions
 
