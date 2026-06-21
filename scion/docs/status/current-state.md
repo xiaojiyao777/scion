@@ -74,9 +74,10 @@ Current readiness snapshot for both roots:
   `active=0`, `total=1`; ignore volatile expired/refreshing substates unless
   active auth becomes available
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=7812bec5`; current WSL HEAD may include docs-only
-  status commits after prepare, and strict readiness accepts that only when the
-  guarded runtime paths are unchanged since prepare
+  `prepared_runtime_commit=7812bec5`; current WSL HEAD may include status or
+  tooling commits outside runtime-guard paths after prepare, and strict
+  readiness accepts that only when the guarded runtime paths are unchanged since
+  prepare
 - measurement handoff:
   `measurement_readiness.calibration_evidence_level=summary_only` and no
   `measurement_readiness.calibration_ref` or
@@ -140,6 +141,10 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   python scripts/sync_wsl_run_root.py <wsl-run-root> \
   --execute --format json
 ```
+
+Prepared-only mirrors skip current-run postrun acceptance and should return the
+rsync/local-status result with `postrun_check_skip_reason=prepared_only_not_launched`;
+postrun acceptance remains required after an actual launch.
 
 ## Preserved Guarantees
 

@@ -238,6 +238,51 @@ def test_sync_wsl_run_root_skips_postrun_check_when_requested(
     )
 
 
+def test_sync_wsl_run_root_skips_postrun_for_prepared_only_root(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        if command[0] == "ssh":
+            return subprocess.CompletedProcess(
+                command, 0, "source_root_ok\n", ""
+            )
+        if command[0] == "rsync":
+            local_dir = Path(command[-1])
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / "run_status.json").write_text(
+                json.dumps({"status": "prepared", "prepared_only": True}),
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, "synced", "")
+        return subprocess.CompletedProcess(command, 99, "", "unexpected postrun")
+
+    monkeypatch.setattr(sync_tool, "_run", fake_run)
+
+    report = sync_tool.sync_and_check(
+        wsl_run_root="/wsl/experiments/run-prepared",
+        local_experiments_root=tmp_path,
+        execute=True,
+    )
+
+    assert [call[0] for call in calls] == ["ssh", "rsync"]
+    assert report["rsync_exit_status"] == 0
+    assert report["local_status_check_exit_status"] == 0
+    assert report["local_run_status_summary"]["status"] == "prepared"
+    assert report["local_run_status_summary"]["prepared_only"] is True
+    assert report["postrun_check_exit_status"] is None
+    assert report["postrun_check_skipped"] is True
+    assert report["postrun_check_skip_reason"] == "prepared_only_not_launched"
+    assert report["postrun_current_run_ready"] is False
+    rendered = sync_tool.render_text(report)
+    assert "POSTRUN_CHECK_SKIPPED=1" in rendered
+    assert "POSTRUN_CHECK_SKIP_REASON=prepared_only_not_launched" in rendered
+    assert "POSTRUN_CURRENT_RUN_READY=0" in rendered
+
+
 def test_sync_wsl_run_root_preserves_postrun_unready_status(
     tmp_path: Path,
     monkeypatch,
@@ -442,6 +487,40 @@ def test_sync_wsl_run_root_cli_returns_local_status_failure_exit(
     assert payload["local_status_check_exit_status"] == (
         sync_tool.LOCAL_STATUS_FAILED_EXIT
     )
+
+
+def test_sync_wsl_run_root_cli_returns_zero_for_prepared_only_skip(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    def fake_sync_and_check(**_: object) -> dict[str, object]:
+        return {
+            "execute": True,
+            "rsync_exit_status": 0,
+            "local_status_check_exit_status": 0,
+            "postrun_check_exit_status": None,
+            "postrun_check_skipped": True,
+            "postrun_check_skip_reason": "prepared_only_not_launched",
+        }
+
+    monkeypatch.setattr(sync_tool, "sync_and_check", fake_sync_and_check)
+
+    exit_code = sync_tool.main(
+        [
+            "/wsl/experiments/run-prepared",
+            "--local-experiments-root",
+            str(tmp_path),
+            "--execute",
+            "--format",
+            "json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["postrun_check_skipped"] is True
+    assert payload["postrun_check_skip_reason"] == "prepared_only_not_launched"
 
 
 def test_sync_wsl_run_root_cli_dry_run_json(tmp_path: Path, capsys) -> None:

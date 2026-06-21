@@ -178,6 +178,8 @@ def sync_and_check(
         "source_check_exit_status": None,
         "rsync_exit_status": None,
         "postrun_check_exit_status": None,
+        "postrun_check_skipped": False,
+        "postrun_check_skip_reason": None,
         "local_status_check_exit_status": None,
         "local_run_status_summary": None,
     }
@@ -209,6 +211,13 @@ def sync_and_check(
         return report
     report["local_status_check_exit_status"] = 0
     if not check_postrun:
+        report["postrun_check_skipped"] = True
+        report["postrun_check_skip_reason"] = "operator_skip_postrun_check"
+        return report
+    if _is_prepared_only_summary(report["local_run_status_summary"]):
+        report["postrun_check_skipped"] = True
+        report["postrun_check_skip_reason"] = "prepared_only_not_launched"
+        report["postrun_current_run_ready"] = False
         return report
 
     postrun_result = _run(postrun_command)
@@ -269,6 +278,12 @@ def render_text(report: dict[str, Any]) -> str:
         lines.append(
             f"POSTRUN_CHECK_EXIT_STATUS={report['postrun_check_exit_status']}"
         )
+    if report.get("postrun_check_skipped"):
+        lines.append("POSTRUN_CHECK_SKIPPED=1")
+        if report.get("postrun_check_skip_reason"):
+            lines.append(
+                f"POSTRUN_CHECK_SKIP_REASON={report['postrun_check_skip_reason']}"
+            )
     if "postrun_current_run_ready" in report:
         lines.append(
             f"POSTRUN_CURRENT_RUN_READY={int(bool(report['postrun_current_run_ready']))}"
@@ -425,6 +440,10 @@ def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
 def _postrun_ready_from_stdout(stdout: str) -> bool | None:
     value = _postrun_summary_from_stdout(stdout).get("current_run_analysis_ready")
     return value if isinstance(value, bool) else None
+
+
+def _is_prepared_only_summary(summary: Any) -> bool:
+    return isinstance(summary, dict) and summary.get("prepared_only") is True
 
 
 def _run_status_summary(path: Path) -> dict[str, Any]:
