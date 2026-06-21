@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `3ed027b8`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `896b9c06` after scheduler-depth repair; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-21*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -250,11 +250,17 @@ Current checkpoint:
   protection evidence. Launch readiness also verifies that those protected
   cases are present in formal screening before the prepared root can be
   considered static-ready.
+- Scheduler-depth repair is accepted at local commit `e39300f4` / WSL commit
+  `896b9c06`: ordinary active no-effect/marginal low-signal branches remain
+  schedulable for same-mechanism follow-up, and scheduler-origin park/reclaim
+  is not written for ordinary low-signal branches without a Decision-origin
+  park marker. Quality-regression slot release and Decision-origin parked
+  lineage reclaim remain fail-closed.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6d3f5ad-search-memory-noeffect-6r-gpt55-6r-gpt55-20260621T014210Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-896b9c06-scheddepth-6r-gpt55-6r-gpt55-20260621T020223Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6d3f5ad-search-memory-noeffect-resume-4r-gpt55-4r-gpt55-20260621T014226Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-896b9c06-scheddepth-resume-4r-gpt55-4r-gpt55-20260621T020237Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -269,7 +275,7 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok`,
-  `prepared_runtime_commit=3ed027b8`, `actual_runtime_commit=3ed027b8`, and
+  `prepared_runtime_commit=896b9c06`, `actual_runtime_commit=896b9c06`, and
   `runtime_guard_reason=runtime_guard_commit_matches`. They also report
   `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
   `campaign_execution_marker_status=ok` through top-level marker summary
@@ -324,7 +330,10 @@ Current checkpoint:
     active no-effect diagnostic follow-up, and portfolio no-effect plateau
     lessons expose the same current-branch diagnostic allowance while still
     blocking unchanged sibling copies; true runtime regression or saturation
-    still gets runtime diversity guidance.
+    still gets runtime diversity guidance. Scheduler policy keeps those
+    ordinary low-signal follow-ups schedulable and does not create
+    scheduler-origin parked-lineage blocks unless the branch is truly
+    ineligible, quality-regressive, or already parked by Decision.
   - Runtime telemetry summaries distinguish explicit inactive activation
     evidence from numeric zero counters. `candidate_false` and activation
     status `inactive` keep delegated review and proposal feedback from
