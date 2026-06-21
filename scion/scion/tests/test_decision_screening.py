@@ -322,6 +322,40 @@ def test_decision_budget_exhausting_runtime_ratio_does_not_block_low_snr_expand(
     )
 
 
+def test_decision_budget_exhausting_high_runtime_ratio_does_not_block_low_snr_expand():
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate(
+            {
+                "pairing_validity": "trajectory_divergent",
+                "runtime": {"runtime_model": "budget_exhausting"},
+            }
+        )
+    )
+    f = _features(
+        stage="screening",
+        wins=3,
+        losses=4,
+        ties=9,
+        win_rate=3 / 16,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=2.0,
+        pair_wins=14,
+        pair_losses=11,
+        pair_ties=32,
+        runtime_ratio_median=9.0,
+        runtime_regression_rate=1.0,
+        runtime_pairs=16,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.EXPAND_SCREENING
+    assert out.reason_codes == (
+        "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",
+    )
+
+
 def test_decision_trajectory_stable_low_snr_shape_does_not_expand():
     f = _features(
         stage="screening",

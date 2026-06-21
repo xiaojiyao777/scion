@@ -186,14 +186,15 @@ def _trajectory_divergent_low_snr_expand(
         return False
     if stats.candidate_failed_pairs > 0 or stats.failed_pairs > 0:
         return False
-    if (
-        stats.runtime_ratio_median is not None
-        and stats.runtime_ratio_median > config.max_runtime_ratio
-    ):
-        return False
     budget_exhausting = (
         getattr(config.runtime, "runtime_model", "comparative") == "budget_exhausting"
     )
+    if (
+        not budget_exhausting
+        and stats.runtime_ratio_median is not None
+        and stats.runtime_ratio_median > config.max_runtime_ratio
+    ):
+        return False
     if (
         not budget_exhausting
         and stats.runtime_regression_rate is not None

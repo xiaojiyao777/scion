@@ -336,7 +336,8 @@ class DecisionEngine:
             )
 
         if (
-            features.runtime_ratio_median is not None
+            _runtime_regression_rate_actionable(self.config)
+            and features.runtime_ratio_median is not None
             and features.runtime_ratio_median > self.config.max_runtime_ratio
         ):
             return self._out(features, Decision.ABANDON, ["RUNTIME_REGRESSION"])
