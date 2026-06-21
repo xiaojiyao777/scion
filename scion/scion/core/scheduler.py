@@ -4,7 +4,6 @@ from typing import Any, Callable, Iterable, List, Literal, Mapping, Optional
 
 from scion.core.branch_hygiene import (
     BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
-    CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM,
     branch_is_parked_lineage,
     branch_lifecycle_new_mechanism_ineligible,
     branch_requires_same_mechanism_followup,
@@ -156,15 +155,20 @@ class Scheduler:
             if b.state != BranchState.BLOCKED_INFRA
             and not branch_is_parked_lineage(b)
             and not _branch_has_decision_origin_park_marker(b)
-            and not _retained_checkpoint_no_effect_current_head(b)
+            and (
+                not _retained_checkpoint_no_effect_current_head(b)
+                or _same_mechanism_low_signal_followup_candidate(b)
+            )
             and (
                 not _no_effect_slot_release_preferred(b)
                 or _branch_same_branch_refinement_sampling_candidate(b)
+                or _same_mechanism_low_signal_followup_candidate(b)
             )
             and not _quality_regression_slot_release_preferred(b)
             and (
                 not _branch_lifecycle_budget_exhausted(b)
                 or _branch_plateau_gate_same_branch_candidate(b)
+                or _same_mechanism_low_signal_followup_candidate(b)
             )
         ]
 
@@ -198,6 +202,7 @@ class Scheduler:
                 and (
                     not _branch_lifecycle_budget_exhausted(branch)
                     or _branch_plateau_gate_same_branch_candidate(branch)
+                    or _same_mechanism_low_signal_followup_candidate(branch)
                 )
             ]
             if not eligible_research:
@@ -295,6 +300,19 @@ class Scheduler:
                     reason=_reason_for_branch(selected),
                     slot=_slot_for_branch(selected),
                 )
+            same_mechanism_followup_candidates = [
+                branch
+                for branch in eligible_research
+                if _same_mechanism_low_signal_followup_candidate(branch)
+            ]
+            if same_mechanism_followup_candidates:
+                selected = _select_budgeted(same_mechanism_followup_candidates)
+                return SchedulerAction(
+                    action="run_existing",
+                    branch=selected,
+                    reason=_reason_for_branch(selected),
+                    slot=_slot_for_branch(selected),
+                )
             if not preferred_research:
                 reason = (
                     RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
@@ -325,18 +343,12 @@ class Scheduler:
                 branch_requires_same_mechanism_followup(branch)
                 for branch in eligible_research
             ):
-                if len(active_for_slots) < self._max_active_branches:
-                    return SchedulerAction(
-                        action="create_new",
-                        branch=None,
-                        reason=CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM,
-                        slot="explore_new",
-                    )
+                selected = _select_budgeted(eligible_research)
                 return SchedulerAction(
-                    action="at_capacity",
-                    branch=None,
-                    reason="active_branch_limit_reached",
-                    slot="capacity_blocked",
+                    action="run_existing",
+                    branch=selected,
+                    reason=_reason_for_branch(selected),
+                    slot=_slot_for_branch(selected),
                 )
             clean_research = [
                 branch
@@ -431,6 +443,30 @@ def _merge_audit_metadata(*items: Mapping[str, Any]) -> dict[str, Any]:
         if item:
             merged.update(dict(item))
     return merged
+
+
+def _same_mechanism_low_signal_followup_candidate(branch: Branch) -> bool:
+    if not branch_requires_same_mechanism_followup(branch):
+        return False
+    if branch_lifecycle_new_mechanism_ineligible(branch):
+        return False
+    if branch_is_parked_lineage(branch):
+        return False
+    if _quality_regression_slot_release_preferred(branch):
+        return False
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    return status in {
+        "active_marginal",
+        "active_neutral",
+        "active_no_effect",
+        "active_runtime_regression",
+    } or tier in {
+        "marginal",
+        "neutral",
+        "no_effect",
+        "runtime_regression",
+    }
 
 
 def branch_counts_toward_active_slots(branch: Branch) -> bool:

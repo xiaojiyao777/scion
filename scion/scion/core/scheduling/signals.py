@@ -76,6 +76,15 @@ def scheduler_owned_active_slot_release_reason(
         has_decision_origin_park_marker=has_decision_origin_park_marker,
     )
     if (
+        not has_decision_origin_park_marker
+        and low_value_reason
+        in {
+            "retained_checkpoint_no_effect_current_head",
+            "repeated_no_effect_zero_effect_slot_release",
+        }
+    ):
+        return ""
+    if (
         low_value_reason == "retained_checkpoint_no_effect_current_head"
         and not branch_lifecycle_budget_exhausted(branch)
     ):
@@ -114,12 +123,8 @@ def eligible_new_branch_slot_reclaim(
     if has_decision_origin_park_marker:
         return True
     return (
-        branch_lifecycle_budget_exhausted(branch)
-        or branch_lifecycle_new_mechanism_ineligible(branch)
-        or no_effect_slot_release_preferred(branch)
-        or no_effect_without_actionable_diagnostic(branch)
+        branch_lifecycle_new_mechanism_ineligible(branch)
         or quality_regression_slot_release_preferred(branch)
-        or branch_plateau_reroute_preferred(branch)
     )
 
 
@@ -683,7 +688,7 @@ def reason_for_branch(branch: Branch) -> str:
         if status == "active_runtime_regression" or tier == "runtime_regression":
             return "runtime_diagnostic_followup"
         if no_effect_without_actionable_diagnostic(branch):
-            return "no_effect_without_actionable_diagnostic_deprioritized"
+            return "no_effect_same_mechanism_followup"
         if status.startswith("active_") or tier:
             return "effect_diagnostic_followup"
         return "diagnostic_followup"

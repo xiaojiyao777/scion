@@ -122,7 +122,7 @@ def test_active_slot_module_inventory_matches_scheduler_facade_policy() -> None:
     ) == active_slot_inventory([branch], max_active_branches=1)
 
 
-def test_active_slot_reclaim_writes_scheduler_origin_marker_without_decision_marker() -> None:
+def test_active_slot_reclaim_does_not_park_without_decision_marker() -> None:
     branch = Branch(
         branch_id="low-value-without-marker",
         state=BranchState.EXPLORE,
@@ -139,27 +139,21 @@ def test_active_slot_reclaim_writes_scheduler_origin_marker_without_decision_mar
     )
     inventory = active_slot_inventory([branch], max_active_branches=1)
 
-    assert reconciliation.changed is True
+    assert reconciliation.changed is False
     assert reconciliation.blocked is False
-    assert reconciliation.after_used == 0
-    assert reconciliation.candidate_branch_ids == (branch.branch_id,)
+    assert reconciliation.after_used == 1
+    assert reconciliation.candidate_branch_ids == ()
     assert reconciliation.marker_missing_branch_ids == ()
-    assert reconciliation.scheduler_origin_parked_branch_ids == (branch.branch_id,)
-    assert branch.state == BranchState.PARKED_LINEAGE
-    assert inventory["used"] == 0
-    assert inventory["parked_lineage_ids"] == [branch.branch_id]
+    assert reconciliation.scheduler_origin_parked_branch_ids == ()
+    assert branch.state == BranchState.EXPLORE
+    assert inventory["used"] == 1
+    assert inventory["parked_lineage_ids"] == []
     audit = reconciliation.as_audit_metadata()
-    assert audit["lifecycle_action"] == "park_lineage"
-    assert audit["lifecycle_action_origin"] == "scheduler_active_slot_reclaim"
-    assert audit["reclaimed_branch_ids"] == [branch.branch_id]
-    assert audit["scheduler_origin_reclaimed_branch_ids"] == [branch.branch_id]
+    assert "lifecycle_action" not in audit
+    assert "reclaimed_branch_ids" not in audit
+    assert "scheduler_origin_reclaimed_branch_ids" not in audit
     assert "decision_origin_marker_required" not in audit
-    assert branch.last_branch_lifecycle_policy_block["lifecycle_action_origin"] == (
-        "scheduler_active_slot_reclaim"
-    )
-    assert "SCHEDULER_ACTIVE_SLOT_RECLAIM_PARK_LINEAGE" in (
-        branch.last_branch_lifecycle_policy_block["lifecycle_action_reason_codes"]
-    )
+    assert branch.last_branch_lifecycle_policy_block == {}
 
 
 def test_active_slot_reclaim_parks_branch_with_decision_origin_marker() -> None:
@@ -197,7 +191,7 @@ def test_active_slot_reclaim_parks_branch_with_decision_origin_marker() -> None:
     assert inventory["parked_lineage_ids"] == [branch.branch_id]
 
 
-def test_no_effect_exhausted_head_releases_active_slot_without_parking() -> None:
+def test_no_effect_exhausted_head_runs_same_mechanism_without_parking() -> None:
     branch = Branch(
         branch_id="no-effect-slot-release",
         state=BranchState.EXPLORE,
@@ -211,14 +205,12 @@ def test_no_effect_exhausted_head_releases_active_slot_without_parking() -> None
     action = Scheduler(max_active_branches=1).select_next([branch])
     inventory = active_slot_inventory([branch], max_active_branches=1)
 
-    assert action.action == "create_new"
-    assert action.reason == "new_exploration_slot_available"
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.reason == "no_effect_same_mechanism_followup"
     assert branch.state == BranchState.EXPLORE
-    assert inventory["used"] == 0
-    assert inventory["released_active_slot_ids"] == [branch.branch_id]
-    assert inventory["released_active_slot_reasons"][branch.branch_id] == (
-        "repeated_no_effect_zero_effect_slot_release"
-    )
+    assert inventory["used"] == 1
+    assert inventory["released_active_slot_ids"] == []
     assert inventory["parked_lineage_ids"] == []
 
 
@@ -541,7 +533,7 @@ def test_no_effect_branch_gets_one_same_branch_sample_before_clean_fork() -> Non
     ] == 1
 
 
-def test_sampled_no_effect_branch_still_allows_clean_fork() -> None:
+def test_sampled_no_effect_branch_still_runs_same_mechanism_followup() -> None:
     branch = Branch(
         branch_id="sampled-no-effect",
         state=BranchState.EXPLORE,
@@ -560,18 +552,15 @@ def test_sampled_no_effect_branch_still_allows_clean_fork() -> None:
 
     action = Scheduler(max_active_branches=2).select_next([branch])
 
-    assert action.action == "create_new"
-    assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason in {
-        "clean_fork_required_for_new_mechanism",
-        "plateau_reroute_clean_fork",
-    }
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.slot == "repair_diagnostic"
+    assert action.reason == "no_effect_same_mechanism_followup"
     assert "same_branch_refinement_sampling" not in action.audit_metadata
     assert "material_difference_required" not in action.audit_metadata
 
 
-def test_repeated_no_effect_clean_fork_requires_material_difference_without_plateau_threshold() -> None:
+def test_repeated_no_effect_without_plateau_threshold_runs_same_mechanism_followup() -> None:
     branch = Branch(
         branch_id="repeated-no-effect-clean-fork",
         state=BranchState.EXPLORE,
@@ -603,34 +592,15 @@ def test_repeated_no_effect_clean_fork_requires_material_difference_without_plat
 
     action = Scheduler(max_active_branches=2).select_next([branch])
 
-    assert action.action == "create_new"
-    assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason == "new_exploration_slot_available"
-    assert action.audit_metadata["low_value_active_slot_release"] is True
-    assert (
-        action.audit_metadata["low_value_active_slot_release_candidates"][0][
-            "release_reason"
-        ]
-        == "repeated_no_effect_zero_effect_slot_release"
-    )
-    assert action.audit_metadata["material_difference_required"] is True
-    requirement = action.audit_metadata["material_difference_requirement"]
-    assert requirement["schema_version"] == "material_difference_requirement.v1"
-    assert requirement["record_type"] == "material_difference_requirement"
-    assert requirement["record_id"].startswith("material_difference_requirement:")
-    assert requirement["record_digest"].startswith("sha256:")
-    assert requirement["proposal_visibility_only"] is True
-    assert requirement["decision_features_excluded"] is True
-    assert requirement["requirement_source"] == "low_value_clean_fork_pressure"
-    assert requirement["candidate_branch_ids"] == [
-        "repeated-no-effect-clean-fork"
-    ]
-    assert "LOW_VALUE_CLEAN_FORK_PRESSURE" in requirement["reason_codes"]
-    assert "generic no-effect direction" not in str(requirement)
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.slot == "repair_diagnostic"
+    assert action.reason == "no_effect_same_mechanism_followup"
+    assert "low_value_active_slot_release" not in action.audit_metadata
+    assert "material_difference_required" not in action.audit_metadata
 
 
-def test_retained_checkpoint_no_effect_clean_fork_requires_material_difference() -> None:
+def test_retained_checkpoint_no_effect_runs_same_mechanism_followup() -> None:
     branch = Branch(
         branch_id="retained-no-effect-clean-fork",
         state=BranchState.EXPLORE,
@@ -662,34 +632,13 @@ def test_retained_checkpoint_no_effect_clean_fork_requires_material_difference()
 
     action = Scheduler(max_active_branches=2).select_next([branch])
 
-    assert action.action == "create_new"
-    assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason == "new_exploration_slot_available"
-    assert action.audit_metadata["low_value_active_slot_release"] is True
-    assert (
-        action.audit_metadata["low_value_active_slot_release_candidates"][0][
-            "release_reason"
-        ]
-        == "retained_checkpoint_no_effect_current_head"
-    )
-    assert action.audit_metadata["material_difference_required"] is True
-    requirement = action.audit_metadata["material_difference_requirement"]
-    assert requirement["schema_version"] == "material_difference_requirement.v1"
-    assert requirement["record_type"] == "material_difference_requirement"
-    assert requirement["record_id"].startswith("material_difference_requirement:")
-    assert requirement["record_digest"].startswith("sha256:")
-    assert requirement["proposal_visibility_only"] is True
-    assert requirement["decision_features_excluded"] is True
-    assert requirement["requirement_source"] == "low_value_clean_fork_pressure"
-    assert requirement["candidate_branch_ids"] == [
-        "retained-no-effect-clean-fork"
-    ]
-    assert action.audit_metadata["material_difference_audit_records"] == [
-        requirement
-    ]
-    assert "LOW_VALUE_CLEAN_FORK_PRESSURE" in requirement["reason_codes"]
-    assert "generic retained checkpoint direction" not in str(requirement)
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.slot == "refine_active"
+    assert action.reason == "same_branch_low_signal_observation_sample"
+    assert action.audit_metadata["same_branch_refinement_selected"] is True
+    assert "low_value_active_slot_release" not in action.audit_metadata
+    assert "material_difference_required" not in action.audit_metadata
 
 
 def test_low_confidence_runtime_branch_gets_same_branch_sample_once() -> None:

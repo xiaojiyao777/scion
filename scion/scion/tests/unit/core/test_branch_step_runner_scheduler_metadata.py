@@ -1198,7 +1198,7 @@ def test_fresh_runtime_replay_drain_step_reports_pressure_without_pending_candid
     assert metadata["fresh_runtime_replay"]["decision_features_excluded"] is True
 
 
-def test_clean_fork_reclaims_scheduler_origin_slot_before_create_new() -> None:
+def test_capacity_full_low_signal_without_decision_marker_runs_existing_branch() -> None:
     champion = _champion()
     controller = BranchController()
     stale_branches = []
@@ -1265,26 +1265,17 @@ def test_clean_fork_reclaims_scheduler_origin_slot_before_create_new() -> None:
         max_active_branches=3,
     )
 
-    assert result.action == "create_branch"
-    assert result.attempt_kind == "screening"
+    assert result.action == "explore"
+    assert result.branch_id == reclaim_target.branch_id
+    assert result.scheduler_slot == "repair_diagnostic"
+    assert result.scheduler_reason == "no_effect_same_mechanism_followup"
     assert result.reason != "max_active_branches reached"
-    assert reclaim_target.state == BranchState.PARKED_LINEAGE
+    assert reclaim_target.state == BranchState.EXPLORE
     assert inventory["used"] == 3
-    assert inventory["parked_lineage_ids"] == [reclaim_target.branch_id]
-    assert len(controller.get_reportable_branches()) == 4
-    assert saved[0] == (reclaim_target.branch_id, BranchState.PARKED_LINEAGE)
-    assert result.scheduler_audit_metadata["active_slot_reconciliation"][
-        "mode"
-    ] == "new_branch_reclaim"
-    assert result.scheduler_audit_metadata["active_slot_reconciliation"][
-        "lifecycle_action_origin"
-    ] == "scheduler_active_slot_reclaim"
-    assert result.scheduler_audit_metadata["active_slot_reconciliation"][
-        "reclaimed_branch_ids"
-    ] == [reclaim_target.branch_id]
-    assert result.scheduler_audit_metadata["active_slot_reconciliation"][
-        "scheduler_origin_reclaimed_branch_ids"
-    ] == [reclaim_target.branch_id]
+    assert inventory["parked_lineage_ids"] == []
+    assert len(controller.get_reportable_branches()) == 3
+    assert saved == []
+    assert "active_slot_reconciliation" not in result.scheduler_audit_metadata
     assert "active_slot_hard_cap" not in result.scheduler_audit_metadata
     assert recorded == [result]
 
