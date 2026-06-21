@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `07371fdc`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `3ed027b8`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-21*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -252,9 +252,9 @@ Current checkpoint:
   considered static-ready.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-dddad0f-portfolio-noeffect-6r-gpt55-6r-gpt55-20260621T013137Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6d3f5ad-search-memory-noeffect-6r-gpt55-6r-gpt55-20260621T014210Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-dddad0f-portfolio-noeffect-resume-4r-gpt55-4r-gpt55-20260621T013152Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6d3f5ad-search-memory-noeffect-resume-4r-gpt55-4r-gpt55-20260621T014226Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -269,7 +269,7 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok`,
-  `prepared_runtime_commit=07371fdc`, `actual_runtime_commit=07371fdc`, and
+  `prepared_runtime_commit=3ed027b8`, `actual_runtime_commit=3ed027b8`, and
   `runtime_guard_reason=runtime_guard_commit_matches`. They also report
   `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
   `campaign_execution_marker_status=ok` through top-level marker summary
@@ -313,8 +313,9 @@ Current checkpoint:
     high-win-rate, non-negative, sub-practical-delta screening evidence is a
     diagnostic validation candidate (`SCREENING_PASS_MARGINAL_DELTA`) and is
     recorded in proposal feedback/search memory as marginal rather than
-    promotable, while high-win-rate negative median effect remains
-    inconclusive/fail-closed.
+    promotable. Search memory uses hard-failure counts for global AVOID and
+    does not exhaust ordinary repeated no-effect/tie screening memory, while
+    high-win-rate negative median effect remains inconclusive/fail-closed.
   - Active no-effect branch cards now agree with same-mechanism follow-up
     policy: ordinary no-effect/tie evidence keeps same-mechanism diagnostic,
     tune, integrate, repair, parameterize, telemetry-wiring, or observability

@@ -35,15 +35,15 @@ history when exact old chronology is needed.
 ## Active Prepared Roots
 
 These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `07371fdc`; the corresponding server repair commit is
-`dddad0f4`. Local mirrors under `/home/clawd/research/scion-experiments/` are
+runtime commit `3ed027b8`; the corresponding server repair commit is
+`6d3f5ad4`. Local mirrors under `/home/clawd/research/scion-experiments/` are
 for inspection only. Run readiness and launch from WSL because the prepared
 contracts contain WSL absolute paths.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-dddad0f-portfolio-noeffect-6r-gpt55-6r-gpt55-20260621T013137Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6d3f5ad-search-memory-noeffect-6r-gpt55-6r-gpt55-20260621T014210Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-dddad0f-portfolio-noeffect-resume-4r-gpt55-4r-gpt55-20260621T013152Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6d3f5ad-search-memory-noeffect-resume-4r-gpt55-4r-gpt55-20260621T014226Z-claw`
 
 Current readiness snapshot for both roots:
 
@@ -52,7 +52,7 @@ Current readiness snapshot for both roots:
 - `failed_static_required_checks=[]`
 - only required failure: completion preflight auth
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=07371fdc`, `actual_runtime_commit=07371fdc`,
+  `prepared_runtime_commit=3ed027b8`, `actual_runtime_commit=3ed027b8`,
   `runtime_guard_reason=runtime_guard_commit_matches`
 - campaign marker: `campaign_execution_marker_status=ok`
 - secret file permissions: `launch_env_secret_permissions=ok`,
@@ -85,13 +85,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 After strict readiness passes, launch the wrapper itself:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-dddad0f-portfolio-noeffect-6r-gpt55-6r-gpt55-20260621T013137Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6d3f5ad-search-memory-noeffect-6r-gpt55-6r-gpt55-20260621T014210Z-claw/run.sh
 ```
 
 Run CVRP after warehouse is underway or accepted for launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-dddad0f-portfolio-noeffect-resume-4r-gpt55-4r-gpt55-20260621T013152Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6d3f5ad-search-memory-noeffect-resume-4r-gpt55-4r-gpt55-20260621T014226Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
@@ -147,7 +147,9 @@ the v0.4 planning summary, focused tests, and experiment reports.
   two-opt claims without current-run CMT2/CMT4 protection evidence.
 - Screening gate, Decision, proposal feedback, and search memory must agree on
   marginal evidence: high-win-rate, non-negative, sub-practical-delta screening
-  evidence is diagnostic follow-up material, not promotable proof.
+  evidence is diagnostic follow-up material, not promotable proof. Global
+  search-memory AVOID is driven by hard failures, not ordinary repeated
+  no-effect/tie diagnostics.
 
 ## Problem Frontiers
 
