@@ -27,6 +27,11 @@ history when exact old chronology is needed.
   warehouse and CVRP follow-up.
 - v0.4 is not closed until live runs show effective research behavior.
 - No LLM campaign is currently running.
+- Latest accepted code repair: local commit `5bc93f16` / WSL commit
+  `13abbbef` requires CVRP CMT2/CMT4 protected-case postrun evidence to carry
+  numeric objective/distance delta evidence; route-count, feasibility-only,
+  case-name, or free-text continuity payloads cannot make a bounded two-opt
+  summary review-ready.
 - Current blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. `/v1/models` lists `gpt-5.5`, but strict completion preflight
   returns HTTP `401`, `classification=not_authenticated`,
@@ -35,25 +40,30 @@ history when exact old chronology is needed.
 ## Active Prepared Roots
 
 These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `c7b06d9a`; the corresponding server repair commit is
-`b14eb332`. Local mirrors under `/home/clawd/research/scion-experiments/` are
-for inspection only. Run readiness and launch from WSL because the prepared
+runtime commit `13abbbef` after the CVRP protected-case objective-delta
+postrun guard repair; the corresponding local repair commit is `5bc93f16`.
+Local mirrors under `/home/clawd/research/scion-experiments/` are for
+inspection only. Run readiness and launch from WSL because the prepared
 contracts contain WSL absolute paths.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-c7b06d9-resumecont-6r-gpt55-20260621T023211Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-13abbbef-resumecont-6r-gpt55-20260621T030244Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-c7b06d9-resumecont-4r-gpt55-20260621T023211Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-13abbbef-resumecont-4r-gpt55-20260621T030244Z-claw`
 
 Current readiness snapshot for both roots:
 
 - `static_ready=true`
 - `launch_ready=false`
 - `failed_static_required_checks=[]`
-- only required failure: completion preflight auth
+- only required failure: completion preflight auth, HTTP `401`,
+  `classification=not_authenticated`, `code=invalid_api_key`, auth pool has
+  `active=0`, `total=1`; ignore volatile expired/refreshing substates unless
+  active auth becomes available
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=c7b06d9a`, `actual_runtime_commit=3138b886`,
-  `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare`
+  `prepared_runtime_commit=13abbbef`; current WSL HEAD may include docs-only
+  status commits after prepare, and strict readiness accepts that only when the
+  guarded runtime paths are unchanged since prepare
 - campaign marker: `campaign_execution_marker_status=ok`
 - secret file permissions: `launch_env_secret_permissions=ok`,
   `launch_env_mode=0o600`
@@ -85,13 +95,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 After strict readiness passes, launch the wrapper itself:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-c7b06d9-resumecont-6r-gpt55-20260621T023211Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-13abbbef-resumecont-6r-gpt55-20260621T030244Z-claw/run.sh
 ```
 
 Run CVRP after warehouse is underway or accepted for launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-c7b06d9-resumecont-4r-gpt55-20260621T023211Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-13abbbef-resumecont-4r-gpt55-20260621T030244Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
