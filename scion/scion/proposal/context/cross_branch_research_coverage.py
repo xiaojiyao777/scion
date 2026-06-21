@@ -239,7 +239,8 @@ def avoid_bridge_guidance(
                     "proposal_guidance": (
                         "Repeated zero-effect outcomes need a bridge proposal "
                         "that changes activation, effect observability, target, "
-                        "or family before more local refinement."
+                        "or family before another unchanged local retry or "
+                        "sibling copy."
                     ),
                     "confidence": 0.66,
                 }

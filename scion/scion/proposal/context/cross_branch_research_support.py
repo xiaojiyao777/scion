@@ -257,6 +257,16 @@ def avoid_signature_set(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if record.get("final_or_active_state") == "active"
             and record.get("outcome_pattern") == "weak_positive"
         )
+        current_active_no_effect = unique(
+            record.get("branch_id", "")
+            for record in group
+            if record.get("is_current_branch")
+            and record.get("final_or_active_state") == "active"
+            and record.get("outcome_pattern") == "no_effect"
+        )
+        same_branch_refinement_branch_ids = unique(
+            (*active_weak_positive, *current_active_no_effect)
+        )
         current_branch_ids = unique(
             record.get("branch_id", "")
             for record in group
@@ -280,10 +290,10 @@ def avoid_signature_set(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             signature,
             required_for=(
                 "sibling_nearby_attempt"
-                if active_weak_positive
+                if same_branch_refinement_branch_ids
                 else "another_nearby_attempt"
             ),
-            same_branch_refinement_allowed=bool(active_weak_positive),
+            same_branch_refinement_allowed=bool(same_branch_refinement_branch_ids),
         )
         items.append(
             drop_empty(
@@ -297,8 +307,13 @@ def avoid_signature_set(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "current_branch_ids": current_branch_ids,
                     "sibling_branch_ids": sibling_branch_ids,
                     "active_weak_positive_branch_ids": active_weak_positive,
-                    "same_branch_refinement_allowed": bool(active_weak_positive),
-                    "same_branch_refinement_allowed_branch_ids": (active_weak_positive),
+                    "current_active_no_effect_branch_ids": current_active_no_effect,
+                    "same_branch_refinement_allowed": bool(
+                        same_branch_refinement_branch_ids
+                    ),
+                    "same_branch_refinement_allowed_branch_ids": (
+                        same_branch_refinement_branch_ids
+                    ),
                     "sibling_duplication_allowed": False,
                     "material_difference_required_for": requirements.get(
                         "required_for"
@@ -319,8 +334,9 @@ def avoid_signature_set(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         "Avoid another sibling or nearby proposal with this "
                         "generic signature unless it changes family, target, "
                         "action, locus, or effect path. Same-branch "
-                        "weak-positive refinement remains allowed only for "
-                        "listed active branches."
+                        "weak-positive or current no-effect diagnostic "
+                        "refinement remains allowed only for listed active "
+                        "branches."
                     ),
                     "confidence": min(0.88, 0.68 + len(branch_ids) * 0.04),
                 }
@@ -502,14 +518,19 @@ def branch_lesson_records(
             continue
         if not _bridge_guidance(guidance):
             continue
+        source_branch_ids = unique(
+            str(item) for item in guidance.get("branch_ids", []) or []
+        )
+        same_branch_no_effect_allowed = any(
+            _low_signal_source_is_current(branch_id, summaries_by_branch)
+            for branch_id in source_branch_ids
+        )
         record = _branch_lesson_record(
             scope="cross_branch",
             lesson_role="bridge",
             lesson_type="no_effect",
             maturity="repeated",
-            source_branch_ids=unique(
-                str(item) for item in guidance.get("branch_ids", []) or []
-            ),
+            source_branch_ids=source_branch_ids,
             shared_signature=_clean_material_signature(
                 guidance.get("shared_signature", {})
                 or guidance.get("signature", {})
@@ -521,8 +542,12 @@ def branch_lesson_records(
                     guidance.get("runtime_evidence_statuses", {})
                 ),
             },
-            required_for="clean_fork_new_branch",
-            same_branch_refinement_allowed=False,
+            required_for=(
+                "same_branch_refinement"
+                if same_branch_no_effect_allowed
+                else "clean_fork_new_branch"
+            ),
+            same_branch_refinement_allowed=same_branch_no_effect_allowed,
             reason_codes=[
                 *[str(code) for code in guidance.get("reason_codes", []) or []],
                 "BRANCH_LESSON_BRIDGE_REQUIRED",
@@ -1294,9 +1319,12 @@ def same_branch_refinement_allowances(
     allowances: list[dict[str, Any]] = []
     for summary in branch_summaries:
         outcome = summary.get("outcome_summary", {}) or {}
-        if outcome.get("outcome_pattern") != "weak_positive":
+        outcome_pattern = str(outcome.get("outcome_pattern") or "")
+        if outcome_pattern not in {"weak_positive", "no_effect"}:
             continue
         if summary.get("final_or_active_state") != "active":
+            continue
+        if outcome_pattern == "no_effect" and not summary.get("is_current_branch"):
             continue
         descriptors = summary.get("research_descriptors", []) or []
         signatures = [
@@ -1310,6 +1338,7 @@ def same_branch_refinement_allowances(
             )
             for descriptor in descriptors
         ]
+        no_effect = outcome_pattern == "no_effect"
         allowances.append(
             drop_empty(
                 {
@@ -1319,18 +1348,33 @@ def same_branch_refinement_allowances(
                     "decision_input_policy": "excluded_from_decision_features",
                     "same_branch_refinement_allowed": True,
                     "sibling_duplication_allowed": False,
-                    "recommended_action": "refine",
+                    "recommended_action": "diagnose" if no_effect else "refine",
                     "priority": "high",
                     "signatures": signatures[:4],
                     "evidence_profile": summary.get("evidence_profile", {}),
                     "reason_codes": [
-                        "NOVELTY_SAME_BRANCH_WEAK_POSITIVE_REFINEMENT_ALLOWED"
+                        (
+                            "NOVELTY_SAME_BRANCH_NO_EFFECT_DIAGNOSTIC_ALLOWED"
+                            if no_effect
+                            else "NOVELTY_SAME_BRANCH_WEAK_POSITIVE_REFINEMENT_ALLOWED"
+                        )
                     ],
                     "proposal_guidance": (
-                        "Continue the active weak-positive branch through "
-                        "same-branch refinement when the proposal explains the "
-                        "follow-up. Do not copy this as a sibling duplicate "
-                        "without a material signature or effect-path change."
+                        (
+                            "Continue the current no-effect branch only through "
+                            "same-branch diagnostic refinement that changes "
+                            "trigger, effect-path, or observability evidence. "
+                            "Do not copy this as a sibling duplicate without a "
+                            "material signature change."
+                        )
+                        if no_effect
+                        else (
+                            "Continue the active weak-positive branch through "
+                            "same-branch refinement when the proposal explains "
+                            "the follow-up. Do not copy this as a sibling "
+                            "duplicate without a material signature or "
+                            "effect-path change."
+                        )
                     ),
                     "confidence": 0.68,
                 }

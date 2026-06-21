@@ -1045,6 +1045,97 @@ def test_cross_branch_research_keeps_active_weak_positive_refinement_allowed() -
     )
 
 
+def test_cross_branch_research_keeps_current_no_effect_diagnostic_allowed() -> None:
+    current = _branch(
+        "branch-current",
+        mechanism_ids=("bounded_signal_probe",),
+    )
+    current.branch_code_status = "active_no_effect"
+    current.last_screening_feedback_tier = "no_effect"
+    sibling = _branch(
+        "branch-sibling",
+        mechanism_ids=("bounded_signal_variant",),
+    )
+    steps = [
+        _screening_step(
+            "branch-current",
+            round_num=1,
+            mechanism_id="bounded_signal_probe",
+            target_file="policies/shared.py",
+            change_locus="activation_policy",
+            reason_codes=("SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",),
+            mechanism_evidence={
+                "activation": {"status": "observed"},
+                "effect": {"status": "zero"},
+            },
+        ),
+        _screening_step(
+            "branch-sibling",
+            round_num=2,
+            mechanism_id="bounded_signal_variant",
+            target_file="policies/shared.py",
+            change_locus="activation_policy",
+            reason_codes=("SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",),
+            mechanism_evidence={
+                "activation": {"status": "observed"},
+                "effect": {"status": "zero"},
+            },
+        ),
+    ]
+
+    payload = build_cross_branch_research_map(current, [current, sibling], steps)
+
+    novelty = payload["novelty_pressure"]
+    avoid = novelty["avoid_signature_set"][0]
+    assert avoid["shared_signature"] == {
+        "mechanism_family": "bounded_signal",
+        "target_file": "policies/shared.py",
+        "action": "modify",
+        "change_locus": "activation_policy",
+    }
+    assert avoid["same_branch_refinement_allowed"] is True
+    assert avoid["current_active_no_effect_branch_ids"] == ["branch-current"]
+    assert avoid["same_branch_refinement_allowed_branch_ids"] == ["branch-current"]
+    assert avoid["sibling_branch_ids"] == ["branch-sibling"]
+    assert avoid["material_difference_required_for"] == "sibling_nearby_attempt"
+    assert (
+        avoid["material_difference_requirements"]["same_branch_refinement_allowed"]
+        is True
+    )
+
+    blocked = novelty["blocked_signature_pressure"][0]
+    assert blocked["same_branch_refinement_allowed_branch_ids"] == [
+        "branch-current"
+    ]
+    allowance = {
+        item["branch_id"]: item for item in novelty["same_branch_refinement_allowances"]
+    }["branch-current"]
+    assert allowance["same_branch_refinement_allowed"] is True
+    assert allowance["recommended_action"] == "diagnose"
+    assert allowance["reason_codes"] == [
+        "NOVELTY_SAME_BRANCH_NO_EFFECT_DIAGNOSTIC_ALLOWED"
+    ]
+
+    bridge_lesson = [
+        lesson
+        for lesson in payload["branch_lesson_records"]
+        if lesson["lesson_role"] == "bridge"
+        and set(lesson["source_branch_ids"]) == {"branch-current", "branch-sibling"}
+    ][0]
+    assert bridge_lesson["required_response"]["required_for"] == (
+        "same_branch_refinement"
+    )
+    assert (
+        bridge_lesson["required_response"]["same_branch_refinement_allowed"] is True
+    )
+    requirement = branch_lesson_usage_requirement_from_records(
+        payload["branch_lesson_records"]
+    )
+    assert "clean_fork_new_branch" not in requirement["required_fors"]
+    assert "same_branch_refinement" in requirement["required_fors"]
+    assert requirement["same_branch_refinement_allowed"] is True
+
+
 def test_current_no_effect_branch_lesson_requires_same_branch_refinement_usage() -> None:
     current = _branch("branch-current", mechanism_ids=("bounded_signal_probe",))
     current.branch_code_status = "active_no_effect"
