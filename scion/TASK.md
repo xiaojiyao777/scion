@@ -2,11 +2,12 @@
 
 *Branch: `codex/v04-evidence-repair-plan`*
 *Status: v0.4 framework/readiness/launcher repairs are accepted enough for
-focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs
-demonstrate effective research behavior. Current WSL prepared roots were
-regenerated at runtime commit `26a03547` after the prepared
-calibration-provenance prompt-bridge repair; both pass static readiness and remain
-blocked only by external `gpt-5.5` completion auth.*
+focused warehouse and CVRP follow-up, but v0.4 is not closed until fresh
+current-run-ready campaigns demonstrate effective research behavior. WSL
+`gpt-5.5` auth has recovered. Warehouse has shown renewed continuous
+improvement from champion `v2` to `v3`, while a fresh postrun-ready rerun is
+needed after the latest prompt/source visibility repair. CVRP bounded
+large-two-opt follow-up is still running from a pre-repair root.*
 *Updated: 2026-06-21*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -243,18 +244,24 @@ not for every prepared root, wrapper failure, or repair-detail checkpoint.
 
 Current checkpoint:
 
-- Warehouse is the accepted v0.4 positive research-path checkpoint. Champion
-  `v2` promoted in the validation-transfer rerun; the open empirical question is
-  whether Scion can produce additional useful research from `v2` or correctly
-  diagnose a real post-v2 plateau.
-- CVRP/VRP continuation is repaired enough for the next focused solver-design
-  follow-up, but v0.4 is not yet accepted because no current CVRP branch has
-  shown continuous improvement or promotion. The active CVRP root uses the
-  large-instance intra-route two-opt seed only as proposal guidance and requires
-  a bounded, deadline-aware mechanism with current-run CMT2/CMT4 case-level
-  protection evidence. Launch readiness also verifies that those protected
-  cases are present in formal screening before the prepared root can be
-  considered static-ready.
+- Warehouse is again a positive v0.4 research-path checkpoint. Fresh WSL root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-33f0e976-transfer-6r-gpt55-20260621T183412Z-claw`
+  completed 6 effective rounds, promoted from champion `v2` to `v3`, and
+  produced two promotion dossiers. Its wrapper remains postrun-unaccepted
+  because the run exposed pre-repair prompt/source visibility gaps; use it as
+  effective-research evidence, not final v0.4 acceptance.
+- CVRP/VRP continuation is repaired enough for focused solver-design follow-up,
+  but v0.4 is not yet accepted because no current CVRP branch has shown
+  continuous improvement or promotion. Active root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
+  is still running from a pre-repair checkout and should be classified with
+  commit-drift caveats after it finishes.
+- Latest accepted prompt/source visibility repair: local commit `774c981d` /
+  WSL commit `a9a537c4` removes active-subject code-constraint prompt
+  truncation, classifies cross-branch/branch-lesson prompt sections as
+  `cross_branch_lesson`, and conditions hypothesis target-source trace
+  requirements on actual target-intent/source requirements. This is
+  proposal/postrun audit material only and remains excluded from Decision.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
   numeric objective/distance delta evidence. Feasibility-only, route-count,
@@ -298,71 +305,20 @@ Current checkpoint:
   is not written for ordinary low-signal branches without a Decision-origin
   park marker. Quality-regression slot release and Decision-origin parked
   lineage reclaim remain fail-closed.
-- Active WSL prepared roots:
-  - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-26a03547-calprompt-6r-gpt55-6r-gpt55-20260621T054141Z-claw`
-  - CVRP:
+- Active WSL roots:
+  - Warehouse evidence root:
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-33f0e976-transfer-6r-gpt55-20260621T183412Z-claw`
+    completed 6 effective rounds and reached champion `v3`, but was generated
+    before the latest prompt/source visibility repair and is not final
+    postrun-accepted evidence.
+  - CVRP active root:
     `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
-- Strict launch readiness for both current roots reports `static_ready=true`,
-  `launch_ready=false`, and `failed_static_required_checks=[]`. The only
-  required failure is external completion auth:
-  HTTP `401`, `classification=not_authenticated`, `code=invalid_api_key`.
-  The auth pool has `active=0`, `total=1`; there is no active account
-  available. Ignore volatile substate changes such as expired versus refreshing
-  unless active auth becomes available. Launch readiness exposes these fields in
-  top-level `completion_preflight_summary` and compatible flat fields, so status
-  refreshes do not need to know nested check paths. Prepared static handoff
-  reports now expose `readiness_scope=static_only_completion_preflight_not_run`
-  and `launch_blockers=["completion_preflight_not_run"]`; only strict launch
-  checks with `readiness_scope=launch_with_completion_preflight` can approve
-  launch. Launch readiness also exposes top-level runtime/env status fields for
-  status refreshes; the current roots report `runtime_guard_status=ok` and
-  `prepared_runtime_commit=26a03547`. Current WSL HEAD may include status or
-  tooling commits outside runtime-guard paths after prepare, and strict
-  readiness accepts that only when the guarded runtime paths are unchanged since
-  prepare. They also report
-  `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
-  `campaign_execution_marker_status=ok` through top-level marker summary fields.
-  The prepared handoff now also verifies
-  `measurement_readiness.calibration_evidence_level=summary_only` and no
-  `measurement_readiness.calibration_ref` or
-  `measurement_readiness.pair_evidence` in either root. The sibling
-  `calibration` block now carries source artifact `sha256` and compact
-  `calibration_run` provenance for the summary-only calibration, and prepared
-  prompt-context readiness verifies that the corresponding proposal-only prompt
-  bridge renders the calibration source/run fields. CVRP additionally verifies
-  `calibration_run.runtime_policy.selected_policy` in the prompt bridge.
-  Completion preflight now also exposes flat `completion_login_url` and
-  `completion_next_step` fields. Use a fresh login URL from strict readiness
-  rather than copying an older OAuth URL from status text.
-  Disabled proposal/APS caps, code-source visibility, source-read headroom,
-  item-level `research_focus` prompt visibility, and CVRP/warehouse
-  adapter-derived opportunity diagnostics are covered by current evidence
-  reports rather than repeated here. Exact `0` proposal/APS caps remain the
-  explicit disabled state; low nonzero caps now fail launch readiness instead
-  of passing as warnings. Fresh-runtime replay drain follows the same
-  explicit-disabled convention and must be explicit; it is set to `0` in the
-  current focused roots. Stage-transition drain must also be explicit; it is
-  set to positive `4` in the current focused roots.
-  Prompt-context readiness now exposes compact `artifact_summaries` in launch
-  readiness: provider scope is
-  `prepared_renderer_summary_not_live_provider_prompt`,
-  `raw_provider_prompt_rendered=false`, and required rendered paths are present
-  for the current CVRP and warehouse launch-focus payloads. CVRP now also
-  reports `cvrp_required_evidence_all_present=true` with 5 rendered
-  required-evidence items.
-  Active subject code-constraint prompt
-  bridge evidence now proves provider constraints reach the actual code prompt
-  with version/subject identity and problem-specific guard markers. Runtime
-  feedback is now rendered as
-  bounded proposal-only screening/verification guidance with omitted-detail
-  counts and digests; it remains excluded from `DecisionFeatures` and from
-  problem semantics. Nominal no-effect/tie runtime summaries remain report-only
-  and do not trigger the generic bounded/top-k prompt hint unless there is an
-  actual comparative slowdown, runtime failure, or runtime budget saturation.
-  Do not launch either root until
-  `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
-  reports `launch_ready=true`.
+    is still running from a pre-repair checkout. Classify it after completion
+    with commit-drift caveats.
+  - Next fresh launch should use WSL commit `a9a537c4` or later, strict
+    launch readiness, conda Python
+    `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`, and no generic
+    proposal/APS/tool-call truncation caps.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

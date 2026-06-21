@@ -25,134 +25,59 @@ history when exact old chronology is needed.
 
 - Framework/readiness/launcher repairs are accepted enough for focused
   warehouse and CVRP follow-up.
-- v0.4 is not closed until live runs show effective research behavior.
-- No LLM campaign is currently running.
-- Latest accepted runtime-path repair: local commit `9b29245e` / WSL commit
-  `2b2cd351` exposes both `fresh_runtime_replay_drain_limit` and
-  `stage_transition_drain_limit` as structured `scion run`/launcher/readiness
-  fields. Focused v0.4 prepared roots set fresh-runtime replay drain to exact
-  `0` and stage-transition drain to explicit `4`, so hidden drain behavior is
-  no longer inherited from core/env defaults.
-- Latest accepted launch-readiness audit repair: local commit `6771a6a4` / WSL
-  commit `6b4c70d6` exposes compact prepared prompt-context evidence summaries
-  directly in launch readiness. The summary distinguishes prepared renderer
-  evidence from live provider-prompt evidence and surfaces the CVRP
-  CMT2/CMT4/resume-continuity, CVRP top-level required-evidence, warehouse
-  champion-v2, warehouse required-evidence, and active code constraint rendered
-  checks without changing Decision, scheduler, promotion, or Protocol inputs.
-- Latest accepted prepared calibration-provenance prompt-bridge repair: local
-  commit `ceaf339c` / WSL commit `26a03547` keeps
-  `measurement_readiness` reduced and ref-free while surfacing compact
-  calibration provenance in the sibling `calibration` block: source artifact
-  `sha256` plus whitelisted `calibration_run` summary fields. Prepared
-  prompt-context readiness now proves that provenance is rendered into the
-  proposal-only research-focus bridge. Raw pair rows and full calibration replay
-  details remain out of status and `DecisionFeatures`.
-- The prior CVRP protected-case guard remains in force: CMT2/CMT4 postrun
-  evidence must carry numeric objective/distance delta evidence; route-count,
-  feasibility-only, case-name, or free-text continuity payloads cannot make a
-  bounded two-opt summary review-ready.
-- Current blocker is external WSL `gpt-5.5` provider auth, not Scion static
-  readiness. `/v1/models` lists `gpt-5.5`, but strict completion preflight
-  returns HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`, with no active auth account available.
+- v0.4 is not closed until a fresh current-run-ready campaign proves effective
+  research behavior. Warehouse has now shown effective research movement; CVRP
+  still needs a solver-design improvement or evidence-backed follow-up result.
+- WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
+  for the latest warehouse rerun before launch.
+- Latest accepted prompt/source visibility repair: local commit `774c981d` /
+  WSL commit `a9a537c4` removes active-subject code-constraint prompt
+  truncation, counts cross-branch/branch-lesson sections as
+  `cross_branch_lesson` signal, and requires hypothesis target-source
+  visibility only when a target-intent preflight or required target source is
+  actually present. This stays in proposal/postrun audit paths and does not
+  change Decision, scheduler, promotion, or Protocol inputs.
+- Existing protected-case and calibration guards remain in force: CVRP
+  CMT2/CMT4 review-ready evidence must carry numeric objective/distance deltas,
+  and calibration provenance remains proposal-visible summary material, not
+  Decision input.
 
-## Active Prepared Roots
+## Active WSL Roots
 
-These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `26a03547` after the prepared calibration-provenance prompt-bridge
-repair; the corresponding local repair commit is `ceaf339c`. They retain the
-CVRP required-evidence repair from WSL commit `6b4c70d6` and the explicit
-drain-limit behavior from WSL commit `2b2cd351`.
-Local mirrors under `/home/clawd/research/scion-experiments/` are for
-inspection only. Run readiness and launch from WSL because the prepared
-contracts contain WSL absolute paths.
+Use WSL for launches and postrun checks:
 
-- Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-26a03547-calprompt-6r-gpt55-6r-gpt55-20260621T054141Z-claw`
-- CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
+- WSL repo: `/home/xjy-ubuntu/research/or-autoresearch-agent`
+- WSL Python: `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`
+- WSL experiment root: `/home/xjy-ubuntu/research/scion-experiments`
 
-Current readiness snapshot for both roots:
+Warehouse evidence root:
 
-- `static_ready=true`
-- `launch_ready=false`
-- `failed_static_required_checks=[]`
-- only required failure: completion preflight auth, HTTP `401`,
-  `classification=not_authenticated`, `code=invalid_api_key`, auth pool has
-  `active=0`, `total=1`; ignore volatile expired/refreshing substates unless
-  active auth becomes available
-- runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=26a03547`; current WSL HEAD may include status or
-  tooling commits outside runtime-guard paths after prepare, and strict
-  readiness accepts that only when the guarded runtime paths are unchanged since
-  prepare
-- measurement handoff:
-  `measurement_readiness.calibration_evidence_level=summary_only` and no
-  `measurement_readiness.calibration_ref` or
-  `measurement_readiness.pair_evidence` in either prepared root. The sibling
-  `calibration` block carries compact source provenance: warehouse source
-  artifact sha `5e34c863356bc74a9d2254dbde1d0a0945c88d56ca7201a4e033344b9718146f`
-  and `calibration_run.action=modify`; CVRP source artifact sha
-  `bdba8272d4eb130200ad537b51ceaef7e50323f614ea3ae29a8247ed9a771684`,
-  `calibration_run.replicate_count=3`, and
-  `calibration_run.runtime_policy.selected_policy=protocol_time_limits`
-- campaign marker: `campaign_execution_marker_status=ok`
-- secret file permissions: `launch_env_secret_permissions=ok`,
-  `launch_env_mode=0o600`
-- headroom guard: `checks.run_script_proposal_headroom_enforced.status=ok`;
-  exact `0` proposal/APS/fresh-runtime replay drain caps are treated as
-  explicitly disabled; low nonzero proposal/APS caps fail readiness instead of
-  passing as warnings, fresh-runtime replay drain must be explicit rather than
-  hidden behind the core legacy default, and stage-transition drain must be an
-  explicit positive value (`4` in the current focused roots)
-- prompt-context readiness summary:
-  `checks.prompt_context_readiness_complete.detail.provider_prompt_scope=prepared_renderer_summary_not_live_provider_prompt`,
-  `raw_provider_prompt_rendered=false`, `missing_rendered_paths=[]`; CVRP
-  exposes `cvrp_case_protection_present=true`,
-  `cvrp_resume_continuity_present=true`, and
-  `cvrp_bounded_twoopt_present=true`, plus
-  `cvrp_required_evidence_all_present=true` with 5 required-evidence items
-  rendered, and the calibration provenance prompt fields
-  `cvrp_measurement_calibration_source_artifact_present=true`,
-  `cvrp_measurement_calibration_run_present=true`, and
-  `cvrp_measurement_calibration_runtime_policy_present=true`; warehouse exposes
-  `warehouse_v2_followup_present=true` and
-  `warehouse_required_evidence_all_present=true`, plus
-  `warehouse_measurement_calibration_source_artifact_present=true` and
-  `warehouse_measurement_calibration_run_present=true`
-- completion preflight exposes flat `completion_login_url` and
-  `completion_next_step`; always fetch a fresh login URL from strict readiness
-  rather than copying an old OAuth URL from notes
+- `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-33f0e976-transfer-6r-gpt55-20260621T183412Z-claw`
+- Campaign completed 6 effective rounds from champion `v2`, reached champion
+  `v3`, and produced two promotion dossiers. Campaign status is valid and
+  stopped by `max_rounds_exhausted`.
+- Wrapper/postrun status is intentionally not accepted as current-run-ready:
+  the run exposed pre-repair prompt visibility failures
+  (`active_subject_code_constraints` truncation and missing cross-branch
+  signal accounting). Treat it as positive research evidence, not final v0.4
+  postrun-acceptance proof.
 
-Do not launch either root until this WSL command reports `launch_ready=true`:
+Active CVRP root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
+- Launched before the latest prompt/source visibility repair. As of the latest
+  check it is still running under WSL, has completed 1 effective round, and is
+  screening the second candidate. Use it as useful CVRP research evidence, but
+  expect postrun commit/readiness caveats because the WSL checkout has advanced.
+
+Before launching any new prepared root, require strict launch readiness from
+the same WSL checkout:
 
 ```bash
 PY=/home/xjy-ubuntu/miniconda3/envs/scion/bin/python
 PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
   "$PY" /home/xjy-ubuntu/research/or-autoresearch-agent/scion/tools/check_launch_readiness.py \
   <prepared-root> --require-launch-ready --format json
-```
-
-Useful auth-recovery check:
-
-```bash
-PY=/home/xjy-ubuntu/miniconda3/envs/scion/bin/python
-PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
-  "$PY" /home/xjy-ubuntu/research/or-autoresearch-agent/scion/tools/check_launch_readiness.py \
-  <prepared-root> --require-launch-ready --format json | jq -r '.completion_login_url, .completion_next_step'
-```
-
-After strict readiness passes, launch the wrapper itself:
-
-```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-26a03547-calprompt-6r-gpt55-6r-gpt55-20260621T054141Z-claw/run.sh
-```
-
-Run CVRP after warehouse is underway or accepted for launch:
-
-```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
@@ -256,15 +181,16 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Refresh the WSL/local proxy login, then rerun strict launch readiness.
-   `/v1/models` is not enough; completion preflight must pass.
-2. Run warehouse champion-`v2` follow-up first as the simpler
-   continuous-improvement proof.
-3. Run the CVRP bounded large-two-opt follow-up after warehouse is underway or
-   accepted for launch.
-4. After each run, classify current-run evidence through the problem-owned
-   postrun review rules before treating promotion/no-promotion as a research
-   conclusion.
+1. Let the active CVRP root finish or reach a clean stopping point, then mirror
+   and classify it with the current problem-owned postrun rules.
+2. Prepare and launch one fresh warehouse champion-`v2` follow-up from WSL commit
+   `a9a537c4` to prove the prompt/source visibility repair under live provider
+   prompts and current-run postrun acceptance.
+3. If the pre-repair CVRP root is useful but postrun-compromised by checkout
+   drift, prepare a fresh CVRP bounded large-two-opt follow-up from the current
+   WSL commit.
+4. Update this file and `scion/TASK.md` only when operating truth changes; keep
+   detailed run evidence in focused experiment reports.
 
 ## Pointers
 
