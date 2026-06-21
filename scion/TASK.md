@@ -469,8 +469,9 @@ Current checkpoint:
     rules, and required evidence cannot pass only as manifest/report data while
     being absent from proposal prompt focus. It also renders the compact
     hypothesis prompt summary in memory and stores only safe boolean/count/path
-    evidence, proving warehouse renders 33 required `research_focus` paths and
-    CVRP renders 50 required paths with `missing_rendered_paths=[]`.
+    evidence. Exact rendered-path counts live in the prepared readiness
+    artifacts; the durable guarantee is `missing_rendered_paths=[]` for the
+    required problem-owned `research_focus` projection.
     Prepared prompt-context readiness now also verifies that copied
     campaign-status research-shape diagnostics render into default-visible
     compact research signals with branch-depth, mechanism-family, and
