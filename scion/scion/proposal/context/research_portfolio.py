@@ -59,7 +59,11 @@ def build_portfolio_steering(
 
     edges = _similarity_edges(signatures)[:max_edges]
     clusters = _cluster_summary(signatures, edges)[:max_clusters]
-    no_effect_lessons = _no_effect_lessons(clusters, max_lessons=max_lessons)
+    no_effect_lessons = _no_effect_lessons(
+        clusters,
+        branch_summaries=branch_summaries,
+        max_lessons=max_lessons,
+    )
     family_saturation_summary = _family_saturation_summary(
         branch_summaries,
         max_groups=max_lessons,
@@ -492,42 +496,98 @@ def _cluster_summary(
 def _no_effect_lessons(
     clusters: list[dict[str, Any]],
     *,
+    branch_summaries: Sequence[Mapping[str, Any]],
     max_lessons: int,
 ) -> list[dict[str, Any]]:
     lessons: list[dict[str, Any]] = []
+    current_active_no_effect = set(
+        _current_active_no_effect_branch_ids(branch_summaries)
+    )
     for cluster in clusters:
         patterns = Counter(cluster.get("outcome_patterns", {}) or {})
         effects = Counter(cluster.get("effect_statuses", {}) or {})
         if patterns.get("no_effect", 0) < 2 and effects.get("zero", 0) < 2:
             continue
         branch_ids = list(cluster.get("branch_ids", []) or [])
+        current_no_effect_branch_ids = [
+            branch_id
+            for branch_id in branch_ids
+            if branch_id in current_active_no_effect
+        ]
+        same_branch_refinement_allowed = bool(current_no_effect_branch_ids)
         lessons.append(
-            {
-                "lesson_type": "no_effect_plateau",
-                "source_cluster_id": cluster.get("cluster_id", ""),
-                "source_signature": cluster.get("shared_signature", {}),
-                "branch_ids": branch_ids,
-                "evidence_basis": {
-                    "branch_count": cluster.get("branch_count", 0),
-                    "signature_count": cluster.get("signature_count", 0),
-                    "outcome_patterns": cluster.get("outcome_patterns", {}),
-                    "activation_statuses": cluster.get("activation_statuses", {}),
-                    "effect_statuses": cluster.get("effect_statuses", {}),
-                    "runtime_evidence_statuses": cluster.get(
-                        "runtime_evidence_statuses",
-                        {},
+            _drop_empty(
+                {
+                    "lesson_type": "no_effect_plateau",
+                    "source_cluster_id": cluster.get("cluster_id", ""),
+                    "source_signature": cluster.get("shared_signature", {}),
+                    "branch_ids": branch_ids,
+                    "current_active_no_effect_branch_ids": (
+                        current_no_effect_branch_ids
                     ),
-                },
-                "required_contrast_dimensions": list(_CONTRAST_DIMENSIONS),
-                "recommended_action": "diversify",
-                "same_branch_refinement_allowed": False,
-                "sibling_duplication_allowed": False,
-                "reason_codes": ["PORTFOLIO_NO_EFFECT_PLATEAU"],
-            }
+                    "evidence_basis": {
+                        "branch_count": cluster.get("branch_count", 0),
+                        "signature_count": cluster.get("signature_count", 0),
+                        "outcome_patterns": cluster.get("outcome_patterns", {}),
+                        "activation_statuses": cluster.get("activation_statuses", {}),
+                        "effect_statuses": cluster.get("effect_statuses", {}),
+                        "runtime_evidence_statuses": cluster.get(
+                            "runtime_evidence_statuses",
+                            {},
+                        ),
+                    },
+                    "required_contrast_dimensions": list(_CONTRAST_DIMENSIONS),
+                    "recommended_action": (
+                        "diagnose" if same_branch_refinement_allowed else "diversify"
+                    ),
+                    "same_branch_refinement_allowed": (
+                        same_branch_refinement_allowed
+                    ),
+                    "sibling_duplication_allowed": False,
+                    "reason_codes": [
+                        (
+                            "PORTFOLIO_CURRENT_NO_EFFECT_DIAGNOSTIC_ALLOWED"
+                            if same_branch_refinement_allowed
+                            else "PORTFOLIO_NO_EFFECT_PLATEAU"
+                        )
+                    ],
+                    "proposal_guidance": (
+                        "Use same-branch diagnostic refinement only for the "
+                        "listed current no-effect branch; unchanged sibling "
+                        "copies still need a contrast dimension."
+                        if same_branch_refinement_allowed
+                        else ""
+                    ),
+                }
+            )
         )
         if len(lessons) >= max_lessons:
             break
     return lessons
+
+
+def _current_active_no_effect_branch_ids(
+    branch_summaries: Sequence[Mapping[str, Any]],
+) -> list[str]:
+    branch_ids: list[str] = []
+    for summary in branch_summaries:
+        if not isinstance(summary, Mapping):
+            continue
+        outcome = _as_mapping(summary.get("outcome_summary"))
+        profile = _as_mapping(summary.get("evidence_profile"))
+        outcome_pattern = (
+            _clean_token(profile.get("outcome_pattern"))
+            or _clean_token(outcome.get("outcome_pattern"))
+        )
+        if (
+            summary.get("is_current_branch")
+            and summary.get("final_or_active_state") == "active"
+            and outcome_pattern == "no_effect"
+        ):
+            branch_id = _clean_token(summary.get("branch_id"))
+            if branch_id:
+                branch_ids.append(branch_id)
+    return _unique(branch_ids)
 
 
 def _family_saturation_summary(

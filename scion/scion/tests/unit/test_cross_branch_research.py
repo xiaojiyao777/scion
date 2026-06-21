@@ -1116,6 +1116,14 @@ def test_cross_branch_research_keeps_current_no_effect_diagnostic_allowed() -> N
         "NOVELTY_SAME_BRANCH_NO_EFFECT_DIAGNOSTIC_ALLOWED"
     ]
 
+    portfolio_lesson = payload["portfolio_steering"]["no_effect_lessons"][0]
+    assert portfolio_lesson["same_branch_refinement_allowed"] is True
+    assert portfolio_lesson["recommended_action"] == "diagnose"
+    assert portfolio_lesson["current_active_no_effect_branch_ids"] == [
+        "branch-current"
+    ]
+    assert portfolio_lesson["sibling_duplication_allowed"] is False
+
     bridge_lesson = [
         lesson
         for lesson in payload["branch_lesson_records"]
