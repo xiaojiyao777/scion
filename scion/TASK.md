@@ -476,10 +476,11 @@ Current checkpoint:
   - Postrun inventory fails closed when root launcher `run_status.json` is
     missing or unreadable, or when launcher status exists but campaign execution
     `run_status.json`/`status.json`/`campaign_summary.json` artifacts are all
-    missing or unreadable: copied or partial campaign artifacts remain resume
-    snapshots, lifecycle/Phase 4 current-run evidence is false, and the run is
-    marked invalid infra-only before delegated review can treat it as research
-    evidence. Launch wrappers write a current campaign-execution marker after
+    missing or unreadable: prepared-only roots remain `prepared_only` resume
+    snapshots, missing/unreadable/stale execution artifacts are marked
+    invalid-infra-only, and lifecycle/Phase 4 current-run evidence is false in
+    both cases before delegated review can treat them as research evidence.
+    Launch wrappers write a current campaign-execution marker after
     pre-campaign checks, and launch readiness rejects wrappers that omit that
     marker, place it before completion-preflight failure handling can exit, or
     place it after the campaign command. When the marker exists, stale copied
