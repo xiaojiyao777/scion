@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `7f95b72c`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `04aa9216`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-21*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -252,9 +252,9 @@ Current checkpoint:
   considered static-ready.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7f95b72-codeconstraints-6r-gpt55-20260621T000647Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-04aa921-preflightaction-6r-gpt55-20260621T001925Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7f95b72-codeconstraints-resume-4r-gpt55-20260621T000648Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-04aa921-preflightaction-resume-4r-gpt55-20260621T001926Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -269,12 +269,15 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok`,
-  `prepared_runtime_commit=7f95b72c`, and either
+  `prepared_runtime_commit=04aa9216`, and either
   `runtime_guard_reason=runtime_guard_commit_matches` or
   `runtime_guard_paths_unchanged_since_prepare` after doc-only commits. They
   also report `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
   `campaign_execution_marker_status=ok` through top-level marker summary
   fields.
+  Completion preflight now also exposes flat `completion_login_url` and
+  `completion_next_step` fields. Use a fresh login URL from strict readiness
+  rather than copying an older OAuth URL from status text.
   Disabled proposal/APS caps, code-source visibility, source-read headroom,
   item-level `research_focus` prompt visibility, and CVRP/warehouse
   adapter-derived opportunity diagnostics are covered by current evidence

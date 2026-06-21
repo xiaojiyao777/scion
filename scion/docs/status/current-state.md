@@ -46,14 +46,14 @@ After strict readiness passes, launch from WSL by running the prepared wrapper
 itself, not by reconstructing the long `scion run` command:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7f95b72-codeconstraints-6r-gpt55-20260621T000647Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-04aa921-preflightaction-6r-gpt55-20260621T001925Z-claw/run.sh
 ```
 
 Run the CVRP wrapper only after the warehouse run is underway or accepted for
 launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7f95b72-codeconstraints-resume-4r-gpt55-20260621T000648Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-04aa921-preflightaction-resume-4r-gpt55-20260621T001926Z-claw/run.sh
 ```
 
 The wrappers already enforce completion preflight, runtime guards, campaign
@@ -84,17 +84,17 @@ current-run readiness only; it does not skip root-status validation.
 
 ## Active Prepared Roots
 
-Generated on WSL at launch-authoritative prepared runtime commit `7f95b72c`;
-the corresponding server repair commit is `e91fc12f`. Local mirrors
+Generated on WSL at launch-authoritative prepared runtime commit `04aa9216`;
+the corresponding server repair commit is `b962a990`. Local mirrors
 exist under `/home/clawd/research/scion-experiments/` with the same directory
 names for inspection only. Run launch readiness on WSL, because prepared
 contracts and wrapper scripts intentionally contain WSL absolute paths and will
 fail identity checks if evaluated from the server-side mirror.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7f95b72-codeconstraints-6r-gpt55-20260621T000647Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-04aa921-preflightaction-6r-gpt55-20260621T001925Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7f95b72-codeconstraints-resume-4r-gpt55-20260621T000648Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-04aa921-preflightaction-resume-4r-gpt55-20260621T001926Z-claw`
 
 Readiness snapshot:
 
@@ -103,7 +103,7 @@ Readiness snapshot:
 - `failed_static_required_checks=[]`
 - Required failure: completion preflight auth only
 - Runtime guard status: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=7f95b72c`, and either
+  `prepared_runtime_commit=04aa9216`, and either
   `runtime_guard_reason=runtime_guard_commit_matches` or
   `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare` after
   doc-only commits. Treat all earlier prepared roots as superseded because
@@ -118,8 +118,10 @@ Readiness snapshot:
   `launch_env_mode=0o600`.
 - Completion auth status is exposed by launch readiness in
   `completion_preflight_summary` plus flat `completion_http_status`,
-  `completion_classification`, `completion_code`, and `completion_auth_pool`
-  fields.
+  `completion_classification`, `completion_code`, `completion_auth_pool`,
+  `completion_login_url`, and `completion_next_step` fields. The current
+  blocker is an invalidated proxy refresh token; use a fresh login URL from
+  strict launch readiness rather than a stale copied URL.
 - Runtime/env refresh status is exposed by launch readiness in flat
   `runtime_guard_status`, `runtime_guard_reason`, `prepared_runtime_commit`,
   `actual_runtime_commit`, `launch_env_secret_permissions`, and
