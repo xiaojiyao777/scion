@@ -66,9 +66,10 @@ Active CVRP root:
 
 - `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
 - Launched before the latest prompt/source visibility repair. As of the latest
-  check it is still running under WSL, has completed 1 effective round, and is
-  screening the second candidate. Use it as useful CVRP research evidence, but
-  expect postrun commit/readiness caveats because the WSL checkout has advanced.
+  check it is still running under WSL, has completed 2 effective screening
+  rounds with 2 formal candidates and no quality blocks, and is entering the
+  third proposal/round. Use it as useful CVRP research evidence, but expect
+  postrun commit/readiness caveats because the WSL checkout has advanced.
 
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:
