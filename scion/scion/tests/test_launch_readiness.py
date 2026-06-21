@@ -3060,7 +3060,7 @@ def test_launch_readiness_rejects_missing_proposal_headroom_env(
     } in headroom_check["detail"]["failures"]
 
 
-def test_launch_readiness_warns_on_low_manifest_proposal_headroom(
+def test_launch_readiness_rejects_low_manifest_proposal_headroom(
     tmp_path: Path,
 ) -> None:
     run_root = _write_prepared_root(tmp_path)
@@ -3075,24 +3075,25 @@ def test_launch_readiness_warns_on_low_manifest_proposal_headroom(
 
     report = readiness_tool.build_readiness(run_root)
 
+    assert report["ready"] is False
+    assert report["static_ready"] is False
     headroom_check = report["checks"]["run_script_proposal_headroom_enforced"]
-    assert headroom_check["status"] == "ok"
-    assert headroom_check["detail"]["failures"] == []
-    warnings = headroom_check["detail"]["warnings"]
+    assert headroom_check["status"] == "failed"
+    failures = headroom_check["detail"]["failures"]
     assert {
         "reason": "proposal_quality_loop_limit_manifest_execution_below_minimum",
         "field": "proposal_quality_loop_limit",
         "source": "manifest_execution",
         "recommended_min": 64,
         "actual": 7,
-    } in warnings
+    } in failures
     assert {
         "reason": "proposal_quality_loop_limit_manifest_command_below_minimum",
         "field": "proposal_quality_loop_limit",
         "source": "manifest_command",
         "recommended_min": 64,
         "actual": 7,
-    } in warnings
+    } in failures
 
 
 def test_launch_readiness_accepts_disabled_proposal_headroom_caps(
@@ -3174,7 +3175,7 @@ def test_launch_readiness_rejects_missing_agentic_tool_headroom_env(
     } in headroom_check["detail"]["failures"]
 
 
-def test_launch_readiness_warns_on_low_manifest_agentic_tool_headroom(
+def test_launch_readiness_rejects_low_manifest_agentic_tool_headroom(
     tmp_path: Path,
 ) -> None:
     run_root = _write_prepared_root(tmp_path)
@@ -3189,24 +3190,25 @@ def test_launch_readiness_warns_on_low_manifest_agentic_tool_headroom(
 
     report = readiness_tool.build_readiness(run_root)
 
+    assert report["ready"] is False
+    assert report["static_ready"] is False
     headroom_check = report["checks"]["run_script_proposal_headroom_enforced"]
-    assert headroom_check["status"] == "ok"
-    assert headroom_check["detail"]["failures"] == []
-    warnings = headroom_check["detail"]["warnings"]
+    assert headroom_check["status"] == "failed"
+    failures = headroom_check["detail"]["failures"]
     assert {
         "reason": "agentic_tool_max_steps_manifest_execution_below_minimum",
         "field": "agentic_tool_max_steps",
         "source": "manifest_execution",
         "recommended_min": 240,
         "actual": 24,
-    } in warnings
+    } in failures
     assert {
         "reason": "agentic_tool_max_steps_manifest_command_below_minimum",
         "field": "agentic_tool_max_steps",
         "source": "manifest_command",
         "recommended_min": 240,
         "actual": 24,
-    } in warnings
+    } in failures
 
 
 def test_launch_readiness_accepts_disabled_agentic_tool_headroom_caps(

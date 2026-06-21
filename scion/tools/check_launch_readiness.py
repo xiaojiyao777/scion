@@ -2691,7 +2691,7 @@ def _run_script_proposal_headroom_enforced(
                     }
                 )
             elif value < expected_min:
-                warnings.append(
+                failures.append(
                     {
                         "reason": f"{field}_{source}_below_minimum",
                         "field": field,
