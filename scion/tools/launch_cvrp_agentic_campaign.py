@@ -745,6 +745,8 @@ def _build_command(env: dict[str, object]) -> str:
         f"--proposal-quality-loop-limit {env['PROPOSAL_QUALITY_LOOP_LIMIT']} "
         f"--fresh-runtime-replay-drain-limit "
         f"{env['SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT']} "
+        f"--stage-transition-drain-limit "
+        f"{env['SCION_STAGE_TRANSITION_DRAIN_LIMIT']} "
         f"--measurement-governance {env['MEASUREMENT_GOVERNANCE']} "
         f"--proposal-context-ablation {env['PROPOSAL_CONTEXT_ABLATION']} "
         "--disable-early-stop "
@@ -917,6 +919,7 @@ echo "CAMPAIGN_EXECUTION_MARKER:$RUN_ROOT/campaign_execution_marker.v1.json" >> 
   --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" \\
   --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" \\
   --fresh-runtime-replay-drain-limit "$SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT" \\
+  --stage-transition-drain-limit "$SCION_STAGE_TRANSITION_DRAIN_LIMIT" \\
   --measurement-governance "$MEASUREMENT_GOVERNANCE" \\
   --proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION" \\
   --disable-early-stop \\
@@ -1019,6 +1022,9 @@ def _write_prepare_status(run_root: Path, env: dict[str, object]) -> None:
         "proposal_quality_loop_limit": int(env["PROPOSAL_QUALITY_LOOP_LIMIT"]),
         "fresh_runtime_replay_drain_limit": int(
             env["SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT"]
+        ),
+        "stage_transition_drain_limit": int(
+            env["SCION_STAGE_TRANSITION_DRAIN_LIMIT"]
         ),
         "git_commit": str(env["GIT_COMMIT"]),
         "started_utc": str(env["STARTED_UTC"]),

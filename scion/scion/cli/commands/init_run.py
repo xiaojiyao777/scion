@@ -380,6 +380,15 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 "core legacy default; use 0 to disable this drain"
             ),
         ),
+        stage_transition_drain_limit: Optional[int] = typer.Option(
+            None,
+            "--stage-transition-drain-limit",
+            help=(
+                "Maximum post-budget validation/frozen stage-transition drain "
+                "attempts; defaults to SCION_STAGE_TRANSITION_DRAIN_LIMIT or "
+                "the core legacy default; use 0 to disable this drain"
+            ),
+        ),
         campaign_dir: str = typer.Option(
             "campaign_out",
             "--campaign-dir",
@@ -820,6 +829,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 proposal_quality_loop_limit=proposal_quality_loop_limit,
                 proposal_attempt_limit=proposal_attempt_limit,
                 fresh_runtime_replay_drain_limit=fresh_runtime_replay_drain_limit,
+                stage_transition_drain_limit=stage_transition_drain_limit,
                 proposal_context_ablation=proposal_context_ablation,
             )
 

@@ -102,6 +102,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepare_status["proposal_attempt_limit"] == 0
     assert prepare_status["proposal_quality_loop_limit"] == 0
     assert prepare_status["fresh_runtime_replay_drain_limit"] == 0
+    assert prepare_status["stage_transition_drain_limit"] == 4
 
     launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
     prepared_manifest = json.loads(
@@ -370,6 +371,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "SCION_BASE_URL=http://127.0.0.1:8080" in command_txt
     assert "SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT=0" in command_txt
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in command_txt
+    assert "--stage-transition-drain-limit 4" in command_txt
     assert "AGENTIC_SESSION_TIMEOUT_SEC=3600" in command_txt
     assert "AGENTIC_TOOL_MAX_STEPS=0" in command_txt
     assert "AGENTIC_TOOL_MAX_CALLS=0" in command_txt
@@ -829,6 +831,7 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
     assert "--proposal-attempt-limit 17" in command_txt
     assert "--proposal-quality-loop-limit 19" in command_txt
     assert "--fresh-runtime-replay-drain-limit 3" in command_txt
+    assert "--stage-transition-drain-limit 2" in command_txt
     assert "--control-pair-key" not in command_txt
     run_command_block = run_sh_text.split(
         '"$PY" -m scion.cli.main run \\', maxsplit=1
@@ -841,6 +844,10 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
     )
     assert (
         '--fresh-runtime-replay-drain-limit "$SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT"'
+        in run_command_block
+    )
+    assert (
+        '--stage-transition-drain-limit "$SCION_STAGE_TRANSITION_DRAIN_LIMIT"'
         in run_command_block
     )
     assert 'rebuild_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text

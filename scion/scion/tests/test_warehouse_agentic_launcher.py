@@ -42,6 +42,7 @@ def test_warehouse_agentic_launcher_help() -> None:
     assert "--proposal-attempt-limit" in result.stdout
     assert "--proposal-quality-loop-limit" in result.stdout
     assert "--fresh-runtime-replay-drain-limit" in result.stdout
+    assert "--stage-transition-drain-limit" in result.stdout
 
 
 def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
@@ -97,6 +98,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert prepare_status["proposal_attempt_limit"] == 0
     assert prepare_status["proposal_quality_loop_limit"] == 0
     assert prepare_status["fresh_runtime_replay_drain_limit"] == 0
+    assert prepare_status["stage_transition_drain_limit"] == 4
 
     launch_env_path = run_root / "launch.env"
     launch_env = launch_env_path.read_text(encoding="utf-8")
@@ -183,6 +185,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert prepared_manifest["execution"]["proposal_attempt_limit"] == 0
     assert prepared_manifest["execution"]["proposal_quality_loop_limit"] == 0
     assert prepared_manifest["execution"]["fresh_runtime_replay_drain_limit"] == 0
+    assert prepared_manifest["execution"]["stage_transition_drain_limit"] == 4
     assert prepared_manifest["config"]["warehouse_data_root"] == str(data_root)
     assert prepared_manifest["config"]["problem_v1"] == str(
         run_root / "config" / "problem-v1.yaml"
@@ -232,6 +235,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "SCION_API_KEY=pwd" in launch_env
     assert "SCION_API_KEY_ENV=''" in launch_env
     assert "SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT=0" in launch_env
+    assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in launch_env
     assert (
         f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}"
         in launch_env
@@ -337,9 +341,14 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         '--fresh-runtime-replay-drain-limit "$SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT"'
         in run_sh_text
     )
+    assert (
+        '--stage-transition-drain-limit "$SCION_STAGE_TRANSITION_DRAIN_LIMIT"'
+        in run_sh_text
+    )
     assert "--proposal-attempt-limit 0" in command_txt
     assert "--proposal-quality-loop-limit 0" in command_txt
     assert "--fresh-runtime-replay-drain-limit 0" in command_txt
+    assert "--stage-transition-drain-limit 4" in command_txt
     assert "--agentic-session-timeout-sec 3600" in command_txt
     assert "--agentic-tool-max-steps 0" in command_txt
     assert "--agentic-tool-max-calls 0" in command_txt
@@ -355,6 +364,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     )
     assert "POSTRUN_REPORTS=1" in command_txt
     assert "SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT=0" in command_txt
+    assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in command_txt
     assert "PROPOSAL_ATTEMPT_LIMIT=0" in command_txt
     assert "PROPOSAL_QUALITY_LOOP_LIMIT=0" in command_txt
     assert "AGENTIC_SESSION_TIMEOUT_SEC=3600" in command_txt

@@ -31,6 +31,7 @@ DEFAULT_AGENTIC_OBSERVATION_MAX_CHARS = 0
 DEFAULT_PROPOSAL_ATTEMPT_LIMIT = 0
 DEFAULT_PROPOSAL_QUALITY_LOOP_LIMIT = 0
 DEFAULT_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT = 0
+DEFAULT_STAGE_TRANSITION_DRAIN_LIMIT = 4
 DEFAULT_PYTHON = Path(sys.executable)
 DEFAULT_USER_SUFFIX = "claw"
 PREFLIGHT_FAILURE_EXIT_CODE = 64
@@ -677,6 +678,8 @@ def _build_command(env: dict[str, object]) -> str:
         f"--proposal-quality-loop-limit {env['PROPOSAL_QUALITY_LOOP_LIMIT']} "
         f"--fresh-runtime-replay-drain-limit "
         f"{env['SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT']} "
+        f"--stage-transition-drain-limit "
+        f"{env['SCION_STAGE_TRANSITION_DRAIN_LIMIT']} "
         f"--measurement-governance {env['MEASUREMENT_GOVERNANCE']} "
         f"--proposal-context-ablation {env['PROPOSAL_CONTEXT_ABLATION']} "
         "--disable-early-stop "
@@ -702,6 +705,7 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "SCION_SDK_MAX_RETRIES",
         "SCION_LLM_MAX_RETRIES",
         "SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT",
+        "SCION_STAGE_TRANSITION_DRAIN_LIMIT",
         "SCION_WAREHOUSE_DATA_ROOT",
         "SCION_PROBLEM_DATA_ROOT",
         "COMPLETION_PREFLIGHT",
@@ -765,7 +769,7 @@ if [[ ! -r "$_RUN_SCRIPT_DIR/launch.env" ]]; then
   exit {PREFLIGHT_FAILURE_EXIT_CODE}
 fi
 source "$(dirname "$0")/launch.env"
-export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT SCION_WAREHOUSE_DATA_ROOT SCION_PROBLEM_DATA_ROOT PREPARED_RUN_MANIFEST
+export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT SCION_STAGE_TRANSITION_DRAIN_LIMIT SCION_WAREHOUSE_DATA_ROOT SCION_PROBLEM_DATA_ROOT PREPARED_RUN_MANIFEST
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 if [[ -n "${{SCION_API_KEY_ENV:-}}" ]]; then
   if [[ "$SCION_API_KEY_ENV" == "SCION_API_KEY" ]]; then
@@ -861,6 +865,7 @@ echo "CAMPAIGN_EXECUTION_MARKER:$RUN_ROOT/campaign_execution_marker.v1.json" >> 
   --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" \\
   --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" \\
   --fresh-runtime-replay-drain-limit "$SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT" \\
+  --stage-transition-drain-limit "$SCION_STAGE_TRANSITION_DRAIN_LIMIT" \\
   --measurement-governance "$MEASUREMENT_GOVERNANCE" \\
   --proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION" \\
   --disable-early-stop \\
@@ -964,6 +969,9 @@ def _write_prepare_status(run_root: Path, env: dict[str, object]) -> None:
         "fresh_runtime_replay_drain_limit": int(
             env["SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT"]
         ),
+        "stage_transition_drain_limit": int(
+            env["SCION_STAGE_TRANSITION_DRAIN_LIMIT"]
+        ),
         "git_commit": str(env["GIT_COMMIT"]),
         "started_utc": str(env["STARTED_UTC"]),
     }
@@ -1032,6 +1040,9 @@ def _write_prepared_run_manifest(
             ),
             "fresh_runtime_replay_drain_limit": int(
                 env["SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT"]
+            ),
+            "stage_transition_drain_limit": int(
+                env["SCION_STAGE_TRANSITION_DRAIN_LIMIT"]
             ),
             "measurement_governance": str(env["MEASUREMENT_GOVERNANCE"]),
             "proposal_context_ablation": str(env["PROPOSAL_CONTEXT_ABLATION"]),
@@ -1185,6 +1196,7 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         "proposal_attempt_limit",
         "proposal_quality_loop_limit",
         "fresh_runtime_replay_drain_limit",
+        "stage_transition_drain_limit",
         "measurement_governance",
         "proposal_context_ablation",
         "agentic_proposal",
@@ -1286,6 +1298,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT": (
             args.fresh_runtime_replay_drain_limit
         ),
+        "SCION_STAGE_TRANSITION_DRAIN_LIMIT": args.stage_transition_drain_limit,
         "SCION_WAREHOUSE_DATA_ROOT": warehouse_data_root,
         "SCION_PROBLEM_DATA_ROOT": warehouse_data_root,
         "COMPLETION_PREFLIGHT": 1 if args.completion_preflight else 0,
@@ -1334,6 +1347,8 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             f"SCION_BASE_URL={env['SCION_BASE_URL']}\n"
             f"SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT="
             f"{env['SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT']}\n"
+            f"SCION_STAGE_TRANSITION_DRAIN_LIMIT="
+            f"{env['SCION_STAGE_TRANSITION_DRAIN_LIMIT']}\n"
             f"SCION_WAREHOUSE_DATA_ROOT={env['SCION_WAREHOUSE_DATA_ROOT']}\n\n"
             f"AGENTIC_SESSION_TIMEOUT_SEC={env['AGENTIC_SESSION_TIMEOUT_SEC']}\n"
             f"AGENTIC_TOOL_MAX_STEPS={env['AGENTIC_TOOL_MAX_STEPS']}\n"
@@ -1547,6 +1562,17 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--stage-transition-drain-limit",
+        type=int,
+        default=DEFAULT_STAGE_TRANSITION_DRAIN_LIMIT,
+        help=(
+            "Focused v0.4 post-budget validation/frozen drain cap passed to "
+            "scion run. Defaults to 4 so queued stage transitions can be "
+            "observed without starting new hypothesis rounds; use 0 to "
+            "disable this drain."
+        ),
+    )
+    parser.add_argument(
         "--experiments-root",
         type=Path,
         default=DEFAULT_EXPERIMENTS_ROOT,
@@ -1577,6 +1603,8 @@ def parse_args() -> argparse.Namespace:
         raise SystemExit("--proposal-quality-loop-limit must be >= 0")
     if args.fresh_runtime_replay_drain_limit < 0:
         raise SystemExit("--fresh-runtime-replay-drain-limit must be >= 0")
+    if args.stage_transition_drain_limit < 0:
+        raise SystemExit("--stage-transition-drain-limit must be >= 0")
     if args.api_key is not None and args.api_key_env:
         raise SystemExit("--api-key and --api-key-env are mutually exclusive")
     if args.api_key_env:

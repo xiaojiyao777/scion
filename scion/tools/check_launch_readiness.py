@@ -47,6 +47,7 @@ MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS = 200
 MIN_PREPARED_AGENTIC_CODE_TOOL_MAX_CALLS = MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS
 MIN_PREPARED_AGENTIC_OBSERVATION_MAX_CHARS = 2_000_000
 MIN_PREPARED_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT = 1
+MIN_PREPARED_STAGE_TRANSITION_DRAIN_LIMIT = 1
 REPO_DIR = Path(__file__).resolve().parents[2]
 LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS = {
     "manifest_env_reader": (
@@ -2639,6 +2640,12 @@ def _run_script_proposal_headroom_enforced(
             "min": MIN_PREPARED_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT,
             "zero_disables": True,
         },
+        "stage_transition_drain_limit": {
+            "env": "SCION_STAGE_TRANSITION_DRAIN_LIMIT",
+            "option": "--stage-transition-drain-limit",
+            "min": MIN_PREPARED_STAGE_TRANSITION_DRAIN_LIMIT,
+            "zero_disables": True,
+        },
     }
     detail_fields: dict[str, Any] = {}
     for field, spec in fields.items():
@@ -2743,6 +2750,9 @@ def _run_script_proposal_headroom_enforced(
         ),
         "min_prepared_fresh_runtime_replay_drain_limit": (
             MIN_PREPARED_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT
+        ),
+        "min_prepared_stage_transition_drain_limit": (
+            MIN_PREPARED_STAGE_TRANSITION_DRAIN_LIMIT
         ),
         "campaign_command_position": campaign_pos,
         "campaign_status_position": campaign_status_pos,
