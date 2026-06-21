@@ -188,4 +188,3 @@ CVRP live run:
   branch slot.
 - Require pair-level total-distance, feasibility, route-count, wall-clock, and
   CMT2/CMT4 evidence before treating a bounded two-opt claim as review-ready.
-
