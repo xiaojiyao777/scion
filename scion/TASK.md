@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `04aa9216`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `488576d9`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-21*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -252,9 +252,9 @@ Current checkpoint:
   considered static-ready.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-04aa921-preflightaction-6r-gpt55-20260621T001925Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-488576-runtime-ratio-6r-gpt55-20260621T003311Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-04aa921-preflightaction-resume-4r-gpt55-20260621T001926Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-488576-runtime-ratio-resume-4r-gpt55-20260621T003312Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -269,7 +269,7 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok`,
-  `prepared_runtime_commit=04aa9216`, and either
+  `prepared_runtime_commit=488576d9`, and either
   `runtime_guard_reason=runtime_guard_commit_matches` or
   `runtime_guard_paths_unchanged_since_prepare` after doc-only commits. They
   also report `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
@@ -297,11 +297,12 @@ Current checkpoint:
     from `DecisionFeatures`.
   - Budget-exhausting runtime semantics suppress stale fresh-runtime replay
     markers/pressure and comparative runtime-ratio slowdown blockers for
-    low-SNR follow-up. Low-SNR trajectory-divergent lifecycle continuation and
-    hard-negative fail-closed behavior are covered by focused tests. Postrun
-    runtime budget diagnostics preserve saturated-side and repairable counts so
-    delegated review can distinguish candidate repair signals from champion-only
-    or observational saturation.
+    low-SNR follow-up, including the protocol gate and Decision preflight
+    paths. Low-SNR trajectory-divergent lifecycle continuation and hard-negative
+    fail-closed behavior are covered by focused tests. Postrun runtime budget
+    diagnostics preserve saturated-side and repairable counts so delegated
+    review can distinguish candidate repair signals from champion-only or
+    observational saturation.
   - Screening gate reporting and Decision routing agree on marginal evidence:
     high-win-rate, non-negative, sub-practical-delta screening evidence is a
     diagnostic validation candidate (`SCREENING_PASS_MARGINAL_DELTA`) and is
