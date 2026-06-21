@@ -168,6 +168,9 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["completion_classification"] is None
     assert report["completion_code"] is None
     assert report["completion_auth_pool"] is None
+    assert report["completion_login_url"] is None
+    assert report["completion_next_step"] is None
+    assert report["completion_operator_action"] is None
     markdown = readiness_tool.render_markdown(report)
     assert markdown.startswith("# Launch Readiness:")
     assert "Campaign execution marker: `ok`" in markdown
@@ -2170,6 +2173,7 @@ def test_launch_readiness_keeps_static_ready_when_completion_preflight_fails(
                 "model": "gpt-5.5",
                 "base_url": "http://127.0.0.1:8080",
                 "next_step": "Refresh the local proxy login.",
+                "login_url": "http://127.0.0.1:8080/auth/login",
             },
         }
 
@@ -2207,6 +2211,15 @@ def test_launch_readiness_keeps_static_ready_when_completion_preflight_fails(
         "active": 0,
         "total": 1,
         "expired": 1,
+    }
+    assert report["completion_login_url"] == "http://127.0.0.1:8080/auth/login"
+    assert report["completion_next_step"] == "Refresh the local proxy login."
+    assert report["completion_operator_action"] == {
+        "classification": "not_authenticated",
+        "model": "gpt-5.5",
+        "base_url": "http://127.0.0.1:8080",
+        "next_step": "Refresh the local proxy login.",
+        "login_url": "http://127.0.0.1:8080/auth/login",
     }
 
 
@@ -3547,6 +3560,11 @@ def test_launch_readiness_cli_require_launch_ready_implies_completion_preflight(
                 "code": "invalid_api_key",
             },
             "auth_status": {"pool": {"active": 0, "total": 1}},
+            "operator_action": {
+                "classification": "not_authenticated",
+                "next_step": "Refresh the local proxy login.",
+                "login_url": "http://127.0.0.1:8080/auth/login",
+            },
         }
 
     monkeypatch.setattr(
@@ -3585,6 +3603,8 @@ def test_launch_readiness_cli_require_launch_ready_implies_completion_preflight(
     assert payload["completion_http_status"] == 401
     assert payload["completion_classification"] == "not_authenticated"
     assert payload["completion_code"] == "invalid_api_key"
+    assert payload["completion_login_url"] == "http://127.0.0.1:8080/auth/login"
+    assert payload["completion_next_step"] == "Refresh the local proxy login."
     assert payload["campaign_execution_marker_status"] == "ok"
     assert payload["campaign_execution_marker_ok"] is True
     assert payload["campaign_execution_marker_failure_reasons"] == []
@@ -3622,6 +3642,9 @@ def test_launch_readiness_cli_require_launch_ready_accepts_real_preflight_succes
     assert payload["completion_preflight_summary"]["status"] == "ok"
     assert payload["completion_preflight_summary"]["ok"] is True
     assert payload["completion_http_status"] == 200
+    assert payload["completion_login_url"] is None
+    assert payload["completion_next_step"] is None
+    assert payload["completion_operator_action"] is None
 
 
 def _write_prepared_root(

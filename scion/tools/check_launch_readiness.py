@@ -541,6 +541,11 @@ def build_readiness(
     completion_summary = _completion_preflight_summary(
         checks.get("completion_preflight")
     )
+    completion_action = (
+        completion_summary.get("operator_action")
+        if isinstance(completion_summary.get("operator_action"), dict)
+        else {}
+    )
     runtime_guard_summary = _runtime_guard_commit_summary(
         checks.get("git_runtime_guard_commit_consistent")
     )
@@ -586,6 +591,11 @@ def build_readiness(
         "completion_classification": completion_summary.get("classification"),
         "completion_code": completion_summary.get("code"),
         "completion_auth_pool": completion_summary.get("auth_pool"),
+        "completion_login_url": completion_summary.get("login_url"),
+        "completion_next_step": completion_action.get("next_step"),
+        "completion_operator_action": (
+            completion_action if completion_action else None
+        ),
         "runtime_guard_status": runtime_guard_summary.get("status"),
         "runtime_guard_reason": runtime_guard_summary.get("reason"),
         "prepared_runtime_commit": runtime_guard_summary.get("prepared_commit"),
