@@ -27,11 +27,11 @@ history when exact old chronology is needed.
   warehouse and CVRP follow-up.
 - v0.4 is not closed until live runs show effective research behavior.
 - No LLM campaign is currently running.
-- Latest accepted runtime-path repair: local commit `23f2296a` / WSL commit
-  `37ff1f45` keeps prepared and live proposal handoff
-  `measurement_readiness` compact: it exposes problem-owned calibration
-  evidence level (`summary_only`, `pair_evidence`, `full_replay`) without
-  leaking calibration refs or replay rows into the readiness subobject.
+- Latest accepted runtime-path repair: local commit `65a0e338` / WSL commit
+  `10c12e6e` exposes `fresh_runtime_replay_drain_limit` as a structured
+  `scion run`/launcher/readiness field. Focused v0.4 prepared roots set it to
+  exact `0`, so hidden post-budget fresh-runtime replay drain is disabled
+  rather than inherited from the core legacy default.
 - The prior CVRP protected-case guard remains in force: CMT2/CMT4 postrun
   evidence must carry numeric objective/distance delta evidence; route-count,
   feasibility-only, case-name, or free-text continuity payloads cannot make a
@@ -44,16 +44,16 @@ history when exact old chronology is needed.
 ## Active Prepared Roots
 
 These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `37ff1f45` after the compact measurement-readiness handoff
-repair; the corresponding local repair commit is `23f2296a`.
+runtime commit `10c12e6e` after the explicit fresh-runtime replay drain repair;
+the corresponding local repair commit is `65a0e338`.
 Local mirrors under `/home/clawd/research/scion-experiments/` are for
 inspection only. Run readiness and launch from WSL because the prepared
 contracts contain WSL absolute paths.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-37ff1f45-compactready-resumecont-6r-gpt55-6r-gpt55-20260621T034103Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-10c12e6e-freshreplay0-resumecont-6r-gpt55-20260621T040856Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-37ff1f45-compactready-resumecont-4r-gpt55-4r-gpt55-20260621T034103Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-10c12e6e-freshreplay0-resumecont-4r-gpt55-20260621T040909Z-claw`
 
 Current readiness snapshot for both roots:
 
@@ -65,7 +65,7 @@ Current readiness snapshot for both roots:
   `active=0`, `total=1`; ignore volatile expired/refreshing substates unless
   active auth becomes available
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=37ff1f45`; current WSL HEAD may include docs-only
+  `prepared_runtime_commit=10c12e6e`; current WSL HEAD may include docs-only
   status commits after prepare, and strict readiness accepts that only when the
   guarded runtime paths are unchanged since prepare
 - measurement handoff:
@@ -76,8 +76,10 @@ Current readiness snapshot for both roots:
 - secret file permissions: `launch_env_secret_permissions=ok`,
   `launch_env_mode=0o600`
 - headroom guard: `checks.run_script_proposal_headroom_enforced.status=ok`;
-  exact `0` proposal/APS caps are treated as explicitly disabled, while low
-  nonzero caps fail readiness instead of passing as warnings
+  exact `0` proposal/APS/fresh-runtime replay drain caps are treated as
+  explicitly disabled; low nonzero proposal/APS caps fail readiness instead of
+  passing as warnings, and fresh-runtime replay drain must be explicit rather
+  than hidden behind the core legacy default
 - completion preflight exposes flat `completion_login_url` and
   `completion_next_step`; always fetch a fresh login URL from strict readiness
   rather than copying an old OAuth URL from notes
@@ -103,13 +105,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 After strict readiness passes, launch the wrapper itself:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-37ff1f45-compactready-resumecont-6r-gpt55-6r-gpt55-20260621T034103Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-10c12e6e-freshreplay0-resumecont-6r-gpt55-20260621T040856Z-claw/run.sh
 ```
 
 Run CVRP after warehouse is underway or accepted for launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-37ff1f45-compactready-resumecont-4r-gpt55-4r-gpt55-20260621T034103Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-10c12e6e-freshreplay0-resumecont-4r-gpt55-20260621T040909Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
@@ -135,7 +137,9 @@ the v0.4 planning summary, focused tests, and experiment reports.
   model route, completion preflight, private `launch.env` permissions,
   wrapper/campaign marker consistency, and strict postrun rebuild/readiness
   behavior before launch. Low nonzero proposal/APS caps fail readiness; use
-  exact `0` when the intended v0.4 behavior is no research-headroom cap.
+  exact `0` when the intended v0.4 behavior is no research-headroom cap. The
+  same explicit-disabled convention applies to focused fresh-runtime replay
+  drain.
 - Problem-owned diagnostics may guide proposal context, protocol
   configuration, runtime governance, lifecycle policy, and readiness only
   through deterministic, schema-validated fields.
