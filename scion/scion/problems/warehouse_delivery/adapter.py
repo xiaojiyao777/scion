@@ -1910,7 +1910,43 @@ def _mentions_validation_transfer_risk(text: str) -> bool:
             "6/9/0",
         )
     )
-    return has_formal_stage and has_transfer
+    if has_formal_stage and has_transfer:
+        return True
+
+    has_beyond_screening_generalization = any(
+        term in text
+        for term in (
+            "beyond screening",
+            "generalize beyond screening",
+            "generalise beyond screening",
+            "generalizes beyond screening",
+            "generalises beyond screening",
+            "not distribution-specific",
+            "distribution-specific",
+            "case-general",
+            "objective-computed",
+        )
+    )
+    has_screening_failure_guard = any(
+        term in text
+        for term in (
+            "screening-only",
+            "screening only",
+            "no-effect",
+            "no effect",
+            "cost-worsening",
+            "cost worsening",
+            "cost regress",
+            "return the original solution",
+            "reject",
+            "guard",
+        )
+    )
+    return (
+        "screening" in text
+        and has_beyond_screening_generalization
+        and has_screening_failure_guard
+    )
 
 
 def _has_activation_effect_diagnostics(hypothesis: Any, text: str) -> bool:

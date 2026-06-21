@@ -623,6 +623,61 @@ def test_warehouse_quality_check_allows_transfer_and_diagnostics_claims() -> Non
     assert check.allowed is True
 
 
+def test_warehouse_quality_accepts_beyond_screening_transfer_wording() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Repair and tighten promote_subcategory_overflow so it stops "
+            "accepting split-preserving promotions that raise vehicle cost. "
+            "The guard is objective-computed on each instance rather than "
+            "distribution-specific, so screening-only no-effect or "
+            "cost-worsening promotions return the original solution while "
+            "eligible overflow groups still expose positive accepted_moves, "
+            "split_delta_sum, or cost_delta_sum when real improvements exist."
+        ),
+        change_locus="vehicle_level",
+        action="modify",
+        target_file="operators/promote_subcategory_overflow.py",
+        target_weakness=(
+            "Existing promote_subcategory_overflow screening failed with zero "
+            "accepted/effect diagnostics and cost regressions from "
+            "split-preserving promotions."
+        ),
+        expected_effect=(
+            "Accepted candidates should produce positive "
+            "operator_diagnostics.promote_subcategory_overflow.accepted_moves "
+            "and either split_delta_sum for true split-positive consolidation "
+            "or cost_delta_sum for split-preserving cost compression."
+        ),
+        objective_tradeoff_policy=(
+            "Prefer split_delta > 0 with nonnegative cost_delta; allow "
+            "cost-only compression only when split_delta == 0 and cost_delta > 0."
+        ),
+        no_op_condition=(
+            "Return the original solution if no bounded candidate plan has "
+            "split_delta > 0 with cost_delta >= 0 or split_delta == 0 and "
+            "cost_delta > 0."
+        ),
+        risk_to_higher_priority=(
+            "The transfer risk is that a screening-only, distribution-specific "
+            "cost move looks active but has no case-general effect."
+        ),
+        runtime_budget_strategy=(
+            "Top 8 overflow groups, max 4 vehicles per group, max 32 candidate "
+            "plans, with early exit to keep runtime comparable to champion."
+        ),
+    )
+
+    check = validate_problem_hypothesis_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        hypothesis,
+    )
+
+    assert check.allowed is True
+
+
 def test_warehouse_hypothesis_quality_rejects_missing_split_cost_effect_scope() -> None:
     spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
     adapter = WarehouseDeliveryAdapter(spec_v1)
