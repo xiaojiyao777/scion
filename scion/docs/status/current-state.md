@@ -33,6 +33,13 @@ history when exact old chronology is needed.
   fields. Focused v0.4 prepared roots set fresh-runtime replay drain to exact
   `0` and stage-transition drain to explicit `4`, so hidden drain behavior is
   no longer inherited from core/env defaults.
+- Latest accepted launch-readiness audit repair: local commit `d5a367af` / WSL
+  commit `7812bec5` exposes compact prepared prompt-context evidence summaries
+  directly in launch readiness. The summary distinguishes prepared renderer
+  evidence from live provider-prompt evidence and surfaces the CVRP
+  CMT2/CMT4/resume-continuity, warehouse champion-v2, and active code
+  constraint rendered checks without changing Decision, scheduler, promotion,
+  or Protocol inputs.
 - The prior CVRP protected-case guard remains in force: CMT2/CMT4 postrun
   evidence must carry numeric objective/distance delta evidence; route-count,
   feasibility-only, case-name, or free-text continuity payloads cannot make a
@@ -45,16 +52,17 @@ history when exact old chronology is needed.
 ## Active Prepared Roots
 
 These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `2b2cd351` after the explicit drain-limit repair; the
-corresponding local repair commit is `9b29245e`.
+runtime commit `7812bec5` after the prompt-context evidence-summary repair; the
+corresponding local repair commit is `d5a367af`. They retain the explicit
+drain-limit behavior from WSL commit `2b2cd351`.
 Local mirrors under `/home/clawd/research/scion-experiments/` are for
 inspection only. Run readiness and launch from WSL because the prepared
 contracts contain WSL absolute paths.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-2b2cd351-explicitdrains-resumecont-6r-gpt55-20260621T042334Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7812bec5-promptsummary-resumecont-6r-gpt55-20260621T043754Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2b2cd351-explicitdrains-resumecont-4r-gpt55-20260621T042348Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7812bec5-promptsummary-resumecont-4r-gpt55-20260621T043755Z-claw`
 
 Current readiness snapshot for both roots:
 
@@ -66,7 +74,7 @@ Current readiness snapshot for both roots:
   `active=0`, `total=1`; ignore volatile expired/refreshing substates unless
   active auth becomes available
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=2b2cd351`; current WSL HEAD may include docs-only
+  `prepared_runtime_commit=7812bec5`; current WSL HEAD may include docs-only
   status commits after prepare, and strict readiness accepts that only when the
   guarded runtime paths are unchanged since prepare
 - measurement handoff:
@@ -82,6 +90,14 @@ Current readiness snapshot for both roots:
   passing as warnings, fresh-runtime replay drain must be explicit rather than
   hidden behind the core legacy default, and stage-transition drain must be an
   explicit positive value (`4` in the current focused roots)
+- prompt-context readiness summary:
+  `checks.prompt_context_readiness_complete.detail.provider_prompt_scope=prepared_renderer_summary_not_live_provider_prompt`,
+  `raw_provider_prompt_rendered=false`, `missing_rendered_paths=[]`; CVRP
+  exposes `cvrp_case_protection_present=true`,
+  `cvrp_resume_continuity_present=true`, and
+  `cvrp_bounded_twoopt_present=true`; warehouse exposes
+  `warehouse_v2_followup_present=true` and
+  `warehouse_required_evidence_all_present=true`
 - completion preflight exposes flat `completion_login_url` and
   `completion_next_step`; always fetch a fresh login URL from strict readiness
   rather than copying an old OAuth URL from notes
@@ -107,13 +123,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 After strict readiness passes, launch the wrapper itself:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-2b2cd351-explicitdrains-resumecont-6r-gpt55-20260621T042334Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7812bec5-promptsummary-resumecont-6r-gpt55-20260621T043754Z-claw/run.sh
 ```
 
 Run CVRP after warehouse is underway or accepted for launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2b2cd351-explicitdrains-resumecont-4r-gpt55-20260621T042348Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7812bec5-promptsummary-resumecont-4r-gpt55-20260621T043755Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
@@ -142,7 +158,9 @@ the v0.4 planning summary, focused tests, and experiment reports.
   exact `0` when the intended v0.4 behavior is no research-headroom cap. The
   same explicit-disabled convention applies to focused fresh-runtime replay
   drain. Stage-transition drain must also be explicit and positive for the
-  current focused launch shape.
+  current focused launch shape. Prompt-context readiness now exposes compact
+  renderer-summary evidence in launch readiness; live provider-prompt evidence
+  remains a postlaunch trace requirement.
 - Problem-owned diagnostics may guide proposal context, protocol
   configuration, runtime governance, lifecycle policy, and readiness only
   through deterministic, schema-validated fields.
