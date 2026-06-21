@@ -35,15 +35,15 @@ history when exact old chronology is needed.
 ## Active Prepared Roots
 
 These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `0d9f869b`; the corresponding server repair commit is
-`f3141fad`. Local mirrors under `/home/clawd/research/scion-experiments/` are
+runtime commit `a71f477e`; the corresponding server repair commit is
+`c4db5318`. Local mirrors under `/home/clawd/research/scion-experiments/` are
 for inspection only. Run readiness and launch from WSL because the prepared
 contracts contain WSL absolute paths.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-0d9f869-noeffect-branch-guidance-6r-gpt55-20260621T011015Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-c4db531-noeffect-diagnostic-6r-gpt55-6r-gpt55-20260621T012454Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-0d9f869-noeffect-branch-guidance-resume-4r-gpt55-20260621T011016Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-c4db531-noeffect-diagnostic-resume-4r-gpt55-4r-gpt55-20260621T012509Z-claw`
 
 Current readiness snapshot for both roots:
 
@@ -52,8 +52,8 @@ Current readiness snapshot for both roots:
 - `failed_static_required_checks=[]`
 - only required failure: completion preflight auth
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=0d9f869b`; doc-only commits may report
-  `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare`
+  `prepared_runtime_commit=a71f477e`, `actual_runtime_commit=a71f477e`,
+  `runtime_guard_reason=runtime_guard_commit_matches`
 - campaign marker: `campaign_execution_marker_status=ok`
 - secret file permissions: `launch_env_secret_permissions=ok`,
   `launch_env_mode=0o600`
@@ -85,13 +85,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 After strict readiness passes, launch the wrapper itself:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-0d9f869-noeffect-branch-guidance-6r-gpt55-20260621T011015Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-c4db531-noeffect-diagnostic-6r-gpt55-6r-gpt55-20260621T012454Z-claw/run.sh
 ```
 
 Run CVRP after warehouse is underway or accepted for launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-0d9f869-noeffect-branch-guidance-resume-4r-gpt55-20260621T011016Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-c4db531-noeffect-diagnostic-resume-4r-gpt55-4r-gpt55-20260621T012509Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
@@ -129,7 +129,9 @@ the v0.4 planning summary, focused tests, and experiment reports.
   omission/digest audit markers, not raw long prose or telemetry dumps.
 - Active no-effect branch cards and sibling projections must agree with
   same-mechanism follow-up policy: ordinary no-effect/tie evidence does not
-  emit runtime-saturated diversity or clean-fork guidance. True runtime
+  emit runtime-saturated diversity or clean-fork guidance. Cross-branch
+  repeated-signature pressure preserves current active no-effect diagnostic
+  follow-up while still blocking unchanged sibling copies. True runtime
   regression or runtime saturation can still emit runtime diversity guidance.
 - Runtime semantics must not turn budget-exhausting solver saturation, cached
   ties, comparative runtime-ratio slowdown, or inactive mechanism activation
