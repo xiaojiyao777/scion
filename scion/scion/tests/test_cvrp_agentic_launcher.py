@@ -651,6 +651,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prompt_summary["cvrp_required_evidence_item_count"] == 5
     assert prompt_summary["cvrp_required_evidence_rendered_count"] == 5
     assert prompt_summary["cvrp_required_evidence_all_present"] is True
+    assert (
+        prompt_summary["cvrp_measurement_calibration_source_artifact_present"]
+        is True
+    )
+    assert prompt_summary["cvrp_measurement_calibration_run_present"] is True
+    assert (
+        prompt_summary["cvrp_measurement_calibration_runtime_policy_present"]
+        is True
+    )
     assert prompt_summary["cvrp_resume_continuity_present"] is True
     assert (
         prompt_summary["cvrp_resume_continuity_required_evidence_all_present"]

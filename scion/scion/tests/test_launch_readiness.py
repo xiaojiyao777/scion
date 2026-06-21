@@ -1708,6 +1708,39 @@ def test_launch_readiness_rejects_stale_research_focus_prompt_summary(
     )
 
 
+def test_launch_readiness_rejects_missing_calibration_provenance_prompt_summary(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    artifact_path = (
+        run_root
+        / "prepared_handoff"
+        / "prompt_context_readiness"
+        / "cvrp_on_full.prepared_prompt_context_readiness.v1.json"
+    )
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    summary = payload["signals"]["prepared_research_focus_prompt_bridge"][
+        "detail"
+    ]["prompt_summary"]
+    summary["cvrp_measurement_calibration_source_artifact_present"] = False
+    artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert any(
+        failure["reason"] == "prepared_focus_prompt_summary_field_mismatch"
+        and failure["field"]
+        == "cvrp_measurement_calibration_source_artifact_present"
+        and failure["expected"] is True
+        and failure["actual"] is False
+        for failure in prompt_check["detail"]["failures"]
+    )
+
+
 def test_launch_readiness_rejects_key_only_warehouse_research_focus_evidence(
     tmp_path: Path,
 ) -> None:
@@ -4192,6 +4225,24 @@ def _cvrp_research_focus() -> dict[str, object]:
                 "calibrated_at": "2026-06-11T22:03:16.746083+00:00",
                 "n_pairs": 96,
                 "decision_features_excluded": True,
+                "source_artifact": {
+                    "ref": "/tmp/cvrp/source-aa/aa_noise_floor.json",
+                    "sha256": (
+                        "bdba8272d4eb130200ad537b51ceaef7e50323f614ea3ae29a8247ed9a771684"
+                    ),
+                },
+                "calibration_run": {
+                    "decision_features_excluded": True,
+                    "replicate_count": 3,
+                    "selected_surface": "solver_design",
+                    "selected_case_count": 8,
+                    "selected_seed_count": 4,
+                    "runtime_policy": {
+                        "selected_policy": "protocol_time_limits",
+                        "runner_timeout_sec": 45,
+                        "uniform_time_limit_sec": 30,
+                    },
+                },
             },
             "opportunity_projection_source": (
                 "problem_adapter.render_problem_measurement_diagnostics"
@@ -4409,6 +4460,16 @@ def _warehouse_research_focus() -> dict[str, object]:
                 "n_pairs": 36,
                 "decision_features_excluded": True,
                 "calibration_run_action": "modify",
+                "source_artifact": {
+                    "ref": "/tmp/warehouse/source-aa/aa_noise_floor.json",
+                    "sha256": (
+                        "5e34c863356bc74a9d2254dbde1d0a0945c88d56ca7201a4e033344b9718146f"
+                    ),
+                },
+                "calibration_run": {
+                    "action": "modify",
+                    "decision_features_excluded": True,
+                },
             },
             "reason_codes": [
                 "WAREHOUSE_MDE_EXCEEDS_PRACTICAL_DELTA",

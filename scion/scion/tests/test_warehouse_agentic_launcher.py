@@ -552,6 +552,14 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         ]
         is True
     )
+    prompt_summary = prepared_prompt_context["signals"][
+        "prepared_research_focus_prompt_bridge"
+    ]["detail"]["prompt_summary"]
+    assert (
+        prompt_summary["warehouse_measurement_calibration_source_artifact_present"]
+        is True
+    )
+    assert prompt_summary["warehouse_measurement_calibration_run_present"] is True
     measurement_signal = prepared_prompt_context["signals"][
         "warehouse_measurement_runtime_handoff"
     ]

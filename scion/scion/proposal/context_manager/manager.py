@@ -321,6 +321,9 @@ def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
                         "reason_codes",
                     ),
                 ),
+                "calibration": _project_launch_focus_calibration(
+                    measurement.get("calibration")
+                ),
                 "policy": _string_or_empty(measurement.get("policy")),
                 "decision_features_excluded": measurement.get(
                     "decision_features_excluded"
@@ -410,6 +413,50 @@ def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
             if child not in ("", [], {}, None)
         }
     return projected
+
+
+def _project_launch_focus_calibration(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    source_artifact = _project_launch_focus_mapping(
+        value.get("source_artifact"),
+        fields=("sha256",),
+    )
+    runtime_policy = _project_launch_focus_mapping(
+        (value.get("calibration_run") or {}).get("runtime_policy")
+        if isinstance(value.get("calibration_run"), Mapping)
+        else {},
+        fields=(
+            "selected_policy",
+            "runner_timeout_sec",
+            "uniform_time_limit_sec",
+        ),
+    )
+    calibration_run = _project_launch_focus_mapping(
+        value.get("calibration_run"),
+        fields=(
+            "action",
+            "replicate_count",
+            "selected_surface",
+            "selected_case_count",
+            "selected_seed_count",
+        ),
+    )
+    if runtime_policy:
+        calibration_run["runtime_policy"] = runtime_policy
+    return {
+        key: child
+        for key, child in {
+            "schema": _string_or_empty(value.get("schema")),
+            "decision_features_excluded": value.get("decision_features_excluded"),
+            "source_artifact": source_artifact,
+            "calibration_run_action": _string_or_empty(
+                value.get("calibration_run_action")
+            ),
+            "calibration_run": calibration_run,
+        }.items()
+        if child not in ("", [], {}, None)
+    }
 
 
 def _project_launch_focus_mapping(

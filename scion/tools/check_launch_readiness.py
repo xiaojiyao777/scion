@@ -3759,11 +3759,32 @@ def _prompt_context_artifact_summary(payload: Any, *, artifact: str) -> dict[str
             "cvrp_required_evidence_all_present": focus_summary.get(
                 "cvrp_required_evidence_all_present"
             ),
+            "cvrp_measurement_calibration_source_artifact_present": (
+                focus_summary.get(
+                    "cvrp_measurement_calibration_source_artifact_present"
+                )
+            ),
+            "cvrp_measurement_calibration_run_present": focus_summary.get(
+                "cvrp_measurement_calibration_run_present"
+            ),
+            "cvrp_measurement_calibration_runtime_policy_present": (
+                focus_summary.get(
+                    "cvrp_measurement_calibration_runtime_policy_present"
+                )
+            ),
             "warehouse_v2_followup_present": focus_summary.get(
                 "warehouse_v2_followup_present"
             ),
             "warehouse_required_evidence_all_present": focus_summary.get(
                 "warehouse_required_evidence_all_present"
+            ),
+            "warehouse_measurement_calibration_source_artifact_present": (
+                focus_summary.get(
+                    "warehouse_measurement_calibration_source_artifact_present"
+                )
+            ),
+            "warehouse_measurement_calibration_run_present": focus_summary.get(
+                "warehouse_measurement_calibration_run_present"
             ),
         },
         "active_subject_code_constraints_summary": {
@@ -4122,10 +4143,15 @@ def _research_focus_prompt_summary_failures(
         "warehouse_default_avoid_direction_rendered_count",
         "warehouse_default_avoid_direction_all_present",
         "warehouse_measurement_handoff_present",
+        "warehouse_measurement_calibration_source_artifact_present",
+        "warehouse_measurement_calibration_run_present",
         "cvrp_case_protection_present",
         "cvrp_bounded_twoopt_present",
         "cvrp_direct_effect_rules_present",
         "cvrp_measurement_handoff_present",
+        "cvrp_measurement_calibration_source_artifact_present",
+        "cvrp_measurement_calibration_run_present",
+        "cvrp_measurement_calibration_runtime_policy_present",
         "cvrp_required_evidence_present",
         "cvrp_required_evidence_item_count",
         "cvrp_required_evidence_rendered_count",

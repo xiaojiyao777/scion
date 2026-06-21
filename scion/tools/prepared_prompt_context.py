@@ -559,6 +559,25 @@ def research_focus_prompt_summary(
     measurement = _mapping_or_empty(
         research_focus.get("measurement_opportunity_diagnostics")
     )
+    calibration = _mapping_or_empty(measurement.get("calibration"))
+    calibration_source_artifact = _mapping_or_empty(
+        calibration.get("source_artifact")
+    )
+    calibration_run = _mapping_or_empty(calibration.get("calibration_run"))
+    calibration_runtime_policy = _mapping_or_empty(
+        calibration_run.get("runtime_policy")
+    )
+    calibration_source_sha256 = str(
+        calibration_source_artifact.get("sha256") or ""
+    ).strip()
+    calibration_run_action = str(
+        calibration_run.get("action")
+        or calibration.get("calibration_run_action")
+        or ""
+    ).strip()
+    calibration_runtime_policy_name = str(
+        calibration_runtime_policy.get("selected_policy") or ""
+    ).strip()
     empty_sequence_counts = {
         "item_count": 0,
         "rendered_count": 0,
@@ -687,6 +706,22 @@ def research_focus_prompt_summary(
             and "measurement_opportunity_diagnostics" in rendered_prompt
             and "runtime_model" in rendered_prompt
         ),
+        "warehouse_measurement_calibration_source_artifact_present": (
+            problem_family == "warehouse_delivery"
+            and bool(calibration_source_sha256)
+            and "source_artifact" in rendered_prompt
+            and "sha256" in rendered_prompt
+            and calibration_source_sha256 in rendered_prompt
+        ),
+        "warehouse_measurement_calibration_run_present": (
+            problem_family == "warehouse_delivery"
+            and bool(calibration_run)
+            and "calibration_run" in rendered_prompt
+            and (
+                not calibration_run_action
+                or calibration_run_action in rendered_prompt
+            )
+        ),
         "warehouse_measurement_transfer_risk_present": (
             problem_family == "warehouse_delivery"
             and "transfer_risk" in rendered_prompt
@@ -735,6 +770,27 @@ def research_focus_prompt_summary(
         "cvrp_measurement_handoff_present": (
             problem_family == "cvrp"
             and "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in rendered_prompt
+        ),
+        "cvrp_measurement_calibration_source_artifact_present": (
+            problem_family == "cvrp"
+            and bool(calibration_source_sha256)
+            and "source_artifact" in rendered_prompt
+            and "sha256" in rendered_prompt
+            and calibration_source_sha256 in rendered_prompt
+        ),
+        "cvrp_measurement_calibration_run_present": (
+            problem_family == "cvrp"
+            and bool(calibration_run)
+            and "calibration_run" in rendered_prompt
+        ),
+        "cvrp_measurement_calibration_runtime_policy_present": (
+            problem_family == "cvrp"
+            and bool(calibration_runtime_policy)
+            and "runtime_policy" in rendered_prompt
+            and (
+                not calibration_runtime_policy_name
+                or calibration_runtime_policy_name in rendered_prompt
+            )
         ),
         "cvrp_required_evidence_present": (
             problem_family == "cvrp"
@@ -893,6 +949,14 @@ def research_focus_prompt_summary(
             not in ({}, [], "", None)
         ):
             required_true_fields.append("warehouse_measurement_handoff_present")
+            if calibration_source_artifact not in ({}, [], "", None):
+                required_true_fields.append(
+                    "warehouse_measurement_calibration_source_artifact_present"
+                )
+            if calibration_run not in ({}, [], "", None):
+                required_true_fields.append(
+                    "warehouse_measurement_calibration_run_present"
+                )
             if measurement.get("transfer_risk") not in ({}, [], "", None):
                 required_true_fields.append(
                     "warehouse_measurement_transfer_risk_present"
@@ -974,6 +1038,18 @@ def research_focus_prompt_summary(
             not in ({}, [], "", None)
         ):
             required_true_fields.append("cvrp_measurement_handoff_present")
+            if calibration_source_artifact not in ({}, [], "", None):
+                required_true_fields.append(
+                    "cvrp_measurement_calibration_source_artifact_present"
+                )
+            if calibration_run not in ({}, [], "", None):
+                required_true_fields.append(
+                    "cvrp_measurement_calibration_run_present"
+                )
+            if calibration_runtime_policy not in ({}, [], "", None):
+                required_true_fields.append(
+                    "cvrp_measurement_calibration_runtime_policy_present"
+                )
             if measurement.get("screening_headroom") not in ({}, [], "", None):
                 required_true_fields.append(
                     "cvrp_measurement_screening_headroom_present"
@@ -1526,6 +1602,19 @@ def _required_research_focus_projection_paths(
                 "policy",
                 "decision_features_excluded",
                 "proposal_visibility_only",
+                "calibration",
+            ),
+        )
+    )
+    paths.extend(
+        _supported_measurement_nested_paths(
+            research_focus,
+            "calibration",
+            (
+                "schema",
+                "source_artifact",
+                "calibration_run",
+                "calibration_run_action",
             ),
         )
     )
