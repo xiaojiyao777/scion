@@ -3611,6 +3611,9 @@ def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:
     detail: dict[str, Any] = {
         "directory": str(readiness_dir),
         "artifacts": [path.name for path in paths],
+        "artifact_summaries": [],
+        "provider_prompt_scope": "prepared_renderer_summary_not_live_provider_prompt",
+        "raw_provider_prompt_rendered": False,
         "failures": [],
     }
     failures: list[dict[str, Any]] = []
@@ -3619,6 +3622,9 @@ def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:
 
     for path in paths:
         payload = _read_json(path)
+        detail["artifact_summaries"].append(
+            _prompt_context_artifact_summary(payload, artifact=path.name)
+        )
         failures.extend(
             {"artifact": path.name, **failure}
             for failure in _prompt_context_artifact_failures(
@@ -3695,6 +3701,80 @@ def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:
 
     detail["failures"] = failures
     return ("ok" if not failures else "failed"), detail
+
+
+def _prompt_context_artifact_summary(payload: Any, *, artifact: str) -> dict[str, Any]:
+    """Return compact operator-facing prompt-context evidence scope."""
+
+    if not isinstance(payload, dict):
+        return {
+            "artifact": artifact,
+            "valid_payload": False,
+            "reason": "invalid_json_payload",
+        }
+    readiness = payload.get("readiness")
+    readiness_dict = readiness if isinstance(readiness, dict) else {}
+    signals = payload.get("signals")
+    signals_dict = signals if isinstance(signals, dict) else {}
+    focus_bridge = _mapping_or_empty(
+        signals_dict.get("prepared_research_focus_prompt_bridge")
+    )
+    focus_detail = _mapping_or_empty(focus_bridge.get("detail"))
+    focus_summary = _mapping_or_empty(focus_detail.get("prompt_summary"))
+    family = str(payload.get("problem_family") or "")
+    code_signal_name = ACTIVE_SUBJECT_CODE_CONSTRAINT_SIGNAL_NAMES.get(family, "")
+    code_bridge = _mapping_or_empty(signals_dict.get(code_signal_name))
+    code_detail = _mapping_or_empty(code_bridge.get("detail"))
+    code_summary = _mapping_or_empty(code_detail.get("code_prompt_summary"))
+    return {
+        "artifact": artifact,
+        "valid_payload": True,
+        "problem_family": family,
+        "ready_for_launch_prompt_audit": readiness_dict.get(
+            "ready_for_launch_prompt_audit"
+        ),
+        "missing_required": readiness_dict.get("missing_required"),
+        "raw_provider_prompt_rendered": payload.get("raw_provider_prompt_rendered"),
+        "provider_prompt_scope": (
+            "live_provider_prompt"
+            if payload.get("raw_provider_prompt_rendered") is True
+            else "prepared_renderer_summary_not_live_provider_prompt"
+        ),
+        "prepared_focus_prompt_summary": {
+            "available": focus_summary.get("available"),
+            "problem_family": focus_summary.get("problem_family"),
+            "rendered_required_path_count": focus_summary.get(
+                "rendered_required_path_count"
+            ),
+            "missing_rendered_paths": focus_summary.get("missing_rendered_paths"),
+            "cvrp_case_protection_present": focus_summary.get(
+                "cvrp_case_protection_present"
+            ),
+            "cvrp_resume_continuity_present": focus_summary.get(
+                "cvrp_resume_continuity_present"
+            ),
+            "cvrp_bounded_twoopt_present": focus_summary.get(
+                "cvrp_bounded_twoopt_present"
+            ),
+            "warehouse_v2_followup_present": focus_summary.get(
+                "warehouse_v2_followup_present"
+            ),
+            "warehouse_required_evidence_all_present": focus_summary.get(
+                "warehouse_required_evidence_all_present"
+            ),
+        },
+        "active_subject_code_constraints_summary": {
+            "available": code_summary.get("available"),
+            "prompt_section_present": code_summary.get("prompt_section_present"),
+            "subject_id": code_summary.get("subject_id"),
+            "constraint_ids_all_present": code_summary.get(
+                "constraint_ids_all_present"
+            ),
+            "forbidden_patterns_all_present": code_summary.get(
+                "forbidden_patterns_all_present"
+            ),
+        },
+    }
 
 
 def _prompt_context_artifact_failures(

@@ -85,6 +85,24 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
         == "ok"
     )
     assert report["checks"]["prompt_context_readiness_complete"]["status"] == "ok"
+    prompt_detail = report["checks"]["prompt_context_readiness_complete"]["detail"]
+    assert prompt_detail["provider_prompt_scope"] == (
+        "prepared_renderer_summary_not_live_provider_prompt"
+    )
+    assert prompt_detail["raw_provider_prompt_rendered"] is False
+    prompt_artifact_summary = prompt_detail["artifact_summaries"][0]
+    assert prompt_artifact_summary["raw_provider_prompt_rendered"] is False
+    focus_summary = prompt_artifact_summary["prepared_focus_prompt_summary"]
+    assert focus_summary["missing_rendered_paths"] == []
+    assert focus_summary["cvrp_case_protection_present"] is True
+    assert focus_summary["cvrp_resume_continuity_present"] is True
+    assert focus_summary["cvrp_bounded_twoopt_present"] is True
+    code_summary = prompt_artifact_summary[
+        "active_subject_code_constraints_summary"
+    ]
+    assert code_summary["available"] is True
+    assert code_summary["constraint_ids_all_present"] is True
+    assert code_summary["forbidden_patterns_all_present"] is True
     assert report["checks"]["prepared_analysis_brief_current"]["status"] == "ok"
     assert (
         report["checks"]["analysis_brief_prepared_contract_consistency"]["status"]
