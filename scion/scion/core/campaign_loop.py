@@ -981,11 +981,11 @@ def _fresh_runtime_replay_drain_limit(
     configured: int | None,
 ) -> int:
     if configured is not None:
-        return max(1, int(configured))
+        return max(0, int(configured))
     raw = os.environ.get("SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT")
     if raw:
         try:
-            return max(1, int(raw))
+            return max(0, int(raw))
         except ValueError:
             logger.warning(
                 "Ignoring invalid SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT=%r",
@@ -1090,11 +1090,14 @@ def _fresh_runtime_replay_drain_status(
     attempts: int,
     executed: int,
     skipped: int,
+    limit: int,
     stopped_reason: str,
     accepted_replay_last_result: Mapping[str, Any],
     final_attempt_last_result: Mapping[str, Any],
     blocked_count: int,
 ) -> str:
+    if limit <= 0 and attempts <= 0 and executed <= 0 and skipped <= 0:
+        return "disabled"
     if executed > 0:
         if blocked_count > 0:
             return "selected_blocked"
@@ -1210,7 +1213,7 @@ def _campaign_loop_status(
     fresh_replay_drain_attempts = max(0, int(fresh_runtime_replay_drain_attempts))
     fresh_replay_drain_executed = max(0, int(fresh_runtime_replay_drain_executed))
     fresh_replay_drain_skipped = max(0, int(fresh_runtime_replay_drain_skipped))
-    fresh_replay_drain_limit = max(1, int(fresh_runtime_replay_drain_limit))
+    fresh_replay_drain_limit = max(0, int(fresh_runtime_replay_drain_limit))
     stage_drain_attempts = max(0, int(stage_transition_drain_attempts))
     stage_drain_executed = max(0, int(stage_transition_drain_executed))
     stage_drain_skipped = max(0, int(stage_transition_drain_skipped))
@@ -1236,6 +1239,7 @@ def _campaign_loop_status(
         attempts=fresh_replay_drain_attempts,
         executed=fresh_replay_drain_executed,
         skipped=fresh_replay_drain_skipped,
+        limit=fresh_replay_drain_limit,
         stopped_reason=fresh_runtime_replay_drain_stop_reason,
         accepted_replay_last_result=accepted_replay_last_result,
         final_attempt_last_result=final_attempt_last_result,

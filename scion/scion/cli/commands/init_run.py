@@ -371,6 +371,15 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 "research-headroom cap"
             ),
         ),
+        fresh_runtime_replay_drain_limit: Optional[int] = typer.Option(
+            None,
+            "--fresh-runtime-replay-drain-limit",
+            help=(
+                "Maximum post-budget fresh-runtime replay drain attempts; "
+                "defaults to SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT or the "
+                "core legacy default; use 0 to disable this drain"
+            ),
+        ),
         campaign_dir: str = typer.Option(
             "campaign_out",
             "--campaign-dir",
@@ -810,6 +819,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 force_target_file=forced_request.target_file if forced_request else None,
                 proposal_quality_loop_limit=proposal_quality_loop_limit,
                 proposal_attempt_limit=proposal_attempt_limit,
+                fresh_runtime_replay_drain_limit=fresh_runtime_replay_drain_limit,
                 proposal_context_ablation=proposal_context_ablation,
             )
 

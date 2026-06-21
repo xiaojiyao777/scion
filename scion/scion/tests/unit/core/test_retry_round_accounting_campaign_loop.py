@@ -360,6 +360,71 @@ def test_campaign_loop_drains_fresh_runtime_replay_after_max_rounds() -> None:
     )
 
 
+def test_zero_fresh_runtime_replay_drain_limit_disables_post_budget_drain() -> None:
+    main_calls = 0
+    drain_calls = 0
+    statuses: list[dict[str, Any]] = []
+    stopped_reasons: list[str | None] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal main_calls
+        main_calls += 1
+        return _screening_result()
+
+    def drain_step() -> StepResult:
+        nonlocal drain_calls
+        drain_calls += 1
+        return StepResult(
+            action="replay",
+            branch_id="b1",
+            reason="fresh runtime replay complete",
+            counts_toward_max_rounds=False,
+            attempt_kind="fresh_runtime_replay",
+        )
+
+    def write_status(**kwargs: Any) -> None:
+        if "loop_status" in kwargs:
+            statuses.append(dict(kwargs["loop_status"]))
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_fresh_runtime_replay_drain_step=drain_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=1,
+        fresh_runtime_replay_drain_limit=0,
+    )
+
+    loop.run(max_rounds=1)
+
+    final_status = statuses[-1]
+    assert main_calls == 1
+    assert drain_calls == 0
+    assert "max_rounds_exhausted" in stopped_reasons
+    assert final_status["fresh_runtime_replay_drain_limit"] == 0
+    assert final_status["fresh_runtime_replay_drain_status"] == "disabled"
+    assert final_status["fresh_runtime_replay_drain"]["status"] == "disabled"
+    assert final_status["fresh_runtime_replay_drain"]["attempts"] == 0
+    assert final_status["fresh_runtime_replay_drain"]["executed"] == 0
+    assert final_status["fresh_runtime_replay_drain"]["skipped"] == 0
+
+
 def test_campaign_loop_does_not_drain_arbitrary_non_counted_result_after_max_rounds() -> None:
     main_calls = 0
     drain_calls = 0
@@ -680,6 +745,7 @@ def test_fresh_runtime_replay_drain_status_distinguishes_failed_from_blocked() -
             attempts=1,
             executed=1,
             skipped=0,
+            limit=1,
             stopped_reason="",
             accepted_replay_last_result={
                 "attempt_kind": "fresh_runtime_replay",

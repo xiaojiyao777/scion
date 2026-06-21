@@ -114,6 +114,7 @@ class CampaignManager:
         force_target_file: Optional[str] = None,
         proposal_quality_loop_limit: Optional[int] = None,
         proposal_attempt_limit: Optional[int] = None,
+        fresh_runtime_replay_drain_limit: Optional[int] = None,
         proposal_context_ablation: str = "full",
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
@@ -163,6 +164,7 @@ class CampaignManager:
             force_target_file=forced_request.target_file if forced_request else None,
             proposal_quality_loop_limit=proposal_quality_loop_limit,
             proposal_attempt_limit=proposal_attempt_limit,
+            fresh_runtime_replay_drain_limit=fresh_runtime_replay_drain_limit,
             proposal_context_ablation=proposal_context_ablation,
         )
 

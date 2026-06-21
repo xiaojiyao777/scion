@@ -3089,6 +3089,38 @@ def test_launch_readiness_rejects_missing_proposal_headroom_env(
     } in headroom_check["detail"]["failures"]
 
 
+def test_launch_readiness_rejects_missing_fresh_runtime_replay_drain_env(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(
+        "\n".join(
+            line
+            for line in launch_env.read_text(encoding="utf-8").splitlines()
+            if not line.startswith("SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT=")
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    headroom_check = report["checks"]["run_script_proposal_headroom_enforced"]
+    assert headroom_check["status"] == "failed"
+    assert {
+        "reason": (
+            "fresh_runtime_replay_drain_limit_launch_env_missing_or_invalid"
+        ),
+        "field": "fresh_runtime_replay_drain_limit",
+        "source": "launch_env",
+        "expected_min": 1,
+        "actual": None,
+    } in headroom_check["detail"]["failures"]
+
+
 def test_launch_readiness_rejects_low_manifest_proposal_headroom(
     tmp_path: Path,
 ) -> None:
@@ -3169,6 +3201,12 @@ def test_launch_readiness_accepts_disabled_proposal_headroom_caps(
     assert {
         "field": "proposal_quality_loop_limit",
         "source": "manifest_execution",
+        "actual": 0,
+        "semantic": "disabled",
+    } in disabled
+    assert {
+        "field": "fresh_runtime_replay_drain_limit",
+        "source": "launch_env",
         "actual": 0,
         "semantic": "disabled",
     } in disabled
@@ -3729,6 +3767,7 @@ def _write_prepared_root(
         "--agentic-code-tool-max-calls 200 "
         "--agentic-observation-max-chars 2000000 "
         "--proposal-attempt-limit 64 --proposal-quality-loop-limit 64 "
+        "--fresh-runtime-replay-drain-limit 0 "
         "--measurement-governance on --proposal-context-ablation full "
         f"--agentic-proposal --disable-early-stop"
     )
@@ -3784,6 +3823,7 @@ def _write_prepared_root(
             "agentic_observation_max_chars": 2000000,
             "proposal_attempt_limit": 64,
             "proposal_quality_loop_limit": 64,
+            "fresh_runtime_replay_drain_limit": 0,
             "measurement_governance": "on",
             "proposal_context_ablation": "full",
             "agentic_proposal": True,
@@ -3848,6 +3888,7 @@ def _write_prepared_root(
                 "AGENTIC_OBSERVATION_MAX_CHARS=2000000",
                 "PROPOSAL_ATTEMPT_LIMIT=64",
                 "PROPOSAL_QUALITY_LOOP_LIMIT=64",
+                "SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT=0",
                 "DISABLE_EARLY_STOP=1",
                 f"GIT_COMMIT={_git_head_short()}",
                 f"GIT_RUNTIME_GUARD_PATHS={json.dumps(runtime_guard_paths)}",
@@ -3938,7 +3979,7 @@ printf '{{"schema":"scion.launcher_campaign_execution_marker.v1","started_at":"%
   "$CAMPAIGN_EXECUTION_MARKER_STARTED_AT" "$RUN_ROOT" "$CAMPAIGN_DIR" \
   > "$RUN_ROOT/campaign_execution_marker.v1.json"
 echo "CAMPAIGN_EXECUTION_MARKER:$RUN_ROOT/campaign_execution_marker.v1.json" >> "$RUN_ROOT/run.log"
-{sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --time-limit-sec 30 --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" --agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS" --agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS" --agentic-code-tool-max-calls "$AGENTIC_CODE_TOOL_MAX_CALLS" --agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS" --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" --measurement-governance "$MEASUREMENT_GOVERNANCE" --proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION" --agentic-proposal --disable-early-stop
+{sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --time-limit-sec 30 --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" --agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS" --agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS" --agentic-code-tool-max-calls "$AGENTIC_CODE_TOOL_MAX_CALLS" --agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS" --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" --fresh-runtime-replay-drain-limit "$SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT" --measurement-governance "$MEASUREMENT_GOVERNANCE" --proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION" --agentic-proposal --disable-early-stop
 STATUS=$?
 CAMPAIGN_STATUS=$STATUS
 POSTRUN_ACCEPTANCE_STATUS=0

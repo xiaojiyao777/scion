@@ -148,6 +148,7 @@ def compose_campaign_services(
     force_target_file: str | None = None,
     proposal_quality_loop_limit: int | None = None,
     proposal_attempt_limit: int | None = None,
+    fresh_runtime_replay_drain_limit: int | None = None,
     proposal_context_ablation: str = "full",
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
@@ -726,6 +727,7 @@ def compose_campaign_services(
         ),
         proposal_quality_loop_limit=proposal_quality_loop_limit,
         proposal_attempt_limit=proposal_attempt_limit,
+        fresh_runtime_replay_drain_limit=fresh_runtime_replay_drain_limit,
         get_proposal_attempts=lambda: owner._round_num,
     )
 
