@@ -135,6 +135,18 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert measurement["source"] == "problem_v1.measurement.calibration_ref"
     assert measurement["calibration"]["schema"] == "scion.aa_noise_floor.v1"
     assert measurement["calibration"]["decision_features_excluded"] is True
+    assert measurement["calibration"]["source_artifact"]["sha256"] == (
+        "bdba8272d4eb130200ad537b51ceaef7e50323f614ea3ae29a8247ed9a771684"
+    )
+    assert measurement["calibration"]["calibration_run"]["replicate_count"] == 3
+    assert measurement["calibration"]["calibration_run"]["selected_surface"] == (
+        "solver_design"
+    )
+    assert measurement["calibration"]["calibration_run"]["selected_case_count"] == 8
+    assert measurement["calibration"]["calibration_run"]["selected_seed_count"] == 4
+    assert measurement["calibration"]["calibration_run"]["runtime_policy"][
+        "selected_policy"
+    ] == "protocol_time_limits"
     assert measurement["measurement_readiness"]["status"] == "ready"
     assert (
         measurement["measurement_readiness"]["calibration_evidence_level"]
@@ -272,6 +284,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "CVRP post-pivot" in prepared_manifest_md
     assert "## Current Research Focus" in prepared_manifest_md
     assert "screening_mde_at_power_80: 9.9" in prepared_manifest_md
+    assert "calibration_source_sha256" in prepared_manifest_md
+    assert "runtime_policy=protocol_time_limits" in prepared_manifest_md
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prepared_manifest_md
     assert "screening_headroom" in prepared_manifest_md
     assert "mechanism_effect_ranking" in prepared_manifest_md

@@ -456,19 +456,12 @@ def _warehouse_measurement_opportunity_diagnostics(
         "practical_validate_delta": float(effect_scale.practical_delta_validate),
         "screening_mde_at_power_80": mde_at_power_80,
         "measurement_readiness": readiness.to_status_payload(),
-        "calibration": {
-            "schema": calibration_artifact.get("schema"),
-            "ref": calibration_ref,
-            "path": str(calibration_path),
-            "calibrated_at": calibration_artifact.get("calibrated_at"),
-            "n_pairs": readiness.n_pairs,
-            "decision_features_excluded": calibration_artifact.get(
-                "decision_features_excluded"
-            ),
-            "calibration_run_action": _mapping_or_empty(
-                calibration_artifact.get("calibration_run")
-            ).get("action"),
-        },
+        "calibration": _calibration_handoff(
+            calibration_artifact=calibration_artifact,
+            calibration_ref=calibration_ref,
+            calibration_path=calibration_path,
+            n_pairs=readiness.n_pairs,
+        ),
         "summary": _warehouse_measurement_summary(
             metric=effect_scale.metric,
             mde_at_power_80=mde_at_power_80,
@@ -575,6 +568,91 @@ def _read_calibration_artifact(path: Path) -> dict[str, Any]:
         ) from exc
     if not isinstance(payload, dict):
         raise SystemExit(f"Warehouse calibration artifact must be a JSON object: {path}")
+    return payload
+
+
+def _calibration_handoff(
+    *,
+    calibration_artifact: Mapping[str, Any],
+    calibration_ref: str,
+    calibration_path: Path,
+    n_pairs: int,
+) -> dict[str, Any]:
+    calibration_run = _compact_calibration_run(
+        calibration_artifact.get("calibration_run")
+    )
+    payload: dict[str, Any] = {
+        "schema": calibration_artifact.get("schema"),
+        "ref": calibration_ref,
+        "path": str(calibration_path),
+        "calibrated_at": calibration_artifact.get("calibrated_at"),
+        "n_pairs": n_pairs,
+        "decision_features_excluded": calibration_artifact.get(
+            "decision_features_excluded"
+        ),
+        "calibration_run_action": calibration_run.get("action"),
+    }
+    source_artifact = _compact_source_artifact(
+        calibration_artifact.get("source_artifact")
+    )
+    if source_artifact:
+        payload["source_artifact"] = source_artifact
+    if calibration_run:
+        payload["calibration_run"] = calibration_run
+    return {
+        key: value
+        for key, value in payload.items()
+        if value not in ("", None, [], {}, ())
+    }
+
+
+def _compact_source_artifact(value: Any) -> dict[str, Any]:
+    source = _mapping_or_empty(value)
+    payload = {
+        "ref": str(source.get("ref") or ""),
+        "sha256": str(source.get("sha256") or ""),
+    }
+    return {
+        key: item
+        for key, item in payload.items()
+        if item not in ("", None)
+    }
+
+
+def _compact_calibration_run(value: Any) -> dict[str, Any]:
+    run = _mapping_or_empty(value)
+    payload: dict[str, Any] = {}
+    for key in (
+        "action",
+        "replicate_count",
+        "selected_surface",
+        "selected_case_count",
+        "selected_seed_count",
+        "seed_offset",
+        "bootstrap_samples",
+        "decision_features_excluded",
+    ):
+        item = run.get(key)
+        if item not in ("", None, [], {}, ()):
+            payload[key] = item
+    runtime_policy = _compact_runtime_policy(run.get("runtime_policy"))
+    if runtime_policy:
+        payload["runtime_policy"] = runtime_policy
+    return payload
+
+
+def _compact_runtime_policy(value: Any) -> dict[str, Any]:
+    policy = _mapping_or_empty(value)
+    payload: dict[str, Any] = {}
+    for key in (
+        "selected_policy",
+        "runner_timeout_sec",
+        "uniform_time_limit_sec",
+        "time_limit_sec",
+    ):
+        item = policy.get(key)
+        if item not in ("", None, [], {}, ()):
+            payload[key] = item
     return payload
 
 
@@ -1128,6 +1206,8 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
                 "  - Screening MDE at 80% power: "
                 f"`{measurement.get('screening_mde_at_power_80')}`",
                 f"  - Readiness: `{readiness.get('status')}`",
+                "  - Calibration evidence level: "
+                f"`{readiness.get('calibration_evidence_level')}`",
                 "  - Opportunity projection source: "
                 f"`{measurement.get('opportunity_projection_source')}`",
                 "  - Adapter payload schema: "
@@ -1135,6 +1215,33 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
                 f"  - Summary: {measurement.get('summary')}",
             ]
         )
+        calibration = measurement.get("calibration")
+        if isinstance(calibration, dict):
+            source_artifact = calibration.get("source_artifact")
+            if isinstance(source_artifact, dict) and source_artifact:
+                lines.append(
+                    "  - Calibration source sha256: "
+                    f"`{source_artifact.get('sha256')}`"
+                )
+            calibration_run = calibration.get("calibration_run")
+            if isinstance(calibration_run, dict) and calibration_run:
+                run_bits = []
+                for key in (
+                    "action",
+                    "replicate_count",
+                    "selected_surface",
+                    "selected_case_count",
+                    "selected_seed_count",
+                ):
+                    if key in calibration_run:
+                        run_bits.append(f"{key}={calibration_run[key]}")
+                runtime_policy = calibration_run.get("runtime_policy")
+                if isinstance(runtime_policy, dict) and runtime_policy:
+                    selected_policy = runtime_policy.get("selected_policy")
+                    if selected_policy:
+                        run_bits.append(f"runtime_policy={selected_policy}")
+                if run_bits:
+                    lines.append("  - Calibration run: " + "; ".join(run_bits))
         transfer_risk = measurement.get("transfer_risk")
         if isinstance(transfer_risk, dict) and transfer_risk:
             lines.append("  - transfer_risk:")

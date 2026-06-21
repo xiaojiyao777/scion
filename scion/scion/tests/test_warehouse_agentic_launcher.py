@@ -151,6 +151,14 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert measurement["calibration"]["schema"] == "scion.aa_noise_floor.v1"
     assert measurement["calibration"]["ref"] == "calibration/aa_noise_floor.json"
     assert measurement["calibration"]["decision_features_excluded"] is True
+    assert measurement["calibration"]["source_artifact"]["sha256"] == (
+        "5e34c863356bc74a9d2254dbde1d0a0945c88d56ca7201a4e033344b9718146f"
+    )
+    assert measurement["calibration"]["calibration_run_action"] == "modify"
+    assert measurement["calibration"]["calibration_run"] == {
+        "action": "modify",
+        "decision_features_excluded": True,
+    }
     assert measurement["recommended_min_seeds"] == 4
     assert "WAREHOUSE_MDE_EXCEEDS_PRACTICAL_DELTA" in measurement["reason_codes"]
     assert "TRAJECTORY_DIVERGENT_LOW_SNR" in measurement["reason_codes"]
@@ -224,6 +232,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "split_delta_sum==0" in prepared_manifest_md
     assert "Measurement/runtime handoff" in prepared_manifest_md
     assert "problem_v1.measurement.calibration_ref" in prepared_manifest_md
+    assert "Calibration source sha256" in prepared_manifest_md
+    assert "Calibration run: action=modify" in prepared_manifest_md
     assert stat.S_IMODE(launch_env_path.stat().st_mode) == 0o600
     assert f"REPO_ROOT={PROJECT_ROOT}" in launch_env
     assert f"SCION_DIR={SCION_DIR}" in launch_env
