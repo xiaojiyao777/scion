@@ -35,15 +35,15 @@ history when exact old chronology is needed.
 ## Active Prepared Roots
 
 These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `488576d9`; the corresponding server repair commit is
-`6d985f84`. Local mirrors under `/home/clawd/research/scion-experiments/` are
+runtime commit `09a4aff5`; the corresponding server repair commit is
+`b39608b2`. Local mirrors under `/home/clawd/research/scion-experiments/` are
 for inspection only. Run readiness and launch from WSL because the prepared
 contracts contain WSL absolute paths.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-488576-runtime-ratio-6r-gpt55-20260621T003311Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-09a4aff-headroom-caps-6r-gpt55-20260621T004554Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-488576-runtime-ratio-resume-4r-gpt55-20260621T003312Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-09a4aff-headroom-caps-resume-4r-gpt55-20260621T004554Z-claw`
 
 Current readiness snapshot for both roots:
 
@@ -52,11 +52,14 @@ Current readiness snapshot for both roots:
 - `failed_static_required_checks=[]`
 - only required failure: completion preflight auth
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=488576d9`; doc-only commits may report
+  `prepared_runtime_commit=09a4aff5`; doc-only commits may report
   `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare`
 - campaign marker: `campaign_execution_marker_status=ok`
 - secret file permissions: `launch_env_secret_permissions=ok`,
   `launch_env_mode=0o600`
+- headroom guard: `run_script_proposal_headroom_enforced=ok`; exact `0`
+  proposal/APS caps are treated as explicitly disabled, while low nonzero caps
+  fail readiness instead of passing as warnings
 - completion preflight exposes flat `completion_login_url` and
   `completion_next_step`; always fetch a fresh login URL from strict readiness
   rather than copying an old OAuth URL from notes
@@ -82,13 +85,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 After strict readiness passes, launch the wrapper itself:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-488576-runtime-ratio-6r-gpt55-20260621T003311Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-09a4aff-headroom-caps-6r-gpt55-20260621T004554Z-claw/run.sh
 ```
 
 Run CVRP after warehouse is underway or accepted for launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-488576-runtime-ratio-resume-4r-gpt55-20260621T003312Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-09a4aff-headroom-caps-resume-4r-gpt55-20260621T004554Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
@@ -113,7 +116,8 @@ the v0.4 planning summary, focused tests, and experiment reports.
   checks prepared-contract identity, prompt-context bridge, runtime paths,
   model route, completion preflight, private `launch.env` permissions,
   wrapper/campaign marker consistency, and strict postrun rebuild/readiness
-  behavior before launch.
+  behavior before launch. Low nonzero proposal/APS caps fail readiness; use
+  exact `0` when the intended v0.4 behavior is no research-headroom cap.
 - Problem-owned diagnostics may guide proposal context, protocol
   configuration, runtime governance, lifecycle policy, and readiness only
   through deterministic, schema-validated fields.

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `488576d9`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `09a4aff5`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-21*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -252,9 +252,9 @@ Current checkpoint:
   considered static-ready.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-488576-runtime-ratio-6r-gpt55-20260621T003311Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-09a4aff-headroom-caps-6r-gpt55-20260621T004554Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-488576-runtime-ratio-resume-4r-gpt55-20260621T003312Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-09a4aff-headroom-caps-resume-4r-gpt55-20260621T004554Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -269,7 +269,7 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok`,
-  `prepared_runtime_commit=488576d9`, and either
+  `prepared_runtime_commit=09a4aff5`, and either
   `runtime_guard_reason=runtime_guard_commit_matches` or
   `runtime_guard_paths_unchanged_since_prepare` after doc-only commits. They
   also report `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
@@ -281,7 +281,9 @@ Current checkpoint:
   Disabled proposal/APS caps, code-source visibility, source-read headroom,
   item-level `research_focus` prompt visibility, and CVRP/warehouse
   adapter-derived opportunity diagnostics are covered by current evidence
-  reports rather than repeated here. Active subject code-constraint prompt
+  reports rather than repeated here. Exact `0` proposal/APS caps remain the
+  explicit disabled state; low nonzero caps now fail launch readiness instead
+  of passing as warnings. Active subject code-constraint prompt
   bridge evidence now proves provider constraints reach the actual code prompt
   with version/subject identity and problem-specific guard markers. Runtime
   feedback is now rendered as
@@ -303,6 +305,9 @@ Current checkpoint:
     diagnostics preserve saturated-side and repairable counts so delegated
     review can distinguish candidate repair signals from champion-only or
     observational saturation.
+  - Launch readiness rejects low nonzero proposal and APS headroom caps while
+    accepting exact `0` as disabled, so focused v0.4 roots do not quietly carry
+    research truncation through prepared handoff.
   - Screening gate reporting and Decision routing agree on marginal evidence:
     high-win-rate, non-negative, sub-practical-delta screening evidence is a
     diagnostic validation candidate (`SCREENING_PASS_MARGINAL_DELTA`) and is
