@@ -89,7 +89,8 @@ class FamilyEntry:
     total_attempts: int = 0
     best_wr: float = 0.0
     consecutive_fails: int = 0
-    is_exhausted: bool = False          # total_attempts >= 5 AND best_wr < 0.35
+    hard_fail_attempts: int = 0
+    is_exhausted: bool = False          # hard_fail_attempts >= 5 AND best_wr < 0.35
     last_failure_reason: str = ""
     champion_version_at_discovery: int = 0
     promoted: bool = False              # whether this family was ever promoted
@@ -206,11 +207,28 @@ class CampaignSearchMemory:
             fam.promoted = True
             fam.consecutive_fails = 0
 
+        screening_summary: ScreeningFeedbackSummary | None = None
+        if (
+            step.protocol_result is not None
+            and _stage_value(step.protocol_result.stage) == "screening"
+        ):
+            screening_summary = screening_feedback_summary(
+                step.protocol_result,
+                decision_reason_codes=tuple(
+                    getattr(step, "decision_reason_codes", ()) or ()
+                ),
+            )
+
         if step.protocol_result is not None:
             wr = step.protocol_result.stats.win_rate
             fam.best_wr = max(fam.best_wr, wr)
-            if wr < 0.35 and not is_promoted:
+            if _counts_as_family_hard_failure(
+                step,
+                screening_summary=screening_summary,
+                is_promoted=is_promoted,
+            ):
                 fam.consecutive_fails += 1
+                fam.hard_fail_attempts += 1
                 runtime_reason = _runtime_failure_reason(step)
                 if runtime_reason:
                     fam.last_failure_reason = runtime_reason
@@ -219,6 +237,7 @@ class CampaignSearchMemory:
         elif step.failure_stage is not None:
             # Failed before reaching protocol — counts as a fail
             fam.consecutive_fails += 1
+            fam.hard_fail_attempts += 1
             fam.last_failure_reason = step.failure_detail or step.failure_stage or ""
             if step.failure_detail and step.failure_stage == "verification":
                 fam.recent_failure_details.append(step.failure_detail[:200])
@@ -232,26 +251,30 @@ class CampaignSearchMemory:
             self._record_branch_mechanism_memory(
                 step,
                 mechanism_id=_mechanism_id_from_step(step, fallback=mechanism),
+                summary=screening_summary,
             )
 
-        # Exhaustion: total_attempts >= 5 AND best_wr < 0.35 (uniform for all families)
-        fam.is_exhausted = (fam.total_attempts >= 5 and fam.best_wr < 0.35)
+        # Exhaustion is a global AVOID signal; use hard failures, not ordinary
+        # no-effect/marginal diagnostics that may still need same-branch repair.
+        fam.is_exhausted = fam.hard_fail_attempts >= 5 and fam.best_wr < 0.35
 
     def _record_branch_mechanism_memory(
         self,
         step: StepRecord,
         *,
         mechanism_id: str,
+        summary: ScreeningFeedbackSummary | None = None,
     ) -> None:
         protocol = step.protocol_result
         if protocol is None or _stage_value(protocol.stage) != "screening":
             return
-        summary = screening_feedback_summary(
-            protocol,
-            decision_reason_codes=tuple(
-                getattr(step, "decision_reason_codes", ()) or ()
-            ),
-        )
+        if summary is None:
+            summary = screening_feedback_summary(
+                protocol,
+                decision_reason_codes=tuple(
+                    getattr(step, "decision_reason_codes", ()) or ()
+                ),
+            )
         if summary.tier == "promotable":
             return
         entry = _branch_memory_entry_from_summary(
@@ -402,7 +425,7 @@ class CampaignSearchMemory:
                     line += "\n  Recent failures: " + "; ".join(f.recent_failure_details[-2:])
                 lines.append(line)
             sections.append(
-                "### 已耗尽方向（AVOID — 全局失败 ≥5 次，best_wr < 0.35）\n" +
+                "### 已耗尽方向（AVOID — 全局硬失败 ≥5 次，best_wr < 0.35）\n" +
                 "\n".join(lines)
             )
 
@@ -558,6 +581,31 @@ def _runtime_failure_reason(step: StepRecord) -> str:
     if not parts:
         return ""
     return "candidate_runtime=" + ",".join(parts[:4])
+
+
+def _counts_as_family_hard_failure(
+    step: StepRecord,
+    *,
+    screening_summary: ScreeningFeedbackSummary | None,
+    is_promoted: bool,
+) -> bool:
+    if is_promoted:
+        return False
+    protocol = step.protocol_result
+    if protocol is None:
+        return bool(step.failure_stage)
+    if _stage_value(protocol.stage) != "screening":
+        return False
+    if screening_summary is not None:
+        return screening_summary.tier in {
+            "invalid",
+            "quality_regression",
+            "runtime_regression",
+        }
+    stats = protocol.stats
+    losses = int(getattr(stats, "losses", 0) or 0)
+    wins = int(getattr(stats, "wins", 0) or 0)
+    return losses > 0 and wins == 0
 
 
 def _mechanism_id_from_step(step: StepRecord, *, fallback: str) -> str:

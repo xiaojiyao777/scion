@@ -33,6 +33,8 @@ def _make_step(
     locus: str = "vehicle_level",
     action: str = "create_new",
     win_rate: float = 0.0,
+    losses: int | None = None,
+    ties: int | None = None,
     failure_stage: str | None = None,
     failure_detail: str | None = None,
     decision: Decision | None = None,
@@ -43,10 +45,21 @@ def _make_step(
     hyp = _make_hypothesis(hyp_text, locus, action)
     protocol_result = None
     if failure_stage is None:
+        wins = int(win_rate * 5)
+        effective_losses = 5 - wins if losses is None else losses
+        effective_ties = 0 if ties is None else ties
         protocol_result = ProtocolResult(
             stage=stage,
-            stats=EvalStats(n_cases=5, wins=int(win_rate * 5), losses=5 - int(win_rate * 5),
-                           ties=0, win_rate=win_rate, median_delta=0.0, ci_low=0.0, ci_high=0.0),
+            stats=EvalStats(
+                n_cases=5,
+                wins=wins,
+                losses=effective_losses,
+                ties=effective_ties,
+                win_rate=win_rate,
+                median_delta=0.0,
+                ci_low=0.0,
+                ci_high=0.0,
+            ),
             gate_outcome="pass" if win_rate > 0.5 else "fail",
             reason_codes=(),
             exposed_summary="",
@@ -215,6 +228,27 @@ class TestSearchMemoryUpdate:
             sm.update(_make_step(hyp_text="subcategory swap", win_rate=0.10, round_num=i))
         key = _make_family_key("subcategory_consolidation", "create_new", "vehicle_level")
         assert sm.families[key].is_exhausted is True
+        assert sm.families[key].hard_fail_attempts == 6
+
+    def test_repeated_no_effect_ties_do_not_exhaust_family(self):
+        """Repeated tie/no-effect screening stays diagnostic, not global AVOID."""
+        sm = CampaignSearchMemory(family_taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
+        for i in range(6):
+            sm.update(
+                _make_step(
+                    hyp_text="subcategory swap",
+                    win_rate=0.0,
+                    losses=0,
+                    ties=5,
+                    round_num=i,
+                )
+            )
+        key = _make_family_key("subcategory_consolidation", "create_new", "vehicle_level")
+
+        assert sm.families[key].is_exhausted is False
+        assert sm.families[key].hard_fail_attempts == 0
+        assert sm.branch_mechanism_memory["b1"][-1].tier == "no_effect"
+        assert "AVOID" not in sm.render(view="hypothesis", branch_id="b1")
 
     def test_not_exhausted_if_good_wr(self):
         """5+ attempts but best_wr >= 0.35 → not exhausted."""
