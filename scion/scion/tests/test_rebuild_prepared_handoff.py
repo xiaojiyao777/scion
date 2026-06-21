@@ -409,6 +409,33 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
     assert provider_payload["forbidden_pattern_count"] >= 1
     assert provider_payload["decision_features_excluded"] is True
     assert provider_payload["raw_payload_excluded"] is True
+    code_summary = code_bridge["detail"]["code_prompt_summary"]
+    assert code_summary["schema_version"] == (
+        "scion.active_subject_code_constraints_prompt_summary.v1"
+    )
+    assert code_summary["available"] is True
+    assert code_summary["report_only"] is True
+    assert code_summary["decision_features_excluded"] is True
+    assert code_summary["raw_payload_excluded"] is True
+    assert code_summary["problem_family"] == "cvrp"
+    assert code_summary["surface"] == "solver_design"
+    assert code_summary["payload_version"] == "cvrp_solver_design_code_constraints.v1"
+    assert code_summary["subject_id"] == "cvrp.solver_design.active_baseline"
+    assert code_summary["prompt_section_present"] is True
+    assert code_summary["compact_prompt_value_present"] is True
+    assert code_summary["payload_version_present"] is True
+    assert code_summary["subject_id_present"] is True
+    assert code_summary["surface_present"] is True
+    assert code_summary["decision_features_exclusion_present"] is True
+    assert code_summary["constraint_count"] == 2
+    assert code_summary["constraint_id_rendered_count"] == 2
+    assert code_summary["constraint_ids_all_present"] is True
+    assert code_summary["api_contract_count"] == 2
+    assert code_summary["api_contract_ids_all_present"] is True
+    assert code_summary["forbidden_pattern_count"] >= 1
+    assert code_summary["forbidden_patterns_all_present"] is True
+    assert code_summary["large_twoopt_runtime_guard_present"] is True
+    assert code_summary["unbounded_twoopt_reject_present"] is True
     diagnostic_bridge = prompt_context["signals"][
         "cvrp_problem_measurement_diagnostics_prompt_bridge"
     ]
@@ -586,6 +613,36 @@ def test_rebuild_prepared_handoff_adds_warehouse_code_constraint_bridge(
     assert provider_payload["forbidden_pattern_count"] >= 1
     assert provider_payload["decision_features_excluded"] is True
     assert provider_payload["raw_payload_excluded"] is True
+    code_summary = code_bridge["detail"]["code_prompt_summary"]
+    assert code_summary["schema_version"] == (
+        "scion.active_subject_code_constraints_prompt_summary.v1"
+    )
+    assert code_summary["available"] is True
+    assert code_summary["report_only"] is True
+    assert code_summary["decision_features_excluded"] is True
+    assert code_summary["raw_payload_excluded"] is True
+    assert code_summary["problem_family"] == "warehouse_delivery"
+    assert code_summary["surface"] == "order_level"
+    assert (
+        code_summary["payload_version"]
+        == "warehouse_operator_validation_transfer_code_constraints.v1"
+    )
+    assert (
+        code_summary["subject_id"]
+        == "warehouse_delivery.operator.validation_transfer"
+    )
+    assert code_summary["prompt_section_present"] is True
+    assert code_summary["compact_prompt_value_present"] is True
+    assert code_summary["payload_version_present"] is True
+    assert code_summary["subject_id_present"] is True
+    assert code_summary["surface_present"] is True
+    assert code_summary["decision_features_exclusion_present"] is True
+    assert code_summary["constraint_count"] >= 3
+    assert code_summary["constraint_ids_all_present"] is True
+    assert code_summary["forbidden_pattern_count"] >= 1
+    assert code_summary["forbidden_patterns_all_present"] is True
+    assert code_summary["warehouse_validation_transfer_diagnostics_present"] is True
+    assert code_summary["warehouse_lexicographic_guard_present"] is True
 
 
 def test_rebuild_prepared_handoff_cli_uses_current_checkout_without_pythonpath(
@@ -637,6 +694,12 @@ def test_rebuild_prepared_handoff_cli_uses_current_checkout_without_pythonpath(
     )
     assert provider_payload["constraint_count"] >= 3
     assert provider_payload["forbidden_pattern_count"] >= 1
+    code_summary = prompt_context["signals"][
+        "warehouse_active_subject_code_constraints_prompt_bridge"
+    ]["detail"]["code_prompt_summary"]
+    assert code_summary["available"] is True
+    assert code_summary["warehouse_validation_transfer_diagnostics_present"] is True
+    assert code_summary["warehouse_lexicographic_guard_present"] is True
 
 
 def _write_rebuild_fixture_root(

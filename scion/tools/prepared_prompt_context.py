@@ -18,6 +18,9 @@ PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_SUMMARY_SCHEMA = (
 RESEARCH_SHAPE_PROMPT_SUMMARY_SCHEMA = (
     "scion.prepared_research_shape_prompt_summary.v1"
 )
+ACTIVE_SUBJECT_CODE_CONSTRAINTS_PROMPT_SUMMARY_SCHEMA = (
+    "scion.active_subject_code_constraints_prompt_summary.v1"
+)
 PROBLEM_MEASUREMENT_DIAGNOSTICS_FORBIDDEN_PROMPT_TOKENS = (
     "bks_gap_details",
     "hidden-bks",
@@ -28,6 +31,178 @@ PROBLEM_MEASUREMENT_DIAGNOSTICS_FORBIDDEN_PROMPT_TOKENS = (
     "prompt_ratios",
     "llm_text",
 )
+
+
+def active_subject_code_constraints_prompt_summary(
+    *,
+    problem_v1_path: Path | str | None,
+    problem_family: str,
+    surface: str,
+) -> dict[str, Any]:
+    """Summarize active subject code constraints that reach code prompts."""
+
+    family = str(problem_family or "").strip()
+    surface_name = str(surface or "").strip()
+    problem_path = Path(problem_v1_path).expanduser() if problem_v1_path else None
+    problem_path = (
+        problem_path.resolve()
+        if problem_path is not None and problem_path.exists()
+        else None
+    )
+    base = {
+        "schema_version": ACTIVE_SUBJECT_CODE_CONSTRAINTS_PROMPT_SUMMARY_SCHEMA,
+        "problem_family": family,
+        "surface": surface_name,
+        "problem_v1_path": str(problem_path) if problem_path else "",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_payload_excluded": True,
+    }
+    if family not in {"cvrp", "warehouse_delivery"}:
+        return {**base, "available": False, "reason": "unsupported_problem_family"}
+    if problem_path is None:
+        return {**base, "available": False, "reason": "problem_v1_not_found"}
+
+    try:
+        from scion.problem.bridge import load_problem_spec_v1_from_yaml
+        from scion.problem.loader import load_problem_adapter
+        from scion.problem.providers import active_subject_code_constraints_payload
+        from scion.proposal.engine.code_prompts import _split_code_context
+
+        spec = load_problem_spec_v1_from_yaml(problem_path)
+        adapter = load_problem_adapter(spec)
+        payload = active_subject_code_constraints_payload(
+            problem_spec=spec,
+            adapter=adapter,
+            surface=surface_name,
+        )
+        system_blocks, user_prompt = _split_code_context(
+            _minimal_code_constraints_context(
+                problem_family=family,
+                surface=surface_name,
+                payload=payload,
+            )
+        )
+        rendered_prompt = "\n".join(
+            str(block.get("text") or "")
+            for block in system_blocks
+            if isinstance(block, dict)
+        )
+        rendered_prompt = f"{rendered_prompt}\n{user_prompt}"
+    except Exception as exc:  # pragma: no cover - surfaced as readiness detail.
+        return {
+            **base,
+            "available": False,
+            "reason": "prompt_bridge_error",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+
+    constraints = payload.get("constraints")
+    object_model_hints = payload.get("object_model_hints")
+    api_contracts = payload.get("api_contracts")
+    forbidden_patterns = payload.get("forbidden_patterns")
+    constraint_ids = _rendered_constraint_item_counts(rendered_prompt, constraints)
+    object_model_hint_ids = _rendered_constraint_item_counts(
+        rendered_prompt,
+        object_model_hints,
+    )
+    api_contract_ids = _rendered_constraint_item_counts(rendered_prompt, api_contracts)
+    forbidden_pattern_ids = _rendered_constraint_item_counts(
+        rendered_prompt,
+        forbidden_patterns,
+    )
+    rendered_lower = rendered_prompt.lower()
+    version = str(payload.get("version") or "").strip()
+    subject_id = str(payload.get("subject_id") or "").strip()
+    summary = {
+        **base,
+        "payload_version": version,
+        "subject_id": subject_id,
+        "prompt_section_present": (
+            "## Active Subject Code Constraints" in rendered_prompt
+        ),
+        "compact_prompt_value_present": bool(version and version in rendered_prompt),
+        "payload_version_present": bool(version and version in rendered_prompt),
+        "subject_id_present": bool(subject_id and subject_id in rendered_prompt),
+        "surface_present": bool(surface_name and surface_name in rendered_prompt),
+        "decision_features_exclusion_present": (
+            "excluded from DecisionFeatures" in rendered_prompt
+            or "excluded_from_decision_features" in rendered_prompt
+        ),
+        "constraint_count": _sequence_count(constraints),
+        "constraint_id_rendered_count": constraint_ids["rendered_count"],
+        "constraint_ids_all_present": constraint_ids["all_present"],
+        "object_model_hint_count": _sequence_count(object_model_hints),
+        "object_model_hint_id_rendered_count": object_model_hint_ids[
+            "rendered_count"
+        ],
+        "object_model_hint_ids_all_present": object_model_hint_ids["all_present"],
+        "api_contract_count": _sequence_count(api_contracts),
+        "api_contract_id_rendered_count": api_contract_ids["rendered_count"],
+        "api_contract_ids_all_present": api_contract_ids["all_present"],
+        "forbidden_pattern_count": _sequence_count(forbidden_patterns),
+        "forbidden_pattern_rendered_count": forbidden_pattern_ids[
+            "rendered_count"
+        ],
+        "forbidden_patterns_all_present": forbidden_pattern_ids["all_present"],
+        "large_twoopt_runtime_guard_present": (
+            family == "cvrp"
+            and "large_instance_two_opt_runtime_guard" in rendered_prompt
+        ),
+        "unbounded_twoopt_reject_present": (
+            family == "cvrp"
+            and "UNBOUNDED_TWO_OPT_DEFAULT_REJECT" in rendered_prompt
+        ),
+        "warehouse_validation_transfer_diagnostics_present": (
+            family == "warehouse_delivery"
+            and "validation_transfer_diagnostics" in rendered_prompt
+        ),
+        "warehouse_lexicographic_guard_present": (
+            family == "warehouse_delivery"
+            and "lexicographic" in rendered_lower
+        ),
+    }
+    required_true_fields = [
+        "prompt_section_present",
+        "compact_prompt_value_present",
+        "payload_version_present",
+        "subject_id_present",
+        "surface_present",
+        "decision_features_exclusion_present",
+        "constraint_ids_all_present",
+    ]
+    if summary["object_model_hint_count"]:
+        required_true_fields.append("object_model_hint_ids_all_present")
+    if summary["api_contract_count"]:
+        required_true_fields.append("api_contract_ids_all_present")
+    if summary["forbidden_pattern_count"]:
+        required_true_fields.append("forbidden_patterns_all_present")
+    if family == "cvrp":
+        required_true_fields.extend(
+            [
+                "large_twoopt_runtime_guard_present",
+                "unbounded_twoopt_reject_present",
+            ]
+        )
+    elif family == "warehouse_delivery":
+        required_true_fields.extend(
+            [
+                "warehouse_validation_transfer_diagnostics_present",
+                "warehouse_lexicographic_guard_present",
+            ]
+        )
+    available = (
+        bool(payload)
+        and bool(version)
+        and all(summary[field] is True for field in required_true_fields)
+    )
+    return {
+        **summary,
+        "available": available,
+        "reason": "ok" if available else "missing_code_prompt_projection",
+    }
 
 
 def research_shape_prompt_summary(
@@ -950,6 +1125,78 @@ def _minimal_hypothesis_context(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _minimal_code_constraints_context(
+    *,
+    problem_family: str,
+    surface: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    family = str(problem_family or "")
+    surface_name = str(surface or "").strip()
+    solver_design = surface_name == "solver_design"
+    if family == "warehouse_delivery":
+        return {
+            "problem_summary": "Warehouse prepared code-constraints audit.",
+            "problem_object": "Warehouse delivery operator state.",
+            "solver_mechanics": "Apply one order-level operator move per call.",
+            "research_surface_name": surface_name,
+            "research_surface_kind": "operator",
+            "operator_interface_spec": "Modify operator modules with feasible moves.",
+            "import_whitelist": "typing, math",
+            "champion_operators_code": (
+                "class MoveOrder:\\n"
+                "    validation_transfer_diagnostics = {}\\n"
+            ),
+            "hypothesis_implementation_brief": {
+                "action": "modify",
+                "target_file": "operators/move_order.py",
+                "hypothesis_text": "Prepared code constraint audit.",
+            },
+            "target_file": "operators/move_order.py",
+            "target_file_code": "class MoveOrder:\\n    pass\\n",
+            "editable_patterns": "operators/*.py",
+            "frozen_patterns": "tests/**",
+            "reference_operators": "operators/move_order.py",
+            "active_subject_code_constraints": payload,
+        }
+    return {
+        "problem_summary": "CVRP prepared code-constraints audit.",
+        "problem_object": "CVRP solver design context.",
+        "solver_mechanics": "ALNS/VNS solver with bounded local search phases.",
+        "research_surface_name": surface_name,
+        "research_surface_kind": "solver_design" if solver_design else "operator",
+        "operator_interface_spec": (
+            "Modify the solver-design target while preserving feasibility."
+        ),
+        "solver_design_api_manifest": (
+            "context.make_solution(routes); context.record_phase(name, elapsed_ms); "
+            "context.record_iteration(phase, count); context.record_move(...)"
+        ),
+        "solver_design_branch_current_integration_files": (
+            "policies/baseline_algorithm.py"
+        ),
+        "import_whitelist": "math, time, random",
+        "champion_operators_code": "def solve(context):\\n    return context.nearest_neighbor()\\n",
+        "hypothesis_implementation_brief": {
+            "action": "modify",
+            "target_file": "policies/baseline_algorithm.py",
+            "hypothesis_text": "Prepared code constraint audit.",
+            "mechanism_changes": [
+                {
+                    "id": "large_instance_intra_route_two_opt_seed",
+                    "action": "modify",
+                }
+            ],
+        },
+        "target_file": "policies/baseline_algorithm.py",
+        "target_file_code": "def solve(context):\\n    return context.nearest_neighbor()\\n",
+        "editable_patterns": "policies/*.py",
+        "frozen_patterns": "tests/**",
+        "reference_operators": "policies/baseline_algorithm.py",
+        "active_subject_code_constraints": payload,
+    }
+
+
 def _minimal_research_shape_context(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "problem_summary": "Prepared research-shape prompt audit.",
@@ -1324,6 +1571,29 @@ def _rendered_sequence_item_counts(
         "item_count": len(items),
         "rendered_count": rendered_count,
         "all_present": rendered_count == len(items),
+    }
+
+
+def _rendered_constraint_item_counts(
+    rendered_prompt: str,
+    value: Any,
+) -> dict[str, Any]:
+    sequence = value if isinstance(value, (list, tuple)) else []
+    tokens: list[str] = []
+    for item in sequence:
+        if isinstance(item, dict):
+            token = str(item.get("id") or item.get("summary") or "").strip()
+            if token:
+                tokens.append(token)
+        else:
+            token = str(item or "").strip()
+            if token:
+                tokens.append(token)
+    rendered_count = sum(1 for token in tokens if token in rendered_prompt)
+    return {
+        "item_count": len(tokens),
+        "rendered_count": rendered_count,
+        "all_present": rendered_count == len(tokens),
     }
 
 

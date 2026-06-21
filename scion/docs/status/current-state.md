@@ -187,8 +187,12 @@ reports.
   runtime ties from creating meaningless fresh-replay pressure, lifecycle churn,
   or proposal feedback noise.
 - Code-phase prompts must retain direct champion/current-branch/target source
-  visibility and declared integration-file visibility; compression may remove
-  boilerplate, not the research object code.
+  visibility, declared integration-file visibility, and active
+  problem-owned code constraints. Prepared readiness must prove those
+  constraints render into the actual code prompt with provider item counts,
+  version/subject identity, problem-specific guard markers, and
+  `DecisionFeatures` exclusion evidence; compression may remove boilerplate,
+  not the research object code or active contract.
 - Hypothesis prompts must render cross-branch maps and branch-lesson context as
   mechanism-level distilled signals with lesson ids, signatures, maturity,
   evidence counts/statuses, and explicit `omitted_*`/digest audit markers

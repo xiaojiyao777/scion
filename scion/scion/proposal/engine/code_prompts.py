@@ -644,7 +644,8 @@ def _active_subject_code_constraints_section(value: Any) -> str:
         "## Active Subject Code Constraints\n"
         "These provider-owned facts are the active subject object/API contract "
         "for code generation. Treat them as hard constraints when editing the "
-        "approved target and integration files.\n\n"
+        "approved target and integration files. They are proposal/code-generation "
+        "context only and excluded from DecisionFeatures.\n\n"
         f"{_bounded_json(payload, 12000)}\n\n"
     )
 

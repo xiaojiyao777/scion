@@ -23,9 +23,11 @@ if str(TOOLS_DIR) not in sys.path:
 
 from postrun_artifact_inventory import build_inventory, command_has_shell_flag  # noqa: E402
 from prepared_prompt_context import (  # noqa: E402
+    ACTIVE_SUBJECT_CODE_CONSTRAINTS_PROMPT_SUMMARY_SCHEMA,
     PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_SUMMARY_SCHEMA,
     RESEARCH_FOCUS_PROMPT_SUMMARY_SCHEMA,
     RESEARCH_FOCUS_PROJECTION_SUMMARY_SCHEMA,
+    active_subject_code_constraints_prompt_summary,
     problem_measurement_diagnostics_prompt_summary,
     research_focus_prompt_summary,
     research_focus_projection_summary,
@@ -3873,6 +3875,15 @@ def _prompt_context_artifact_failures(
                     failure_prefix=failure_prefix,
                 )
             )
+            failures.extend(
+                _active_subject_code_constraints_prompt_summary_failures(
+                    code_detail_dict.get("code_prompt_summary"),
+                    root=root,
+                    manifest=manifest,
+                    problem_family=family,
+                    failure_prefix=failure_prefix,
+                )
+            )
 
     diagnostics_signal_name = PROBLEM_MEASUREMENT_DIAGNOSTICS_SIGNAL_NAMES.get(family)
     if diagnostics_signal_name:
@@ -4281,6 +4292,117 @@ def _active_subject_code_constraints_provider_payload_failures(
             )
     if _int_or_zero(payload.get("total_guidance_item_count")) <= 0:
         failures.append({"reason": f"{failure_prefix}_provider_payload_empty"})
+    return failures
+
+
+def _active_subject_code_constraints_prompt_summary_failures(
+    value: Any,
+    *,
+    root: Path,
+    manifest: dict[str, Any],
+    problem_family: str,
+    failure_prefix: str,
+) -> list[dict[str, Any]]:
+    payload = value if isinstance(value, dict) else {}
+    problem_v1 = _resolve_problem_v1_path(
+        root=root,
+        manifest=manifest,
+        problem_family=problem_family,
+    )
+    surface = ACTIVE_SUBJECT_CODE_CONSTRAINT_SURFACES.get(problem_family, "")
+    expected = active_subject_code_constraints_prompt_summary(
+        problem_v1_path=problem_v1,
+        problem_family=problem_family,
+        surface=surface,
+    )
+    failures: list[dict[str, Any]] = []
+    if not payload:
+        return [{"reason": f"{failure_prefix}_code_prompt_summary_missing"}]
+
+    boundary_expectations = {
+        "schema_version": ACTIVE_SUBJECT_CODE_CONSTRAINTS_PROMPT_SUMMARY_SCHEMA,
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_payload_excluded": True,
+        "available": True,
+        "reason": "ok",
+    }
+    for field, expected_value in boundary_expectations.items():
+        if payload.get(field) != expected_value:
+            failures.append(
+                {
+                    "reason": f"{failure_prefix}_code_prompt_summary_field_mismatch",
+                    "field": field,
+                    "expected": expected_value,
+                    "actual": payload.get(field),
+                }
+            )
+
+    if expected.get("available") is not True:
+        failures.append(
+            {
+                "reason": f"{failure_prefix}_live_code_prompt_summary_unavailable",
+                "expected": expected,
+            }
+        )
+        return failures
+
+    compare_fields = [
+        "problem_family",
+        "surface",
+        "problem_v1_path",
+        "payload_version",
+        "subject_id",
+        "prompt_section_present",
+        "compact_prompt_value_present",
+        "payload_version_present",
+        "subject_id_present",
+        "surface_present",
+        "decision_features_exclusion_present",
+        "constraint_count",
+        "constraint_id_rendered_count",
+        "constraint_ids_all_present",
+        "object_model_hint_count",
+        "object_model_hint_id_rendered_count",
+        "object_model_hint_ids_all_present",
+        "api_contract_count",
+        "api_contract_id_rendered_count",
+        "api_contract_ids_all_present",
+        "forbidden_pattern_count",
+        "forbidden_pattern_rendered_count",
+        "forbidden_patterns_all_present",
+    ]
+    if problem_family == "cvrp":
+        compare_fields.extend(
+            [
+                "large_twoopt_runtime_guard_present",
+                "unbounded_twoopt_reject_present",
+            ]
+        )
+    elif problem_family == "warehouse_delivery":
+        compare_fields.extend(
+            [
+                "warehouse_validation_transfer_diagnostics_present",
+                "warehouse_lexicographic_guard_present",
+            ]
+        )
+    for field in compare_fields:
+        if payload.get(field) != expected.get(field):
+            failures.append(
+                {
+                    "reason": f"{failure_prefix}_code_prompt_summary_field_mismatch",
+                    "field": field,
+                    "expected": expected.get(field),
+                    "actual": payload.get(field),
+                }
+            )
+    if _int_or_zero(payload.get("constraint_count")) <= 0:
+        failures.append({"reason": f"{failure_prefix}_code_prompt_summary_empty"})
+    if _int_or_zero(payload.get("constraint_id_rendered_count")) <= 0:
+        failures.append(
+            {"reason": f"{failure_prefix}_code_prompt_summary_not_rendered"}
+        )
     return failures
 
 

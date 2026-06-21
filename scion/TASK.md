@@ -313,10 +313,14 @@ Current checkpoint:
     registry result-cap rejection, shallow-preview symbol misses, code-prompt
     projection shrinkage, symbol-read receipt-only visibility, or unstable
     retry-block placement. Non-solver/operator code prompts also retain
-    cacheable active algorithm facts in the stable system block; current-run
-    postrun readiness audits prompt/source visibility, branch state, champion
-    progress, failure taxonomy, research-context actionability, signal density,
-    runtime drain readiness, and interpretation-specific review inputs.
+    cacheable active algorithm facts and problem-owned active code constraints
+    in the stable system block; prepared readiness verifies the active
+    constraint provider payload and actual code prompt rendering by item count,
+    version/subject identity, problem-specific guard markers, and
+    `DecisionFeatures` exclusion. Current-run postrun readiness audits
+    prompt/source visibility, branch state, champion progress, failure
+    taxonomy, research-context actionability, signal density, runtime drain
+    readiness, and interpretation-specific review inputs.
     Hypothesis prompts render cross-branch maps and branch-lesson context as
     mechanism-level distilled signals with lesson ids, signatures, maturity,
     evidence counts/statuses, and explicit `omitted_*`/digest audit markers
@@ -414,7 +418,9 @@ Current checkpoint:
     campaign-status research-shape diagnostics render into default-visible
     compact research signals with branch-depth, mechanism-family, and
     `DecisionFeatures` exclusion evidence, rather than accepting only source
-    marker presence.
+    marker presence. Active subject code-constraint readiness likewise must
+    prove the provider payload reaches the actual code prompt, not only that
+    source markers and provider hooks exist.
   - CVRP prepared-run contract checks the same protected cases against the
     configured split manifest's formal screening set; the current root reports
     CMT2 and CMT4 in `screening`, preventing prompt-only CMT2/CMT4 protection

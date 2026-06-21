@@ -33,6 +33,7 @@ from postrun_artifact_inventory import (  # noqa: E402
     render_markdown as render_inventory_markdown,
 )
 from prepared_prompt_context import (  # noqa: E402
+    active_subject_code_constraints_prompt_summary,
     problem_measurement_diagnostics_prompt_summary,
     research_shape_prompt_summary,
     research_focus_prompt_summary,
@@ -1054,10 +1055,21 @@ def _add_active_subject_code_constraints_prompt_signal(
     provider_markers = ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS_BY_FAMILY.get(family)
     if not provider_markers:
         return
+    surface = ACTIVE_SUBJECT_CODE_CONSTRAINT_SURFACES.get(family, "")
+    problem_v1 = _resolve_problem_v1_path(
+        root=root,
+        manifest=manifest,
+        problem_family=family,
+    )
     provider_payload = _active_subject_code_constraints_provider_payload_summary(
         root=root,
         manifest=manifest,
         problem_family=family,
+    )
+    code_prompt_summary = active_subject_code_constraints_prompt_summary(
+        problem_v1_path=problem_v1,
+        problem_family=family,
+        surface=surface,
     )
     source_marker_results = {
         name: _source_contains(relative_path, marker)
@@ -1076,6 +1088,7 @@ def _add_active_subject_code_constraints_prompt_signal(
             all(source_marker_results.values())
             and all(provider_marker_results.values())
             and provider_payload.get("available") is True
+            and code_prompt_summary.get("available") is True
         ),
         required=True,
         source=(
@@ -1086,6 +1099,7 @@ def _add_active_subject_code_constraints_prompt_signal(
             "source_markers": source_marker_results,
             "provider_markers": provider_marker_results,
             "provider_payload": provider_payload,
+            "code_prompt_summary": code_prompt_summary,
             "boundary": (
                 "report-only source bridge; provider constraints guide code "
                 "generation and stay out of DecisionFeatures"
