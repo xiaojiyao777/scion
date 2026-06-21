@@ -1855,6 +1855,7 @@ def _cvrp_research_focus() -> dict[str, object]:
         ],
         "large_instance_two_opt_constraints": _large_twoopt_constraints(),
         "case_protection_requirements": _cmt_case_protection_requirements(),
+        "resume_continuity_requirements": _resume_continuity_requirements(),
         "route_merge_exception_rule": (
             "Only continue route_merge_repair when the proposal names a causal "
             "path beyond tested variants and defines direct activation-to-objective-effect evidence."
@@ -1925,6 +1926,39 @@ def _large_twoopt_constraints() -> dict[str, object]:
         "default_reject_directions": [
             "unbounded two_opt_intra fallback",
             "activation claims without wall-clock evidence",
+        ],
+    }
+
+
+def _resume_continuity_requirements() -> dict[str, object]:
+    return {
+        "schema_version": "scion.cvrp_resume_continuity_requirements.v1",
+        "scope": "proposal_only_prepared_handoff",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "fallback_sources": [
+            "prepared_research_focus",
+            "copied_agentic_session_trace_index",
+            "copied_target_intent_or_hypothesis_traces",
+        ],
+        "rules": [
+            (
+                "A sparse resume with zero branch cards must use copied "
+                "target-intent or hypothesis traces before treating the run "
+                "as empty."
+            ),
+            (
+                "First CVRP branch must continue bounded large-instance "
+                "two-opt with CMT2/CMT4 protection or name a different "
+                "problem-owned causal path."
+            ),
+        ],
+        "required_evidence": [
+            (
+                "live hypothesis references copied target-intent or "
+                "hypothesis evidence when branch cards are absent"
+            ),
+            "branch-continuity caveat is recorded if copied branch cards remain absent",
         ],
     }
 

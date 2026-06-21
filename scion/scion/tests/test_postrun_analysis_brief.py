@@ -3753,6 +3753,9 @@ def _write_cvrp_large_twoopt_manifest(
     research_focus["case_protection_requirements"] = (
         _cmt_case_protection_requirements()
     )
+    research_focus["resume_continuity_requirements"] = (
+        _resume_continuity_requirements()
+    )
     command = (
         "python -m scion.cli.main run "
         f"--campaign-dir {campaign_dir} "
@@ -3874,6 +3877,39 @@ def _cmt_case_protection_requirements() -> dict[str, object]:
             "live target-intent or hypothesis trace mentions CMT2/CMT4 protection",
             "formal screening includes CMT2 and CMT4 or records a case-selection caveat",
             "case-level total_distance deltas for CMT2 and CMT4",
+        ],
+    }
+
+
+def _resume_continuity_requirements() -> dict[str, object]:
+    return {
+        "schema_version": "scion.cvrp_resume_continuity_requirements.v1",
+        "scope": "proposal_only_prepared_handoff",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "fallback_sources": [
+            "prepared_research_focus",
+            "copied_agentic_session_trace_index",
+            "copied_target_intent_or_hypothesis_traces",
+        ],
+        "rules": [
+            (
+                "A sparse resume with zero branch cards must use copied "
+                "target-intent or hypothesis traces before treating the run "
+                "as empty."
+            ),
+            (
+                "First CVRP branch must continue bounded large-instance "
+                "two-opt with CMT2/CMT4 protection or name a different "
+                "problem-owned causal path."
+            ),
+        ],
+        "required_evidence": [
+            (
+                "live hypothesis references copied target-intent or "
+                "hypothesis evidence when branch cards are absent"
+            ),
+            "branch-continuity caveat is recorded if copied branch cards remain absent",
         ],
     }
 

@@ -541,6 +541,21 @@ def research_focus_prompt_summary(
         rendered_prompt,
         case_protection.get("required_evidence"),
     )
+    resume_continuity = _mapping_or_empty(
+        research_focus.get("resume_continuity_requirements")
+    )
+    resume_continuity_fallback_counts = _rendered_sequence_item_counts(
+        rendered_prompt,
+        resume_continuity.get("fallback_sources"),
+    )
+    resume_continuity_rule_counts = _rendered_sequence_item_counts(
+        rendered_prompt,
+        resume_continuity.get("rules"),
+    )
+    resume_continuity_evidence_counts = _rendered_sequence_item_counts(
+        rendered_prompt,
+        resume_continuity.get("required_evidence"),
+    )
     measurement = _mapping_or_empty(
         research_focus.get("measurement_opportunity_diagnostics")
     )
@@ -586,6 +601,21 @@ def research_focus_prompt_summary(
     )
     cvrp_case_protection_evidence_counts = (
         case_protection_evidence_counts
+        if problem_family == "cvrp"
+        else empty_sequence_counts
+    )
+    cvrp_resume_continuity_fallback_counts = (
+        resume_continuity_fallback_counts
+        if problem_family == "cvrp"
+        else empty_sequence_counts
+    )
+    cvrp_resume_continuity_rule_counts = (
+        resume_continuity_rule_counts
+        if problem_family == "cvrp"
+        else empty_sequence_counts
+    )
+    cvrp_resume_continuity_evidence_counts = (
+        resume_continuity_evidence_counts
         if problem_family == "cvrp"
         else empty_sequence_counts
     )
@@ -785,6 +815,40 @@ def research_focus_prompt_summary(
         "cvrp_case_protection_required_evidence_all_present": (
             cvrp_case_protection_evidence_counts["all_present"]
         ),
+        "cvrp_resume_continuity_present": (
+            problem_family == "cvrp"
+            and "resume_continuity_requirements" in rendered_prompt
+            and "zero branch cards" in rendered_lower
+            and "target-intent" in rendered_lower
+            and "copied" in rendered_lower
+        ),
+        "cvrp_resume_continuity_fallback_source_item_count": (
+            cvrp_resume_continuity_fallback_counts["item_count"]
+        ),
+        "cvrp_resume_continuity_fallback_source_rendered_count": (
+            cvrp_resume_continuity_fallback_counts["rendered_count"]
+        ),
+        "cvrp_resume_continuity_fallback_source_all_present": (
+            cvrp_resume_continuity_fallback_counts["all_present"]
+        ),
+        "cvrp_resume_continuity_rule_item_count": (
+            cvrp_resume_continuity_rule_counts["item_count"]
+        ),
+        "cvrp_resume_continuity_rule_rendered_count": (
+            cvrp_resume_continuity_rule_counts["rendered_count"]
+        ),
+        "cvrp_resume_continuity_rule_all_present": (
+            cvrp_resume_continuity_rule_counts["all_present"]
+        ),
+        "cvrp_resume_continuity_required_evidence_item_count": (
+            cvrp_resume_continuity_evidence_counts["item_count"]
+        ),
+        "cvrp_resume_continuity_required_evidence_rendered_count": (
+            cvrp_resume_continuity_evidence_counts["rendered_count"]
+        ),
+        "cvrp_resume_continuity_required_evidence_all_present": (
+            cvrp_resume_continuity_evidence_counts["all_present"]
+        ),
     }
     required_true_fields = [
         "launch_focus_schema_present",
@@ -870,6 +934,20 @@ def research_focus_prompt_summary(
             not in ({}, [], "", None)
         ):
             required_true_fields.append("cvrp_direct_effect_rules_present")
+        if research_focus.get("resume_continuity_requirements") not in (
+            {},
+            [],
+            "",
+            None,
+        ):
+            required_true_fields.append("cvrp_resume_continuity_present")
+            required_true_fields.append(
+                "cvrp_resume_continuity_fallback_source_all_present"
+            )
+            required_true_fields.append("cvrp_resume_continuity_rule_all_present")
+            required_true_fields.append(
+                "cvrp_resume_continuity_required_evidence_all_present"
+            )
         if (
             research_focus.get("measurement_opportunity_diagnostics")
             not in ({}, [], "", None)
@@ -1372,6 +1450,7 @@ def _required_research_focus_projection_keys(
             for key in (
                 "large_instance_two_opt_constraints",
                 "case_protection_requirements",
+                "resume_continuity_requirements",
                 "route_merge_exception_rule",
                 "construction_seed_rule",
             )
@@ -1472,6 +1551,21 @@ def _required_research_focus_projection_paths(
                     "proposal_visibility_only",
                     "decision_features_excluded",
                     "protected_cases",
+                    "rules",
+                    "required_evidence",
+                ),
+            )
+        )
+        paths.extend(
+            _supported_nested_paths(
+                "resume_continuity_requirements",
+                research_focus,
+                (
+                    "schema_version",
+                    "scope",
+                    "proposal_visibility_only",
+                    "decision_features_excluded",
+                    "fallback_sources",
                     "rules",
                     "required_evidence",
                 ),

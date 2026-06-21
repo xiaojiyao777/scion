@@ -5249,6 +5249,27 @@ def _prepared_research_focus_fixture(problem_family: str) -> dict[str, object]:
                     "total_distance cmt2 cmt4"
                 ],
             },
+            "resume_continuity_requirements": {
+                "proposal_visibility_only": True,
+                "decision_features_excluded": True,
+                "fallback_sources": [
+                    "prepared_research_focus",
+                    "copied_agentic_session_trace_index",
+                    "copied_target_intent_or_hypothesis_traces",
+                ],
+                "rules": [
+                    (
+                        "zero branch cards copied target-intent hypothesis "
+                        "bounded two-opt cmt2 cmt4 problem-owned"
+                    )
+                ],
+                "required_evidence": [
+                    (
+                        "copied target-intent hypothesis branch-continuity "
+                        "caveat when branch cards are absent"
+                    )
+                ],
+            },
             "large_instance_two_opt_constraints": {
                 "proposal_visibility_only": True,
                 "decision_features_excluded": True,

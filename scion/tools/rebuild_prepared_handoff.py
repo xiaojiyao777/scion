@@ -778,6 +778,34 @@ def _add_focus_signals(
                 "required_evidence_count": len(case_evidence),
             },
         )
+        resume_continuity = _mapping_or_empty(
+            research_focus.get("resume_continuity_requirements")
+        )
+        fallback_sources = _string_items(resume_continuity.get("fallback_sources"))
+        continuity_rules = _string_items(resume_continuity.get("rules"))
+        continuity_evidence = _string_items(
+            resume_continuity.get("required_evidence")
+        )
+        _add_signal(
+            signals,
+            "cvrp_resume_continuity_requirements",
+            available=(
+                bool(resume_continuity)
+                and bool(fallback_sources)
+                and bool(continuity_rules)
+                and bool(continuity_evidence)
+                and resume_continuity.get("proposal_visibility_only") is True
+                and resume_continuity.get("decision_features_excluded") is True
+            ),
+            required=True,
+            source="prepared_run_manifest.research_focus.resume_continuity_requirements",
+            detail={
+                "schema_version": resume_continuity.get("schema_version"),
+                "fallback_source_count": len(fallback_sources),
+                "rule_count": len(continuity_rules),
+                "required_evidence_count": len(continuity_evidence),
+            },
+        )
     elif family == "warehouse_delivery":
         measurement = _mapping_or_empty(
             research_focus.get("measurement_opportunity_diagnostics")

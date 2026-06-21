@@ -4041,6 +4041,16 @@ def _research_focus_prompt_summary_failures(
         "cvrp_case_protection_required_evidence_item_count",
         "cvrp_case_protection_required_evidence_rendered_count",
         "cvrp_case_protection_required_evidence_all_present",
+        "cvrp_resume_continuity_present",
+        "cvrp_resume_continuity_fallback_source_item_count",
+        "cvrp_resume_continuity_fallback_source_rendered_count",
+        "cvrp_resume_continuity_fallback_source_all_present",
+        "cvrp_resume_continuity_rule_item_count",
+        "cvrp_resume_continuity_rule_rendered_count",
+        "cvrp_resume_continuity_rule_all_present",
+        "cvrp_resume_continuity_required_evidence_item_count",
+        "cvrp_resume_continuity_required_evidence_rendered_count",
+        "cvrp_resume_continuity_required_evidence_all_present",
     )
     for field in compare_fields:
         if payload.get(field) != expected.get(field):

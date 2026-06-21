@@ -333,10 +333,24 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
         "case_protection_requirements.required_evidence"
         in projection_detail["required_projected_paths"]
     )
+    assert (
+        "resume_continuity_requirements"
+        in projection_detail["required_projected_keys"]
+    )
+    assert (
+        "resume_continuity_requirements.rules"
+        in projection_detail["required_projected_paths"]
+    )
     case_protection = prompt_context["signals"]["cvrp_case_protection_requirements"]
     assert case_protection["available"] is True
     assert case_protection["required"] is True
     assert case_protection["detail"]["protected_cases"] == ["CMT2", "CMT4"]
+    resume_continuity = prompt_context["signals"][
+        "cvrp_resume_continuity_requirements"
+    ]
+    assert resume_continuity["available"] is True
+    assert resume_continuity["required"] is True
+    assert resume_continuity["detail"]["fallback_source_count"] == 3
     assert not stale_prompt.exists()
     assert not stale_readiness_md.exists()
     assert (
@@ -379,6 +393,16 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
     assert prompt_summary["cvrp_measurement_measurable_opportunities_present"] is True
     assert prompt_summary["cvrp_measurement_mechanism_ranking_present"] is True
     assert prompt_summary["cvrp_measurement_opportunity_diagnostics_present"] is True
+    assert prompt_summary["cvrp_resume_continuity_present"] is True
+    assert (
+        prompt_summary["cvrp_resume_continuity_fallback_source_all_present"]
+        is True
+    )
+    assert prompt_summary["cvrp_resume_continuity_rule_all_present"] is True
+    assert (
+        prompt_summary["cvrp_resume_continuity_required_evidence_all_present"]
+        is True
+    )
     assert prompt_summary["cvrp_measurement_mechanism_rank_count"] == 1
     assert prompt_summary["cvrp_measurement_opportunity_diagnostic_count"] == 1
     assert prompt_summary["missing_rendered_paths"] == []
@@ -964,6 +988,7 @@ def _cvrp_research_focus() -> dict[str, object]:
         ],
         "large_instance_two_opt_constraints": _large_twoopt_constraints(),
         "case_protection_requirements": _cmt_case_protection_requirements(),
+        "resume_continuity_requirements": _resume_continuity_requirements(),
         "route_merge_exception_rule": (
             "Only continue route_merge_repair when the proposal names a causal "
             "path beyond tested variants and defines direct activation-to-objective-effect evidence."
@@ -1155,6 +1180,39 @@ def _cmt_case_protection_requirements() -> dict[str, object]:
         "required_evidence": [
             "live target-intent or hypothesis trace mentions CMT2/CMT4 protection",
             "case-level total_distance deltas for CMT2 and CMT4",
+        ],
+    }
+
+
+def _resume_continuity_requirements() -> dict[str, object]:
+    return {
+        "schema_version": "scion.cvrp_resume_continuity_requirements.v1",
+        "scope": "proposal_only_prepared_handoff",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "fallback_sources": [
+            "prepared_research_focus",
+            "copied_agentic_session_trace_index",
+            "copied_target_intent_or_hypothesis_traces",
+        ],
+        "rules": [
+            (
+                "A sparse resume with zero branch cards must use copied "
+                "target-intent or hypothesis traces before treating the run "
+                "as empty."
+            ),
+            (
+                "First CVRP branch must continue bounded large-instance "
+                "two-opt with CMT2/CMT4 protection or name a different "
+                "problem-owned causal path."
+            ),
+        ],
+        "required_evidence": [
+            (
+                "live hypothesis references copied target-intent or "
+                "hypothesis evidence when branch cards are absent"
+            ),
+            "branch-continuity caveat is recorded if copied branch cards remain absent",
         ],
     }
 

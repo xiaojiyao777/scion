@@ -179,6 +179,47 @@ CVRP_CASE_PROTECTION_REQUIREMENTS = {
         "case-level total_distance deltas for CMT2 and CMT4",
     ],
 }
+CVRP_RESUME_CONTINUITY_REQUIREMENTS = {
+    "schema_version": "scion.cvrp_resume_continuity_requirements.v1",
+    "scope": "proposal_only_prepared_handoff",
+    "proposal_visibility_only": True,
+    "decision_features_excluded": True,
+    "fallback_sources": [
+        "prepared_research_focus",
+        "copied_agentic_session_trace_index",
+        "copied_target_intent_or_hypothesis_traces",
+    ],
+    "rules": [
+        (
+            "A sparse resume with zero branch cards must not be treated as an "
+            "empty campaign; use prepared research_focus plus copied "
+            "target-intent or hypothesis traces as the continuity seed."
+        ),
+        (
+            "Before the first new CVRP branch, identify whether the proposal "
+            "continues bounded large-instance two-opt with CMT2/CMT4 "
+            "protection or names a materially different problem-owned causal "
+            "path."
+        ),
+        (
+            "Do not spend a branch slot on default-avoid mechanism families "
+            "unless the hypothesis explains why prior evidence no longer "
+            "applies."
+        ),
+    ],
+    "required_evidence": [
+        (
+            "live target-intent or hypothesis trace references copied "
+            "target-intent, hypothesis, or agentic session trace evidence "
+            "when branch cards are absent"
+        ),
+        (
+            "first live hypothesis names bounded large-instance "
+            "two-opt/CMT2/CMT4 continuity or a different causal mechanism"
+        ),
+        "branch-continuity caveat is recorded if copied branch cards remain absent",
+    ],
+}
 CVRP_CURRENT_RESEARCH_FOCUS = {
     "schema_version": "scion.cvrp_research_focus.v1",
     "scope": "report_only_prepared_handoff",
@@ -228,6 +269,7 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
         "same-mechanism accepted delta for objective-effect claims."
     ),
     "case_protection_requirements": CVRP_CASE_PROTECTION_REQUIREMENTS,
+    "resume_continuity_requirements": CVRP_RESUME_CONTINUITY_REQUIREMENTS,
     "decision_boundary": (
         "This focus is proposal/delegated-analysis guidance only and must not "
         "enter DecisionFeatures, Protocol gates, promotion input, or scheduler "
@@ -1210,6 +1252,23 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
             lines.append(f"    - {item}")
         lines.append("  - required_evidence:")
         for item in case_protection.get("required_evidence") or []:
+            lines.append(f"    - {item}")
+    resume_continuity = research_focus.get("resume_continuity_requirements")
+    if isinstance(resume_continuity, dict) and resume_continuity:
+        lines.extend(
+            [
+                "- Resume-continuity requirements:",
+                f"  - schema_version: {resume_continuity.get('schema_version')}",
+                "  - fallback_sources:",
+            ]
+        )
+        for item in resume_continuity.get("fallback_sources") or []:
+            lines.append(f"    - {item}")
+        lines.append("  - rules:")
+        for item in resume_continuity.get("rules") or []:
+            lines.append(f"    - {item}")
+        lines.append("  - required_evidence:")
+        for item in resume_continuity.get("required_evidence") or []:
             lines.append(f"    - {item}")
     lines.extend(["", "## Config"])
     for key in ("problem", "protocol", "split", "seeds", "data_root"):

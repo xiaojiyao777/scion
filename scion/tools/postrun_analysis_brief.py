@@ -92,6 +92,7 @@ CVRP_LARGE_TWOOPT_REQUIREMENT_KEYS = (
     "cvrp_large_twoopt_unbounded_default_avoid_handoff",
     "cvrp_large_twoopt_bounded_constraints_handoff",
     "cvrp_cmt_case_protection_handoff",
+    "cvrp_resume_continuity_handoff",
     "cvrp_measurement_mde_handoff",
     "cvrp_low_snr_reason_handoff",
     "cvrp_decision_boundary_handoff",
@@ -444,6 +445,21 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 lines.append("    - rules:")
                 lines.extend(f"      - {_display(item)}" for item in rules)
             evidence = case_protection.get("required_evidence")
+            if isinstance(evidence, list) and evidence:
+                lines.append("    - required_evidence:")
+                lines.extend(f"      - {_display(item)}" for item in evidence)
+        resume_continuity = research_focus.get("resume_continuity_requirements")
+        if isinstance(resume_continuity, dict) and resume_continuity:
+            lines.append("  - Resume-continuity requirements:")
+            fallback_sources = resume_continuity.get("fallback_sources")
+            if isinstance(fallback_sources, list) and fallback_sources:
+                lines.append("    - fallback_sources:")
+                lines.extend(f"      - {_display(item)}" for item in fallback_sources)
+            rules = resume_continuity.get("rules")
+            if isinstance(rules, list) and rules:
+                lines.append("    - rules:")
+                lines.extend(f"      - {_display(item)}" for item in rules)
+            evidence = resume_continuity.get("required_evidence")
             if isinstance(evidence, list) and evidence:
                 lines.append("    - required_evidence:")
                 lines.extend(f"      - {_display(item)}" for item in evidence)

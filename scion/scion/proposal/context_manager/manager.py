@@ -384,6 +384,31 @@ def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
             }.items()
             if child not in ("", [], {}, None)
         }
+    resume_continuity = value.get("resume_continuity_requirements")
+    if isinstance(resume_continuity, Mapping):
+        projected["resume_continuity_requirements"] = {
+            key: child
+            for key, child in {
+                "schema_version": _string_or_empty(
+                    resume_continuity.get("schema_version")
+                ),
+                "scope": _string_or_empty(resume_continuity.get("scope")),
+                "proposal_visibility_only": resume_continuity.get(
+                    "proposal_visibility_only"
+                ),
+                "decision_features_excluded": resume_continuity.get(
+                    "decision_features_excluded"
+                ),
+                "fallback_sources": _string_items(
+                    resume_continuity.get("fallback_sources")
+                ),
+                "rules": _string_items(resume_continuity.get("rules")),
+                "required_evidence": _string_items(
+                    resume_continuity.get("required_evidence")
+                ),
+            }.items()
+            if child not in ("", [], {}, None)
+        }
     return projected
 
 

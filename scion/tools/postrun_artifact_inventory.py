@@ -138,6 +138,12 @@ CVRP_REQUIRED_DEFAULT_AVOID_TOKENS = (
     "cluster-biased",
     "route-limit",
 )
+CVRP_REQUIRED_RESUME_CONTINUITY_TOKENS = (
+    "zero branch cards",
+    "target-intent",
+    "hypothesis",
+    "copied",
+)
 CVRP_REQUIRED_LARGE_TWOOPT_IMPLEMENTATION_TOKENS = (
     "deadline",
     "wall-clock",
@@ -536,6 +542,21 @@ def render_markdown(inventory: dict[str, Any]) -> str:
                 lines.append("  - rules:")
                 lines.extend(f"    - {_display(item)}" for item in rules)
             evidence = case_protection.get("required_evidence")
+            if isinstance(evidence, list) and evidence:
+                lines.append("  - required_evidence:")
+                lines.extend(f"    - {_display(item)}" for item in evidence)
+        resume_continuity = research_focus.get("resume_continuity_requirements")
+        if isinstance(resume_continuity, dict) and resume_continuity:
+            lines.append("- Resume-continuity requirements:")
+            fallback_sources = resume_continuity.get("fallback_sources")
+            if isinstance(fallback_sources, list) and fallback_sources:
+                lines.append("  - fallback_sources:")
+                lines.extend(f"    - {_display(item)}" for item in fallback_sources)
+            rules = resume_continuity.get("rules")
+            if isinstance(rules, list) and rules:
+                lines.append("  - rules:")
+                lines.extend(f"    - {_display(item)}" for item in rules)
+            evidence = resume_continuity.get("required_evidence")
             if isinstance(evidence, list) and evidence:
                 lines.append("  - required_evidence:")
                 lines.extend(f"    - {_display(item)}" for item in evidence)
@@ -1520,6 +1541,15 @@ def _add_cvrp_measurement_handoff_checks(
         case_protection_status["complete"],
         case_protection_status,
     )
+    resume_continuity = _mapping_or_empty(
+        focus.get("resume_continuity_requirements")
+    )
+    resume_continuity_status = _cvrp_resume_continuity_status(resume_continuity)
+    add_check(
+        "cvrp_resume_continuity_present",
+        resume_continuity_status["complete"],
+        resume_continuity_status,
+    )
     split_status = _cvrp_protected_cases_split_status(
         _mapping_or_empty(manifest.get("config")),
         case_protection,
@@ -2208,6 +2238,9 @@ def _cvrp_problem_specific_phase4_requirements(
     case_protection_status = _cvrp_case_protection_status(
         _mapping_or_empty(focus.get("case_protection_requirements"))
     )
+    resume_continuity_status = _cvrp_resume_continuity_status(
+        _mapping_or_empty(focus.get("resume_continuity_requirements"))
+    )
     large_twoopt_status = _cvrp_large_twoopt_constraint_status(
         _mapping_or_empty(focus.get("large_instance_two_opt_constraints"))
     )
@@ -2269,6 +2302,10 @@ def _cvrp_problem_specific_phase4_requirements(
             int(case_protection_status["complete"]),
             "prepared_run_manifest cvrp research_focus case_protection_requirements",
         ),
+        "cvrp_resume_continuity_handoff": _coverage_item(
+            int(resume_continuity_status["complete"]),
+            "prepared_run_manifest cvrp research_focus resume_continuity_requirements",
+        ),
         "cvrp_decision_boundary_handoff": _coverage_item(
             int(
                 "decisionfeatures" in boundary
@@ -2326,6 +2363,41 @@ def _cvrp_case_protection_status(
         "missing_cases": missing_cases,
         "missing_rule_tokens": missing_rule_tokens,
         "missing_evidence_tokens": missing_evidence_tokens,
+    }
+
+
+def _cvrp_resume_continuity_status(
+    requirements: Mapping[str, Any],
+) -> dict[str, Any]:
+    fallback_sources = _string_items(requirements.get("fallback_sources"))
+    rule_items = _string_items(requirements.get("rules"))
+    evidence_items = _string_items(requirements.get("required_evidence"))
+    joined_text = "\n".join([*fallback_sources, *rule_items, *evidence_items]).lower()
+    missing_tokens = [
+        token
+        for token in CVRP_REQUIRED_RESUME_CONTINUITY_TOKENS
+        if token.lower() not in joined_text
+    ]
+    complete = (
+        bool(requirements)
+        and requirements.get("proposal_visibility_only") is True
+        and requirements.get("decision_features_excluded") is True
+        and bool(fallback_sources)
+        and bool(rule_items)
+        and bool(evidence_items)
+        and not missing_tokens
+    )
+    return {
+        "complete": complete,
+        "schema_version": requirements.get("schema_version"),
+        "proposal_visibility_only": requirements.get("proposal_visibility_only"),
+        "decision_features_excluded": requirements.get(
+            "decision_features_excluded"
+        ),
+        "fallback_source_count": len(fallback_sources),
+        "rule_count": len(rule_items),
+        "required_evidence_count": len(evidence_items),
+        "missing_tokens": missing_tokens,
     }
 
 
