@@ -4547,11 +4547,14 @@ def _protected_cases_from_case_payload(value: Any) -> set[str]:
     if isinstance(value, Mapping):
         for key, item in value.items():
             case = _protected_case_name(key)
-            if case and _case_payload_has_effect_evidence(item):
+            if case and _case_payload_has_objective_delta_evidence(item):
                 observed.add(case)
             if isinstance(item, Mapping):
                 embedded_case = _protected_case_from_mapping(item)
-                if embedded_case and _case_payload_has_effect_evidence(item):
+                if (
+                    embedded_case
+                    and _case_payload_has_objective_delta_evidence(item)
+                ):
                     observed.add(embedded_case)
                 observed.update(_protected_cases_from_case_payload(item))
             elif isinstance(item, list):
@@ -4560,7 +4563,7 @@ def _protected_cases_from_case_payload(value: Any) -> set[str]:
         for item in value:
             if isinstance(item, Mapping):
                 case = _protected_case_from_mapping(item)
-                if case and _case_payload_has_effect_evidence(item):
+                if case and _case_payload_has_objective_delta_evidence(item):
                     observed.add(case)
                 observed.update(_protected_cases_from_case_payload(item))
             elif isinstance(item, list):
@@ -4593,39 +4596,53 @@ def _protected_case_name(value: Any) -> str | None:
     return None
 
 
-def _case_payload_has_effect_evidence(value: Any) -> bool:
+def _case_payload_has_objective_delta_evidence(value: Any) -> bool:
     if isinstance(value, bool):
-        return value
+        return False
     if isinstance(value, (int, float)):
         return True
     if isinstance(value, str):
-        return bool(value.strip()) and _protected_case_name(value) is None
+        return _float_or_none(value) is not None
     if isinstance(value, Mapping):
         for key, item in value.items():
             key_text = str(key).lower()
             if any(
                 marker in key_text
                 for marker in (
+                    "candidate_minus_champion",
+                    "champion_minus_candidate",
+                    "candidate_minus_baseline",
+                    "baseline_minus_candidate",
                     "delta",
                     "distance",
                     "objective",
                     "cost",
-                    "feasible",
-                    "route",
                     "improvement",
-                    "effect",
-                    "evaluated",
-                    "metric",
                 )
-            ) and _case_payload_has_effect_evidence(item):
+            ) and _payload_has_numeric_evidence(item):
                 return True
-            if isinstance(item, (Mapping, list)) and _case_payload_has_effect_evidence(
-                item
+            if (
+                isinstance(item, (Mapping, list))
+                and _case_payload_has_objective_delta_evidence(item)
             ):
                 return True
         return False
     if isinstance(value, list):
-        return any(_case_payload_has_effect_evidence(item) for item in value)
+        return any(_case_payload_has_objective_delta_evidence(item) for item in value)
+    return False
+
+
+def _payload_has_numeric_evidence(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    if isinstance(value, str):
+        return _float_or_none(value) is not None
+    if isinstance(value, Mapping):
+        return any(_payload_has_numeric_evidence(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_payload_has_numeric_evidence(item) for item in value)
     return False
 
 
