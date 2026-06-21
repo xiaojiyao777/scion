@@ -45,21 +45,21 @@ def _runtime_saturated_diversity_guidance(
             "runtime_saturation",
             "runtime saturation",
             "runtime_budget",
-            "no_effect",
-            "no effect",
-            "zero_effect",
-            "zero effect",
+            "runtime_regression",
+            "runtime regression",
+            "runtime_pressure",
+            "runtime pressure",
         )
     ):
         return {}
     return {
         "policy": RUNTIME_SATURATED_DIVERSITY_REROUTE_GUIDANCE,
         "guidance": (
-            "Recent branch feedback is low-effect or runtime-saturated. Avoid "
-            "continuing with another homogeneous high-cost variant on the same "
-            "branch. Prefer a clean branch/fork or a materially different "
-            "research direction that changes the mechanism family, trigger "
-            "condition, budget allocation, or evaluation observability."
+            "Recent branch feedback is runtime-saturated or runtime-regressed. "
+            "Avoid continuing with another homogeneous high-cost variant on "
+            "the same branch. Prefer a clean branch/fork or a materially "
+            "different research direction that changes the mechanism family, "
+            "trigger condition, budget allocation, or evaluation observability."
         ),
         "allowed_same_branch_followup": (
             "Only continue this branch when the follow-up reduces/redirects "
@@ -73,10 +73,10 @@ def _diversity_guidance_sentence(context: Mapping[str, Any]) -> str:
     if not isinstance(guidance, Mapping) or not guidance:
         return ""
     return (
-        "Runtime/no-effect lifecycle feedback is active: avoid another "
-        "homogeneous high-cost variant here; prefer changing mechanism family, "
-        "trigger condition, budget allocation, or evaluation observability, "
-        "or use a clean branch/fork for a new direction. "
+        "Runtime lifecycle feedback is active: avoid another homogeneous "
+        "high-cost variant here; prefer changing mechanism family, trigger "
+        "condition, budget allocation, or evaluation observability, or use a "
+        "clean branch/fork for a new direction. "
     )
 
 

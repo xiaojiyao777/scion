@@ -24,6 +24,9 @@ from scion.proposal.agentic_grounding import (
     _pre_hypothesis_solver_design_target_file_read_args,
     _solver_design_target_file_read_args,
 )
+from scion.proposal.agentic_session_tools_config import (
+    _ACTIVE_SOLVER_SOURCE_READ_HEADROOM_CHARS,
+)
 from scion.proposal.active_solver_snapshot import (
     list_algorithm_files_payload,
     read_algorithm_file_payload,
@@ -281,16 +284,20 @@ def test_branch_current_created_file_is_existing_hypothesis_grounding_target() -
     file_rows = list_algorithm_files_payload(context, include_inactive=True)
     preground_args = _pre_hypothesis_solver_design_target_file_read_args(context)
     target_args = _solver_design_target_file_read_args(hypothesis, context=context)
-    payload = read_algorithm_file_payload(context, target_file, max_chars=24000)
+    payload = read_algorithm_file_payload(
+        context,
+        target_file,
+        max_chars=_ACTIVE_SOLVER_SOURCE_READ_HEADROOM_CHARS,
+    )
 
     assert target_file in {row["file_path"] for row in file_rows}
     assert preground_args == [
-        {
-            "surface": "solver_design",
-            "file_path": target_file,
-            "max_chars": 24000,
-        }
-    ]
+            {
+                "surface": "solver_design",
+                "file_path": target_file,
+                "max_chars": _ACTIVE_SOLVER_SOURCE_READ_HEADROOM_CHARS,
+            }
+        ]
     assert target_args == preground_args[0]
     assert payload["readable"] is True
     assert payload["source"] == "branch_current_file_sources"

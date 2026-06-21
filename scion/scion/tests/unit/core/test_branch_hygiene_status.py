@@ -870,13 +870,41 @@ def test_active_no_effect_context_exposes_same_mechanism_followup_policy() -> No
         "parameterize",
         "telemetry_wiring",
     ]
-    assert payload["diversity_reroute_guidance"]["policy"] == (
-        "runtime_saturated_diversity_reroute"
-    )
-    assert "mechanism family" in payload["diversity_reroute_guidance"]["guidance"]
+    assert "diversity_reroute_guidance" not in payload
+    assert payload["allowed_next_actions"] == [
+        "diagnostic",
+        "observability",
+        "refine",
+        "tune",
+        "integrate",
+        "repair",
+        "parameterize",
+        "telemetry_wiring",
+        "diagnose",
+    ]
     assert payload["baseline_policy"] == (
         "branch_workspace_same_mechanism_followup_only"
     )
+
+
+def test_runtime_regression_context_keeps_runtime_diversity_reroute() -> None:
+    branch = Branch(
+        branch_id="active-runtime-regression",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_runtime_regression",
+        last_screening_feedback_tier="runtime_regression",
+        branch_mechanism_ids=("bounded_probe",),
+    )
+
+    payload = branch_hygiene_context(branch)
+
+    assert payload["diversity_reroute_guidance"]["policy"] == (
+        "runtime_saturated_diversity_reroute"
+    )
+    assert "runtime-regressed" in payload["diversity_reroute_guidance"]["guidance"]
+    assert "mechanism family" in payload["diversity_reroute_guidance"]["guidance"]
 
 
 def test_repeated_no_effect_fresh_runtime_missing_replay_identity_is_replay_blocked() -> None:

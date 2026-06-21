@@ -517,10 +517,6 @@ def _branch_card_allowed_actions(
         return ["clean_fork"]
     if lineage_status == "replay_blocked":
         return ["clean_fork"]
-    if lineage_status == "active_no_effect" and not branch_has_actionable_diagnostic(
-        branch
-    ):
-        return ["clean_fork"]
     actions: list[str] = []
     if repair_focus_required:
         actions.extend(["repair", "telemetry_wiring"])

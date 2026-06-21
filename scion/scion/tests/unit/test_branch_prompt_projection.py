@@ -92,14 +92,8 @@ def test_sibling_prompt_projection_marks_clean_and_no_effect_status() -> None:
     assert "protected_mechanism_ids=bounded_probe" in no_effect_line
     assert "forbidden_mechanism_policy=no_unrelated_mechanism_ids" in no_effect_line
     assert "baseline_policy=branch_workspace_same_mechanism_followup_only" in no_effect_line
-    assert (
-        "diversity_redirect_guidance=runtime_saturated_diversity_redirect"
-        in no_effect_line
-    )
-    assert (
-        "diversity_action=change_mechanism_family_or_trigger_or_observability"
-        in no_effect_line
-    )
+    assert "diversity_redirect_guidance" not in no_effect_line
+    assert "diversity_action" not in no_effect_line
     assert "branch_code_status=clean" not in no_effect_line
     assert "baseline_policy=clean" not in no_effect_line
 
@@ -209,7 +203,11 @@ def test_no_effect_branch_card_marks_unchanged_repeat_forbidden() -> None:
     assert "lineage_status=active_no_effect" in rendered
     assert "current_head_status=active_no_effect" in rendered
     assert "best_checkpoint_status=none" in rendered
-    assert "allowed_next_actions=clean_fork" in rendered
+    assert (
+        "allowed_next_actions="
+        "diagnostic,observability,refine,tune,integrate,repair,"
+        "parameterize,telemetry_wiring,diagnose"
+    ) in rendered
     assert "forbidden_next_actions=unrelated_mechanism,unchanged_repeat" in rendered
     for forbidden in ("CVRP", "route", "capacity", "customer", "vehicle"):
         assert forbidden not in rendered
