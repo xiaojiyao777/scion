@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+from hashlib import sha256
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Mapping, Optional
@@ -12,6 +13,8 @@ from scion.core.run_validity import failure_category_for_run_validity
 from scion.core.step_result import StepResult
 
 logger = logging.getLogger(__name__)
+
+_REPEATED_QUALITY_BLOCK_SIGNATURE_LIMIT = 3
 
 
 @dataclass
@@ -75,6 +78,9 @@ class CampaignLoop:
         formal_screened_candidates = 0
         protocol_evaluated_candidates = 0
         quality_block_ledger: list[dict[str, Any]] = []
+        last_quality_block_signature = ""
+        repeated_quality_block_signature_count = 0
+        repeated_quality_block_signature_digest = ""
         protocol_stage_counts: dict[str, int] = {
             "screening": 0,
             "validation": 0,
@@ -219,6 +225,15 @@ class CampaignLoop:
                 protocol_evaluated_candidates=protocol_evaluated_candidates,
                 protocol_stage_counts=protocol_stage_counts,
                 quality_block_ledger=quality_block_ledger,
+                repeated_quality_block_signature_digest=(
+                    repeated_quality_block_signature_digest
+                ),
+                repeated_quality_block_signature_count=(
+                    repeated_quality_block_signature_count
+                ),
+                repeated_quality_block_signature_limit=(
+                    _REPEATED_QUALITY_BLOCK_SIGNATURE_LIMIT
+                ),
                 failure_categories=failure_category_counts,
                 last_failure_category=last_failure_category,
             )
@@ -336,14 +351,30 @@ class CampaignLoop:
                 elif kind == "proposal_block":
                     consume_proposal_attempt()
                     proposal_quality_blocked_attempts += 1
-                    quality_block_ledger.append(
-                        _quality_block_ledger_entry(
-                            result,
-                            sequence=proposal_quality_blocked_attempts,
-                            loop_step=loop_steps,
-                            attempt_kind=kind,
-                        )
+                    entry = _quality_block_ledger_entry(
+                        result,
+                        sequence=proposal_quality_blocked_attempts,
+                        loop_step=loop_steps,
+                        attempt_kind=kind,
                     )
+                    signature = _quality_block_signature(result, attempt_kind=kind)
+                    digest = _quality_block_signature_digest(signature)
+                    if signature == last_quality_block_signature:
+                        repeated_quality_block_signature_count += 1
+                    else:
+                        last_quality_block_signature = signature
+                        repeated_quality_block_signature_count = 1
+                    repeated_quality_block_signature_digest = digest
+                    entry["quality_block_signature_digest"] = digest
+                    entry["quality_block_repeat_count"] = (
+                        repeated_quality_block_signature_count
+                    )
+                    quality_block_ledger.append(entry)
+                    if (
+                        repeated_quality_block_signature_count
+                        >= _REPEATED_QUALITY_BLOCK_SIGNATURE_LIMIT
+                    ):
+                        final_reason = "repeated_quality_block_signature"
                     if _limit_enabled(proposal_quality_loop_limit) and (
                         proposal_quality_blocked_attempts
                         >= proposal_quality_loop_limit
@@ -351,14 +382,30 @@ class CampaignLoop:
                         final_reason = "proposal_quality_loop"
                 elif kind == "schema_quality_block":
                     proposal_quality_blocked_attempts += 1
-                    quality_block_ledger.append(
-                        _quality_block_ledger_entry(
-                            result,
-                            sequence=proposal_quality_blocked_attempts,
-                            loop_step=loop_steps,
-                            attempt_kind=kind,
-                        )
+                    entry = _quality_block_ledger_entry(
+                        result,
+                        sequence=proposal_quality_blocked_attempts,
+                        loop_step=loop_steps,
+                        attempt_kind=kind,
                     )
+                    signature = _quality_block_signature(result, attempt_kind=kind)
+                    digest = _quality_block_signature_digest(signature)
+                    if signature == last_quality_block_signature:
+                        repeated_quality_block_signature_count += 1
+                    else:
+                        last_quality_block_signature = signature
+                        repeated_quality_block_signature_count = 1
+                    repeated_quality_block_signature_digest = digest
+                    entry["quality_block_signature_digest"] = digest
+                    entry["quality_block_repeat_count"] = (
+                        repeated_quality_block_signature_count
+                    )
+                    quality_block_ledger.append(entry)
+                    if (
+                        repeated_quality_block_signature_count
+                        >= _REPEATED_QUALITY_BLOCK_SIGNATURE_LIMIT
+                    ):
+                        final_reason = "repeated_quality_block_signature"
                     if _limit_enabled(proposal_quality_loop_limit) and (
                         proposal_quality_blocked_attempts
                         >= proposal_quality_loop_limit
@@ -369,7 +416,10 @@ class CampaignLoop:
                     bad_proposal_attempts += 1
                     if bad_proposal_attempts >= bad_proposal_limit:
                         final_reason = "bad_proposal_budget_exhausted"
-            if final_reason == "proposal_quality_loop":
+            if final_reason in {
+                "proposal_quality_loop",
+                "repeated_quality_block_signature",
+            }:
                 result.stopped = True
             if (
                 final_reason is None
@@ -840,6 +890,45 @@ def _quality_block_ledger_entry(
     }
 
 
+def _quality_block_signature(result: StepResult, *, attempt_kind: str) -> str:
+    session_ref = getattr(result, "proposal_session_ref", None)
+    if not isinstance(session_ref, Mapping):
+        session_ref = {}
+    primary = session_ref.get("primary_failure")
+    if not isinstance(primary, Mapping):
+        primary = {}
+    rejection = session_ref.get("rejection_constraint")
+    if not isinstance(rejection, Mapping):
+        rejection = {}
+    values = (
+        str(attempt_kind or ""),
+        str(getattr(result, "branch_id", None) or ""),
+        str(getattr(result, "hypothesis_id", None) or ""),
+        str(getattr(result, "failure_stage", None) or ""),
+        str(getattr(result, "failure_category", None) or ""),
+        str(
+            session_ref.get("failure_code")
+            or rejection.get("failure_code")
+            or primary.get("code")
+            or ""
+        ),
+        str(rejection.get("gate_name") or primary.get("gate_name") or ""),
+        str(rejection.get("retry_constraint") or ""),
+        str(
+            getattr(result, "failure_detail", None)
+            or getattr(result, "reason", None)
+            or ""
+        ),
+    )
+    return "\x1f".join(values)
+
+
+def _quality_block_signature_digest(signature: str) -> str:
+    if not signature:
+        return ""
+    return sha256(signature.encode("utf-8", errors="replace")).hexdigest()
+
+
 def _proposal_session_ref_fields_from_result(result: StepResult) -> dict[str, Any]:
     session_ref = getattr(result, "proposal_session_ref", None)
     if not isinstance(session_ref, Mapping):
@@ -1196,6 +1285,9 @@ def _campaign_loop_status(
     protocol_evaluated_candidates: int,
     protocol_stage_counts: dict[str, int],
     quality_block_ledger: list[dict[str, Any]],
+    repeated_quality_block_signature_digest: str,
+    repeated_quality_block_signature_count: int,
+    repeated_quality_block_signature_limit: int,
     failure_categories: dict[str, int],
     last_failure_category: str,
 ) -> dict[str, Any]:
@@ -1207,6 +1299,8 @@ def _campaign_loop_status(
         + int(validation_repair_required_attempts),
     )
     quality_blocks = max(0, int(proposal_quality_blocked_attempts))
+    repeated_quality_count = max(0, int(repeated_quality_block_signature_count))
+    repeated_quality_limit = max(1, int(repeated_quality_block_signature_limit))
     branch_lifecycle_blocks = max(0, int(branch_lifecycle_policy_blocks))
     reconcile_steps = max(0, int(reconcile_lifecycle_steps))
     active_slot_blocks = max(0, int(scheduler_active_slot_blocked_attempts))
@@ -1401,6 +1495,14 @@ def _campaign_loop_status(
         "quality_block_ledger": [dict(item) for item in quality_block_ledger],
         "quality_block_ledger_count": len(quality_block_ledger),
         "blocked_attempts": quality_blocks,
+        "repeated_quality_block_signature_digest": str(
+            repeated_quality_block_signature_digest or ""
+        ),
+        "repeated_quality_block_signature_count": repeated_quality_count,
+        "repeated_quality_block_signature_limit": repeated_quality_limit,
+        "repeated_quality_block_signature_exhausted": (
+            repeated_quality_count >= repeated_quality_limit
+        ),
         "proposal_quality_blocks_remaining": max(
             0,
             int(proposal_quality_loop_limit)

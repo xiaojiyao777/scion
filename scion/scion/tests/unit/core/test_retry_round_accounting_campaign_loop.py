@@ -94,10 +94,11 @@ def test_zero_proposal_limits_disable_research_headroom_caps() -> None:
                 action="explore",
                 branch_id="b1",
                 reason="agent_quality_blocked",
+                failure_detail=f"agent_quality_blocked:distinct_quality_block_{index}",
                 counts_toward_max_rounds=False,
                 attempt_kind="proposal_block",
             )
-            for _ in range(5)
+            for index in range(5)
         ],
         _screening_result(reason="screening 1"),
         _screening_result(reason="screening 2"),
@@ -153,6 +154,88 @@ def test_zero_proposal_limits_disable_research_headroom_caps() -> None:
     assert final_status["proposal_quality_loop_limit_enabled"] is False
     assert final_status["proposal_quality_blocks_consumed"] == 5
     assert final_status["effective_rounds_completed"] == 2
+
+
+def test_repeated_quality_block_signature_stops_when_headroom_caps_disabled() -> None:
+    results = [
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            reason="agent_quality_blocked",
+            failure_stage="agent_quality_blocked",
+            failure_detail=(
+                "agent_quality_blocked:"
+                "warehouse_validation_transfer_quality_missing:"
+                "missing=validation_transfer_risk"
+            ),
+            counts_toward_max_rounds=False,
+            attempt_kind="proposal_block",
+            proposal_session_ref={
+                "failure_code": "warehouse_validation_transfer_quality_missing",
+                "agent_block_reason": "agent_quality_blocked",
+                "primary_failure": {
+                    "stage": "agent_quality_blocked",
+                    "code": "warehouse_validation_transfer_quality_missing",
+                },
+            },
+        )
+        for _ in range(4)
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=0,
+        proposal_quality_loop_limit=0,
+    )
+
+    loop.run(max_rounds=1)
+
+    final_status = loop_statuses[-1]
+    assert calls == 3
+    assert "repeated_quality_block_signature" in stopped_reasons
+    assert "proposal_quality_loop" not in stopped_reasons
+    assert final_status["proposal_attempt_limit_enabled"] is False
+    assert final_status["proposal_quality_loop_limit_enabled"] is False
+    assert final_status["proposal_quality_blocks_consumed"] == 3
+    assert final_status["effective_rounds_completed"] == 0
+    assert final_status["repeated_quality_block_signature_count"] == 3
+    assert final_status["repeated_quality_block_signature_limit"] == 3
+    assert final_status["repeated_quality_block_signature_exhausted"] is True
+    assert final_status["repeated_quality_block_signature_digest"]
+    assert final_status["quality_block_ledger"][-1][
+        "quality_block_repeat_count"
+    ] == 3
 
 
 def test_campaign_loop_does_not_count_retry_attempt_against_max_rounds() -> None:
@@ -1422,10 +1505,11 @@ def test_campaign_loop_explicit_attempt_limit_allows_bounded_quality_overflow() 
                 action="explore",
                 branch_id="b1",
                 reason="agent_quality_blocked",
+                failure_detail=f"agent_quality_blocked:bounded_overflow_{index}",
                 counts_toward_max_rounds=False,
                 attempt_kind="proposal_block",
             )
-            for _ in range(5)
+            for index in range(5)
         ],
         _screening_result(reason="screening 1"),
         StepResult(action="explore", branch_id="b1", reason="screening 2"),
@@ -1484,10 +1568,11 @@ def test_campaign_loop_default_attempt_limit_allows_quality_block_headroom() -> 
             action="explore",
             branch_id="b1",
             reason="agent_quality_blocked",
+            failure_detail=f"agent_quality_blocked:headroom_{index}",
             counts_toward_max_rounds=False,
             attempt_kind="proposal_block",
         )
-        for _ in range(11)
+        for index in range(11)
     ]
     calls = 0
     stopped_reasons: list[str | None] = []
