@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `a71f477e`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `07371fdc`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-21*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -252,9 +252,9 @@ Current checkpoint:
   considered static-ready.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-c4db531-noeffect-diagnostic-6r-gpt55-6r-gpt55-20260621T012454Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-dddad0f-portfolio-noeffect-6r-gpt55-6r-gpt55-20260621T013137Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-c4db531-noeffect-diagnostic-resume-4r-gpt55-4r-gpt55-20260621T012509Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-dddad0f-portfolio-noeffect-resume-4r-gpt55-4r-gpt55-20260621T013152Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -269,7 +269,7 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok`,
-  `prepared_runtime_commit=a71f477e`, `actual_runtime_commit=a71f477e`, and
+  `prepared_runtime_commit=07371fdc`, `actual_runtime_commit=07371fdc`, and
   `runtime_guard_reason=runtime_guard_commit_matches`. They also report
   `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
   `campaign_execution_marker_status=ok` through top-level marker summary
@@ -320,9 +320,10 @@ Current checkpoint:
     tune, integrate, repair, parameterize, telemetry-wiring, or observability
     actions visible and does not emit runtime-saturated diversity or clean-fork
     guidance. Cross-branch repeated-signature pressure preserves current
-    active no-effect diagnostic follow-up while still blocking unchanged
-    sibling copies; true runtime regression or saturation still gets runtime
-    diversity guidance.
+    active no-effect diagnostic follow-up, and portfolio no-effect plateau
+    lessons expose the same current-branch diagnostic allowance while still
+    blocking unchanged sibling copies; true runtime regression or saturation
+    still gets runtime diversity guidance.
   - Runtime telemetry summaries distinguish explicit inactive activation
     evidence from numeric zero counters. `candidate_false` and activation
     status `inactive` keep delegated review and proposal feedback from
