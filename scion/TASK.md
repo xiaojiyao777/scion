@@ -4,8 +4,8 @@
 *Status: v0.4 framework/readiness/launcher repairs are accepted enough for
 focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs
 demonstrate effective research behavior. Current WSL prepared roots were
-regenerated at runtime commit `7812bec5` after the prompt-context readiness
-evidence-summary repair; both pass static readiness and remain blocked only by
+regenerated at runtime commit `6b4c70d6` after the CVRP required-evidence
+prepared handoff repair; both pass static readiness and remain blocked only by
 external `gpt-5.5` completion auth.*
 *Updated: 2026-06-21*
 
@@ -277,13 +277,13 @@ Current checkpoint:
   explicit `4`, removing hidden post-budget drain behavior inherited from
   core/env defaults while preserving a bounded drain for already queued
   validation/frozen stage work.
-- Latest accepted launch-readiness audit repair: local commit `d5a367af` / WSL
-  commit `7812bec5` exposes compact prepared prompt-context evidence summaries
+- Latest accepted launch-readiness audit repair: local commit `6771a6a4` / WSL
+  commit `6b4c70d6` exposes compact prepared prompt-context evidence summaries
   directly in launch readiness. Current roots show prepared renderer evidence,
   not live provider-prompt evidence, and expose the CVRP CMT2/CMT4,
-  bounded-two-opt, resume-continuity, warehouse champion-v2, required-evidence,
-  and active code-constraint checks without changing Decision, scheduler,
-  promotion, or Protocol inputs.
+  bounded-two-opt, resume-continuity, CVRP required-evidence, warehouse
+  champion-v2, warehouse required-evidence, and active code-constraint checks
+  without changing Decision, scheduler, promotion, or Protocol inputs.
 - Scheduler-depth repair is accepted at local commit `e39300f4` / WSL commit
   `896b9c06`: ordinary active no-effect/marginal low-signal branches remain
   schedulable for same-mechanism follow-up, and scheduler-origin park/reclaim
@@ -292,9 +292,9 @@ Current checkpoint:
   lineage reclaim remain fail-closed.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7812bec5-promptsummary-resumecont-6r-gpt55-20260621T043754Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6b4c70d6-reqevidence-6r-gpt55-20260621T051044Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7812bec5-promptsummary-resumecont-4r-gpt55-20260621T043755Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6b4c70d6-reqevidence-4r-gpt55-20260621T051045Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -309,7 +309,7 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok` and
-  `prepared_runtime_commit=7812bec5`. Current WSL HEAD may include status or
+  `prepared_runtime_commit=6b4c70d6`. Current WSL HEAD may include status or
   tooling commits outside runtime-guard paths after prepare, and strict
   readiness accepts that only when the guarded runtime paths are unchanged since
   prepare. They also report
@@ -335,7 +335,9 @@ Current checkpoint:
   readiness: provider scope is
   `prepared_renderer_summary_not_live_provider_prompt`,
   `raw_provider_prompt_rendered=false`, and required rendered paths are present
-  for the current CVRP and warehouse launch-focus payloads.
+  for the current CVRP and warehouse launch-focus payloads. CVRP now also
+  reports `cvrp_required_evidence_all_present=true` with 5 rendered
+  required-evidence items.
   Active subject code-constraint prompt
   bridge evidence now proves provider constraints reach the actual code prompt
   with version/subject identity and problem-specific guard markers. Runtime

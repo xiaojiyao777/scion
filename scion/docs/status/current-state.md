@@ -33,13 +33,13 @@ history when exact old chronology is needed.
   fields. Focused v0.4 prepared roots set fresh-runtime replay drain to exact
   `0` and stage-transition drain to explicit `4`, so hidden drain behavior is
   no longer inherited from core/env defaults.
-- Latest accepted launch-readiness audit repair: local commit `d5a367af` / WSL
-  commit `7812bec5` exposes compact prepared prompt-context evidence summaries
+- Latest accepted launch-readiness audit repair: local commit `6771a6a4` / WSL
+  commit `6b4c70d6` exposes compact prepared prompt-context evidence summaries
   directly in launch readiness. The summary distinguishes prepared renderer
   evidence from live provider-prompt evidence and surfaces the CVRP
-  CMT2/CMT4/resume-continuity, warehouse champion-v2, and active code
-  constraint rendered checks without changing Decision, scheduler, promotion,
-  or Protocol inputs.
+  CMT2/CMT4/resume-continuity, CVRP top-level required-evidence, warehouse
+  champion-v2, warehouse required-evidence, and active code constraint rendered
+  checks without changing Decision, scheduler, promotion, or Protocol inputs.
 - The prior CVRP protected-case guard remains in force: CMT2/CMT4 postrun
   evidence must carry numeric objective/distance delta evidence; route-count,
   feasibility-only, case-name, or free-text continuity payloads cannot make a
@@ -52,17 +52,17 @@ history when exact old chronology is needed.
 ## Active Prepared Roots
 
 These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `7812bec5` after the prompt-context evidence-summary repair; the
-corresponding local repair commit is `d5a367af`. They retain the explicit
-drain-limit behavior from WSL commit `2b2cd351`.
+runtime commit `6b4c70d6` after the CVRP required-evidence prepared handoff
+repair; the corresponding local repair commit is `6771a6a4`. They retain the
+explicit drain-limit behavior from WSL commit `2b2cd351`.
 Local mirrors under `/home/clawd/research/scion-experiments/` are for
 inspection only. Run readiness and launch from WSL because the prepared
 contracts contain WSL absolute paths.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7812bec5-promptsummary-resumecont-6r-gpt55-20260621T043754Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6b4c70d6-reqevidence-6r-gpt55-20260621T051044Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7812bec5-promptsummary-resumecont-4r-gpt55-20260621T043755Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6b4c70d6-reqevidence-4r-gpt55-20260621T051045Z-claw`
 
 Current readiness snapshot for both roots:
 
@@ -74,7 +74,7 @@ Current readiness snapshot for both roots:
   `active=0`, `total=1`; ignore volatile expired/refreshing substates unless
   active auth becomes available
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=7812bec5`; current WSL HEAD may include status or
+  `prepared_runtime_commit=6b4c70d6`; current WSL HEAD may include status or
   tooling commits outside runtime-guard paths after prepare, and strict
   readiness accepts that only when the guarded runtime paths are unchanged since
   prepare
@@ -96,7 +96,9 @@ Current readiness snapshot for both roots:
   `raw_provider_prompt_rendered=false`, `missing_rendered_paths=[]`; CVRP
   exposes `cvrp_case_protection_present=true`,
   `cvrp_resume_continuity_present=true`, and
-  `cvrp_bounded_twoopt_present=true`; warehouse exposes
+  `cvrp_bounded_twoopt_present=true`, plus
+  `cvrp_required_evidence_all_present=true` with 5 required-evidence items
+  rendered; warehouse exposes
   `warehouse_v2_followup_present=true` and
   `warehouse_required_evidence_all_present=true`
 - completion preflight exposes flat `completion_login_url` and
@@ -124,13 +126,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 After strict readiness passes, launch the wrapper itself:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7812bec5-promptsummary-resumecont-6r-gpt55-20260621T043754Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6b4c70d6-reqevidence-6r-gpt55-20260621T051044Z-claw/run.sh
 ```
 
 Run CVRP after warehouse is underway or accepted for launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7812bec5-promptsummary-resumecont-4r-gpt55-20260621T043755Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6b4c70d6-reqevidence-4r-gpt55-20260621T051045Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
