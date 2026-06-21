@@ -579,6 +579,11 @@ def research_focus_prompt_summary(
         if problem_family == "cvrp"
         else empty_sequence_counts
     )
+    cvrp_required_evidence_counts = (
+        required_evidence_counts
+        if problem_family == "cvrp"
+        else empty_sequence_counts
+    )
     cvrp_large_twoopt_implementation_counts = (
         large_twoopt_implementation_counts
         if problem_family == "cvrp"
@@ -731,6 +736,19 @@ def research_focus_prompt_summary(
             problem_family == "cvrp"
             and "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in rendered_prompt
         ),
+        "cvrp_required_evidence_present": (
+            problem_family == "cvrp"
+            and "required_evidence" in rendered_prompt
+        ),
+        "cvrp_required_evidence_item_count": cvrp_required_evidence_counts[
+            "item_count"
+        ],
+        "cvrp_required_evidence_rendered_count": cvrp_required_evidence_counts[
+            "rendered_count"
+        ],
+        "cvrp_required_evidence_all_present": cvrp_required_evidence_counts[
+            "all_present"
+        ],
         "cvrp_measurement_screening_headroom_present": (
             problem_family == "cvrp"
             and "screening_headroom" in rendered_prompt
@@ -891,6 +909,9 @@ def research_focus_prompt_summary(
                     "warehouse_measurement_plateau_guard_present"
                 )
     elif problem_family == "cvrp":
+        if research_focus.get("required_evidence") not in ({}, [], "", None):
+            required_true_fields.append("cvrp_required_evidence_present")
+            required_true_fields.append("cvrp_required_evidence_all_present")
         if research_focus.get("case_protection_requirements") not in (
             {},
             [],

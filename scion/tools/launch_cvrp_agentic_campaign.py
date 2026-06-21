@@ -231,6 +231,28 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
         "objective-effect evidence before spending another route-merge or "
         "construction-seed branch slot."
     ),
+    "required_evidence": [
+        (
+            "bounded or deadline-aware implementation evidence for any "
+            "large-instance two-opt follow-up"
+        ),
+        (
+            "current-run pair-level total_distance, feasibility, route-count, "
+            "and wall-clock evidence before objective-effect claims"
+        ),
+        (
+            "CMT2/CMT4 protection evidence or an explicit unresolved caveat "
+            "for mechanisms related to prior protected-case losses"
+        ),
+        (
+            "copied target-intent, hypothesis, or agentic trace continuity "
+            "when branch cards are absent from the sparse resume"
+        ),
+        (
+            "direct activation-to-objective-effect evidence for any route-merge, "
+            "construction-seed, destroy/repair, or acceptance-weighting claim"
+        ),
+    ],
     "measurement_opportunity_diagnostics": {},
     "default_avoid_directions": list(CVRP_DEFAULT_AVOID_DIRECTIONS),
     "large_instance_two_opt_constraints": CVRP_LARGE_INSTANCE_TWO_OPT_CONSTRAINTS,
@@ -1161,8 +1183,14 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         f"- Route-merge exception: {research_focus['route_merge_exception_rule']}",
         f"- Construction-seed rule: {research_focus['construction_seed_rule']}",
         f"- Decision boundary: {research_focus['decision_boundary']}",
-        "- Measurement/opportunity diagnostics:",
+        "- Required evidence:",
     ]
+    required_evidence = research_focus.get("required_evidence")
+    if isinstance(required_evidence, list) and required_evidence:
+        lines.extend(f"  - {item}" for item in required_evidence)
+    else:
+        lines.append("  - None recorded in the prepared manifest.")
+    lines.append("- Measurement/opportunity diagnostics:")
     measurement = research_focus.get("measurement_opportunity_diagnostics")
     if isinstance(measurement, dict):
         for key in (

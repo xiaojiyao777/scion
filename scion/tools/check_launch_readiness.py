@@ -3756,6 +3756,9 @@ def _prompt_context_artifact_summary(payload: Any, *, artifact: str) -> dict[str
             "cvrp_bounded_twoopt_present": focus_summary.get(
                 "cvrp_bounded_twoopt_present"
             ),
+            "cvrp_required_evidence_all_present": focus_summary.get(
+                "cvrp_required_evidence_all_present"
+            ),
             "warehouse_v2_followup_present": focus_summary.get(
                 "warehouse_v2_followup_present"
             ),
@@ -4123,6 +4126,10 @@ def _research_focus_prompt_summary_failures(
         "cvrp_bounded_twoopt_present",
         "cvrp_direct_effect_rules_present",
         "cvrp_measurement_handoff_present",
+        "cvrp_required_evidence_present",
+        "cvrp_required_evidence_item_count",
+        "cvrp_required_evidence_rendered_count",
+        "cvrp_required_evidence_all_present",
         "cvrp_measurable_opportunity_class_item_count",
         "cvrp_measurable_opportunity_class_rendered_count",
         "cvrp_measurable_opportunity_class_all_present",
