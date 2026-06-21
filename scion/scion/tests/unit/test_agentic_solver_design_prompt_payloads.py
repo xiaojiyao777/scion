@@ -6,6 +6,9 @@ from scion.proposal.engine import (
     _split_hypothesis_context,
     _split_hypothesis_target_intent_context,
 )
+from scion.proposal.engine.code_prompts import (
+    _active_subject_code_constraints_section,
+)
 from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.agentic_solver_design_test_support import *
 
@@ -28,6 +31,31 @@ class SyntheticSolverDesignPromptProvider:
         return (
             "SYNTHETIC_USER_CONSTRAINT: return a synthetic artifact with a stable score.",
         )
+
+
+def test_active_subject_code_constraints_section_is_not_prompt_truncated() -> None:
+    payload = {
+        "surface": "solver_design",
+        "subject_id": "synthetic",
+        "version": "v1",
+        "constraints": [
+            {
+                "name": f"constraint_{idx}",
+                "requirement": "preserve the active subject contract " * 20,
+            }
+            for idx in range(80)
+        ],
+        "forbidden_patterns": [
+            {"name": "avoid_full_file_rewrite", "pattern": "full file rewrite"}
+        ],
+    }
+
+    rendered = _active_subject_code_constraints_section(payload)
+
+    assert "## Active Subject Code Constraints" in rendered
+    assert "... <truncated agentic context>" not in rendered
+    assert "constraint_79" in rendered
+    assert "avoid_full_file_rewrite" in rendered
 
 
 def test_solver_design_hypothesis_prompt_resolves_provider_from_ref() -> None:

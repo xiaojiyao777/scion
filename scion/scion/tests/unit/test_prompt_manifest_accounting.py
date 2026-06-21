@@ -9,6 +9,7 @@ from scion.proposal.prompt_manifest_accounting import (
     _system_text_chars,
     _text_digest,
 )
+from scion.proposal.prompt_manifest_visibility import _section_block_family
 
 
 def test_prompt_manifest_accounting_uses_rendered_provider_prompt() -> None:
@@ -61,3 +62,13 @@ def test_prompt_manifest_accounting_uses_rendered_provider_prompt() -> None:
     )
     assert system_records[0]["content_hash"] == _text_digest(system_blocks[0]["text"])
     assert "raw_metrics_ref" not in system_records[0]["cache_control"]
+
+
+def test_cross_branch_sections_get_cross_branch_family() -> None:
+    assert _section_block_family("cross_branch_research_map") == (
+        "cross_branch_lesson"
+    )
+    assert _section_block_family("branch_lesson_usage_context") == (
+        "cross_branch_lesson"
+    )
+    assert _section_block_family("branch_dossier") == "research_signal"

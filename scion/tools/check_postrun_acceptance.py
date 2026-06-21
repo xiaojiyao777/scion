@@ -2137,6 +2137,7 @@ def _prompt_source_visibility_actionability(
     summary = _mapping_or_empty(brief.get("prompt_context_visibility_summary"))
     aggregate = _mapping_or_empty(summary.get("aggregate"))
     source_visibility = _mapping_or_empty(aggregate.get("source_visibility"))
+    call_kind_counts = _mapping_or_empty(aggregate.get("call_kind_counts"))
     hypothesis_density = _mapping_or_empty(
         aggregate.get("hypothesis_generation_signal_density")
     )
@@ -2179,22 +2180,32 @@ def _prompt_source_visibility_actionability(
         failures.append("prompt_context_trace_accounting_missing")
     if _int_or_zero(source_visibility.get("trace_count")) <= 0:
         failures.append("prompt_source_visibility_trace_accounting_missing")
-    if (
-        _int_or_zero(source_visibility.get("hypothesis_target_source_trace_count"))
-        <= 0
-    ):
-        failures.append("hypothesis_target_source_visibility_trace_missing")
-    elif (
-        _int_or_zero(source_visibility.get("hypothesis_target_source_visible_count"))
-        <= 0
-    ):
-        failures.append("hypothesis_target_source_visibility_not_visible")
     hypothesis_required_count = _int_or_zero(
         source_visibility.get("hypothesis_target_source_required_count")
     )
     hypothesis_visible_count = _int_or_zero(
         source_visibility.get("hypothesis_target_source_visible_count")
     )
+    target_intent_trace_count = _int_or_zero(
+        call_kind_counts.get("hypothesis_target_intent")
+    )
+    target_intent_source_visibility_required = (
+        target_intent_trace_count > 0 or hypothesis_required_count > 0
+    )
+    if (
+        target_intent_source_visibility_required
+        and
+        _int_or_zero(source_visibility.get("hypothesis_target_source_trace_count"))
+        <= 0
+    ):
+        failures.append("hypothesis_target_source_visibility_trace_missing")
+    elif (
+        target_intent_source_visibility_required
+        and
+        _int_or_zero(source_visibility.get("hypothesis_target_source_visible_count"))
+        <= 0
+    ):
+        failures.append("hypothesis_target_source_visibility_not_visible")
     if (
         hypothesis_required_count > 0
         and hypothesis_visible_count < hypothesis_required_count
@@ -2263,6 +2274,10 @@ def _prompt_source_visibility_actionability(
             "available": summary.get("available"),
             "expected_available": expected.get("available"),
             "manifest_report_count": summary.get("manifest_report_count"),
+            "target_intent_trace_count": target_intent_trace_count,
+            "target_intent_source_visibility_required": (
+                target_intent_source_visibility_required
+            ),
             "expected_manifest_report_count": expected.get("manifest_report_count"),
             "context_report_count": summary.get("context_report_count"),
             "expected_context_report_count": expected.get("context_report_count"),

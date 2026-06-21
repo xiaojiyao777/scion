@@ -640,13 +640,14 @@ def _active_subject_code_constraints_section(value: Any) -> str:
     payload = _compact_active_subject_code_constraints(value)
     if not payload:
         return ""
+    rendered = json.dumps(payload, indent=2, sort_keys=True, default=str)
     return (
         "## Active Subject Code Constraints\n"
         "These provider-owned facts are the active subject object/API contract "
         "for code generation. Treat them as hard constraints when editing the "
         "approved target and integration files. They are proposal/code-generation "
         "context only and excluded from DecisionFeatures.\n\n"
-        f"{_bounded_json(payload, 12000)}\n\n"
+        f"{rendered}\n\n"
     )
 
 
@@ -689,18 +690,18 @@ def _compact_constraint_list(value: Any) -> list[Any]:
         items = list(value)
     except TypeError:
         return [str(value)]
-    return [_compact_constraint_item(item) for item in items[:24]]
+    return [_compact_constraint_item(item) for item in items]
 
 
 def _compact_constraint_item(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            key: _snippet_text(str(item)) if isinstance(item, str) else item
+            key: item
             for key, item in value.items()
             if item not in (None, "", [], (), {})
         }
     if isinstance(value, str):
-        return _snippet_text(value)
+        return value
     return value
 
 

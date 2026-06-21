@@ -2660,6 +2660,7 @@ def test_postrun_acceptance_readiness_requires_target_source_visibility_trace(
         "current_run_evidence": True,
         "aggregate": {
             "trace_count": 2,
+            "call_kind_counts": {"hypothesis": 1, "hypothesis_target_intent": 1},
             "source_visibility": {
                 "trace_count": 2,
                 "code_trace_count": 1,
@@ -2682,6 +2683,36 @@ def test_postrun_acceptance_readiness_requires_target_source_visibility_trace(
         check_tool.main([str(run_root), "--require-current-run-ready"])
         == check_tool.UNREADY_EXIT
     )
+
+
+def test_postrun_acceptance_does_not_require_target_source_without_target_intent(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-no-target-intent")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    _add_prompt_source_visibility_summary(brief)
+    prompt_aggregate = brief["prompt_context_visibility_summary"]["aggregate"]
+    prompt_aggregate["call_kind_counts"] = {"hypothesis": 1, "code": 1}
+    prompt_aggregate["source_visibility"]["hypothesis_target_source_trace_count"] = 0
+    prompt_aggregate["source_visibility"]["hypothesis_target_source_required_count"] = 0
+    prompt_aggregate["source_visibility"]["hypothesis_target_source_visible_count"] = 0
+    _refresh_research_context_actionability_summary(brief)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
+
+    assert "hypothesis_target_source_visibility_trace_missing" not in prompt_check[
+        "detail"
+    ]["failures"]
 
 
 def test_cvrp_postrun_acceptance_requires_code_constraint_prompt_trace(
