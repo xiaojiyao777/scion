@@ -488,6 +488,12 @@ class MeasurementReadinessConfig(BaseModel):
     signal_to_noise_tier: Literal["ready", "marginal", "low_power", "unknown"] = (
         "unknown"
     )
+    calibration_evidence_level: Literal[
+        "none",
+        "summary_only",
+        "pair_evidence",
+        "full_replay",
+    ] = "none"
     decision_features_excluded: bool = True
 
 

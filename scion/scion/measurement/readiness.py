@@ -21,6 +21,12 @@ MeasurementReadinessReason = Literal[
     "calibration_stale",
 ]
 SignalToNoiseTier = Literal["ready", "marginal", "low_power", "unknown"]
+CalibrationEvidenceLevel = Literal[
+    "none",
+    "summary_only",
+    "pair_evidence",
+    "full_replay",
+]
 
 
 @dataclass(frozen=True)
@@ -36,6 +42,7 @@ class MeasurementReadiness:
     noise_band_p90_abs: float | None = None
     effect_to_mde_ratio: float | None = None
     signal_to_noise_tier: SignalToNoiseTier = "unknown"
+    calibration_evidence_level: CalibrationEvidenceLevel = "none"
     decision_features_excluded: bool = True
     calibration_ref: str = ""
 
@@ -52,6 +59,7 @@ class MeasurementReadiness:
             "noise_band_p90_abs": self.noise_band_p90_abs,
             "effect_to_mde_ratio": self.effect_to_mde_ratio,
             "signal_to_noise_tier": self.signal_to_noise_tier,
+            "calibration_evidence_level": self.calibration_evidence_level,
             "decision_features_excluded": self.decision_features_excluded,
         }
 
@@ -227,6 +235,7 @@ def _artifact_summary(artifact: Mapping[str, Any]) -> dict[str, Any]:
         "n_pairs": _nonnegative_int(artifact.get("n_pairs", 0)),
         "mde_at_power_80": _float_or_none(power.get("mde_at_power_80")),
         "noise_band_p90_abs": _noise_band_p90_abs(artifact.get("per_case")),
+        "calibration_evidence_level": _calibration_evidence_level(artifact),
     }
 
 
@@ -245,6 +254,11 @@ def _summary_payload(value: Any) -> dict[str, Any]:
     tier = _tier(value.get("signal_to_noise_tier"))
     if tier != "unknown":
         payload["signal_to_noise_tier"] = tier
+    evidence_level = _calibration_evidence_level_value(
+        value.get("calibration_evidence_level")
+    )
+    if evidence_level != "none":
+        payload["calibration_evidence_level"] = evidence_level
     n_pairs = _nonnegative_int(value.get("n_pairs", 0))
     if n_pairs > 0:
         payload["n_pairs"] = n_pairs
@@ -277,6 +291,9 @@ def _readiness(
         signal_to_noise_tier=_tier(
             summary.get("signal_to_noise_tier") or _tier_for_ratio(ratio)
         ),
+        calibration_evidence_level=_calibration_evidence_level_value(
+            summary.get("calibration_evidence_level")
+        ),
         calibration_ref=calibration_ref,
     )
 
@@ -297,6 +314,54 @@ def _noise_band_p90_abs(per_case: Any) -> float | None:
         if parsed is not None
     ]
     return max(values) if values else None
+
+
+def _calibration_evidence_level(artifact: Mapping[str, Any]) -> CalibrationEvidenceLevel:
+    n_pairs = _nonnegative_int(artifact.get("n_pairs", 0))
+    pair_evidence = artifact.get("pair_evidence")
+    pair_count = len(pair_evidence) if isinstance(pair_evidence, list) else 0
+    if pair_count <= 0:
+        return "summary_only" if n_pairs > 0 else "none"
+    selected_cases = artifact.get("selected_cases")
+    selected_seeds = artifact.get("selected_seeds")
+    runtime_policy = artifact.get("runtime_policy")
+    has_replay_metadata = (
+        isinstance(selected_cases, list)
+        and bool(selected_cases)
+        and isinstance(selected_seeds, list)
+        and bool(selected_seeds)
+        and isinstance(runtime_policy, Mapping)
+        and bool(runtime_policy)
+        and artifact.get("replicate_count") is not None
+    )
+    pair_rows_resolve_cases = all(
+        isinstance(row, Mapping)
+        and bool(row.get("candidate_seed") is not None)
+        and (
+            bool(row.get("resolved_case_path"))
+            or isinstance(row.get("case_resolution"), Mapping)
+        )
+        for row in pair_evidence
+    )
+    if (
+        n_pairs > 0
+        and pair_count >= n_pairs
+        and has_replay_metadata
+        and pair_rows_resolve_cases
+    ):
+        return "full_replay"
+    return "pair_evidence"
+
+
+def _calibration_evidence_level_value(value: Any) -> CalibrationEvidenceLevel:
+    text = str(value or "").strip()
+    if text == "summary_only":
+        return "summary_only"
+    if text == "pair_evidence":
+        return "pair_evidence"
+    if text == "full_replay":
+        return "full_replay"
+    return "none"
 
 
 def _parse_calibrated_at(value: Any) -> datetime | None:

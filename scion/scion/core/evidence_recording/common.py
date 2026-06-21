@@ -16,6 +16,7 @@ _MEASUREMENT_READINESS_STATUS_FIELDS = (
     "noise_band_p90_abs",
     "effect_to_mde_ratio",
     "signal_to_noise_tier",
+    "calibration_evidence_level",
     "decision_features_excluded",
 )
 

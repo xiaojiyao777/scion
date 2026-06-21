@@ -195,6 +195,7 @@ def test_cvrp_formal_protocol_consumes_problem_measurement_declaration():
     assert config.measurement_readiness.status == "ready"
     assert config.measurement_readiness.reason_code == "ok"
     assert config.measurement_readiness.mde_at_power_80 == pytest.approx(9.9)
+    assert config.measurement_readiness.calibration_evidence_level == "summary_only"
     status_payload = config.measurement_readiness.model_dump()
     assert "calibration_ref" not in status_payload
     assert "pair_evidence" not in status_payload
@@ -222,6 +223,7 @@ def test_warehouse_prod_protocol_consumes_problem_measurement_declaration():
     assert config.measurement_readiness.status == "ready"
     assert config.measurement_readiness.reason_code == "ok"
     assert config.measurement_readiness.mde_at_power_80 == pytest.approx(577.5)
+    assert config.measurement_readiness.calibration_evidence_level == "summary_only"
     status_payload = config.measurement_readiness.model_dump()
     assert "calibration_ref" not in status_payload
     assert "pair_evidence" not in status_payload

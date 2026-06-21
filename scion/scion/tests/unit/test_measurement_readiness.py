@@ -137,8 +137,67 @@ def test_compatible_calibration_reduces_to_deterministic_readiness_fields(tmp_pa
     assert readiness.noise_band_p90_abs == 1.25
     assert readiness.effect_to_mde_ratio == 0.5
     assert readiness.signal_to_noise_tier == "marginal"
+    assert readiness.calibration_evidence_level == "pair_evidence"
+    assert readiness.to_status_payload()["calibration_evidence_level"] == (
+        "pair_evidence"
+    )
     assert "pair_evidence" not in readiness.to_status_payload()
     assert "calibration_ref" not in readiness.to_status_payload()
+
+
+def test_summary_only_calibration_evidence_level_is_visible(tmp_path) -> None:
+    measurement = _Measurement()
+    measurement.calibration_ref = "formal/calibration/aa_noise_floor.json"
+    _write_artifact(tmp_path, mde=4.0)
+    path = tmp_path / measurement.calibration_ref
+    artifact = json.loads(path.read_text(encoding="utf-8"))
+    artifact.pop("pair_evidence")
+    path.write_text(json.dumps(artifact), encoding="utf-8")
+
+    readiness = measurement_readiness_status(
+        _Problem(str(tmp_path), measurement),
+        as_of=date(2026, 6, 11),
+    )
+
+    assert readiness.status == "ready"
+    assert readiness.calibration_evidence_level == "summary_only"
+    assert readiness.to_status_payload()["calibration_evidence_level"] == (
+        "summary_only"
+    )
+
+
+def test_full_replay_calibration_evidence_level_requires_replay_metadata(tmp_path) -> None:
+    measurement = _Measurement()
+    measurement.calibration_ref = "formal/calibration/aa_noise_floor.json"
+    _write_artifact(tmp_path, mde=4.0)
+    path = tmp_path / measurement.calibration_ref
+    artifact = json.loads(path.read_text(encoding="utf-8"))
+    artifact["selected_cases"] = ["case-a.vrp"]
+    artifact["selected_seeds"] = [11]
+    artifact["replicate_count"] = 1
+    artifact["runtime_policy"] = {"selected_policy": "protocol_time_limits"}
+    artifact["pair_evidence"] = [
+        {
+            "case": "case-a",
+            "ledger_seed": 11,
+            "candidate_seed": 1000011,
+            "resolved_case_path": "/data/case-a.vrp",
+        }
+        for _ in range(artifact["n_pairs"])
+    ]
+    path.write_text(json.dumps(artifact), encoding="utf-8")
+
+    readiness = measurement_readiness_status(
+        _Problem(str(tmp_path), measurement),
+        as_of=date(2026, 6, 11),
+    )
+
+    assert readiness.status == "ready"
+    assert readiness.calibration_evidence_level == "full_replay"
+    payload = readiness.to_status_payload()
+    assert payload["calibration_evidence_level"] == "full_replay"
+    assert "selected_cases" not in payload
+    assert "pair_evidence" not in payload
 
 
 def test_incomplete_calibration_is_degraded(tmp_path) -> None:
