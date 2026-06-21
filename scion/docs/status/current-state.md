@@ -35,15 +35,15 @@ history when exact old chronology is needed.
 ## Active Prepared Roots
 
 These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `7ee1c181`; the corresponding server repair commit is
-`282bf982`. Local mirrors under `/home/clawd/research/scion-experiments/` are
+runtime commit `0d9f869b`; the corresponding server repair commit is
+`f3141fad`. Local mirrors under `/home/clawd/research/scion-experiments/` are
 for inspection only. Run readiness and launch from WSL because the prepared
 contracts contain WSL absolute paths.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7ee1c18-runtime-feedback-6r-gpt55-20260621T010016Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-0d9f869-noeffect-branch-guidance-6r-gpt55-20260621T011015Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7ee1c18-runtime-feedback-resume-4r-gpt55-20260621T010016Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-0d9f869-noeffect-branch-guidance-resume-4r-gpt55-20260621T011016Z-claw`
 
 Current readiness snapshot for both roots:
 
@@ -52,7 +52,7 @@ Current readiness snapshot for both roots:
 - `failed_static_required_checks=[]`
 - only required failure: completion preflight auth
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=7ee1c181`; doc-only commits may report
+  `prepared_runtime_commit=0d9f869b`; doc-only commits may report
   `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare`
 - campaign marker: `campaign_execution_marker_status=ok`
 - secret file permissions: `launch_env_secret_permissions=ok`,
@@ -85,13 +85,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 After strict readiness passes, launch the wrapper itself:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7ee1c18-runtime-feedback-6r-gpt55-20260621T010016Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-0d9f869-noeffect-branch-guidance-6r-gpt55-20260621T011015Z-claw/run.sh
 ```
 
 Run CVRP after warehouse is underway or accepted for launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7ee1c18-runtime-feedback-resume-4r-gpt55-20260621T010016Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-0d9f869-noeffect-branch-guidance-resume-4r-gpt55-20260621T011016Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
@@ -127,6 +127,10 @@ the v0.4 planning summary, focused tests, and experiment reports.
 - Hypothesis prompts should receive compact mechanism-level branch lessons,
   research-shape diagnostics, and bounded runtime/protocol feedback with
   omission/digest audit markers, not raw long prose or telemetry dumps.
+- Active no-effect branch cards and sibling projections must agree with
+  same-mechanism follow-up policy: ordinary no-effect/tie evidence does not
+  emit runtime-saturated diversity or clean-fork guidance. True runtime
+  regression or runtime saturation can still emit runtime diversity guidance.
 - Runtime semantics must not turn budget-exhausting solver saturation, cached
   ties, comparative runtime-ratio slowdown, or inactive mechanism activation
   into meaningless replay pressure, lifecycle churn, or proposal feedback

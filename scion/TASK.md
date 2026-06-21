@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `7ee1c181`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `0d9f869b`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-21*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -252,9 +252,9 @@ Current checkpoint:
   considered static-ready.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7ee1c18-runtime-feedback-6r-gpt55-20260621T010016Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-0d9f869-noeffect-branch-guidance-6r-gpt55-20260621T011015Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7ee1c18-runtime-feedback-resume-4r-gpt55-20260621T010016Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-0d9f869-noeffect-branch-guidance-resume-4r-gpt55-20260621T011016Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -269,7 +269,7 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok`,
-  `prepared_runtime_commit=7ee1c181`, and either
+  `prepared_runtime_commit=0d9f869b`, and either
   `runtime_guard_reason=runtime_guard_commit_matches` or
   `runtime_guard_paths_unchanged_since_prepare` after doc-only commits. They
   also report `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
@@ -316,6 +316,12 @@ Current checkpoint:
     recorded in proposal feedback/search memory as marginal rather than
     promotable, while high-win-rate negative median effect remains
     inconclusive/fail-closed.
+  - Active no-effect branch cards now agree with same-mechanism follow-up
+    policy: ordinary no-effect/tie evidence keeps same-mechanism diagnostic,
+    tune, integrate, repair, parameterize, telemetry-wiring, or observability
+    actions visible and does not emit runtime-saturated diversity or clean-fork
+    guidance. True runtime regression or saturation still gets runtime
+    diversity guidance.
   - Runtime telemetry summaries distinguish explicit inactive activation
     evidence from numeric zero counters. `candidate_false` and activation
     status `inactive` keep delegated review and proposal feedback from
