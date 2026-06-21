@@ -4,9 +4,9 @@
 *Status: v0.4 framework/readiness/launcher repairs are accepted enough for
 focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs
 demonstrate effective research behavior. Current WSL prepared roots were
-regenerated at runtime commit `10c12e6e` after the explicit fresh-runtime replay
-drain repair; both pass static readiness and remain blocked only by external
-`gpt-5.5` completion auth.*
+regenerated at runtime commit `2b2cd351` after the explicit drain-limit repair;
+both pass static readiness and remain blocked only by external `gpt-5.5`
+completion auth.*
 *Updated: 2026-06-21*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -269,11 +269,14 @@ Current checkpoint:
   `measurement_readiness` compact: no calibration refs or replay rows in the
   readiness subobject, with calibration provenance kept in the sibling
   `calibration` block.
-- Latest accepted focused-launch runtime repair: local commit `65a0e338` / WSL
-  commit `10c12e6e` exposes `fresh_runtime_replay_drain_limit` through
-  `scion run`, campaign composition, launcher artifacts, and launch readiness.
-  Current focused roots set it to exact `0`, disabling hidden post-budget
-  fresh-runtime replay drain instead of inheriting the legacy core default.
+- Latest accepted focused-launch runtime repair: local commit `9b29245e` / WSL
+  commit `2b2cd351` exposes both `fresh_runtime_replay_drain_limit` and
+  `stage_transition_drain_limit` through `scion run`, campaign composition,
+  launcher artifacts, and launch readiness. Current focused roots set
+  fresh-runtime replay drain to exact `0` and stage-transition drain to
+  explicit `4`, removing hidden post-budget drain behavior inherited from
+  core/env defaults while preserving a bounded drain for already queued
+  validation/frozen stage work.
 - Scheduler-depth repair is accepted at local commit `e39300f4` / WSL commit
   `896b9c06`: ordinary active no-effect/marginal low-signal branches remain
   schedulable for same-mechanism follow-up, and scheduler-origin park/reclaim
@@ -282,9 +285,9 @@ Current checkpoint:
   lineage reclaim remain fail-closed.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-10c12e6e-freshreplay0-resumecont-6r-gpt55-20260621T040856Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-2b2cd351-explicitdrains-resumecont-6r-gpt55-20260621T042334Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-10c12e6e-freshreplay0-resumecont-4r-gpt55-20260621T040909Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2b2cd351-explicitdrains-resumecont-4r-gpt55-20260621T042348Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -299,7 +302,7 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok` and
-  `prepared_runtime_commit=10c12e6e`. Current WSL HEAD may include docs-only
+  `prepared_runtime_commit=2b2cd351`. Current WSL HEAD may include docs-only
   status commits after prepare, and strict readiness accepts that only when the
   guarded runtime paths are unchanged since prepare. They also report
   `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
@@ -318,7 +321,8 @@ Current checkpoint:
   explicit disabled state; low nonzero caps now fail launch readiness instead
   of passing as warnings. Fresh-runtime replay drain follows the same
   explicit-disabled convention and must be explicit; it is set to `0` in the
-  current focused roots.
+  current focused roots. Stage-transition drain must also be explicit; it is
+  set to positive `4` in the current focused roots.
   Active subject code-constraint prompt
   bridge evidence now proves provider constraints reach the actual code prompt
   with version/subject identity and problem-specific guard markers. Runtime
