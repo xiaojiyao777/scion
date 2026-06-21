@@ -65,8 +65,9 @@ Current readiness snapshot for both roots:
   `active=0`, `total=1`; ignore volatile expired/refreshing substates unless
   active auth becomes available
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=a7237c88`, `actual_runtime_commit=a7237c88`,
-  `runtime_guard_reason=runtime_guard_commit_matches`
+  `prepared_runtime_commit=a7237c88`; current WSL HEAD may include docs-only
+  status commits after prepare, and strict readiness accepts that only when the
+  guarded runtime paths are unchanged since prepare
 - campaign marker: `campaign_execution_marker_status=ok`
 - secret file permissions: `launch_env_secret_permissions=ok`,
   `launch_env_mode=0o600`
