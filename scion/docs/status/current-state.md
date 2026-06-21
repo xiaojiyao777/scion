@@ -27,11 +27,11 @@ history when exact old chronology is needed.
   warehouse and CVRP follow-up.
 - v0.4 is not closed until live runs show effective research behavior.
 - No LLM campaign is currently running.
-- Latest accepted runtime-path repair: local commit `7f64b381` / WSL commit
-  `a7237c88` exposes problem-owned calibration evidence level
-  (`summary_only`, `pair_evidence`, `full_replay`) in deterministic
-  measurement readiness status without leaking replay rows or calibration
-  paths into status consumers.
+- Latest accepted runtime-path repair: local commit `23f2296a` / WSL commit
+  `37ff1f45` keeps prepared and live proposal handoff
+  `measurement_readiness` compact: it exposes problem-owned calibration
+  evidence level (`summary_only`, `pair_evidence`, `full_replay`) without
+  leaking calibration refs or replay rows into the readiness subobject.
 - The prior CVRP protected-case guard remains in force: CMT2/CMT4 postrun
   evidence must carry numeric objective/distance delta evidence; route-count,
   feasibility-only, case-name, or free-text continuity payloads cannot make a
@@ -44,16 +44,16 @@ history when exact old chronology is needed.
 ## Active Prepared Roots
 
 These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `a7237c88` after the calibration evidence-level readiness
-repair; the corresponding local repair commit is `7f64b381`.
+runtime commit `37ff1f45` after the compact measurement-readiness handoff
+repair; the corresponding local repair commit is `23f2296a`.
 Local mirrors under `/home/clawd/research/scion-experiments/` are for
 inspection only. Run readiness and launch from WSL because the prepared
 contracts contain WSL absolute paths.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-a7237c88-calevel-resumecont-6r-gpt55-6r-gpt55-20260621T032623Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-37ff1f45-compactready-resumecont-6r-gpt55-6r-gpt55-20260621T034103Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-a7237c88-calevel-resumecont-4r-gpt55-4r-gpt55-20260621T032623Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-37ff1f45-compactready-resumecont-4r-gpt55-4r-gpt55-20260621T034103Z-claw`
 
 Current readiness snapshot for both roots:
 
@@ -65,9 +65,13 @@ Current readiness snapshot for both roots:
   `active=0`, `total=1`; ignore volatile expired/refreshing substates unless
   active auth becomes available
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=a7237c88`; current WSL HEAD may include docs-only
+  `prepared_runtime_commit=37ff1f45`; current WSL HEAD may include docs-only
   status commits after prepare, and strict readiness accepts that only when the
   guarded runtime paths are unchanged since prepare
+- measurement handoff:
+  `measurement_readiness.calibration_evidence_level=summary_only` and no
+  `measurement_readiness.calibration_ref` or
+  `measurement_readiness.pair_evidence` in either prepared root
 - campaign marker: `campaign_execution_marker_status=ok`
 - secret file permissions: `launch_env_secret_permissions=ok`,
   `launch_env_mode=0o600`
@@ -99,13 +103,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 After strict readiness passes, launch the wrapper itself:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-a7237c88-calevel-resumecont-6r-gpt55-6r-gpt55-20260621T032623Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-37ff1f45-compactready-resumecont-6r-gpt55-6r-gpt55-20260621T034103Z-claw/run.sh
 ```
 
 Run CVRP after warehouse is underway or accepted for launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-a7237c88-calevel-resumecont-4r-gpt55-4r-gpt55-20260621T032623Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-37ff1f45-compactready-resumecont-4r-gpt55-4r-gpt55-20260621T034103Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
