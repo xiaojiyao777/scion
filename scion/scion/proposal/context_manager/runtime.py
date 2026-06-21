@@ -13,6 +13,11 @@ from scion.proposal.context.feedback import (
 )
 from scion.proposal.context.surfaces import _coerce_text_list, _get_research_surfaces
 
+_RUNTIME_ACTIONABLE_SLOW_RATIO = 1.10
+_RUNTIME_ACTIONABLE_SLOW_DELTA_MS = 5.0
+_RUNTIME_ACTIONABLE_REGRESSION_RATE = 0.90
+
+
 def _build_runtime_feedback(
     steps: List[StepRecord],
     max_items: int = 4,
@@ -109,7 +114,11 @@ def _build_runtime_feedback(
                     f"regression_rate={regression_rate} "
                     f"pairs={st.runtime_pairs}"
                 )
-                if not low_confidence_runtime and runtime_model != "budget_exhausting":
+                if _runtime_summary_actionable(
+                    st,
+                    runtime_model=runtime_model,
+                    low_confidence_runtime=low_confidence_runtime,
+                ):
                     strong_runtime_actionable = True
             (
                 raw_failures,
@@ -121,10 +130,16 @@ def _build_runtime_feedback(
                 max_items=max_items,
                 slow_case_threshold=slow_case_threshold,
             )
+            failure_cause_runtime_actionable = (
+                _screening_failure_cause_runtime_actionable(step, {})
+            )
             for line in raw_failure_causes:
                 if len(failure_causes) < max_items:
                     failure_causes.append(line)
-                    if not low_confidence_runtime:
+                    if (
+                        failure_cause_runtime_actionable
+                        and not low_confidence_runtime
+                    ):
                         strong_runtime_actionable = True
             for line in raw_failures:
                 if len(failure_cases) < max_items:
@@ -214,6 +229,79 @@ def _build_runtime_feedback(
             "Prefer bounded neighborhoods, top-k candidate filters, and early no-op exits."
         )
     return "\n".join(sections)
+
+
+def _runtime_summary_actionable(
+    stats: Any,
+    *,
+    runtime_model: str,
+    low_confidence_runtime: bool,
+) -> bool:
+    if low_confidence_runtime or runtime_model == "budget_exhausting":
+        return False
+    if _as_int(getattr(stats, "runtime_pairs", 0)) <= 0:
+        return False
+    runtime_ratio = _as_float(getattr(stats, "runtime_ratio_median", None))
+    runtime_delta = _as_float(getattr(stats, "runtime_delta_median_ms", None))
+    runtime_regression_rate = _as_float(
+        getattr(stats, "runtime_regression_rate", None)
+    )
+    if runtime_ratio is not None and runtime_ratio > _RUNTIME_ACTIONABLE_SLOW_RATIO:
+        return True
+    if (
+        runtime_delta is not None
+        and runtime_delta >= _RUNTIME_ACTIONABLE_SLOW_DELTA_MS
+    ):
+        return True
+    return (
+        runtime_regression_rate is not None
+        and runtime_regression_rate >= _RUNTIME_ACTIONABLE_REGRESSION_RATE
+    )
+
+
+def _screening_failure_cause_runtime_actionable(
+    step: StepRecord,
+    payload: dict[str, Any],
+) -> bool:
+    protocol = step.protocol_result
+    if protocol is None:
+        return False
+    stats = protocol.stats
+    failed_pairs = _count_field(stats.failed_pairs, payload, "failed_pairs")
+    candidate_failed = _count_field(
+        stats.candidate_failed_pairs,
+        payload,
+        "candidate_failed_pairs",
+    )
+    champion_failed = _count_field(
+        stats.champion_failed_pairs,
+        payload,
+        "champion_failed_pairs",
+    )
+    operator_errors = _structured_runtime_count(
+        step,
+        "candidate_operator_errors",
+        payload,
+        "candidate_runtime",
+        "operator_errors",
+    )
+    invalid_outputs = _structured_runtime_count(
+        step,
+        "candidate_operator_invalid_outputs",
+        payload,
+        "candidate_runtime",
+        "operator_invalid_outputs",
+    )
+    return any(
+        value > 0
+        for value in (
+            failed_pairs,
+            candidate_failed,
+            champion_failed,
+            operator_errors,
+            invalid_outputs,
+        )
+    )
 
 
 def _runtime_evidence_low_confidence_or_excluded(
@@ -849,6 +937,16 @@ def _as_int(value: Any) -> int:
         return int(str(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _as_float(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
 
 def _fmt_runtime(value: float | None) -> str:
     if value is None:
