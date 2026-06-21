@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `09a4aff5`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
+*Status: v0.4 framework/readiness/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated at runtime commit `7ee1c181`; both pass static readiness and remain blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-21*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -252,9 +252,9 @@ Current checkpoint:
   considered static-ready.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-09a4aff-headroom-caps-6r-gpt55-20260621T004554Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7ee1c18-runtime-feedback-6r-gpt55-20260621T010016Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-09a4aff-headroom-caps-resume-4r-gpt55-20260621T004554Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7ee1c18-runtime-feedback-resume-4r-gpt55-20260621T010016Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -269,7 +269,7 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok`,
-  `prepared_runtime_commit=09a4aff5`, and either
+  `prepared_runtime_commit=7ee1c181`, and either
   `runtime_guard_reason=runtime_guard_commit_matches` or
   `runtime_guard_paths_unchanged_since_prepare` after doc-only commits. They
   also report `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
@@ -289,7 +289,9 @@ Current checkpoint:
   feedback is now rendered as
   bounded proposal-only screening/verification guidance with omitted-detail
   counts and digests; it remains excluded from `DecisionFeatures` and from
-  problem semantics.
+  problem semantics. Nominal no-effect/tie runtime summaries remain report-only
+  and do not trigger the generic bounded/top-k prompt hint unless there is an
+  actual comparative slowdown, runtime failure, or runtime budget saturation.
   Do not launch either root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.

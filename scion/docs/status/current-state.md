@@ -35,15 +35,15 @@ history when exact old chronology is needed.
 ## Active Prepared Roots
 
 These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `09a4aff5`; the corresponding server repair commit is
-`b39608b2`. Local mirrors under `/home/clawd/research/scion-experiments/` are
+runtime commit `7ee1c181`; the corresponding server repair commit is
+`282bf982`. Local mirrors under `/home/clawd/research/scion-experiments/` are
 for inspection only. Run readiness and launch from WSL because the prepared
 contracts contain WSL absolute paths.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-09a4aff-headroom-caps-6r-gpt55-20260621T004554Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7ee1c18-runtime-feedback-6r-gpt55-20260621T010016Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-09a4aff-headroom-caps-resume-4r-gpt55-20260621T004554Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7ee1c18-runtime-feedback-resume-4r-gpt55-20260621T010016Z-claw`
 
 Current readiness snapshot for both roots:
 
@@ -52,14 +52,14 @@ Current readiness snapshot for both roots:
 - `failed_static_required_checks=[]`
 - only required failure: completion preflight auth
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=09a4aff5`; doc-only commits may report
+  `prepared_runtime_commit=7ee1c181`; doc-only commits may report
   `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare`
 - campaign marker: `campaign_execution_marker_status=ok`
 - secret file permissions: `launch_env_secret_permissions=ok`,
   `launch_env_mode=0o600`
-- headroom guard: `run_script_proposal_headroom_enforced=ok`; exact `0`
-  proposal/APS caps are treated as explicitly disabled, while low nonzero caps
-  fail readiness instead of passing as warnings
+- headroom guard: `checks.run_script_proposal_headroom_enforced.status=ok`;
+  exact `0` proposal/APS caps are treated as explicitly disabled, while low
+  nonzero caps fail readiness instead of passing as warnings
 - completion preflight exposes flat `completion_login_url` and
   `completion_next_step`; always fetch a fresh login URL from strict readiness
   rather than copying an old OAuth URL from notes
@@ -85,13 +85,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 After strict readiness passes, launch the wrapper itself:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-09a4aff-headroom-caps-6r-gpt55-20260621T004554Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-7ee1c18-runtime-feedback-6r-gpt55-20260621T010016Z-claw/run.sh
 ```
 
 Run CVRP after warehouse is underway or accepted for launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-09a4aff-headroom-caps-resume-4r-gpt55-20260621T004554Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-7ee1c18-runtime-feedback-resume-4r-gpt55-20260621T010016Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
@@ -130,7 +130,9 @@ the v0.4 planning summary, focused tests, and experiment reports.
 - Runtime semantics must not turn budget-exhausting solver saturation, cached
   ties, comparative runtime-ratio slowdown, or inactive mechanism activation
   into meaningless replay pressure, lifecycle churn, or proposal feedback
-  noise.
+  noise. Nominal no-effect/tie runtime summaries remain report-only; generic
+  bounded/top-k runtime guidance requires actual comparative slowdown,
+  runtime failure, or runtime budget saturation.
 - Postrun acceptance must fail closed on missing current-run evidence, stale
   copied resume artifacts, wrapper/postrun status failures, absent source
   visibility, missing interpretation-specific review inputs, or CVRP bounded
