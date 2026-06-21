@@ -40,6 +40,12 @@ history when exact old chronology is needed.
   CMT2/CMT4/resume-continuity, CVRP top-level required-evidence, warehouse
   champion-v2, warehouse required-evidence, and active code constraint rendered
   checks without changing Decision, scheduler, promotion, or Protocol inputs.
+- Latest accepted prepared measurement-handoff audit repair: local commit
+  `a532dcd0` / WSL commit `b470f1bb` keeps
+  `measurement_readiness` reduced and ref-free while surfacing compact
+  calibration provenance in the sibling `calibration` block: source artifact
+  `sha256` plus whitelisted `calibration_run` summary fields. Raw pair rows and
+  full calibration replay details remain out of status and `DecisionFeatures`.
 - The prior CVRP protected-case guard remains in force: CMT2/CMT4 postrun
   evidence must carry numeric objective/distance delta evidence; route-count,
   feasibility-only, case-name, or free-text continuity payloads cannot make a
@@ -52,17 +58,18 @@ history when exact old chronology is needed.
 ## Active Prepared Roots
 
 These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `6b4c70d6` after the CVRP required-evidence prepared handoff
-repair; the corresponding local repair commit is `6771a6a4`. They retain the
-explicit drain-limit behavior from WSL commit `2b2cd351`.
+runtime commit `b470f1bb` after the prepared calibration-provenance handoff
+repair; the corresponding local repair commit is `a532dcd0`. They retain the
+CVRP required-evidence repair from WSL commit `6b4c70d6` and the explicit
+drain-limit behavior from WSL commit `2b2cd351`.
 Local mirrors under `/home/clawd/research/scion-experiments/` are for
 inspection only. Run readiness and launch from WSL because the prepared
 contracts contain WSL absolute paths.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6b4c70d6-reqevidence-6r-gpt55-20260621T051044Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-b470f1bb-calprov-6r-gpt55-20260621T052524Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6b4c70d6-reqevidence-4r-gpt55-20260621T051045Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-b470f1bb-calprov-4r-gpt55-20260621T052526Z-claw`
 
 Current readiness snapshot for both roots:
 
@@ -74,14 +81,20 @@ Current readiness snapshot for both roots:
   `active=0`, `total=1`; ignore volatile expired/refreshing substates unless
   active auth becomes available
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=6b4c70d6`; current WSL HEAD may include status or
+  `prepared_runtime_commit=b470f1bb`; current WSL HEAD may include status or
   tooling commits outside runtime-guard paths after prepare, and strict
   readiness accepts that only when the guarded runtime paths are unchanged since
   prepare
 - measurement handoff:
   `measurement_readiness.calibration_evidence_level=summary_only` and no
   `measurement_readiness.calibration_ref` or
-  `measurement_readiness.pair_evidence` in either prepared root
+  `measurement_readiness.pair_evidence` in either prepared root. The sibling
+  `calibration` block carries compact source provenance: warehouse source
+  artifact sha `5e34c863356bc74a9d2254dbde1d0a0945c88d56ca7201a4e033344b9718146f`
+  and `calibration_run.action=modify`; CVRP source artifact sha
+  `bdba8272d4eb130200ad537b51ceaef7e50323f614ea3ae29a8247ed9a771684`,
+  `calibration_run.replicate_count=3`, and
+  `calibration_run.runtime_policy.selected_policy=protocol_time_limits`
 - campaign marker: `campaign_execution_marker_status=ok`
 - secret file permissions: `launch_env_secret_permissions=ok`,
   `launch_env_mode=0o600`
@@ -126,13 +139,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 After strict readiness passes, launch the wrapper itself:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-6b4c70d6-reqevidence-6r-gpt55-20260621T051044Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-b470f1bb-calprov-6r-gpt55-20260621T052524Z-claw/run.sh
 ```
 
 Run CVRP after warehouse is underway or accepted for launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-6b4c70d6-reqevidence-4r-gpt55-20260621T051045Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-b470f1bb-calprov-4r-gpt55-20260621T052526Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
