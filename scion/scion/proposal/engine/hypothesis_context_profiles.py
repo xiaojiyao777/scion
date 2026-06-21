@@ -598,8 +598,8 @@ def _compact_problem_measurement_diagnostics(payload: Any) -> str:
                     "noise_band_p90_abs",
                     "effect_to_mde_ratio",
                     "signal_to_noise_tier",
+                    "calibration_evidence_level",
                     "decision_features_excluded",
-                    "calibration_ref",
                 ),
             ),
             "noise_floor": _project_mapping(

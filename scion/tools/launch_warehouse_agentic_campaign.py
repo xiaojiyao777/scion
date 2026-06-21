@@ -453,7 +453,7 @@ def _warehouse_measurement_opportunity_diagnostics(
         "practical_screen_delta": practical_screen_delta,
         "practical_validate_delta": float(effect_scale.practical_delta_validate),
         "screening_mde_at_power_80": mde_at_power_80,
-        "measurement_readiness": readiness.to_diagnostic_payload(),
+        "measurement_readiness": readiness.to_status_payload(),
         "calibration": {
             "schema": calibration_artifact.get("schema"),
             "ref": calibration_ref,

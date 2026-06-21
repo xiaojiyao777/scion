@@ -138,6 +138,12 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert measurement["measurement_readiness"]["status"] == "ready"
     assert measurement["measurement_readiness"]["reason_code"] == "ok"
     assert measurement["measurement_readiness"]["n_pairs"] == 36
+    assert (
+        measurement["measurement_readiness"]["calibration_evidence_level"]
+        == "summary_only"
+    )
+    assert "calibration_ref" not in measurement["measurement_readiness"]
+    assert "pair_evidence" not in measurement["measurement_readiness"]
     assert measurement["calibration"]["schema"] == "scion.aa_noise_floor.v1"
     assert measurement["calibration"]["ref"] == "calibration/aa_noise_floor.json"
     assert measurement["calibration"]["decision_features_excluded"] is True

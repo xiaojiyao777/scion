@@ -133,6 +133,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert measurement["calibration"]["schema"] == "scion.aa_noise_floor.v1"
     assert measurement["calibration"]["decision_features_excluded"] is True
     assert measurement["measurement_readiness"]["status"] == "ready"
+    assert (
+        measurement["measurement_readiness"]["calibration_evidence_level"]
+        == "summary_only"
+    )
+    assert "calibration_ref" not in measurement["measurement_readiness"]
+    assert "pair_evidence" not in measurement["measurement_readiness"]
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in measurement["reason_codes"]
     assert measurement["opportunity_projection_source"] == (
         "problem_adapter.render_problem_measurement_diagnostics"

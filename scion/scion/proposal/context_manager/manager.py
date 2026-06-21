@@ -587,7 +587,7 @@ def _problem_measurement_diagnostics(
             }.items()
             if value not in ("", None, [], {}, ())
         },
-        "measurement_readiness": readiness.to_diagnostic_payload(),
+        "measurement_readiness": readiness.to_status_payload(),
         "calibration": {
             key: value
             for key, value in {
