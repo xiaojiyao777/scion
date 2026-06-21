@@ -4,8 +4,8 @@
 *Status: v0.4 framework/readiness/launcher repairs are accepted enough for
 focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs
 demonstrate effective research behavior. Current WSL prepared roots were
-regenerated at runtime commit `b470f1bb` after the prepared
-calibration-provenance handoff repair; both pass static readiness and remain
+regenerated at runtime commit `26a03547` after the prepared
+calibration-provenance prompt-bridge repair; both pass static readiness and remain
 blocked only by external `gpt-5.5` completion auth.*
 *Updated: 2026-06-21*
 
@@ -284,12 +284,14 @@ Current checkpoint:
   bounded-two-opt, resume-continuity, CVRP required-evidence, warehouse
   champion-v2, warehouse required-evidence, and active code-constraint checks
   without changing Decision, scheduler, promotion, or Protocol inputs.
-- Latest accepted prepared measurement-handoff audit repair: local commit
-  `a532dcd0` / WSL commit `b470f1bb` keeps
+- Latest accepted prepared calibration-provenance prompt-bridge repair: local
+  commit `ceaf339c` / WSL commit `26a03547` keeps
   `measurement_readiness` reduced and ref-free while surfacing compact
   calibration provenance in the sibling `calibration` block: source artifact
-  `sha256` plus whitelisted `calibration_run` summary fields. Raw pair rows and
-  full calibration replay details remain out of status and `DecisionFeatures`.
+  `sha256` plus whitelisted `calibration_run` summary fields. Prepared
+  prompt-context readiness also proves that provenance is rendered into the
+  proposal-only research-focus bridge. Raw pair rows and full calibration replay
+  details remain out of status and `DecisionFeatures`.
 - Scheduler-depth repair is accepted at local commit `e39300f4` / WSL commit
   `896b9c06`: ordinary active no-effect/marginal low-signal branches remain
   schedulable for same-mechanism follow-up, and scheduler-origin park/reclaim
@@ -298,9 +300,9 @@ Current checkpoint:
   lineage reclaim remain fail-closed.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-b470f1bb-calprov-6r-gpt55-20260621T052524Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-26a03547-calprompt-6r-gpt55-6r-gpt55-20260621T054141Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-b470f1bb-calprov-4r-gpt55-20260621T052526Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -315,7 +317,7 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok` and
-  `prepared_runtime_commit=b470f1bb`. Current WSL HEAD may include status or
+  `prepared_runtime_commit=26a03547`. Current WSL HEAD may include status or
   tooling commits outside runtime-guard paths after prepare, and strict
   readiness accepts that only when the guarded runtime paths are unchanged since
   prepare. They also report
@@ -326,7 +328,10 @@ Current checkpoint:
   `measurement_readiness.calibration_ref` or
   `measurement_readiness.pair_evidence` in either root. The sibling
   `calibration` block now carries source artifact `sha256` and compact
-  `calibration_run` provenance for the summary-only calibration.
+  `calibration_run` provenance for the summary-only calibration, and prepared
+  prompt-context readiness verifies that the corresponding proposal-only prompt
+  bridge renders the calibration source/run fields. CVRP additionally verifies
+  `calibration_run.runtime_policy.selected_policy` in the prompt bridge.
   Completion preflight now also exposes flat `completion_login_url` and
   `completion_next_step` fields. Use a fresh login URL from strict readiness
   rather than copying an older OAuth URL from status text.

@@ -40,12 +40,14 @@ history when exact old chronology is needed.
   CMT2/CMT4/resume-continuity, CVRP top-level required-evidence, warehouse
   champion-v2, warehouse required-evidence, and active code constraint rendered
   checks without changing Decision, scheduler, promotion, or Protocol inputs.
-- Latest accepted prepared measurement-handoff audit repair: local commit
-  `a532dcd0` / WSL commit `b470f1bb` keeps
+- Latest accepted prepared calibration-provenance prompt-bridge repair: local
+  commit `ceaf339c` / WSL commit `26a03547` keeps
   `measurement_readiness` reduced and ref-free while surfacing compact
   calibration provenance in the sibling `calibration` block: source artifact
-  `sha256` plus whitelisted `calibration_run` summary fields. Raw pair rows and
-  full calibration replay details remain out of status and `DecisionFeatures`.
+  `sha256` plus whitelisted `calibration_run` summary fields. Prepared
+  prompt-context readiness now proves that provenance is rendered into the
+  proposal-only research-focus bridge. Raw pair rows and full calibration replay
+  details remain out of status and `DecisionFeatures`.
 - The prior CVRP protected-case guard remains in force: CMT2/CMT4 postrun
   evidence must carry numeric objective/distance delta evidence; route-count,
   feasibility-only, case-name, or free-text continuity payloads cannot make a
@@ -58,8 +60,8 @@ history when exact old chronology is needed.
 ## Active Prepared Roots
 
 These WSL roots supersede earlier prepared roots. They were generated at WSL
-runtime commit `b470f1bb` after the prepared calibration-provenance handoff
-repair; the corresponding local repair commit is `a532dcd0`. They retain the
+runtime commit `26a03547` after the prepared calibration-provenance prompt-bridge
+repair; the corresponding local repair commit is `ceaf339c`. They retain the
 CVRP required-evidence repair from WSL commit `6b4c70d6` and the explicit
 drain-limit behavior from WSL commit `2b2cd351`.
 Local mirrors under `/home/clawd/research/scion-experiments/` are for
@@ -67,9 +69,9 @@ inspection only. Run readiness and launch from WSL because the prepared
 contracts contain WSL absolute paths.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-b470f1bb-calprov-6r-gpt55-20260621T052524Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-26a03547-calprompt-6r-gpt55-6r-gpt55-20260621T054141Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-b470f1bb-calprov-4r-gpt55-20260621T052526Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
 
 Current readiness snapshot for both roots:
 
@@ -81,7 +83,7 @@ Current readiness snapshot for both roots:
   `active=0`, `total=1`; ignore volatile expired/refreshing substates unless
   active auth becomes available
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=b470f1bb`; current WSL HEAD may include status or
+  `prepared_runtime_commit=26a03547`; current WSL HEAD may include status or
   tooling commits outside runtime-guard paths after prepare, and strict
   readiness accepts that only when the guarded runtime paths are unchanged since
   prepare
@@ -111,9 +113,14 @@ Current readiness snapshot for both roots:
   `cvrp_resume_continuity_present=true`, and
   `cvrp_bounded_twoopt_present=true`, plus
   `cvrp_required_evidence_all_present=true` with 5 required-evidence items
-  rendered; warehouse exposes
+  rendered, and the calibration provenance prompt fields
+  `cvrp_measurement_calibration_source_artifact_present=true`,
+  `cvrp_measurement_calibration_run_present=true`, and
+  `cvrp_measurement_calibration_runtime_policy_present=true`; warehouse exposes
   `warehouse_v2_followup_present=true` and
-  `warehouse_required_evidence_all_present=true`
+  `warehouse_required_evidence_all_present=true`, plus
+  `warehouse_measurement_calibration_source_artifact_present=true` and
+  `warehouse_measurement_calibration_run_present=true`
 - completion preflight exposes flat `completion_login_url` and
   `completion_next_step`; always fetch a fresh login URL from strict readiness
   rather than copying an old OAuth URL from notes
@@ -139,13 +146,13 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 After strict readiness passes, launch the wrapper itself:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-b470f1bb-calprov-6r-gpt55-20260621T052524Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-26a03547-calprompt-6r-gpt55-6r-gpt55-20260621T054141Z-claw/run.sh
 ```
 
 Run CVRP after warehouse is underway or accepted for launch:
 
 ```bash
-bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-b470f1bb-calprov-4r-gpt55-20260621T052526Z-claw/run.sh
+bash /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw/run.sh
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
