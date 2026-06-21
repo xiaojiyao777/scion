@@ -4,9 +4,9 @@
 *Status: v0.4 framework/readiness/launcher repairs are accepted enough for
 focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs
 demonstrate effective research behavior. Current WSL prepared roots were
-regenerated at runtime commit `13abbbef` after the CVRP protected-case
-objective-delta postrun guard repair; both pass static readiness and remain
-blocked only by external `gpt-5.5` completion auth.*
+regenerated at runtime commit `a7237c88` after the calibration evidence-level
+readiness repair; both pass static readiness and remain blocked only by
+external `gpt-5.5` completion auth.*
 *Updated: 2026-06-21*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -260,6 +260,10 @@ Current checkpoint:
   numeric objective/distance delta evidence. Feasibility-only, route-count,
   case-name, or free-text continuity payloads cannot make a bounded two-opt
   summary review-ready.
+- Latest accepted readiness/status repair: local commit `7f64b381` / WSL
+  commit `a7237c88` exposes compact calibration evidence depth
+  (`summary_only`, `pair_evidence`, `full_replay`) in measurement readiness
+  without leaking replay rows or calibration paths into status consumers.
 - Scheduler-depth repair is accepted at local commit `e39300f4` / WSL commit
   `896b9c06`: ordinary active no-effect/marginal low-signal branches remain
   schedulable for same-mechanism follow-up, and scheduler-origin park/reclaim
@@ -268,9 +272,9 @@ Current checkpoint:
   lineage reclaim remain fail-closed.
 - Active WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-13abbbef-resumecont-6r-gpt55-20260621T030244Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-a7237c88-calevel-resumecont-6r-gpt55-6r-gpt55-20260621T032623Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-13abbbef-resumecont-4r-gpt55-20260621T030244Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-a7237c88-calevel-resumecont-4r-gpt55-4r-gpt55-20260621T032623Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, and `failed_static_required_checks=[]`. The only
   required failure is external completion auth:
@@ -285,9 +289,8 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok` and
-  `prepared_runtime_commit=13abbbef`. Current WSL HEAD may include docs-only
-  status commits after prepare, and strict readiness accepts that only when the
-  guarded runtime paths are unchanged since prepare. They also report
+  `prepared_runtime_commit=a7237c88`, `actual_runtime_commit=a7237c88`, and
+  `runtime_guard_reason=runtime_guard_commit_matches`. They also report
   `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
   `campaign_execution_marker_status=ok` through top-level marker summary fields.
   Completion preflight now also exposes flat `completion_login_url` and
