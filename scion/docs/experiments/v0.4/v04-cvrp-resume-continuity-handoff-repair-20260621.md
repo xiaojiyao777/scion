@@ -35,6 +35,7 @@ Code commits:
 
 - Local: `b14eb332` (`Require CVRP resume continuity handoff`)
 - WSL: `c7b06d9a` (`Require CVRP resume continuity handoff`)
+- WSL status/docs sync: `3138b886`
 
 ## Verification
 
@@ -92,7 +93,8 @@ Strict launch readiness for both refreshed roots reports:
   `code=invalid_api_key`
 - `runtime_guard_status=ok`
 - `prepared_runtime_commit=c7b06d9a`
-- `actual_runtime_commit=c7b06d9a`
+- `actual_runtime_commit=3138b886`
+- `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare`
 - `campaign_execution_marker_status=ok`
 - `launch_env_secret_permissions=ok`
 

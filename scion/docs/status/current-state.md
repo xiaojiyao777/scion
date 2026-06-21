@@ -52,8 +52,8 @@ Current readiness snapshot for both roots:
 - `failed_static_required_checks=[]`
 - only required failure: completion preflight auth
 - runtime guard: `runtime_guard_status=ok`,
-  `prepared_runtime_commit=c7b06d9a`, `actual_runtime_commit=c7b06d9a`,
-  `runtime_guard_reason=runtime_guard_commit_matches`
+  `prepared_runtime_commit=c7b06d9a`, `actual_runtime_commit=3138b886`,
+  `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare`
 - campaign marker: `campaign_execution_marker_status=ok`
 - secret file permissions: `launch_env_secret_permissions=ok`,
   `launch_env_mode=0o600`

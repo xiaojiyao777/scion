@@ -275,9 +275,9 @@ Current checkpoint:
   checks with `readiness_scope=launch_with_completion_preflight` can approve
   launch. Launch readiness also exposes top-level runtime/env status fields for
   status refreshes; the current roots report `runtime_guard_status=ok`,
-  `prepared_runtime_commit=c7b06d9a`, `actual_runtime_commit=c7b06d9a`, and
-  `runtime_guard_reason=runtime_guard_commit_matches`. They also report
-  `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
+  `prepared_runtime_commit=c7b06d9a`, `actual_runtime_commit=3138b886`, and
+  `runtime_guard_reason=runtime_guard_paths_unchanged_since_prepare`. They also
+  report `launch_env_secret_permissions=ok`, `launch_env_mode=0o600`, and
   `campaign_execution_marker_status=ok` through top-level marker summary
   fields.
   Completion preflight now also exposes flat `completion_login_url` and
