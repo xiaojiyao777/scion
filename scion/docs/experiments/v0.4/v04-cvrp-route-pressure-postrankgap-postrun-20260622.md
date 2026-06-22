@@ -117,4 +117,3 @@ hypothesis names a new non-acceptance causal path and direct objective-effect
 telemetry. The launcher handoff has been updated accordingly so the next WSL
 root steers toward bounded local search or another direct solver-design
 mechanism.
-
