@@ -25,10 +25,10 @@ history when exact old chronology is needed.
 
 - Framework/readiness/launcher repairs are accepted enough for focused
   warehouse and CVRP follow-up.
-- v0.4 is not closed until a fresh current-run-ready campaign proves effective
-  research behavior. Warehouse has now shown effective research movement; CVRP
-  still needs a solver-design improvement or a stronger evidence-backed
-  follow-up result.
+- v0.4 is not closed until fresh current-run-ready campaigns prove effective
+  research behavior. Warehouse now has both positive movement evidence and a
+  post-repair current-run-ready partial run; CVRP still needs a solver-design
+  improvement or a stronger evidence-backed follow-up result.
 - WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
   for the latest warehouse rerun before launch, and live prompt/source evidence
   passed under the patched postrun checker.
@@ -102,6 +102,23 @@ Warehouse quality-loop guard root:
   recovery bug. A quality-rejected waiting-approval partial hypothesis was
   recovered repeatedly instead of allowing quality feedback to drive a fresh
   proposal. The fix is WSL commit `43ac9935`.
+
+Warehouse APS retry evidence root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-60029d30-apsretry-6r-gpt55-20260622T014615Z-claw`
+- Strict launch readiness passed from WSL commit `60029d30`.
+- The run finished naturally with `wrapper_exit_status=0`,
+  `campaign_wrapper_exit_status=0`, `postrun_readiness_exit_status=0`, and
+  `postrun_acceptance_status=ready`.
+- Campaign status is current-run-ready partial evidence:
+  `valid_partial_interrupted`, 3 effective rounds, 3 protocol-evaluated
+  candidates, 5 screening rows, 5 quality blocks, 0 promotions, champion still
+  `v2`, and `last_stop_reason=repeated_quality_block_signature`.
+- Interpretation: the prompt/source visibility checker, repeated quality-block
+  guard, and APS quality-feedback recovery are now verified under live provider
+  traces. The run is not a promotion result; it is a valid partial warehouse
+  research result showing no positive effect at or above MDE in the screened
+  rows and a fail-closed plateau/quality-guidance stop.
 
 CVRP evidence root:
 
@@ -204,8 +221,13 @@ the v0.4 planning summary, focused tests, and experiment reports.
 Warehouse:
 
 - Positive checkpoint: champion `v2` promoted in the validation-transfer rerun.
-- Next question: can Scion produce useful follow-up research from `v2`, or
-  correctly diagnose a real post-v2 plateau?
+- Current post-repair checkpoint: APS retry from champion `v2` produced
+  current-run-ready partial evidence and correctly stopped on repeated
+  quality-block signature after fresh proposal recovery.
+- Next question: whether further warehouse work should refine the
+  validation-transfer quality guidance (`runtime_bounded_acceptance` /
+  `bounded_candidate_policy`) or accept this as a post-v2 plateau/quality
+  guidance signal while CVRP remains the v0.4 closure blocker.
 - Accept a plateau conclusion only with protocol evidence below MDE,
   review-ready runtime evidence, and substantive continuity evidence without
   fully missed same-mechanism follow-up opportunities.
@@ -230,13 +252,12 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Prepare and launch one fresh warehouse champion-`v2` follow-up from WSL commit
-   `43ac9935` or later to verify fresh APS retry after quality feedback and
-   current-run postrun acceptance.
-2. Use the completed pre-repair CVRP root as trajectory evidence only. Prepare a
-   fresh CVRP bounded large-two-opt follow-up from the current WSL commit if
-   warehouse proves the live prompt/source visibility repair under postrun
-   acceptance.
+1. Prepare and launch a fresh CVRP bounded large-two-opt or materially different
+   solver-design follow-up from the current synchronized WSL commit. Treat the
+   completed pre-repair CVRP root as trajectory evidence only.
+2. Keep warehouse as current-run-ready partial evidence unless a targeted
+   follow-up is needed to refine validation-transfer quality guidance around
+   `runtime_bounded_acceptance` / `bounded_candidate_policy`.
 3. Update this file and `scion/TASK.md` only when operating truth changes; keep
    detailed run evidence in focused experiment reports.
 

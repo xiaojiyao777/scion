@@ -5,13 +5,14 @@
 focused warehouse and CVRP follow-up, but v0.4 is not closed until fresh
 current-run-ready campaigns demonstrate effective research behavior. WSL
 `gpt-5.5` auth has recovered. Warehouse has shown renewed continuous
-improvement from champion `v2` to `v3`; the post prompt/source-visibility rerun
-proved live prompt/source evidence but exposed an alternating proposal-quality
-loop, and the guard-verification rerun exposed stale APS partial-hypothesis
-recovery after quality feedback. Both are fixed for the next rerun. The
-pre-repair CVRP bounded large-two-opt follow-up finished as valid research
-evidence but did not produce promotion, positive-at-MDE evidence, or direct
-large-two-opt mechanism evidence.*
+improvement from champion `v2` to `v3`; the latest post-repair APS retry root
+is current-run postrun-ready partial evidence and verifies live prompt/source
+visibility, repeated quality-block fail-closed behavior, and fresh proposal
+recovery after quality feedback. It did not promote beyond champion `v2`, so
+the next v0.4 closure blocker is a fresh CVRP solver-design run from the
+current repaired checkout. The pre-repair CVRP bounded large-two-opt follow-up
+finished as valid research evidence but did not produce promotion,
+positive-at-MDE evidence, or direct large-two-opt mechanism evidence.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -261,6 +262,17 @@ Current checkpoint:
   screening rows, and 313 quality blocks because alternating proposal-quality
   failures bypassed the old consecutive-only repeat guard. Treat this as a
   framework escape finding, not a warehouse plateau conclusion.
+- Warehouse APS retry root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-60029d30-apsretry-6r-gpt55-20260622T014615Z-claw`
+  finished naturally from WSL commit `60029d30`: wrapper exit `0`, postrun
+  readiness exit `0`, postrun acceptance `ready`, `valid_partial_interrupted`,
+  3 effective rounds, 3 protocol-evaluated candidates, 5 screening rows, 5
+  quality blocks, 0 promotions, champion still `v2`, and
+  `last_stop_reason=repeated_quality_block_signature`.
+  Interpretation: the quality-loop guard and APS quality-feedback recovery are
+  now verified under live provider traces. The run is current-run-ready partial
+  research evidence and a plateau/quality-guidance signal, not a warehouse
+  promotion result.
 - CVRP/VRP continuation is repaired enough for focused solver-design follow-up,
   but v0.4 is not yet accepted because no current CVRP branch has shown
   continuous improvement or promotion. Pre-repair root
@@ -344,14 +356,21 @@ Current checkpoint:
     runaway guard, but produced 0 effective rounds because stale partial
     hypothesis recovery replayed a quality-rejected warehouse hypothesis before
     the APS recovery repair.
+  - Warehouse APS retry evidence root:
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-60029d30-apsretry-6r-gpt55-20260622T014615Z-claw`
+    launched from WSL commit `60029d30`, passed strict launch readiness, and
+    finished with wrapper/postrun exit `0`. It is current-run-ready partial
+    evidence: 3 effective rounds, 5 screening rows, 0 promotions,
+    `champion_version=2`, and fail-closed stop on repeated quality-block
+    signature after fresh APS retry behavior was observed.
   - CVRP active root:
     `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
     finished from a pre-repair checkout. Campaign status is valid, but
     postrun readiness is not accepted; the run produced no promotion, no
     positive effect at/above MDE, no CMT2/CMT4 protected-case evidence, and no
     direct large-instance bounded two-opt mechanism signal.
-  - Next fresh launch should use WSL commit `43ac9935` or later, strict
-    launch readiness, conda Python
+  - Next fresh launch should be a CVRP solver-design follow-up from the current
+    synchronized WSL commit, with strict launch readiness, conda Python
     `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`, and no generic
     proposal/APS/tool-call truncation caps.
 - Current framework guarantees, all report-only/control-plane or problem-owned
