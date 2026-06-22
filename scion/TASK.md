@@ -8,13 +8,14 @@ has recovered. Warehouse has shown renewed continuous improvement from champion
 `v2` to `v3`; the latest post-repair APS retry root is current-run
 postrun-ready partial evidence and verifies live prompt/source visibility,
 repeated quality-block fail-closed behavior, and fresh proposal recovery after
-quality feedback. The latest post-repair CVRP root is current-run-ready,
-complete evidence: 4 effective rounds, no quality blocks, prompt/source and
-research-efficiency acceptance checks passing on WSL, and same-mechanism
-rank-gap acceptance follow-up with expanded screening and MDE-aware rejection.
-It did not produce promotion, positive-at-MDE evidence, or a solver improvement,
-so the next blocker is a focused CVRP postrun review and a materially different
-solver-design follow-up rather than another unchanged acceptance-gate repeat.*
+quality feedback. CVRP now has two current-run-ready complete post-repair roots:
+rank-gap acceptance and route-pressure acceptance both show clean framework
+execution, expanded screening, MDE-aware rejection, and no quality blocks, but
+neither produced promotion, positive-at-MDE evidence, large-two-opt signal, or a
+solver improvement. The active blocker is therefore CVRP research-direction
+control: the next root must avoid spending branch slots on acceptance/adaptive
+weighting unless it names a new non-acceptance causal path with direct
+objective-effect telemetry.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -275,7 +276,7 @@ Current checkpoint:
   now verified under live provider traces. The run is current-run-ready partial
   research evidence and a plateau/quality-guidance signal, not a warehouse
   promotion result.
-- CVRP/VRP continuation now has a current-run-ready complete post-repair root:
+- CVRP/VRP continuation has current-run-ready complete post-repair evidence:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2e1bc5ae-postrepair-4r-gpt55-20260622T021910Z-claw`.
   It launched from WSL commit `2e1bc5ae`, finished naturally with wrapper exit
   `0`, campaign wrapper exit `0`, postrun readiness exit `0`, postrun
@@ -295,6 +296,19 @@ Current checkpoint:
   reject CVRP hypotheses, but not as a promotion or v0.4 closure by itself.
   Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-rank-gap-acceptance-postrepair-20260622.md`.
+- A follow-up CVRP root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-nextmech-1aae436c-postrankgap-4r-gpt55-20260622T041502Z-claw`
+  launched from WSL commit `1aae436c`, resumed from the rank-gap root, and
+  also finished current-run-ready: wrapper/postrun exit `0`, validity `valid`,
+  completeness `complete`, 4 effective rounds, 4 protocol-evaluated screening
+  rows, 0 quality blocks, 0 promotions, champion still `v1`. The agent spent
+  all four current rows on `route_pressure_acceptance` rather than the
+  bounded-two-opt handoff. Expanded 48-pair rows had only `+8` and `+5` net raw
+  delta, protected CMT cases were neutral, all rows were below MDE, and postrun
+  analysis reported `missing_large_twoopt_mechanism_signal`. Treat this as
+  framework-valid CVRP rejection evidence, not a solver improvement. Detailed
+  report:
+  `scion/docs/experiments/v0.4/v04-cvrp-route-pressure-postrankgap-postrun-20260622.md`.
 - Latest accepted prompt/source visibility repair: local commit `774c981d` /
   WSL commit `a9a537c4` removes active-subject code-constraint prompt
   truncation, classifies cross-branch/branch-lesson prompt sections as
@@ -311,6 +325,12 @@ Current checkpoint:
   skips stale `partial_hypothesis_only` reuse when the current request carries
   agentic quality-block feedback. This forces a fresh proposal after
   problem-quality rejection instead of replaying the same old hypothesis.
+- Latest CVRP direction handoff repair: local worktree now marks current-run
+  rank-gap and route-pressure acceptance variants as default-avoid directions
+  unless a future hypothesis names a new non-acceptance causal path and direct
+  objective-effect telemetry. This remains proposal-only research-focus
+  guidance and is excluded from Decision, Protocol, scheduler, and promotion
+  inputs.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
   numeric objective/distance delta evidence. Feasibility-only, route-count,
@@ -384,10 +404,19 @@ Current checkpoint:
     CVRP research continuity and fail-closed evidence interpretation, but the
     `rank_gap_annealing_acceptance` mechanism family produced no positive
     effect at or above MDE.
-  - Next fresh CVRP launch should avoid repeating unchanged rank-gap acceptance
-    gates. Pick a materially different problem-owned solver mechanism or a new
-    causal path with direct objective-effect telemetry, CMT2/CMT4 protection,
-    and strict launch readiness from the synchronized WSL commit.
+  - CVRP route-pressure follow-up root:
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-nextmech-1aae436c-postrankgap-4r-gpt55-20260622T041502Z-claw`
+    launched from WSL commit `1aae436c`, passed strict launch readiness, and
+    finished current-run-ready: wrapper/postrun exit `0`, validity `valid`,
+    completeness `complete`, 4 effective rounds, 4 screening rows, 0 quality
+    blocks, 0 promotions, and `champion_version=1`. It confirms that another
+    acceptance-family path is insufficient: `route_pressure_acceptance` had no
+    positive-at-MDE effect and no large-two-opt signal.
+  - Next fresh CVRP launch should avoid repeating unchanged rank-gap or
+    route-pressure acceptance gates. Pick bounded local search or a materially
+    different problem-owned solver mechanism with direct objective-effect
+    telemetry, CMT2/CMT4 protection, and strict launch readiness from the
+    synchronized WSL commit.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

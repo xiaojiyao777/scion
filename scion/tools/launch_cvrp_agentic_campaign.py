@@ -81,6 +81,11 @@ CVRP_DEFAULT_AVOID_DIRECTIONS = (
     "cross-route 2-opt reconnect",
     "cluster-biased worst removal",
     "route-limit seed diversification",
+    "rank-gap acceptance gates after current-run no-effect expansion",
+    (
+        "route-pressure acceptance/adaptive-weighting variants without a new "
+        "non-acceptance causal path or direct objective-effect telemetry"
+    ),
 )
 CVRP_ADAPTER_OPPORTUNITY_FIELDS = (
     "screening_headroom",
@@ -228,8 +233,8 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
         "Test the large-instance intra-route two-opt seed only as a "
         "deadline-aware bounded local-search mechanism, or select another "
         "materially different CVRP solver-design mechanism with direct "
-        "objective-effect evidence before spending another route-merge or "
-        "construction-seed branch slot."
+        "objective-effect evidence before spending another route-merge, "
+        "construction-seed, or acceptance/adaptive-weighting branch slot."
     ),
     "required_evidence": [
         (
@@ -251,6 +256,10 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
         (
             "direct activation-to-objective-effect evidence for any route-merge, "
             "construction-seed, destroy/repair, or acceptance-weighting claim"
+        ),
+        (
+            "a new non-acceptance causal path before revisiting rank-gap or "
+            "route-pressure acceptance after the current-run no-effect results"
         ),
     ],
     "measurement_opportunity_diagnostics": {},
@@ -278,7 +287,10 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
         ),
         (
             "acceptance_or_adaptive_weighting: require direct move acceptance "
-            "and downstream objective-effect telemetry"
+            "and downstream objective-effect telemetry; after current-run "
+            "rank-gap and route-pressure no-effect expansions, do not spend "
+            "the next CVRP branch slot here without a new non-acceptance "
+            "causal path"
         ),
     ],
     "route_merge_exception_rule": (

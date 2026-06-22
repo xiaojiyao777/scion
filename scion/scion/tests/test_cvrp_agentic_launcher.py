@@ -124,6 +124,14 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "default_avoid_directions"
     ]
     assert any(
+        "rank-gap acceptance" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "route-pressure acceptance/adaptive-weighting" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
         "unbounded large-instance two-opt fallback" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
@@ -190,6 +198,13 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "large_instance_intra_route_two_opt_seed" in item
         and "deadline-aware bounded search effort" in item
         and "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md" in item
+        for item in prepared_manifest["research_focus"][
+            "measurable_opportunity_classes"
+        ]
+    )
+    assert any(
+        "acceptance_or_adaptive_weighting" in item
+        and "new non-acceptance causal path" in item
         for item in prepared_manifest["research_focus"][
             "measurable_opportunity_classes"
         ]
@@ -527,6 +542,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "research_focus"
     ]["default_avoid_directions"]
     assert any(
+        "route-pressure acceptance/adaptive-weighting" in item
+        for item in prepared_brief["prepared_run_contract"]["research_focus"][
+            "default_avoid_directions"
+        ]
+    )
+    assert any(
         "large_instance_intra_route_two_opt_seed" in item
         for item in prepared_brief["prepared_run_contract"]["research_focus"][
             "measurable_opportunity_classes"
@@ -648,8 +669,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     prompt_summary = prepared_prompt_context["signals"][
         "prepared_research_focus_prompt_bridge"
     ]["detail"]["prompt_summary"]
-    assert prompt_summary["cvrp_required_evidence_item_count"] == 5
-    assert prompt_summary["cvrp_required_evidence_rendered_count"] == 5
+    assert prompt_summary["cvrp_required_evidence_item_count"] == 6
+    assert prompt_summary["cvrp_required_evidence_rendered_count"] == 6
     assert prompt_summary["cvrp_required_evidence_all_present"] is True
     assert (
         prompt_summary["cvrp_measurement_calibration_source_artifact_present"]

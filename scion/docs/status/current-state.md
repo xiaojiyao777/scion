@@ -27,10 +27,10 @@ history when exact old chronology is needed.
   warehouse and CVRP follow-up.
 - v0.4 is not closed until the latest current-run-ready evidence is reviewed
   against the effective-research gate. Warehouse now has both positive movement
-  evidence and a post-repair current-run-ready partial run. CVRP now has a
-  current-run-ready complete post-repair run showing same-mechanism branch
-  depth, expanded screening, MDE-aware rejection, and clean prompt/source
-  evidence, but still lacks a solver improvement or promotion.
+  evidence and a post-repair current-run-ready partial run. CVRP now has two
+  current-run-ready complete post-repair roots showing branch depth, expanded
+  screening, MDE-aware rejection, and clean prompt/source evidence, but still
+  lacks a solver improvement or promotion.
 - WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
   for the latest warehouse and CVRP reruns before launch, and live
   prompt/source evidence passed under the patched postrun checker.
@@ -45,6 +45,11 @@ history when exact old chronology is needed.
   CMT2/CMT4 review-ready evidence must carry numeric objective/distance deltas,
   and calibration provenance remains proposal-visible summary material, not
   Decision input.
+- Latest CVRP direction handoff repair: the launcher now marks current-run
+  rank-gap and route-pressure acceptance variants as default-avoid directions
+  unless a future hypothesis names a new non-acceptance causal path and direct
+  objective-effect telemetry. This is proposal-only research-focus guidance,
+  not a Decision, Protocol, scheduler, or promotion rule.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
   commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
   stops repeated quality-block signatures by global signature count instead of
@@ -144,6 +149,26 @@ CVRP evidence root:
   delta). The final expansion had negative CMT2/CMT3 behavior, so it is not a
   promotion or solver-improvement result. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-rank-gap-acceptance-postrepair-20260622.md`.
+
+CVRP route-pressure follow-up root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-nextmech-1aae436c-postrankgap-4r-gpt55-20260622T041502Z-claw`
+- Launched from WSL commit `1aae436c` after the rank-gap run; local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-nextmech-1aae436c-postrankgap-4r-gpt55-20260622T041502Z-claw`.
+- The run finished naturally with wrapper/postrun exit `0`,
+  postrun acceptance `ready`, validity `valid`, completeness `complete`, and
+  `last_stop_reason=max_rounds_exhausted`.
+- Campaign status: 4 effective rounds, 4 consumed proposal attempts, 4
+  protocol-evaluated screening rows, 0 quality blocks, 0 promotions, champion
+  still `v1`.
+- Evidence interpretation: the run is framework-valid current-run evidence but
+  not an effective solver improvement. Despite bounded two-opt being the
+  highest-opportunity handoff, all four current rows stayed in
+  `route_pressure_acceptance`; 48-pair expanded rows had only `+8` and `+5`
+  net raw delta, protected CMT cases were neutral, all rows were below MDE, and
+  postrun analysis reported `missing_large_twoopt_mechanism_signal`. Detailed
+  report:
+  `scion/docs/experiments/v0.4/v04-cvrp-route-pressure-postrankgap-postrun-20260622.md`.
 
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:
