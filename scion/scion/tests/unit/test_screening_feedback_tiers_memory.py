@@ -393,6 +393,56 @@ def test_hook_activation_without_inner_mechanism_evidence_is_opportunity_diagnos
     assert any("primary mechanism" in item for item in summary.opportunity_diagnostics)
 
 
+def test_primary_mechanism_not_triggered_is_not_weak_positive_pair_noise() -> None:
+    summary = screening_feedback_summary(
+        _protocol(
+            case_wins=0,
+            case_losses=0,
+            case_ties=8,
+            pair_wins=2,
+            pair_losses=0,
+            pair_ties=30,
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "telemetry_guard": {
+                    "passed": True,
+                    "warnings": [
+                        {
+                            "severity": "warn",
+                            "diagnostic_kind": "not_evaluated/not_triggered",
+                        }
+                    ],
+                    "mechanism_diagnostics": [
+                        {
+                            "mechanism": "large_instance_intra_route_two_opt_seed",
+                            "activation_status": "missing",
+                            "runtime_status": "missing",
+                            "effect_status": "missing",
+                            "diagnostic_kind": "not_evaluated/not_triggered",
+                            "telemetry_outcome": "not_evaluated/not_triggered",
+                        }
+                    ],
+                },
+            },
+        )
+    )
+
+    assert summary.tier == "inactive"
+    assert summary.activation_status == "not_observed"
+    assert summary.effect_status == "pair_level_positive_signal"
+    assert summary.mechanism_evidence["primary_mechanism"] == (
+        "large_instance_intra_route_two_opt_seed"
+    )
+    assert summary.mechanism_evidence["primary_activation_status"] == "missing"
+    assert summary.phase_causal_summary["classification"] == (
+        "activation_not_observed"
+    )
+    assert any(
+        "primary mechanism not evaluated" in item
+        for item in summary.opportunity_diagnostics
+    )
+
+
 def test_experiment_history_renders_tier_pair_and_case_feedback() -> None:
     step = _step(
         _protocol(

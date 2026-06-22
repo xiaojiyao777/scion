@@ -267,12 +267,12 @@ def screening_feedback_summary(
         tier = "marginal"
     elif protocol.gate_outcome == "pass":
         tier = "promotable"
+    elif activation_status == "not_observed":
+        tier = "inactive"
     elif case_marginal_positive:
         tier = "marginal"
     elif objective_positive:
         tier = "weak_positive"
-    elif activation_status == "not_observed":
-        tier = "inactive"
     elif no_objective_effect and runtime_slowdown:
         tier = "runtime_regression"
     elif no_objective_effect:
@@ -446,6 +446,20 @@ def _pair_counts(protocol: ProtocolResult) -> tuple[int, int, int]:
 
 
 def _activation_status(protocol: ProtocolResult) -> str:
+    mechanism_evidence = mechanism_evidence_for_protocol(protocol)
+    primary_activation = str(
+        mechanism_evidence.get("primary_activation_status") or ""
+    ).strip().lower()
+    primary_kind = str(
+        mechanism_evidence.get("primary_diagnostic_kind") or ""
+    ).strip().lower()
+    if primary_activation in {"observed", "positive", "activation_observed"}:
+        return "observed"
+    if (
+        primary_activation in {"missing", "inactive", "not_observed", "zero"}
+        or primary_kind == "not_evaluated/not_triggered"
+    ) and not bool(mechanism_evidence.get("hook_activation_observed")):
+        return "not_observed"
     if formal_telemetry_guard_failed(protocol):
         categories = set(telemetry_failure_categories(protocol))
         details = telemetry_decision_details(protocol)
@@ -659,7 +673,14 @@ def _phase_causal_summary(
         and case_losses == 0
         and case_ties > 0
     )
-    if phase_positive and objective_loss:
+    if activation_status == "not_observed":
+        classification = "activation_not_observed"
+        summary = "activation was not observed in formal screening telemetry"
+        interpretation = (
+            "repair activation path, instrumentation, or choose a different "
+            "trigger; do not manufacture positive counters"
+        )
+    elif phase_positive and objective_loss:
         classification = "phase_positive_final_objective_loss"
         summary = (
             "phase telemetry was positive, but final objective evidence had a "
@@ -688,13 +709,6 @@ def _phase_causal_summary(
         interpretation = (
             "mechanism activity alone was insufficient; change the causal path to "
             "objective effect"
-        )
-    elif activation_status == "not_observed":
-        classification = "activation_not_observed"
-        summary = "activation was not observed in formal screening telemetry"
-        interpretation = (
-            "repair activation path, instrumentation, or choose a different "
-            "trigger; do not manufacture positive counters"
         )
     elif pair_wins > 0 or case_wins > 0:
         classification = "objective_positive_without_phase_detail"
