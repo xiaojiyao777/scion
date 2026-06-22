@@ -837,6 +837,7 @@ def _current_research_focus(env: dict[str, object]) -> dict[str, Any]:
 
 
 def _build_command(env: dict[str, object]) -> str:
+    forced_args = _forced_surface_command_args(env)
     return (
         f"{env['PY']} -m scion.cli.main run "
         f"--problem {env['PROBLEM']} "
@@ -859,9 +860,24 @@ def _build_command(env: dict[str, object]) -> str:
         f"{env['SCION_STAGE_TRANSITION_DRAIN_LIMIT']} "
         f"--measurement-governance {env['MEASUREMENT_GOVERNANCE']} "
         f"--proposal-context-ablation {env['PROPOSAL_CONTEXT_ABLATION']} "
+        f"{forced_args}"
         "--disable-early-stop "
         "--agentic-proposal"
     )
+
+
+def _forced_surface_command_args(env: Mapping[str, object]) -> str:
+    forced_surface = str(env.get("FORCE_SURFACE") or "").strip()
+    if not forced_surface:
+        return ""
+    parts = ["--force-surface", shlex.quote(forced_surface)]
+    forced_action = str(env.get("FORCE_ACTION") or "").strip()
+    if forced_action:
+        parts.extend(["--force-action", shlex.quote(forced_action)])
+    forced_target_file = str(env.get("FORCE_TARGET_FILE") or "").strip()
+    if forced_target_file:
+        parts.extend(["--force-target-file", shlex.quote(forced_target_file)])
+    return " ".join(parts) + " "
 
 
 def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
@@ -895,6 +911,9 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "PROPOSAL_QUALITY_LOOP_LIMIT",
         "MEASUREMENT_GOVERNANCE",
         "PROPOSAL_CONTEXT_ABLATION",
+        "FORCE_SURFACE",
+        "FORCE_ACTION",
+        "FORCE_TARGET_FILE",
         "CONTROL_PAIR_KEY",
         "AGENTIC_PROPOSAL",
         "DISABLE_EARLY_STOP",
@@ -1208,6 +1227,9 @@ def _write_prepared_run_manifest(
             ),
             "measurement_governance": str(env["MEASUREMENT_GOVERNANCE"]),
             "proposal_context_ablation": str(env["PROPOSAL_CONTEXT_ABLATION"]),
+            "force_surface": str(env.get("FORCE_SURFACE") or ""),
+            "force_action": str(env.get("FORCE_ACTION") or ""),
+            "force_target_file": str(env.get("FORCE_TARGET_FILE") or ""),
             "agentic_proposal": bool(int(env["AGENTIC_PROPOSAL"])),
             "disable_early_stop": bool(int(env["DISABLE_EARLY_STOP"])),
         },
@@ -1447,6 +1469,9 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         "stage_transition_drain_limit",
         "measurement_governance",
         "proposal_context_ablation",
+        "force_surface",
+        "force_action",
+        "force_target_file",
         "agentic_proposal",
         "disable_early_stop",
     ):
@@ -1548,6 +1573,9 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "PROPOSAL_QUALITY_LOOP_LIMIT": args.proposal_quality_loop_limit,
         "MEASUREMENT_GOVERNANCE": args.measurement_governance,
         "PROPOSAL_CONTEXT_ABLATION": args.proposal_context_ablation,
+        "FORCE_SURFACE": args.force_surface or "",
+        "FORCE_ACTION": args.force_action or "",
+        "FORCE_TARGET_FILE": args.force_target_file or "",
         "CONTROL_PAIR_KEY": control_pair_key,
         "AGENTIC_PROPOSAL": 1,
         "DISABLE_EARLY_STOP": 1,
@@ -1647,6 +1675,25 @@ def parse_args() -> argparse.Namespace:
             "Report-only metadata for matched-control launches. Written to "
             "launch.env and command.txt; not passed to scion run."
         ),
+    )
+    parser.add_argument(
+        "--force-surface",
+        default=None,
+        help=(
+            "Diagnostic pass-through to scion run --force-surface. Use with "
+            "--force-action/--force-target-file to constrain the next "
+            "hypothesis target."
+        ),
+    )
+    parser.add_argument(
+        "--force-action",
+        default=None,
+        help="Diagnostic pass-through to scion run --force-action.",
+    )
+    parser.add_argument(
+        "--force-target-file",
+        default=None,
+        help="Diagnostic pass-through to scion run --force-target-file.",
     )
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
@@ -1827,6 +1874,12 @@ def parse_args() -> argparse.Namespace:
         raise SystemExit("--stage-transition-drain-limit must be >= 0")
     if args.api_key is not None and args.api_key_env:
         raise SystemExit("--api-key and --api-key-env are mutually exclusive")
+    if args.force_surface is None and (
+        args.force_action is not None or args.force_target_file is not None
+    ):
+        raise SystemExit(
+            "--force-action and --force-target-file require --force-surface"
+        )
     if args.api_key_env:
         _validate_env_var_name(args.api_key_env)
     if not str(args.python).strip():

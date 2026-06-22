@@ -81,8 +81,24 @@ acceptance candidate to match the acceptance avoid entry.
 ## Next
 
 After synchronizing the tightened guard to WSL, prepare a fresh CVRP root from
-the new commit and monitor the first hypothesis. The first live proposal should
-either target bounded local search or another materially different
-non-acceptance solver-design causal path. If it still proposes a default-avoid
-target, the run should fail at schema preview before consuming Protocol rows,
-with the matched avoid direction attributed to the correct prepared focus item.
+the new commit and monitor the first hypothesis:
+
+- WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-nonaccept-tightguard-93a3b3c8-postroutepressure-4r-gpt55-20260622T080005Z-claw`
+- WSL commit: `93a3b3c8`
+- Strict launch readiness: `launch_ready=true`, completion preflight healthy,
+  runtime guard clean.
+- Final status: wrapper effective exit `64`, postrun acceptance `failed`,
+  `last_stop_reason=repeated_quality_block_signature`,
+  `run_validity_status=invalid_no_effective_rounds`, 0 effective rounds, 0
+  protocol rows, 3 proposal quality blocks.
+
+The tightened guard attributed the blocks to acceptance-family default-avoid
+items instead of unrelated route-limit/VNS strings, so the matcher repair
+worked. The live agent still selected acceptance-family targets three times
+(`distance_scaled_acceptance`, `distance_rank_acceptance`, and another
+acceptance variant) and never reached bounded local search. The remaining issue
+is therefore not Protocol screening waste; it is target selection. The next
+CVRP launch should use the existing `scion run` forced-surface diagnostic path,
+exposed through the CVRP launcher, to force `solver_design` / `modify` /
+`policies/baseline_modules/local_search.py` for a bounded-local-search probe.

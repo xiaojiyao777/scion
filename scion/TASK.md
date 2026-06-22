@@ -335,8 +335,13 @@ Current checkpoint:
   `default_avoid_directions`. The first guarded WSL relaunch from commit
   `24b609de` failed closed before Protocol rows but exposed over-broad
   narrative phrase matching, now tightened so multi-token avoid phrases must
-  hit candidate identity fields. This remains excluded from Decision,
-  Protocol, scheduler, promotion, and solver semantics. Detailed report:
+  hit candidate identity fields. A tightened-guard relaunch from WSL commit
+  `93a3b3c8` then failed closed on repeated acceptance-family default-avoid
+  blocks without Protocol rows. The CVRP launcher now exposes the existing
+  `scion run` forced-surface diagnostic path so the next root can force
+  `solver_design` / `modify` /
+  `policies/baseline_modules/local_search.py`. This remains excluded from
+  Decision, Protocol, scheduler, promotion, and solver semantics. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-default-avoid-preview-guard-20260622.md`.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
@@ -421,10 +426,13 @@ Current checkpoint:
     positive-at-MDE effect and no large-two-opt signal.
   - Next fresh CVRP launch should avoid repeating unchanged rank-gap or
     route-pressure acceptance gates, and must come from a commit containing the
-    tightened schema-preview default-avoid guard. Pick bounded local search or
-    a materially different problem-owned solver mechanism with direct
-    objective-effect telemetry, CMT2/CMT4 protection, and strict launch
-    readiness from the synchronized WSL commit.
+    tightened schema-preview default-avoid guard plus launcher forced-target
+    pass-through. Use `--force-surface solver_design`,
+    `--force-action modify`, and
+    `--force-target-file policies/baseline_modules/local_search.py` for the
+    next root to test bounded local search with direct objective-effect
+    telemetry, CMT2/CMT4 protection, and strict launch readiness from the
+    synchronized WSL commit.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

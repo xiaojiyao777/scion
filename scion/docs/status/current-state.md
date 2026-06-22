@@ -53,8 +53,12 @@ history when exact old chronology is needed.
   `proposal.schema_preview` through proposal-only `launch_research_focus`; a
   follow-up local patch also tightens phrase matching so narrative words do not
   misattribute an acceptance-family target to unrelated route-limit/VNS avoid
-  strings. This is not a Decision, Protocol, scheduler, promotion, or solver
-  rule.
+  strings. A tightened-guard WSL relaunch then failed closed on repeated
+  acceptance-family default-avoid blocks without consuming Protocol rows. The
+  next CVRP root should use the existing forced-surface diagnostic path, now
+  exposed by the CVRP launcher, to force `solver_design` / `modify` /
+  `policies/baseline_modules/local_search.py`. This is not a Decision,
+  Protocol, scheduler, promotion, or solver rule.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
   commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
   stops repeated quality-block signatures by global signature count instead of
@@ -203,6 +207,19 @@ CVRP first guarded relaunch root:
   route/seed/VNS terms. The local follow-up patch requires multi-token avoid
   phrases to hit candidate identity fields before matching. Relaunch from the
   synchronized follow-up commit, not `24b609de`.
+
+CVRP tightened-guard relaunch root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-nonaccept-tightguard-93a3b3c8-postroutepressure-4r-gpt55-20260622T080005Z-claw`
+- Strict launch readiness passed from WSL commit `93a3b3c8`.
+- The run failed closed before Protocol rows:
+  `last_stop_reason=repeated_quality_block_signature`,
+  `run_validity_status=invalid_no_effective_rounds`, 0 effective rounds, 0
+  protocol rows, and 3 proposal quality blocks.
+- Interpretation: tightened default-avoid matching works and blocks repeated
+  acceptance-family proposals pre-Protocol, but the agent still does not choose
+  bounded local search unaided. Use the launcher forced-target pass-through for
+  the next root instead of another unconstrained relaunch.
 
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:

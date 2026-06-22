@@ -54,6 +54,9 @@ def test_cvrp_agentic_launcher_help() -> None:
     assert "--fresh-runtime-replay-drain-limit" in result.stdout
     assert "--stage-transition-drain-limit" in result.stdout
     assert "--resume-from-campaign" in result.stdout
+    assert "--force-surface" in result.stdout
+    assert "--force-action" in result.stdout
+    assert "--force-target-file" in result.stdout
 
 
 def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
@@ -1293,6 +1296,61 @@ def test_cvrp_agentic_launcher_prepare_writes_completion_preflight(
     assert "openai.OpenAI" not in run_sh_text
 
     subprocess.run(["bash", "-n", str(run_root / "run.sh")], check=True)
+
+
+def test_cvrp_agentic_launcher_prepare_threads_forced_target(
+    tmp_path: Path,
+) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "unit-cvrp-forced",
+            "--experiments-root",
+            str(tmp_path),
+            "--force-surface",
+            "solver_design",
+            "--force-action",
+            "modify",
+            "--force-target-file",
+            "policies/baseline_modules/local_search.py",
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    run_root_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
+    )
+    run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
+    launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
+    command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
+    prepared_manifest = json.loads(
+        (run_root / "prepared_run_manifest.v1.json").read_text(encoding="utf-8")
+    )
+
+    assert "FORCE_SURFACE=solver_design" in launch_env
+    assert "FORCE_ACTION=modify" in launch_env
+    assert (
+        "FORCE_TARGET_FILE=policies/baseline_modules/local_search.py"
+        in launch_env
+    )
+    assert "--force-surface solver_design" in command_txt
+    assert "--force-action modify" in command_txt
+    assert (
+        "--force-target-file policies/baseline_modules/local_search.py"
+        in command_txt
+    )
+    assert prepared_manifest["execution"]["force_surface"] == "solver_design"
+    assert prepared_manifest["execution"]["force_action"] == "modify"
+    assert prepared_manifest["execution"]["force_target_file"] == (
+        "policies/baseline_modules/local_search.py"
+    )
 
 
 def test_cvrp_agentic_launcher_rejects_api_key_and_api_key_env(
