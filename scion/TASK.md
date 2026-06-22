@@ -8,15 +8,16 @@ has recovered. Warehouse has shown renewed continuous improvement from champion
 `v2` to `v3`; the latest post-repair APS retry root is current-run
 postrun-ready partial evidence and verifies live prompt/source visibility,
 repeated quality-block fail-closed behavior, and fresh proposal recovery after
-quality feedback. CVRP now has two current-run-ready complete post-repair roots:
-rank-gap acceptance and route-pressure acceptance both show clean framework
-execution, expanded screening, MDE-aware rejection, and no quality blocks, but
-neither produced promotion, positive-at-MDE evidence, large-two-opt signal, or a
-solver improvement. The active blocker is therefore CVRP research-direction
-control: prompt-only default-avoid guidance was insufficient, so the next root
-must launch from the schema-preview default-avoid guard and avoid spending
-branch slots on acceptance/adaptive weighting unless the prepared focus is
-explicitly changed.*
+quality feedback. CVRP rank-gap and route-pressure acceptance roots are
+current-run-ready rejection evidence, not solver improvements. The active CVRP
+forced-local-search root from WSL commit `eb2627e5` has now crossed the main
+direction-control gate: after resume artifact replay it generated and coded a
+`policies/baseline_modules/local_search.py` candidate
+`bounded_interroute_2opt_bridge`, completed one screening row, and produced
+mechanism-specific runtime telemetry. The first row is mixed/negative
+(`32/32` valid pairs, `10` wins, `8` losses, `14` ties, net raw delta `-59`),
+so it is effective research evidence and a next-hypothesis signal, not a
+promotion. The root is still running the next batch/stage.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -345,6 +346,23 @@ Current checkpoint:
   only in command metadata. This remains excluded from Decision, Protocol,
   scheduler, promotion, and solver semantics. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-default-avoid-preview-guard-20260622.md`.
+- Latest CVRP forced-local checkpoint:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-forced-local-eb2627e5-postroutepressure-4r-gpt55-20260622T081704Z-claw`
+  launched from WSL commit `eb2627e5` with `--force-surface solver_design`,
+  `--force-action modify`, and
+  `--force-target-file policies/baseline_modules/local_search.py`. The root
+  resumes the route-pressure campaign, so its agentic session index includes
+  older construction/acceptance sessions; do not treat those as current forced
+  target failures. The live forced-local proposal/code path produced
+  `bounded_interroute_2opt_bridge` in
+  `policies/baseline_modules/local_search.py`, passed schema/target/static
+  preview, completed code generation, and completed the first screening row:
+  `effective_rounds_completed=1`, `screening_protocol_results=1`, 0 quality
+  blocks, 32/32 valid pairs, 10 wins, 8 losses, 14 ties, net raw delta `-59`.
+  The candidate has real activation telemetry but is not a promotion-quality
+  result. The root is still running the next batch/stage; the stale top-level
+  `exit.txt` from the operator's earlier SIGTERM should not be used as current
+  restart status while `campaign/run_status.json` reports `status=running`.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
   numeric objective/distance delta evidence. Feasibility-only, route-count,

@@ -109,3 +109,51 @@ force arguments but the generated `run.sh` execution block did not. The launcher
 template now builds a `FORCE_ARGS` bash array and passes it to the actual
 `scion.cli.main run` invocation; tests assert both command metadata and the real
 run script execution block.
+
+## Forced Local-Search Checkpoint
+
+The corrected launcher/run-script path was then used for the active forced
+local-search root:
+
+- WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-forced-local-eb2627e5-postroutepressure-4r-gpt55-20260622T081704Z-claw`
+- WSL commit: `eb2627e5`
+- Forced target:
+  `--force-surface solver_design --force-action modify --force-target-file policies/baseline_modules/local_search.py`
+- Resume source:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-nextmech-1aae436c-postrankgap-4r-gpt55-20260622T041502Z-claw/campaign`
+
+Interpretation caveat: because this root resumes the route-pressure campaign,
+the `agentic_session_index.json` contains older construction and
+acceptance-family sessions from the resume source. They are not current forced
+target failures. The current forced-local path starts at the local-search
+sessions in this root.
+
+Current checkpoint:
+
+- The live forced proposal/code path produced
+  `bounded_interroute_2opt_bridge` in
+  `policies/baseline_modules/local_search.py`.
+- Schema preview, target/action preview, and static contract preview passed.
+- Code generation completed and the candidate entered Protocol screening.
+- Campaign status has reached `effective_rounds_completed=1` and
+  `screening_protocol_results=1` with 0 quality blocks.
+- The first complete screening row has 32/32 valid pairs, 10 wins, 8 losses,
+  14 ties, and net raw delta `-59`.
+- Runtime/mechanism evidence is real: the new
+  `bounded_interroute_2opt_bridge` phase activated and recorded accepted moves,
+  improvement counts, phase runtime, and objective-effect deltas in the
+  candidate metrics.
+
+This is an important v0.4 recovery checkpoint: the framework can now steer the
+agent away from repeated acceptance-family proposals, generate a bounded
+local-search mechanism, code it, and collect case-level screening evidence. The
+specific candidate is not promotion-quality on the first row, so the next
+decision should come from the complete forced-local postrun review rather than
+from another unchanged rank-gap, route-pressure, or generic acceptance relaunch.
+
+Operational caveat: this root was manually SIGTERM-stopped once after an
+operator misread of resume artifacts, then restarted. While the restart is
+running, the stale top-level `exit.txt` records the earlier SIGTERM; use
+`campaign/run_status.json`, `campaign/status.json`, and the metrics artifacts as
+the current live state.

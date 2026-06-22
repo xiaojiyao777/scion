@@ -45,21 +45,19 @@ history when exact old chronology is needed.
   CMT2/CMT4 review-ready evidence must carry numeric objective/distance deltas,
   and calibration provenance remains proposal-visible summary material, not
   Decision input.
-- Latest CVRP direction-control repair: prompt-only default-avoid guidance was
-  insufficient; the first post route-pressure relaunch from WSL commit
-  `443b1a51` still chose `policies/baseline_modules/acceptance.py` /
-  `distance_scaled_sa_reheat` and was stopped before Protocol rows. The local
-  worktree now enforces prepared `default_avoid_directions` in
-  `proposal.schema_preview` through proposal-only `launch_research_focus`; a
-  follow-up local patch also tightens phrase matching so narrative words do not
-  misattribute an acceptance-family target to unrelated route-limit/VNS avoid
-  strings. A tightened-guard WSL relaunch then failed closed on repeated
-  acceptance-family default-avoid blocks without consuming Protocol rows. The
-  next CVRP root should use the existing forced-surface diagnostic path, now
-  exposed by the CVRP launcher and fixed in the generated `run.sh` execution
-  block, to force `solver_design` / `modify` /
-  `policies/baseline_modules/local_search.py`. This is not a Decision,
-  Protocol, scheduler, promotion, or solver rule.
+- Latest CVRP direction-control checkpoint: prompt-only default-avoid guidance
+  was insufficient, schema-preview default-avoid enforcement now blocks
+  repeated acceptance-family proposals before Protocol rows, and the launcher
+  forced-surface pass-through now reaches the generated `run.sh` execution
+  block. The active forced-local root from WSL commit `eb2627e5` has produced a
+  `policies/baseline_modules/local_search.py` proposal/code candidate
+  (`bounded_interroute_2opt_bridge`) and completed one screening row. The row
+  is effective research evidence but not a solver improvement: 32/32 valid
+  pairs, 10 wins, 8 losses, 14 ties, net raw delta `-59`, 0 quality blocks,
+  and mechanism-specific activation/runtime telemetry. The root is still
+  running the next batch/stage. Older acceptance sessions in its agentic index
+  come from the resumed route-pressure campaign and are not current forced
+  target failures.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
   commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
   stops repeated quality-block signatures by global signature count instead of
@@ -224,6 +222,29 @@ CVRP tightened-guard relaunch root:
   discarded forced-local prepared/aborted root created before the generated
   `run.sh` execution block carried `FORCE_ARGS`.
 
+CVRP forced-local-search root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-forced-local-eb2627e5-postroutepressure-4r-gpt55-20260622T081704Z-claw`
+- Launched from WSL commit `eb2627e5` with `--force-surface solver_design`,
+  `--force-action modify`, and
+  `--force-target-file policies/baseline_modules/local_search.py`.
+- The root resumes the route-pressure campaign, so its agentic session index
+  contains older construction/acceptance sessions. The current forced-local
+  path starts at the `local_search.py` sessions and should be interpreted from
+  there.
+- Current checkpoint: the run is still active. It has completed one screening
+  row with `effective_rounds_completed=1`,
+  `screening_protocol_results=1`, 0 quality blocks, and the coded
+  `bounded_interroute_2opt_bridge` candidate in
+  `policies/baseline_modules/local_search.py`.
+- First-row evidence: 32/32 valid pairs, 10 wins, 8 losses, 14 ties, net raw
+  delta `-59`; mechanism telemetry shows the new phase activated and produced
+  objective-effect events, but the aggregate row is mixed/negative and not
+  promotion-quality.
+- Operational caveat: top-level `exit.txt` still reflects the earlier manual
+  SIGTERM from an operator misread. While the restart is running, use
+  `campaign/run_status.json` and `campaign/status.json` as current state.
+
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:
 
@@ -329,26 +350,25 @@ CVRP/VRP:
   code generation, formal screening, mechanism telemetry, and evidence-backed
   rejection of weak/negative hypotheses under current-run-ready postrun
   acceptance.
-- The repaired CVRP framework behavior is much healthier, but no current
-  solver-design branch has produced continuous improvement or promotion. The
-  latest `rank_gap_annealing_acceptance` mechanism activated and received
-  same-branch refinement, but it ended as below-MDE/no-effect evidence and was
-  parked after expanded screening.
-- Next CVRP work should avoid an unchanged rank-gap acceptance repeat and pick
-  a materially different problem-owned solver mechanism or new causal path with
-  direct objective-effect telemetry and CMT2/CMT4 protection. The external
-  large-instance intra-route two-opt result remains proposal guidance only
-  unless the implementation is bounded/deadline-aware and carries current-run
-  activation, objective-effect, wall-clock, and protected-case evidence.
+- The repaired CVRP framework behavior is much healthier, and the active
+  forced-local root has now recovered non-acceptance solver research: a
+  bounded local-search mechanism was proposed, coded, instrumented, and
+  screened. The first row is mixed/negative rather than promotable, so v0.4
+  still lacks continuous CVRP improvement or promotion.
+- Next CVRP work should use the completed forced-local evidence to choose a
+  follow-up: either refine the local-search bridge around the observed
+  win/loss cases, or pivot to a different bounded local-search/destroy-repair
+  causal path with direct objective-effect telemetry and CMT2/CMT4 protection.
 
 ## Next Actions
 
-1. Do a focused CVRP postrun review of the rank-gap acceptance run, especially
-   the missed same-mechanism opportunity and branch-lesson semantic gaps, then
-   choose the next materially different solver-design mechanism.
-2. Prepare the next CVRP launch from a synchronized WSL commit with strict
-   launch readiness, conda Python, no generic proposal/APS/tool-call caps, and
-   explicit CMT2/CMT4 protection evidence requirements.
+1. Let the active CVRP forced-local root finish or reach a clean stop, then
+   review the complete screening/postrun evidence for
+   `bounded_interroute_2opt_bridge`, especially case-level wins/losses,
+   activation telemetry, runtime ratio, and protected CMT2/CMT4 behavior.
+2. Use that evidence to choose the next CVRP follow-up mechanism. Do not return
+   to unchanged rank-gap, route-pressure, or generic acceptance/adaptive-weight
+   variants unless the prepared research focus is explicitly changed.
 3. Keep warehouse as current-run-ready partial evidence unless a targeted
    follow-up is needed to refine validation-transfer quality guidance around
    `runtime_bounded_acceptance` / `bounded_candidate_policy`.
