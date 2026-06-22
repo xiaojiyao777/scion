@@ -408,6 +408,79 @@ def test_schema_preview_allows_required_twoopt_when_avoid_terms_are_only_lesson_
     assert required_guard["passed"] is True
 
 
+def test_schema_preview_allows_required_twoopt_with_missing_primary_avoid_lesson(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    mechanism_id = "large_instance_intra_route_two_opt_seed"
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+        launch_research_focus={
+            "research_focus": {
+                "default_avoid_directions": [
+                    (
+                        "ec052599-style weak_positive continuation when "
+                        "declared primary mechanism telemetry is missing or "
+                        "not_evaluated/not_triggered"
+                    ),
+                ],
+                "required_mechanism_ids": [mechanism_id],
+            },
+        },
+    )
+    hypothesis = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/baseline_modules/local_search.py",
+        hypothesis_text=(
+            "Add a deadline-aware large_instance_intra_route_two_opt_seed pass "
+            "that records active primary mechanism telemetry and checks the "
+            "remaining wall-clock budget before route and pair sweeps."
+        ),
+        expected_effect=(
+            "Reduce total_distance on large cases through bounded same-route "
+            "two-opt improvements while preserving feasibility."
+        ),
+        target_runtime_effect=(
+            "Stop when context.remaining_time() leaves no local-search budget."
+        ),
+        runtime_budget_strategy="deadline_aware_large_route_sweeps",
+        mechanism_changes=[
+            {"id": mechanism_id, "change_type": "modify"},
+        ],
+        novelty_signature={
+            "algorithm_family": "bounded_local_search",
+            "construction_strategy": "unchanged_feasible_seed_portfolio",
+            "improvement_strategy": mechanism_id,
+            "acceptance_strategy": "strict_same_route_positive_delta_only",
+            "runtime_budget_strategy": "deadline_route_sweep_pair_caps",
+        },
+        expected_telemetry={
+            "activation": [
+                "solver_algorithm_context_records.large_instance_intra_route_two_opt_seed_iterations",
+                "solver_algorithm_phase_runtime_ms.large_instance_intra_route_two_opt_seed",
+            ],
+            "effect": [
+                "solver_algorithm_phase_best_delta.large_instance_intra_route_two_opt_seed",
+            ],
+        },
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    section = preview.structured_payload["hypothesis"]
+    default_guard = section["launch_research_focus_default_avoid_guard"]
+    required_guard = section["launch_research_focus_required_mechanism_guard"]
+    assert preview.structured_payload["passed"] is True
+    assert default_guard["passed"] is True
+    assert required_guard["passed"] is True
+    assert mechanism_id in required_guard["matched_mechanism_ids"]
+
+
 def test_schema_preview_still_blocks_actual_route_merge_default_avoid(
     tmp_path: Path,
 ) -> None:

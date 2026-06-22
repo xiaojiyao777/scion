@@ -90,9 +90,8 @@ CVRP_DEFAULT_AVOID_DIRECTIONS = (
     "high-asymmetric-promise bounded_interroute_2opt_bridge refinement",
     "unchanged cmt_slack_aware_segment_swap local-search segment swap",
     (
-        "sparse intra-route two-opt polish / ec052599-style weak-positive "
-        "continuation when the declared primary mechanism telemetry is missing "
-        "or not_evaluated/not_triggered"
+        "ec052599-style weak_positive continuation when declared primary "
+        "mechanism telemetry is missing or not_evaluated/not_triggered"
     ),
 )
 CVRP_ADAPTER_OPPORTUNITY_FIELDS = (
