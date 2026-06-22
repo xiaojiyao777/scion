@@ -89,6 +89,11 @@ CVRP_DEFAULT_AVOID_DIRECTIONS = (
     "unchanged bounded_interroute_2opt_bridge local-search bridge",
     "high-asymmetric-promise bounded_interroute_2opt_bridge refinement",
     "unchanged cmt_slack_aware_segment_swap local-search segment swap",
+    (
+        "sparse intra-route two-opt polish / ec052599-style weak-positive "
+        "continuation when the declared primary mechanism telemetry is missing "
+        "or not_evaluated/not_triggered"
+    ),
 )
 CVRP_ADAPTER_OPPORTUNITY_FIELDS = (
     "screening_headroom",
@@ -285,6 +290,11 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
             "cmt_slack_aware_segment_swap after the forced-local negative "
             "postrun evidence"
         ),
+        (
+            "do not continue a resumed weak-positive sparse two-opt branch "
+            "unless current-run telemetry proves the declared primary mechanism "
+            "activates with the exact large_instance_intra_route_two_opt_seed id"
+        ),
     ],
     "measurement_opportunity_diagnostics": {},
     "default_avoid_directions": list(CVRP_DEFAULT_AVOID_DIRECTIONS),
@@ -326,6 +336,16 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
         "Treat fallback activation, seed-pool size, or merely selecting a seed "
         "as activation/design evidence only; require same-run seed baseline or "
         "same-mechanism accepted delta for objective-effect claims."
+    ),
+    "missing_primary_telemetry_rule": (
+        "If a resumed branch or row is weak_positive only from pair-level noise "
+        "while telemetry diagnostics say the declared primary mechanism was "
+        "not_evaluated/not_triggered or activation/runtime/effect fields are "
+        "missing, treat it as inactive missing-telemetry feedback rather than "
+        "positive same-mechanism evidence. Do not continue ec052599-style sparse "
+        "two-opt polish unless the next hypothesis materially changes the "
+        "causal activation path and records large_instance_intra_route_two_opt_seed "
+        "on active paths."
     ),
     "case_protection_requirements": CVRP_CASE_PROTECTION_REQUIREMENTS,
     "resume_continuity_requirements": CVRP_RESUME_CONTINUITY_REQUIREMENTS,
@@ -1333,6 +1353,8 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         + ", ".join(map(str, research_focus["required_mechanism_ids"])),
         f"- Route-merge exception: {research_focus['route_merge_exception_rule']}",
         f"- Construction-seed rule: {research_focus['construction_seed_rule']}",
+        "- Missing-primary telemetry rule: "
+        f"{research_focus['missing_primary_telemetry_rule']}",
         f"- Decision boundary: {research_focus['decision_boundary']}",
         "- Required evidence:",
     ]

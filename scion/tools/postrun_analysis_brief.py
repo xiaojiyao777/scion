@@ -426,6 +426,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
         for key, label in (
             ("route_merge_exception_rule", "Route-merge exception"),
             ("construction_seed_rule", "Construction-seed rule"),
+            ("missing_primary_telemetry_rule", "Missing-primary telemetry rule"),
             ("decision_boundary", "Decision boundary"),
         ):
             value = research_focus.get(key)

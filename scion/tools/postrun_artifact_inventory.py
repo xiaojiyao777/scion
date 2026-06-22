@@ -523,6 +523,7 @@ def render_markdown(inventory: dict[str, Any]) -> str:
         for key, label in (
             ("route_merge_exception_rule", "Route-merge exception"),
             ("construction_seed_rule", "Construction-seed rule"),
+            ("missing_primary_telemetry_rule", "Missing-primary telemetry rule"),
             ("decision_boundary", "Decision boundary"),
         ):
             value = research_focus.get(key)
@@ -1521,6 +1522,9 @@ def _add_cvrp_measurement_handoff_checks(
 
     route_rule = str(focus.get("route_merge_exception_rule") or "").lower()
     construction_rule = str(focus.get("construction_seed_rule") or "").lower()
+    missing_primary_rule = str(
+        focus.get("missing_primary_telemetry_rule") or ""
+    ).lower()
     add_check(
         "cvrp_direct_effect_rules_present",
         (
@@ -1532,6 +1536,21 @@ def _add_cvrp_measurement_handoff_checks(
         {
             "route_merge_exception_rule": focus.get("route_merge_exception_rule"),
             "construction_seed_rule": focus.get("construction_seed_rule"),
+        },
+    )
+    add_check(
+        "cvrp_missing_primary_telemetry_rule_present",
+        (
+            "missing" in missing_primary_rule
+            and "primary mechanism" in missing_primary_rule
+            and "not_evaluated/not_triggered" in missing_primary_rule
+            and "weak_positive" in missing_primary_rule
+            and "large_instance_intra_route_two_opt_seed" in missing_primary_rule
+        ),
+        {
+            "missing_primary_telemetry_rule": focus.get(
+                "missing_primary_telemetry_rule"
+            ),
         },
     )
     case_protection = _mapping_or_empty(focus.get("case_protection_requirements"))
@@ -2234,6 +2253,9 @@ def _cvrp_problem_specific_phase4_requirements(
     avoid_text = "\n".join(_string_items(focus.get("default_avoid_directions"))).lower()
     route_rule = str(focus.get("route_merge_exception_rule") or "").lower()
     construction_rule = str(focus.get("construction_seed_rule") or "").lower()
+    missing_primary_rule = str(
+        focus.get("missing_primary_telemetry_rule") or ""
+    ).lower()
     boundary = str(focus.get("decision_boundary") or "").lower()
     case_protection_status = _cvrp_case_protection_status(
         _mapping_or_empty(focus.get("case_protection_requirements"))
@@ -2297,6 +2319,17 @@ def _cvrp_problem_specific_phase4_requirements(
                 and "same-mechanism" in construction_rule
             ),
             "prepared_run_manifest cvrp research_focus route/construction direct-effect rules",
+        ),
+        "cvrp_missing_primary_telemetry_handoff": _coverage_item(
+            int(
+                "missing" in missing_primary_rule
+                and "primary mechanism" in missing_primary_rule
+                and "not_evaluated/not_triggered" in missing_primary_rule
+                and "weak_positive" in missing_primary_rule
+                and "large_instance_intra_route_two_opt_seed"
+                in missing_primary_rule
+            ),
+            "prepared_run_manifest cvrp research_focus missing_primary_telemetry_rule",
         ),
         "cvrp_cmt_case_protection_handoff": _coverage_item(
             int(case_protection_status["complete"]),

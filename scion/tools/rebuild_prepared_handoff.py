@@ -723,6 +723,28 @@ def _add_focus_signals(
                 ),
             },
         )
+        missing_primary_rule = str(
+            research_focus.get("missing_primary_telemetry_rule") or ""
+        ).lower()
+        _add_signal(
+            signals,
+            "cvrp_missing_primary_telemetry_rule",
+            available=(
+                "missing" in missing_primary_rule
+                and "primary mechanism" in missing_primary_rule
+                and "not_evaluated/not_triggered" in missing_primary_rule
+                and "weak_positive" in missing_primary_rule
+                and "large_instance_intra_route_two_opt_seed"
+                in missing_primary_rule
+            ),
+            required=True,
+            source="prepared_run_manifest.research_focus.missing_primary_telemetry_rule",
+            detail={
+                "missing_primary_telemetry_rule_present": bool(
+                    research_focus.get("missing_primary_telemetry_rule")
+                ),
+            },
+        )
         large_twoopt = _mapping_or_empty(
             research_focus.get("large_instance_two_opt_constraints")
         )

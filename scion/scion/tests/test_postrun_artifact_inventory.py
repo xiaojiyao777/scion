@@ -1864,6 +1864,13 @@ def _cvrp_research_focus() -> dict[str, object]:
             "Require same-run seed baseline or same-mechanism accepted delta "
             "for construction seed objective-effect claims."
         ),
+        "missing_primary_telemetry_rule": (
+            "If telemetry says the declared primary mechanism is "
+            "not_evaluated/not_triggered or missing, treat weak_positive "
+            "sparse two-opt feedback as missing primary mechanism telemetry; "
+            "do not continue without active large_instance_intra_route_two_opt_seed "
+            "evidence."
+        ),
         "decision_boundary": (
             "This focus must not enter DecisionFeatures, Protocol gates, "
             "promotion input, or scheduler state."

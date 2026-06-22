@@ -772,6 +772,13 @@ def research_focus_prompt_summary(
             and "route_merge_exception_rule" in rendered_prompt
             and "construction_seed_rule" in rendered_prompt
         ),
+        "cvrp_missing_primary_telemetry_rule_present": (
+            problem_family == "cvrp"
+            and "missing_primary_telemetry_rule" in rendered_prompt
+            and "not_evaluated/not_triggered" in rendered_prompt
+            and "weak_positive" in rendered_prompt
+            and "large_instance_intra_route_two_opt_seed" in rendered_prompt
+        ),
         "cvrp_measurement_handoff_present": (
             problem_family == "cvrp"
             and "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in rendered_prompt
@@ -1026,6 +1033,15 @@ def research_focus_prompt_summary(
             not in ({}, [], "", None)
         ):
             required_true_fields.append("cvrp_direct_effect_rules_present")
+        if research_focus.get("missing_primary_telemetry_rule") not in (
+            {},
+            [],
+            "",
+            None,
+        ):
+            required_true_fields.append(
+                "cvrp_missing_primary_telemetry_rule_present"
+            )
         if research_focus.get("resume_continuity_requirements") not in (
             {},
             [],
@@ -1559,6 +1575,7 @@ def _required_research_focus_projection_keys(
                 "resume_continuity_requirements",
                 "route_merge_exception_rule",
                 "construction_seed_rule",
+                "missing_primary_telemetry_rule",
             )
             if key in research_focus
         )

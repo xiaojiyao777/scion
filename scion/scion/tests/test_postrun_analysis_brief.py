@@ -3797,6 +3797,13 @@ def _write_cvrp_large_twoopt_manifest(
         "construction_seed_rule": (
             "Require same-run seed baseline or same-mechanism accepted delta."
         ),
+        "missing_primary_telemetry_rule": (
+            "If telemetry says the declared primary mechanism is "
+            "not_evaluated/not_triggered or missing, treat weak_positive "
+            "sparse two-opt feedback as missing primary mechanism telemetry; "
+            "do not continue without active large_instance_intra_route_two_opt_seed "
+            "evidence."
+        ),
         "decision_boundary": (
             "Proposal guidance only; never enter DecisionFeatures, "
             "Protocol gates, promotion input, or scheduler state."

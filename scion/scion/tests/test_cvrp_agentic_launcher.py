@@ -146,6 +146,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "unbounded large-instance two-opt fallback" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
+    assert any(
+        "ec052599-style" in item and "declared primary mechanism telemetry" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
     measurement = prepared_manifest["research_focus"][
         "measurement_opportunity_diagnostics"
     ]
@@ -223,6 +227,18 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         and "first attempted direction" in item
         for item in prepared_manifest["research_focus"]["required_evidence"]
     )
+    assert any(
+        "weak-positive sparse two-opt branch" in item
+        and "large_instance_intra_route_two_opt_seed" in item
+        for item in prepared_manifest["research_focus"]["required_evidence"]
+    )
+    missing_primary_rule = prepared_manifest["research_focus"][
+        "missing_primary_telemetry_rule"
+    ]
+    assert "not_evaluated/not_triggered" in missing_primary_rule
+    assert "weak_positive" in missing_primary_rule
+    assert "ec052599-style" in missing_primary_rule
+    assert "large_instance_intra_route_two_opt_seed" in missing_primary_rule
     assert any(
         "large_instance_intra_route_two_opt_seed" in item
         and "deadline-aware bounded search effort" in item
@@ -342,6 +358,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "Required mechanism ids" in prepared_manifest_md
     assert "large_instance_intra_route_two_opt_seed" in prepared_manifest_md
     assert "unbounded large-instance two-opt fallback" in prepared_manifest_md
+    assert "Missing-primary telemetry rule" in prepared_manifest_md
+    assert "not_evaluated/not_triggered" in prepared_manifest_md
     assert "Required evidence" in prepared_manifest_md
     assert "current-run pair-level total_distance" in prepared_manifest_md
     assert "Large-instance two-opt constraints" in prepared_manifest_md
@@ -604,6 +622,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_brief["prepared_run_contract"]["research_focus"][
         "measurement_opportunity_diagnostics"
     ]["source"] == "problem_v1.measurement.calibration_ref"
+    brief_missing_primary_rule = prepared_brief["prepared_run_contract"][
+        "research_focus"
+    ]["missing_primary_telemetry_rule"]
+    assert "not_evaluated/not_triggered" in brief_missing_primary_rule
+    assert "weak_positive" in brief_missing_primary_rule
+    assert "large_instance_intra_route_two_opt_seed" in brief_missing_primary_rule
     cvrp_checks = prepared_brief["prepared_run_contract"]["checks"]
     assert cvrp_checks["cvrp_measurement_handoff_present"]["passed"] is True
     assert (
@@ -612,6 +636,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert cvrp_checks["cvrp_default_avoid_directions_present"]["passed"] is True
     assert cvrp_checks["cvrp_direct_effect_rules_present"]["passed"] is True
+    assert cvrp_checks["cvrp_missing_primary_telemetry_rule_present"][
+        "passed"
+    ] is True
     assert (
         cvrp_checks["cvrp_large_twoopt_bounded_constraints_present"]["passed"]
         is True
@@ -646,6 +673,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "cvrp_large_twoopt_bounded_constraints_handoff",
         "cvrp_resume_continuity_handoff",
         "cvrp_direct_effect_rules_handoff",
+        "cvrp_missing_primary_telemetry_handoff",
         "cvrp_decision_boundary_handoff",
     ):
         assert problem_specific[key]["available"] is True
@@ -656,6 +684,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     ]["passed"] is True
     assert prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
         "cvrp_default_avoid_directions_present"
+    ]["passed"] is True
+    assert prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
+        "cvrp_missing_primary_telemetry_rule_present"
     ]["passed"] is True
     assert prepared_readiness["schema_version"] == "scion.launch_readiness.v1"
     assert prepared_readiness["static_ready"] is False
@@ -711,13 +742,17 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         ]
         is True
     )
+    assert prepared_prompt_context["signals"]["cvrp_missing_primary_telemetry_rule"][
+        "available"
+    ] is True
     prompt_summary = prepared_prompt_context["signals"][
         "prepared_research_focus_prompt_bridge"
     ]["detail"]["prompt_summary"]
     assert prompt_summary["cvrp_next_required_direction_present"] is True
-    assert prompt_summary["cvrp_required_evidence_item_count"] == 8
-    assert prompt_summary["cvrp_required_evidence_rendered_count"] == 8
+    assert prompt_summary["cvrp_required_evidence_item_count"] == 9
+    assert prompt_summary["cvrp_required_evidence_rendered_count"] == 9
     assert prompt_summary["cvrp_required_evidence_all_present"] is True
+    assert prompt_summary["cvrp_missing_primary_telemetry_rule_present"] is True
     assert (
         prompt_summary["cvrp_measurement_calibration_source_artifact_present"]
         is True
@@ -753,6 +788,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "cvrp_large_twoopt_unbounded_default_avoid_handoff" in brief_text
     assert "cvrp_large_twoopt_bounded_constraints_handoff" in brief_text
     assert "cvrp_resume_continuity_handoff" in brief_text
+    assert "cvrp_missing_primary_telemetry_handoff" in brief_text
     assert (
         "## Launcher Artifacts"
         in inventory_text
@@ -765,6 +801,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "cvrp_large_twoopt_unbounded_default_avoid_handoff" in inventory_text
     assert "cvrp_large_twoopt_bounded_constraints_handoff" in inventory_text
     assert "cvrp_resume_continuity_handoff" in inventory_text
+    assert "cvrp_missing_primary_telemetry_handoff" in inventory_text
+    assert "not_evaluated/not_triggered" in inventory_text
     assert "copied_campaign_summary" in prompt_context_md.read_text(
         encoding="utf-8"
     )
