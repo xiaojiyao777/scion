@@ -131,8 +131,8 @@ The third attempt omitted the required id again and was blocked by
 
 Interpretation: this is not solver evidence. It exposes that prepared
 `required_mechanism_ids` must bind target-intent preflight before formal
-hypothesis generation, not only schema-preview retry. The current local repair
-projects the required id into the target-intent prompt and host-rebinds a
+hypothesis generation, not only schema-preview retry. The follow-up repair
+projected the required id into the target-intent prompt and host-rebinds a
 non-required selected preflight mechanism id to the prepared id before target
 binding.
 
@@ -212,3 +212,74 @@ repair narrows multi-token default-avoid phrase/fallback matching so a match
 requires non-weak candidate identity support; actual route-merge style
 mechanism ids still fail the guard, while the required same-route two-opt seed
 can proceed to code generation.
+
+## Identity-Supported Default-Avoid Follow-up
+
+A fifth follow-up WSL launch tested that weak-identity default-avoid repair:
+
+- WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-avoididentity-f80d990f-postweakid-4r-gpt55-4r-gpt55-20260622T144637Z-claw`
+- Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-avoididentity-f80d990f-postweakid-4r-gpt55-4r-gpt55-20260622T144637Z-claw`
+- WSL commit: `f80d990f`
+- Strict launch readiness passed, and postrun acceptance reported `ready`.
+
+The run finished naturally:
+
+- `run_validity_status=valid`
+- `run_completeness_status=complete`
+- `last_stop_reason=max_rounds_exhausted`
+- wrapper exit `0`
+- 4 effective screening rounds
+- 4 protocol metric rows
+- 0 quality blocks and 0 proposal quality blocks
+- 0 promotions; champion remained `v1`
+
+This root validates the default-avoid identity repair. The required
+`large_instance_intra_route_two_opt_seed` direction crossed hypothesis,
+target-intent, code generation, smoke, and Protocol. It is current-run-ready
+effective negative research, not solver improvement.
+
+The dense candidate branch `1d630ce3-fe33-4083-8769-3d3c573e207d` implemented a
+large-instance intra-route two-opt seed operator in `local_search.py` and wired
+it into the default VNS path. The first 32-pair screen had direct mechanism
+telemetry and expanded; the 48-pair expansion retained direct telemetry
+(`large_instance_intra_route_two_opt_seed` phase observed on 40/48 candidate
+runs) and failed closed: 0 case wins, 4 losses, 8 ties, pair result 9/14/25,
+median delta `0`, CI `[-0.5, 0]`. It was correctly abandoned.
+
+The sparse refinement branch `ec052599-281d-40fc-9d8f-639b452904b3` exposed a
+framework feedback bug. It changed the sparse intra-route two-opt polish path
+and produced pair-level tie noise (32-pair row: 2/0/30 pair result; 48-pair
+row: 2/0/46 pair result), but raw metrics showed the declared primary
+mechanism was not evaluated or triggered:
+
+- `metrics/5914c858-d77c-44f2-99af-1e27a4f6baf4.json`: every declared
+  `large_instance_intra_route_two_opt_seed` activation/runtime/effect field was
+  missing across 32 candidate runs.
+- `metrics/8a325037-728a-4965-8f15-a6160c7519e1.json`: the same declared
+  fields were missing across 48 candidate runs.
+- Candidate phase buckets contained `alns_core`, `construction`,
+  `vns_embedded`, and `vns_initial`; no
+  `large_instance_intra_route_two_opt_seed` bucket was present.
+
+The old run nevertheless left the branch as `explore` / `weak_positive`
+because `screening_feedback` treated a passed telemetry guard and pair-level
+positive noise as activation. That interpretation is wrong for v0.4 effective
+research: missing declared primary telemetry should be inactive feedback and a
+repair/abandon signal, not evidence for same-mechanism continuation.
+
+Follow-up repair:
+
+- Local commit `e9ec3635`
+  (`Treat missing primary telemetry as inactive feedback`)
+- WSL commit `01b1abb4`
+- Tests:
+  - Local: `PYTHONPATH=scion pytest scion/scion/tests/unit/test_screening_feedback_tiers_memory.py -q` -> 9 passed.
+  - Local: related feedback/protocol/decision/prompt regression set -> 217 passed.
+  - WSL: `PYTHONPATH=scion /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest scion/scion/tests/unit/test_screening_feedback_tiers_memory.py -q` -> 9 passed.
+  - WSL: related regression set -> 208 passed.
+
+Operational conclusion: relaunch from `01b1abb4` or later. Do not treat the
+stale `ec052599` weak-positive branch state from the `f80d990f` run as accepted
+evidence unless a future patched run observes the declared primary mechanism.

@@ -8,51 +8,25 @@ has recovered. Warehouse has shown renewed continuous improvement from champion
 `v2` to `v3`; the latest post-repair APS retry root is current-run
 postrun-ready partial evidence and verifies live prompt/source visibility,
 repeated quality-block fail-closed behavior, and fresh proposal recovery after
-quality feedback. CVRP rank-gap and route-pressure acceptance roots are
-current-run-ready rejection evidence, not solver improvements. The CVRP
-forced-local-search root from WSL commit `eb2627e5` finished current-run-ready
-with 4 effective screening rows, postrun acceptance `ready`, 0 quality blocks,
-0 promotions, and champion still `v1`. It crossed the direction-control gate:
-after resume artifact replay it generated, coded, expanded/refined, and
-rejected `policies/baseline_modules/local_search.py` mechanisms with direct
-mechanism telemetry. The solver evidence is negative: all rows were below MDE,
-all CI highs were below MDE, the refined `bounded_interroute_2opt_bridge`
-regressed, and `cmt_slack_aware_segment_swap` was abandoned. This is recovered
-effective negative research, not a promotion or CVRP improvement. The immediate
-next-local relaunch from WSL commit `6f40ebcb` failed closed before Protocol
-rows after three default-avoid proposal blocks, proving the guard works but
-that positive target selection still needed repair. The current launcher focus
-then named `large_instance_intra_route_two_opt_seed` as the next required
-prepared direction, but a WSL launch from commit `4b7e78b7` still failed closed
-before Protocol rows after default-avoid repeats. Structured
-`required_mechanism_ids` and a schema-preview check then correctly blocked
-hypotheses that did not declare `large_instance_intra_route_two_opt_seed`, but
-the follow-up WSL launch from commit `1e4c2dde` proved the agentic hypothesis
-session was not converting that guard into full in-session retry feedback: it
-failed closed before Protocol rows after three
-`launch_research_focus_required_mechanism` proposal blocks. The retry-feedback
-repair was synchronized and tested from WSL commit `f75cd321`: the first two
-formal hypotheses did retry with `large_instance_intra_route_two_opt_seed`, but
-target-intent preflight had selected non-required mechanisms, so
-target-intent binding blocked code generation. The current repair projects
-prepared `required_mechanism_ids` into target-intent preflight and rebinds a
-non-required selected mechanism id to the prepared id before formal hypothesis
-binding. A WSL launch from commit `7382a090` verified that repair: later
-target-intent sessions selected `large_instance_intra_route_two_opt_seed` and
-binding stayed aligned. It still failed closed before Protocol rows because the
-default-avoid matcher falsely rejected a deadline-aware bounded hypothesis that
-contrasted itself against the unbounded fallback. The current repair narrows
-that unbounded/deadline default-avoid match so positive deadline-scope
-candidates are not misclassified. A follow-up WSL launch from commit
-`76d02567` verified that deadline-scope repair, but still failed closed before
-Protocol rows because `route-merge absorption` / `cross-route 2-opt reconnect`
-default-avoid phrases matched only weak identity overlap (`route`/`opt`) while
-the required mechanism stayed `large_instance_intra_route_two_opt_seed`. The
-current repair requires default-avoid matches to have non-weak candidate
-identity support, keeps problem-specific launch-focus scalar fields as generic
-context-manager pass-through instead of hardcoding CVRP terms in core, and
-refreshes stale solver-design multimodule fixtures against the current
-scheduler import surface.*
+quality feedback. CVRP rank-gap, route-pressure, forced-local, and
+required-intra-two-opt roots are current-run-ready rejection or repair evidence,
+not solver improvements. The forced-local root from WSL commit `eb2627e5`
+recovered non-acceptance local-search research and rejected weak/negative
+mechanisms. The identity-supported default-avoid repair was then verified by
+the WSL commit `f80d990f` root: the run finished valid/complete with postrun
+acceptance `ready`, 4 effective screening rows, 0 quality blocks, and 0
+promotions, and it finally crossed proposal/code/Protocol for
+`large_instance_intra_route_two_opt_seed`. Its dense candidate had direct
+mechanism telemetry and was correctly abandoned after expansion. Its sparse
+refinement exposed a framework feedback bug: the old run kept
+`ec052599` as `weak_positive` even though raw metrics showed the declared
+primary mechanism was not evaluated or triggered. Local commit `e9ec3635` and
+WSL commit `01b1abb4` now treat missing primary telemetry as inactive feedback;
+future CVRP relaunches must not treat the stale `ec052599` weak-positive state
+as accepted evidence. The next CVRP run should launch from `01b1abb4` or later
+with the forced or otherwise audited `local_search.py` target-control path,
+while avoiding unchanged rank-gap, route-pressure, bridge, CMT slack-swap, and
+missing-primary-telemetry variants.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -415,40 +389,22 @@ Current checkpoint:
   `large_instance_intra_route_two_opt_seed` as a deadline-aware bounded
   local-search mechanism. Detailed loop report:
   `scion/docs/experiments/v0.4/v04-cvrp-nextlocal-default-avoid-loop-20260622.md`.
-- A follow-up WSL root from commit `4b7e78b7`
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-intratwoopt-4b7e78b7-postavoidloop-4r-gpt55-20260622T123924Z-claw`
-  verified that the natural-language `next_required_direction` reached
-  prepared prompt readiness, but still failed closed before Protocol rows after
-  three default-avoid repeats. Treat this as target-control failure evidence,
-  not solver evidence. A second follow-up WSL root from commit `1e4c2dde`
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-requiredmech-1e4c2dde-postintratwoopt-4r-gpt55-20260622T124949Z-claw`
-  verified that structured
-  `required_mechanism_ids=["large_instance_intra_route_two_opt_seed"]` and the
-  proposal schema-preview guard do block hypotheses that omit the required id,
-  but it still failed closed before Protocol rows because that guard was not
-  converted into full in-session hypothesis retry feedback. A third follow-up
-  WSL root from commit `f75cd321`
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-requiredmechretry-f75cd321-postguard-4r-gpt55-4r-gpt55-20260622T130938Z-claw`
-  proved that retry feedback can rewrite the formal hypothesis to the required
-  id, but target-intent preflight still selected non-required mechanisms and
-  caused `target_intent_binding_mismatch` before code generation. The current
-  local repair makes the required id binding visible and deterministic in
-  target-intent preflight. A fourth follow-up WSL root from commit `7382a090`
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-targetintent-7382a090-postdrift-4r-gpt55-4r-gpt55-20260622T133014Z-claw`
-  verified that target-intent and formal hypothesis binding now align on
-  `large_instance_intra_route_two_opt_seed`, but it still failed closed before
-  Protocol rows because the default-avoid matcher treated a deadline-aware
-  bounded proposal as the forbidden unbounded/no-deadline fallback. A fifth
-  follow-up WSL root from commit `76d02567`
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-deadlinescope-76d02567-postavoidfp-4r-gpt55-4r-gpt55-20260622T134246Z-claw`
-  verified that the unbounded/deadline false positive is repaired and that the
-  required target-intent/formal binding still stays on
-  `large_instance_intra_route_two_opt_seed`. It still failed closed before
-  Protocol rows after three quality blocks because default-avoid phrase
-  matching treated weak overlap through `route`/`opt` plus branch-lesson
-  contrast text as actual `route-merge`/`cross-route` mechanism identity. The
-  current local repair narrows default-avoid phrase/fallback matches to require
-  non-weak candidate identity support. Detailed report:
+- The required-intra-two-opt control chain progressed from natural-language
+  focus failure (`4b7e78b7`), through structured required-id guard/retry and
+  target-intent binding repairs (`1e4c2dde`, `f75cd321`, `7382a090`), then two
+  default-avoid false-positive repairs (`76d02567`, `f80d990f`). The latest WSL
+  root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-avoididentity-f80d990f-postweakid-4r-gpt55-4r-gpt55-20260622T144637Z-claw`
+  finally carried `large_instance_intra_route_two_opt_seed` through proposal,
+  target intent, code generation, and Protocol. It finished valid/complete with
+  postrun acceptance `ready`, 4 effective screening rows, 0 quality blocks, 0
+  promotions, and champion still `v1`. Dense intra-two-opt seed evidence was
+  direct-telemetry negative and correctly abandoned after expansion. Sparse
+  refinement evidence exposed a feedback semantics bug: raw metrics showed the
+  declared primary mechanism was not evaluated or triggered, but the old run
+  left the branch as `weak_positive`. Local commit `e9ec3635` / WSL commit
+  `01b1abb4` now treats missing primary telemetry as inactive feedback before
+  pair-level noise. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-intratwoopt-required-direction-loop-20260622.md`.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
@@ -531,19 +487,16 @@ Current checkpoint:
     blocks, 0 promotions, and `champion_version=1`. It confirms that another
     acceptance-family path is insufficient: `route_pressure_acceptance` had no
     positive-at-MDE effect and no large-two-opt signal.
-  - Next fresh CVRP launch should avoid repeating unchanged rank-gap,
-    route-pressure acceptance gates, unchanged `bounded_interroute_2opt_bridge`,
-    its high-asymmetric-promise refinement, or `cmt_slack_aware_segment_swap`.
-    The prepared focus should continue to require
-    `large_instance_intra_route_two_opt_seed` structurally through
-    `required_mechanism_ids`, target-intent preflight, and schema preview, but
-    the next relaunch must come after the identity-supported default-avoid
-    matcher repair is synchronized and tested on WSL. It should test the
-    required id as a deadline-aware bounded local-search mechanism with direct
-    objective-effect telemetry, CMT2/CMT4 protection, and strict launch
-    readiness from the synchronized WSL commit. Keep forced or otherwise
-    audited non-acceptance target control until unaided target selection is
-    demonstrably reliable.
+  - Next fresh CVRP launch should start from WSL commit `01b1abb4` or later and
+    avoid repeating unchanged rank-gap, route-pressure acceptance gates,
+    unchanged `bounded_interroute_2opt_bridge`, its high-asymmetric-promise
+    refinement, `cmt_slack_aware_segment_swap`, or sparse
+    missing-primary-telemetry variants unless the causal activation path is
+    materially changed. Keep forced or otherwise audited non-acceptance target
+    control until unaided target selection is demonstrably reliable. If the run
+    resumes from the `f80d990f` root, inspect prompt and branch-card context for
+    the corrected missing-primary-telemetry lesson before interpreting
+    same-branch continuation.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

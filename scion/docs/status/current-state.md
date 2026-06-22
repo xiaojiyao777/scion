@@ -47,60 +47,28 @@ history when exact old chronology is needed.
   and calibration provenance remains proposal-visible summary material, not
   Decision input.
 - Latest CVRP direction-control checkpoint: prompt-only default-avoid guidance
-  was insufficient, schema-preview default-avoid enforcement now blocks
-  repeated acceptance-family proposals before Protocol rows, and the launcher
-  forced-surface pass-through now reaches the generated `run.sh` execution
-  block. The forced-local root from WSL commit `eb2627e5` finished
-  current-run-ready with 4 effective screening rows, 0 quality blocks, 0
-  promotions, champion still `v1`, and postrun acceptance `ready`. It recovered
-  non-acceptance solver research by generating, coding, expanding, refining, and
-  rejecting local-search mechanisms in
-  `policies/baseline_modules/local_search.py`. The solver evidence is negative:
-  all rows were below MDE, all CI highs were below MDE, the refined
-  `bounded_interroute_2opt_bridge` regressed, and
-  `cmt_slack_aware_segment_swap` was abandoned. Older acceptance sessions in
-  its agentic index come from the resumed route-pressure campaign and are not
-  current forced-target failures. The launcher prepared focus now carries the
-  failed local-search mechanisms as proposal-visible default-avoid directions,
-  and schema preview blocks repeated `bounded_interroute_2opt_bridge`
-  hypotheses before Protocol rows. The immediate next-local relaunch from WSL
-  commit `6f40ebcb` verified that guard but failed before Protocol rows after
-  three default-avoid proposal blocks; positive target selection still needs
-  repair before another identical forced-local relaunch. The current launcher
-  focus now narrows the next required prepared direction to
-  `large_instance_intra_route_two_opt_seed` as a deadline-aware bounded
-  local-search mechanism instead of leaving that seed as one optional direction
-  among many. A launch from WSL commit `4b7e78b7` proved that this
-  natural-language positive focus still was not enough: the run failed closed
-  before Protocol rows after default-avoid repeats. The current repair now adds
-  structured `required_mechanism_ids` and a proposal schema-preview guard that
-  requires the hypothesis to declare `large_instance_intra_route_two_opt_seed`
-  in `mechanism_changes`. A follow-up launch from WSL commit `1e4c2dde` proved
-  that the guard itself is wired, but also exposed a missing agentic-session
-  retry-feedback path: all three proposal attempts failed closed on
-  `launch_research_focus_required_mechanism` before Protocol rows. The
-  follow-up repair converted that launch-focus guard into structured
-  hypothesis retry feedback and prompt projection, and the WSL commit
-  `f75cd321` launch proved the formal retry can rewrite to the required id. It
-  also exposed target-intent drift: preflight selected non-required mechanism
-  ids while the formal hypothesis used
-  `large_instance_intra_route_two_opt_seed`, so target-intent binding blocked
-  code generation. The WSL commit `7382a090` launch verified the target-intent
-  required-id projection repair: later target-intent sessions selected the
-  required id and binding stayed aligned. That run exposed the next blocker:
-  the default-avoid matcher falsely rejected a deadline-aware bounded
-  `large_instance_intra_route_two_opt_seed` hypothesis because it mentioned the
-  unbounded fallback in a contrast/no-op context. The current local repair
-  narrows only the unbounded-large-two-opt default-avoid matcher so candidates
-  with positive deadline scope (`deadline-aware`, `remaining_time`,
-  `wall-clock`, or bounded+deadline evidence) are not misclassified. The WSL
-  commit `76d02567` launch verified that repair, but exposed a second
-  default-avoid overmatch: `route-merge absorption` and `cross-route 2-opt
-  reconnect` matched a required same-route two-opt seed proposal through weak
-  shared terms (`route`/`opt`) plus branch-lesson contrast text. The current
-  local repair now requires multi-term default-avoid matches to have non-weak
-  candidate identity support, while actual route-merge style mechanisms remain
-  blocked.
+  was insufficient, so the current path uses proposal-only schema-preview
+  guards, structured `required_mechanism_ids`, target-intent binding, and the
+  forced or otherwise audited `local_search.py` target-control path. The
+  forced-local root from WSL commit `eb2627e5` finished current-run-ready and
+  recovered non-acceptance local-search research, but produced only negative
+  solver evidence. The follow-up identity-supported default-avoid repair was
+  verified by the WSL commit `f80d990f` root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-avoididentity-f80d990f-postweakid-4r-gpt55-4r-gpt55-20260622T144637Z-claw`.
+  That run finished valid/complete with wrapper exit `0`, postrun acceptance
+  `ready`, 4 effective screening rows, 0 quality blocks, 0 proposal quality
+  blocks, 0 promotions, and champion still `v1`. It crossed the
+  proposal/code/Protocol boundary for `large_instance_intra_route_two_opt_seed`.
+  The dense candidate (`1d630ce3`) had direct mechanism telemetry and failed
+  closed after expansion: 0 case wins, 4 losses, 8 ties, pair result
+  9/14/25, median delta `0`, CI `[-0.5, 0]`. The sparse refinement
+  (`ec052599`) exposed a framework feedback bug rather than a solver signal:
+  raw metrics `5914c858` and `8a325037` showed the declared primary mechanism
+  was not evaluated or triggered, but the old feedback tier still preserved it
+  as `weak_positive` from pair-level tie noise. Local commit `e9ec3635` and WSL
+  commit `01b1abb4` now classify missing primary telemetry as inactive feedback
+  before pair-level positive noise. Future relaunches must not treat the stale
+  `ec052599` weak-positive branch state as accepted evidence.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
   commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
   stops repeated quality-block signatures by global signature count instead of
@@ -388,11 +356,10 @@ CVRP required-mechanism retry target-intent mismatch root:
   `capacity_slack_segment_exchange`), so target-intent binding blocked them
   before code generation. The third attempt again omitted the required id and
   was blocked by the schema-preview guard. This exposed a target-intent
-  projection gap, not solver evidence. The current local repair now projects
-  prepared `required_mechanism_ids` into the target-intent prompt and
+  projection gap, not solver evidence. The follow-up repair projected prepared
+  `required_mechanism_ids` into the target-intent prompt and
   deterministically rebinds a non-required preflight mechanism id to the
-  prepared id before formal hypothesis binding. Relaunch from a clean WSL
-  commit after tests, not from `f75cd321`.
+  prepared id before formal hypothesis binding.
 
 CVRP required-mechanism default-avoid latest root:
 
@@ -419,6 +386,28 @@ CVRP required-mechanism default-avoid latest root:
   `cross_route`, and weak identity overlap through generic `route`/`opt` terms
   caused `route-merge absorption` / `cross-route 2-opt reconnect` to block the
   required same-route two-opt seed before code generation.
+
+CVRP required-mechanism Protocol evidence root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-avoididentity-f80d990f-postweakid-4r-gpt55-4r-gpt55-20260622T144637Z-claw`
+- Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-avoididentity-f80d990f-postweakid-4r-gpt55-4r-gpt55-20260622T144637Z-claw`
+- Launched from WSL commit `f80d990f`, resumed from the completed forced-local
+  root, and kept the forced target at
+  `policies/baseline_modules/local_search.py`.
+- The run finished naturally with wrapper exit `0`, postrun acceptance
+  `ready`, validity `valid`, completeness `complete`, and
+  `last_stop_reason=max_rounds_exhausted`.
+- Campaign status: 4 effective screening rounds, 4 protocol metric rows, 0
+  quality blocks, 0 proposal quality blocks, 0 promotions, champion still `v1`.
+- Evidence interpretation: the weak-identity default-avoid repair worked and
+  the required direction finally reached code generation and Protocol. Dense
+  `large_instance_intra_route_two_opt_seed` was direct-telemetry negative and
+  correctly abandoned after expansion. The sparse refinement is not accepted as
+  a weak-positive mechanism: raw metrics show its declared primary mechanism was
+  not evaluated or triggered in either screening row. Local commit `e9ec3635`
+  and WSL commit `01b1abb4` fix the proposal/lifecycle feedback semantics so
+  missing primary telemetry outranks pair-level positive noise.
 
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:
@@ -531,38 +520,34 @@ CVRP/VRP:
   from complete postrun-ready evidence. This is effective negative research,
   not solver progress; v0.4 still lacks continuous CVRP improvement or
   promotion.
-- Next CVRP work should synchronize and validate the identity-supported
-  default-avoid matcher repair, then relaunch the same forced `local_search.py`
-  root from a clean WSL commit. Avoid unchanged
-  `bounded_interroute_2opt_bridge`, its high-asymmetric-promise refinement, and
-  `cmt_slack_aware_segment_swap` unless the causal path is changed. The
-  prepared focus should keep `large_instance_intra_route_two_opt_seed` as the
-  structured required mechanism until a deadline-aware candidate reaches code
-  generation and Protocol evidence.
+- The latest required-mechanism root reached Protocol for
+  `large_instance_intra_route_two_opt_seed`, but the sparse refinement exposed a
+  feedback semantics bug: missing declared primary telemetry must be inactive
+  feedback, not weak-positive pair noise. That repair is synchronized and tested
+  in WSL commit `01b1abb4`.
+- Next CVRP work should relaunch from `01b1abb4` or later, not from the old
+  `f80d990f` feedback semantics. Avoid unchanged
+  `bounded_interroute_2opt_bridge`, its high-asymmetric-promise refinement,
+  `cmt_slack_aware_segment_swap`, and sparse/missing-primary-telemetry variants
+  unless the causal activation path is materially changed. Keep the forced or
+  otherwise audited `local_search.py` target-control path until unaided target
+  selection is reliable.
 
 ## Next Actions
 
-1. Synchronize the identity-supported default-avoid matcher repair to WSL and
-   run the focused conda `scion` tests there. Local focused/related regression
-   tests pass; the broad local unit suite progressed past the previously
-   failing sections but was killed by the host with exit `137` before producing
-   a final summary.
-2. Relaunch CVRP only after a clean synchronized WSL commit verifies the
-   prepared `required_mechanism_ids` path across target-intent preflight,
-   formal hypothesis retry, schema-preview required-id guard, and the narrowed
-   default-avoid matcher for `large_instance_intra_route_two_opt_seed`. The
-   latest live root proved target-intent binding and deadline-scope matching
-   now work, but exposed a weak-identity default-avoid false positive before
-   code generation.
-3. Do not return to unchanged rank-gap, route-pressure, or generic
+1. Relaunch CVRP from WSL commit `01b1abb4` or later after strict launch
+   readiness. The run should avoid treating the stale `ec052599` weak-positive
+   state as accepted evidence; if it resumes from the old root, inspect prompt
+   and branch cards for the corrected missing-primary-telemetry lesson.
+2. Do not return to unchanged rank-gap, route-pressure, or generic
    acceptance/adaptive-weight variants unless the prepared research focus is
    explicitly changed. The next CVRP root should keep the forced or otherwise
    audited non-acceptance target-control path until unaided target selection is
    demonstrably reliable.
-4. Keep warehouse as current-run-ready partial evidence unless a targeted
+3. Keep warehouse as current-run-ready partial evidence unless a targeted
    follow-up is needed to refine validation-transfer quality guidance around
    `runtime_bounded_acceptance` / `bounded_candidate_policy`.
-5. Update this file and `scion/TASK.md` only when operating truth changes; keep
+4. Update this file and `scion/TASK.md` only when operating truth changes; keep
    detailed run evidence in focused experiment reports.
 
 ## Pointers
