@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-06-21
+Last updated: 2026-06-22
 
 This file is the operational resume point, not a run log. Replace stale facts
 instead of appending history. Put detailed repair evidence in focused
@@ -27,7 +27,8 @@ history when exact old chronology is needed.
   warehouse and CVRP follow-up.
 - v0.4 is not closed until a fresh current-run-ready campaign proves effective
   research behavior. Warehouse has now shown effective research movement; CVRP
-  still needs a solver-design improvement or evidence-backed follow-up result.
+  still needs a solver-design improvement or a stronger evidence-backed
+  follow-up result.
 - WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
   for the latest warehouse rerun before launch.
 - Latest accepted prompt/source visibility repair: local commit `774c981d` /
@@ -62,14 +63,21 @@ Warehouse evidence root:
   signal accounting). Treat it as positive research evidence, not final v0.4
   postrun-acceptance proof.
 
-Active CVRP root:
+CVRP evidence root:
 
 - `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
-- Launched before the latest prompt/source visibility repair. As of the latest
-  check it is still running under WSL, has completed 2 effective screening
-  rounds with 2 formal candidates and no quality blocks, and is entering the
-  third proposal/round. Use it as useful CVRP research evidence, but expect
-  postrun commit/readiness caveats because the WSL checkout has advanced.
+- Launched before the latest prompt/source visibility repair. Campaign status
+  is valid and stopped by `max_rounds_exhausted`: 4 effective rounds, 5
+  protocol-evaluated screening rows, 4 formal candidate artifacts, 2 quality
+  blocks, 0 promotions, champion still `v1`.
+- Wrapper/postrun status is not accepted (`wrapper_exit_status=64`) because
+  current-run readiness failed on pre-repair prompt/source visibility and
+  research-context actionability checks. Treat it as useful CVRP trajectory
+  evidence, not final v0.4 acceptance proof.
+- Evidence interpretation: the run showed substantive continuity
+  (`max_branch_depth=5`, same-mechanism opportunities observed) but no positive
+  effect at or above MDE, no CMT2/CMT4 protected-case evidence, and no direct
+  large-instance bounded two-opt mechanism signal.
 
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:
@@ -182,15 +190,14 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Let the active CVRP root finish or reach a clean stopping point, then mirror
-   and classify it with the current problem-owned postrun rules.
-2. Prepare and launch one fresh warehouse champion-`v2` follow-up from WSL commit
+1. Prepare and launch one fresh warehouse champion-`v2` follow-up from WSL commit
    `a9a537c4` to prove the prompt/source visibility repair under live provider
    prompts and current-run postrun acceptance.
-3. If the pre-repair CVRP root is useful but postrun-compromised by checkout
-   drift, prepare a fresh CVRP bounded large-two-opt follow-up from the current
-   WSL commit.
-4. Update this file and `scion/TASK.md` only when operating truth changes; keep
+2. Use the completed pre-repair CVRP root as trajectory evidence only. Prepare a
+   fresh CVRP bounded large-two-opt follow-up from the current WSL commit if
+   warehouse proves the live prompt/source visibility repair under postrun
+   acceptance.
+3. Update this file and `scion/TASK.md` only when operating truth changes; keep
    detailed run evidence in focused experiment reports.
 
 ## Pointers

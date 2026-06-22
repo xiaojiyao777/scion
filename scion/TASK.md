@@ -6,9 +6,11 @@ focused warehouse and CVRP follow-up, but v0.4 is not closed until fresh
 current-run-ready campaigns demonstrate effective research behavior. WSL
 `gpt-5.5` auth has recovered. Warehouse has shown renewed continuous
 improvement from champion `v2` to `v3`, while a fresh postrun-ready rerun is
-needed after the latest prompt/source visibility repair. CVRP bounded
-large-two-opt follow-up is still running from a pre-repair root.*
-*Updated: 2026-06-21*
+needed after the latest prompt/source visibility repair. The pre-repair CVRP
+bounded large-two-opt follow-up finished as valid research evidence but did not
+produce promotion, positive-at-MDE evidence, or direct large-two-opt mechanism
+evidence.*
+*Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
 experiments. The goal is not to keep tuning campaign knobs blindly. The goal is
@@ -252,10 +254,14 @@ Current checkpoint:
   effective-research evidence, not final v0.4 acceptance.
 - CVRP/VRP continuation is repaired enough for focused solver-design follow-up,
   but v0.4 is not yet accepted because no current CVRP branch has shown
-  continuous improvement or promotion. Active root
+  continuous improvement or promotion. Pre-repair root
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
-  is still running from a pre-repair checkout and should be classified with
-  commit-drift caveats after it finishes.
+  completed 4 effective rounds as a valid campaign, stopped by
+  `max_rounds_exhausted`, produced 5 protocol-evaluated screening rows and 4
+  formal candidate artifacts, but had 0 promotions and retained champion `v1`.
+  Its wrapper exit is `64` because postrun readiness failed on pre-repair
+  prompt/source visibility and research-context actionability checks. Use it
+  as useful CVRP trajectory evidence, not final v0.4 acceptance.
 - Latest accepted prompt/source visibility repair: local commit `774c981d` /
   WSL commit `a9a537c4` removes active-subject code-constraint prompt
   truncation, classifies cross-branch/branch-lesson prompt sections as
@@ -313,8 +319,10 @@ Current checkpoint:
     postrun-accepted evidence.
   - CVRP active root:
     `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
-    is still running from a pre-repair checkout. Classify it after completion
-    with commit-drift caveats.
+    finished from a pre-repair checkout. Campaign status is valid, but
+    postrun readiness is not accepted; the run produced no promotion, no
+    positive effect at/above MDE, no CMT2/CMT4 protected-case evidence, and no
+    direct large-instance bounded two-opt mechanism signal.
   - Next fresh launch should use WSL commit `a9a537c4` or later, strict
     launch readiness, conda Python
     `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`, and no generic
