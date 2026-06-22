@@ -5,11 +5,11 @@
 focused warehouse and CVRP follow-up, but v0.4 is not closed until fresh
 current-run-ready campaigns demonstrate effective research behavior. WSL
 `gpt-5.5` auth has recovered. Warehouse has shown renewed continuous
-improvement from champion `v2` to `v3`, while a fresh postrun-ready rerun is
-needed after the latest prompt/source visibility repair. The pre-repair CVRP
-bounded large-two-opt follow-up finished as valid research evidence but did not
-produce promotion, positive-at-MDE evidence, or direct large-two-opt mechanism
-evidence.*
+improvement from champion `v2` to `v3`; the post prompt/source-visibility rerun
+proved live prompt/source evidence but exposed an alternating proposal-quality
+loop, now fixed for the next rerun. The pre-repair CVRP bounded large-two-opt
+follow-up finished as valid research evidence but did not produce promotion,
+positive-at-MDE evidence, or direct large-two-opt mechanism evidence.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -252,6 +252,13 @@ Current checkpoint:
   produced two promotion dossiers. Its wrapper remains postrun-unaccepted
   because the run exposed pre-repair prompt/source visibility gaps; use it as
   effective-research evidence, not final v0.4 acceptance.
+- Post prompt/source-visibility warehouse probe
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-306fc271-postrepair-6r-gpt55-20260622T005300Z-claw`
+  passed strict launch readiness and live provider prompt/source evidence under
+  the patched checker, but was manually stopped after 5 effective rounds, 8
+  screening rows, and 313 quality blocks because alternating proposal-quality
+  failures bypassed the old consecutive-only repeat guard. Treat this as a
+  framework escape finding, not a warehouse plateau conclusion.
 - CVRP/VRP continuation is repaired enough for focused solver-design follow-up,
   but v0.4 is not yet accepted because no current CVRP branch has shown
   continuous improvement or promotion. Pre-repair root
@@ -268,6 +275,11 @@ Current checkpoint:
   `cross_branch_lesson`, and conditions hypothesis target-source trace
   requirements on actual target-intent/source requirements. This is
   proposal/postrun audit material only and remains excluded from Decision.
+- Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
+  commit `7bd1a42c` keeps proposal quality-loop budgets disabled when set to
+  exact `0`, but stops repeated quality-block signatures by global signature
+  count rather than consecutive-only repetition. This prevents alternating
+  quality-block loops without reintroducing broad research headroom caps.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
   numeric objective/distance delta evidence. Feasibility-only, route-count,
@@ -323,7 +335,7 @@ Current checkpoint:
     postrun readiness is not accepted; the run produced no promotion, no
     positive effect at/above MDE, no CMT2/CMT4 protected-case evidence, and no
     direct large-instance bounded two-opt mechanism signal.
-  - Next fresh launch should use WSL commit `a9a537c4` or later, strict
+  - Next fresh launch should use WSL commit `7bd1a42c` or later, strict
     launch readiness, conda Python
     `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`, and no generic
     proposal/APS/tool-call truncation caps.

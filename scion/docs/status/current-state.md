@@ -30,7 +30,8 @@ history when exact old chronology is needed.
   still needs a solver-design improvement or a stronger evidence-backed
   follow-up result.
 - WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
-  for the latest warehouse rerun before launch.
+  for the latest warehouse rerun before launch, and live prompt/source evidence
+  passed under the patched postrun checker.
 - Latest accepted prompt/source visibility repair: local commit `774c981d` /
   WSL commit `a9a537c4` removes active-subject code-constraint prompt
   truncation, counts cross-branch/branch-lesson sections as
@@ -42,6 +43,11 @@ history when exact old chronology is needed.
   CMT2/CMT4 review-ready evidence must carry numeric objective/distance deltas,
   and calibration provenance remains proposal-visible summary material, not
   Decision input.
+- Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
+  commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
+  stops repeated quality-block signatures by global signature count instead of
+  consecutive-only repetition. This is a fail-closed escape guard, not a broad
+  research budget.
 
 ## Active WSL Roots
 
@@ -62,6 +68,21 @@ Warehouse evidence root:
   (`active_subject_code_constraints` truncation and missing cross-branch
   signal accounting). Treat it as positive research evidence, not final v0.4
   postrun-acceptance proof.
+
+Warehouse post prompt/source-visibility probe root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-306fc271-postrepair-6r-gpt55-20260622T005300Z-claw`
+- Strict launch readiness passed from WSL commit `306fc271`; the run produced
+  live provider prompt/source evidence sufficient for the patched
+  prompt-source visibility check.
+- The run was manually stopped with SIGTERM after 5 effective rounds, 8
+  screening rows, 5 protocol-evaluated candidates, 0 validation/frozen rows,
+  and 313 quality blocks. The run is not accepted as postrun-ready because the
+  wrapper status is intentionally failed by the operator stop.
+- Interpretation: the result exposed an alternating proposal-quality loop
+  between repeated quality-block signatures. The follow-up fix is WSL commit
+  `7bd1a42c`; rerun warehouse from that commit or later before drawing a
+  plateau conclusion.
 
 CVRP evidence root:
 
@@ -191,8 +212,8 @@ CVRP/VRP:
 ## Next Actions
 
 1. Prepare and launch one fresh warehouse champion-`v2` follow-up from WSL commit
-   `a9a537c4` to prove the prompt/source visibility repair under live provider
-   prompts and current-run postrun acceptance.
+   `7bd1a42c` or later to verify the quality-loop guard and current-run postrun
+   acceptance.
 2. Use the completed pre-repair CVRP root as trajectory evidence only. Prepare a
    fresh CVRP bounded large-two-opt follow-up from the current WSL commit if
    warehouse proves the live prompt/source visibility repair under postrun
