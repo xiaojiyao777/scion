@@ -7,9 +7,11 @@ current-run-ready campaigns demonstrate effective research behavior. WSL
 `gpt-5.5` auth has recovered. Warehouse has shown renewed continuous
 improvement from champion `v2` to `v3`; the post prompt/source-visibility rerun
 proved live prompt/source evidence but exposed an alternating proposal-quality
-loop, now fixed for the next rerun. The pre-repair CVRP bounded large-two-opt
-follow-up finished as valid research evidence but did not produce promotion,
-positive-at-MDE evidence, or direct large-two-opt mechanism evidence.*
+loop, and the guard-verification rerun exposed stale APS partial-hypothesis
+recovery after quality feedback. Both are fixed for the next rerun. The
+pre-repair CVRP bounded large-two-opt follow-up finished as valid research
+evidence but did not produce promotion, positive-at-MDE evidence, or direct
+large-two-opt mechanism evidence.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -280,6 +282,11 @@ Current checkpoint:
   exact `0`, but stops repeated quality-block signatures by global signature
   count rather than consecutive-only repetition. This prevents alternating
   quality-block loops without reintroducing broad research headroom caps.
+- Latest accepted APS recovery repair: local commit `621b9604` / WSL commit
+  `43ac9935` keeps normal waiting-approval partial-hypothesis recovery, but
+  skips stale `partial_hypothesis_only` reuse when the current request carries
+  agentic quality-block feedback. This forces a fresh proposal after
+  problem-quality rejection instead of replaying the same old hypothesis.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
   numeric objective/distance delta evidence. Feasibility-only, route-count,
@@ -329,13 +336,21 @@ Current checkpoint:
     completed 6 effective rounds and reached champion `v3`, but was generated
     before the latest prompt/source visibility repair and is not final
     postrun-accepted evidence.
+  - Warehouse quality-loop guard root:
+    `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-84a6d0d0-qloopfix-6r-gpt55-20260622T013700Z-claw`
+    launched from WSL commit `84a6d0d0`, passed strict launch readiness, and
+    stopped after 3 repeated quality blocks with
+    `last_stop_reason=repeated_quality_block_signature`. This proves the
+    runaway guard, but produced 0 effective rounds because stale partial
+    hypothesis recovery replayed a quality-rejected warehouse hypothesis before
+    the APS recovery repair.
   - CVRP active root:
     `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
     finished from a pre-repair checkout. Campaign status is valid, but
     postrun readiness is not accepted; the run produced no promotion, no
     positive effect at/above MDE, no CMT2/CMT4 protected-case evidence, and no
     direct large-instance bounded two-opt mechanism signal.
-  - Next fresh launch should use WSL commit `7bd1a42c` or later, strict
+  - Next fresh launch should use WSL commit `43ac9935` or later, strict
     launch readiness, conda Python
     `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`, and no generic
     proposal/APS/tool-call truncation caps.

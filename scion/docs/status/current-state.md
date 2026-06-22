@@ -48,6 +48,11 @@ history when exact old chronology is needed.
   stops repeated quality-block signatures by global signature count instead of
   consecutive-only repetition. This is a fail-closed escape guard, not a broad
   research budget.
+- Latest accepted APS recovery repair: local commit `621b9604` / WSL commit
+  `43ac9935` keeps normal waiting-approval partial-hypothesis recovery, but
+  skips stale `partial_hypothesis_only` reuse whenever current hypothesis
+  context carries agentic quality-block feedback. A quality-blocked branch must
+  get a fresh proposal attempt instead of replaying the old hypothesis.
 
 ## Active WSL Roots
 
@@ -83,6 +88,20 @@ Warehouse post prompt/source-visibility probe root:
   between repeated quality-block signatures. The follow-up fix is WSL commit
   `7bd1a42c`; rerun warehouse from that commit or later before drawing a
   plateau conclusion.
+
+Warehouse quality-loop guard root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-84a6d0d0-qloopfix-6r-gpt55-20260622T013700Z-claw`
+- Strict launch readiness passed from WSL commit `84a6d0d0`.
+- The repaired repeated-signature guard stopped the run after 3 quality blocks
+  with `last_stop_reason=repeated_quality_block_signature`, rather than
+  repeating hundreds of blocked attempts. Campaign validity is
+  `invalid_no_effective_rounds`: 0 effective rounds, 0 screened experiments,
+  champion still `v2`.
+- Interpretation: guard behavior is fixed, but the run exposed a separate APS
+  recovery bug. A quality-rejected waiting-approval partial hypothesis was
+  recovered repeatedly instead of allowing quality feedback to drive a fresh
+  proposal. The fix is WSL commit `43ac9935`.
 
 CVRP evidence root:
 
@@ -212,8 +231,8 @@ CVRP/VRP:
 ## Next Actions
 
 1. Prepare and launch one fresh warehouse champion-`v2` follow-up from WSL commit
-   `7bd1a42c` or later to verify the quality-loop guard and current-run postrun
-   acceptance.
+   `43ac9935` or later to verify fresh APS retry after quality feedback and
+   current-run postrun acceptance.
 2. Use the completed pre-repair CVRP root as trajectory evidence only. Prepare a
    fresh CVRP bounded large-two-opt follow-up from the current WSL commit if
    warehouse proves the live prompt/source visibility repair under postrun
