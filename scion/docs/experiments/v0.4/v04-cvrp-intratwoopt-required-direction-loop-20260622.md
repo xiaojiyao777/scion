@@ -135,3 +135,42 @@ hypothesis generation, not only schema-preview retry. The current local repair
 projects the required id into the target-intent prompt and host-rebinds a
 non-required selected preflight mechanism id to the prepared id before target
 binding.
+
+## Target-Intent Required-Id Follow-up
+
+A third follow-up WSL launch tested that target-intent repair:
+
+- WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-targetintent-7382a090-postdrift-4r-gpt55-4r-gpt55-20260622T133014Z-claw`
+- Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-targetintent-7382a090-postdrift-4r-gpt55-4r-gpt55-20260622T133014Z-claw`
+- WSL commit: `7382a090`
+- Strict launch readiness passed with no required blockers and healthy
+  completion preflight.
+
+The run failed closed before Protocol rows:
+
+- `run_validity_status=invalid_no_effective_rounds`
+- `run_completeness_status=interrupted_incomplete`
+- `last_stop_reason=repeated_quality_block_signature`
+- 0 effective rounds
+- 0 screening rows
+- 3 proposal quality blocks
+- campaign wrapper exit `0`
+- wrapper effective exit `64`
+- `postrun_acceptance_status=failed`
+
+This root validates the target-intent repair but is still not solver evidence.
+Current target-intent sessions selected
+`large_instance_intra_route_two_opt_seed`, and formal binding stayed aligned
+instead of failing with `target_intent_binding_mismatch`.
+
+The remaining blocker is a default-avoid false positive. The formal hypothesis
+was deadline-aware, referenced `context.remaining_time()`, and contrasted
+itself against an unbounded fallback, but the default-avoid matcher treated the
+contrast text as matching the prepared avoid direction
+`unbounded large-instance two-opt fallback without deadline...`. The follow-up
+local repair narrows only this unbounded/deadline avoid shape so candidates
+with positive deadline scope (`deadline-aware`, `remaining_time`, `wall-clock`,
+or bounded+deadline evidence) are not rejected as the forbidden unbounded
+fallback.

@@ -85,9 +85,15 @@ history when exact old chronology is needed.
   also exposed target-intent drift: preflight selected non-required mechanism
   ids while the formal hypothesis used
   `large_instance_intra_route_two_opt_seed`, so target-intent binding blocked
-  code generation. The current local repair now projects prepared
-  `required_mechanism_ids` into target-intent preflight and rebinds non-required
-  selected ids before formal hypothesis binding.
+  code generation. The WSL commit `7382a090` launch verified the target-intent
+  required-id projection repair: later target-intent sessions selected the
+  required id and binding stayed aligned. That run exposed the next blocker:
+  the default-avoid matcher falsely rejected a deadline-aware bounded
+  `large_instance_intra_route_two_opt_seed` hypothesis because it mentioned the
+  unbounded fallback in a contrast/no-op context. The current local repair
+  narrows only the unbounded-large-two-opt default-avoid matcher so candidates
+  with positive deadline scope (`deadline-aware`, `remaining_time`,
+  `wall-clock`, or bounded+deadline evidence) are not misclassified.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
   commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
   stops repeated quality-block signatures by global signature count instead of
@@ -381,6 +387,33 @@ CVRP required-mechanism retry target-intent mismatch root:
   prepared id before formal hypothesis binding. Relaunch from a clean WSL
   commit after tests, not from `f75cd321`.
 
+CVRP target-intent required-id projection root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-targetintent-7382a090-postdrift-4r-gpt55-4r-gpt55-20260622T133014Z-claw`
+- Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-targetintent-7382a090-postdrift-4r-gpt55-4r-gpt55-20260622T133014Z-claw`
+- Launched from WSL commit `7382a090`, resumed from the completed forced-local
+  root, and kept the forced target at
+  `policies/baseline_modules/local_search.py`.
+- Strict launch readiness passed with `ready=true`, `static_ready=true`,
+  `launch_ready=true`, no failed required checks, and authenticated completion
+  preflight.
+- The run failed closed before Protocol rows:
+  `last_stop_reason=repeated_quality_block_signature`,
+  `run_validity_status=invalid_no_effective_rounds`, 0 effective rounds, 0
+  screening rows, 3 proposal quality blocks, campaign wrapper exit `0`,
+  wrapper effective exit `64`, and postrun acceptance `failed`.
+- Interpretation: this is not solver evidence, but it validates the previous
+  target-intent repair. The current target-intent sessions selected
+  `large_instance_intra_route_two_opt_seed`, and binding stayed aligned instead
+  of failing with `target_intent_binding_mismatch`. The remaining blocker is
+  default-avoid false-positive matching: the formal hypothesis was
+  deadline-aware and referenced `context.remaining_time()`, but the guard
+  matched the prepared avoid phrase `unbounded large-instance two-opt fallback
+  without deadline...` because the candidate contrasted against an unbounded
+  fallback. The current local repair adds a deadline-scope exception only for
+  this unbounded/deadline default-avoid shape.
+
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:
 
@@ -492,27 +525,27 @@ CVRP/VRP:
   from complete postrun-ready evidence. This is effective negative research,
   not solver progress; v0.4 still lacks continuous CVRP improvement or
   promotion.
-- Next CVRP work should synchronize and validate the target-intent required-id
-  projection repair, then relaunch the same forced `local_search.py` root from
-  a clean WSL commit. Avoid unchanged `bounded_interroute_2opt_bridge`, its
-  high-asymmetric-promise refinement, and `cmt_slack_aware_segment_swap` unless
-  the causal path is changed. The prepared focus should keep
-  `large_instance_intra_route_two_opt_seed` as the structured required
-  mechanism until the repaired target-intent/retry path produces a formal
-  code-generation attempt and Protocol evidence.
+- Next CVRP work should synchronize and validate the deadline-scope
+  default-avoid matcher repair, then relaunch the same forced `local_search.py`
+  root from a clean WSL commit. Avoid unchanged
+  `bounded_interroute_2opt_bridge`, its high-asymmetric-promise refinement, and
+  `cmt_slack_aware_segment_swap` unless the causal path is changed. The
+  prepared focus should keep `large_instance_intra_route_two_opt_seed` as the
+  structured required mechanism until a deadline-aware candidate reaches code
+  generation and Protocol evidence.
 
 ## Next Actions
 
-1. Synchronize the target-intent required-id projection repair to WSL and run
+1. Synchronize the deadline-scope default-avoid matcher repair to WSL and run
    the focused conda `scion` tests there. Local non-readiness regression tests
    pass; launch-readiness tests must be rerun after the runtime worktree is
    committed because they intentionally fail on dirty guarded runtime paths.
 2. Relaunch CVRP only after a clean synchronized WSL commit verifies the
    prepared `required_mechanism_ids` path across target-intent preflight,
-   formal hypothesis retry, and schema-preview guard for
-   `large_instance_intra_route_two_opt_seed`. The latest live root proved the
-   formal retry path works, but exposed target-intent binding drift before code
-   generation.
+   formal hypothesis retry, schema-preview required-id guard, and the narrowed
+   default-avoid matcher for `large_instance_intra_route_two_opt_seed`. The
+   latest live root proved target-intent binding now works, but exposed a
+   default-avoid false positive before code generation.
 3. Do not return to unchanged rank-gap, route-pressure, or generic
    acceptance/adaptive-weight variants unless the prepared research focus is
    explicitly changed. The next CVRP root should keep the forced or otherwise

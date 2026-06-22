@@ -218,6 +218,120 @@ def test_schema_preview_blocks_launch_focus_default_avoid_local_search_mechanism
     assert guard["candidate_mechanism_ids"] == ["bounded_interroute_2opt_bridge"]
 
 
+def test_schema_preview_blocks_unbounded_large_twoopt_default_avoid(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+        launch_research_focus={
+            "research_focus": {
+                "default_avoid_directions": [
+                    (
+                        "unbounded large-instance two-opt fallback without "
+                        "deadline or wall-clock evidence"
+                    ),
+                ],
+            },
+        },
+    )
+    hypothesis = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/baseline_modules/local_search.py",
+        hypothesis_text=(
+            "Add an unbounded large-instance two-opt fallback that runs after "
+            "the normal local search without a deadline."
+        ),
+        expected_effect="Improve total distance with a broad fallback sweep.",
+        mechanism_changes=[
+            {"id": "large_instance_two_opt_fallback", "change_type": "modify"},
+        ],
+        novelty_signature={
+            "algorithm_family": "large_instance_two_opt_fallback",
+            "construction_strategy": "unchanged_seed_pool",
+            "improvement_strategy": "unbounded_large_two_opt_fallback",
+            "acceptance_strategy": "strict_improvement_only",
+            "runtime_budget_strategy": "unbounded_route_sweep",
+        },
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    guard = preview.structured_payload["hypothesis"][
+        "launch_research_focus_default_avoid_guard"
+    ]
+    assert preview.structured_payload["passed"] is False
+    assert guard["passed"] is False
+    assert guard["matched_default_avoid_direction"].startswith(
+        "unbounded large-instance two-opt fallback"
+    )
+
+
+def test_schema_preview_allows_deadline_scoped_required_twoopt_default_avoid(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    mechanism_id = "large_instance_intra_route_two_opt_seed"
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+        launch_research_focus={
+            "research_focus": {
+                "default_avoid_directions": [
+                    (
+                        "unbounded large-instance two-opt fallback without "
+                        "deadline or wall-clock evidence"
+                    ),
+                ],
+                "required_mechanism_ids": [mechanism_id],
+            },
+        },
+    )
+    hypothesis = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/baseline_modules/local_search.py",
+        hypothesis_text=(
+            "Add a deadline-aware large_instance_intra_route_two_opt_seed pass "
+            "that performs bounded first-improvement intra-route 2-opt sweeps "
+            "with context.remaining_time() checks before each route, sweep, "
+            "and candidate pair, rather than invoking an unbounded broad VNS "
+            "fallback."
+        ),
+        expected_effect=(
+            "Reduce total_distance on large cases with bounded two-opt while "
+            "preserving route count and feasibility."
+        ),
+        mechanism_changes=[
+            {"id": mechanism_id, "change_type": "modify"},
+        ],
+        novelty_signature={
+            "algorithm_family": "bounded_local_search",
+            "construction_strategy": "unchanged_seed_pool",
+            "improvement_strategy": mechanism_id,
+            "acceptance_strategy": "strict_improvement_only",
+            "runtime_budget_strategy": "deadline_aware",
+        },
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    section = preview.structured_payload["hypothesis"]
+    default_guard = section["launch_research_focus_default_avoid_guard"]
+    required_guard = section["launch_research_focus_required_mechanism_guard"]
+    assert default_guard["passed"] is True
+    assert required_guard["passed"] is True
+    assert mechanism_id in required_guard["matched_mechanism_ids"]
+
+
 def test_schema_preview_allows_nonmatching_launch_focus_default_avoid(
     tmp_path: Path,
 ) -> None:

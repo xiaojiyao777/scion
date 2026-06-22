@@ -37,7 +37,13 @@ target-intent preflight had selected non-required mechanisms, so
 target-intent binding blocked code generation. The current repair projects
 prepared `required_mechanism_ids` into target-intent preflight and rebinds a
 non-required selected mechanism id to the prepared id before formal hypothesis
-binding.*
+binding. A WSL launch from commit `7382a090` verified that repair: later
+target-intent sessions selected `large_instance_intra_route_two_opt_seed` and
+binding stayed aligned. It still failed closed before Protocol rows because the
+default-avoid matcher falsely rejected a deadline-aware bounded hypothesis that
+contrasted itself against the unbounded fallback. The current repair narrows
+that unbounded/deadline default-avoid match so positive deadline-scope
+candidates are not misclassified.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -418,7 +424,13 @@ Current checkpoint:
   id, but target-intent preflight still selected non-required mechanisms and
   caused `target_intent_binding_mismatch` before code generation. The current
   local repair makes the required id binding visible and deterministic in
-  target-intent preflight. Detailed report:
+  target-intent preflight. A fourth follow-up WSL root from commit `7382a090`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-targetintent-7382a090-postdrift-4r-gpt55-4r-gpt55-20260622T133014Z-claw`
+  verified that target-intent and formal hypothesis binding now align on
+  `large_instance_intra_route_two_opt_seed`, but it still failed closed before
+  Protocol rows because the default-avoid matcher treated a deadline-aware
+  bounded proposal as the forbidden unbounded/no-deadline fallback. The current
+  local repair narrows that matcher. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-intratwoopt-required-direction-loop-20260622.md`.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
@@ -507,7 +519,7 @@ Current checkpoint:
     The prepared focus should continue to require
     `large_instance_intra_route_two_opt_seed` structurally through
     `required_mechanism_ids`, target-intent preflight, and schema preview, but
-    the next relaunch must come after the target-intent required-id projection
+    the next relaunch must come after the deadline-scope default-avoid matcher
     repair is synchronized and tested on WSL. It should test the required id as
     a deadline-aware bounded local-search mechanism with direct
     objective-effect telemetry, CMT2/CMT4 protection, and strict launch

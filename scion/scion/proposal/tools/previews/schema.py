@@ -1016,6 +1016,11 @@ def _launch_focus_default_avoid_match(
     terms = _launch_focus_signal_terms(avoid_direction)
     if not terms:
         return None
+    if (
+        _launch_focus_avoid_requires_absent_deadline_scope(terms)
+        and "deadline_scoped" in full_tokens
+    ):
+        return None
     identity_matches = (
         terms
         & identity_tokens
@@ -1034,6 +1039,12 @@ def _launch_focus_default_avoid_match(
     if len(matched_terms) >= 2 and (terms & identity_tokens):
         return {"matched_terms": matched_terms}
     return None
+
+
+def _launch_focus_avoid_requires_absent_deadline_scope(terms: set[str]) -> bool:
+    return "unbounded" in terms and (
+        "deadline" in terms or {"wall", "clock"}.issubset(terms)
+    )
 
 
 def _launch_focus_signal_phrases(value: str) -> tuple[tuple[str, ...], ...]:
@@ -1106,10 +1117,31 @@ def _launch_focus_candidate_tokens(
     narrative_parts.extend(_launch_focus_leaf_texts(hypothesis.branch_lesson_usage))
     identity_tokens = _launch_focus_tokens(" ".join(identity_parts))
     full_tokens = set(identity_tokens)
-    full_tokens.update(_launch_focus_tokens(" ".join(narrative_parts)))
+    narrative_text = " ".join(narrative_parts)
+    full_tokens.update(_launch_focus_tokens(narrative_text))
+    if _launch_focus_has_positive_deadline_scope(narrative_text):
+        full_tokens.add("deadline_scoped")
     if {"simulated", "annealing"}.issubset(full_tokens):
         full_tokens.add("acceptance")
     return identity_tokens, full_tokens
+
+
+def _launch_focus_has_positive_deadline_scope(value: str) -> bool:
+    text = str(value or "").lower().replace("_", " ").replace("-", " ")
+    if re.search(
+        r"\b(deadline aware|deadline guarded|remaining time|wall clock|"
+        r"time limit|budget capped|budget guarded|context remaining time)\b",
+        text,
+    ):
+        return True
+    tokens = set(_launch_focus_token_sequence(value))
+    if "bounded" in tokens and (
+        "deadline" in tokens
+        or {"remaining", "time"}.issubset(tokens)
+        or {"wall", "clock"}.issubset(tokens)
+    ):
+        return True
+    return False
 
 
 def _launch_focus_leaf_texts(value: Any) -> list[str]:
