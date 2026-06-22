@@ -9,6 +9,7 @@ from scion.proposal.engine import (
     _parse_hypothesis_target_intent,
     _split_code_context,
     _split_hypothesis_context,
+    _split_hypothesis_target_intent_context,
 )
 from scion.proposal.context_manager.code_context import (
     _build_solver_design_branch_current_integration_files,
@@ -311,6 +312,130 @@ def test_target_intent_mismatch_retries_then_blocks_before_code(
         "formal_hypothesis_target_file; not preflight target intent"
     )
     assert "target_intent_binding_mismatch" in output.failure_detail
+
+
+def test_launch_focus_required_mechanism_rebinds_target_intent_before_formal_hypothesis(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/local_search.py"
+    required_id = "large_instance_intra_route_two_opt_seed"
+    original_id = "capacity_slack_segment_exchange"
+    hypothesis = _solver_design_file_hypothesis(
+        target_file=target_file,
+        mechanism_id=required_id,
+        text="Modify local_search.py with the prepared intraroute two-opt seed.",
+    )
+    creative = TargetIntentCreative(
+        intent={
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": target_file,
+            "mechanism_id": original_id,
+            "mechanism_sketch": "Exchange capacity-slack route segments.",
+            "confidence": 0.68,
+        },
+        hypotheses=[hypothesis],
+    )
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file=target_file,
+        active_problem_boundary_surfaces=("solver_design",),
+        launch_research_focus={
+            "schema_version": "scion.launch_research_focus_prompt.v1",
+            "taint": "prepared_launch_research_focus",
+            "research_focus": {
+                "required_mechanism_ids": [required_id],
+                "next_required_direction": (
+                    "Seed a bounded intra-route two-opt pass for large cases."
+                ),
+            },
+        },
+    )
+    artifact_store = FileAgenticSessionArtifactStore(
+        tmp_path / "artifacts-launch-focus-target-intent"
+    )
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-launch-focus-target-intent",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "launch-focus-target-intent"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert len(creative.hypothesis_contexts) == 1
+    selected_context = creative.hypothesis_contexts[0][
+        "agentic_hypothesis_target_intent"
+    ]
+    selected_intent = selected_context["intent"]
+    assert selected_intent["mechanism_id"] == required_id
+    assert selected_intent["mechanism_id_status"] == (
+        "launch_focus_required_mechanism"
+    )
+    adjustment = selected_context["host_adjustments"][
+        "launch_focus_required_mechanism"
+    ]
+    assert adjustment["selected_required_mechanism_id"] == required_id
+    assert adjustment["original_target_intent_mechanism"]["mechanism_id"] == (
+        original_id
+    )
+
+    binding_artifacts = _target_binding_artifacts(output)
+    assert len(binding_artifacts) == 1
+    assert binding_artifacts[0]["binding_status"] == "bound"
+    assert binding_artifacts[0]["selected_target_intent"]["mechanism_id"] == (
+        required_id
+    )
+    assert binding_artifacts[0]["formal_hypothesis_target"][
+        "mechanism_ids"
+    ] == [required_id]
+
+
+def test_target_intent_prompt_renders_launch_focus_required_mechanism() -> None:
+    required_id = "large_instance_intra_route_two_opt_seed"
+    _system_blocks, user_prompt = _split_hypothesis_target_intent_context(
+        {
+            "problem_summary": "CVRP.",
+            "research_surfaces": "solver_design",
+            "champion_operators_code": "def improve(): pass",
+            "champion_stats": "{}",
+            "operator_categories": "solver_design",
+            "forced_surface": "solver_design",
+            "forced_action": "modify",
+            "forced_target_file": "policies/baseline_modules/local_search.py",
+            "launch_research_focus": {
+                "research_focus": {
+                    "required_mechanism_ids": [required_id],
+                    "next_required_direction": (
+                        "Seed a bounded intra-route two-opt pass for large cases."
+                    ),
+                    "current_question": (
+                        "Can the local-search owner produce a measurable "
+                        "large-case improvement?"
+                    ),
+                },
+            },
+        }
+    )
+
+    assert "Prepared launch-focus required mechanism" in user_prompt
+    assert f"`{required_id}`" in user_prompt
+    assert "Prepared next_required_direction" in user_prompt
+    assert "Prepared current_question" in user_prompt
 
 
 def test_target_intent_binding_allows_same_mechanism_refinement_suffix() -> None:

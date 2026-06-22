@@ -30,10 +30,14 @@ hypotheses that did not declare `large_instance_intra_route_two_opt_seed`, but
 the follow-up WSL launch from commit `1e4c2dde` proved the agentic hypothesis
 session was not converting that guard into full in-session retry feedback: it
 failed closed before Protocol rows after three
-`launch_research_focus_required_mechanism` proposal blocks. The current repair
-routes that guard into structured retry feedback and prompt projection so the
-session can retry with the exact required mechanism id instead of only exposing
-a truncated quality-block reason.*
+`launch_research_focus_required_mechanism` proposal blocks. The retry-feedback
+repair was synchronized and tested from WSL commit `f75cd321`: the first two
+formal hypotheses did retry with `large_instance_intra_route_two_opt_seed`, but
+target-intent preflight had selected non-required mechanisms, so
+target-intent binding blocked code generation. The current repair projects
+prepared `required_mechanism_ids` into target-intent preflight and rebinds a
+non-required selected mechanism id to the prepared id before formal hypothesis
+binding.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -407,8 +411,14 @@ Current checkpoint:
   `required_mechanism_ids=["large_instance_intra_route_two_opt_seed"]` and the
   proposal schema-preview guard do block hypotheses that omit the required id,
   but it still failed closed before Protocol rows because that guard was not
-  converted into full in-session hypothesis retry feedback. The current local
-  repair adds that retry feedback/projection path. Detailed report:
+  converted into full in-session hypothesis retry feedback. A third follow-up
+  WSL root from commit `f75cd321`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-requiredmechretry-f75cd321-postguard-4r-gpt55-4r-gpt55-20260622T130938Z-claw`
+  proved that retry feedback can rewrite the formal hypothesis to the required
+  id, but target-intent preflight still selected non-required mechanisms and
+  caused `target_intent_binding_mismatch` before code generation. The current
+  local repair makes the required id binding visible and deterministic in
+  target-intent preflight. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-intratwoopt-required-direction-loop-20260622.md`.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
@@ -496,13 +506,14 @@ Current checkpoint:
     its high-asymmetric-promise refinement, or `cmt_slack_aware_segment_swap`.
     The prepared focus should continue to require
     `large_instance_intra_route_two_opt_seed` structurally through
-    `required_mechanism_ids` and schema preview, but the next relaunch must
-    come after the in-session launch-focus retry feedback repair is synchronized
-    and tested on WSL. It should test the required id as a deadline-aware
-    bounded local-search mechanism with direct objective-effect telemetry,
-    CMT2/CMT4 protection, and strict launch readiness from the synchronized WSL
-    commit. Keep forced or otherwise audited non-acceptance target control
-    until unaided target selection is demonstrably reliable.
+    `required_mechanism_ids`, target-intent preflight, and schema preview, but
+    the next relaunch must come after the target-intent required-id projection
+    repair is synchronized and tested on WSL. It should test the required id as
+    a deadline-aware bounded local-search mechanism with direct
+    objective-effect telemetry, CMT2/CMT4 protection, and strict launch
+    readiness from the synchronized WSL commit. Keep forced or otherwise
+    audited non-acceptance target control until unaided target selection is
+    demonstrably reliable.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

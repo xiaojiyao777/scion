@@ -55,6 +55,11 @@ def _build_hypothesis_prompt_context(
         hypothesis_context["agentic_hypothesis_constraints"] = (
             _sanitize_agentic_value(constraints)
         )
+    launch_focus = getattr(tool_context, "launch_research_focus", {}) or {}
+    if launch_focus and not hypothesis_context.get("launch_research_focus"):
+        hypothesis_context["launch_research_focus"] = (
+            _sanitize_agentic_value(launch_focus)
+        )
     if target_intent:
         hypothesis_context["agentic_hypothesis_target_intent"] = (
             _sanitize_agentic_value(target_intent)

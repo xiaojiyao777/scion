@@ -405,6 +405,7 @@ def _split_hypothesis_target_intent_context(
             "For existing targets, choose `target_file` from declared active "
             f"boundary files when applicable: {targetable_files}."
         )
+    task_lines.extend(_target_intent_launch_focus_required_mechanism_lines(context))
     if same_mechanism_constraints:
         task_lines.append(
             "Same-branch refinement is same-mechanism only. Select a target "
@@ -456,6 +457,59 @@ def _target_intent_solver_design_context(
         if "solver_design" in str(value or ""):
             return True
     return False
+
+
+def _target_intent_launch_focus_required_mechanism_lines(
+    context: Mapping[str, Any],
+) -> list[str]:
+    required_ids = _launch_focus_required_mechanism_ids(context)
+    if not required_ids:
+        return []
+    research_focus = _launch_focus_research_focus_payload(context)
+    rendered_ids = ", ".join(f"`{item}`" for item in required_ids)
+    lines = [
+        (
+            "Prepared launch-focus required mechanism: set `mechanism_id` "
+            f"exactly to one of required_mechanism_ids: {rendered_ids}."
+        ),
+        (
+            "Do not choose a different target-intent mechanism for this "
+            "prepared run. If another mechanism seems better, the prepared "
+            "launch research_focus must be regenerated before this preflight."
+        ),
+    ]
+    direction = str(research_focus.get("next_required_direction") or "").strip()
+    if direction:
+        lines.append(f"Prepared next_required_direction: {direction}")
+    question = str(research_focus.get("current_question") or "").strip()
+    if question:
+        lines.append(f"Prepared current_question: {question}")
+    return lines
+
+
+def _launch_focus_required_mechanism_ids(context: Mapping[str, Any]) -> list[str]:
+    research_focus = _launch_focus_research_focus_payload(context)
+    return _launch_focus_string_items(research_focus.get("required_mechanism_ids"))
+
+
+def _launch_focus_research_focus_payload(context: Mapping[str, Any]) -> Mapping[str, Any]:
+    focus = context.get("launch_research_focus")
+    if not isinstance(focus, Mapping):
+        return {}
+    research_focus = focus.get("research_focus")
+    if isinstance(research_focus, Mapping):
+        return research_focus
+    return focus
+
+
+def _launch_focus_string_items(value: Any) -> list[str]:
+    if isinstance(value, str):
+        items = [value]
+    elif isinstance(value, (list, tuple, set)):
+        items = [str(item) for item in value]
+    else:
+        items = []
+    return [item.strip() for item in items if item.strip()]
 
 
 _AGENTIC_CONTEXT_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)

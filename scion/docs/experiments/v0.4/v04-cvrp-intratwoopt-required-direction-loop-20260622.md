@@ -97,3 +97,41 @@ repair adds a launch-focus required-mechanism retry feedback path and prompt
 projection that preserves full `required_mechanism_ids`, candidate ids, allowed
 repair shape, and a retry rule allowing the previous mechanism id to be
 replaced by the prepared required id.
+
+## Required-Mechanism Retry Follow-up
+
+A second follow-up WSL launch tested that retry-feedback repair:
+
+- WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-requiredmechretry-f75cd321-postguard-4r-gpt55-4r-gpt55-20260622T130938Z-claw`
+- Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-requiredmechretry-f75cd321-postguard-4r-gpt55-4r-gpt55-20260622T130938Z-claw`
+- WSL commit: `f75cd321`
+- Strict launch readiness passed with no required blockers.
+
+The run again failed closed before Protocol rows:
+
+- `run_validity_status=invalid_no_effective_rounds`
+- `run_completeness_status=interrupted_incomplete`
+- `last_stop_reason=circuit_breaker`
+- 0 effective rounds
+- 0 screening rows
+- 3 proposal quality blocks
+- wrapper effective exit `64`
+- `postrun_acceptance_status=failed`
+
+This root proved the retry-feedback path partially worked: the first two
+formal hypotheses were rewritten to
+`large_instance_intra_route_two_opt_seed`. They were still blocked before code
+generation because target-intent preflight had selected different mechanism ids
+(`intra_route_relocate_polish` and `capacity_slack_segment_exchange`), so the
+target-intent binding gate correctly reported `target_intent_binding_mismatch`.
+The third attempt omitted the required id again and was blocked by
+`launch_research_focus_required_mechanism`.
+
+Interpretation: this is not solver evidence. It exposes that prepared
+`required_mechanism_ids` must bind target-intent preflight before formal
+hypothesis generation, not only schema-preview retry. The current local repair
+projects the required id into the target-intent prompt and host-rebinds a
+non-required selected preflight mechanism id to the prepared id before target
+binding.

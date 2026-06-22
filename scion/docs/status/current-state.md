@@ -78,12 +78,16 @@ history when exact old chronology is needed.
   in `mechanism_changes`. A follow-up launch from WSL commit `1e4c2dde` proved
   that the guard itself is wired, but also exposed a missing agentic-session
   retry-feedback path: all three proposal attempts failed closed on
-  `launch_research_focus_required_mechanism` before Protocol rows. The current
-  local repair converts that launch-focus guard into structured hypothesis
-  retry feedback and prompt projection, including full
-  `required_mechanism_ids`, candidate ids, allowed repair shape, and a retry
-  rule that explicitly permits replacing the prior mechanism id with the
-  prepared required id.
+  `launch_research_focus_required_mechanism` before Protocol rows. The
+  follow-up repair converted that launch-focus guard into structured
+  hypothesis retry feedback and prompt projection, and the WSL commit
+  `f75cd321` launch proved the formal retry can rewrite to the required id. It
+  also exposed target-intent drift: preflight selected non-required mechanism
+  ids while the formal hypothesis used
+  `large_instance_intra_route_two_opt_seed`, so target-intent binding blocked
+  code generation. The current local repair now projects prepared
+  `required_mechanism_ids` into target-intent preflight and rebinds non-required
+  selected ids before formal hypothesis binding.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
   commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
   stops repeated quality-block signatures by global signature count instead of
@@ -345,8 +349,37 @@ CVRP required-mechanism schema-guard loop root:
   correctly blocking hypotheses that omit
   `large_instance_intra_route_two_opt_seed`, but the agentic hypothesis session
   was not turning that guard payload into full in-session retry feedback. The
-  current local repair adds that feedback/projection path. After WSL sync and
-  tests, relaunch from the new commit rather than repeating `1e4c2dde`.
+  follow-up retry-feedback repair was synchronized and tested from WSL commit
+  `f75cd321`.
+
+CVRP required-mechanism retry target-intent mismatch root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-requiredmechretry-f75cd321-postguard-4r-gpt55-4r-gpt55-20260622T130938Z-claw`
+- Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-requiredmechretry-f75cd321-postguard-4r-gpt55-4r-gpt55-20260622T130938Z-claw`
+- Launched from WSL commit `f75cd321`, resumed from the completed forced-local
+  root, and kept the forced target at
+  `policies/baseline_modules/local_search.py`.
+- Strict launch readiness passed with `ready=true`, `static_ready=true`,
+  `launch_ready=true`, no failed required checks, and authenticated completion
+  preflight.
+- The run failed closed before Protocol rows:
+  `last_stop_reason=circuit_breaker`,
+  `run_validity_status=invalid_no_effective_rounds`, 0 effective rounds, 0
+  screening rows, 3 proposal quality blocks, wrapper effective exit `64`, and
+  postrun acceptance `failed`.
+- Interpretation: the retry-feedback repair partly worked. The first two
+  formal hypotheses were rewritten to
+  `large_instance_intra_route_two_opt_seed`, but target-intent preflight had
+  selected different mechanisms (`intra_route_relocate_polish` and
+  `capacity_slack_segment_exchange`), so target-intent binding blocked them
+  before code generation. The third attempt again omitted the required id and
+  was blocked by the schema-preview guard. This exposed a target-intent
+  projection gap, not solver evidence. The current local repair now projects
+  prepared `required_mechanism_ids` into the target-intent prompt and
+  deterministically rebinds a non-required preflight mechanism id to the
+  prepared id before formal hypothesis binding. Relaunch from a clean WSL
+  commit after tests, not from `f75cd321`.
 
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:
@@ -459,26 +492,27 @@ CVRP/VRP:
   from complete postrun-ready evidence. This is effective negative research,
   not solver progress; v0.4 still lacks continuous CVRP improvement or
   promotion.
-- Next CVRP work should synchronize and validate the required-mechanism retry
-  feedback repair, then relaunch the same forced `local_search.py` root from a
-  clean WSL commit. Avoid unchanged `bounded_interroute_2opt_bridge`, its
+- Next CVRP work should synchronize and validate the target-intent required-id
+  projection repair, then relaunch the same forced `local_search.py` root from
+  a clean WSL commit. Avoid unchanged `bounded_interroute_2opt_bridge`, its
   high-asymmetric-promise refinement, and `cmt_slack_aware_segment_swap` unless
   the causal path is changed. The prepared focus should keep
   `large_instance_intra_route_two_opt_seed` as the structured required
-  mechanism until this repaired retry path is tested under a live root.
+  mechanism until the repaired target-intent/retry path produces a formal
+  code-generation attempt and Protocol evidence.
 
 ## Next Actions
 
-1. Synchronize the launch-focus required-mechanism retry repair to WSL and run
+1. Synchronize the target-intent required-id projection repair to WSL and run
    the focused conda `scion` tests there. Local non-readiness regression tests
-   already pass; launch-readiness tests must be rerun after the runtime
-   worktree is committed because they intentionally fail on dirty guarded
-   runtime paths.
-2. Relaunch CVRP only after a clean synchronized WSL commit verifies both the
-   structured `required_mechanism_ids` schema-preview guard and its full
-   in-session retry feedback for `large_instance_intra_route_two_opt_seed`.
-   The latest required-mechanism root proved the guard works but the previous
-   session retry path exposed only a truncated quality-block reason.
+   pass; launch-readiness tests must be rerun after the runtime worktree is
+   committed because they intentionally fail on dirty guarded runtime paths.
+2. Relaunch CVRP only after a clean synchronized WSL commit verifies the
+   prepared `required_mechanism_ids` path across target-intent preflight,
+   formal hypothesis retry, and schema-preview guard for
+   `large_instance_intra_route_two_opt_seed`. The latest live root proved the
+   formal retry path works, but exposed target-intent binding drift before code
+   generation.
 3. Do not return to unchanged rank-gap, route-pressure, or generic
    acceptance/adaptive-weight variants unless the prepared research focus is
    explicitly changed. The next CVRP root should keep the forced or otherwise
