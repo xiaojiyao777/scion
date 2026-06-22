@@ -24,10 +24,16 @@ rows after three default-avoid proposal blocks, proving the guard works but
 that positive target selection still needed repair. The current launcher focus
 then named `large_instance_intra_route_two_opt_seed` as the next required
 prepared direction, but a WSL launch from commit `4b7e78b7` still failed closed
-before Protocol rows after default-avoid repeats. The current repair therefore
-adds structured `required_mechanism_ids` and a schema-preview check that the
-hypothesis declares `large_instance_intra_route_two_opt_seed` in
-`mechanism_changes`.*
+before Protocol rows after default-avoid repeats. Structured
+`required_mechanism_ids` and a schema-preview check then correctly blocked
+hypotheses that did not declare `large_instance_intra_route_two_opt_seed`, but
+the follow-up WSL launch from commit `1e4c2dde` proved the agentic hypothesis
+session was not converting that guard into full in-session retry feedback: it
+failed closed before Protocol rows after three
+`launch_research_focus_required_mechanism` proposal blocks. The current repair
+routes that guard into structured retry feedback and prompt projection so the
+session can retry with the exact required mechanism id instead of only exposing
+a truncated quality-block reason.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -395,10 +401,14 @@ Current checkpoint:
   verified that the natural-language `next_required_direction` reached
   prepared prompt readiness, but still failed closed before Protocol rows after
   three default-avoid repeats. Treat this as target-control failure evidence,
-  not solver evidence. The current repair adds structured
-  `required_mechanism_ids=["large_instance_intra_route_two_opt_seed"]` and a
-  proposal schema-preview guard that requires the hypothesis to declare that id
-  in `mechanism_changes`. Detailed report:
+  not solver evidence. A second follow-up WSL root from commit `1e4c2dde`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-requiredmech-1e4c2dde-postintratwoopt-4r-gpt55-20260622T124949Z-claw`
+  verified that structured
+  `required_mechanism_ids=["large_instance_intra_route_two_opt_seed"]` and the
+  proposal schema-preview guard do block hypotheses that omit the required id,
+  but it still failed closed before Protocol rows because that guard was not
+  converted into full in-session hypothesis retry feedback. The current local
+  repair adds that retry feedback/projection path. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-intratwoopt-required-direction-loop-20260622.md`.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
@@ -484,13 +494,15 @@ Current checkpoint:
   - Next fresh CVRP launch should avoid repeating unchanged rank-gap,
     route-pressure acceptance gates, unchanged `bounded_interroute_2opt_bridge`,
     its high-asymmetric-promise refinement, or `cmt_slack_aware_segment_swap`.
-    The prepared focus should require
+    The prepared focus should continue to require
     `large_instance_intra_route_two_opt_seed` structurally through
-    `required_mechanism_ids` and schema preview, then test it as a
-    deadline-aware bounded local-search mechanism with direct objective-effect
-    telemetry, CMT2/CMT4 protection, and strict launch readiness from the
-    synchronized WSL commit. Keep forced or otherwise audited non-acceptance
-    target control until unaided target selection is demonstrably reliable.
+    `required_mechanism_ids` and schema preview, but the next relaunch must
+    come after the in-session launch-focus retry feedback repair is synchronized
+    and tested on WSL. It should test the required id as a deadline-aware
+    bounded local-search mechanism with direct objective-effect telemetry,
+    CMT2/CMT4 protection, and strict launch readiness from the synchronized WSL
+    commit. Keep forced or otherwise audited non-acceptance target control
+    until unaided target selection is demonstrably reliable.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

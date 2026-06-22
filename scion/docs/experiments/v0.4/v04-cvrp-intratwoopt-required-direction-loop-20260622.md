@@ -61,3 +61,39 @@ The launcher focus now exposes
 `proposal.schema_preview` checks that the hypothesis declares one of those ids
 in `mechanism_changes`. This remains proposal-only launch guidance and is
 excluded from Decision, Protocol, scheduler, promotion, and solver semantics.
+
+## Required-Mechanism Guard Follow-up
+
+A follow-up WSL launch tested the structured guard:
+
+- WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-requiredmech-1e4c2dde-postintratwoopt-4r-gpt55-20260622T124949Z-claw`
+- Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-requiredmech-1e4c2dde-postintratwoopt-4r-gpt55-20260622T124949Z-claw`
+- WSL commit: `1e4c2dde`
+- Strict launch readiness passed.
+
+The run failed closed before Protocol rows:
+
+- `run_validity_status=invalid_no_effective_rounds`
+- `run_completeness_status=interrupted_incomplete`
+- `last_stop_reason=repeated_quality_block_signature`
+- 0 effective rounds
+- 0 screening rows
+- 3 proposal quality blocks
+- `wrapper_exit_status=64`
+- `postrun_acceptance_status=failed`
+
+All three proposal attempts were blocked by
+`launch_research_focus_required_mechanism`. This proves the schema-preview
+guard is wired and fail-closed, but it is still not solver evidence: the agent
+never generated a formal candidate or Protocol row.
+
+The root exposed a second repair point. The guard payload contained the full
+required id and retry constraint, but the agentic hypothesis session did not
+convert that guard into in-session schema retry feedback, so the outer
+quality-block path only saw a truncated failure reason. The follow-up local
+repair adds a launch-focus required-mechanism retry feedback path and prompt
+projection that preserves full `required_mechanism_ids`, candidate ids, allowed
+repair shape, and a retry rule allowing the previous mechanism id to be
+replaced by the prepared required id.

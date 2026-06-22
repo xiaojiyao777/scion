@@ -33,27 +33,24 @@ def schema_retry_feedback_projection(
             )
         )
     latest = compact_items[-1] if compact_items else {}
+    latest_failure_code = latest.get("failure_code")
     return _drop_empty(
         {
             "retry_attempt": retry_attempt,
             "attempt_kind": latest.get("attempt_kind")
             or "schema_accounting_repair",
             "repair_classification": latest.get("repair_classification"),
-            "retry_mode": (
-                "identity_corrective"
-                if latest.get("failure_code") == "schema_retry_drift"
-                else "schema_telemetry_repair"
-            ),
-            "final_task": (
-                "Repair expected_telemetry/schema fields for the same "
-                "hypothesis. Do not explore, rename, retarget, or switch "
-                "mechanism family during this schema retry. Treat this as "
-                "telemetry/accounting repair, not algorithmic refinement."
-            ),
+            "retry_mode": _retry_mode_for_failure_code(latest_failure_code),
+            "final_task": latest.get("final_task")
+            or _final_task_for_failure_code(latest_failure_code),
             "retry_rule": retry_rule,
             "protected_exact_identity": latest.get("protected_identity")
             or _protected_identity_from_preserve(latest.get("preserve_hypothesis")),
-            "latest_failure_code": latest.get("failure_code"),
+            "latest_failure_code": latest_failure_code,
+            "required_mechanism_ids": latest.get("required_mechanism_ids"),
+            "candidate_mechanism_ids": latest.get("candidate_mechanism_ids"),
+            "candidate_target_file": latest.get("candidate_target_file"),
+            "allowed_repair_shape": latest.get("allowed_repair_shape"),
             "allowed_top_level_categories": latest.get("allowed_top_level_categories"),
             "exact_allowed_top_level_categories": latest.get(
                 "exact_allowed_top_level_categories"
@@ -135,6 +132,17 @@ def _schema_retry_feedback_item(
                 if include_allowed_template
                 else None
             ),
+            "required_mechanism_ids": _bounded_list(
+                item.get("required_mechanism_ids"),
+                16,
+            ),
+            "candidate_mechanism_ids": _bounded_list(
+                item.get("candidate_mechanism_ids"),
+                16,
+            ),
+            "candidate_target_file": item.get("candidate_target_file"),
+            "allowed_repair_shape": item.get("allowed_repair_shape"),
+            "final_task": item.get("final_task"),
             "protected_identity": item.get("protected_identity")
             or _protected_identity_from_preserve(preserve),
             "preserve_hypothesis": _compact_preserve_hypothesis(preserve),
@@ -143,6 +151,30 @@ def _schema_retry_feedback_item(
                 700,
             ),
         }
+    )
+
+
+def _retry_mode_for_failure_code(failure_code: Any) -> str:
+    if failure_code == "schema_retry_drift":
+        return "identity_corrective"
+    if failure_code == "launch_research_focus_required_mechanism":
+        return "launch_focus_required_mechanism_repair"
+    return "schema_telemetry_repair"
+
+
+def _final_task_for_failure_code(failure_code: Any) -> str:
+    if failure_code == "launch_research_focus_required_mechanism":
+        return (
+            "Rewrite the hypothesis around one prepared required_mechanism_ids "
+            "value. Put that exact id in mechanism_changes and align expected "
+            "telemetry refs to the same id; this launch-focus repair may "
+            "replace the previous mechanism id."
+        )
+    return (
+        "Repair expected_telemetry/schema fields for the same hypothesis. Do "
+        "not explore, rename, retarget, or switch mechanism family during this "
+        "schema retry. Treat this as telemetry/accounting repair, not "
+        "algorithmic refinement."
     )
 
 

@@ -557,3 +557,14 @@ def _mechanism_id_schema_retry_pending(
         str(preview_rejections[-1].get("failure_code") or "").strip()
         == "invalid_mechanism_id"
     )
+
+
+def _launch_focus_required_mechanism_retry_pending(
+    preview_rejections: list[Mapping[str, Any]],
+) -> bool:
+    if not preview_rejections:
+        return False
+    return (
+        str(preview_rejections[-1].get("failure_code") or "").strip()
+        == "launch_research_focus_required_mechanism"
+    )

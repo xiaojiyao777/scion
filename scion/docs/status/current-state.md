@@ -75,7 +75,15 @@ history when exact old chronology is needed.
   before Protocol rows after default-avoid repeats. The current repair now adds
   structured `required_mechanism_ids` and a proposal schema-preview guard that
   requires the hypothesis to declare `large_instance_intra_route_two_opt_seed`
-  in `mechanism_changes`.
+  in `mechanism_changes`. A follow-up launch from WSL commit `1e4c2dde` proved
+  that the guard itself is wired, but also exposed a missing agentic-session
+  retry-feedback path: all three proposal attempts failed closed on
+  `launch_research_focus_required_mechanism` before Protocol rows. The current
+  local repair converts that launch-focus guard into structured hypothesis
+  retry feedback and prompt projection, including full
+  `required_mechanism_ids`, candidate ids, allowed repair shape, and a retry
+  rule that explicitly permits replacing the prior mechanism id with the
+  prepared required id.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
   commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
   stops repeated quality-block signatures by global signature count instead of
@@ -317,6 +325,29 @@ CVRP intra-two-opt required-direction loop root:
   schema-preview guard on `mechanism_changes`. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-intratwoopt-required-direction-loop-20260622.md`.
 
+CVRP required-mechanism schema-guard loop root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-requiredmech-1e4c2dde-postintratwoopt-4r-gpt55-20260622T124949Z-claw`
+- Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-requiredmech-1e4c2dde-postintratwoopt-4r-gpt55-20260622T124949Z-claw`
+- Launched from WSL commit `1e4c2dde`, resumed from the completed forced-local
+  root, and kept the forced target at
+  `policies/baseline_modules/local_search.py`.
+- Strict launch readiness passed with `launch_ready=true`, authenticated
+  completion preflight, clean runtime guard, and the structured required
+  mechanism present in prepared prompt readiness.
+- The run failed closed before Protocol rows:
+  `last_stop_reason=repeated_quality_block_signature`,
+  `run_validity_status=invalid_no_effective_rounds`, 0 effective rounds, 0
+  screening rows, 3 proposal quality blocks, wrapper exit `64`, and postrun
+  acceptance `failed`.
+- Interpretation: this is not solver evidence. The schema-preview guard is
+  correctly blocking hypotheses that omit
+  `large_instance_intra_route_two_opt_seed`, but the agentic hypothesis session
+  was not turning that guard payload into full in-session retry feedback. The
+  current local repair adds that feedback/projection path. After WSL sync and
+  tests, relaunch from the new commit rather than repeating `1e4c2dde`.
+
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:
 
@@ -428,30 +459,26 @@ CVRP/VRP:
   from complete postrun-ready evidence. This is effective negative research,
   not solver progress; v0.4 still lacks continuous CVRP improvement or
   promotion.
-- Next CVRP work should use the completed forced-local evidence to choose a
-  materially different follow-up. Avoid unchanged
-  `bounded_interroute_2opt_bridge`, its high-asymmetric-promise refinement, and
-  `cmt_slack_aware_segment_swap` unless the causal path is changed. Prefer a
-  different bounded local-search or destroy/repair mechanism with direct
-  activation-to-objective telemetry and CMT2/CMT4 protection; the prepared
-  launcher focus now enforces those avoid directions before Protocol rows. The
-  failed next-local and intra-two-opt relaunches show that negative guardrails
-  and natural-language positive focus are not enough; the prepared focus now
-  has a structured required-mechanism schema-preview guard before spending
-  another live root.
+- Next CVRP work should synchronize and validate the required-mechanism retry
+  feedback repair, then relaunch the same forced `local_search.py` root from a
+  clean WSL commit. Avoid unchanged `bounded_interroute_2opt_bridge`, its
+  high-asymmetric-promise refinement, and `cmt_slack_aware_segment_swap` unless
+  the causal path is changed. The prepared focus should keep
+  `large_instance_intra_route_two_opt_seed` as the structured required
+  mechanism until this repaired retry path is tested under a live root.
 
 ## Next Actions
 
-1. Choose the next CVRP mechanism from the completed forced-local evidence.
-   Treat the original bridge, its refinement, and the CMT slack segment swap as
-   rejected/default-avoid unless a proposal changes the causal mechanism and
-   explains the observed A/B/E/P/CMT/X case pattern.
-2. Relaunch CVRP only after a clean synchronized WSL commit verifies the
-   structured `required_mechanism_ids` schema-preview guard for
-   `large_instance_intra_route_two_opt_seed`. The latest next-local and
-   intra-two-opt relaunches proved the default-avoid guard works but also
-   exposed a default-avoid proposal loop that ignores prompt-only positive
-   focus.
+1. Synchronize the launch-focus required-mechanism retry repair to WSL and run
+   the focused conda `scion` tests there. Local non-readiness regression tests
+   already pass; launch-readiness tests must be rerun after the runtime
+   worktree is committed because they intentionally fail on dirty guarded
+   runtime paths.
+2. Relaunch CVRP only after a clean synchronized WSL commit verifies both the
+   structured `required_mechanism_ids` schema-preview guard and its full
+   in-session retry feedback for `large_instance_intra_route_two_opt_seed`.
+   The latest required-mechanism root proved the guard works but the previous
+   session retry path exposed only a truncated quality-block reason.
 3. Do not return to unchanged rank-gap, route-pressure, or generic
    acceptance/adaptive-weight variants unless the prepared research focus is
    explicitly changed. The next CVRP root should keep the forced or otherwise

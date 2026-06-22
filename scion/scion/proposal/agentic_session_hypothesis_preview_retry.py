@@ -44,6 +44,13 @@ def _hypothesis_preview_retry_feedback(
     )
     if target_action_feedback is not None:
         return target_action_feedback
+    launch_required_feedback = _launch_focus_required_mechanism_retry_feedback(
+        hypothesis,
+        detail=detail,
+        attempt=attempt,
+    )
+    if launch_required_feedback is not None:
+        return launch_required_feedback
     same_mechanism_feedback = _same_mechanism_preview_retry_feedback(
         hypothesis,
         detail=detail,
@@ -230,6 +237,79 @@ def _target_permission_guard_from_observations(
         ),
         "target_file": requested.get("target_file"),
     }
+
+
+def _launch_focus_required_mechanism_retry_feedback(
+    hypothesis: Mapping[str, Any],
+    *,
+    detail: str,
+    attempt: int,
+) -> dict[str, Any] | None:
+    guard = hypothesis.get("launch_research_focus_required_mechanism_guard")
+    if not isinstance(guard, Mapping):
+        return None
+    if guard.get("passed") is not False:
+        return None
+    if (
+        str(guard.get("failure_code") or "").strip()
+        != "launch_research_focus_required_mechanism"
+    ):
+        return None
+
+    required_ids = [
+        str(item).strip()
+        for item in (guard.get("required_mechanism_ids") or ())
+        if str(item).strip()
+    ]
+    candidate_ids = [
+        str(item).strip()
+        for item in (guard.get("candidate_mechanism_ids") or ())
+        if str(item).strip()
+    ]
+    target_file = str(guard.get("candidate_target_file") or "").strip()
+    return _drop_empty_dict(
+        {
+            "attempt": attempt,
+            "attempt_kind": "launch_focus_required_mechanism_repair",
+            "repair_classification": "launch_focus_required_mechanism_repair",
+            "source": "hypothesis_preview_launch_focus_guard",
+            "gate_name": "proposal.schema_preview",
+            "failure_code": "launch_research_focus_required_mechanism",
+            "check": "launch_research_focus_required_mechanism",
+            "failure_category": AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value,
+            "reason": _limit_string(
+                str(guard.get("reason") or "") or detail,
+                1200,
+            ),
+            "required_mechanism_ids": required_ids,
+            "candidate_mechanism_ids": candidate_ids,
+            "candidate_target_file": target_file,
+            "candidate_change_locus": guard.get("candidate_change_locus"),
+            "allowed_repair_shape": {
+                "mechanism_changes": [
+                    {"id": mechanism_id, "change_type": "modify"}
+                    for mechanism_id in required_ids
+                ],
+                "target_file": target_file,
+            },
+            "protected_identity": {
+                "required_mechanism_ids": required_ids,
+                "candidate_mechanism_ids": candidate_ids,
+                "target_file": target_file,
+            },
+            "final_task": (
+                "Rewrite the hypothesis around the prepared launch-focus "
+                "required mechanism id. This launch-focus repair may replace "
+                "the previous mechanism id instead of preserving it."
+            ),
+            "retry_constraint": (
+                guard.get("retry_constraint")
+                or "Use one required_mechanism_ids value exactly in "
+                "mechanism_changes and align expected telemetry refs to that "
+                "same mechanism id."
+            ),
+        }
+    )
 
 
 def _same_mechanism_preview_retry_feedback(

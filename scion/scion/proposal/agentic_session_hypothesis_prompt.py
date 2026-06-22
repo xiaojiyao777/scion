@@ -15,6 +15,7 @@ from scion.proposal.agentic_session_common import (
     _sanitize_agentic_value,
 )
 from scion.proposal.agentic_session_hypothesis_schema_retry import (
+    _launch_focus_required_mechanism_retry_pending,
     _mechanism_id_schema_retry_pending,
     _same_mechanism_preview_retry_pending,
     _schema_retry_corrective_retry_already_used,
@@ -113,6 +114,17 @@ def _build_hypothesis_prompt_context(
                 "mechanism_changes and expected telemetry refs. "
                 "raw_mechanism_id/provenance fields are audit-only and "
                 "must not be copied into formal mechanism_changes."
+            )
+        elif _launch_focus_required_mechanism_retry_pending(preview_rejections):
+            hypothesis_context["agentic_hypothesis_preview_retry_rule"] = (
+                "LAUNCH-FOCUS REQUIRED-MECHANISM RETRY. The prepared "
+                "research_focus requires an exact mechanism_changes id. "
+                "Rewrite the hypothesis around one of required_mechanism_ids "
+                "from the feedback, put that exact id in mechanism_changes, "
+                "and align expected telemetry activation/effect/budget refs "
+                "to that same id. This retry is allowed to replace the "
+                "previous mechanism id because the launch focus is the "
+                "binding research direction for this campaign."
             )
         elif _target_intent_binding_retry_pending(preview_rejections):
             hypothesis_context["agentic_hypothesis_preview_retry_rule"] = (

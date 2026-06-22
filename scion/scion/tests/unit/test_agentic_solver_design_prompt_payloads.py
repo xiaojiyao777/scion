@@ -1310,6 +1310,58 @@ def test_hypothesis_schema_retry_prompt_preserves_allowed_telemetry_template() -
         assert field in user_prompt
 
 
+def test_hypothesis_launch_focus_required_mechanism_retry_prompt_keeps_required_id(
+) -> None:
+    required_id = "large_instance_intra_route_two_opt_seed"
+    feedback = {
+        "attempt": 2,
+        "attempt_kind": "launch_focus_required_mechanism_repair",
+        "repair_classification": "launch_focus_required_mechanism_repair",
+        "failure_code": "launch_research_focus_required_mechanism",
+        "reason": (
+            "required_mechanism_ids=['large_instance_intra_route_two_opt_seed']; "
+            "candidate_mechanism_ids=['bounded_two_opt_probe']"
+        ),
+        "required_mechanism_ids": [required_id],
+        "candidate_mechanism_ids": ["bounded_two_opt_probe"],
+        "candidate_target_file": "policies/baseline_modules/local_search.py",
+        "allowed_repair_shape": {
+            "mechanism_changes": [
+                {"id": required_id, "change_type": "modify"}
+            ],
+        },
+        "retry_constraint": (
+            "Rewrite the hypothesis around the prepared required mechanism id "
+            "'large_instance_intra_route_two_opt_seed'; put that exact id in "
+            "mechanism_changes."
+        ),
+    }
+
+    _system_blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "CVRP.",
+            "champion_operators_code": "def solve(): pass",
+            "champion_stats": "{}",
+            "experiment_history": "",
+            "blacklist_summary": "",
+            "active_hyp_summary": "",
+            "sibling_summary": "",
+            "operator_categories": "solver_design",
+            "agentic_hypothesis_retry_attempt": 3,
+            "agentic_hypothesis_preview_retry_rule": (
+                "LAUNCH-FOCUS REQUIRED-MECHANISM RETRY."
+            ),
+            "agentic_hypothesis_preview_rejections": [feedback],
+        }
+    )
+
+    assert "launch_focus_required_mechanism_repair" in user_prompt
+    assert "required_mechanism_ids override the prior mechanism id" in user_prompt
+    assert required_id in user_prompt
+    assert "bounded_two_opt_probe" in user_prompt
+    assert "allowed_repair_shape" in user_prompt
+
+
 def test_algorithm_smoke_compacts_to_fit_remaining_observation_budget(
     tmp_path: Path,
 ) -> None:

@@ -79,6 +79,7 @@ def test_schema_retry_helpers_remain_importable_from_hypothesis_facade() -> None
         "_mechanism_ref_token",
         "_mechanism_ref_matches",
         "_mechanism_id_schema_retry_pending",
+        "_launch_focus_required_mechanism_retry_pending",
     )
 
     for helper_name in helper_names:
@@ -465,6 +466,55 @@ def _vns_hypothesis(expected_telemetry: dict) -> HypothesisProposal:
     )
 
 
+def _local_search_mechanism_hypothesis(
+    *,
+    mechanism_id: str,
+    text: str,
+) -> HypothesisProposal:
+    return HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/baseline_modules/local_search.py",
+            hypothesis_text=text,
+            target_weakness=(
+                "Large CVRP cases need a targeted local-search mechanism with "
+                "direct objective-effect telemetry."
+            ),
+            expected_effect=(
+                "Improve total_distance on large cases while preserving fleet "
+                "feasibility."
+            ),
+            no_op_condition="Skip when there is no remaining local-search budget.",
+            mechanism_changes=[
+                {
+                    "id": mechanism_id,
+                    "change_type": "modify",
+                }
+            ],
+            novelty_signature={
+                "algorithm_family": "bounded_local_search",
+                "construction_strategy": "preserve_existing_construction",
+                "improvement_strategy": mechanism_id,
+                "acceptance_strategy": "strict_improvement_only",
+                "runtime_budget_strategy": "deadline_aware_candidate_pool",
+            },
+            expected_telemetry={
+                "activity": ["solver_algorithm_search_iterations"],
+                "activation": [
+                    f"solver_algorithm_context_records.{mechanism_id}_iterations",
+                    f"solver_algorithm_phase_runtime_ms.{mechanism_id}",
+                ],
+                "effect": [
+                    f"solver_algorithm_phase_improvement_counts.{mechanism_id}"
+                ],
+                "budget": [
+                    f"solver_algorithm_phase_runtime_ms.{mechanism_id}"
+                ],
+            },
+        )
+    )
+
+
 def _duplicate_or_opt_hypothesis() -> HypothesisProposal:
     return HypothesisProposal(
         **_valid_hypothesis_payload(
@@ -750,6 +800,69 @@ def test_same_mechanism_preview_retry_happens_inside_proposal_session(
         event.metadata.get("failure_code") == "new_mechanism_requires_clean_fork"
         for event in output.transcript
     )
+
+
+def test_launch_focus_required_mechanism_preview_retries_to_required_id(
+    tmp_path: Path,
+) -> None:
+    required_id = "large_instance_intra_route_two_opt_seed"
+    bad = _local_search_mechanism_hypothesis(
+        mechanism_id="bounded_two_opt_probe",
+        text="Add a bounded two-opt probe that is not the prepared launch focus.",
+    )
+    good = _local_search_mechanism_hypothesis(
+        mechanism_id=required_id,
+        text=(
+            "Implement the prepared large-instance intra-route two-opt seed "
+            "inside local_search.py."
+        ),
+    )
+    creative = SequentialHypothesisCreative([bad, good])
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+        launch_research_focus={
+            "research_focus": {
+                "required_mechanism_ids": [required_id],
+            },
+        },
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-launch-focus-required-mechanism-retry",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "launch-focus-required-mechanism"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.hypothesis == good
+    assert len(creative.hypothesis_contexts) == 2
+    retry_context = creative.hypothesis_contexts[1]
+    retry_feedback = retry_context["agentic_hypothesis_preview_rejections"][0]
+    assert (
+        retry_feedback["failure_code"]
+        == "launch_research_focus_required_mechanism"
+    )
+    assert retry_feedback["required_mechanism_ids"] == [required_id]
+    assert retry_feedback["candidate_mechanism_ids"] == ["bounded_two_opt_probe"]
+    assert retry_feedback["allowed_repair_shape"]["mechanism_changes"] == [
+        {"id": required_id, "change_type": "modify"}
+    ]
+    assert "LAUNCH-FOCUS REQUIRED-MECHANISM RETRY" in retry_context[
+        "agentic_hypothesis_preview_retry_rule"
+    ]
 
 
 def test_same_branch_target_intent_and_formal_prompts_route_new_mechanisms_to_clean_fork(

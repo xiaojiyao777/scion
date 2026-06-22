@@ -11,6 +11,7 @@ from scion.proposal.agentic_session_hypothesis_schema_retry import (
     _flatten_telemetry_activation_items,
     _hypothesis_retry_anchor,
     _is_structural_activation_ref,
+    _launch_focus_required_mechanism_retry_pending,
     _latest_schema_preservation_rejection,
     _mechanism_change_anchor,
     _mechanism_id_schema_retry_pending,
