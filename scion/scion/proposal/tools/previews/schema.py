@@ -928,12 +928,6 @@ def _launch_focus_default_avoid_match(
     terms = _launch_focus_signal_terms(avoid_direction)
     if not terms:
         return None
-    for phrase in _launch_focus_signal_phrases(avoid_direction):
-        if set(phrase).issubset(full_tokens):
-            return {
-                "matched_terms": set(phrase),
-                "matched_phrase": " ".join(phrase),
-            }
     identity_matches = (
         terms
         & identity_tokens
@@ -941,6 +935,13 @@ def _launch_focus_default_avoid_match(
     )
     if identity_matches:
         return {"matched_terms": identity_matches}
+    for phrase in _launch_focus_signal_phrases(avoid_direction):
+        phrase_terms = set(phrase)
+        if phrase_terms.issubset(full_tokens) and (phrase_terms & identity_tokens):
+            return {
+                "matched_terms": phrase_terms,
+                "matched_phrase": " ".join(phrase),
+            }
     matched_terms = terms & full_tokens
     if len(matched_terms) >= 2 and (terms & identity_tokens):
         return {"matched_terms": matched_terms}

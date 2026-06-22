@@ -114,6 +114,8 @@ def test_schema_preview_blocks_launch_focus_default_avoid_acceptance_family(
             "decision_features_excluded": True,
             "research_focus": {
                 "default_avoid_directions": [
+                    "route-limit seed diversification",
+                    "simple initial-VNS disablement",
                     (
                         "route-pressure acceptance/adaptive-weighting variants "
                         "without a new non-acceptance causal path or direct "
@@ -134,7 +136,8 @@ def test_schema_preview_blocks_launch_focus_default_avoid_acceptance_family(
         target_file="policies/baseline_modules/acceptance.py",
         hypothesis_text=(
             "Modify the simulated annealing rule with a distance-scaled "
-            "stagnation reheating floor."
+            "stagnation reheating floor after route-limit seed experiments "
+            "failed."
         ),
         expected_effect="Improve large-case acceptance of uphill route moves.",
         mechanism_changes=[
@@ -155,6 +158,7 @@ def test_schema_preview_blocks_launch_focus_default_avoid_acceptance_family(
     assert guard["passed"] is False
     assert guard["failure_code"] == "launch_research_focus_default_avoid"
     assert "acceptance" in guard["matched_terms"]
+    assert guard["matched_default_avoid_direction"].startswith("route-pressure")
     assert "launch_research_focus_default_avoid" in section["failure_reason"]
     assert guard["proposal_visibility_only"] is True
     assert guard["decision_features_excluded"] is True

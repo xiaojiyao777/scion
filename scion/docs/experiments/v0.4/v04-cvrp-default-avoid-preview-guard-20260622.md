@@ -52,10 +52,37 @@ The follow-up repair keeps the v3 boundary intact:
 Focused tests cover both the blocked acceptance-family case and a nonmatching
 bounded local-search case.
 
+## Guarded Launch Probe
+
+After synchronizing the first guard repair to WSL, a fresh root was prepared
+and launched:
+
+- WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-nonaccept-guard-24b609de-postroutepressure-4r-gpt55-20260622T075205Z-claw`
+- WSL commit: `24b609de`
+- Strict launch readiness: `launch_ready=true`, completion preflight healthy,
+  runtime guard clean.
+- Final status: wrapper effective exit `64`, postrun acceptance `failed`,
+  `last_stop_reason=circuit_breaker`,
+  `run_validity_status=invalid_no_effective_rounds`, 0 effective rounds, 0
+  protocol rows, 3 proposal quality blocks.
+
+The guard correctly stopped default-avoid hypotheses before Protocol rows, but
+the first implementation matched some acceptance-family candidates to earlier
+avoid strings such as `route-limit seed diversification` and
+`simple initial-VNS disablement`. The cause was phrase matching over narrative
+text. The follow-up repair tightens matching so multi-token avoid phrases must
+also hit candidate identity fields (`target_file`, `change_locus`, or
+`mechanism_changes`), while strong identity tokens such as `acceptance` still
+block acceptance-family targets. A regression test now puts route-limit and VNS
+avoid directions before the acceptance avoid direction and requires the
+acceptance candidate to match the acceptance avoid entry.
+
 ## Next
 
-After synchronizing the repair to WSL, prepare a fresh CVRP root from the new
-commit and monitor the first hypothesis. The first live proposal should either
-target bounded local search or another materially different non-acceptance
-solver-design causal path. If it still proposes an acceptance-family target,
-the run should fail at schema preview before consuming Protocol rows.
+After synchronizing the tightened guard to WSL, prepare a fresh CVRP root from
+the new commit and monitor the first hypothesis. The first live proposal should
+either target bounded local search or another materially different
+non-acceptance solver-design causal path. If it still proposes a default-avoid
+target, the run should fail at schema preview before consuming Protocol rows,
+with the matched avoid direction attributed to the correct prepared focus item.

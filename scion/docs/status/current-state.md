@@ -50,8 +50,11 @@ history when exact old chronology is needed.
   `443b1a51` still chose `policies/baseline_modules/acceptance.py` /
   `distance_scaled_sa_reheat` and was stopped before Protocol rows. The local
   worktree now enforces prepared `default_avoid_directions` in
-  `proposal.schema_preview` through proposal-only `launch_research_focus`.
-  This is not a Decision, Protocol, scheduler, promotion, or solver rule.
+  `proposal.schema_preview` through proposal-only `launch_research_focus`; a
+  follow-up local patch also tightens phrase matching so narrative words do not
+  misattribute an acceptance-family target to unrelated route-limit/VNS avoid
+  strings. This is not a Decision, Protocol, scheduler, promotion, or solver
+  rule.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
   commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
   stops repeated quality-block signatures by global signature count instead of
@@ -186,6 +189,20 @@ CVRP default-avoid guard probe root:
   default-avoid guidance must be enforced by schema preview before the next
   launch. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-default-avoid-preview-guard-20260622.md`.
+
+CVRP first guarded relaunch root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-nonaccept-guard-24b609de-postroutepressure-4r-gpt55-20260622T075205Z-claw`
+- Strict launch readiness passed from WSL commit `24b609de`.
+- The run failed closed before Protocol rows:
+  `last_stop_reason=circuit_breaker`,
+  `run_validity_status=invalid_no_effective_rounds`, 0 effective rounds, and 3
+  proposal quality blocks.
+- Interpretation: schema-preview default-avoid enforcement works as a
+  pre-Protocol blocker, but the first matcher was too broad over narrative
+  route/seed/VNS terms. The local follow-up patch requires multi-token avoid
+  phrases to hit candidate identity fields before matching. Relaunch from the
+  synchronized follow-up commit, not `24b609de`.
 
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:

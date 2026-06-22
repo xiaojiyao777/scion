@@ -332,8 +332,11 @@ Current checkpoint:
   was stopped before Protocol rows. The local worktree now carries a
   `proposal.schema_preview` default-avoid guard that consumes proposal-only
   `launch_research_focus` and fails hypotheses matching prepared
-  `default_avoid_directions`. This remains excluded from Decision, Protocol,
-  scheduler, promotion, and solver semantics. Detailed report:
+  `default_avoid_directions`. The first guarded WSL relaunch from commit
+  `24b609de` failed closed before Protocol rows but exposed over-broad
+  narrative phrase matching, now tightened so multi-token avoid phrases must
+  hit candidate identity fields. This remains excluded from Decision,
+  Protocol, scheduler, promotion, and solver semantics. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-default-avoid-preview-guard-20260622.md`.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
@@ -418,8 +421,8 @@ Current checkpoint:
     positive-at-MDE effect and no large-two-opt signal.
   - Next fresh CVRP launch should avoid repeating unchanged rank-gap or
     route-pressure acceptance gates, and must come from a commit containing the
-    schema-preview default-avoid guard. Pick bounded local search or a
-    materially different problem-owned solver mechanism with direct
+    tightened schema-preview default-avoid guard. Pick bounded local search or
+    a materially different problem-owned solver mechanism with direct
     objective-effect telemetry, CMT2/CMT4 protection, and strict launch
     readiness from the synchronized WSL commit.
 - Current framework guarantees, all report-only/control-plane or problem-owned
