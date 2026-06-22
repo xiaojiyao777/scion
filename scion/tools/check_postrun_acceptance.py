@@ -2242,11 +2242,18 @@ def _prompt_source_visibility_actionability(
             failures.append(
                 f"{failure_prefix}_active_subject_code_constraints_trace_missing"
             )
-        if active_constraints_required_count < code_trace_count:
+        if active_constraints_required_count <= 0:
             failures.append(
                 f"{failure_prefix}_active_subject_code_constraints_not_required"
             )
-        if active_constraints_full_visible_count < code_trace_count:
+        if (
+            active_constraints_required_count <= 0
+            and active_constraints_full_visible_count <= 0
+        ) or (
+            active_constraints_required_count > 0
+            and active_constraints_full_visible_count
+            < active_constraints_required_count
+        ):
             failures.append(
                 f"{failure_prefix}_active_subject_code_constraints_not_full_visible"
             )

@@ -2864,6 +2864,71 @@ def test_warehouse_postrun_acceptance_requires_code_constraint_prompt_trace(
     )
 
 
+def test_warehouse_postrun_acceptance_allows_partial_code_constraint_requirement(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    run_root = _write_current_run_root(
+        tmp_path / "warehouse-run-partial-code-constraints"
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    summary = brief["prompt_context_visibility_summary"]
+    aggregate = summary["aggregate"]
+    aggregate["trace_count"] = 3
+    aggregate["call_kind_counts"] = {"hypothesis": 1, "code": 2}
+    source_visibility = aggregate["source_visibility"]
+    source_visibility.update(
+        {
+            "trace_count": 3,
+            "code_trace_count": 2,
+            "code_protected_source_visible_count": 2,
+            "active_subject_code_constraints_trace_count": 1,
+            "active_subject_code_constraints_required_count": 1,
+            "active_subject_code_constraints_full_visible_count": 1,
+            "active_subject_code_constraints_not_full_visible_count": 0,
+            "active_subject_code_constraints_status_counts": {"included": 1},
+        }
+    )
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+    monkeypatch.setattr(
+        check_tool,
+        "_prompt_context_visibility_summary",
+        lambda _run_root, _inventory: summary,
+    )
+
+    readiness = check_tool.build_readiness(run_root)
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
+
+    assert prompt_check["status"] == "ok"
+    assert (
+        "warehouse_active_subject_code_constraints_not_required"
+        not in prompt_check["detail"]["failures"]
+    )
+    assert (
+        "warehouse_active_subject_code_constraints_not_full_visible"
+        not in prompt_check["detail"]["failures"]
+    )
+
+
 def test_postrun_acceptance_requires_all_required_target_source_visible(
     tmp_path: Path,
 ) -> None:

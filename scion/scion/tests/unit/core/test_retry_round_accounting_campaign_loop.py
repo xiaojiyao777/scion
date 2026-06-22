@@ -238,6 +238,92 @@ def test_repeated_quality_block_signature_stops_when_headroom_caps_disabled() ->
     ] == 3
 
 
+def test_alternating_repeated_quality_block_signatures_stop_without_headroom_caps() -> None:
+    def block(branch_id: str, failure_code: str) -> StepResult:
+        return StepResult(
+            action="explore",
+            branch_id=branch_id,
+            reason="agent_quality_blocked",
+            failure_stage="agent_quality_blocked",
+            failure_detail=f"agent_quality_blocked:{failure_code}",
+            counts_toward_max_rounds=False,
+            attempt_kind="proposal_block",
+            proposal_session_ref={
+                "failure_code": failure_code,
+                "agent_block_reason": "agent_quality_blocked",
+                "primary_failure": {
+                    "stage": "agent_quality_blocked",
+                    "code": failure_code,
+                },
+            },
+        )
+
+    results = [
+        block("b1", "warehouse_validation_transfer_quality_missing"),
+        block("b2", "warehouse_operator_telemetry_identity_mismatch"),
+        block("b1", "warehouse_validation_transfer_quality_missing"),
+        block("b2", "warehouse_operator_telemetry_identity_mismatch"),
+        block("b1", "warehouse_validation_transfer_quality_missing"),
+        _screening_result(reason="should not run"),
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=0,
+        proposal_quality_loop_limit=0,
+    )
+
+    loop.run(max_rounds=1)
+
+    final_status = loop_statuses[-1]
+    assert calls == 5
+    assert "repeated_quality_block_signature" in stopped_reasons
+    assert "proposal_quality_loop" not in stopped_reasons
+    assert final_status["proposal_attempt_limit_enabled"] is False
+    assert final_status["proposal_quality_loop_limit_enabled"] is False
+    assert final_status["proposal_quality_blocks_consumed"] == 5
+    assert final_status["effective_rounds_completed"] == 0
+    assert final_status["repeated_quality_block_signature_count"] == 3
+    assert final_status["repeated_quality_block_signature_exhausted"] is True
+    assert final_status["quality_block_ledger"][-1][
+        "quality_block_repeat_count"
+    ] == 1
+    assert final_status["quality_block_ledger"][-1][
+        "quality_block_signature_seen_count"
+    ] == 3
+
+
 def test_campaign_loop_does_not_count_retry_attempt_against_max_rounds() -> None:
     results = [
         StepResult(

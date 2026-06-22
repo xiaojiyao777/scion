@@ -79,6 +79,7 @@ class CampaignLoop:
         protocol_evaluated_candidates = 0
         quality_block_ledger: list[dict[str, Any]] = []
         last_quality_block_signature = ""
+        quality_block_signature_counts: dict[str, int] = {}
         repeated_quality_block_signature_count = 0
         repeated_quality_block_signature_digest = ""
         protocol_stage_counts: dict[str, int] = {
@@ -359,6 +360,10 @@ class CampaignLoop:
                     )
                     signature = _quality_block_signature(result, attempt_kind=kind)
                     digest = _quality_block_signature_digest(signature)
+                    signature_seen_count = (
+                        quality_block_signature_counts.get(signature, 0) + 1
+                    )
+                    quality_block_signature_counts[signature] = signature_seen_count
                     if signature == last_quality_block_signature:
                         repeated_quality_block_signature_count += 1
                     else:
@@ -369,11 +374,15 @@ class CampaignLoop:
                     entry["quality_block_repeat_count"] = (
                         repeated_quality_block_signature_count
                     )
+                    entry["quality_block_signature_seen_count"] = (
+                        signature_seen_count
+                    )
                     quality_block_ledger.append(entry)
-                    if (
-                        repeated_quality_block_signature_count
-                        >= _REPEATED_QUALITY_BLOCK_SIGNATURE_LIMIT
-                    ):
+                    if signature_seen_count >= _REPEATED_QUALITY_BLOCK_SIGNATURE_LIMIT:
+                        repeated_quality_block_signature_count = max(
+                            repeated_quality_block_signature_count,
+                            signature_seen_count,
+                        )
                         final_reason = "repeated_quality_block_signature"
                     if _limit_enabled(proposal_quality_loop_limit) and (
                         proposal_quality_blocked_attempts
@@ -390,6 +399,10 @@ class CampaignLoop:
                     )
                     signature = _quality_block_signature(result, attempt_kind=kind)
                     digest = _quality_block_signature_digest(signature)
+                    signature_seen_count = (
+                        quality_block_signature_counts.get(signature, 0) + 1
+                    )
+                    quality_block_signature_counts[signature] = signature_seen_count
                     if signature == last_quality_block_signature:
                         repeated_quality_block_signature_count += 1
                     else:
@@ -400,11 +413,15 @@ class CampaignLoop:
                     entry["quality_block_repeat_count"] = (
                         repeated_quality_block_signature_count
                     )
+                    entry["quality_block_signature_seen_count"] = (
+                        signature_seen_count
+                    )
                     quality_block_ledger.append(entry)
-                    if (
-                        repeated_quality_block_signature_count
-                        >= _REPEATED_QUALITY_BLOCK_SIGNATURE_LIMIT
-                    ):
+                    if signature_seen_count >= _REPEATED_QUALITY_BLOCK_SIGNATURE_LIMIT:
+                        repeated_quality_block_signature_count = max(
+                            repeated_quality_block_signature_count,
+                            signature_seen_count,
+                        )
                         final_reason = "repeated_quality_block_signature"
                     if _limit_enabled(proposal_quality_loop_limit) and (
                         proposal_quality_blocked_attempts
