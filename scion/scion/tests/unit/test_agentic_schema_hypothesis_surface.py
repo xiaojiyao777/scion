@@ -101,6 +101,116 @@ def test_cvrp_active_boundary_exposes_solver_design_novelty_requirements(
     assert "nonempty_sequence_fields" not in requirements
 
 
+def test_schema_preview_blocks_launch_focus_default_avoid_acceptance_family(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+        launch_research_focus={
+            "schema_version": "scion.launch_research_focus_prompt.v1",
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "research_focus": {
+                "default_avoid_directions": [
+                    (
+                        "route-pressure acceptance/adaptive-weighting variants "
+                        "without a new non-acceptance causal path or direct "
+                        "objective-effect telemetry"
+                    ),
+                ],
+                "required_evidence": [
+                    (
+                        "a new non-acceptance causal path before revisiting "
+                        "route-pressure acceptance"
+                    ),
+                ],
+            },
+        },
+    )
+    hypothesis = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/baseline_modules/acceptance.py",
+        hypothesis_text=(
+            "Modify the simulated annealing rule with a distance-scaled "
+            "stagnation reheating floor."
+        ),
+        expected_effect="Improve large-case acceptance of uphill route moves.",
+        mechanism_changes=[
+            {"id": "distance_scaled_sa_reheat", "change_type": "modify"},
+        ],
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    section = preview.structured_payload["hypothesis"]
+    guard = section["launch_research_focus_default_avoid_guard"]
+    assert preview.structured_payload["passed"] is False
+    assert section["passed"] is False
+    assert guard["passed"] is False
+    assert guard["failure_code"] == "launch_research_focus_default_avoid"
+    assert "acceptance" in guard["matched_terms"]
+    assert "launch_research_focus_default_avoid" in section["failure_reason"]
+    assert guard["proposal_visibility_only"] is True
+    assert guard["decision_features_excluded"] is True
+
+
+def test_schema_preview_allows_nonmatching_launch_focus_default_avoid(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+        launch_research_focus={
+            "research_focus": {
+                "default_avoid_directions": [
+                    (
+                        "route-pressure acceptance/adaptive-weighting variants "
+                        "without a new non-acceptance causal path or direct "
+                        "objective-effect telemetry"
+                    ),
+                ],
+            },
+        },
+    )
+    hypothesis = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/baseline_modules/local_search.py",
+        hypothesis_text=(
+            "Add a bounded two-opt probe for selected high-slack customer pairs."
+        ),
+        expected_effect="Improve total distance by testing bounded route edits.",
+        mechanism_changes=[
+            {"id": "bounded_two_opt_probe", "change_type": "modify"},
+        ],
+        novelty_signature={
+            "algorithm_family": "bounded_local_search",
+            "construction_strategy": "unchanged_seed_pool",
+            "improvement_strategy": "bounded_two_opt_probe",
+            "acceptance_strategy": "strict_improvement_only",
+            "runtime_budget_strategy": "small_candidate_pool",
+        },
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    guard = preview.structured_payload["hypothesis"][
+        "launch_research_focus_default_avoid_guard"
+    ]
+    assert guard["passed"] is True
+    assert guard["configured"] is True
+
+
 def test_context_read_surface_exposes_solver_design_mechanism_telemetry(
     tmp_path: Path,
 ) -> None:

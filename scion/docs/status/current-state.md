@@ -45,11 +45,13 @@ history when exact old chronology is needed.
   CMT2/CMT4 review-ready evidence must carry numeric objective/distance deltas,
   and calibration provenance remains proposal-visible summary material, not
   Decision input.
-- Latest CVRP direction handoff repair: the launcher now marks current-run
-  rank-gap and route-pressure acceptance variants as default-avoid directions
-  unless a future hypothesis names a new non-acceptance causal path and direct
-  objective-effect telemetry. This is proposal-only research-focus guidance,
-  not a Decision, Protocol, scheduler, or promotion rule.
+- Latest CVRP direction-control repair: prompt-only default-avoid guidance was
+  insufficient; the first post route-pressure relaunch from WSL commit
+  `443b1a51` still chose `policies/baseline_modules/acceptance.py` /
+  `distance_scaled_sa_reheat` and was stopped before Protocol rows. The local
+  worktree now enforces prepared `default_avoid_directions` in
+  `proposal.schema_preview` through proposal-only `launch_research_focus`.
+  This is not a Decision, Protocol, scheduler, promotion, or solver rule.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
   commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
   stops repeated quality-block signatures by global signature count instead of
@@ -169,6 +171,21 @@ CVRP route-pressure follow-up root:
   postrun analysis reported `missing_large_twoopt_mechanism_signal`. Detailed
   report:
   `scion/docs/experiments/v0.4/v04-cvrp-route-pressure-postrankgap-postrun-20260622.md`.
+
+CVRP default-avoid guard probe root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-nonaccept-443b1a51-postroutepressure-4r-gpt55-20260622T073501Z-claw`
+- Strict launch readiness passed from WSL commit `443b1a51`, but the first
+  proposal still selected the acceptance-family target
+  `policies/baseline_modules/acceptance.py` with mechanism
+  `distance_scaled_sa_reheat`.
+- The run was manually stopped before protocol evaluation:
+  `last_stop_reason=signal:SIGTERM`, `run_validity_status=invalid_no_experiments`,
+  0 effective rounds, and 0 protocol rows.
+- Interpretation: this is not solver evidence. It shows that prepared
+  default-avoid guidance must be enforced by schema preview before the next
+  launch. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-default-avoid-preview-guard-20260622.md`.
 
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:

@@ -1292,6 +1292,25 @@ def test_agentic_pipeline_passes_compact_resume_context_from_failed_artifact(
     assert "SECRET" not in rendered
 
 
+def test_agentic_tool_context_inherits_launch_research_focus() -> None:
+    launch_focus = {
+        "schema_version": "scion.launch_research_focus_prompt.v1",
+        "research_focus": {
+            "default_avoid_directions": ["acceptance variants"],
+        },
+    }
+    pipeline, branch, _, _, _, _ = _pipeline()
+
+    request = pipeline._build_agentic_request(
+        branch=branch,
+        champion=_champion(),
+        hypothesis_context={"launch_research_focus": launch_focus},
+    )
+
+    assert request.tool_context is not None
+    assert request.tool_context.launch_research_focus == launch_focus
+
+
 def test_agentic_pipeline_recovers_waiting_hypothesis_without_rerun(
     tmp_path: Path,
 ) -> None:

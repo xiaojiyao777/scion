@@ -113,6 +113,7 @@ class ProposalToolContext:
     branch_current_file_sources: Mapping[str, str] = field(default_factory=dict)
     branch_hygiene: Mapping[str, Any] = field(default_factory=dict)
     branch_hygiene_guidance: str = ""
+    launch_research_focus: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def branch_id(self) -> str | None:

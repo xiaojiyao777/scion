@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -598,6 +599,10 @@ def _hypothesis_schema_preview(
         context,
         hypothesis,
     )
+    launch_focus_default_avoid_guard = _launch_focus_default_avoid_guard(
+        context,
+        hypothesis,
+    )
     passed = bool(c1_checks and all(check.passed for check in c1_checks))
     forced_violation = _forced_hypothesis_violation(context, hypothesis)
     if forced_violation is not None:
@@ -605,6 +610,8 @@ def _hypothesis_schema_preview(
     if not target_action_guard.get("passed", True):
         passed = False
     if not branch_continuation_guard.get("passed", True):
+        passed = False
+    if not launch_focus_default_avoid_guard.get("passed", True):
         passed = False
     if (
         isinstance(problem_telemetry_preview, Mapping)
@@ -626,6 +633,10 @@ def _hypothesis_schema_preview(
         failure_reason = str(target_action_guard.get("reason") or "")
     elif not branch_continuation_guard.get("passed", True):
         failure_reason = str(branch_continuation_guard.get("reason") or "")
+    elif not launch_focus_default_avoid_guard.get("passed", True):
+        failure_reason = str(
+            launch_focus_default_avoid_guard.get("reason") or ""
+        )
     elif problem_telemetry_failed:
         failure_reason = str(problem_telemetry_preview.get("reason") or "")
     elif (
@@ -658,6 +669,9 @@ def _hypothesis_schema_preview(
         "forced_surface_constraint": _forced_surface_constraint_payload(context),
         "target_action_guard": target_action_guard,
         "branch_continuation_guard": branch_continuation_guard,
+        "launch_research_focus_default_avoid_guard": (
+            launch_focus_default_avoid_guard
+        ),
         "novelty_signature_guidance": novelty_guidance,
     }
 
@@ -775,6 +789,264 @@ def _branch_continuation_schema_preview(
         },
     }
     return _drop_empty_items(payload)
+
+_LAUNCH_FOCUS_AVOID_TOKEN_STOPWORDS = frozenset(
+    {
+        "after",
+        "before",
+        "branch",
+        "branches",
+        "causal",
+        "current",
+        "direct",
+        "direction",
+        "directions",
+        "effect",
+        "effects",
+        "evidence",
+        "experiment",
+        "experiments",
+        "expansion",
+        "focus",
+        "generic",
+        "large",
+        "mechanism",
+        "mechanisms",
+        "objective",
+        "objectives",
+        "path",
+        "paths",
+        "result",
+        "results",
+        "run",
+        "slot",
+        "slots",
+        "telemetry",
+        "unless",
+        "variant",
+        "variants",
+        "without",
+    }
+)
+_LAUNCH_FOCUS_STRONG_SINGLE_AVOID_TERMS = frozenset(
+    {
+        "acceptance",
+        "adaptive",
+        "gating",
+        "rankgap",
+        "reheat",
+        "reheating",
+        "scheduler",
+        "weighting",
+    }
+)
+
+
+def _launch_focus_default_avoid_guard(
+    context: ProposalToolContext,
+    hypothesis: HypothesisProposal,
+) -> dict[str, Any]:
+    focus = getattr(context, "launch_research_focus", {}) or {}
+    if not isinstance(focus, Mapping):
+        return {
+            "name": "launch_research_focus_default_avoid",
+            "passed": True,
+            "configured": False,
+        }
+    research_focus = focus.get("research_focus")
+    if not isinstance(research_focus, Mapping):
+        research_focus = focus
+    default_avoid = _launch_focus_string_items(
+        research_focus.get("default_avoid_directions")
+    )
+    if not default_avoid:
+        return {
+            "name": "launch_research_focus_default_avoid",
+            "passed": True,
+            "configured": False,
+        }
+
+    identity_tokens, full_tokens = _launch_focus_candidate_tokens(hypothesis)
+    for avoid_direction in default_avoid:
+        match = _launch_focus_default_avoid_match(
+            avoid_direction,
+            identity_tokens=identity_tokens,
+            full_tokens=full_tokens,
+        )
+        if not match:
+            continue
+        reason = (
+            "launch_research_focus_default_avoid: proposed hypothesis matches "
+            f"prepared default_avoid_direction={avoid_direction!r}; choose a "
+            "non-default-avoid mechanism or update the prepared research_focus "
+            "before retrying."
+        )
+        return _drop_empty_items(
+            {
+                "name": "launch_research_focus_default_avoid",
+                "passed": False,
+                "configured": True,
+                "failure_code": "launch_research_focus_default_avoid",
+                "reason": reason,
+                "matched_default_avoid_direction": avoid_direction,
+                "matched_terms": sorted(match.get("matched_terms") or ()),
+                "matched_phrase": match.get("matched_phrase"),
+                "default_avoid_count": len(default_avoid),
+                "candidate_target_file": hypothesis.target_file,
+                "candidate_change_locus": hypothesis.change_locus,
+                "candidate_mechanism_ids": [
+                    str(change.id).strip()
+                    for change in mechanism_changes(hypothesis)
+                    if str(change.id).strip()
+                ],
+                "proposal_visibility_only": True,
+                "decision_features_excluded": True,
+                "retry_constraint": (
+                    "Rewrite the hypothesis around a direction that does not "
+                    "match any prepared default_avoid_directions. If this "
+                    "avoid direction is now intentionally allowed, regenerate "
+                    "or edit the prepared launch research_focus first so the "
+                    "constraint is explicit in the run manifest."
+                ),
+            }
+        )
+
+    return {
+        "name": "launch_research_focus_default_avoid",
+        "passed": True,
+        "configured": True,
+        "default_avoid_count": len(default_avoid),
+    }
+
+
+def _launch_focus_default_avoid_match(
+    avoid_direction: str,
+    *,
+    identity_tokens: set[str],
+    full_tokens: set[str],
+) -> dict[str, Any] | None:
+    terms = _launch_focus_signal_terms(avoid_direction)
+    if not terms:
+        return None
+    for phrase in _launch_focus_signal_phrases(avoid_direction):
+        if set(phrase).issubset(full_tokens):
+            return {
+                "matched_terms": set(phrase),
+                "matched_phrase": " ".join(phrase),
+            }
+    identity_matches = (
+        terms
+        & identity_tokens
+        & _LAUNCH_FOCUS_STRONG_SINGLE_AVOID_TERMS
+    )
+    if identity_matches:
+        return {"matched_terms": identity_matches}
+    matched_terms = terms & full_tokens
+    if len(matched_terms) >= 2 and (terms & identity_tokens):
+        return {"matched_terms": matched_terms}
+    return None
+
+
+def _launch_focus_signal_phrases(value: str) -> tuple[tuple[str, ...], ...]:
+    phrases: list[tuple[str, ...]] = []
+    text = str(value or "").strip().lower().replace("/", " ")
+    for match in re.finditer(r"[a-z0-9]+(?:[-_][a-z0-9]+)+", text):
+        phrase = tuple(_launch_focus_signal_term_sequence(match.group(0)))
+        if len(phrase) >= 2:
+            phrases.append(phrase)
+    return tuple(phrases)
+
+
+def _launch_focus_signal_terms(value: str) -> set[str]:
+    return set(_launch_focus_signal_term_sequence(value))
+
+
+def _launch_focus_signal_term_sequence(value: str) -> tuple[str, ...]:
+    seen: set[str] = set()
+    terms: list[str] = []
+    for token in _launch_focus_token_sequence(str(value or "")):
+        if (
+            token in seen
+            or token in _LAUNCH_FOCUS_AVOID_TOKEN_STOPWORDS
+            or (len(token) < 4 and token not in {"sa", "vns", "alns", "opt"})
+        ):
+            continue
+        seen.add(token)
+        terms.append(token)
+    return tuple(terms)
+
+
+def _launch_focus_token_sequence(value: str) -> tuple[str, ...]:
+    text = str(value or "").lower().replace("_", " ").replace("-", " ")
+    return tuple(re.findall(r"[a-z0-9]+", text))
+
+
+def _launch_focus_tokens(value: str) -> set[str]:
+    return {
+        token
+        for token in _launch_focus_token_sequence(value)
+    }
+
+
+def _launch_focus_candidate_tokens(
+    hypothesis: HypothesisProposal,
+) -> tuple[set[str], set[str]]:
+    mechanism_ids = [
+        str(change.id).strip()
+        for change in mechanism_changes(hypothesis)
+        if str(change.id).strip()
+    ]
+    identity_parts: list[str] = [
+        str(hypothesis.change_locus or ""),
+        str(hypothesis.target_file or ""),
+        *mechanism_ids,
+    ]
+    narrative_parts: list[str] = [
+        str(hypothesis.hypothesis_text or ""),
+        str(hypothesis.target_weakness or ""),
+        str(hypothesis.expected_effect or ""),
+        str(hypothesis.objective_tradeoff_policy or ""),
+        str(hypothesis.no_op_condition or ""),
+        str(hypothesis.risk_to_higher_priority or ""),
+        str(hypothesis.target_runtime_effect or ""),
+        str(hypothesis.complexity_claim or ""),
+        str(hypothesis.runtime_budget_strategy or ""),
+    ]
+    narrative_parts.extend(_launch_focus_leaf_texts(hypothesis.novelty_signature))
+    narrative_parts.extend(_launch_focus_leaf_texts(hypothesis.expected_telemetry))
+    narrative_parts.extend(_launch_focus_leaf_texts(hypothesis.branch_lesson_usage))
+    identity_tokens = _launch_focus_tokens(" ".join(identity_parts))
+    full_tokens = set(identity_tokens)
+    full_tokens.update(_launch_focus_tokens(" ".join(narrative_parts)))
+    if {"simulated", "annealing"}.issubset(full_tokens):
+        full_tokens.add("acceptance")
+    return identity_tokens, full_tokens
+
+
+def _launch_focus_leaf_texts(value: Any) -> list[str]:
+    if isinstance(value, Mapping):
+        texts: list[str] = []
+        for child in value.values():
+            texts.extend(_launch_focus_leaf_texts(child))
+        return texts
+    if isinstance(value, (list, tuple, set, frozenset)):
+        texts: list[str] = []
+        for child in value:
+            texts.extend(_launch_focus_leaf_texts(child))
+        return texts
+    if value is None:
+        return []
+    return [str(value)]
+
+
+def _launch_focus_string_items(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        item = value.strip()
+        return (item,) if item else ()
+    if not isinstance(value, (list, tuple, set, frozenset)):
+        return ()
+    return tuple(str(item).strip() for item in value if str(item).strip())
+
 
 def _hypothesis_target_action_guard(
     context: ProposalToolContext,

@@ -164,6 +164,13 @@ class AgenticRequestMixin:
             str((hypothesis_context or {}).get("forced_target_file") or "").strip()
             or (self.forced_surface_target_file if forced_surface else None)
         )
+        launch_research_focus = (
+            (hypothesis_context or {}).get("launch_research_focus")
+            if isinstance(hypothesis_context, Mapping)
+            else None
+        )
+        if not isinstance(launch_research_focus, Mapping):
+            launch_research_focus = {}
 
         active_boundary = _declared_solver_design_surface_names(problem_spec)
         if not active_boundary and adapter is not None:
@@ -207,6 +214,7 @@ class AgenticRequestMixin:
             ),
             branch_hygiene=branch_hygiene_context(branch),
             branch_hygiene_guidance=branch_hygiene_guidance(branch),
+            launch_research_focus=launch_research_focus,
         )
 
 

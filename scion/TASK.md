@@ -13,9 +13,10 @@ rank-gap acceptance and route-pressure acceptance both show clean framework
 execution, expanded screening, MDE-aware rejection, and no quality blocks, but
 neither produced promotion, positive-at-MDE evidence, large-two-opt signal, or a
 solver improvement. The active blocker is therefore CVRP research-direction
-control: the next root must avoid spending branch slots on acceptance/adaptive
-weighting unless it names a new non-acceptance causal path with direct
-objective-effect telemetry.*
+control: prompt-only default-avoid guidance was insufficient, so the next root
+must launch from the schema-preview default-avoid guard and avoid spending
+branch slots on acceptance/adaptive weighting unless the prepared focus is
+explicitly changed.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -325,12 +326,15 @@ Current checkpoint:
   skips stale `partial_hypothesis_only` reuse when the current request carries
   agentic quality-block feedback. This forces a fresh proposal after
   problem-quality rejection instead of replaying the same old hypothesis.
-- Latest CVRP direction handoff repair: local worktree now marks current-run
-  rank-gap and route-pressure acceptance variants as default-avoid directions
-  unless a future hypothesis names a new non-acceptance causal path and direct
-  objective-effect telemetry. This remains proposal-only research-focus
-  guidance and is excluded from Decision, Protocol, scheduler, and promotion
-  inputs.
+- Latest CVRP direction-control repair: prompt-only default-avoid guidance was
+  not enough; a WSL relaunch from commit `443b1a51` still selected
+  `policies/baseline_modules/acceptance.py` / `distance_scaled_sa_reheat` and
+  was stopped before Protocol rows. The local worktree now carries a
+  `proposal.schema_preview` default-avoid guard that consumes proposal-only
+  `launch_research_focus` and fails hypotheses matching prepared
+  `default_avoid_directions`. This remains excluded from Decision, Protocol,
+  scheduler, promotion, and solver semantics. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-default-avoid-preview-guard-20260622.md`.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
   numeric objective/distance delta evidence. Feasibility-only, route-count,
@@ -413,10 +417,11 @@ Current checkpoint:
     acceptance-family path is insufficient: `route_pressure_acceptance` had no
     positive-at-MDE effect and no large-two-opt signal.
   - Next fresh CVRP launch should avoid repeating unchanged rank-gap or
-    route-pressure acceptance gates. Pick bounded local search or a materially
-    different problem-owned solver mechanism with direct objective-effect
-    telemetry, CMT2/CMT4 protection, and strict launch readiness from the
-    synchronized WSL commit.
+    route-pressure acceptance gates, and must come from a commit containing the
+    schema-preview default-avoid guard. Pick bounded local search or a
+    materially different problem-owned solver mechanism with direct
+    objective-effect telemetry, CMT2/CMT4 protection, and strict launch
+    readiness from the synchronized WSL commit.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded
