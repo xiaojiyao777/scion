@@ -1329,6 +1329,7 @@ def test_cvrp_agentic_launcher_prepare_threads_forced_target(
     )
     run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
     launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
+    run_sh_text = (run_root / "run.sh").read_text(encoding="utf-8")
     command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
     prepared_manifest = json.loads(
         (run_root / "prepared_run_manifest.v1.json").read_text(encoding="utf-8")
@@ -1346,6 +1347,14 @@ def test_cvrp_agentic_launcher_prepare_threads_forced_target(
         "--force-target-file policies/baseline_modules/local_search.py"
         in command_txt
     )
+    assert "FORCE_ARGS=()" in run_sh_text
+    assert 'FORCE_ARGS+=(--force-surface "$FORCE_SURFACE")' in run_sh_text
+    assert 'FORCE_ARGS+=(--force-action "$FORCE_ACTION")' in run_sh_text
+    assert (
+        'FORCE_ARGS+=(--force-target-file "$FORCE_TARGET_FILE")'
+        in run_sh_text
+    )
+    assert '"${FORCE_ARGS[@]}" \\' in run_sh_text
     assert prepared_manifest["execution"]["force_surface"] == "solver_design"
     assert prepared_manifest["execution"]["force_action"] == "modify"
     assert prepared_manifest["execution"]["force_target_file"] == (

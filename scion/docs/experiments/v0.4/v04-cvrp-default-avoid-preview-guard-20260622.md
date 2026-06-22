@@ -102,3 +102,10 @@ is therefore not Protocol screening waste; it is target selection. The next
 CVRP launch should use the existing `scion run` forced-surface diagnostic path,
 exposed through the CVRP launcher, to force `solver_design` / `modify` /
 `policies/baseline_modules/local_search.py` for a bounded-local-search probe.
+
+An intermediate forced-local prepared root was intentionally discarded after
+launch inspection showed that `command.txt` and the COMMAND marker contained the
+force arguments but the generated `run.sh` execution block did not. The launcher
+template now builds a `FORCE_ARGS` bash array and passes it to the actual
+`scion.cli.main run` invocation; tests assert both command metadata and the real
+run script execution block.

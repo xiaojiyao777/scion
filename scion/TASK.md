@@ -340,8 +340,10 @@ Current checkpoint:
   blocks without Protocol rows. The CVRP launcher now exposes the existing
   `scion run` forced-surface diagnostic path so the next root can force
   `solver_design` / `modify` /
-  `policies/baseline_modules/local_search.py`. This remains excluded from
-  Decision, Protocol, scheduler, promotion, and solver semantics. Detailed report:
+  `policies/baseline_modules/local_search.py`; the launcher template now
+  passes those force args in the actual generated `run.sh` execution block, not
+  only in command metadata. This remains excluded from Decision, Protocol,
+  scheduler, promotion, and solver semantics. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-default-avoid-preview-guard-20260622.md`.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
@@ -427,7 +429,8 @@ Current checkpoint:
   - Next fresh CVRP launch should avoid repeating unchanged rank-gap or
     route-pressure acceptance gates, and must come from a commit containing the
     tightened schema-preview default-avoid guard plus launcher forced-target
-    pass-through. Use `--force-surface solver_design`,
+    pass-through with generated `run.sh` execution support. Use
+    `--force-surface solver_design`,
     `--force-action modify`, and
     `--force-target-file policies/baseline_modules/local_search.py` for the
     next root to test bounded local search with direct objective-effect

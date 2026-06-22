@@ -56,7 +56,8 @@ history when exact old chronology is needed.
   strings. A tightened-guard WSL relaunch then failed closed on repeated
   acceptance-family default-avoid blocks without consuming Protocol rows. The
   next CVRP root should use the existing forced-surface diagnostic path, now
-  exposed by the CVRP launcher, to force `solver_design` / `modify` /
+  exposed by the CVRP launcher and fixed in the generated `run.sh` execution
+  block, to force `solver_design` / `modify` /
   `policies/baseline_modules/local_search.py`. This is not a Decision,
   Protocol, scheduler, promotion, or solver rule.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
@@ -219,7 +220,9 @@ CVRP tightened-guard relaunch root:
 - Interpretation: tightened default-avoid matching works and blocks repeated
   acceptance-family proposals pre-Protocol, but the agent still does not choose
   bounded local search unaided. Use the launcher forced-target pass-through for
-  the next root instead of another unconstrained relaunch.
+  the next root instead of another unconstrained relaunch. Do not use the
+  discarded forced-local prepared/aborted root created before the generated
+  `run.sh` execution block carried `FORCE_ARGS`.
 
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:

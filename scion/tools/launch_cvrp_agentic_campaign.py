@@ -939,6 +939,9 @@ def _write_run_sh(run_root: Path, command: str, env: dict[str, object]) -> None:
         "SCION_DIR",
         "MEASUREMENT_GOVERNANCE",
         "PROPOSAL_CONTEXT_ABLATION",
+        "FORCE_SURFACE",
+        "FORCE_ACTION",
+        "FORCE_TARGET_FILE",
         "CONTROL_PAIR_KEY",
         "POSTRUN_REPORTS",
     ]
@@ -1032,6 +1035,16 @@ printf '{{"schema":"scion.launcher_campaign_execution_marker.v1","started_at":"%
   "$CAMPAIGN_EXECUTION_MARKER_STARTED_AT" "$RUN_ROOT" "$CAMPAIGN_DIR" \
   > "$RUN_ROOT/campaign_execution_marker.v1.json"
 echo "CAMPAIGN_EXECUTION_MARKER:$RUN_ROOT/campaign_execution_marker.v1.json" >> "$RUN_ROOT/run.log"
+FORCE_ARGS=()
+if [[ -n "${{FORCE_SURFACE:-}}" ]]; then
+  FORCE_ARGS+=(--force-surface "$FORCE_SURFACE")
+  if [[ -n "${{FORCE_ACTION:-}}" ]]; then
+    FORCE_ARGS+=(--force-action "$FORCE_ACTION")
+  fi
+  if [[ -n "${{FORCE_TARGET_FILE:-}}" ]]; then
+    FORCE_ARGS+=(--force-target-file "$FORCE_TARGET_FILE")
+  fi
+fi
 "$PY" -m scion.cli.main run \\
   --problem "$PROBLEM" \\
   --protocol "$PROTOCOL" \\
@@ -1051,6 +1064,7 @@ echo "CAMPAIGN_EXECUTION_MARKER:$RUN_ROOT/campaign_execution_marker.v1.json" >> 
   --stage-transition-drain-limit "$SCION_STAGE_TRANSITION_DRAIN_LIMIT" \\
   --measurement-governance "$MEASUREMENT_GOVERNANCE" \\
   --proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION" \\
+  "${{FORCE_ARGS[@]}}" \\
   --disable-early-stop \\
   --agentic-proposal \\
   >> "$RUN_ROOT/run.log" 2>&1
