@@ -2,22 +2,23 @@
 
 *Branch: `codex/v04-evidence-repair-plan`*
 *Status: v0.4 framework/readiness/launcher repairs are accepted enough for
-focused warehouse and CVRP follow-up, but v0.4 is not closed until the current
+focused warehouse and CVRP follow-up, but v0.4 is not closed until current
 evidence is reviewed against the effective-research gate. WSL `gpt-5.5` auth
 has recovered. Warehouse has shown renewed continuous improvement from champion
 `v2` to `v3`; the latest post-repair APS retry root is current-run
 postrun-ready partial evidence and verifies live prompt/source visibility,
 repeated quality-block fail-closed behavior, and fresh proposal recovery after
 quality feedback. CVRP rank-gap and route-pressure acceptance roots are
-current-run-ready rejection evidence, not solver improvements. The active CVRP
-forced-local-search root from WSL commit `eb2627e5` has now crossed the main
-direction-control gate: after resume artifact replay it generated and coded a
-`policies/baseline_modules/local_search.py` candidate
-`bounded_interroute_2opt_bridge`, completed one screening row, and produced
-mechanism-specific runtime telemetry. The first row is mixed/negative
-(`32/32` valid pairs, `10` wins, `8` losses, `14` ties, net raw delta `-59`),
-so it is effective research evidence and a next-hypothesis signal, not a
-promotion. The root is still running the next batch/stage.*
+current-run-ready rejection evidence, not solver improvements. The CVRP
+forced-local-search root from WSL commit `eb2627e5` finished current-run-ready
+with 4 effective screening rows, postrun acceptance `ready`, 0 quality blocks,
+0 promotions, and champion still `v1`. It crossed the direction-control gate:
+after resume artifact replay it generated, coded, expanded/refined, and
+rejected `policies/baseline_modules/local_search.py` mechanisms with direct
+mechanism telemetry. The solver evidence is negative: all rows were below MDE,
+all CI highs were below MDE, the refined `bounded_interroute_2opt_bridge`
+regressed, and `cmt_slack_aware_segment_swap` was abandoned. This is recovered
+effective negative research, not a promotion or CVRP improvement.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -354,15 +355,20 @@ Current checkpoint:
   resumes the route-pressure campaign, so its agentic session index includes
   older construction/acceptance sessions; do not treat those as current forced
   target failures. The live forced-local proposal/code path produced
-  `bounded_interroute_2opt_bridge` in
+  `bounded_interroute_2opt_bridge` and `cmt_slack_aware_segment_swap` in
   `policies/baseline_modules/local_search.py`, passed schema/target/static
-  preview, completed code generation, and completed the first screening row:
-  `effective_rounds_completed=1`, `screening_protocol_results=1`, 0 quality
-  blocks, 32/32 valid pairs, 10 wins, 8 losses, 14 ties, net raw delta `-59`.
-  The candidate has real activation telemetry but is not a promotion-quality
-  result. The root is still running the next batch/stage; the stale top-level
-  `exit.txt` from the operator's earlier SIGTERM should not be used as current
-  restart status while `campaign/run_status.json` reports `status=running`.
+  preview, completed code generation, and finished naturally with wrapper exit
+  `0`, postrun readiness exit `0`, postrun acceptance `ready`, validity
+  `valid`, completeness `complete`, and
+  `last_stop_reason=max_rounds_exhausted`. Campaign counters: 4 effective
+  screening rounds, 0 quality blocks, 0 proposal quality blocks, 0 promotions,
+  champion still `v1`. The result is effective negative research, not solver
+  progress: `bounded_interroute_2opt_bridge` produced two marginal/negative
+  rows (`-59` and `-82` net raw delta), its refinement regressed (`-87` net raw
+  delta, 0 case wins, CMT2 loss), and `cmt_slack_aware_segment_swap` was
+  abandoned (`-132` net raw delta). All rows were below MDE and had CI high
+  below MDE. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-forced-local-postroutepressure-postrun-20260622.md`.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
   numeric objective/distance delta evidence. Feasibility-only, route-count,
@@ -444,16 +450,14 @@ Current checkpoint:
     blocks, 0 promotions, and `champion_version=1`. It confirms that another
     acceptance-family path is insufficient: `route_pressure_acceptance` had no
     positive-at-MDE effect and no large-two-opt signal.
-  - Next fresh CVRP launch should avoid repeating unchanged rank-gap or
-    route-pressure acceptance gates, and must come from a commit containing the
-    tightened schema-preview default-avoid guard plus launcher forced-target
-    pass-through with generated `run.sh` execution support. Use
-    `--force-surface solver_design`,
-    `--force-action modify`, and
-    `--force-target-file policies/baseline_modules/local_search.py` for the
-    next root to test bounded local search with direct objective-effect
-    telemetry, CMT2/CMT4 protection, and strict launch readiness from the
-    synchronized WSL commit.
+  - Next fresh CVRP launch should avoid repeating unchanged rank-gap,
+    route-pressure acceptance gates, unchanged `bounded_interroute_2opt_bridge`,
+    its high-asymmetric-promise refinement, or `cmt_slack_aware_segment_swap`.
+    Prefer a materially different bounded local-search or destroy/repair
+    causal path with direct objective-effect telemetry, CMT2/CMT4 protection,
+    and strict launch readiness from the synchronized WSL commit. Keep forced
+    or otherwise audited non-acceptance target control until unaided target
+    selection is demonstrably reliable.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

@@ -112,7 +112,7 @@ run script execution block.
 
 ## Forced Local-Search Checkpoint
 
-The corrected launcher/run-script path was then used for the active forced
+The corrected launcher/run-script path was then used for the forced
 local-search root:
 
 - WSL root:
@@ -129,31 +129,26 @@ acceptance-family sessions from the resume source. They are not current forced
 target failures. The current forced-local path starts at the local-search
 sessions in this root.
 
-Current checkpoint:
+Final checkpoint:
 
-- The live forced proposal/code path produced
-  `bounded_interroute_2opt_bridge` in
-  `policies/baseline_modules/local_search.py`.
-- Schema preview, target/action preview, and static contract preview passed.
-- Code generation completed and the candidate entered Protocol screening.
-- Campaign status has reached `effective_rounds_completed=1` and
-  `screening_protocol_results=1` with 0 quality blocks.
-- The first complete screening row has 32/32 valid pairs, 10 wins, 8 losses,
-  14 ties, and net raw delta `-59`.
-- Runtime/mechanism evidence is real: the new
-  `bounded_interroute_2opt_bridge` phase activated and recorded accepted moves,
-  improvement counts, phase runtime, and objective-effect deltas in the
-  candidate metrics.
+- The root finished current-run-ready with wrapper exit `0`, postrun readiness
+  exit `0`, postrun acceptance `ready`, validity `valid`, completeness
+  `complete`, and `last_stop_reason=max_rounds_exhausted`.
+- Campaign status reached 4 effective screening rows, 0 quality blocks, 0
+  proposal quality blocks, 0 promotions, and champion still `v1`.
+- The forced proposal/code path produced local-search mechanisms in
+  `policies/baseline_modules/local_search.py`, and mechanism telemetry shows
+  activation and objective-effect events.
+- The solver evidence is negative: `bounded_interroute_2opt_bridge` produced
+  two marginal/negative rows, its refinement regressed, and
+  `cmt_slack_aware_segment_swap` was abandoned. All rows were below MDE and
+  had CI high below MDE.
 
-This is an important v0.4 recovery checkpoint: the framework can now steer the
-agent away from repeated acceptance-family proposals, generate a bounded
-local-search mechanism, code it, and collect case-level screening evidence. The
-specific candidate is not promotion-quality on the first row, so the next
-decision should come from the complete forced-local postrun review rather than
-from another unchanged rank-gap, route-pressure, or generic acceptance relaunch.
-
-Operational caveat: this root was manually SIGTERM-stopped once after an
-operator misread of resume artifacts, then restarted. While the restart is
-running, the stale top-level `exit.txt` records the earlier SIGTERM; use
-`campaign/run_status.json`, `campaign/status.json`, and the metrics artifacts as
-the current live state.
+This remains an important v0.4 recovery result: the framework can steer the
+agent away from repeated acceptance-family proposals, generate local-search
+mechanisms, code them, collect case-level screening evidence, and reject weak or
+negative mechanisms. The specific mechanisms are not promotion-quality, so the
+next CVRP decision should come from the completed forced-local postrun report
+rather than from another unchanged rank-gap, route-pressure, generic acceptance,
+or unchanged local-search relaunch:
+`scion/docs/experiments/v0.4/v04-cvrp-forced-local-postroutepressure-postrun-20260622.md`.
