@@ -232,14 +232,27 @@ CVRP_RESUME_CONTINUITY_REQUIREMENTS = {
 CVRP_CURRENT_RESEARCH_FOCUS = {
     "schema_version": "scion.cvrp_research_focus.v1",
     "scope": "report_only_prepared_handoff",
+    "next_required_direction": (
+        "First attempt `large_instance_intra_route_two_opt_seed` as a "
+        "deadline-aware bounded local-search mechanism in "
+        "`policies/baseline_modules/local_search.py`; do not substitute a "
+        "different mechanism under this prepared focus unless the prepared "
+        "research_focus is explicitly updated after review."
+    ),
     "current_question": (
-        "Test the large-instance intra-route two-opt seed only as a "
-        "deadline-aware bounded local-search mechanism, or select another "
-        "materially different CVRP solver-design mechanism with direct "
-        "objective-effect evidence before spending another route-merge, "
-        "construction-seed, or acceptance/adaptive-weighting branch slot."
+        "Can the still-untried large-instance intra-route two-opt seed improve "
+        "total_distance when implemented as a deadline-aware bounded "
+        "local-search mechanism with wall-clock, feasibility, route-count, and "
+        "pair-level objective evidence? The next proposal should attempt this "
+        "direction first; do not substitute another mechanism under this "
+        "prepared focus."
     ),
     "required_evidence": [
+        (
+            "live target-intent or hypothesis explicitly names "
+            "large_instance_intra_route_two_opt_seed as the first attempted "
+            "direction for this prepared focus"
+        ),
         (
             "bounded or deadline-aware implementation evidence for any "
             "large-instance two-opt follow-up"
@@ -1314,6 +1327,7 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         "",
         "## Current Research Focus",
         f"- Question: {research_focus['current_question']}",
+        f"- Next required direction: {research_focus['next_required_direction']}",
         f"- Route-merge exception: {research_focus['route_merge_exception_rule']}",
         f"- Construction-seed rule: {research_focus['construction_seed_rule']}",
         f"- Decision boundary: {research_focus['decision_boundary']}",

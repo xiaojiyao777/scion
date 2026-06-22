@@ -3753,6 +3753,9 @@ def _prompt_context_artifact_summary(payload: Any, *, artifact: str) -> dict[str
             "cvrp_resume_continuity_present": focus_summary.get(
                 "cvrp_resume_continuity_present"
             ),
+            "cvrp_next_required_direction_present": focus_summary.get(
+                "cvrp_next_required_direction_present"
+            ),
             "cvrp_bounded_twoopt_present": focus_summary.get(
                 "cvrp_bounded_twoopt_present"
             ),
@@ -4146,6 +4149,7 @@ def _research_focus_prompt_summary_failures(
         "warehouse_measurement_calibration_source_artifact_present",
         "warehouse_measurement_calibration_run_present",
         "cvrp_case_protection_present",
+        "cvrp_next_required_direction_present",
         "cvrp_bounded_twoopt_present",
         "cvrp_direct_effect_rules_present",
         "cvrp_measurement_handoff_present",

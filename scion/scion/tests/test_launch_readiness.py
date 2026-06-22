@@ -96,6 +96,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert focus_summary["missing_rendered_paths"] == []
     assert focus_summary["cvrp_case_protection_present"] is True
     assert focus_summary["cvrp_resume_continuity_present"] is True
+    assert focus_summary["cvrp_next_required_direction_present"] is True
     assert focus_summary["cvrp_bounded_twoopt_present"] is True
     code_summary = prompt_artifact_summary[
         "active_subject_code_constraints_summary"
@@ -4193,6 +4194,9 @@ def _cvrp_research_focus() -> dict[str, object]:
     return {
         "schema_version": "scion.cvrp_research_focus.v1",
         "scope": "report_only_prepared_handoff",
+        "next_required_direction": (
+            "First attempt large_instance_intra_route_two_opt_seed."
+        ),
         "measurement_opportunity_diagnostics": {
             "schema_version": "cvrp_measurement_opportunity_handoff.v1",
             "source": "problem_v1.measurement.calibration_ref",

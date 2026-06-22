@@ -18,7 +18,12 @@ rejected `policies/baseline_modules/local_search.py` mechanisms with direct
 mechanism telemetry. The solver evidence is negative: all rows were below MDE,
 all CI highs were below MDE, the refined `bounded_interroute_2opt_bridge`
 regressed, and `cmt_slack_aware_segment_swap` was abandoned. This is recovered
-effective negative research, not a promotion or CVRP improvement.*
+effective negative research, not a promotion or CVRP improvement. The immediate
+next-local relaunch from WSL commit `6f40ebcb` failed closed before Protocol
+rows after three default-avoid proposal blocks, proving the guard works but
+that positive target selection still needed repair. The current launcher focus
+now names `large_instance_intra_route_two_opt_seed` as the next required
+prepared direction rather than a broad optional seed.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -372,7 +377,15 @@ Current checkpoint:
   Follow-up launcher focus now carries these failed local-search mechanisms as
   proposal-visible default-avoid directions, with tests covering prepared
   manifest propagation and schema-preview blocking for
-  `bounded_interroute_2opt_bridge`.
+  `bounded_interroute_2opt_bridge`. The immediate next-local relaunch from WSL
+  commit `6f40ebcb` then failed closed before Protocol rows after three
+  default-avoid proposal blocks (`pure ALNS/no-polish`, `cross-route 2-opt
+  reconnect`, and unchanged `bounded_interroute_2opt_bridge`), proving the
+  guard works but the prepared focus was still too broad. The current launcher
+  focus repair narrows the next required prepared direction to
+  `large_instance_intra_route_two_opt_seed` as a deadline-aware bounded
+  local-search mechanism. Detailed loop report:
+  `scion/docs/experiments/v0.4/v04-cvrp-nextlocal-default-avoid-loop-20260622.md`.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
   numeric objective/distance delta evidence. Feasibility-only, route-count,
@@ -457,11 +470,12 @@ Current checkpoint:
   - Next fresh CVRP launch should avoid repeating unchanged rank-gap,
     route-pressure acceptance gates, unchanged `bounded_interroute_2opt_bridge`,
     its high-asymmetric-promise refinement, or `cmt_slack_aware_segment_swap`.
-    Prefer a materially different bounded local-search or destroy/repair
-    causal path with direct objective-effect telemetry, CMT2/CMT4 protection,
-    and strict launch readiness from the synchronized WSL commit. Keep forced
-    or otherwise audited non-acceptance target control until unaided target
-    selection is demonstrably reliable.
+    The prepared focus should first require
+    `large_instance_intra_route_two_opt_seed` as a deadline-aware bounded
+    local-search mechanism with direct objective-effect telemetry, CMT2/CMT4
+    protection, and strict launch readiness from the synchronized WSL commit.
+    Keep forced or otherwise audited non-acceptance target control until unaided
+    target selection is demonstrably reliable.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

@@ -63,7 +63,14 @@ history when exact old chronology is needed.
   current forced-target failures. The launcher prepared focus now carries the
   failed local-search mechanisms as proposal-visible default-avoid directions,
   and schema preview blocks repeated `bounded_interroute_2opt_bridge`
-  hypotheses before Protocol rows.
+  hypotheses before Protocol rows. The immediate next-local relaunch from WSL
+  commit `6f40ebcb` verified that guard but failed before Protocol rows after
+  three default-avoid proposal blocks; positive target selection still needs
+  repair before another identical forced-local relaunch. The current launcher
+  focus now narrows the next required prepared direction to
+  `large_instance_intra_route_two_opt_seed` as a deadline-aware bounded
+  local-search mechanism instead of leaving that seed as one optional direction
+  among many.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
   commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
   stops repeated quality-block signatures by global signature count instead of
@@ -258,6 +265,29 @@ CVRP forced-local-search root:
 - Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-forced-local-postroutepressure-postrun-20260622.md`.
 
+CVRP next-local default-avoid loop root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-nextlocal-6f40ebcb-postforcedlocal-4r-gpt55-20260622T122048Z-claw`
+- Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-nextlocal-6f40ebcb-postforcedlocal-4r-gpt55-20260622T122048Z-claw`
+- Launched from WSL commit `6f40ebcb`, resumed from the completed
+  forced-local root, and kept the forced target at
+  `policies/baseline_modules/local_search.py`.
+- Strict launch readiness passed with `launch_ready=true`; completion preflight
+  was healthy and the prepared default-avoid count was `18`.
+- The run failed closed before Protocol rows:
+  `last_stop_reason=circuit_breaker`,
+  `run_validity_status=invalid_no_effective_rounds`, 0 effective rounds, 0
+  screening rows, 3 proposal quality blocks, wrapper exit `64`, and postrun
+  acceptance `failed`.
+- Interpretation: the guard is working, including the new
+  `bounded_interroute_2opt_bridge` default-avoid entry, but agent target
+  selection is still poor. The three blocked attempts matched `pure
+  ALNS/no-polish`, `cross-route 2-opt reconnect`, and unchanged
+  `bounded_interroute_2opt_bridge`. Do not relaunch the same prepared focus
+  unchanged; strengthen positive mechanism targeting first. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-nextlocal-default-avoid-loop-20260622.md`.
+
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:
 
@@ -375,7 +405,10 @@ CVRP/VRP:
   `cmt_slack_aware_segment_swap` unless the causal path is changed. Prefer a
   different bounded local-search or destroy/repair mechanism with direct
   activation-to-objective telemetry and CMT2/CMT4 protection; the prepared
-  launcher focus now enforces those avoid directions before Protocol rows.
+  launcher focus now enforces those avoid directions before Protocol rows. The
+  failed next-local relaunch shows that negative guardrails alone are not
+  enough; the prepared focus has now been tightened around the positive
+  large-instance intra-route two-opt seed before spending another live root.
 
 ## Next Actions
 
@@ -383,15 +416,20 @@ CVRP/VRP:
    Treat the original bridge, its refinement, and the CMT slack segment swap as
    rejected/default-avoid unless a proposal changes the causal mechanism and
    explains the observed A/B/E/P/CMT/X case pattern.
-2. Do not return to unchanged rank-gap, route-pressure, or generic
+2. Relaunch CVRP only after a clean synchronized WSL commit verifies the
+   tightened `next_required_direction` prepared focus for
+   `large_instance_intra_route_two_opt_seed`. The latest next-local relaunch
+   proved the default-avoid guard works but also exposed a default-avoid
+   proposal loop.
+3. Do not return to unchanged rank-gap, route-pressure, or generic
    acceptance/adaptive-weight variants unless the prepared research focus is
    explicitly changed. The next CVRP root should keep the forced or otherwise
    audited non-acceptance target-control path until unaided target selection is
    demonstrably reliable.
-3. Keep warehouse as current-run-ready partial evidence unless a targeted
+4. Keep warehouse as current-run-ready partial evidence unless a targeted
    follow-up is needed to refine validation-transfer quality guidance around
    `runtime_bounded_acceptance` / `bounded_candidate_policy`.
-4. Update this file and `scion/TASK.md` only when operating truth changes; keep
+5. Update this file and `scion/TASK.md` only when operating truth changes; keep
    detailed run evidence in focused experiment reports.
 
 ## Pointers

@@ -753,6 +753,11 @@ def research_focus_prompt_summary(
             and "CMT2" in rendered_prompt
             and "CMT4" in rendered_prompt
         ),
+        "cvrp_next_required_direction_present": (
+            problem_family == "cvrp"
+            and "next_required_direction" in rendered_prompt
+            and "large_instance_intra_route_two_opt_seed" in rendered_prompt
+        ),
         "cvrp_bounded_twoopt_present": (
             problem_family == "cvrp"
             and "large_instance_two_opt_constraints" in rendered_prompt
@@ -973,6 +978,8 @@ def research_focus_prompt_summary(
                     "warehouse_measurement_plateau_guard_present"
                 )
     elif problem_family == "cvrp":
+        if research_focus.get("next_required_direction") not in ({}, [], "", None):
+            required_true_fields.append("cvrp_next_required_direction_present")
         if research_focus.get("required_evidence") not in ({}, [], "", None):
             required_true_fields.append("cvrp_required_evidence_present")
             required_true_fields.append("cvrp_required_evidence_all_present")
@@ -1533,6 +1540,7 @@ def _required_research_focus_projection_keys(
         for key in (
             "schema_version",
             "scope",
+            "next_required_direction",
             "decision_boundary",
             "measurement_opportunity_diagnostics",
             "default_avoid_directions",

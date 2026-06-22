@@ -207,6 +207,7 @@ def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
         "schema_version",
         "scope",
         "accepted_checkpoint",
+        "next_required_direction",
         "current_question",
         "route_merge_exception_rule",
         "construction_seed_rule",

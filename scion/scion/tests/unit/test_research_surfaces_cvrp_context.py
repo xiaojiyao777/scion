@@ -79,6 +79,9 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
                 "research_focus": {
                     "schema_version": "scion.cvrp_research_focus.v1",
                     "scope": "report_only_prepared_handoff",
+                    "next_required_direction": (
+                        "First attempt large_instance_intra_route_two_opt_seed."
+                    ),
                     "current_question": (
                         "Select a materially different CVRP solver-design mechanism."
                     ),
@@ -198,6 +201,9 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
         focus["research_focus"]["current_question"]
         == "Select a materially different CVRP solver-design mechanism."
     )
+    assert focus["research_focus"]["next_required_direction"] == (
+        "First attempt large_instance_intra_route_two_opt_seed."
+    )
     assert focus["research_focus"]["large_instance_two_opt_constraints"][
         "implementation_constraints"
     ] == [
@@ -212,6 +218,7 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
     prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
 
     assert "launch_research_focus" in prompt_text
+    assert "next_required_direction" in prompt_text
     assert "route-merge absorption" in prompt_text
     assert "bounded_local_search_variant" in prompt_text
     assert "large_instance_two_opt_constraints" in prompt_text

@@ -386,6 +386,7 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
     assert prompt_summary["compact_prompt_value_present"] is True
     assert prompt_summary["launch_research_focus_key_present"] is True
     assert prompt_summary["cvrp_case_protection_present"] is True
+    assert prompt_summary["cvrp_next_required_direction_present"] is True
     assert prompt_summary["cvrp_bounded_twoopt_present"] is True
     assert prompt_summary["cvrp_direct_effect_rules_present"] is True
     assert prompt_summary["cvrp_measurement_handoff_present"] is True
@@ -911,6 +912,9 @@ def _cvrp_research_focus() -> dict[str, object]:
     return {
         "schema_version": "scion.cvrp_research_focus.v1",
         "scope": "report_only_prepared_handoff",
+        "next_required_direction": (
+            "First attempt large_instance_intra_route_two_opt_seed."
+        ),
         "measurement_opportunity_diagnostics": {
             "schema_version": "cvrp_measurement_opportunity_handoff.v1",
             "proposal_visibility_only": True,

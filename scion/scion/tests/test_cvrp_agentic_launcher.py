@@ -205,6 +205,21 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "large-instance intra-route two-opt seed" in prepared_manifest[
         "research_focus"
     ]["current_question"]
+    assert "or select another" not in prepared_manifest["research_focus"][
+        "current_question"
+    ]
+    assert (
+        "large_instance_intra_route_two_opt_seed"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert "First attempt" in prepared_manifest["research_focus"][
+        "next_required_direction"
+    ]
+    assert any(
+        "large_instance_intra_route_two_opt_seed" in item
+        and "first attempted direction" in item
+        for item in prepared_manifest["research_focus"]["required_evidence"]
+    )
     assert any(
         "large_instance_intra_route_two_opt_seed" in item
         and "deadline-aware bounded search effort" in item
@@ -320,6 +335,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "route-merge absorption" in prepared_manifest_md
     assert "bounded_interroute_2opt_bridge" in prepared_manifest_md
     assert "cmt_slack_aware_segment_swap" in prepared_manifest_md
+    assert "Next required direction" in prepared_manifest_md
     assert "large_instance_intra_route_two_opt_seed" in prepared_manifest_md
     assert "unbounded large-instance two-opt fallback" in prepared_manifest_md
     assert "Required evidence" in prepared_manifest_md
@@ -694,8 +710,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     prompt_summary = prepared_prompt_context["signals"][
         "prepared_research_focus_prompt_bridge"
     ]["detail"]["prompt_summary"]
-    assert prompt_summary["cvrp_required_evidence_item_count"] == 7
-    assert prompt_summary["cvrp_required_evidence_rendered_count"] == 7
+    assert prompt_summary["cvrp_next_required_direction_present"] is True
+    assert prompt_summary["cvrp_required_evidence_item_count"] == 8
+    assert prompt_summary["cvrp_required_evidence_rendered_count"] == 8
     assert prompt_summary["cvrp_required_evidence_all_present"] is True
     assert (
         prompt_summary["cvrp_measurement_calibration_source_artifact_present"]
