@@ -25,13 +25,15 @@ history when exact old chronology is needed.
 
 - Framework/readiness/launcher repairs are accepted enough for focused
   warehouse and CVRP follow-up.
-- v0.4 is not closed until fresh current-run-ready campaigns prove effective
-  research behavior. Warehouse now has both positive movement evidence and a
-  post-repair current-run-ready partial run; CVRP still needs a solver-design
-  improvement or a stronger evidence-backed follow-up result.
+- v0.4 is not closed until the latest current-run-ready evidence is reviewed
+  against the effective-research gate. Warehouse now has both positive movement
+  evidence and a post-repair current-run-ready partial run. CVRP now has a
+  current-run-ready complete post-repair run showing same-mechanism branch
+  depth, expanded screening, MDE-aware rejection, and clean prompt/source
+  evidence, but still lacks a solver improvement or promotion.
 - WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
-  for the latest warehouse rerun before launch, and live prompt/source evidence
-  passed under the patched postrun checker.
+  for the latest warehouse and CVRP reruns before launch, and live
+  prompt/source evidence passed under the patched postrun checker.
 - Latest accepted prompt/source visibility repair: local commit `774c981d` /
   WSL commit `a9a537c4` removes active-subject code-constraint prompt
   truncation, counts cross-branch/branch-lesson sections as
@@ -122,19 +124,26 @@ Warehouse APS retry evidence root:
 
 CVRP evidence root:
 
-- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
-- Launched before the latest prompt/source visibility repair. Campaign status
-  is valid and stopped by `max_rounds_exhausted`: 4 effective rounds, 5
-  protocol-evaluated screening rows, 4 formal candidate artifacts, 2 quality
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2e1bc5ae-postrepair-4r-gpt55-20260622T021910Z-claw`
+- Launched from WSL commit `2e1bc5ae`; local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-twoopt-2e1bc5ae-postrepair-4r-gpt55-20260622T021910Z-claw`.
+- The run finished naturally with `wrapper_exit_status=0`,
+  `campaign_wrapper_exit_status=0`, `postrun_readiness_exit_status=0`,
+  `postrun_acceptance_status=ready`, `run_validity_status=valid`,
+  `run_completeness_status=complete`, and
+  `last_stop_reason=max_rounds_exhausted`.
+- Campaign status: 4 effective rounds, 4 consumed proposal attempts, 4
+  protocol-evaluated screening rows, 4 formal screened candidates, 0 quality
   blocks, 0 promotions, champion still `v1`.
-- Wrapper/postrun status is not accepted (`wrapper_exit_status=64`) because
-  current-run readiness failed on pre-repair prompt/source visibility and
-  research-context actionability checks. Treat it as useful CVRP trajectory
-  evidence, not final v0.4 acceptance proof.
-- Evidence interpretation: the run showed substantive continuity
-  (`max_branch_depth=5`, same-mechanism opportunities observed) but no positive
-  effect at or above MDE, no CMT2/CMT4 protected-case evidence, and no direct
-  large-instance bounded two-opt mechanism signal.
+- Evidence interpretation: this is current-run-ready complete evidence that
+  repaired CVRP can perform same-mechanism solver-design follow-up and
+  fail-closed rejection. The `rank_gap_annealing_acceptance` branch reached
+  depth 4 and selected 3 of 4 same-branch refinement opportunities, but all
+  rows remained below MDE and the two positive-looking 32-pair screens reversed
+  or weakened under 48-pair expansion (`+142 -> -16` and `+90 -> -72` net
+  delta). The final expansion had negative CMT2/CMT3 behavior, so it is not a
+  promotion or solver-improvement result. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-rank-gap-acceptance-postrepair-20260622.md`.
 
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:
@@ -147,17 +156,20 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 ```
 
 After a run, inspect `exit.txt`, `run_status.json`, and
-`postrun_acceptance/readiness/`, then mirror the WSL root back to the server:
+`postrun_acceptance/readiness/` on WSL, then mirror the WSL root back to the
+server. For WSL-origin roots, WSL postrun acceptance is authoritative; the
+local mirror keeps WSL absolute paths in postrun artifacts, so use
+`--skip-postrun-check` during mirror-only sync:
 
 ```bash
 PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   python scripts/sync_wsl_run_root.py <wsl-run-root> \
-  --execute --format json
+  --execute --skip-postrun-check --format json
 ```
 
 Prepared-only mirrors skip current-run postrun acceptance and should return the
 rsync/local-status result with `postrun_check_skip_reason=prepared_only_not_launched`;
-postrun acceptance remains required after an actual launch.
+postrun acceptance remains required on the launch host after an actual launch.
 
 ## Preserved Guarantees
 
@@ -236,29 +248,32 @@ CVRP/VRP:
 
 - CVRP now has better target intent, branch-lesson transfer, material solver
   code generation, formal screening, mechanism telemetry, and evidence-backed
-  rejection of weak/negative hypotheses.
-- CVRP is still not v0.4-accepted because no current solver-design branch has
-  produced continuous improvement or promotion.
-- The active follow-up treats the external large-instance intra-route two-opt
-  result only as proposal guidance. Review readiness requires a bounded,
-  deadline-aware implementation with current-run positive effect, activation,
-  objective-effect, intra-large-two-opt telemetry, and CMT2/CMT4 protection
-  evidence. `two_opt_star`, cross-route, VNS, unbounded fallback, and
-  continuity-only mentions do not satisfy this direct-evidence rule.
-- The active CVRP prepared handoff now also carries proposal-only
-  `resume_continuity_requirements`, so the zero-branch-card sparse resume must
-  use copied target-intent or hypothesis trace evidence rather than being
-  treated as an empty campaign.
+  rejection of weak/negative hypotheses under current-run-ready postrun
+  acceptance.
+- The repaired CVRP framework behavior is much healthier, but no current
+  solver-design branch has produced continuous improvement or promotion. The
+  latest `rank_gap_annealing_acceptance` mechanism activated and received
+  same-branch refinement, but it ended as below-MDE/no-effect evidence and was
+  parked after expanded screening.
+- Next CVRP work should avoid an unchanged rank-gap acceptance repeat and pick
+  a materially different problem-owned solver mechanism or new causal path with
+  direct objective-effect telemetry and CMT2/CMT4 protection. The external
+  large-instance intra-route two-opt result remains proposal guidance only
+  unless the implementation is bounded/deadline-aware and carries current-run
+  activation, objective-effect, wall-clock, and protected-case evidence.
 
 ## Next Actions
 
-1. Prepare and launch a fresh CVRP bounded large-two-opt or materially different
-   solver-design follow-up from the current synchronized WSL commit. Treat the
-   completed pre-repair CVRP root as trajectory evidence only.
-2. Keep warehouse as current-run-ready partial evidence unless a targeted
+1. Do a focused CVRP postrun review of the rank-gap acceptance run, especially
+   the missed same-mechanism opportunity and branch-lesson semantic gaps, then
+   choose the next materially different solver-design mechanism.
+2. Prepare the next CVRP launch from a synchronized WSL commit with strict
+   launch readiness, conda Python, no generic proposal/APS/tool-call caps, and
+   explicit CMT2/CMT4 protection evidence requirements.
+3. Keep warehouse as current-run-ready partial evidence unless a targeted
    follow-up is needed to refine validation-transfer quality guidance around
    `runtime_bounded_acceptance` / `bounded_candidate_policy`.
-3. Update this file and `scion/TASK.md` only when operating truth changes; keep
+4. Update this file and `scion/TASK.md` only when operating truth changes; keep
    detailed run evidence in focused experiment reports.
 
 ## Pointers

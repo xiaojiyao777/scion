@@ -2,17 +2,19 @@
 
 *Branch: `codex/v04-evidence-repair-plan`*
 *Status: v0.4 framework/readiness/launcher repairs are accepted enough for
-focused warehouse and CVRP follow-up, but v0.4 is not closed until fresh
-current-run-ready campaigns demonstrate effective research behavior. WSL
-`gpt-5.5` auth has recovered. Warehouse has shown renewed continuous
-improvement from champion `v2` to `v3`; the latest post-repair APS retry root
-is current-run postrun-ready partial evidence and verifies live prompt/source
-visibility, repeated quality-block fail-closed behavior, and fresh proposal
-recovery after quality feedback. It did not promote beyond champion `v2`, so
-the next v0.4 closure blocker is a fresh CVRP solver-design run from the
-current repaired checkout. The pre-repair CVRP bounded large-two-opt follow-up
-finished as valid research evidence but did not produce promotion,
-positive-at-MDE evidence, or direct large-two-opt mechanism evidence.*
+focused warehouse and CVRP follow-up, but v0.4 is not closed until the current
+evidence is reviewed against the effective-research gate. WSL `gpt-5.5` auth
+has recovered. Warehouse has shown renewed continuous improvement from champion
+`v2` to `v3`; the latest post-repair APS retry root is current-run
+postrun-ready partial evidence and verifies live prompt/source visibility,
+repeated quality-block fail-closed behavior, and fresh proposal recovery after
+quality feedback. The latest post-repair CVRP root is current-run-ready,
+complete evidence: 4 effective rounds, no quality blocks, prompt/source and
+research-efficiency acceptance checks passing on WSL, and same-mechanism
+rank-gap acceptance follow-up with expanded screening and MDE-aware rejection.
+It did not produce promotion, positive-at-MDE evidence, or a solver improvement,
+so the next blocker is a focused CVRP postrun review and a materially different
+solver-design follow-up rather than another unchanged acceptance-gate repeat.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -273,16 +275,26 @@ Current checkpoint:
   now verified under live provider traces. The run is current-run-ready partial
   research evidence and a plateau/quality-guidance signal, not a warehouse
   promotion result.
-- CVRP/VRP continuation is repaired enough for focused solver-design follow-up,
-  but v0.4 is not yet accepted because no current CVRP branch has shown
-  continuous improvement or promotion. Pre-repair root
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
-  completed 4 effective rounds as a valid campaign, stopped by
-  `max_rounds_exhausted`, produced 5 protocol-evaluated screening rows and 4
-  formal candidate artifacts, but had 0 promotions and retained champion `v1`.
-  Its wrapper exit is `64` because postrun readiness failed on pre-repair
-  prompt/source visibility and research-context actionability checks. Use it
-  as useful CVRP trajectory evidence, not final v0.4 acceptance.
+- CVRP/VRP continuation now has a current-run-ready complete post-repair root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2e1bc5ae-postrepair-4r-gpt55-20260622T021910Z-claw`.
+  It launched from WSL commit `2e1bc5ae`, finished naturally with wrapper exit
+  `0`, campaign wrapper exit `0`, postrun readiness exit `0`, postrun
+  acceptance `ready`, validity `valid`, completeness `complete`, and
+  `last_stop_reason=max_rounds_exhausted`. Campaign counters: 4 effective
+  rounds, 4 proposal attempts consumed, 4 protocol-evaluated screening rows, 4
+  formal screened candidates, 0 quality blocks, 0 promotions, champion still
+  `v1`. Research behavior is materially improved: the branch reached depth 4
+  in the `rank_gap_annealing_acceptance` family, selected same-branch
+  refinement for 3 of 4 observed same-mechanism opportunities, retained
+  target/source visibility, and interpreted effects against CVRP MDE
+  (`mde_at_power_80=9.9`). Result quality is still not a solver improvement:
+  both 32-pair positive-looking screens reversed or weakened under 48-pair
+  expansion (`+142 -> -16` and `+90 -> -72` net delta), all rows had CI high
+  below MDE, and CMT2/CMT3 protection was negative in the final expanded row.
+  Treat this as strong evidence that the repaired framework can continue and
+  reject CVRP hypotheses, but not as a promotion or v0.4 closure by itself.
+  Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-rank-gap-acceptance-postrepair-20260622.md`.
 - Latest accepted prompt/source visibility repair: local commit `774c981d` /
   WSL commit `a9a537c4` removes active-subject code-constraint prompt
   truncation, classifies cross-branch/branch-lesson prompt sections as
@@ -363,16 +375,19 @@ Current checkpoint:
     evidence: 3 effective rounds, 5 screening rows, 0 promotions,
     `champion_version=2`, and fail-closed stop on repeated quality-block
     signature after fresh APS retry behavior was observed.
-  - CVRP active root:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-26a03547-calprompt-4r-gpt55-4r-gpt55-20260621T054140Z-claw`
-    finished from a pre-repair checkout. Campaign status is valid, but
-    postrun readiness is not accepted; the run produced no promotion, no
-    positive effect at/above MDE, no CMT2/CMT4 protected-case evidence, and no
-    direct large-instance bounded two-opt mechanism signal.
-  - Next fresh launch should be a CVRP solver-design follow-up from the current
-    synchronized WSL commit, with strict launch readiness, conda Python
-    `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`, and no generic
-    proposal/APS/tool-call truncation caps.
+  - CVRP post-repair evidence root:
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2e1bc5ae-postrepair-4r-gpt55-20260622T021910Z-claw`
+    launched from WSL commit `2e1bc5ae`, passed strict launch readiness, and
+    finished current-run-ready: wrapper/postrun exit `0`, validity `valid`,
+    completeness `complete`, 4 effective rounds, 4 screening rows, 0 quality
+    blocks, 0 promotions, and `champion_version=1`. It demonstrates repaired
+    CVRP research continuity and fail-closed evidence interpretation, but the
+    `rank_gap_annealing_acceptance` mechanism family produced no positive
+    effect at or above MDE.
+  - Next fresh CVRP launch should avoid repeating unchanged rank-gap acceptance
+    gates. Pick a materially different problem-owned solver mechanism or a new
+    causal path with direct objective-effect telemetry, CMT2/CMT4 protection,
+    and strict launch readiness from the synchronized WSL commit.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded
