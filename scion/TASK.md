@@ -43,7 +43,16 @@ binding stayed aligned. It still failed closed before Protocol rows because the
 default-avoid matcher falsely rejected a deadline-aware bounded hypothesis that
 contrasted itself against the unbounded fallback. The current repair narrows
 that unbounded/deadline default-avoid match so positive deadline-scope
-candidates are not misclassified.*
+candidates are not misclassified. A follow-up WSL launch from commit
+`76d02567` verified that deadline-scope repair, but still failed closed before
+Protocol rows because `route-merge absorption` / `cross-route 2-opt reconnect`
+default-avoid phrases matched only weak identity overlap (`route`/`opt`) while
+the required mechanism stayed `large_instance_intra_route_two_opt_seed`. The
+current repair requires default-avoid matches to have non-weak candidate
+identity support, keeps problem-specific launch-focus scalar fields as generic
+context-manager pass-through instead of hardcoding CVRP terms in core, and
+refreshes stale solver-design multimodule fixtures against the current
+scheduler import surface.*
 *Updated: 2026-06-22*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -429,8 +438,17 @@ Current checkpoint:
   verified that target-intent and formal hypothesis binding now align on
   `large_instance_intra_route_two_opt_seed`, but it still failed closed before
   Protocol rows because the default-avoid matcher treated a deadline-aware
-  bounded proposal as the forbidden unbounded/no-deadline fallback. The current
-  local repair narrows that matcher. Detailed report:
+  bounded proposal as the forbidden unbounded/no-deadline fallback. A fifth
+  follow-up WSL root from commit `76d02567`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-deadlinescope-76d02567-postavoidfp-4r-gpt55-4r-gpt55-20260622T134246Z-claw`
+  verified that the unbounded/deadline false positive is repaired and that the
+  required target-intent/formal binding still stays on
+  `large_instance_intra_route_two_opt_seed`. It still failed closed before
+  Protocol rows after three quality blocks because default-avoid phrase
+  matching treated weak overlap through `route`/`opt` plus branch-lesson
+  contrast text as actual `route-merge`/`cross-route` mechanism identity. The
+  current local repair narrows default-avoid phrase/fallback matches to require
+  non-weak candidate identity support. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-intratwoopt-required-direction-loop-20260622.md`.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
@@ -519,9 +537,9 @@ Current checkpoint:
     The prepared focus should continue to require
     `large_instance_intra_route_two_opt_seed` structurally through
     `required_mechanism_ids`, target-intent preflight, and schema preview, but
-    the next relaunch must come after the deadline-scope default-avoid matcher
-    repair is synchronized and tested on WSL. It should test the required id as
-    a deadline-aware bounded local-search mechanism with direct
+    the next relaunch must come after the identity-supported default-avoid
+    matcher repair is synchronized and tested on WSL. It should test the
+    required id as a deadline-aware bounded local-search mechanism with direct
     objective-effect telemetry, CMT2/CMT4 protection, and strict launch
     readiness from the synchronized WSL commit. Keep forced or otherwise
     audited non-acceptance target control until unaided target selection is

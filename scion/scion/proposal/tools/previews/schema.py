@@ -855,6 +855,30 @@ _LAUNCH_FOCUS_STRONG_SINGLE_AVOID_TERMS = frozenset(
         "weighting",
     }
 )
+_LAUNCH_FOCUS_WEAK_IDENTITY_OVERLAP_TERMS = frozenset(
+    {
+        "action",
+        "add",
+        "baseline",
+        "file",
+        "instance",
+        "large",
+        "local",
+        "module",
+        "modules",
+        "modify",
+        "opt",
+        "policies",
+        "policy",
+        "py",
+        "route",
+        "routes",
+        "search",
+        "seed",
+        "solver",
+        "target",
+    }
+)
 
 
 def _launch_focus_default_avoid_guard(
@@ -905,6 +929,9 @@ def _launch_focus_default_avoid_guard(
                 "reason": reason,
                 "matched_default_avoid_direction": avoid_direction,
                 "matched_terms": sorted(match.get("matched_terms") or ()),
+                "matched_identity_terms": sorted(
+                    match.get("matched_identity_terms") or ()
+                ),
                 "matched_phrase": match.get("matched_phrase"),
                 "default_avoid_count": len(default_avoid),
                 "candidate_target_file": hypothesis.target_file,
@@ -1027,18 +1054,44 @@ def _launch_focus_default_avoid_match(
         & _LAUNCH_FOCUS_STRONG_SINGLE_AVOID_TERMS
     )
     if identity_matches:
-        return {"matched_terms": identity_matches}
+        return {
+            "matched_terms": identity_matches,
+            "matched_identity_terms": identity_matches,
+        }
     for phrase in _launch_focus_signal_phrases(avoid_direction):
         phrase_terms = set(phrase)
-        if phrase_terms.issubset(full_tokens) and (phrase_terms & identity_tokens):
+        identity_support = _launch_focus_default_avoid_identity_support(
+            phrase_terms,
+            identity_tokens,
+        )
+        if phrase_terms.issubset(full_tokens) and identity_support:
             return {
                 "matched_terms": phrase_terms,
+                "matched_identity_terms": identity_support,
                 "matched_phrase": " ".join(phrase),
             }
     matched_terms = terms & full_tokens
-    if len(matched_terms) >= 2 and (terms & identity_tokens):
-        return {"matched_terms": matched_terms}
+    identity_support = _launch_focus_default_avoid_identity_support(
+        matched_terms,
+        identity_tokens,
+    )
+    if len(matched_terms) >= 2 and identity_support:
+        return {
+            "matched_terms": matched_terms,
+            "matched_identity_terms": identity_support,
+        }
     return None
+
+
+def _launch_focus_default_avoid_identity_support(
+    terms: set[str],
+    identity_tokens: set[str],
+) -> set[str]:
+    return (
+        terms
+        & identity_tokens
+        - _LAUNCH_FOCUS_WEAK_IDENTITY_OVERLAP_TERMS
+    )
 
 
 def _launch_focus_avoid_requires_absent_deadline_scope(terms: set[str]) -> bool:

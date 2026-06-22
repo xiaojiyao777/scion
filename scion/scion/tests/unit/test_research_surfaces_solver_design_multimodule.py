@@ -2,6 +2,11 @@
 
 from .research_surfaces_solver_design_support import *  # noqa: F401,F403
 
+_SCHEDULER_LOCAL_SEARCH_IMPORT = (
+    "from .local_search import _default_vns_operators, _two_opt_intra_polish, _vns\n"
+)
+
+
 def test_contract_gate_allows_multimodule_scheduler_integration_edit(
     tmp_path: Path,
 ) -> None:
@@ -76,8 +81,8 @@ def test_contract_gate_allows_same_patch_recombination_relative_import(
         "    return solution\n"
     )
     scheduler_code = codes[scheduler_path].replace(
-        "from .local_search import _default_vns_operators, _vns\n",
-        "from .local_search import _default_vns_operators, _vns\n"
+        _SCHEDULER_LOCAL_SEARCH_IMPORT,
+        _SCHEDULER_LOCAL_SEARCH_IMPORT +
         "from .recombination import _ElitePool, _try_recombination, _MAX_CALLS\n",
         1,
     ).replace(
@@ -124,8 +129,8 @@ def test_contract_gate_attributes_same_patch_missing_import_symbol_to_c9e(
     recombination_path = "policies/baseline_modules/recombination.py"
     gate, codes = _gate_with_cvrp_champion(tmp_path, (scheduler_path,))
     scheduler_code = codes[scheduler_path].replace(
-        "from .local_search import _default_vns_operators, _vns\n",
-        "from .local_search import _default_vns_operators, _vns\n"
+        _SCHEDULER_LOCAL_SEARCH_IMPORT,
+        _SCHEDULER_LOCAL_SEARCH_IMPORT +
         "from .recombination import _missing_recombination\n",
         1,
     )
@@ -179,8 +184,11 @@ def test_contract_gate_resolves_imports_against_branch_base_snapshot(
     )
     (branch / local_search_path).write_text(branch_local_search, encoding="utf-8")
     scheduler_code = codes[scheduler_path].replace(
-        "from .local_search import _default_vns_operators, _vns\n",
-        "from .local_search import _default_vns_operators, _vns, _double_bridge\n",
+        _SCHEDULER_LOCAL_SEARCH_IMPORT,
+        (
+            "from .local_search import _default_vns_operators, "
+            "_two_opt_intra_polish, _vns, _double_bridge\n"
+        ),
         1,
     ).replace(
         "        best = current.copy()\n",
@@ -233,8 +241,8 @@ def test_contract_gate_allows_branch_owned_relative_import_from_base_snapshot(
         encoding="utf-8",
     )
     scheduler_code = codes[scheduler_path].replace(
-        "from .local_search import _default_vns_operators, _vns\n",
-        "from .local_search import _default_vns_operators, _vns\n"
+        _SCHEDULER_LOCAL_SEARCH_IMPORT,
+        _SCHEDULER_LOCAL_SEARCH_IMPORT +
         "from .route_shape_polish import _route_shape_polish\n",
         1,
     ).replace(
@@ -280,8 +288,8 @@ def test_contract_gate_allows_branch_current_source_override_relative_import(
         "    return solution\n"
     )
     scheduler_code = codes[scheduler_path].replace(
-        "from .local_search import _default_vns_operators, _vns\n",
-        "from .local_search import _default_vns_operators, _vns\n"
+        _SCHEDULER_LOCAL_SEARCH_IMPORT,
+        _SCHEDULER_LOCAL_SEARCH_IMPORT +
         "from .route_sequence_dp import _route_sequence_dp\n",
         1,
     ).replace(
@@ -342,8 +350,8 @@ def test_contract_gate_constructor_source_overrides_support_preview_context(
         file_path=scheduler_path,
         action="modify",
         code_content=scheduler_code.replace(
-            "from .local_search import _default_vns_operators, _vns\n",
-            "from .local_search import _default_vns_operators, _vns\n"
+            _SCHEDULER_LOCAL_SEARCH_IMPORT,
+            _SCHEDULER_LOCAL_SEARCH_IMPORT +
             "from .route_sequence_dp import _route_sequence_dp\n",
             1,
         ).replace(

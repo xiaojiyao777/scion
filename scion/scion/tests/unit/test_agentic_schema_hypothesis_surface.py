@@ -332,6 +332,130 @@ def test_schema_preview_allows_deadline_scoped_required_twoopt_default_avoid(
     assert mechanism_id in required_guard["matched_mechanism_ids"]
 
 
+def test_schema_preview_allows_required_twoopt_when_avoid_terms_are_only_lesson_contrast(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    mechanism_id = "large_instance_intra_route_two_opt_seed"
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+        launch_research_focus={
+            "research_focus": {
+                "default_avoid_directions": [
+                    "route-merge absorption",
+                    "cross-route 2-opt reconnect",
+                ],
+                "required_mechanism_ids": [mechanism_id],
+            },
+        },
+    )
+    hypothesis = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/baseline_modules/local_search.py",
+        hypothesis_text=(
+            "Add a deadline-aware intra-route two-opt seed polish for large "
+            "instances. It deliberately keeps the move inside one route and "
+            "does not add a route-merge operator."
+        ),
+        expected_effect=(
+            "Improve total_distance by bounded same-route reversals while "
+            "leaving cross-route reconnect behavior untouched."
+        ),
+        target_runtime_effect=(
+            "Bounded by route caps and context.remaining_time() checks."
+        ),
+        runtime_budget_strategy="deadline_bounded_large_route_sweeps",
+        mechanism_changes=[
+            {"id": mechanism_id, "change_type": "add"},
+        ],
+        novelty_signature={
+            "algorithm_family": "alns_vns_large_route_two_opt_seed",
+            "construction_strategy": "unchanged_feasible_seed_portfolio",
+            "improvement_strategy": "deadline_large_instance_intraroute_2opt",
+            "acceptance_strategy": "strict_same_route_positive_delta_only",
+            "runtime_budget_strategy": "deadline_route_sweep_pair_caps",
+        },
+        branch_lesson_usage={
+            "clean_fork_diversity_claim": {
+                "new_mechanism": mechanism_id,
+                "not_family": ["route_merge", "cross_route_2opt_reconnect"],
+            },
+            "contrasted_lessons": [
+                {
+                    "lesson_id": "lesson:route-merge",
+                    "contrast_code": "not_route_merge_absorption",
+                    "new_linkage": {
+                        "mechanism": mechanism_id,
+                        "target_file": "policies/baseline_modules/local_search.py",
+                    },
+                }
+            ],
+        },
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    section = preview.structured_payload["hypothesis"]
+    default_guard = section["launch_research_focus_default_avoid_guard"]
+    required_guard = section["launch_research_focus_required_mechanism_guard"]
+    assert preview.structured_payload["passed"] is True
+    assert default_guard["passed"] is True
+    assert required_guard["passed"] is True
+
+
+def test_schema_preview_still_blocks_actual_route_merge_default_avoid(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+        launch_research_focus={
+            "research_focus": {
+                "default_avoid_directions": ["route-merge absorption"],
+            },
+        },
+    )
+    hypothesis = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/baseline_modules/local_search.py",
+        hypothesis_text=(
+            "Add a route-merge absorption pass that merges compatible routes "
+            "after local search."
+        ),
+        expected_effect="Improve total distance through direct route merges.",
+        mechanism_changes=[
+            {"id": "route_merge_absorption", "change_type": "add"},
+        ],
+        novelty_signature={
+            "algorithm_family": "route_merge_absorption",
+            "construction_strategy": "unchanged_feasible_seed_portfolio",
+            "improvement_strategy": "route_merge_absorption",
+            "acceptance_strategy": "strict_feasible_merge_only",
+            "runtime_budget_strategy": "bounded_merge_candidates",
+        },
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    guard = preview.structured_payload["hypothesis"][
+        "launch_research_focus_default_avoid_guard"
+    ]
+    assert preview.structured_payload["passed"] is False
+    assert guard["passed"] is False
+    assert guard["matched_default_avoid_direction"] == "route-merge absorption"
+    assert "merge" in guard["matched_identity_terms"]
+
+
 def test_schema_preview_allows_nonmatching_launch_focus_default_avoid(
     tmp_path: Path,
 ) -> None:

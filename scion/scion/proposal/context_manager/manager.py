@@ -209,8 +209,6 @@ def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
         "accepted_checkpoint",
         "next_required_direction",
         "current_question",
-        "route_merge_exception_rule",
-        "construction_seed_rule",
         "decision_boundary",
     )
     projected: dict[str, Any] = {
@@ -224,6 +222,15 @@ def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
         "required_evidence",
         "measurable_opportunity_classes",
     )
+    handled_fields = set(fields) | set(list_fields) | {
+        "measurement_opportunity_diagnostics",
+    }
+    for field, child in value.items():
+        if field in handled_fields or not isinstance(field, str):
+            continue
+        text = _string_or_empty(child)
+        if text:
+            projected[field] = text
     for field in list_fields:
         items = _string_items(value.get(field))
         if items:

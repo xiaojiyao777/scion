@@ -93,7 +93,14 @@ history when exact old chronology is needed.
   unbounded fallback in a contrast/no-op context. The current local repair
   narrows only the unbounded-large-two-opt default-avoid matcher so candidates
   with positive deadline scope (`deadline-aware`, `remaining_time`,
-  `wall-clock`, or bounded+deadline evidence) are not misclassified.
+  `wall-clock`, or bounded+deadline evidence) are not misclassified. The WSL
+  commit `76d02567` launch verified that repair, but exposed a second
+  default-avoid overmatch: `route-merge absorption` and `cross-route 2-opt
+  reconnect` matched a required same-route two-opt seed proposal through weak
+  shared terms (`route`/`opt`) plus branch-lesson contrast text. The current
+  local repair now requires multi-term default-avoid matches to have non-weak
+  candidate identity support, while actual route-merge style mechanisms remain
+  blocked.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
   commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
   stops repeated quality-block signatures by global signature count instead of
@@ -387,12 +394,12 @@ CVRP required-mechanism retry target-intent mismatch root:
   prepared id before formal hypothesis binding. Relaunch from a clean WSL
   commit after tests, not from `f75cd321`.
 
-CVRP target-intent required-id projection root:
+CVRP required-mechanism default-avoid latest root:
 
-- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-targetintent-7382a090-postdrift-4r-gpt55-4r-gpt55-20260622T133014Z-claw`
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-deadlinescope-76d02567-postavoidfp-4r-gpt55-4r-gpt55-20260622T134246Z-claw`
 - Local mirror:
-  `/home/clawd/research/scion-experiments/v04-cvrp-targetintent-7382a090-postdrift-4r-gpt55-4r-gpt55-20260622T133014Z-claw`
-- Launched from WSL commit `7382a090`, resumed from the completed forced-local
+  `/home/clawd/research/scion-experiments/v04-cvrp-deadlinescope-76d02567-postavoidfp-4r-gpt55-4r-gpt55-20260622T134246Z-claw`
+- Launched from WSL commit `76d02567`, resumed from the completed forced-local
   root, and kept the forced target at
   `policies/baseline_modules/local_search.py`.
 - Strict launch readiness passed with `ready=true`, `static_ready=true`,
@@ -404,15 +411,14 @@ CVRP target-intent required-id projection root:
   screening rows, 3 proposal quality blocks, campaign wrapper exit `0`,
   wrapper effective exit `64`, and postrun acceptance `failed`.
 - Interpretation: this is not solver evidence, but it validates the previous
-  target-intent repair. The current target-intent sessions selected
-  `large_instance_intra_route_two_opt_seed`, and binding stayed aligned instead
-  of failing with `target_intent_binding_mismatch`. The remaining blocker is
-  default-avoid false-positive matching: the formal hypothesis was
-  deadline-aware and referenced `context.remaining_time()`, but the guard
-  matched the prepared avoid phrase `unbounded large-instance two-opt fallback
-  without deadline...` because the candidate contrasted against an unbounded
-  fallback. The current local repair adds a deadline-scope exception only for
-  this unbounded/deadline default-avoid shape.
+  target-intent repair and the deadline-scope default-avoid repair. Current
+  target-intent sessions selected `large_instance_intra_route_two_opt_seed`,
+  formal binding stayed aligned, and the unbounded/no-deadline fallback was no
+  longer the blocker. The remaining blocker is a default-avoid phrase
+  false-positive: branch-lesson contrast text carried `route_merge` /
+  `cross_route`, and weak identity overlap through generic `route`/`opt` terms
+  caused `route-merge absorption` / `cross-route 2-opt reconnect` to block the
+  required same-route two-opt seed before code generation.
 
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:
@@ -525,7 +531,7 @@ CVRP/VRP:
   from complete postrun-ready evidence. This is effective negative research,
   not solver progress; v0.4 still lacks continuous CVRP improvement or
   promotion.
-- Next CVRP work should synchronize and validate the deadline-scope
+- Next CVRP work should synchronize and validate the identity-supported
   default-avoid matcher repair, then relaunch the same forced `local_search.py`
   root from a clean WSL commit. Avoid unchanged
   `bounded_interroute_2opt_bridge`, its high-asymmetric-promise refinement, and
@@ -536,16 +542,18 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Synchronize the deadline-scope default-avoid matcher repair to WSL and run
-   the focused conda `scion` tests there. Local non-readiness regression tests
-   pass; launch-readiness tests must be rerun after the runtime worktree is
-   committed because they intentionally fail on dirty guarded runtime paths.
+1. Synchronize the identity-supported default-avoid matcher repair to WSL and
+   run the focused conda `scion` tests there. Local focused/related regression
+   tests pass; the broad local unit suite progressed past the previously
+   failing sections but was killed by the host with exit `137` before producing
+   a final summary.
 2. Relaunch CVRP only after a clean synchronized WSL commit verifies the
    prepared `required_mechanism_ids` path across target-intent preflight,
    formal hypothesis retry, schema-preview required-id guard, and the narrowed
    default-avoid matcher for `large_instance_intra_route_two_opt_seed`. The
-   latest live root proved target-intent binding now works, but exposed a
-   default-avoid false positive before code generation.
+   latest live root proved target-intent binding and deadline-scope matching
+   now work, but exposed a weak-identity default-avoid false positive before
+   code generation.
 3. Do not return to unchanged rank-gap, route-pressure, or generic
    acceptance/adaptive-weight variants unless the prepared research focus is
    explicitly changed. The next CVRP root should keep the forced or otherwise

@@ -174,3 +174,41 @@ local repair narrows only this unbounded/deadline avoid shape so candidates
 with positive deadline scope (`deadline-aware`, `remaining_time`, `wall-clock`,
 or bounded+deadline evidence) are not rejected as the forbidden unbounded
 fallback.
+
+A fourth follow-up WSL launch tested the deadline-scope matcher repair:
+
+- WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-deadlinescope-76d02567-postavoidfp-4r-gpt55-4r-gpt55-20260622T134246Z-claw`
+- Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-deadlinescope-76d02567-postavoidfp-4r-gpt55-4r-gpt55-20260622T134246Z-claw`
+- WSL commit: `76d02567`
+- Strict launch readiness passed with no required blockers and healthy
+  completion preflight.
+
+The run still failed closed before Protocol rows:
+
+- `run_validity_status=invalid_no_effective_rounds`
+- `run_completeness_status=interrupted_incomplete`
+- `last_stop_reason=repeated_quality_block_signature`
+- 0 effective rounds
+- 0 screening rows
+- 3 proposal quality blocks
+- campaign wrapper exit `0`
+- wrapper effective exit `64`
+- `postrun_acceptance_status=failed`
+
+This root validates the deadline-scope repair but is still not solver
+evidence. Current target-intent/formal hypotheses stayed aligned on
+`large_instance_intra_route_two_opt_seed`, and the previous
+unbounded/no-deadline fallback false positive did not recur.
+
+The remaining blocker is a second default-avoid false positive. The failed
+formal hypotheses declared the required mechanism id, but branch-lesson
+contrast fields mentioned `route_merge` or `cross_route` as excluded families.
+The guard then accepted weak overlap through generic identity tokens such as
+`route` and `opt` as enough evidence that the proposal matched
+`route-merge absorption` or `cross-route 2-opt reconnect`. The follow-up local
+repair narrows multi-token default-avoid phrase/fallback matching so a match
+requires non-weak candidate identity support; actual route-merge style
+mechanism ids still fail the guard, while the required same-route two-opt seed
+can proceed to code generation.
