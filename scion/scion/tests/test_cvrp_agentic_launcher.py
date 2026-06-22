@@ -135,6 +135,14 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
+        "bounded_interroute_2opt_bridge" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "cmt_slack_aware_segment_swap" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
         "unbounded large-instance two-opt fallback" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
@@ -310,6 +318,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "highest_current_followup" in prepared_manifest_md
     assert "opportunity_diagnostics" in prepared_manifest_md
     assert "route-merge absorption" in prepared_manifest_md
+    assert "bounded_interroute_2opt_bridge" in prepared_manifest_md
+    assert "cmt_slack_aware_segment_swap" in prepared_manifest_md
     assert "large_instance_intra_route_two_opt_seed" in prepared_manifest_md
     assert "unbounded large-instance two-opt fallback" in prepared_manifest_md
     assert "Required evidence" in prepared_manifest_md
@@ -551,6 +561,18 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         ]
     )
     assert any(
+        "bounded_interroute_2opt_bridge" in item
+        for item in prepared_brief["prepared_run_contract"]["research_focus"][
+            "default_avoid_directions"
+        ]
+    )
+    assert any(
+        "cmt_slack_aware_segment_swap" in item
+        for item in prepared_brief["prepared_run_contract"]["research_focus"][
+            "default_avoid_directions"
+        ]
+    )
+    assert any(
         "large_instance_intra_route_two_opt_seed" in item
         for item in prepared_brief["prepared_run_contract"]["research_focus"][
             "measurable_opportunity_classes"
@@ -672,8 +694,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     prompt_summary = prepared_prompt_context["signals"][
         "prepared_research_focus_prompt_bridge"
     ]["detail"]["prompt_summary"]
-    assert prompt_summary["cvrp_required_evidence_item_count"] == 6
-    assert prompt_summary["cvrp_required_evidence_rendered_count"] == 6
+    assert prompt_summary["cvrp_required_evidence_item_count"] == 7
+    assert prompt_summary["cvrp_required_evidence_rendered_count"] == 7
     assert prompt_summary["cvrp_required_evidence_all_present"] is True
     assert (
         prompt_summary["cvrp_measurement_calibration_source_artifact_present"]

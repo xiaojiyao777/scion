@@ -369,6 +369,10 @@ Current checkpoint:
   abandoned (`-132` net raw delta). All rows were below MDE and had CI high
   below MDE. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-forced-local-postroutepressure-postrun-20260622.md`.
+  Follow-up launcher focus now carries these failed local-search mechanisms as
+  proposal-visible default-avoid directions, with tests covering prepared
+  manifest propagation and schema-preview blocking for
+  `bounded_interroute_2opt_bridge`.
 - Latest accepted postrun guard repair: local commit `5bc93f16` / WSL commit
   `13abbbef` requires CVRP CMT2/CMT4 protected-case summary evidence to include
   numeric objective/distance delta evidence. Feasibility-only, route-count,

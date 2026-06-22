@@ -145,3 +145,9 @@ continuous CVRP improvement. The next CVRP root should not repeat unchanged
 materially different bounded local-search operator or a different direct
 solver-design causal path with activation-to-objective telemetry and explicit
 CMT2/CMT4 protection.
+
+Follow-up control repair: the CVRP launcher prepared focus now includes those
+failed local-search mechanisms in `default_avoid_directions`, and schema
+preview blocks repeated `bounded_interroute_2opt_bridge` hypotheses before
+Protocol rows. Focused verification:
+`pytest scion/scion/tests/test_cvrp_agentic_launcher.py scion/scion/tests/unit/test_agentic_schema_hypothesis_surface.py`.

@@ -60,7 +60,10 @@ history when exact old chronology is needed.
   `bounded_interroute_2opt_bridge` regressed, and
   `cmt_slack_aware_segment_swap` was abandoned. Older acceptance sessions in
   its agentic index come from the resumed route-pressure campaign and are not
-  current forced-target failures.
+  current forced-target failures. The launcher prepared focus now carries the
+  failed local-search mechanisms as proposal-visible default-avoid directions,
+  and schema preview blocks repeated `bounded_interroute_2opt_bridge`
+  hypotheses before Protocol rows.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
   commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
   stops repeated quality-block signatures by global signature count instead of
@@ -371,7 +374,8 @@ CVRP/VRP:
   `bounded_interroute_2opt_bridge`, its high-asymmetric-promise refinement, and
   `cmt_slack_aware_segment_swap` unless the causal path is changed. Prefer a
   different bounded local-search or destroy/repair mechanism with direct
-  activation-to-objective telemetry and CMT2/CMT4 protection.
+  activation-to-objective telemetry and CMT2/CMT4 protection; the prepared
+  launcher focus now enforces those avoid directions before Protocol rows.
 
 ## Next Actions
 

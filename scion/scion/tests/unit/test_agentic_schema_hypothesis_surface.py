@@ -164,6 +164,60 @@ def test_schema_preview_blocks_launch_focus_default_avoid_acceptance_family(
     assert guard["decision_features_excluded"] is True
 
 
+def test_schema_preview_blocks_launch_focus_default_avoid_local_search_mechanism(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+        launch_research_focus={
+            "research_focus": {
+                "default_avoid_directions": [
+                    "unchanged bounded_interroute_2opt_bridge local-search bridge",
+                    "unchanged cmt_slack_aware_segment_swap local-search segment swap",
+                ],
+            },
+        },
+    )
+    hypothesis = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/baseline_modules/local_search.py",
+        hypothesis_text=(
+            "Repeat the bounded inter-route bridge after the previous run."
+        ),
+        expected_effect="Improve total distance with the same bridge operator.",
+        mechanism_changes=[
+            {"id": "bounded_interroute_2opt_bridge", "change_type": "modify"},
+        ],
+        novelty_signature={
+            "algorithm_family": "bounded_local_search",
+            "construction_strategy": "unchanged_seed_pool",
+            "improvement_strategy": "bounded_interroute_2opt_bridge",
+            "acceptance_strategy": "strict_improvement_only",
+            "runtime_budget_strategy": "bounded_pair_pool",
+        },
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    section = preview.structured_payload["hypothesis"]
+    guard = section["launch_research_focus_default_avoid_guard"]
+    assert preview.structured_payload["passed"] is False
+    assert section["passed"] is False
+    assert guard["passed"] is False
+    assert guard["failure_code"] == "launch_research_focus_default_avoid"
+    assert guard["matched_default_avoid_direction"].startswith(
+        "unchanged bounded_interroute_2opt_bridge"
+    )
+    assert {"bounded", "interroute", "bridge"} <= set(guard["matched_terms"])
+    assert guard["candidate_mechanism_ids"] == ["bounded_interroute_2opt_bridge"]
+
+
 def test_schema_preview_allows_nonmatching_launch_focus_default_avoid(
     tmp_path: Path,
 ) -> None:

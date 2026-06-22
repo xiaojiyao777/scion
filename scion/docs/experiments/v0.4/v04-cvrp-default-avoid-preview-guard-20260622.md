@@ -152,3 +152,10 @@ next CVRP decision should come from the completed forced-local postrun report
 rather than from another unchanged rank-gap, route-pressure, generic acceptance,
 or unchanged local-search relaunch:
 `scion/docs/experiments/v0.4/v04-cvrp-forced-local-postroutepressure-postrun-20260622.md`.
+
+The launcher prepared focus now includes the failed local-search mechanisms
+(`bounded_interroute_2opt_bridge`, its high-asymmetric-promise refinement, and
+`cmt_slack_aware_segment_swap`) as proposal-visible default-avoid directions.
+Focused tests cover propagation into prepared manifests/handoffs and
+schema-preview blocking for repeated `bounded_interroute_2opt_bridge`
+hypotheses.

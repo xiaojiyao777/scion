@@ -86,6 +86,9 @@ CVRP_DEFAULT_AVOID_DIRECTIONS = (
         "route-pressure acceptance/adaptive-weighting variants without a new "
         "non-acceptance causal path or direct objective-effect telemetry"
     ),
+    "unchanged bounded_interroute_2opt_bridge local-search bridge",
+    "high-asymmetric-promise bounded_interroute_2opt_bridge refinement",
+    "unchanged cmt_slack_aware_segment_swap local-search segment swap",
 )
 CVRP_ADAPTER_OPPORTUNITY_FIELDS = (
     "screening_headroom",
@@ -260,6 +263,13 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
         (
             "a new non-acceptance causal path before revisiting rank-gap or "
             "route-pressure acceptance after the current-run no-effect results"
+        ),
+        (
+            "a materially different bounded local-search or destroy/repair "
+            "causal path before revisiting bounded_interroute_2opt_bridge, "
+            "its high-asymmetric-promise refinement, or "
+            "cmt_slack_aware_segment_swap after the forced-local negative "
+            "postrun evidence"
         ),
     ],
     "measurement_opportunity_diagnostics": {},
