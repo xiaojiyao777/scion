@@ -1342,6 +1342,80 @@ def test_agentic_pipeline_recovers_waiting_hypothesis_without_rerun(
     assert session_ref["session_id"] == previous_output.session_id
 
 
+def test_agentic_pipeline_does_not_reuse_waiting_hypothesis_after_quality_feedback(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "agentic"
+    creative = FakeCreative()
+    initial_pipeline, branch, _, _, _, _ = _pipeline(
+        creative=creative,
+        agentic_artifact_dir=str(artifact_dir),
+    )
+    previous = AgenticProposalSession(
+        creative,
+        artifact_store=FileAgenticSessionArtifactStore(artifact_dir),
+    )
+    previous.run(
+        initial_pipeline._build_agentic_request(
+            branch=branch,
+            champion=_champion(),
+            hypothesis_context={},
+        )
+    )
+    captured: list[AgenticProposalRequest] = []
+
+    class CapturingSession:
+        def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
+            captured.append(request)
+            return AgenticProposalOutput(
+                status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+                session_id="fresh-after-quality-feedback",
+                campaign_id=request.campaign_id,
+                branch_id=request.branch.branch_id,
+                champion_version=request.champion.version if request.champion else None,
+                problem_id=request.problem_id,
+                problem_spec_hash=request.problem_spec_hash,
+                hypothesis=creative.hypothesis,
+                termination_reason=(
+                    AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL
+                ),
+            )
+
+    pipeline, branch, _, _, _, _ = _pipeline(
+        creative=creative,
+        agentic_session=CapturingSession(),
+        agentic_artifact_dir=str(artifact_dir),
+    )
+    pipeline.agentic_quality_feedback[branch.branch_id] = [
+        {
+            "source": "agentic_quality_block",
+            "session_id": "blocked-session",
+            "failure_code": "warehouse_validation_transfer_quality_missing",
+            "retry_constraint": "state split-vs-cost effect scope",
+            "recorded_at": "2026-06-22T00:00:00Z",
+        }
+    ]
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis == creative.hypothesis
+    assert record is not None
+    assert len(captured) == 1
+    context = captured[0].hypothesis_context
+    assert context is not None
+    assert context["agentic_prior_quality_blocks"][0]["failure_code"] == (
+        "warehouse_validation_transfer_quality_missing"
+    )
+    report = pipeline.agentic_recovery_reports[branch.branch_id]
+    assert report["recovery_mode"] == (
+        "partial_hypothesis_output_reuse_skipped_quality_feedback"
+    )
+    assert report["validation_ok"] is False
+    assert "fresh hypothesis" in report["validation_errors"][0]
+    recovered = pipeline.agentic_outputs[branch.branch_id]
+    assert recovered.session_id == "fresh-after-quality-feedback"
+
+
 def test_agentic_pipeline_rejects_stale_partial_hypothesis_key_and_runs_fresh(
     tmp_path: Path,
 ) -> None:

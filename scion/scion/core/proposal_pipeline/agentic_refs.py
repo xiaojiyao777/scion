@@ -57,6 +57,18 @@ class AgenticRefsMixin:
             return None
         store = AgenticSessionStore(self.agentic_artifact_dir)
         branch_id = request.branch.branch_id
+        prior_quality_blocks = _request_prior_quality_blocks(request)
+        if prior_quality_blocks:
+            self.agentic_recovery_reports[branch_id] = {
+                "branch_id": branch_id,
+                "recovery_mode": "partial_hypothesis_output_reuse_skipped_quality_feedback",
+                "validation_ok": False,
+                "validation_errors": [
+                    "prior agentic quality feedback requires a fresh hypothesis"
+                ],
+                "prior_quality_block_count": len(prior_quality_blocks),
+            }
+            return None
         for stored in reversed(store.list_sessions()):
             if stored.entry.branch_id != branch_id:
                 continue
@@ -467,3 +479,15 @@ def _strip_repeated_quality_prefix(
     if text.startswith(marker):
         return text[len(marker) :].strip()
     return text
+
+
+def _request_prior_quality_blocks(
+    request: AgenticProposalRequest,
+) -> tuple[Mapping[str, Any], ...]:
+    context = request.hypothesis_context
+    if not isinstance(context, Mapping):
+        return ()
+    raw = context.get("agentic_prior_quality_blocks")
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    return tuple(item for item in raw if isinstance(item, Mapping))
