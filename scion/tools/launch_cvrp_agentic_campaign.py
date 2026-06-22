@@ -239,6 +239,7 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
         "different mechanism under this prepared focus unless the prepared "
         "research_focus is explicitly updated after review."
     ),
+    "required_mechanism_ids": ["large_instance_intra_route_two_opt_seed"],
     "current_question": (
         "Can the still-untried large-instance intra-route two-opt seed improve "
         "total_distance when implemented as a deadline-aware bounded "
@@ -1328,6 +1329,8 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         "## Current Research Focus",
         f"- Question: {research_focus['current_question']}",
         f"- Next required direction: {research_focus['next_required_direction']}",
+        "- Required mechanism ids: "
+        + ", ".join(map(str, research_focus["required_mechanism_ids"])),
         f"- Route-merge exception: {research_focus['route_merge_exception_rule']}",
         f"- Construction-seed rule: {research_focus['construction_seed_rule']}",
         f"- Decision boundary: {research_focus['decision_boundary']}",

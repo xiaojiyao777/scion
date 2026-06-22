@@ -1544,6 +1544,7 @@ def _required_research_focus_projection_keys(
             "decision_boundary",
             "measurement_opportunity_diagnostics",
             "default_avoid_directions",
+            "required_mechanism_ids",
             "required_evidence",
             "measurable_opportunity_classes",
         )

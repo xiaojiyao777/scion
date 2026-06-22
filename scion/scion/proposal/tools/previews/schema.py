@@ -599,6 +599,12 @@ def _hypothesis_schema_preview(
         context,
         hypothesis,
     )
+    launch_focus_required_mechanism_guard = (
+        _launch_focus_required_mechanism_guard(
+            context,
+            hypothesis,
+        )
+    )
     launch_focus_default_avoid_guard = _launch_focus_default_avoid_guard(
         context,
         hypothesis,
@@ -610,6 +616,8 @@ def _hypothesis_schema_preview(
     if not target_action_guard.get("passed", True):
         passed = False
     if not branch_continuation_guard.get("passed", True):
+        passed = False
+    if not launch_focus_required_mechanism_guard.get("passed", True):
         passed = False
     if not launch_focus_default_avoid_guard.get("passed", True):
         passed = False
@@ -633,6 +641,10 @@ def _hypothesis_schema_preview(
         failure_reason = str(target_action_guard.get("reason") or "")
     elif not branch_continuation_guard.get("passed", True):
         failure_reason = str(branch_continuation_guard.get("reason") or "")
+    elif not launch_focus_required_mechanism_guard.get("passed", True):
+        failure_reason = str(
+            launch_focus_required_mechanism_guard.get("reason") or ""
+        )
     elif not launch_focus_default_avoid_guard.get("passed", True):
         failure_reason = str(
             launch_focus_default_avoid_guard.get("reason") or ""
@@ -669,6 +681,9 @@ def _hypothesis_schema_preview(
         "forced_surface_constraint": _forced_surface_constraint_payload(context),
         "target_action_guard": target_action_guard,
         "branch_continuation_guard": branch_continuation_guard,
+        "launch_research_focus_required_mechanism_guard": (
+            launch_focus_required_mechanism_guard
+        ),
         "launch_research_focus_default_avoid_guard": (
             launch_focus_default_avoid_guard
         ),
@@ -917,6 +932,79 @@ def _launch_focus_default_avoid_guard(
         "configured": True,
         "default_avoid_count": len(default_avoid),
     }
+
+
+def _launch_focus_required_mechanism_guard(
+    context: ProposalToolContext,
+    hypothesis: HypothesisProposal,
+) -> dict[str, Any]:
+    focus = getattr(context, "launch_research_focus", {}) or {}
+    if not isinstance(focus, Mapping):
+        return {
+            "name": "launch_research_focus_required_mechanism",
+            "passed": True,
+            "configured": False,
+        }
+    research_focus = focus.get("research_focus")
+    if not isinstance(research_focus, Mapping):
+        research_focus = focus
+    required_ids = _launch_focus_string_items(
+        research_focus.get("required_mechanism_ids")
+    )
+    if not required_ids:
+        return {
+            "name": "launch_research_focus_required_mechanism",
+            "passed": True,
+            "configured": False,
+        }
+
+    candidate_ids = [
+        str(change.id).strip()
+        for change in mechanism_changes(hypothesis)
+        if str(change.id).strip()
+    ]
+    required_set = set(required_ids)
+    matched_ids = [item for item in candidate_ids if item in required_set]
+    if matched_ids:
+        return {
+            "name": "launch_research_focus_required_mechanism",
+            "passed": True,
+            "configured": True,
+            "required_mechanism_ids": list(required_ids),
+            "candidate_mechanism_ids": candidate_ids,
+            "matched_mechanism_ids": matched_ids,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        }
+
+    reason = (
+        "launch_research_focus_required_mechanism: prepared research_focus "
+        "requires the hypothesis to declare one of "
+        f"required_mechanism_ids={list(required_ids)!r} in mechanism_changes; "
+        f"candidate_mechanism_ids={candidate_ids!r}."
+    )
+    return _drop_empty_items(
+        {
+            "name": "launch_research_focus_required_mechanism",
+            "passed": False,
+            "configured": True,
+            "failure_code": "launch_research_focus_required_mechanism",
+            "reason": reason,
+            "required_mechanism_ids": list(required_ids),
+            "candidate_mechanism_ids": candidate_ids,
+            "candidate_target_file": hypothesis.target_file,
+            "candidate_change_locus": hypothesis.change_locus,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "retry_constraint": (
+                "Rewrite the hypothesis around the prepared required mechanism "
+                f"id {required_ids[0]!r}; put that exact id in "
+                "mechanism_changes and align expected telemetry to the same id. "
+                "If a different mechanism is intentionally desired, regenerate "
+                "or edit the prepared launch research_focus first."
+            ),
+        }
+    )
 
 
 def _launch_focus_default_avoid_match(

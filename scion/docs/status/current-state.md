@@ -70,7 +70,12 @@ history when exact old chronology is needed.
   focus now narrows the next required prepared direction to
   `large_instance_intra_route_two_opt_seed` as a deadline-aware bounded
   local-search mechanism instead of leaving that seed as one optional direction
-  among many.
+  among many. A launch from WSL commit `4b7e78b7` proved that this
+  natural-language positive focus still was not enough: the run failed closed
+  before Protocol rows after default-avoid repeats. The current repair now adds
+  structured `required_mechanism_ids` and a proposal schema-preview guard that
+  requires the hypothesis to declare `large_instance_intra_route_two_opt_seed`
+  in `mechanism_changes`.
 - Latest accepted quality-loop guard repair: local commit `11ba7898` / WSL
   commit `7bd1a42c` keeps exact `0` proposal quality-loop budgets disabled, but
   stops repeated quality-block signatures by global signature count instead of
@@ -288,6 +293,30 @@ CVRP next-local default-avoid loop root:
   unchanged; strengthen positive mechanism targeting first. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-nextlocal-default-avoid-loop-20260622.md`.
 
+CVRP intra-two-opt required-direction loop root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-intratwoopt-4b7e78b7-postavoidloop-4r-gpt55-20260622T123924Z-claw`
+- Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-intratwoopt-4b7e78b7-postavoidloop-4r-gpt55-20260622T123924Z-claw`
+- Launched from WSL commit `4b7e78b7`, resumed from the completed forced-local
+  root, and kept the forced target at
+  `policies/baseline_modules/local_search.py`.
+- Strict launch readiness passed with `launch_ready=true`,
+  `cvrp_next_required_direction_present=true`, authenticated completion
+  preflight, and clean runtime guard.
+- The run still failed closed before Protocol rows:
+  `last_stop_reason=circuit_breaker`,
+  `run_validity_status=invalid_no_effective_rounds`, 0 effective rounds, 0
+  screening rows, 3 proposal quality blocks, wrapper exit `64`, and postrun
+  acceptance `failed`.
+- Interpretation: positive natural-language focus was visible but insufficient.
+  The three blocked attempts repeated unchanged `bounded_interroute_2opt_bridge`,
+  `cross-route 2-opt reconnect`, and unchanged `bounded_interroute_2opt_bridge`.
+  The current repair makes the required mechanism structured:
+  `required_mechanism_ids=["large_instance_intra_route_two_opt_seed"]` plus a
+  schema-preview guard on `mechanism_changes`. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-intratwoopt-required-direction-loop-20260622.md`.
+
 Before launching any new prepared root, require strict launch readiness from
 the same WSL checkout:
 
@@ -406,9 +435,10 @@ CVRP/VRP:
   different bounded local-search or destroy/repair mechanism with direct
   activation-to-objective telemetry and CMT2/CMT4 protection; the prepared
   launcher focus now enforces those avoid directions before Protocol rows. The
-  failed next-local relaunch shows that negative guardrails alone are not
-  enough; the prepared focus has now been tightened around the positive
-  large-instance intra-route two-opt seed before spending another live root.
+  failed next-local and intra-two-opt relaunches show that negative guardrails
+  and natural-language positive focus are not enough; the prepared focus now
+  has a structured required-mechanism schema-preview guard before spending
+  another live root.
 
 ## Next Actions
 
@@ -417,10 +447,11 @@ CVRP/VRP:
    rejected/default-avoid unless a proposal changes the causal mechanism and
    explains the observed A/B/E/P/CMT/X case pattern.
 2. Relaunch CVRP only after a clean synchronized WSL commit verifies the
-   tightened `next_required_direction` prepared focus for
-   `large_instance_intra_route_two_opt_seed`. The latest next-local relaunch
-   proved the default-avoid guard works but also exposed a default-avoid
-   proposal loop.
+   structured `required_mechanism_ids` schema-preview guard for
+   `large_instance_intra_route_two_opt_seed`. The latest next-local and
+   intra-two-opt relaunches proved the default-avoid guard works but also
+   exposed a default-avoid proposal loop that ignores prompt-only positive
+   focus.
 3. Do not return to unchanged rank-gap, route-pressure, or generic
    acceptance/adaptive-weight variants unless the prepared research focus is
    explicitly changed. The next CVRP root should keep the forced or otherwise

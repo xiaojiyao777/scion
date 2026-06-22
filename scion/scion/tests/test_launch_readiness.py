@@ -4197,6 +4197,9 @@ def _cvrp_research_focus() -> dict[str, object]:
         "next_required_direction": (
             "First attempt large_instance_intra_route_two_opt_seed."
         ),
+        "required_mechanism_ids": [
+            "large_instance_intra_route_two_opt_seed",
+        ],
         "measurement_opportunity_diagnostics": {
             "schema_version": "cvrp_measurement_opportunity_handoff.v1",
             "source": "problem_v1.measurement.calibration_ref",

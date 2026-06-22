@@ -269,6 +269,115 @@ def test_schema_preview_allows_nonmatching_launch_focus_default_avoid(
     assert guard["configured"] is True
 
 
+def test_schema_preview_blocks_missing_launch_focus_required_mechanism(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+        launch_research_focus={
+            "research_focus": {
+                "required_mechanism_ids": [
+                    "large_instance_intra_route_two_opt_seed",
+                ],
+            },
+        },
+    )
+    hypothesis = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/baseline_modules/local_search.py",
+        hypothesis_text=(
+            "Add a bounded local-search probe that is not the prepared large "
+            "instance two-opt seed."
+        ),
+        expected_effect="Improve total distance with a bounded route edit.",
+        mechanism_changes=[
+            {"id": "bounded_two_opt_probe", "change_type": "modify"},
+        ],
+        novelty_signature={
+            "algorithm_family": "bounded_local_search",
+            "construction_strategy": "unchanged_seed_pool",
+            "improvement_strategy": "bounded_two_opt_probe",
+            "acceptance_strategy": "strict_improvement_only",
+            "runtime_budget_strategy": "small_candidate_pool",
+        },
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    section = preview.structured_payload["hypothesis"]
+    guard = section["launch_research_focus_required_mechanism_guard"]
+    assert preview.structured_payload["passed"] is False
+    assert section["passed"] is False
+    assert guard["passed"] is False
+    assert guard["failure_code"] == "launch_research_focus_required_mechanism"
+    assert guard["required_mechanism_ids"] == [
+        "large_instance_intra_route_two_opt_seed"
+    ]
+    assert guard["candidate_mechanism_ids"] == ["bounded_two_opt_probe"]
+    assert "large_instance_intra_route_two_opt_seed" in guard["retry_constraint"]
+    assert "launch_research_focus_required_mechanism" in section["failure_reason"]
+
+
+def test_schema_preview_allows_launch_focus_required_mechanism(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+        launch_research_focus={
+            "research_focus": {
+                "required_mechanism_ids": [
+                    "large_instance_intra_route_two_opt_seed",
+                ],
+            },
+        },
+    )
+    hypothesis = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/baseline_modules/local_search.py",
+        hypothesis_text=(
+            "Implement the prepared deadline-aware large-instance intra-route "
+            "two-opt seed."
+        ),
+        expected_effect="Improve large-case total distance with bounded two-opt.",
+        mechanism_changes=[
+            {
+                "id": "large_instance_intra_route_two_opt_seed",
+                "change_type": "modify",
+            },
+        ],
+        novelty_signature={
+            "algorithm_family": "bounded_local_search",
+            "construction_strategy": "unchanged_seed_pool",
+            "improvement_strategy": "large_instance_intra_route_two_opt_seed",
+            "acceptance_strategy": "strict_improvement_only",
+            "runtime_budget_strategy": "deadline_aware",
+        },
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    guard = preview.structured_payload["hypothesis"][
+        "launch_research_focus_required_mechanism_guard"
+    ]
+    assert guard["passed"] is True
+    assert guard["configured"] is True
+    assert guard["matched_mechanism_ids"] == [
+        "large_instance_intra_route_two_opt_seed"
+    ]
+
+
 def test_context_read_surface_exposes_solver_design_mechanism_telemetry(
     tmp_path: Path,
 ) -> None:

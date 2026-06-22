@@ -220,6 +220,7 @@ def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
     }
     list_fields = (
         "default_avoid_directions",
+        "required_mechanism_ids",
         "required_evidence",
         "measurable_opportunity_classes",
     )

@@ -212,6 +212,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "large_instance_intra_route_two_opt_seed"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
+    assert prepared_manifest["research_focus"]["required_mechanism_ids"] == [
+        "large_instance_intra_route_two_opt_seed"
+    ]
     assert "First attempt" in prepared_manifest["research_focus"][
         "next_required_direction"
     ]
@@ -336,6 +339,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "bounded_interroute_2opt_bridge" in prepared_manifest_md
     assert "cmt_slack_aware_segment_swap" in prepared_manifest_md
     assert "Next required direction" in prepared_manifest_md
+    assert "Required mechanism ids" in prepared_manifest_md
     assert "large_instance_intra_route_two_opt_seed" in prepared_manifest_md
     assert "unbounded large-instance two-opt fallback" in prepared_manifest_md
     assert "Required evidence" in prepared_manifest_md
