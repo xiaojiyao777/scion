@@ -23,9 +23,13 @@ contract so structured telemetry diagnostics such as a declared mechanism that
 was not evaluated or triggered become branch-local integration follow-up
 signals instead of ordinary inactive clean-fork pressure; this remains
 proposal/lifecycle/scheduler evidence and stays out of `DecisionFeatures`.
-Local and
-WSL conda `scion` focused target-intent/proposal tests pass at the tightened
-semantics (`121 passed`). The authority validation root launched from WSL
+Local and WSL conda `scion` focused target-intent/proposal tests pass at the
+tightened semantics (`121 passed`). After the old WSL solver-depth run exited,
+local head `416aec82` was synced to WSL head `92fff094`; WSL conda passed the
+Design K/core groups (`53`, `35`, and `30` tests), launcher/guidance tests
+(`48 passed`), launch/postrun tool tests (`227 passed`), direct launcher entry
+checks, py-compile, and diff checks. The authority validation root launched
+from WSL
 commit `542d1f99`,
 `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-authority-542d1f99-postweakpressure-4r-gpt55-20260623T055230Z-claw`,
 is now accepted Design G framework evidence: wrapper/postrun exit `0`, postrun
@@ -44,9 +48,8 @@ The current worktree now reclassifies those report-only signals
 problem-neutrally; a temporary rebuild of the accepted authority root reports
 `actionability_gaps=[]`, `same_mechanism_missed=0`, and
 `branch_lesson_semantic_gap_count=0` while preserving
-`accepted_clean_fork_policy_choice_count=1` as diagnostic evidence. The
-current local Design H/I/J/K repair is not yet synced to WSL; the CVRP
-solver-depth root
+`accepted_clean_fork_policy_choice_count=1` as diagnostic evidence. The CVRP
+solver-depth old-checkout root
 `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-65115459-postauthority-6r-gpt55-20260623T084213Z-claw`
 finished from old WSL commit `65115459` before the local repairs were synced.
 It is current-run-ready framework evidence: wrapper/postrun exit `0`, postrun
@@ -636,13 +639,17 @@ Current checkpoint:
     `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-conflict-20260623.md`
     and
     `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-validation-20260623.md`.
-  - CVRP solver-depth root
+  - CVRP solver-depth old-checkout root
     `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-65115459-postauthority-6r-gpt55-20260623T084213Z-claw`
-    is currently running from WSL commit `65115459` after strict launch
-    readiness passed, resuming from the accepted authority validation campaign.
-    It should be interpreted only as problem-owned solver-direction research;
-    do not sync the current local Design H/I/J/K runtime-path changes into WSL
-    until this live run exits.
+    finished from WSL commit `65115459` after strict launch readiness passed,
+    resuming from the accepted authority validation campaign. It is
+    current-run-ready, valid, and complete, with 6 of 6 effective Protocol rows,
+    but it is framework/integration evidence rather than solver progress:
+    champion stayed `v1`, there were 0 promotions, all six rows were below MDE,
+    continuity was `wide_shallow`, max branch depth was 1, and direct
+    large-two-opt mechanism signal was missing. The run has been mirrored
+    locally; use it as Design K trigger evidence, then relaunch from the
+    synchronized WSL head `92fff094`.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

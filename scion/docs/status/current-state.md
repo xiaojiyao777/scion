@@ -51,7 +51,11 @@ history when exact old chronology is needed.
   diagnostic follow-up without becoming Protocol gates or Decision input, while
   evaluated no-effect remains no-effect evidence rather than wiring repair. No
   CVRP-specific scheduler, target-intent, launcher-lifecycle, projection, or
-  mechanism-evidence exception is accepted.
+  mechanism-evidence exception is accepted. Local head `416aec82` is synced to
+  WSL head `92fff094`; WSL conda passed the focused Design K/core tests
+  (`53`, `35`, and `30` tests), launcher/guidance tests (`48 passed`),
+  launch/postrun tool tests (`227 passed`), direct launcher entry checks,
+  py-compile, and diff checks.
 
 ## Current Decision
 
@@ -69,11 +73,12 @@ history when exact old chronology is needed.
   to report-classifier false positives and repaired in the current worktree, so
   the next question is solver direction quality and warehouse/CVRP effective
   research behavior rather than more authority-loop or actionability-classifier
-  repair. The live CVRP solver-depth root has also exposed a mechanism-evidence
-  contract gap: current screening rows can declare the target mechanism while
-  formal telemetry shows the mechanism was not evaluated or triggered. Treat
-  that as integration/activation diagnostic evidence until the Design K repair
-  is validated on a synchronized rerun.
+  repair. The old-checkout CVRP solver-depth root also exposed the
+  mechanism-evidence contract gap: screening rows can declare the target
+  mechanism while formal telemetry shows the mechanism was not evaluated or
+  triggered. Treat that as integration/activation diagnostic evidence; the
+  Design K repair is now synced to WSL and still requires a synchronized rerun
+  to prove branch-local diagnostic follow-up.
 - Prior CVRP missing-primary follow-up:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-missingprimary-8d28bc30-narrowavoid-4r-gpt55-20260622T171659Z-claw`
   launched from WSL commit `8d28bc30`. It passed postrun acceptance readiness
@@ -334,8 +339,8 @@ CVRP solver-depth old-checkout root:
   those rows as Design K trigger evidence: declared mechanisms that are not
   reached by the formal runtime path should create branch-local integration
   follow-up pressure rather than clean-fork breadth or solver-quality
-  conclusions. The run is now safe to mirror; sync local Design H/I/J/K repairs
-  to WSL only after recording this old-checkout evidence.
+  conclusions. The run has been mirrored locally; the next CVRP solver-depth
+  check should launch only from the synchronized WSL head `92fff094`.
 
 CVRP evidence root:
 
@@ -717,10 +722,9 @@ Warehouse:
   were being projected as hard hypothesis mechanism ids, conflicting with
   concrete operator telemetry identities. The current local repair separates
   rendered context from hard mechanism binding.
-- Next question: after the live CVRP run exits and the repaired checkout is
-  synced to WSL, rerun the warehouse champion-`v2` positive-control path to
-  test whether valid operator ids can now pass proposal quality and recover
-  useful continuous optimization.
+- Next question: rerun the warehouse champion-`v2` positive-control path from
+  the synchronized WSL head `92fff094` to test whether valid operator ids can
+  now pass proposal quality and recover useful continuous optimization.
 - Accept a plateau conclusion only with protocol evidence below MDE,
   review-ready runtime evidence, and substantive continuity evidence without
   fully missed same-mechanism follow-up opportunities.
@@ -762,13 +766,13 @@ CVRP/VRP:
 1. Treat the clean scheduler-status validation root and the target-intent
    authority validation root as accepted framework evidence; do not relaunch
    either validation shape unless a later run regresses the generic behavior.
-2. Let the current CVRP solver-depth root finish before syncing new code into
-   WSL. Continue CVRP only as problem-owned solver research; interpret effects
-   against MDE and do not add VRP/CVRP exceptions to generic scheduler,
+2. Launch the next CVRP solver-depth check only from synchronized WSL head
+   `92fff094`; continue CVRP as problem-owned solver research, interpret effects
+   against MDE, and do not add VRP/CVRP exceptions to generic scheduler,
    proposal authority, actionability, projection, or `DecisionFeatures`.
-3. After syncing the current Design H/I/J/K repairs, rerun warehouse from champion
-   `v2` as the simpler positive-control path. Do not accept the latest
-   quality-blocked positive-control root as plateau evidence.
+3. Rerun warehouse from champion `v2` as the simpler positive-control path from
+   the same synchronized WSL head. Do not accept the latest quality-blocked
+   positive-control root as plateau evidence.
 4. Update this file and `scion/TASK.md` only when operating truth changes; keep
    detailed run evidence in focused experiment reports.
 
