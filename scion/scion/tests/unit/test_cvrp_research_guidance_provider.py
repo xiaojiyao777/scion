@@ -8,7 +8,9 @@ from scion.problems.cvrp.research_guidance import (
 from scion.research_guidance import (
     GuidanceContext,
     ProblemResearchGuidanceProvider,
+    launch_research_guidance_payload,
     render_research_guidance_contract,
+    research_guidance_contract_to_dict,
     validate_research_guidance_contract,
 )
 
@@ -38,6 +40,10 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert [item.mechanism_id for item in contract.required_mechanisms] == [
         "large_instance_intra_route_two_opt_seed"
     ]
+    mechanism_bindings = [
+        item.hypothesis_mechanism_binding for item in contract.required_mechanisms
+    ]
+    assert mechanism_bindings == ["required"]
     assert any(
         "total_distance delta by case and seed" in field
         for requirement in contract.evidence_requirements
@@ -65,6 +71,17 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert "large_instance_intra_route_two_opt_seed" in rendered.text
     assert "CMT2/CMT4 case protection" in rendered.text
     assert "excluded from DecisionFeatures" in rendered.text
+
+    launch_payload = launch_research_guidance_payload(
+        manifest_path="/tmp/prepared_run_manifest.v1.json",
+        manifest={
+            "problem_family": contract.problem_family,
+            "research_guidance_contract": research_guidance_contract_to_dict(contract),
+        },
+    )
+    assert launch_payload["required_mechanism_ids"] == [
+        "large_instance_intra_route_two_opt_seed"
+    ]
 
 
 def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:

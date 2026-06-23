@@ -7,6 +7,8 @@ from pathlib import Path
 
 import yaml
 
+from scion.research_guidance import launch_research_guidance_payload
+
 
 SCION_DIR = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -125,9 +127,26 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         mechanism["mechanism_id"] == "warehouse_champion_v2_checkpoint"
         for mechanism in typed_contract["required_mechanisms"]
     )
+    assert {
+        mechanism["mechanism_id"]: mechanism["hypothesis_mechanism_binding"]
+        for mechanism in typed_contract["required_mechanisms"]
+    } == {
+        "warehouse_champion_v2_checkpoint": "context_only",
+        "validation_transfer_continuation": "context_only",
+        "warehouse_runtime_model_handoff": "context_only",
+    }
     assert any(
         block["block_id"] == "warehouse_prepared_followup_focus"
         for block in typed_contract["guidance_blocks"]
+    )
+    launch_payload = launch_research_guidance_payload(
+        manifest_path=run_root / "prepared_run_manifest.v1.json",
+        manifest=prepared_manifest,
+    )
+    assert launch_payload["required_mechanism_ids"] == []
+    assert (
+        "required_mechanisms.warehouse_champion_v2_checkpoint"
+        in launch_payload["rendered_paths"]
     )
     assert prepared_manifest["research_focus"]["scope"] == (
         "report_only_prepared_handoff"

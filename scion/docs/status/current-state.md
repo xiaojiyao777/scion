@@ -38,15 +38,21 @@ history when exact old chronology is needed.
   protected/allowed mechanism authority before final hypothesis generation.
   Protected and allowed mechanism ids use an ordered union, branch-local
   authority normalizes selected target intent to existing-file `modify`, and
-  host transport overrides stay outside the intent body. No CVRP-specific
-  scheduler, target-intent, or projection exception is accepted.
+  host transport overrides stay outside the intent body. The current worktree
+  also implements the Design H/I follow-ups: typed required mechanisms now
+  distinguish hard hypothesis binding from context-only rendered guidance, and
+  generated launch wrappers mark root `run_status.json` as running before
+  campaign execution. No CVRP-specific scheduler, target-intent, or projection
+  exception is accepted.
 
 ## Current Decision
 
 - Framework/readiness/launcher repairs are accepted enough for focused
   warehouse and CVRP follow-up.
-- v0.4 is not closed. Warehouse now has both positive movement evidence and a
-  post-repair current-run-ready partial run. CVRP now has multiple
+- v0.4 is not closed. Warehouse now has positive movement evidence, a
+  post-repair current-run-ready partial run, and a current positive-control
+  rerun showing that warehouse v2 follow-up was blocked by a guidance-binding
+  design mismatch rather than proving a plateau. CVRP now has multiple
   current-run-ready complete post-repair roots showing branch depth, expanded
   screening, MDE-aware rejection, forced non-acceptance target control, clean
   prompt/source evidence, accepted scheduler-status repair, and accepted
@@ -272,6 +278,36 @@ Warehouse APS retry evidence root:
   `branch_lesson_semantic_gap_count=0`, and
   `accepted_clean_fork_policy_choice_count=4`, so the old same-mechanism
   actionability gap is not a live warehouse blocker.
+
+Warehouse current positive-control root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-65115459-current-8r-gpt55-20260623T084049Z-claw`
+- Launched from WSL commit `65115459` after strict readiness passed, resuming
+  from the accepted champion-`v2` validation-transfer source campaign.
+- The run finished wrapper/postrun-ready with no postrun required failures, but
+  it is not warehouse promotion or plateau evidence: campaign validity is
+  `valid_partial_interrupted`, with 1 effective round, 1 protocol-evaluated
+  screening row, 0 promotions, champion still `v2`, 5 proposal quality blocks,
+  and `last_stop_reason=repeated_quality_block_signature`.
+- Interpretation: this root exposed a problem-owned guidance binding mismatch.
+  Warehouse v2/validation-transfer/runtime typed guidance ids are context and
+  evidence axes, while modify-existing operator telemetry must use concrete
+  export ids such as `move_order`. Treat the root as accepted trigger evidence
+  for the current Design H repair, not as a real plateau conclusion. Detailed
+  report:
+  `scion/docs/experiments/v0.4/v04-warehouse-guidance-binding-launcher-status-20260623.md`.
+
+CVRP solver-depth live root:
+
+- `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-65115459-postauthority-6r-gpt55-20260623T084213Z-claw`
+- Prepared from WSL commit `65115459` after strict launch readiness passed and
+  resumed from the accepted authority validation campaign. It is running on the
+  old WSL checkout while the local Design H/I repairs remain unsynced. Do not
+  rsync new runtime code into WSL until this run exits.
+- Current live status: `campaign/run_status.json` is `running`, champion still
+  `v1`, no effective rounds counted yet, and the live root reproduces the
+  pre-repair operator-status issue where root `run_status.json` remains
+  prepared until final wrapper status is written.
 
 CVRP evidence root:
 
@@ -648,10 +684,15 @@ Warehouse:
 - Current post-repair checkpoint: APS retry from champion `v2` produced
   current-run-ready partial evidence and correctly stopped on repeated
   quality-block signature after fresh proposal recovery.
-- Next question: whether further warehouse work should refine the
-  validation-transfer quality guidance (`runtime_bounded_acceptance` /
-  `bounded_candidate_policy`) or accept this as a post-v2 plateau/quality
-  guidance signal while CVRP remains the v0.4 closure blocker.
+- Current positive-control rerun: the champion-`v2` path is still not a plateau
+  conclusion. The latest root exposed that context-only warehouse guidance ids
+  were being projected as hard hypothesis mechanism ids, conflicting with
+  concrete operator telemetry identities. The current local repair separates
+  rendered context from hard mechanism binding.
+- Next question: after the live CVRP run exits and the repaired checkout is
+  synced to WSL, rerun the warehouse champion-`v2` positive-control path to
+  test whether valid operator ids can now pass proposal quality and recover
+  useful continuous optimization.
 - Accept a plateau conclusion only with protocol evidence below MDE,
   review-ready runtime evidence, and substantive continuity evidence without
   fully missed same-mechanism follow-up opportunities.
@@ -693,12 +734,13 @@ CVRP/VRP:
 1. Treat the clean scheduler-status validation root and the target-intent
    authority validation root as accepted framework evidence; do not relaunch
    either validation shape unless a later run regresses the generic behavior.
-2. Continue CVRP only as problem-owned solver research; interpret effects
+2. Let the current CVRP solver-depth root finish before syncing new code into
+   WSL. Continue CVRP only as problem-owned solver research; interpret effects
    against MDE and do not add VRP/CVRP exceptions to generic scheduler,
    proposal authority, actionability, projection, or `DecisionFeatures`.
-3. Keep warehouse as the simpler positive-control path unless a targeted
-   follow-up is needed to refine validation-transfer quality guidance around
-   `runtime_bounded_acceptance` / `bounded_candidate_policy`.
+3. After syncing the current Design H/I repairs, rerun warehouse from champion
+   `v2` as the simpler positive-control path. Do not accept the latest
+   quality-blocked positive-control root as plateau evidence.
 4. Update this file and `scion/TASK.md` only when operating truth changes; keep
    detailed run evidence in focused experiment reports.
 

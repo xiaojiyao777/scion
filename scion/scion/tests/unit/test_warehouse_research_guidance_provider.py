@@ -10,7 +10,9 @@ from scion.problems.warehouse_delivery.research_guidance import (
 )
 from scion.research_guidance import (
     GuidanceContext,
+    launch_research_guidance_payload,
     render_research_guidance_contract,
+    research_guidance_contract_to_dict,
     validate_research_guidance_contract,
 )
 
@@ -44,6 +46,14 @@ def test_warehouse_provider_contract_has_guidance_sections() -> None:
 
     assert contract.problem_family == "warehouse_delivery"
     assert contract.required_mechanisms
+    assert {
+        mechanism.mechanism_id: mechanism.hypothesis_mechanism_binding
+        for mechanism in contract.required_mechanisms
+    } == {
+        "warehouse_champion_v2_checkpoint": "context_only",
+        "validation_transfer_continuation": "context_only",
+        "warehouse_runtime_model_handoff": "context_only",
+    }
     assert contract.evidence_requirements
     assert contract.avoid_rules
     assert contract.guidance_blocks
@@ -56,6 +66,23 @@ def test_warehouse_provider_contract_has_guidance_sections() -> None:
     assert "warehouse_champion_v2_checkpoint" in rendered.text
     assert "warehouse_measurement_runtime_handoff" in rendered.text
     assert "excluded from DecisionFeatures" in rendered.text
+
+    launch_payload = launch_research_guidance_payload(
+        manifest_path="/tmp/prepared_run_manifest.v1.json",
+        manifest={
+            "problem_family": contract.problem_family,
+            "research_guidance_contract": research_guidance_contract_to_dict(contract),
+        },
+    )
+    assert launch_payload["required_mechanism_ids"] == []
+    assert (
+        "required_mechanisms.warehouse_champion_v2_checkpoint"
+        in launch_payload["rendered_paths"]
+    )
+    assert (
+        "hypothesis_mechanism_binding=context_only"
+        in launch_payload["guidance_text"]
+    )
 
 
 def test_warehouse_contract_rejects_non_warehouse_context() -> None:

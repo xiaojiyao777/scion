@@ -48,6 +48,7 @@ LAUNCHER_STATUS_KEYS = (
     "pre_campaign_completion_preflight_refreshing_accounts",
     "api_key_env_missing",
     "launch_env_missing",
+    "launcher_running_status_write_failed",
     "scion_dir_missing",
     "warehouse_data_root_missing",
     "git_runtime_dirty",
@@ -64,6 +65,7 @@ LAUNCHER_STATUS_KEYS = (
 PRE_CAMPAIGN_INFRA_FAILURE_KEYS = (
     "api_key_env_missing",
     "launch_env_missing",
+    "launcher_running_status_write_failed",
     "scion_dir_missing",
     "warehouse_data_root_missing",
     "git_runtime_dirty",

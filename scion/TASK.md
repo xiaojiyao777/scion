@@ -5,15 +5,18 @@
 focused warehouse and CVRP follow-up, but v0.4 is not closed until Scion shows
 stable effective research behavior rather than only framework validation.
 WSL `gpt-5.5` auth has recovered. Warehouse has renewed positive movement from
-champion `v2` to `v3`, and the latest warehouse APS retry root is current-run
-postrun-ready partial evidence. CVRP rank-gap, route-pressure, forced-local,
-required-intra-two-opt, missing-primary, scheduler-status, and target-intent
-authority roots are current-run-ready rejection or repair evidence, not solver
-improvements. In the current worktree,
-`scion/design/v0.4-effective-research-repair-design.md` Designs A-G are
-implemented and focused-tested: scheduling status, research-guidance contracts,
-context/readiness schema checks, typed opportunity/lifecycle/failure routing,
-weak-positive runtime-pressure follow-up, and target-intent authority all stay
+champion `v2` to `v3`, the warehouse APS retry root is current-run postrun-ready
+partial evidence, and the latest warehouse positive-control rerun shows a
+guidance-binding design mismatch rather than a real plateau. CVRP rank-gap,
+route-pressure, forced-local, required-intra-two-opt, missing-primary,
+scheduler-status, and target-intent authority roots are current-run-ready
+rejection or repair evidence, not solver improvements. In the current
+worktree, `scion/design/v0.4-effective-research-repair-design.md` Designs A-I
+are implemented and focused-tested: scheduling status, research-guidance
+contracts, context/readiness schema checks, typed
+opportunity/lifecycle/failure routing, weak-positive runtime-pressure
+follow-up, target-intent authority, report-only actionability classification,
+research-guidance binding semantics, and launcher running status all stay
 problem-neutral while CVRP/warehouse semantics remain problem-owned. Local and
 WSL conda `scion` focused target-intent/proposal tests pass at the tightened
 semantics (`121 passed`). The authority validation root launched from WSL
@@ -35,7 +38,12 @@ The current worktree now reclassifies those report-only signals
 problem-neutrally; a temporary rebuild of the accepted authority root reports
 `actionability_gaps=[]`, `same_mechanism_missed=0`, and
 `branch_lesson_semantic_gap_count=0` while preserving
-`accepted_clean_fork_policy_choice_count=1` as diagnostic evidence.*
+`accepted_clean_fork_policy_choice_count=1` as diagnostic evidence. The
+current local Design H/I repair is not yet synced to WSL because the CVRP
+solver-depth root
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-65115459-postauthority-6r-gpt55-20260623T084213Z-claw`
+is running from WSL commit `65115459`; wait for it to exit before rsyncing
+runtime paths.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -297,6 +305,18 @@ Current checkpoint:
   now verified under live provider traces. The run is current-run-ready partial
   research evidence and a plateau/quality-guidance signal, not a warehouse
   promotion result.
+- Warehouse current positive-control root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-65115459-current-8r-gpt55-20260623T084049Z-claw`
+  finished wrapper/postrun-ready from WSL commit `65115459`, but is not
+  promotion or plateau evidence: it stopped after 1 effective round with
+  5 proposal quality blocks and
+  `last_stop_reason=repeated_quality_block_signature`. The root exposed a
+  guidance-binding design mismatch: warehouse v2/validation-transfer/runtime
+  typed guidance ids are rendered research-context axes, while modify-existing
+  operators need concrete telemetry ids such as `move_order`. The current local
+  Design H repair keeps those warehouse ids `context_only` and preserves CVRP's
+  hard-bound `large_instance_intra_route_two_opt_seed`. Detailed report:
+  `scion/docs/experiments/v0.4/v04-warehouse-guidance-binding-launcher-status-20260623.md`.
 - CVRP/VRP continuation has current-run-ready complete post-repair evidence:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2e1bc5ae-postrepair-4r-gpt55-20260622T021910Z-claw`.
   It launched from WSL commit `2e1bc5ae`, finished naturally with wrapper exit
@@ -599,6 +619,13 @@ Current checkpoint:
     `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-conflict-20260623.md`
     and
     `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-validation-20260623.md`.
+  - CVRP solver-depth root
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-65115459-postauthority-6r-gpt55-20260623T084213Z-claw`
+    is currently running from WSL commit `65115459` after strict launch
+    readiness passed, resuming from the accepted authority validation campaign.
+    It should be interpreted only as problem-owned solver-direction research;
+    do not sync the current local Design H/I runtime-path changes into WSL
+    until this live run exits.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

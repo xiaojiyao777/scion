@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 SUPPORTED_VISIBILITY_POLICIES = ("proposal_only",)
+SUPPORTED_HYPOTHESIS_MECHANISM_BINDINGS = ("required", "context_only")
 
 
 class ResearchGuidanceValidationError(ValueError):
@@ -42,6 +43,7 @@ class RequiredMechanism:
     description: str
     required_observations: tuple[str, ...] = ()
     protected_items: tuple[str, ...] = ()
+    hypothesis_mechanism_binding: str = "required"
     visibility: GuidanceVisibility = field(default_factory=GuidanceVisibility)
 
 
@@ -181,6 +183,11 @@ def collect_research_guidance_errors(
         _check_string_sequence(
             mechanism.protected_items,
             f"{path}.protected_items",
+            errors,
+        )
+        _check_hypothesis_mechanism_binding(
+            mechanism.hypothesis_mechanism_binding,
+            f"{path}.hypothesis_mechanism_binding",
             errors,
         )
         _check_visibility_object(f"{path}.visibility", mechanism.visibility, errors)
@@ -375,6 +382,15 @@ def _check_visibility_flags(
         errors.append(f"{path}.proposal_visibility_only must be true")
     if decision_features_excluded is not True:
         errors.append(f"{path}.decision_features_excluded must be true")
+
+
+def _check_hypothesis_mechanism_binding(
+    value: Any,
+    path: str,
+    errors: list[str],
+) -> None:
+    if value not in SUPPORTED_HYPOTHESIS_MECHANISM_BINDINGS:
+        errors.append(f"{path} unsupported: {value!r}")
 
 
 def _as_sequence(value: Any, path: str, errors: list[str]) -> tuple[Any, ...]:

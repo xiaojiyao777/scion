@@ -188,6 +188,37 @@ write_postrun_acceptance_reports
 '''
 
 
+LAUNCHER_RUNNING_STATUS_SNIPPET = r'''
+LAUNCHER_RUNNING_STARTED_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+LAUNCHER_RUNNING_STATUS_WRITE_STATUS=0
+"$PY" "$SCION_DIR/tools/write_launcher_running_status.py" \
+  --output "$RUN_ROOT/run_status.json" \
+  --run-root "$RUN_ROOT" \
+  --campaign-dir "$CAMPAIGN_DIR" \
+  --git-commit "$GIT_COMMIT" \
+  --model "$SCION_MODEL" \
+  --started-utc "$LAUNCHER_RUNNING_STARTED_UTC" \
+  --pid "$$" \
+  --scion-base-url "$SCION_BASE_URL" \
+  --completion-preflight "$COMPLETION_PREFLIGHT" \
+  --postrun-reports "$POSTRUN_REPORTS" \
+  >> "$RUN_ROOT/run.log" 2>&1 || LAUNCHER_RUNNING_STATUS_WRITE_STATUS=$?
+if [[ "$LAUNCHER_RUNNING_STATUS_WRITE_STATUS" -ne 0 ]]; then
+  {
+    echo "WRAPPER_EXIT_STATUS:$PREFLIGHT_FAILURE_EXIT_CODE"
+    echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "LAUNCHER_RUNNING_STATUS_WRITE_FAILED:$LAUNCHER_RUNNING_STATUS_WRITE_STATUS"
+  } > "$RUN_ROOT/exit.txt"
+  printf '{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s,"launcher_running_status_write_failed":%s}\n' \
+    "$PREFLIGHT_FAILURE_EXIT_CODE" "$LAUNCHER_RUNNING_STATUS_WRITE_STATUS" \
+    > "$RUN_ROOT/run_status.json"
+  write_postrun_acceptance_reports
+  exit "$PREFLIGHT_FAILURE_EXIT_CODE"
+fi
+echo "LAUNCHER_RUNNING_STATUS:$RUN_ROOT/run_status.json" >> "$RUN_ROOT/run.log"
+'''
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -741,6 +772,7 @@ def _write_run_sh(run_root: Path, command: str, env: dict[str, object]) -> None:
 set -uo pipefail
 _INHERITED_SCION_API_KEY="${{SCION_API_KEY:-}}"
 _RUN_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PREFLIGHT_FAILURE_EXIT_CODE={PREFLIGHT_FAILURE_EXIT_CODE}
 {fallback_assignments}
 {POSTRUN_REPORT_FUNCTION_SNIPPET}
 if [[ ! -r "$_RUN_SCRIPT_DIR/launch.env" ]]; then
@@ -818,6 +850,7 @@ unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS
   echo "CWD:$PWD"
   echo "COMMAND:{command}"
 }} >> "$RUN_ROOT/run.log"
+{LAUNCHER_RUNNING_STATUS_SNIPPET}
 {COMPLETION_PREFLIGHT_SNIPPET}
 CAMPAIGN_EXECUTION_MARKER_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '{{"schema":"scion.launcher_campaign_execution_marker.v1","started_at":"%s","run_root":"%s","campaign_dir":"%s"}}\n' \

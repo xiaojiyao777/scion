@@ -223,7 +223,9 @@ def launch_research_guidance_payload(
         "current_question": contract.current_question,
         "decision_boundary": contract.decision_boundary,
         "required_mechanism_ids": [
-            mechanism.mechanism_id for mechanism in contract.required_mechanisms
+            mechanism.mechanism_id
+            for mechanism in contract.required_mechanisms
+            if mechanism.hypothesis_mechanism_binding == "required"
         ],
         "expected_rendered_paths": list(expected_paths),
         "rendered_paths": list(rendered.rendered_paths),
@@ -325,6 +327,10 @@ def _required_mechanism(value: Mapping[str, Any]) -> RequiredMechanism:
         description=_string(value.get("description")),
         required_observations=_string_tuple(value.get("required_observations")),
         protected_items=_string_tuple(value.get("protected_items")),
+        hypothesis_mechanism_binding=_string(
+            value.get("hypothesis_mechanism_binding"),
+            "required",
+        ),
         visibility=_visibility(value.get("visibility")),
     )
 

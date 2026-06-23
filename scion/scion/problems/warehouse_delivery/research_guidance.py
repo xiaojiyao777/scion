@@ -127,6 +127,7 @@ def build_warehouse_research_guidance_contract(
                     "promotion_behavior_relative_to_checkpoint",
                 ),
                 protected_items=("champion_v2", "pack_compatible_vehicles"),
+                hypothesis_mechanism_binding="context_only",
             ),
             RequiredMechanism(
                 mechanism_id="validation_transfer_continuation",
@@ -147,6 +148,7 @@ def build_warehouse_research_guidance_contract(
                     "validation_transfer_acceptance_contract",
                     "split_preserving_cost_compression",
                 ),
+                hypothesis_mechanism_binding="context_only",
             ),
             RequiredMechanism(
                 mechanism_id="warehouse_runtime_model_handoff",
@@ -161,6 +163,7 @@ def build_warehouse_research_guidance_contract(
                     "screening_mde_at_power_80",
                 ),
                 protected_items=("measurement_opportunity_diagnostics",),
+                hypothesis_mechanism_binding="context_only",
             ),
         ),
         evidence_requirements=_warehouse_evidence_requirements(),

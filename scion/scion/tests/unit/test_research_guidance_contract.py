@@ -150,6 +150,50 @@ def test_typed_manifest_flows_into_context_manager_payload(
     assert any(contract.current_question in line for line in guard_lines)
 
 
+def test_context_only_required_mechanism_renders_without_hard_launch_binding(
+    tmp_path,
+) -> None:
+    base_contract = _valid_contract()
+    mechanism = base_contract.required_mechanisms[0]
+    contract = replace(
+        base_contract,
+        required_mechanisms=(
+            replace(
+                mechanism,
+                hypothesis_mechanism_binding="context_only",
+            ),
+        ),
+    )
+    manifest = {
+        "problem_family": contract.problem_family,
+        "analysis_intent": "Dummy prepared guidance.",
+        "acceptance_focus": ["Keep guidance proposal-only."],
+        "research_guidance_contract": research_guidance_contract_to_dict(contract),
+    }
+
+    payload = launch_research_guidance_payload(
+        manifest_path=tmp_path / "prepared_run_manifest.v1.json",
+        manifest=manifest,
+    )
+
+    assert payload["required_mechanism_ids"] == []
+    assert "foo_activation_probe" in payload["guidance_text"]
+    assert "hypothesis_mechanism_binding=context_only" in payload["guidance_text"]
+    assert "required_mechanisms.foo_activation_probe" in payload["rendered_paths"]
+    assert payload["expected_rendered_paths"] == list(
+        expected_research_guidance_rendered_paths(contract)
+    )
+
+    from scion.proposal.engine.hypothesis_prompts import (
+        _target_intent_launch_focus_required_mechanism_lines,
+    )
+
+    guard_lines = _target_intent_launch_focus_required_mechanism_lines(
+        {"launch_research_focus": payload}
+    )
+    assert guard_lines == []
+
+
 @pytest.mark.parametrize(
     ("case_name", "expected_error"),
     [
@@ -168,6 +212,10 @@ def test_typed_manifest_flows_into_context_manager_payload(
         (
             "unsupported_visibility_policy",
             "visibility_policy unsupported",
+        ),
+        (
+            "unsupported_hypothesis_mechanism_binding",
+            "hypothesis_mechanism_binding unsupported",
         ),
     ],
 )
@@ -210,6 +258,16 @@ def _invalid_contract(case_name: str) -> ResearchGuidanceContract:
         )
     if case_name == "unsupported_visibility_policy":
         return replace(contract, visibility_policy="decision_visible")
+    if case_name == "unsupported_hypothesis_mechanism_binding":
+        return replace(
+            contract,
+            required_mechanisms=(
+                replace(
+                    contract.required_mechanisms[0],
+                    hypothesis_mechanism_binding="decision_visible",
+                ),
+            ),
+        )
     raise AssertionError(f"unknown invalid contract case: {case_name}")
 
 

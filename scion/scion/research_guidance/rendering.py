@@ -56,7 +56,9 @@ def render_research_guidance_contract(
             f"required_mechanisms.{mechanism.mechanism_id}",
             (
                 f"- {mechanism.mechanism_id} [{mechanism.category}]: "
-                f"{mechanism.description}"
+                f"{mechanism.description} "
+                f"(hypothesis_mechanism_binding="
+                f"{mechanism.hypothesis_mechanism_binding})"
             ),
         )
         _append_optional_list(

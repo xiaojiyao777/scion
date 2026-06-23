@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from scion.research_guidance import launch_research_guidance_payload
+
 
 SCION_DIR = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -130,10 +132,20 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert typed_contract["required_mechanisms"][0]["mechanism_id"] == (
         "large_instance_intra_route_two_opt_seed"
     )
+    assert typed_contract["required_mechanisms"][0][
+        "hypothesis_mechanism_binding"
+    ] == "required"
     assert any(
         block["block_id"] == "large_instance_two_opt_constraints"
         for block in typed_contract["guidance_blocks"]
     )
+    launch_payload = launch_research_guidance_payload(
+        manifest_path=run_root / "prepared_run_manifest.v1.json",
+        manifest=prepared_manifest,
+    )
+    assert launch_payload["required_mechanism_ids"] == [
+        "large_instance_intra_route_two_opt_seed"
+    ]
     assert prepared_manifest["research_focus"]["scope"] == (
         "report_only_prepared_handoff"
     )
