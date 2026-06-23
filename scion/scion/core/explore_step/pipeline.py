@@ -11,6 +11,7 @@ from scion.core.branch_hygiene import (
     branch_requires_repair_focus,
     record_branch_lifecycle_policy_block,
 )
+from scion.core.branch_identity import adopt_verified_hypothesis_identity
 from scion.core.branch_repair_policy import (
     BranchLifecyclePolicyBlockSignal,
     REPAIR_FIRST_POLICY_VIOLATION,
@@ -1137,6 +1138,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             vresult = verification_outcome.verification_result
 
         self.record_verification_pass(branch, code_hash)
+        self.record_verified_hypothesis_identity(branch, hypothesis)
         self.failure_streak.clear()
         self.branch_current_hypothesis[bid] = h_record
 
@@ -1280,6 +1282,14 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         if REPAIR_FIRST_POLICY_VIOLATION in str(failure_detail or ""):
             reason = str(failure_detail or "")
         return "telemetry_repair", repair_ids, reason
+
+    def record_verified_hypothesis_identity(
+        self,
+        branch: Branch,
+        hypothesis: HypothesisProposal | HypothesisRecord,
+    ) -> None:
+        if adopt_verified_hypothesis_identity(branch, hypothesis):
+            self.persist_branch_state(branch.branch_id)
 
     def _record_branch_lifecycle_policy_block(
         self,

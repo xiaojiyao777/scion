@@ -11,6 +11,7 @@ from scion.core.branch_hygiene import (
     campaign_branch_lifecycle_reroute_status,
     record_branch_lifecycle_policy_block,
 )
+from scion.core.branch_identity import adopt_verified_hypothesis_identity
 from scion.core.branch_repair_policy import validate_branch_continuation_patch
 from scion.core.decision_lifecycle_actions import (
     update_branch_screening_evidence_summary,
@@ -24,6 +25,7 @@ from scion.core.models import (
     EvalStats,
     ExperimentStage,
     HypothesisProposal,
+    MechanismChange,
     PatchProposal,
     ProtocolResult,
 )
@@ -94,6 +96,103 @@ def test_explore_status_progress_includes_suspect_branch_hygiene() -> None:
     assert payload["repair_policy"] == "repair_first_same_mechanism_or_clean_fork"
     assert payload["repair_mechanism_ids"] == ["probe"]
     assert payload["telemetry_repair_attempts"] == {"probe": 1}
+
+
+def test_verified_hypothesis_identity_updates_branch_card_mechanisms() -> None:
+    branch = Branch(
+        branch_id="active-identity",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_mechanism_ids=("existing_probe",),
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Refine the bounded assignment probe.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        mechanism_changes=(
+            MechanismChange(id="existing_probe", change_type="modify"),
+            MechanismChange(id="bounded_assignment_probe", change_type="modify"),
+        ),
+    )
+
+    changed = adopt_verified_hypothesis_identity(branch, hypothesis)
+
+    assert changed is True
+    assert branch.branch_mechanism_ids == (
+        "existing_probe",
+        "bounded_assignment_probe",
+    )
+    assert branch.direction == "solver_design: Refine the bounded assignment probe."
+    card = branch_prompt_card(branch)
+    assert "mechanism_ids=existing_probe,bounded_assignment_probe" in card
+    assert "direction=solver_design:_Refine_the_bounded_assignment_probe." in card
+
+
+def test_explore_pipeline_persists_verified_hypothesis_identity() -> None:
+    branch = Branch(
+        branch_id="active-identity",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Refine the bounded assignment probe.",
+        change_locus="solver_design",
+        action="modify",
+        mechanism_changes=(
+            MechanismChange(id="bounded_assignment_probe", change_type="modify"),
+        ),
+    )
+    persisted: list[str] = []
+    pipeline = ExploreStepPipeline(
+        branch_controller=None,
+        contract_gate=None,
+        verification_gate=None,
+        hypothesis_store=None,
+        registry=None,
+        campaign_id="camp-1",
+        get_champion=lambda: None,
+        pending_hypotheses={},
+        branch_hypotheses={},
+        branch_patches={},
+        branch_current_hypothesis={},
+        branch_workspaces={},
+        failure_streak={},
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        generate_hypothesis=lambda _branch: (None, None),
+        generate_code=lambda *_args, **_kwargs: None,
+        attempt_fix=lambda *_args, **_kwargs: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_step=lambda _step: None,
+        setup_workspace=lambda _branch: None,
+        apply_patch=lambda *_args, **_kwargs: None,
+        record_verification_pass=lambda *_args, **_kwargs: None,
+        archive_failed_workspace=lambda *_args, **_kwargs: None,
+        evaluate=lambda *_args, **_kwargs: (None, None, None),
+        apply_decision_and_finalize=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args, **_kwargs: None,
+        persist_branch_state=lambda branch_id: persisted.append(branch_id),
+    )
+
+    pipeline.record_verified_hypothesis_identity(branch, hypothesis)
+
+    assert branch.branch_mechanism_ids == ("bounded_assignment_probe",)
+    assert persisted == ["active-identity"]
+    updates: list[dict] = []
+    pipeline.update_status_progress = lambda payload: updates.append(payload)
+    pipeline._emit_status_progress(
+        branch,
+        phase="formal_screening",
+        round_num=1,
+        hypothesis=hypothesis,
+    )
+    payload = updates[0]
+    assert payload["mechanism_ids"] == ["bounded_assignment_probe"]
+    assert payload["branch_mechanism_ids"] == ["bounded_assignment_probe"]
+    assert "mechanism_ids=bounded_assignment_probe" in branch_prompt_card(branch)
 
 
 def test_activation_missing_outcome_requires_repair_even_if_status_is_clean() -> None:
