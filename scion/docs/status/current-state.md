@@ -71,9 +71,12 @@ history when exact old chronology is needed.
   carried `large_instance_intra_route_two_opt_seed`, but the in-progress branch
   card still reported `mechanism_ids=none` / `open_exploration`. Local commit
   `16227337` persists verified hypothesis mechanism identity onto the branch
-  after verification pass; focused local branch/scheduler/verification/finalizer
-  tests pass (`116 passed`). Do not sync this commit to WSL until the live run
-  is no longer using that checkout.
+  after verification pass; local commit `d5c7c6e7` narrows that projection so it
+  does not set `branch.direction` or mark a clean `CONTINUE_EXPLORE` branch as
+  established. Focused local regression, branch/scheduler/verification/finalizer,
+  and combined scheduler/context tests pass (`75 passed`, `116 passed`,
+  `147 passed`), plus py-compile and diff checks. Do not sync these commits to
+  WSL until the live run is no longer using that checkout.
 
 ## Current Decision
 
@@ -101,8 +104,10 @@ history when exact old chronology is needed.
   launched from WSL commit `9b1db176` after strict launch readiness passed.
   Early live evidence shows Design K's problem-owned guidance reaching
   proposal/code, but the branch card did not persist the verified mechanism
-  identity; local commit `16227337` fixes that generic projection gap and still
-  needs WSL sync/validation after the live run finishes.
+  identity; local commit `16227337` fixes that generic projection gap, and
+  local commit `d5c7c6e7` keeps the fix from polluting established-branch
+  scheduling semantics. Both still need WSL sync/validation after the live run
+  finishes.
   The warehouse champion-`v2` positive-control root
   `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-9b1db176-current-8r-gpt55-20260623T115446Z-claw`
   is prepared-only and strict launch-ready, but not launched while the CVRP
@@ -371,8 +376,8 @@ CVRP solver-depth old-checkout root:
   solver-depth follow-up root
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-mechfollowup-readyfix-6r-gpt55-20260623T115013Z-claw`
   is now running from WSL commit `9b1db176` after strict launch readiness
-  passed. Treat its in-progress branch-card mechanism fields as pre-`16227337`
-  projection evidence, not as accepted final Design K behavior.
+  passed. Treat its in-progress branch-card mechanism fields as pre-`16227337` /
+  pre-`d5c7c6e7` projection evidence, not as accepted final Design K behavior.
 
 CVRP evidence root:
 
@@ -803,9 +808,9 @@ CVRP/VRP:
    `9b1db176`; continue CVRP as problem-owned solver research, interpret
    effects against MDE, and do not add VRP/CVRP exceptions to generic scheduler,
    proposal authority, actionability, projection, or `DecisionFeatures`. After
-   the live run finishes, sync local commit `16227337` to WSL, validate it with
-   conda tests, and decide whether a short rerun is needed for accepted Design K
-   branch-card/scheduler evidence.
+   the live run finishes, sync local commits `16227337` and `d5c7c6e7` to WSL,
+   validate them with conda tests, and decide whether a short rerun is needed
+   for accepted Design K branch-card/scheduler evidence.
 3. Launch the prepared warehouse champion-`v2` positive-control root from the
    same synchronized WSL head after the CVRP follow-up is no longer competing
    for live LLM/runtime resources. Do not accept the latest quality-blocked
