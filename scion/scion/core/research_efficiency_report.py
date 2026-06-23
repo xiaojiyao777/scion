@@ -975,7 +975,6 @@ def _research_continuity_metrics(
     semantic_block_total = sum(semantic_block_counts.values())
     semantic_gap_count = max(
         0,
-        lesson_requirements - lessons_satisfied,
         semantic_failure_total,
         semantic_block_total,
     )

@@ -266,7 +266,12 @@ Warehouse APS retry evidence root:
   guard, and APS quality-feedback recovery are now verified under live provider
   traces. The run is not a promotion result; it is a valid partial warehouse
   research result showing no positive effect at or above MDE in the screened
-  rows and a fail-closed plateau/quality-guidance stop.
+  rows and a fail-closed plateau/quality-guidance stop. A temporary postrun
+  acceptance rebuild with the current actionability classifier reports
+  `actionability_gaps=[]`, `same_mechanism_missed=0`,
+  `branch_lesson_semantic_gap_count=0`, and
+  `accepted_clean_fork_policy_choice_count=4`, so the old same-mechanism
+  actionability gap is not a live warehouse blocker.
 
 CVRP evidence root:
 

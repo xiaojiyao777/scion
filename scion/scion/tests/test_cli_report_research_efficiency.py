@@ -235,6 +235,41 @@ def test_research_efficiency_report_counts_branch_lesson_semantic_failures_as_ga
     assert lessons["semantic_gap_rate"] == 1.0
 
 
+def test_research_efficiency_report_ignores_global_requirement_projection_gap(
+    tmp_path,
+):
+    campaign_dir = _write_research_efficiency_observability_fixture(
+        tmp_path,
+        {
+            "schema_version": "cross_branch_research_observability.v1",
+            "policy": "proposal_observability_only",
+            "decision_input_policy": "excluded_from_decision_features",
+            "branch_lesson_usage_requirement_count": 7,
+            "branch_lesson_usage_present_count": 3,
+            "branch_lesson_usage_satisfied_count": 3,
+            "branch_lesson_usage_missing_block_count": 0,
+            "branch_lesson_usage_metadata_only_count": 0,
+            "branch_lesson_usage_linkage_unrecognized_count": 0,
+            "branch_lesson_usage_semantic_mismatch_count": 0,
+        },
+    )
+
+    result = runner.invoke(
+        app,
+        ["report", "research-efficiency", "--campaign-dir", str(campaign_dir)],
+    )
+
+    assert result.exit_code == 0, result.output
+    lessons = json.loads(result.output)["research_continuity"][
+        "branch_lesson_usage"
+    ]
+    assert lessons["requirement_count"] == 7
+    assert lessons["satisfied_count"] == 3
+    assert lessons["semantic_failure_counts"] == {}
+    assert lessons["semantic_gap_count"] == 0
+    assert lessons["semantic_gap_rate"] == 0.0
+
+
 def test_research_efficiency_report_reclassifies_legacy_clean_fork_miss(
     tmp_path,
 ):

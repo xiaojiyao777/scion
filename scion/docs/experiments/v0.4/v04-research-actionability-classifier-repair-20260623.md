@@ -24,14 +24,14 @@ scheduler, Protocol, promotion, or `DecisionFeatures` state.
   the accepted clean-fork policy-choice diagnostic count in summary/status
   observability.
 - `scion/scion/core/research_efficiency_report.py` computes branch-lesson
-  semantic gaps from active requirements and explicit semantic failure/block
-  counts instead of `present_count - satisfied_count`.
+  semantic gaps from explicit semantic failure/block counts instead of
+  `present_count - satisfied_count` or global requirement projection deltas.
 - Completed summaries with older same-mechanism counters can be reclassified
   from their step scheduler metadata during report generation.
 
-## Validation Root
+## Validation Roots
 
-Source root:
+CVRP source root:
 
 `/home/clawd/research/scion-experiments/v04-cvrp-authority-542d1f99-postweakpressure-4r-gpt55-20260623T055230Z-claw`
 
@@ -50,6 +50,26 @@ This changes only the delegated-review/actionability interpretation. The root
 remains framework evidence rather than solver progress: champion stayed `v1`,
 there were 0 promotions, and the current Protocol rows remained below CVRP MDE.
 
+Warehouse source root:
+
+`/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-60029d30-apsretry-6r-gpt55-20260622T014615Z-claw`
+
+A temporary WSL postrun acceptance rebuild using conda `scion` also completed
+all families and reported:
+
+- `actionability_gaps=[]`
+- `same_mechanism_selected=6`
+- `same_mechanism_observed=6`
+- `same_mechanism_missed=0`
+- `branch_lesson_semantic_gap_count=0`
+- `branch_lesson_semantic_failure_count=0`
+- `accepted_clean_fork_policy_choice_count=4`
+
+The warehouse root remains current-run-ready partial evidence, not a completed
+continuous-optimization conclusion: it stopped at
+`repeated_quality_block_signature`, champion stayed `v2`, and no promotion was
+made in that run.
+
 ## Tests
 
 Local focused checks:
@@ -64,7 +84,7 @@ PYTHONPATH=scion python -m pytest -q \
   -k 'research_context_actionability or branch_lesson or same_mechanism or research_continuity or cross_branch_observability or research_efficiency_report'
 ```
 
-Result: `27 passed, 119 deselected`.
+Result: `28 passed, 119 deselected`.
 
 ```bash
 python -m py_compile \

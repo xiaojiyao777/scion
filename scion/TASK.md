@@ -479,7 +479,9 @@ Current checkpoint:
     finished with wrapper/postrun exit `0`. It is current-run-ready partial
     evidence: 3 effective rounds, 5 screening rows, 0 promotions,
     `champion_version=2`, and fail-closed stop on repeated quality-block
-    signature after fresh APS retry behavior was observed.
+    signature after fresh APS retry behavior was observed. A temporary rebuild
+    with the current actionability classifier reports empty actionability gaps,
+    so the old same-mechanism gap is no longer a live warehouse blocker.
   - CVRP post-repair evidence root:
     `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2e1bc5ae-postrepair-4r-gpt55-20260622T021910Z-claw`
     launched from WSL commit `2e1bc5ae`, passed strict launch readiness, and
