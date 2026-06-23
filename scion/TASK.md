@@ -2,50 +2,32 @@
 
 *Branch: `codex/v04-evidence-repair-plan`*
 *Status: v0.4 framework/readiness/launcher repairs are accepted enough for
-focused warehouse and CVRP follow-up, but v0.4 is not closed until Scion
-demonstrates stable effective research behavior. WSL `gpt-5.5` auth has
-recovered. Warehouse has renewed positive movement from champion `v2` to `v3`,
-and the latest warehouse APS retry root is current-run postrun-ready partial
-evidence. CVRP rank-gap, route-pressure, forced-local, required-intra-two-opt,
-and missing-primary roots are current-run-ready rejection or repair evidence,
-not solver improvements. The CVRP missing-primary run from WSL commit
-`8d28bc30` verified the feedback-tier repair but stopped after 3 of 4 requested
-rounds with `last_stop_reason=scheduler_active_slot_blocked`; copied/resumed
-weak-positive branches consumed all active slots while the current branch was
-inactive diagnostic evidence. The clean scheduler-status validation root from
-WSL commit `d0dded44`,
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-schedstatus-d0dded44-clean-missingprimary-4r-gpt55-20260623T025241Z-claw`,
-is accepted current-run-ready evidence for that generic active-slot blocker:
-postrun acceptance exit `0`, 4 of 4 effective rounds,
-`last_stop_reason=max_rounds_exhausted`, and
-`scheduler_active_slot_blocked_attempts=0`. It is framework validation, not a
-solver improvement. The postweak-pressure CVRP continuity root from WSL commit
-`77f4abe7`,
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-continuity-77f4abe7-postweakpressure-4r-gpt55-20260623T051921Z-claw`,
-verified live `exploit_weak_positive` selection with
-`scheduler_active_slot_blocked_attempts=0`, but failed before Protocol rows
-because prepared target-intent required-mechanism authority conflicted with
-existing branch-local protected mechanism authority. This is Design G
-framework failure evidence, not solver evidence. In the current worktree,
+focused warehouse and CVRP follow-up, but v0.4 is not closed until Scion shows
+stable effective research behavior rather than only framework validation.
+WSL `gpt-5.5` auth has recovered. Warehouse has renewed positive movement from
+champion `v2` to `v3`, and the latest warehouse APS retry root is current-run
+postrun-ready partial evidence. CVRP rank-gap, route-pressure, forced-local,
+required-intra-two-opt, missing-primary, scheduler-status, and target-intent
+authority roots are current-run-ready rejection or repair evidence, not solver
+improvements. In the current worktree,
 `scion/design/v0.4-effective-research-repair-design.md` Designs A-G are
-implemented and focused-tested: scheduler, active-slot inventory, and branch
-cards consume one problem-neutral scheduling-status model; prepared manifests
-carry typed `ResearchGuidanceContract` payloads; generic context/readiness code
-validates schema and rendered-path coverage; free-form `opportunity_diagnostics`
-text no longer creates actionable-loss fresh-runtime lifecycle or scheduler
-pressure; lifecycle policy blocks, live campaign attempt accounting, and
-agentic proposal failure routing require typed or exact machine-readable
-signals; runtime-evidence completeness pressure now yields to current
-weak-positive follow-up when there is no case-level loss; target-intent
-authority resolves prepared required mechanisms against existing branch-local
-protected/allowed mechanism authority before final hypothesis generation; and
-CVRP/warehouse semantics stay in problem-owned providers/tests. Local focused
-target-intent/proposal tests passed at head `ac33df06` (`121 passed`); WSL head
-`542d1f99` passed the pre-tightening target-intent/proposal set (`118 passed`)
-and is running the authority validation root
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-authority-542d1f99-postweakpressure-4r-gpt55-20260623T055230Z-claw`, which has crossed target intent,
-branch-local formal hypothesis/code, and formal solver evaluation startup but
-is not postrun-accepted evidence until it finishes.*
+implemented and focused-tested: scheduling status, research-guidance contracts,
+context/readiness schema checks, typed opportunity/lifecycle/failure routing,
+weak-positive runtime-pressure follow-up, and target-intent authority all stay
+problem-neutral while CVRP/warehouse semantics remain problem-owned. Local and
+WSL conda `scion` focused target-intent/proposal tests pass at the tightened
+semantics (`121 passed`). The authority validation root launched from WSL
+commit `542d1f99`,
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-authority-542d1f99-postweakpressure-4r-gpt55-20260623T055230Z-claw`,
+is now accepted Design G framework evidence: wrapper/postrun exit `0`, postrun
+acceptance `ready`, validity `valid`, completeness `complete`, 4 of 4
+effective Protocol rows, 0 proposal quality blocks, 0 active-slot blocks, and
+`last_stop_reason=max_rounds_exhausted`. It shows branch-local weak-positive
+follow-up can reach target intent, formal hypothesis/code, Protocol screening,
+evidence-backed abandon, expanded screening, and same-branch continuation. It
+does not show solver progress: champion remains `v1`, there are 0 promotions,
+and all four current rows have median effect at or below 0 with CI high below
+the CVRP MDE.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -585,19 +567,23 @@ Current checkpoint:
     that conflict with same-mechanism guards. The postweak-pressure continuity
     root is the failure evidence, not solver evidence:
     `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-continuity-77f4abe7-postweakpressure-4r-gpt55-20260623T051921Z-claw`.
-    Local head `ac33df06` focused target-intent/proposal tests passed
-    (`121 passed`); WSL head `542d1f99` passed the pre-tightening focused set
-    (`118 passed`) and is running authority validation root
+    Local head `ac33df06` and the synchronized WSL semantic-tightening head
+    passed focused target-intent/proposal tests (`121 passed`). The validation
+    root launched earlier from WSL head `542d1f99`
     `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-authority-542d1f99-postweakpressure-4r-gpt55-20260623T055230Z-claw`.
-    The active validation root has crossed target-intent preflight,
-    branch-local formal hypothesis binding, code generation, and formal solver
-    evaluation startup with no proposal quality blocks or active-slot blocks so
-    far, but it is not postrun-accepted evidence until it finishes. Detailed
-    failure report:
-    `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-conflict-20260623.md`.
-  - Latest clean WSL authority validation sync before local tightening:
-    local commit `43c090fe` was applied to WSL as head `542d1f99`; do not sync
-    local head `ac33df06` until the active validation root finishes.
+    The root finished current-run-ready with wrapper/postrun exit `0`, postrun
+    acceptance `ready`, validity `valid`, completeness `complete`, 4 of 4
+    effective Protocol rows, 0 proposal quality blocks, 0 active-slot blocks,
+    and `last_stop_reason=max_rounds_exhausted`. It accepts Design G as a
+    generic proposal-control repair: live `exploit_weak_positive` follow-up
+    reached branch-local target intent, formal hypothesis/code generation, and
+    Protocol screening instead of cycling between target-intent binding and
+    same-mechanism guards. It is still not solver progress: champion remained
+    `v1`, there were 0 promotions, and all current rows were below MDE.
+    Detailed reports:
+    `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-conflict-20260623.md`
+    and
+    `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-validation-20260623.md`.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded
