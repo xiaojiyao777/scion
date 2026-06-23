@@ -525,6 +525,11 @@ Current checkpoint:
     `RepairPolicyCheck.detail` violation parsing, including agentic wrappers,
     so repair-first/lifecycle policy blocks remain structured but free-form
     keyword prose does not suppress failures.
+  - Live CampaignLoop attempt accounting is implemented in the current
+    worktree: non-counting steps no longer infer lifecycle, repair,
+    same-family, or schema-quality control kinds from `StepResult.reason`
+    prose. Producers must set typed `attempt_kind`; reason text remains
+    reporting material.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

@@ -627,25 +627,6 @@ def _attempt_kind(result: StepResult) -> str:
         return "reconcile_lifecycle"
     if _is_scheduler_active_slot_blocked(result):
         return "scheduler_active_slot_blocked"
-    reason = str(getattr(result, "reason", "") or "").lower()
-    if "branch_lifecycle_policy_violation" in reason:
-        return "branch_lifecycle_policy"
-    if "repair_first_policy_violation" in reason:
-        return "telemetry_repair"
-    if (
-        "telemetry_validation_repairable" in reason
-        or "validation_telemetry_repairable" in reason
-    ):
-        if "validation" in reason:
-            return "validation_repair_required"
-        return "telemetry_repairable"
-    if "same_family" in reason or "semantic retry" in reason:
-        return "same_family_retry"
-    if (
-        "schema_quality_block" in reason
-        or "mechanism_changes_duplicate_id_conflict" in reason
-    ):
-        return "schema_quality_block"
     if _is_soft_proposal_diagnostic(result):
         return "proposal_diagnostic"
     return "proposal_block"

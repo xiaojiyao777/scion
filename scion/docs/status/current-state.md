@@ -21,8 +21,8 @@ history when exact old chronology is needed.
   decorative gates. Keep CVRP/warehouse semantics problem-owned and keep
   `DecisionFeatures` problem-neutral.
 - Current design gate: the generic scheduling-status repair, Design B
-  research-guidance contract migration, and typed fresh-runtime opportunity
-  signal plus lifecycle policy-block cleanup in
+  research-guidance contract migration, typed fresh-runtime opportunity signal,
+  typed lifecycle policy-block cleanup, and typed live attempt accounting in
   `scion/design/v0.4-effective-research-repair-design.md` are implemented and
   focused-tested in the current worktree. Scheduler, active-slot inventory, and
   branch cards share one problem-neutral scheduling-status model. Prepared
@@ -36,7 +36,10 @@ history when exact old chronology is needed.
   Free-form `opportunity_diagnostics` text remains proposal/reporting material
   and no longer creates actionable-loss fresh-runtime lifecycle or scheduler
   pressure without structured phase or reason-code signal. No CVRP-specific
-  scheduler or projection exception is accepted.
+  scheduler or projection exception is accepted. Live `CampaignLoop`
+  accounting now relies on explicit `StepResult.attempt_kind` or existing
+  structured scheduler/reconcile signals, not `reason` prose, when classifying
+  lifecycle, repair, same-family, or schema-quality attempts.
 
 ## Current Decision
 
