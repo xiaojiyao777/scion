@@ -15,8 +15,10 @@ focused validation passes (`108 passed`) plus
 `git diff --check`. The WSL reverse SSH tunnel is restored, the current local
 repair files were synced to the WSL runner worktree, and WSL conda `scion`
 focused validation also passes (`108 passed`). The next resume point is to
-launch/inspect the prepared warehouse positive-control and CVRP follow-up runs
-from the recorded local/WSL sync points for effective research behavior.*
+monitor the still-running CVRP root that launched from old WSL commit
+`9b1db176`, treat it as caveated because the runner worktree was synced while
+the process was live, then launch/inspect fresh warehouse and CVRP follow-up
+runs from the recorded local/WSL sync points for effective research behavior.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled

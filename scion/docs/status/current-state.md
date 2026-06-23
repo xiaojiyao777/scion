@@ -56,6 +56,11 @@ chronology belongs in focused experiment reports and git history.
   local runtime-semantics repairs are synchronized and validated on WSL.
 - The next operational action is to inspect or launch the prepared warehouse
   positive-control and CVRP follow-up runs from the recorded sync points.
+- A CVRP solver-depth follow-up process is currently still running on WSL from
+  the older launch commit `9b1db176`. Because the runner worktree was synced
+  while that process was live, treat that root as caveated live-run evidence and
+  do not launch warehouse concurrently. Wait for it to finish, run postrun
+  checks, then launch fresh roots from the recorded sync point.
 
 ## WSL Runner
 
@@ -120,10 +125,12 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 
 ## Next Actions
 
-1. Launch or inspect the prepared warehouse
-   positive-control root and the next CVRP follow-up from the synchronized
-   checkout.
-2. Evaluate runs for effective research behavior: warehouse continuous
+1. Monitor the live CVRP root launched from `9b1db176` until it exits, then run
+   postrun checks with the caveat that the worktree was synced during the live
+   process.
+2. Launch the warehouse positive-control root from the recorded sync point after
+   the live CVRP run is no longer active.
+3. Evaluate runs for effective research behavior: warehouse continuous
    optimization, CVRP branch depth and solver-design follow-up, MDE-aware
    rejection, and absence of framework-control blockers.
 
