@@ -41,9 +41,14 @@ projection gap: the active hypothesis/code path carried
 verified hypothesis mechanism identity on the branch after verification pass,
 and local commit `d5c7c6e7` narrows that projection so it no longer sets
 `branch.direction` or marks an ordinary clean `CONTINUE_EXPLORE` branch as
-established. Local focused regression, branch/scheduler/verification/finalizer,
-and combined scheduler/context tests pass (`75 passed`, `116 passed`,
-`147 passed`), plus py-compile and diff checks. These repairs are not yet
+established. The same live root then showed a required mechanism-contract
+follow-up branch competing behind runtime-evidence clean-fork pressure before
+later returning to the required branch. Local commit `181601ae` makes required
+branch-local mechanism follow-up outrank that clean-fork pressure through the
+generic `BranchSchedulingStatus` contract. Local focused regression,
+branch/scheduler/verification/finalizer, mechanism-contract, and combined
+scheduler/context tests pass (`75 passed`, `116 passed`, `147 passed`,
+`221 passed`), plus py-compile and diff checks. These repairs are not yet
 synced to WSL while the live run is active. The
 authority validation root launched
 from WSL
@@ -88,7 +93,7 @@ The warehouse champion-`v2` positive-control root
 is prepared-only and strict launch-ready, but intentionally not started while
 the CVRP follow-up is live. Do not use the live root's branch-card mechanism
 fields as accepted Design K evidence without accounting for the local
-`16227337` / `d5c7c6e7` projection repairs.*
+`16227337` / `d5c7c6e7` / `181601ae` projection and scheduler-priority repairs.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -682,8 +687,12 @@ Current checkpoint:
     still reporting no mechanism id; local commit `16227337` fixes this generic
     verified-hypothesis-to-branch identity persistence, and local commit
     `d5c7c6e7` keeps that projection from setting `branch.direction` and
-    accidentally triggering established-branch portfolio expansion. Sync both
-    only after the live run is no longer using the WSL checkout.
+    accidentally triggering established-branch portfolio expansion. The same
+    live root has also shown that required mechanism-contract follow-up can run
+    after an intervening clean fork; local commit `181601ae` tightens the
+    generic scheduler so required branch-local mechanism follow-up is selected
+    before runtime-evidence clean-fork pressure. Sync these local repairs only
+    after the live run is no longer using the WSL checkout.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

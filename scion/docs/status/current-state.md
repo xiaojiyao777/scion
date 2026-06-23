@@ -73,9 +73,14 @@ history when exact old chronology is needed.
   `16227337` persists verified hypothesis mechanism identity onto the branch
   after verification pass; local commit `d5c7c6e7` narrows that projection so it
   does not set `branch.direction` or mark a clean `CONTINUE_EXPLORE` branch as
-  established. Focused local regression, branch/scheduler/verification/finalizer,
-  and combined scheduler/context tests pass (`75 passed`, `116 passed`,
-  `147 passed`), plus py-compile and diff checks. Do not sync these commits to
+  established. The live run then showed required mechanism-contract follow-up
+  returning to branch `86acfe43-fd3e-4b1b-80d9-e71989ac3298` after an
+  intervening clean fork; local commit `181601ae` tightens the generic
+  scheduler so required branch-local mechanism follow-up is selected before
+  runtime-evidence clean-fork pressure. Focused local regression,
+  branch/scheduler/verification/finalizer, mechanism-contract, and combined
+  scheduler/context tests pass (`75 passed`, `116 passed`, `147 passed`,
+  `221 passed`), plus py-compile and diff checks. Do not sync these commits to
   WSL until the live run is no longer using that checkout.
 
 ## Current Decision
@@ -106,8 +111,12 @@ history when exact old chronology is needed.
   proposal/code, but the branch card did not persist the verified mechanism
   identity; local commit `16227337` fixes that generic projection gap, and
   local commit `d5c7c6e7` keeps the fix from polluting established-branch
-  scheduling semantics. Both still need WSL sync/validation after the live run
-  finishes.
+  scheduling semantics. The live root has also reached two effective Protocol
+  rows and returned from clean-fork branch `adb2ed1b-9753-4260-84e3-c247ef59038d`
+  to required mechanism-contract follow-up on `86acfe43`; local commit
+  `181601ae` makes that required follow-up win scheduler priority before
+  clean-fork runtime pressure. These local repairs still need WSL
+  sync/validation after the live run finishes.
   The warehouse champion-`v2` positive-control root
   `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-9b1db176-current-8r-gpt55-20260623T115446Z-claw`
   is prepared-only and strict launch-ready, but not launched while the CVRP
@@ -808,9 +817,9 @@ CVRP/VRP:
    `9b1db176`; continue CVRP as problem-owned solver research, interpret
    effects against MDE, and do not add VRP/CVRP exceptions to generic scheduler,
    proposal authority, actionability, projection, or `DecisionFeatures`. After
-   the live run finishes, sync local commits `16227337` and `d5c7c6e7` to WSL,
-   validate them with conda tests, and decide whether a short rerun is needed
-   for accepted Design K branch-card/scheduler evidence.
+   the live run finishes, sync local commits `16227337`, `d5c7c6e7`, and
+   `181601ae` to WSL, validate them with conda tests, and decide whether a
+   short rerun is needed for accepted Design K branch-card/scheduler evidence.
 3. Launch the prepared warehouse champion-`v2` positive-control root from the
    same synchronized WSL head after the CVRP follow-up is no longer competing
    for live LLM/runtime resources. Do not accept the latest quality-blocked
