@@ -10,6 +10,7 @@ from scion.core.telemetry_validation import (
     telemetry_decision_details,
     telemetry_failure_categories,
 )
+from scion.proposal.runtime_aggregate_feedback import runtime_model_from_protocol
 from scion.proposal.tools.feedback.constants import (
     _RUNTIME_ATTRIBUTION_PRIORITY_SUFFIXES,
     _RUNTIME_ATTRIBUTION_SUFFIXES,
@@ -65,7 +66,10 @@ def _surface_runtime_attribution_payload(step: StepRecord) -> dict[str, Any]:
         "target_file": step.hypothesis.target_file,
         "gate_outcome": protocol.gate_outcome,
         "reason_codes": list(protocol.reason_codes),
-        "stats": _eval_stats_payload(protocol.stats),
+        "stats": _eval_stats_payload(
+            protocol.stats,
+            runtime_model=runtime_model_from_protocol(protocol),
+        ),
         "telemetry_guard_failed": formal_telemetry_guard_failed(protocol),
         "telemetry_failure_categories": list(telemetry_failure_categories(protocol)),
         "telemetry_failure_details": telemetry_details,

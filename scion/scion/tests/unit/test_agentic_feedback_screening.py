@@ -60,8 +60,8 @@ def test_feedback_query_screening_distinguishes_pair_and_case_win_rates(
     assert row["screening_pair_losses"] == 2
     assert row["screening_pair_ties"] == 12
     assert row["screening_pair_win_rate"] == 0.125
-    assert row["screening_feedback_tier"] == "weak_positive"
-    assert row["screening_feedback"]["tier"] == "weak_positive"
+    assert row["screening_feedback_tier"] == "inactive"
+    assert row["screening_feedback"]["tier"] == "inactive"
     assert row["case_feedback_summary"] == {
         "wins": 0,
         "losses": 0,
@@ -84,10 +84,9 @@ def test_feedback_query_screening_distinguishes_pair_and_case_win_rates(
     assert row["opportunity_diagnostics"] == ["primary mechanism did not trigger"]
     assert row["mechanism_evidence"]["primary_mechanism"] == "candidate_list"
     assert row["screening_feedback"]["runtime_confidence"] == "low_cached_champion"
+    assert row["screening_feedback"]["activation_status"] == "not_observed"
     assert row["screening_feedback"]["repeat_unchanged_allowed"] is False
-    assert "weak_positive is not promotable" in row["screening_feedback"][
-        "why_not_promoted"
-    ]
+    assert row["screening_feedback"]["why_not_promoted"] == "SCREENING_FAIL_WIN_RATE"
     assert "SECRET" not in rendered
     assert "raw_metrics_ref" not in rendered
 
@@ -149,17 +148,21 @@ def test_feedback_query_screening_marks_budget_exhausting_runtime_as_report_only
 
     assert summary.tier == "no_effect"
     assert row["screening_feedback_tier"] == "no_effect"
-    assert runtime_summary["runtime_regression_rate"] == 1.0
+    assert budget_exhausting_step.protocol_result.stats.runtime_regression_rate == 1.0
+    assert "runtime_regression_rate" not in runtime_summary
     assert runtime_summary["runtime_model"] == "budget_exhausting"
     assert (
         runtime_summary["runtime_regression_rate_interpretation"]
         == "not_applicable_budget_exhausting"
     )
+    assert "runtime_regression_rate" not in runtime_evidence
     assert runtime_evidence["runtime_model"] == "budget_exhausting"
     assert (
         runtime_evidence["runtime_regression_rate_interpretation"]
         == "not_applicable_budget_exhausting"
     )
+    assert "runtime_regression_rate" not in row["stats"]
+    assert row["stats"]["runtime_model"] == "budget_exhausting"
 
 
 def test_screening_feedback_exposes_bounded_phase_causal_summary(

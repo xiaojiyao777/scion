@@ -673,6 +673,8 @@ def _format_runtime_summary(summary: Mapping[str, Any]) -> str:
         "runtime_ratio_median",
         "runtime_delta_median_ms",
         "runtime_regression_rate",
+        "runtime_model",
+        "runtime_regression_rate_interpretation",
         "runtime_pairs",
     ):
         value = summary.get(key)

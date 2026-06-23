@@ -332,6 +332,7 @@ def update_branch_screening_evidence_summary(
     runtime_policy = runtime_evidence_policy_summary(
         runtime_confidence=summary["runtime_evidence_confidence"],
         runtime_evidence_status=summary["runtime_evidence_status"],
+        runtime_model=runtime_model,
         runtime_pairs=summary["runtime_pairs"],
         champion_cached_runtime_pairs=summary["runtime_cache"][
             "champion_cached_runtime_pairs"
@@ -624,6 +625,8 @@ def _runtime_evidence_pressure_count(
     current_summary: Mapping[str, Any],
     reason_codes: tuple[str, ...],
 ) -> int:
+    if not _runtime_evidence_pressure_applicable(current_summary):
+        return 0
     if not _runtime_evidence_pressure_detected(current_summary, reason_codes):
         return 0
     return (
@@ -646,6 +649,8 @@ def _runtime_evidence_pressure_observation(
     summary: Mapping[str, Any],
     reason_codes: tuple[str, ...],
 ) -> dict[str, Any]:
+    if not _runtime_evidence_pressure_applicable(summary):
+        return {}
     confidence = str(
         summary.get("runtime_evidence_confidence") or ""
     ).strip().lower()
@@ -690,6 +695,20 @@ def _runtime_evidence_pressure_observation(
         "runtime_signal_role": "audit_or_proposal_guidance_only",
         "standalone_optimization_signal": False,
     }
+
+
+def _runtime_evidence_pressure_applicable(summary: Mapping[str, Any]) -> bool:
+    return _runtime_evidence_pressure_runtime_model(summary) != "budget_exhausting"
+
+
+def _runtime_evidence_pressure_runtime_model(summary: Mapping[str, Any]) -> str:
+    runtime_model = runtime_model_from_summary(summary, default="")
+    if runtime_model:
+        return runtime_model
+    policy = summary.get("runtime_evidence_policy")
+    if isinstance(policy, Mapping):
+        return runtime_model_from_summary(policy, default="")
+    return ""
 
 
 def _plateau_gate_observation(

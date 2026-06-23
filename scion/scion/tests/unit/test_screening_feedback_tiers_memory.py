@@ -243,7 +243,7 @@ def test_screening_feedback_tiers_classify_external_aps_patterns() -> None:
         )
     ).tier == "quality_regression"
 
-    assert screening_feedback_summary(
+    comparative_runtime = screening_feedback_summary(
         _protocol(
             case_wins=0,
             case_losses=0,
@@ -252,38 +252,43 @@ def test_screening_feedback_tiers_classify_external_aps_patterns() -> None:
             runtime_ratio_median=1.18,
             runtime_regression_rate=1.0,
         )
-    ).tier == "runtime_regression"
+    )
+    assert comparative_runtime.tier == "runtime_regression"
+    assert (
+        comparative_runtime.runtime_summary_payload()["runtime_regression_rate"]
+        == 1.0
+    )
 
 
 def test_budget_exhausting_runtime_rate_does_not_drive_screening_tier() -> None:
-    summary = screening_feedback_summary(
-        _protocol(
-            case_wins=0,
-            case_losses=0,
-            case_ties=8,
-            runtime_delta_median_ms=29.0,
-            runtime_ratio_median=1.18,
-            runtime_regression_rate=1.0,
-            candidate_surface_runtime_summary={
-                "runtime_budget_diagnostic": {
-                    "runtime_model": "budget_exhausting",
-                    "severity": "info",
-                },
+    protocol = _protocol(
+        case_wins=0,
+        case_losses=0,
+        case_ties=8,
+        runtime_delta_median_ms=29.0,
+        runtime_ratio_median=1.18,
+        runtime_regression_rate=1.0,
+        candidate_surface_runtime_summary={
+            "runtime_budget_diagnostic": {
+                "runtime_model": "budget_exhausting",
+                "severity": "info",
             },
-        )
+        },
     )
+    summary = screening_feedback_summary(protocol)
 
     assert summary.tier == "no_effect"
     runtime_summary = summary.runtime_summary_payload()
-    assert runtime_summary["runtime_regression_rate"] == 1.0
+    assert protocol.stats.runtime_regression_rate == 1.0
+    assert "runtime_regression_rate" not in runtime_summary
     assert runtime_summary["runtime_model"] == "budget_exhausting"
     assert (
         runtime_summary["runtime_regression_rate_interpretation"]
         == "not_applicable_budget_exhausting"
     )
-    assert summary.phase_causal_summary["runtime_evidence"]["runtime_model"] == (
-        "budget_exhausting"
-    )
+    runtime_evidence = summary.phase_causal_summary["runtime_evidence"]
+    assert "runtime_regression_rate" not in runtime_evidence
+    assert runtime_evidence["runtime_model"] == "budget_exhausting"
 
 
 def test_two_case_runtime_noise_is_low_confidence_not_runtime_regression() -> None:

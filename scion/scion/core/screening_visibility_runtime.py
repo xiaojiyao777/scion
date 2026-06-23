@@ -100,6 +100,7 @@ def runtime_evidence_policy_summary(
     *,
     runtime_confidence: Any = "",
     runtime_evidence_status: Any = "",
+    runtime_model: Any = "",
     runtime_pairs: Any = 0,
     champion_cached_runtime_pairs: Any = 0,
     runtime_aggregate_excluded: Any = False,
@@ -113,11 +114,13 @@ def runtime_evidence_policy_summary(
 
     confidence = str(runtime_confidence or "").strip().lower() or "unknown"
     status = str(runtime_evidence_status or "").strip().lower() or "unknown"
+    model = str(runtime_model or "").strip().lower()
     runtime_pair_count = _safe_int(runtime_pairs)
     cached_pair_count = _safe_int(champion_cached_runtime_pairs)
     candidate_pair_count = _safe_int(candidate_runtime_pair_evidence_count)
     aggregate_excluded = bool(runtime_aggregate_excluded)
-    fresh_required = status in _FRESH_RUNTIME_STATUSES
+    budget_exhausting = model == "budget_exhausting"
+    fresh_required = status in _FRESH_RUNTIME_STATUSES and not budget_exhausting
     low_confidence = (
         confidence in _LOW_RUNTIME_CONFIDENCES
         or confidence.startswith("low")
@@ -133,23 +136,49 @@ def runtime_evidence_policy_summary(
         or low_confidence
         or incomplete_status
         or aggregate_excluded
+        or budget_exhausting
     )
     reason_codes: list[str] = []
-    if low_confidence:
+    if budget_exhausting:
+        reason_codes.append("RUNTIME_BUDGET_EXHAUSTING_OBSERVATIONAL")
+    if low_confidence and not budget_exhausting:
         reason_codes.append("RUNTIME_EVIDENCE_LOW_OR_CACHED_CONFIDENCE")
     if fresh_required:
         reason_codes.append("RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED")
-    elif incomplete_status:
+    elif incomplete_status and not budget_exhausting:
         reason_codes.append("RUNTIME_EVIDENCE_INCOMPLETE")
     if aggregate_excluded:
         reason_codes.append("RUNTIME_AGGREGATE_EXCLUDED")
     if not reason_codes:
         reason_codes.append("RUNTIME_EVIDENCE_SUPPORTING_SIGNAL_ONLY")
+    if budget_exhausting:
+        proposal_guidance = (
+            "Budget-exhausting runtime aggregates are observational under "
+            "saturation/tie semantics; no fresh champion runtime is required "
+            "by that runtime model, and runtime evidence remains non-standalone."
+        )
+    elif low_or_incomplete:
+        proposal_guidance = (
+            "Do not use runtime evidence as a standalone optimization signal; "
+            "require fresh or non-runtime objective evidence before planning from "
+            "this runtime signal."
+        )
+    else:
+        proposal_guidance = (
+            "Runtime evidence is supporting tie-break evidence, not a standalone "
+            "optimization signal."
+        )
     return _drop_empty(
         {
             "schema_version": "runtime_evidence_policy.v1",
             "runtime_evidence_confidence": confidence,
             "runtime_evidence_status": status,
+            "runtime_model": model or None,
+            "runtime_model_interpretation": (
+                "budget_exhausting_runtime_aggregates_observational_not_standalone"
+                if budget_exhausting
+                else None
+            ),
             "runtime_pairs": runtime_pair_count,
             "champion_cached_runtime_pairs": cached_pair_count,
             "candidate_runtime_pair_evidence_count": candidate_pair_count,
@@ -162,14 +191,7 @@ def runtime_evidence_policy_summary(
                 else "tie_break_supporting_signal"
             ),
             "policy_reason_codes": reason_codes,
-            "proposal_guidance": (
-                "Do not use runtime evidence as a standalone optimization "
-                "signal; require fresh or non-runtime objective evidence before "
-                "planning from this runtime signal."
-                if low_or_incomplete
-                else "Runtime evidence is supporting tie-break evidence, not a "
-                "standalone optimization signal."
-            ),
+            "proposal_guidance": proposal_guidance,
             "proposal_guidance_only": True,
             "decision_features_excluded": True,
         }
@@ -335,6 +357,7 @@ def runtime_evidence_policy_for_protocol(protocol: Any) -> dict[str, Any]:
             "runtime_evidence_status",
             getattr(stats, "runtime_evidence_status", ""),
         ),
+        runtime_model=_runtime_model_from_protocol(protocol),
         runtime_pairs=getattr(stats, "runtime_pairs", 0),
         champion_cached_runtime_pairs=getattr(
             protocol,
@@ -422,6 +445,19 @@ def _runtime_budget_diagnostic_from_protocol(protocol: Any) -> Mapping[str, Any]
         return {}
     diagnostic = surface.get("runtime_budget_diagnostic")
     return diagnostic if isinstance(diagnostic, Mapping) else {}
+
+
+def _runtime_model_from_protocol(protocol: Any) -> str:
+    surface = getattr(protocol, "candidate_surface_runtime_summary", None)
+    if not isinstance(surface, Mapping):
+        return ""
+    diagnostic = surface.get("runtime_budget_diagnostic")
+    if isinstance(diagnostic, Mapping):
+        text = str(diagnostic.get("runtime_model") or "").strip()
+        if text in {"comparative", "budget_exhausting"}:
+            return text
+    text = str(surface.get("runtime_model") or "").strip()
+    return text if text in {"comparative", "budget_exhausting"} else ""
 
 
 def _status_value(value: Any) -> str:

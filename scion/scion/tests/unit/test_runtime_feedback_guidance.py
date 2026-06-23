@@ -245,6 +245,68 @@ def test_runtime_feedback_downgrades_low_cached_runtime_saturation() -> None:
     assert "`runtime_budget_strategy`" not in feedback
 
 
+def test_runtime_feedback_budget_exhausting_low_cached_is_observational() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Try a runtime diagnostic follow-up.",
+        target_weakness="Runtime evidence was excluded.",
+        expected_effect="Improve runtime observability.",
+        change_locus="solver_design",
+        target_file="policies/baseline_algorithm.py",
+        action="modify",
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+            runtime_pairs=0,
+            valid_pairs=4,
+        ),
+        gate_outcome="fail",
+        reason_codes=(SCREENING_RUNTIME_BUDGET_SATURATION,),
+        exposed_summary="runtime aggregate excluded",
+        raw_metrics_ref="internal/metrics.json",
+        champion_cached_runtime_pairs=4,
+        runtime_confidence="low_cached_champion",
+        runtime_evidence_status="insufficient",
+        candidate_surface_runtime_summary={
+            "runtime_budget_diagnostic": {
+                "code": SCREENING_RUNTIME_BUDGET_SATURATION,
+                "runtime_model": "budget_exhausting",
+                "stage": "screening",
+                "total_pairs": 4,
+            }
+        },
+    )
+    step = StepRecord(
+        round_num=7,
+        branch_id="branch-budget-exhausting-runtime",
+        hypothesis=hypothesis,
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=protocol,
+        decision=Decision.CONTINUE_EXPLORE,
+        failure_stage=None,
+        failure_detail=None,
+    )
+
+    feedback = _build_runtime_feedback([step])
+
+    assert "Low-confidence runtime evidence advisory" in feedback
+    assert "runtime_model=budget_exhausting" in feedback
+    assert "budget-exhausting runtime aggregates as observational" in feedback
+    assert "no fresh champion runtime is required" in feedback
+    assert "need fresh champion runtime before runtime-based conclusions" not in feedback
+    assert "Recent runtime budget saturation diagnostics" not in feedback
+
+
 def test_runtime_feedback_keeps_fresh_high_confidence_saturation_guidance() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text="Try a bounded fresh-runtime follow-up.",

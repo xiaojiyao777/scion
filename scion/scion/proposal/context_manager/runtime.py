@@ -12,6 +12,7 @@ from scion.proposal.context.feedback import (
     _first_line,
 )
 from scion.proposal.context.surfaces import _coerce_text_list, _get_research_surfaces
+from scion.proposal.runtime_aggregate_feedback import runtime_model_from_protocol
 
 _RUNTIME_ACTIONABLE_SLOW_RATIO = 1.10
 _RUNTIME_ACTIONABLE_SLOW_DELTA_MS = 5.0
@@ -95,7 +96,7 @@ def _build_runtime_feedback(
                 strong_runtime_actionable = True
             if step.protocol_result.stats.runtime_pairs > 0 and len(summaries) < max_items:
                 st = step.protocol_result.stats
-                runtime_model = _protocol_runtime_model(step.protocol_result)
+                runtime_model = runtime_model_from_protocol(step.protocol_result)
                 regression_rate = (
                     "not_applicable_budget_exhausting"
                     if runtime_model == "budget_exhausting"
@@ -338,6 +339,7 @@ def _low_confidence_runtime_advisory_line(
 ) -> str:
     confidence = runtime_policy.get("runtime_evidence_confidence") or "unknown"
     status = runtime_policy.get("runtime_evidence_status") or "unknown"
+    runtime_model = str(runtime_policy.get("runtime_model") or "").strip()
     aggregate_excluded = str(
         bool(runtime_policy.get("runtime_aggregate_excluded"))
     ).lower()
@@ -346,29 +348,26 @@ def _low_confidence_runtime_advisory_line(
         "candidate_runtime_pair_evidence_count",
         0,
     )
+    model_part = f"runtime_model={runtime_model} " if runtime_model else ""
+    if runtime_model == "budget_exhausting":
+        guidance = (
+            "Treat budget-exhausting runtime aggregates as observational "
+            "non-standalone evidence under saturation/tie semantics; no fresh "
+            "champion runtime is required by this runtime model."
+        )
+    else:
+        guidance = (
+            "Treat runtime saturation/pressure as low-confidence advisory only; "
+            "need fresh champion runtime before runtime-based conclusions."
+        )
     return (
         f"- R{step.round_num} target={target}: "
         f"runtime_confidence={confidence} runtime_evidence_status={status} "
+        f"{model_part}"
         f"runtime_aggregate_excluded={aggregate_excluded} "
         f"champion_cached_runtime_pairs={cached_pairs} "
-        f"candidate_runtime_pair_evidence_count={candidate_pairs}. "
-        "Treat runtime saturation/pressure as low-confidence advisory only; "
-        "need fresh champion runtime before runtime-based conclusions."
+        f"candidate_runtime_pair_evidence_count={candidate_pairs}. {guidance}"
     )
-
-
-def _protocol_runtime_model(protocol: Any) -> str:
-    summary = getattr(protocol, "candidate_surface_runtime_summary", None)
-    if isinstance(summary, dict):
-        diagnostic = summary.get("runtime_budget_diagnostic")
-        if isinstance(diagnostic, dict):
-            text = str(diagnostic.get("runtime_model") or "").strip()
-            if text in {"comparative", "budget_exhausting"}:
-                return text
-        text = str(summary.get("runtime_model") or "").strip()
-        if text in {"comparative", "budget_exhausting"}:
-            return text
-    return ""
 
 
 def _build_runtime_failure_guidance(

@@ -17,6 +17,10 @@ from scion.core.models import (
     mechanism_changes,
 )
 from scion.proposal.context.branch_followup import branch_created_files
+from scion.proposal.runtime_aggregate_feedback import (
+    runtime_aggregate_feedback_payload,
+    runtime_model_from_protocol,
+)
 
 
 def build_branch_dossier(
@@ -138,7 +142,7 @@ def _timeline_item(step: StepRecord) -> dict[str, Any]:
                 else None
             ),
             "pair_summary": _pair_summary(protocol),
-            "runtime_summary": _runtime_summary(stats),
+            "runtime_summary": _runtime_summary(protocol),
         }
     )
 
@@ -177,7 +181,7 @@ def _best_screening_signal(steps: list[StepRecord]) -> dict[str, Any]:
                 "median_delta": stats.median_delta,
             },
             "pair_summary": _pair_summary(protocol),
-            "runtime_summary": _runtime_summary(stats),
+            "runtime_summary": _runtime_summary(protocol),
         }
     )
 
@@ -285,16 +289,18 @@ def _suggested_next_research_questions(
     return questions
 
 
-def _runtime_summary(stats: Any) -> dict[str, Any]:
+def _runtime_summary(protocol: Any) -> dict[str, Any]:
+    stats = getattr(protocol, "stats", None) if protocol is not None else None
     if stats is None:
         return {}
     return _drop_empty(
-        {
-            "runtime_ratio_median": getattr(stats, "runtime_ratio_median", None),
-            "runtime_delta_median_ms": getattr(stats, "runtime_delta_median_ms", None),
-            "runtime_regression_rate": getattr(stats, "runtime_regression_rate", None),
-            "runtime_pairs": getattr(stats, "runtime_pairs", 0),
-        }
+        runtime_aggregate_feedback_payload(
+            runtime_ratio_median=getattr(stats, "runtime_ratio_median", None),
+            runtime_delta_median_ms=getattr(stats, "runtime_delta_median_ms", None),
+            runtime_regression_rate=getattr(stats, "runtime_regression_rate", None),
+            runtime_model=runtime_model_from_protocol(protocol),
+            runtime_pairs=getattr(stats, "runtime_pairs", 0),
+        )
     )
 
 

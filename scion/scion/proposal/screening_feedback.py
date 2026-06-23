@@ -25,6 +25,11 @@ from scion.core.telemetry_validation import (
     telemetry_decision_details,
     telemetry_failure_categories,
 )
+from scion.proposal.runtime_aggregate_feedback import (
+    BUDGET_EXHAUSTING_RUNTIME_INTERPRETATION,
+    runtime_aggregate_feedback_payload,
+    runtime_model_from_protocol,
+)
 
 ScreeningFeedbackTier = Literal[
     "invalid",
@@ -132,16 +137,16 @@ class ScreeningFeedbackSummary:
         }
 
     def runtime_summary_payload(self) -> dict[str, Any]:
-        return {
-            "runtime_ratio_median": self.runtime_ratio_median,
-            "runtime_delta_median_ms": self.runtime_delta_median_ms,
-            "runtime_regression_rate": self.runtime_regression_rate,
-            "runtime_model": self.runtime_model,
-            "runtime_regression_rate_interpretation": (
+        return runtime_aggregate_feedback_payload(
+            runtime_ratio_median=self.runtime_ratio_median,
+            runtime_delta_median_ms=self.runtime_delta_median_ms,
+            runtime_regression_rate=self.runtime_regression_rate,
+            runtime_model=self.runtime_model,
+            runtime_regression_rate_interpretation=(
                 self.runtime_regression_rate_interpretation
             ),
-            "runtime_pairs": self.runtime_pairs,
-        }
+            runtime_pairs=self.runtime_pairs,
+        )
 
 
 def screening_feedback_summary(
@@ -169,9 +174,9 @@ def screening_feedback_summary(
         getattr(stats, "runtime_regression_rate", None)
     )
     runtime_pairs = _safe_int(getattr(stats, "runtime_pairs", 0))
-    runtime_model = _protocol_runtime_model(protocol)
+    runtime_model = runtime_model_from_protocol(protocol)
     runtime_regression_rate_interpretation = (
-        "not_applicable_budget_exhausting"
+        BUDGET_EXHAUSTING_RUNTIME_INTERPRETATION
         if runtime_model == "budget_exhausting"
         else None
     )
@@ -723,6 +728,19 @@ def _phase_causal_summary(
         summary = "screening evidence did not isolate a clear phase-to-objective cause"
         interpretation = "use bounded follow-up diagnostics before reusing the idea"
 
+    runtime_evidence = runtime_aggregate_feedback_payload(
+        runtime_ratio_median=runtime_ratio,
+        runtime_delta_median_ms=runtime_delta,
+        runtime_regression_rate=runtime_regression_rate,
+        runtime_model=runtime_model,
+        runtime_regression_rate_interpretation=(
+            runtime_regression_rate_interpretation
+        ),
+    )
+    runtime_evidence = {
+        "runtime_confidence": runtime_confidence,
+        **runtime_evidence,
+    }
     return {
         "schema_version": "phase_causal_summary.v1",
         "proposal_visibility_only": True,
@@ -751,32 +769,9 @@ def _phase_causal_summary(
             "gate_outcome": gate_outcome,
             "tier": tier,
         },
-        "runtime_evidence": {
-            "runtime_confidence": runtime_confidence,
-            "runtime_ratio_median": runtime_ratio,
-            "runtime_delta_median_ms": runtime_delta,
-            "runtime_regression_rate": runtime_regression_rate,
-            "runtime_model": runtime_model,
-            "runtime_regression_rate_interpretation": (
-                runtime_regression_rate_interpretation
-            ),
-        },
+        "runtime_evidence": runtime_evidence,
         "opportunity_status": opportunity_status,
     }
-
-
-def _protocol_runtime_model(protocol: ProtocolResult) -> str:
-    summary = getattr(protocol, "candidate_surface_runtime_summary", None)
-    if isinstance(summary, Mapping):
-        diagnostic = summary.get("runtime_budget_diagnostic")
-        if isinstance(diagnostic, Mapping):
-            text = str(diagnostic.get("runtime_model") or "").strip()
-            if text in {"comparative", "budget_exhausting"}:
-                return text
-        text = str(summary.get("runtime_model") or "").strip()
-        if text in {"comparative", "budget_exhausting"}:
-            return text
-    return ""
 
 
 def _phase_positive(

@@ -10,7 +10,10 @@ from scion.core.telemetry_validation import (
     telemetry_failure_categories,
 )
 from scion.core.models import StepRecord
-from scion.proposal.screening_feedback import screening_feedback_summary
+from scion.proposal.runtime_aggregate_feedback import runtime_model_from_protocol
+from scion.proposal.screening_feedback import (
+    screening_feedback_summary,
+)
 from scion.proposal.tools.feedback.attribution import _surface_runtime_attribution_payload
 from scion.proposal.tools.feedback.scope import _feedback_step_provenance
 from scion.proposal.tools.feedback.stats import _eval_stats_payload, _screening_pair_stats
@@ -39,7 +42,13 @@ def _screening_step_payload(
         "target_file": step.hypothesis.target_file,
         "gate_outcome": protocol.gate_outcome,
         "reason_codes": list(protocol.reason_codes),
-        "stats": _eval_stats_payload(stats),
+        "stats": _eval_stats_payload(
+            stats,
+            runtime_model=screening_feedback.runtime_model,
+            runtime_regression_rate_interpretation=(
+                screening_feedback.runtime_regression_rate_interpretation
+            ),
+        ),
         "screening_win_rate_scope": "case_level_gate",
         "screening_case_win_rate": stats.win_rate,
         "screening_gate_win_rate": stats.win_rate,
@@ -139,7 +148,10 @@ def _holdout_step_payload(
         "pair_feedback_exposed": False,
     }
     if exposure == HoldoutExposure.AGGREGATE:
-        payload["stats"] = _eval_stats_payload(protocol.stats)
+        payload["stats"] = _eval_stats_payload(
+            protocol.stats,
+            runtime_model=runtime_model_from_protocol(protocol),
+        )
     return payload
 
 __all__ = [

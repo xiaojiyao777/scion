@@ -25,6 +25,7 @@ from scion.core.scheduling.runtime_pressure import (
     _runtime_evidence_pressure_triggers,
     _summary_text,
     branch_runtime_evidence_clean_fork_pressure_summary,
+    runtime_evidence_pressure_applicable,
 )
 
 
@@ -216,6 +217,8 @@ def branch_runtime_evidence_pressure_preferred(branch: Branch) -> bool:
     summary = getattr(branch, "branch_evidence_summary", {}) or {}
     if not isinstance(summary, Mapping):
         return False
+    if not runtime_evidence_pressure_applicable(summary):
+        return False
     return _runtime_evidence_pressure_count(summary) >= 2
 
 
@@ -267,6 +270,11 @@ def branch_plateau_gate_same_branch_candidate(branch: Branch) -> bool:
     if branch_lifecycle_new_mechanism_ineligible(branch):
         return False
     if branch_has_weak_positive_followup_signal(branch):
+        return False
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if isinstance(summary, Mapping) and not runtime_evidence_pressure_applicable(
+        summary
+    ):
         return False
     gate = branch_plateau_gate(branch)
     if not gate or not bool(gate.get("threshold_met")):

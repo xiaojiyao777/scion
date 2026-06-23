@@ -75,6 +75,49 @@ def test_runtime_visibility_module_preserves_facade_contract() -> None:
     assert "runtime_evidence_policy" not in DecisionFeatures.__dataclass_fields__
 
 
+def test_budget_exhausting_runtime_policy_is_observational_not_fresh_required() -> None:
+    protocol = _generic_protocol(
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+            runtime_pairs=0,
+            valid_pairs=4,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_RUNTIME_BUDGET_SATURATION",),
+        champion_cached_runtime_pairs=4,
+        runtime_confidence="low_cached_champion",
+        runtime_evidence_status="fresh_champion_required",
+        candidate_surface_runtime_summary={
+            "runtime_budget_diagnostic": {
+                "runtime_model": "budget_exhausting",
+                "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
+            },
+        },
+    )
+
+    policy = runtime_visibility.runtime_evidence_policy_for_protocol(protocol)
+
+    assert policy["runtime_model"] == "budget_exhausting"
+    assert policy["fresh_champion_required"] is False
+    assert policy["runtime_model_interpretation"] == (
+        "budget_exhausting_runtime_aggregates_observational_not_standalone"
+    )
+    assert "RUNTIME_BUDGET_EXHAUSTING_OBSERVATIONAL" in policy[
+        "policy_reason_codes"
+    ]
+    assert "RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED" not in policy[
+        "policy_reason_codes"
+    ]
+    assert "no fresh champion runtime is required" in policy["proposal_guidance"]
+
+
 def test_observability_no_effect_is_reported_as_diagnostic_not_quality_failure(
     tmp_path: Path,
 ) -> None:

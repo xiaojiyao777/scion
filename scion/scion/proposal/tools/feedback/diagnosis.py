@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from scion.core.models import ExperimentStage, StepRecord
 from scion.proposal.context_manager import _filter_hypothesis_prompt_steps, _get_research_surfaces
+from scion.proposal.runtime_aggregate_feedback import runtime_model_from_protocol
 from scion.proposal.tools.feedback.attribution import (
     _runtime_highlight_has_nonzero_numeric,
     _runtime_highlight_is_all_zero_numeric,
@@ -148,7 +149,10 @@ def _research_diagnosis_payload(
                 "target_file": step.hypothesis.target_file,
                 "gate_outcome": gate,
                 "reason_codes": list(protocol.reason_codes),
-                "stats": _eval_stats_payload(stats),
+                "stats": _eval_stats_payload(
+                    stats,
+                    runtime_model=runtime_model_from_protocol(protocol),
+                ),
             }
         )
 

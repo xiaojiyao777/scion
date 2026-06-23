@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from scion.core.branch_hygiene import branch_lineage_status
+from scion.core.runtime_budget_diagnostics import runtime_model_from_summary
 
 
 RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON = (
@@ -102,6 +103,8 @@ def _branch_current_status_is_weak_positive(branch: Any) -> bool:
 
 
 def _runtime_evidence_pressure_count(summary: Mapping[str, Any]) -> int:
+    if not runtime_evidence_pressure_applicable(summary):
+        return 0
     try:
         return max(0, int(summary.get("runtime_evidence_pressure_count") or 0))
     except (TypeError, ValueError):
@@ -158,6 +161,8 @@ def _runtime_aggregate_excluded(summary: Mapping[str, Any]) -> bool:
 
 
 def _runtime_evidence_pressure_triggers(summary: Mapping[str, Any]) -> list[str]:
+    if not runtime_evidence_pressure_applicable(summary):
+        return []
     pressure = summary.get("runtime_evidence_pressure")
     if isinstance(pressure, Mapping):
         triggers = pressure.get("triggers")
@@ -180,3 +185,17 @@ def _runtime_evidence_pressure_triggers(summary: Mapping[str, Any]) -> list[str]
     if _runtime_aggregate_excluded(summary):
         triggers.append("runtime_aggregate_excluded")
     return list(dict.fromkeys(triggers))
+
+
+def runtime_evidence_pressure_applicable(summary: Mapping[str, Any]) -> bool:
+    return _runtime_evidence_pressure_runtime_model(summary) != "budget_exhausting"
+
+
+def _runtime_evidence_pressure_runtime_model(summary: Mapping[str, Any]) -> str:
+    runtime_model = runtime_model_from_summary(summary, default="")
+    if runtime_model:
+        return runtime_model
+    policy = summary.get("runtime_evidence_policy")
+    if isinstance(policy, Mapping):
+        return runtime_model_from_summary(policy, default="")
+    return ""

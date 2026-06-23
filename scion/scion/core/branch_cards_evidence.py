@@ -15,6 +15,7 @@ from scion.core.branch_hygiene import (
     is_branch_lifecycle_policy_block,
 )
 from scion.core.models import Branch
+from scion.core.runtime_budget_diagnostics import runtime_model_from_summary
 
 
 def _branch_state_value(branch: Branch | None) -> str:
@@ -193,6 +194,8 @@ def _branch_runtime_evidence_pressure_count(branch: Branch | None) -> int | None
 
 def _branch_fresh_runtime_followup(branch: Branch | None) -> dict[str, Any]:
     evidence = _branch_evidence_summary(branch)
+    if _runtime_model_from_branch_summary(evidence) == "budget_exhausting":
+        return {}
     value = evidence.get("fresh_runtime_followup")
     if isinstance(value, Mapping):
         return dict(value)
@@ -395,15 +398,12 @@ def _branch_generic_evidence_summary(
             summary[name] = value
     for group, keys in {
         "effect": ("median_delta", "ci_low", "ci_high"),
-        "runtime": (
-            "runtime_ratio_median",
-            "runtime_delta_median_ms",
-            "runtime_regression_rate",
-            "runtime_pairs",
-        ),
+        "runtime": _branch_card_runtime_metric_keys(source),
     }.items():
         values = {key: _metric_value(source, (key,), float) for key in keys}
         values = {key: value for key, value in values.items() if value is not None}
+        if group == "runtime":
+            _apply_runtime_applicability_projection(values, source)
         if values:
             summary[group] = values
     runtime_confidence = _branch_runtime_evidence_confidence(branch)
@@ -440,6 +440,42 @@ def _branch_generic_evidence_summary(
                 str(item) for item in repair_ids if str(item)
             ]
     return summary
+
+
+def _branch_card_runtime_metric_keys(source: Mapping[str, Any]) -> tuple[str, ...]:
+    keys = (
+        "runtime_ratio_median",
+        "runtime_delta_median_ms",
+        "runtime_regression_rate",
+        "runtime_pairs",
+    )
+    if _runtime_model_from_branch_summary(source) == "budget_exhausting":
+        return tuple(key for key in keys if key != "runtime_regression_rate")
+    return keys
+
+
+def _apply_runtime_applicability_projection(
+    values: dict[str, Any],
+    source: Mapping[str, Any],
+) -> None:
+    runtime_model = _runtime_model_from_branch_summary(source)
+    if runtime_model:
+        values["runtime_model"] = runtime_model
+    if runtime_model == "budget_exhausting":
+        values.pop("runtime_regression_rate", None)
+        values["runtime_regression_rate_interpretation"] = (
+            "not_applicable_budget_exhausting"
+        )
+
+
+def _runtime_model_from_branch_summary(source: Mapping[str, Any]) -> str:
+    runtime_model = runtime_model_from_summary(source, default="")
+    if runtime_model:
+        return runtime_model
+    policy = source.get("runtime_evidence_policy")
+    if isinstance(policy, Mapping):
+        return runtime_model_from_summary(policy, default="")
+    return ""
 
 
 def _tier_from_status(status: str) -> str:

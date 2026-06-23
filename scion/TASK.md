@@ -1,99 +1,22 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/readiness/launcher repairs are accepted enough for
-focused warehouse and CVRP follow-up, but v0.4 is not closed until Scion shows
-stable effective research behavior rather than only framework validation.
-WSL `gpt-5.5` auth has recovered. Warehouse has renewed positive movement from
-champion `v2` to `v3`, the warehouse APS retry root is current-run postrun-ready
-partial evidence, and the latest warehouse positive-control rerun shows a
-guidance-binding design mismatch rather than a real plateau. CVRP rank-gap,
-route-pressure, forced-local, required-intra-two-opt, missing-primary,
-scheduler-status, and target-intent authority roots are current-run-ready
-rejection or repair evidence, not solver improvements. In the current
-worktree, `scion/design/v0.4-effective-research-repair-design.md` Designs A-K
-are implemented and focused-tested: scheduling status, research-guidance
-contracts, context/readiness schema checks, typed
-opportunity/lifecycle/failure routing, weak-positive runtime-pressure
-follow-up, target-intent authority, report-only actionability classification,
-research-guidance binding semantics, launcher running status, and the generic
-launcher lifecycle contract all stay problem-neutral while CVRP/warehouse
-semantics remain problem-owned. Design K adds a generic mechanism-evidence
-contract so structured telemetry diagnostics such as a declared mechanism that
-was not evaluated or triggered become branch-local integration follow-up
-signals instead of ordinary inactive clean-fork pressure; this remains
-proposal/lifecycle/scheduler evidence and stays out of `DecisionFeatures`.
-Local and WSL conda `scion` focused target-intent/proposal tests pass at the
-tightened semantics (`121 passed`). After the old WSL solver-depth run exited,
-local head `dcccbc43` was synced to WSL follow-up code commit `650d9c65`, which
-passed the Design K/core group (`54 passed`), branch/card/telemetry group
-(`35 passed`), screening/protocol group (`30 passed`), py-compile, diff checks,
-minimal launch-readiness/direct launcher entry checks, plus the earlier
-launcher/guidance (`48 passed`) and launch/postrun tool (`227 passed`) groups.
-The current launch-readiness comparison repair is local commit `d12a2ec8` /
-WSL commit `9b1db176`: prepared-contract consistency now compares stable split
-identity rather than environment-local `split_path` projection, and WSL conda
-`scion/scion/tests/test_launch_readiness.py` passes (`116 passed`). The live
-CVRP follow-up from WSL commit `9b1db176` then exposed a generic branch-card
-projection gap: the active hypothesis/code path carried
-`large_instance_intra_route_two_opt_seed`, but the branch card still reported
-`mechanism_ids=none` / `open_exploration`. Local commit `16227337` records
-verified hypothesis mechanism identity on the branch after verification pass,
-and local commit `d5c7c6e7` narrows that projection so it no longer sets
-`branch.direction` or marks an ordinary clean `CONTINUE_EXPLORE` branch as
-established. The same live root then showed a required mechanism-contract
-follow-up branch competing behind runtime-evidence clean-fork pressure before
-later returning to the required branch. Local commit `181601ae` makes required
-branch-local mechanism follow-up outrank that clean-fork pressure through the
-generic `BranchSchedulingStatus` contract. Local focused regression,
-branch/scheduler/verification/finalizer, mechanism-contract, and combined
-scheduler/context tests pass (`75 passed`, `116 passed`, `147 passed`,
-`221 passed`), plus py-compile and diff checks. These repairs are not yet
-synced to WSL while the live run is active. The
-authority validation root launched
-from WSL
-commit `542d1f99`,
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-authority-542d1f99-postweakpressure-4r-gpt55-20260623T055230Z-claw`,
-is now accepted Design G framework evidence: wrapper/postrun exit `0`, postrun
-acceptance `ready`, validity `valid`, completeness `complete`, 4 of 4
-effective Protocol rows, 0 proposal quality blocks, 0 active-slot blocks, and
-`last_stop_reason=max_rounds_exhausted`. It shows branch-local weak-positive
-follow-up can reach target intent, formal hypothesis/code, Protocol screening,
-evidence-backed abandon, expanded screening, and same-branch continuation. It
-does not show solver progress: champion remains `v1`, there are 0 promotions,
-and all four current rows have median effect at or below 0 with CI high below
-the CVRP MDE. The post-validation research-context actionability audit found
-two report-classifier false positives rather than a new prompt/context design
-gap: accepted clean-fork policy choices were counted as missed same-mechanism
-opportunities, and voluntary branch-lesson usage was counted as a semantic gap.
-The current worktree now reclassifies those report-only signals
-problem-neutrally; a temporary rebuild of the accepted authority root reports
-`actionability_gaps=[]`, `same_mechanism_missed=0`, and
-`branch_lesson_semantic_gap_count=0` while preserving
-`accepted_clean_fork_policy_choice_count=1` as diagnostic evidence. The CVRP
-solver-depth old-checkout root
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-65115459-postauthority-6r-gpt55-20260623T084213Z-claw`
-finished from old WSL commit `65115459` before the local repairs were synced.
-It is current-run-ready framework evidence: wrapper/postrun exit `0`, postrun
-acceptance `ready`, validity `valid`, completeness `complete`, 6 of 6
-effective Protocol rows, 0 proposal quality blocks, 0 active-slot blocks, and
-`last_stop_reason=max_rounds_exhausted`. It is not solver progress or branch
-depth evidence: champion remained `v1`, there were 0 promotions, all six
-current rows were below the CVRP MDE, research continuity was `wide_shallow`
-with max branch depth 1, and the large-two-opt summary reported missing direct
-mechanism signal. The final current screening rows exposed the Design K trigger
-shape: the declared `large_instance_intra_route_two_opt_seed` mechanism had
-structured `not_evaluated/not_triggered` diagnostics and no same-name phase
-telemetry, so those rows are mechanism-integration evidence, not solver-quality
-conclusions. A synchronized CVRP solver-depth follow-up root
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-mechfollowup-readyfix-6r-gpt55-20260623T115013Z-claw`
-is now running from WSL commit `9b1db176` after strict launch readiness passed.
-The warehouse champion-`v2` positive-control root
-`/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-9b1db176-current-8r-gpt55-20260623T115446Z-claw`
-is prepared-only and strict launch-ready, but intentionally not started while
-the CVRP follow-up is live. Do not use the live root's branch-card mechanism
-fields as accepted Design K evidence without accounting for the local
-`16227337` / `d5c7c6e7` / `181601ae` projection and scheduler-priority repairs.*
+*Status: v0.4 is not closed. Designs A-K are accepted local framework repairs
+for scheduling status, guidance contracts, lifecycle/failure routing,
+target-intent authority, launcher lifecycle, and mechanism-evidence follow-up.
+The current local worktree adds Designs L and M: budget-exhausting runtime
+aggregates remain in raw evidence but no longer render numeric
+`runtime_regression_rate` into proposal-visible feedback, and budget-exhausting
+low/cached/insufficient runtime evidence can no longer accumulate scheduler
+clean-fork pressure or stale branch-card fresh-runtime follow-up. These repairs
+are generic runtime semantics, not CVRP or warehouse exceptions, and stay out
+of `DecisionFeatures`, Protocol gates, and raw artifacts. Local conda `claw`
+focused validation passes (`108 passed`) plus
+`git diff --check`. The WSL reverse SSH tunnel is restored, the current local
+repair files were synced to the WSL runner worktree, and WSL conda `scion`
+focused validation also passes (`108 passed`). The next resume point is to
+record a clean WSL/local sync point, then launch/inspect the prepared warehouse
+positive-control and CVRP follow-up runs for effective research behavior.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
