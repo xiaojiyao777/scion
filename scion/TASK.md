@@ -11,13 +11,14 @@ guidance-binding design mismatch rather than a real plateau. CVRP rank-gap,
 route-pressure, forced-local, required-intra-two-opt, missing-primary,
 scheduler-status, and target-intent authority roots are current-run-ready
 rejection or repair evidence, not solver improvements. In the current
-worktree, `scion/design/v0.4-effective-research-repair-design.md` Designs A-I
+worktree, `scion/design/v0.4-effective-research-repair-design.md` Designs A-J
 are implemented and focused-tested: scheduling status, research-guidance
 contracts, context/readiness schema checks, typed
 opportunity/lifecycle/failure routing, weak-positive runtime-pressure
 follow-up, target-intent authority, report-only actionability classification,
-research-guidance binding semantics, and launcher running status all stay
-problem-neutral while CVRP/warehouse semantics remain problem-owned. Local and
+research-guidance binding semantics, launcher running status, and the generic
+launcher lifecycle contract all stay problem-neutral while CVRP/warehouse
+semantics remain problem-owned. Local and
 WSL conda `scion` focused target-intent/proposal tests pass at the tightened
 semantics (`121 passed`). The authority validation root launched from WSL
 commit `542d1f99`,
@@ -39,7 +40,7 @@ problem-neutrally; a temporary rebuild of the accepted authority root reports
 `actionability_gaps=[]`, `same_mechanism_missed=0`, and
 `branch_lesson_semantic_gap_count=0` while preserving
 `accepted_clean_fork_policy_choice_count=1` as diagnostic evidence. The
-current local Design H/I repair is not yet synced to WSL because the CVRP
+current local Design H/I/J repair is not yet synced to WSL because the CVRP
 solver-depth root
 `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-65115459-postauthority-6r-gpt55-20260623T084213Z-claw`
 is running from WSL commit `65115459`; wait for it to exit before rsyncing
@@ -624,7 +625,7 @@ Current checkpoint:
     is currently running from WSL commit `65115459` after strict launch
     readiness passed, resuming from the accepted authority validation campaign.
     It should be interpreted only as problem-owned solver-direction research;
-    do not sync the current local Design H/I runtime-path changes into WSL
+    do not sync the current local Design H/I/J runtime-path changes into WSL
     until this live run exits.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:

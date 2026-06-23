@@ -39,11 +39,14 @@ history when exact old chronology is needed.
   Protected and allowed mechanism ids use an ordered union, branch-local
   authority normalizes selected target intent to existing-file `modify`, and
   host transport overrides stay outside the intent body. The current worktree
-  also implements the Design H/I follow-ups: typed required mechanisms now
+  also implements the Design H/I/J follow-ups: typed required mechanisms now
   distinguish hard hypothesis binding from context-only rendered guidance, and
   generated launch wrappers mark root `run_status.json` as running before
-  campaign execution. No CVRP-specific scheduler, target-intent, or projection
-  exception is accepted.
+  campaign execution. The duplicated CVRP/warehouse outer launcher lifecycle
+  is now behind a generic typed lifecycle plan and renderer while problem
+  commands and problem-owned guards remain in their launchers. No CVRP-specific
+  scheduler, target-intent, launcher-lifecycle, or projection exception is
+  accepted.
 
 ## Current Decision
 
@@ -302,7 +305,7 @@ CVRP solver-depth live root:
 - `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-65115459-postauthority-6r-gpt55-20260623T084213Z-claw`
 - Prepared from WSL commit `65115459` after strict launch readiness passed and
   resumed from the accepted authority validation campaign. It is running on the
-  old WSL checkout while the local Design H/I repairs remain unsynced. Do not
+  old WSL checkout while the local Design H/I/J repairs remain unsynced. Do not
   rsync new runtime code into WSL until this run exits.
 - Current live status: `campaign/run_status.json` is `running`, champion still
   `v1`, no effective rounds counted yet, and the live root reproduces the
@@ -738,7 +741,7 @@ CVRP/VRP:
    WSL. Continue CVRP only as problem-owned solver research; interpret effects
    against MDE and do not add VRP/CVRP exceptions to generic scheduler,
    proposal authority, actionability, projection, or `DecisionFeatures`.
-3. After syncing the current Design H/I repairs, rerun warehouse from champion
+3. After syncing the current Design H/I/J repairs, rerun warehouse from champion
    `v2` as the simpler positive-control path. Do not accept the latest
    quality-blocked positive-control root as plateau evidence.
 4. Update this file and `scion/TASK.md` only when operating truth changes; keep

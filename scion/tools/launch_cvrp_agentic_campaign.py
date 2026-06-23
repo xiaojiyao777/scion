@@ -17,6 +17,12 @@ from typing import Any, Mapping
 
 import yaml
 
+from scion.launcher.lifecycle import (
+    CampaignCommandPlan,
+    LauncherLifecyclePlan,
+    render_run_sh,
+)
+
 
 DEFAULT_EXPERIMENTS_ROOT = Path.home() / "research" / "scion-experiments"
 DEFAULT_MODEL = "gpt-5.5"
@@ -99,124 +105,6 @@ PREPARED_HANDOFF_FAMILIES = (
     "launch_readiness",
     "rebuild",
 )
-
-
-COMPLETION_PREFLIGHT_SNIPPET = r'''
-if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then
-  PREFLIGHT_DETAIL="$RUN_ROOT/pre_campaign_completion_preflight.v1.json"
-  "$PY" "$SCION_DIR/tools/check_gpt55_proxy.py" \
-    --base-url "$SCION_BASE_URL" \
-    --model "$SCION_MODEL" \
-    --api-key "$SCION_API_KEY" \
-    --timeout-sec 60 \
-    --login-url-on-failure \
-    --json \
-    > "$PREFLIGHT_DETAIL" 2>> "$RUN_ROOT/run.log"
-  PREFLIGHT_STATUS=$?
-  echo "COMPLETION_PREFLIGHT_DETAIL:$PREFLIGHT_DETAIL" >> "$RUN_ROOT/run.log"
-  if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then
-    {
-      echo "WRAPPER_EXIT_STATUS:$PREFLIGHT_STATUS"
-      echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-      echo "PRE_CAMPAIGN_COMPLETION_PREFLIGHT_FAILED:1"
-    } > "$RUN_ROOT/exit.txt"
-    "$PY" "$SCION_DIR/tools/write_completion_preflight_status.py" \
-      --output "$RUN_ROOT/run_status.json" \
-      --exit-code "$PREFLIGHT_STATUS" \
-      --detail "$PREFLIGHT_DETAIL"
-    write_postrun_acceptance_reports
-    exit "$PREFLIGHT_STATUS"
-  fi
-fi
-'''
-
-
-POSTRUN_REPORT_FUNCTION_SNIPPET = r'''
-write_postrun_acceptance_reports() {
-  if [[ "${POSTRUN_REPORTS:-1}" != "1" ]]; then
-    return 0
-  fi
-  REPORT_DIR="$RUN_ROOT/postrun_acceptance"
-  REPORT_STEM="cvrp_${MEASUREMENT_GOVERNANCE//-/_}_${PROPOSAL_CONTEXT_ABLATION//-/_}"
-  OBSERVED_CONTROL_ARM="${MEASUREMENT_GOVERNANCE//-/_}"
-  echo "POSTRUN_ACCEPTANCE_DIR:$REPORT_DIR" >> "$RUN_ROOT/exit.txt"
-  {
-    echo "POSTRUN_REPORTS_STARTED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    echo "POSTRUN_REPORT_DIR:$REPORT_DIR"
-  } >> "$RUN_ROOT/run.log"
-  rebuild_args=(
-    "$RUN_ROOT"
-    --report-stem "$REPORT_STEM"
-    --observed-control-arm "$OBSERVED_CONTROL_ARM"
-  )
-  if [[ -n "${CONTROL_PAIR_KEY:-}" ]]; then
-    rebuild_args+=(--control-pair-key "$CONTROL_PAIR_KEY")
-  fi
-  POSTRUN_STATUS=0
-  "$PY" "$SCION_DIR/tools/rebuild_postrun_acceptance.py" \
-    "${rebuild_args[@]}" \
-    --strict >> "$RUN_ROOT/run.log" 2>&1 || POSTRUN_STATUS=$?
-  echo "POSTRUN_REPORTS_EXIT_STATUS:$POSTRUN_STATUS" >> "$RUN_ROOT/run.log"
-  mkdir -p "$REPORT_DIR/readiness"
-  POSTRUN_READINESS_STATUS=0
-  "$PY" "$SCION_DIR/tools/check_postrun_acceptance.py" "$RUN_ROOT" \
-    --require-current-run-ready \
-    --format json \
-    > "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json" \
-    2>> "$RUN_ROOT/run.log" || POSTRUN_READINESS_STATUS=$?
-  "$PY" "$SCION_DIR/tools/check_postrun_acceptance.py" "$RUN_ROOT" \
-    --format markdown \
-    > "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.md" \
-    2>> "$RUN_ROOT/run.log" || true
-  {
-    echo "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS"
-    echo "POSTRUN_REPORTS_FINISHED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  } >> "$RUN_ROOT/run.log"
-  if [[ "$POSTRUN_STATUS" -ne 0 ]]; then
-    return "$POSTRUN_STATUS"
-  fi
-  if [[ "$POSTRUN_READINESS_STATUS" -ne 0 ]]; then
-    return "$POSTRUN_READINESS_STATUS"
-  fi
-  return 0
-}
-'''
-
-
-POSTRUN_REPORT_SNIPPET = r'''
-write_postrun_acceptance_reports
-'''
-
-
-LAUNCHER_RUNNING_STATUS_SNIPPET = r'''
-LAUNCHER_RUNNING_STARTED_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-LAUNCHER_RUNNING_STATUS_WRITE_STATUS=0
-"$PY" "$SCION_DIR/tools/write_launcher_running_status.py" \
-  --output "$RUN_ROOT/run_status.json" \
-  --run-root "$RUN_ROOT" \
-  --campaign-dir "$CAMPAIGN_DIR" \
-  --git-commit "$GIT_COMMIT" \
-  --model "$SCION_MODEL" \
-  --started-utc "$LAUNCHER_RUNNING_STARTED_UTC" \
-  --pid "$$" \
-  --scion-base-url "$SCION_BASE_URL" \
-  --completion-preflight "$COMPLETION_PREFLIGHT" \
-  --postrun-reports "$POSTRUN_REPORTS" \
-  >> "$RUN_ROOT/run.log" 2>&1 || LAUNCHER_RUNNING_STATUS_WRITE_STATUS=$?
-if [[ "$LAUNCHER_RUNNING_STATUS_WRITE_STATUS" -ne 0 ]]; then
-  {
-    echo "WRAPPER_EXIT_STATUS:$PREFLIGHT_FAILURE_EXIT_CODE"
-    echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    echo "LAUNCHER_RUNNING_STATUS_WRITE_FAILED:$LAUNCHER_RUNNING_STATUS_WRITE_STATUS"
-  } > "$RUN_ROOT/exit.txt"
-  printf '{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s,"launcher_running_status_write_failed":%s}\n' \
-    "$PREFLIGHT_FAILURE_EXIT_CODE" "$LAUNCHER_RUNNING_STATUS_WRITE_STATUS" \
-    > "$RUN_ROOT/run_status.json"
-  write_postrun_acceptance_reports
-  exit "$PREFLIGHT_FAILURE_EXIT_CODE"
-fi
-echo "LAUNCHER_RUNNING_STATUS:$RUN_ROOT/run_status.json" >> "$RUN_ROOT/run.log"
-'''
 
 
 def _repo_root() -> Path:
@@ -765,182 +653,70 @@ def _write_run_sh(run_root: Path, command: str, env: dict[str, object]) -> None:
         "CONTROL_PAIR_KEY",
         "POSTRUN_REPORTS",
     ]
-    fallback_assignments = "\n".join(
-        _shell_assign(key, env[key]) for key in fallback_keys
-    )
-    content = f"""#!/usr/bin/env bash
-set -uo pipefail
-_INHERITED_SCION_API_KEY="${{SCION_API_KEY:-}}"
-_RUN_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PREFLIGHT_FAILURE_EXIT_CODE={PREFLIGHT_FAILURE_EXIT_CODE}
-{fallback_assignments}
-{POSTRUN_REPORT_FUNCTION_SNIPPET}
-if [[ ! -r "$_RUN_SCRIPT_DIR/launch.env" ]]; then
-  {{
-    echo "WRAPPER_EXIT_STATUS:{PREFLIGHT_FAILURE_EXIT_CODE}"
-    echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    echo "LAUNCH_ENV_MISSING:$_RUN_SCRIPT_DIR/launch.env"
-  }} > "$RUN_ROOT/exit.txt"
-  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"launch_env_missing":"%s"}}\\n' "$_RUN_SCRIPT_DIR/launch.env" > "$RUN_ROOT/run_status.json"
-  write_postrun_acceptance_reports
-  exit {PREFLIGHT_FAILURE_EXIT_CODE}
-fi
-source "$(dirname "$0")/launch.env"
-export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT SCION_STAGE_TRANSITION_DRAIN_LIMIT SCION_PROBLEM_DATA_ROOT PREPARED_RUN_MANIFEST
-export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
-if [[ -n "${{SCION_API_KEY_ENV:-}}" ]]; then
-  if [[ "$SCION_API_KEY_ENV" == "SCION_API_KEY" ]]; then
-    _RESOLVED_SCION_API_KEY="$_INHERITED_SCION_API_KEY"
-  else
-    _RESOLVED_SCION_API_KEY="${{!SCION_API_KEY_ENV:-}}"
-  fi
-  if [[ -z "$_RESOLVED_SCION_API_KEY" ]]; then
-    {{
-      echo "WRAPPER_EXIT_STATUS:{PREFLIGHT_FAILURE_EXIT_CODE}"
-      echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-      echo "SCION_API_KEY_ENV_MISSING:$SCION_API_KEY_ENV"
-    }} > "$RUN_ROOT/exit.txt"
-    printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"api_key_env_missing":"%s"}}\n' "$SCION_API_KEY_ENV" > "$RUN_ROOT/run_status.json"
-    write_postrun_acceptance_reports
-    exit {PREFLIGHT_FAILURE_EXIT_CODE}
-  fi
-  SCION_API_KEY="$_RESOLVED_SCION_API_KEY"
-fi
-unset _INHERITED_SCION_API_KEY _RESOLVED_SCION_API_KEY
-if ! cd "$SCION_DIR"; then
-  {{
-    echo "WRAPPER_EXIT_STATUS:{PREFLIGHT_FAILURE_EXIT_CODE}"
-    echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    echo "SCION_DIR_MISSING:$SCION_DIR"
-  }} > "$RUN_ROOT/exit.txt"
-  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"scion_dir_missing":"%s"}}\\n' "$SCION_DIR" > "$RUN_ROOT/run_status.json"
-  write_postrun_acceptance_reports
-  exit {PREFLIGHT_FAILURE_EXIT_CODE}
-fi
-read -r -a _GIT_RUNTIME_GUARD_PATHS <<< "$GIT_RUNTIME_GUARD_PATHS"
-if [[ -n "$(git -C "$REPO_ROOT" status --porcelain -- "${{_GIT_RUNTIME_GUARD_PATHS[@]}}")" ]]; then
-  {{
-    echo "WRAPPER_EXIT_STATUS:{PREFLIGHT_FAILURE_EXIT_CODE}"
-    echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    echo "GIT_RUNTIME_DIRTY:$GIT_RUNTIME_GUARD_PATHS"
-  }} > "$RUN_ROOT/exit.txt"
-  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"git_runtime_dirty":true}}\n' > "$RUN_ROOT/run_status.json"
-  write_postrun_acceptance_reports
-  exit {PREFLIGHT_FAILURE_EXIT_CODE}
-fi
-_ACTUAL_GIT_COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
-if [[ "$_ACTUAL_GIT_COMMIT" != "$GIT_COMMIT" ]]; then
-  if git -C "$REPO_ROOT" diff --quiet "$GIT_COMMIT" HEAD -- "${{_GIT_RUNTIME_GUARD_PATHS[@]}}"; then
-    echo "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED:expected=$GIT_COMMIT actual=$_ACTUAL_GIT_COMMIT paths=$GIT_RUNTIME_GUARD_PATHS" >> "$RUN_ROOT/run.log"
-  else
-    {{
-      echo "WRAPPER_EXIT_STATUS:{PREFLIGHT_FAILURE_EXIT_CODE}"
-      echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-      echo "GIT_COMMIT_MISMATCH:expected=$GIT_COMMIT actual=$_ACTUAL_GIT_COMMIT paths=$GIT_RUNTIME_GUARD_PATHS"
-    }} > "$RUN_ROOT/exit.txt"
-    printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"git_runtime_commit_mismatch":true}}\n' > "$RUN_ROOT/run_status.json"
-    write_postrun_acceptance_reports
-    exit {PREFLIGHT_FAILURE_EXIT_CODE}
-  fi
-fi
-unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS
-{{
-  echo "STARTED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "GIT_COMMIT:$GIT_COMMIT"
-  echo "CWD:$PWD"
-  echo "COMMAND:{command}"
-}} >> "$RUN_ROOT/run.log"
-{LAUNCHER_RUNNING_STATUS_SNIPPET}
-{COMPLETION_PREFLIGHT_SNIPPET}
-CAMPAIGN_EXECUTION_MARKER_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf '{{"schema":"scion.launcher_campaign_execution_marker.v1","started_at":"%s","run_root":"%s","campaign_dir":"%s"}}\n' \
-  "$CAMPAIGN_EXECUTION_MARKER_STARTED_AT" "$RUN_ROOT" "$CAMPAIGN_DIR" \
-  > "$RUN_ROOT/campaign_execution_marker.v1.json"
-echo "CAMPAIGN_EXECUTION_MARKER:$RUN_ROOT/campaign_execution_marker.v1.json" >> "$RUN_ROOT/run.log"
-FORCE_ARGS=()
-if [[ -n "${{FORCE_SURFACE:-}}" ]]; then
+    command_plan = CampaignCommandPlan(
+        command_log=command,
+        exported_env_names=("SCION_PROBLEM_DATA_ROOT",),
+        command_body=r'''FORCE_ARGS=()
+if [[ -n "${FORCE_SURFACE:-}" ]]; then
   FORCE_ARGS+=(--force-surface "$FORCE_SURFACE")
-  if [[ -n "${{FORCE_ACTION:-}}" ]]; then
+  if [[ -n "${FORCE_ACTION:-}" ]]; then
     FORCE_ARGS+=(--force-action "$FORCE_ACTION")
   fi
-  if [[ -n "${{FORCE_TARGET_FILE:-}}" ]]; then
+  if [[ -n "${FORCE_TARGET_FILE:-}" ]]; then
     FORCE_ARGS+=(--force-target-file "$FORCE_TARGET_FILE")
   fi
 fi
-"$PY" -m scion.cli.main run \\
-  --problem "$PROBLEM" \\
-  --protocol "$PROTOCOL" \\
-  --split "$SPLIT" \\
-  --seeds "$SEEDS" \\
-  --campaign-dir "$CAMPAIGN_DIR" \\
-  --rounds "$ROUNDS" \\
-  --time-limit-sec "$TIME_LIMIT_SEC" \\
-  --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" \\
-  --agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS" \\
-  --agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS" \\
-  --agentic-code-tool-max-calls "$AGENTIC_CODE_TOOL_MAX_CALLS" \\
-  --agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS" \\
-  --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" \\
-  --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" \\
-  --fresh-runtime-replay-drain-limit "$SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT" \\
-  --stage-transition-drain-limit "$SCION_STAGE_TRANSITION_DRAIN_LIMIT" \\
-  --measurement-governance "$MEASUREMENT_GOVERNANCE" \\
-  --proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION" \\
-  "${{FORCE_ARGS[@]}}" \\
-  --disable-early-stop \\
-  --agentic-proposal \\
-  >> "$RUN_ROOT/run.log" 2>&1
-STATUS=$?
-CAMPAIGN_STATUS=$STATUS
-{{
-  echo "WRAPPER_EXIT_STATUS:$STATUS"
-  echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  if [[ -f "$CAMPAIGN_DIR/run_status.json" ]]; then
-    echo "CAMPAIGN_RUN_STATUS:$CAMPAIGN_DIR/run_status.json"
-  fi
-  if [[ -f "$CAMPAIGN_DIR/campaign_summary.json" ]]; then
-    echo "CAMPAIGN_SUMMARY:$CAMPAIGN_DIR/campaign_summary.json"
-  fi
-}} > "$RUN_ROOT/exit.txt"
-if [[ -f "$CAMPAIGN_DIR/run_status.json" ]]; then
-  cp "$CAMPAIGN_DIR/run_status.json" "$RUN_ROOT/run_status.json"
-else
-  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s}}\\n' "$STATUS" > "$RUN_ROOT/run_status.json"
-fi
-POSTRUN_ACCEPTANCE_STATUS=0
-write_postrun_acceptance_reports || POSTRUN_ACCEPTANCE_STATUS=$?
-if [[ "${{POSTRUN_REPORTS:-1}}" == "1" ]]; then
-  if [[ "$POSTRUN_ACCEPTANCE_STATUS" -ne 0 ]]; then
-    {{
-      echo "POSTRUN_ACCEPTANCE_FAILED:$POSTRUN_ACCEPTANCE_STATUS"
-      echo "POSTRUN_REPORTS_EFFECTIVE_EXIT_STATUS:$POSTRUN_STATUS"
-      echo "POSTRUN_READINESS_EFFECTIVE_EXIT_STATUS:$POSTRUN_READINESS_STATUS"
-    }} >> "$RUN_ROOT/exit.txt"
-    if [[ "$STATUS" -eq 0 ]]; then
-      STATUS="$POSTRUN_ACCEPTANCE_STATUS"
-      echo "WRAPPER_EXIT_STATUS_EFFECTIVE:$STATUS" >> "$RUN_ROOT/exit.txt"
-    fi
-  fi
-  POSTRUN_STATUS_WRITE_STATUS=0
-  "$PY" "$SCION_DIR/tools/write_postrun_wrapper_status.py" \
-    --output "$RUN_ROOT/run_status.json" \
-    --wrapper-exit-code "$STATUS" \
-    --campaign-exit-code "$CAMPAIGN_STATUS" \
-    --postrun-reports-exit-code "$POSTRUN_STATUS" \
-    --postrun-readiness-exit-code "$POSTRUN_READINESS_STATUS" \
-    --postrun-report-dir "$REPORT_DIR" \
-    --postrun-readiness-path "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json" \
-    >> "$RUN_ROOT/run.log" 2>&1 || POSTRUN_STATUS_WRITE_STATUS=$?
-  if [[ "$POSTRUN_STATUS_WRITE_STATUS" -ne 0 ]]; then
-    echo "POSTRUN_STATUS_WRITE_EXIT_STATUS:$POSTRUN_STATUS_WRITE_STATUS" >> "$RUN_ROOT/run.log"
-    if [[ "$STATUS" -eq 0 ]]; then
-      STATUS="$POSTRUN_STATUS_WRITE_STATUS"
-      echo "WRAPPER_EXIT_STATUS_EFFECTIVE:$STATUS" >> "$RUN_ROOT/exit.txt"
-    fi
-  fi
-fi
-exit "$STATUS"
-"""
+"$PY" -m scion.cli.main run \
+  --problem "$PROBLEM" \
+  --protocol "$PROTOCOL" \
+  --split "$SPLIT" \
+  --seeds "$SEEDS" \
+  --campaign-dir "$CAMPAIGN_DIR" \
+  --rounds "$ROUNDS" \
+  --time-limit-sec "$TIME_LIMIT_SEC" \
+  --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" \
+  --agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS" \
+  --agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS" \
+  --agentic-code-tool-max-calls "$AGENTIC_CODE_TOOL_MAX_CALLS" \
+  --agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS" \
+  --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" \
+  --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" \
+  --fresh-runtime-replay-drain-limit "$SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT" \
+  --stage-transition-drain-limit "$SCION_STAGE_TRANSITION_DRAIN_LIMIT" \
+  --measurement-governance "$MEASUREMENT_GOVERNANCE" \
+  --proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION" \
+  "${FORCE_ARGS[@]}" \
+  --disable-early-stop \
+  --agentic-proposal \
+  >> "$RUN_ROOT/run.log" 2>&1''',
+    )
+    plan = LauncherLifecyclePlan(
+        run_root=Path(env["RUN_ROOT"]),
+        campaign_dir=Path(env["CAMPAIGN_DIR"]),
+        repo_root=Path(env["REPO_ROOT"]),
+        scion_dir=Path(env["SCION_DIR"]),
+        python=Path(env["PY"]),
+        git_commit=str(env["GIT_COMMIT"]),
+        model=str(env["SCION_MODEL"]),
+        scion_base_url=str(env["SCION_BASE_URL"]),
+        api_key_env_binding=str(env["SCION_API_KEY_ENV"]),
+        postrun_report_stem_prefix="cvrp",
+        command=command_plan,
+        fallback_assignments=tuple((key, env[key]) for key in fallback_keys),
+        exported_env_names=(
+            "PYTHONPATH",
+            "SCION_MODEL",
+            "SCION_BASE_URL",
+            "SCION_API_KEY",
+            "SCION_SDK_MAX_RETRIES",
+            "SCION_LLM_MAX_RETRIES",
+            "SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT",
+            "SCION_STAGE_TRANSITION_DRAIN_LIMIT",
+            "PREPARED_RUN_MANIFEST",
+        ),
+        preflight_failure_exit_code=PREFLIGHT_FAILURE_EXIT_CODE,
+    )
+    content = render_run_sh(plan)
     run_sh = run_root / "run.sh"
     run_sh.write_text(content, encoding="utf-8")
     run_sh.chmod(0o755)
