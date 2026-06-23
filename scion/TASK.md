@@ -4,7 +4,7 @@
 *Status: v0.4 is not closed. Designs A-K are accepted local framework repairs
 for scheduling status, guidance contracts, lifecycle/failure routing,
 target-intent authority, launcher lifecycle, and mechanism-evidence follow-up.
-The current local worktree adds Designs L and M: budget-exhausting runtime
+The current local/WSL worktree adds Designs L and M: budget-exhausting runtime
 aggregates remain in raw evidence but no longer render numeric
 `runtime_regression_rate` into proposal-visible feedback, and budget-exhausting
 low/cached/insufficient runtime evidence can no longer accumulate scheduler
@@ -14,11 +14,16 @@ of `DecisionFeatures`, Protocol gates, and raw artifacts. Local conda `claw`
 focused validation passes (`108 passed`) plus
 `git diff --check`. The WSL reverse SSH tunnel is restored, the current local
 repair files were synced to the WSL runner worktree, and WSL conda `scion`
-focused validation also passes (`108 passed`). The next resume point is to
-monitor the still-running CVRP root that launched from old WSL commit
-`9b1db176`, treat it as caveated because the runner worktree was synced while
-the process was live, then launch/inspect fresh warehouse and CVRP follow-up
-runs from the recorded local/WSL sync points for effective research behavior.*
+focused validation also passes (`108 passed`). The CVRP solver-depth
+mechanism-follow-up root that launched from old WSL commit `9b1db176` finished
+valid/complete and postrun-ready, with 6 of 6 effective Protocol rows, no
+quality blocks, no active-slot blocks, branch depth 4, and 4 of 4 observed
+same-mechanism follow-ups selected. It remains solver-negative and caveated:
+champion stayed `v1`, there were 0 promotions, all rows were below MDE, direct
+large-two-opt signal was missing, and the runner checkout changed while the
+process was live. The next resume point is to launch/inspect a fresh warehouse
+positive-control run from the recorded local/WSL sync point for effective
+research behavior.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -606,18 +611,24 @@ Current checkpoint:
     locally; use it as Design K trigger evidence. The synchronized follow-up
     root
     `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-mechfollowup-readyfix-6r-gpt55-20260623T115013Z-claw`
-    is now running from WSL commit `9b1db176` after strict launch readiness
-    passed. Early live evidence shows the hypothesis/code path carrying
-    `large_instance_intra_route_two_opt_seed`, but the in-progress branch card
-    still reporting no mechanism id; local commit `16227337` fixes this generic
-    verified-hypothesis-to-branch identity persistence, and local commit
-    `d5c7c6e7` keeps that projection from setting `branch.direction` and
-    accidentally triggering established-branch portfolio expansion. The same
-    live root has also shown that required mechanism-contract follow-up can run
-    after an intervening clean fork; local commit `181601ae` tightens the
-    generic scheduler so required branch-local mechanism follow-up is selected
-    before runtime-evidence clean-fork pressure. Sync these local repairs only
-    after the live run is no longer using the WSL checkout.
+    finished from old WSL launch commit `9b1db176` after strict launch
+    readiness passed. It is valid, complete, and postrun-ready: wrapper exit
+    `0`, postrun readiness exit `0`, 6 of 6 effective Protocol rows,
+    0 proposal quality blocks, 0 active-slot blocks, and
+    `last_stop_reason=max_rounds_exhausted`. It improves research continuity
+    relative to the old-checkout root: active shape is `mixed_depth`, max branch
+    depth is 4, all 4 observed same-mechanism follow-up opportunities were
+    selected, branch-lesson semantic gaps are 0, and research-context
+    actionability reports no gaps. It is still not solver progress: champion
+    stayed `v1`, there were 0 promotions, all six rows were below MDE,
+    `positive_rows=0`, and postrun CVRP review reports
+    `protocol_evaluated_without_large_twoopt_signal` with
+    `missing_large_twoopt_mechanism_signal`. The local mirror is
+    `/home/clawd/research/scion-experiments/v04-cvrp-solverdepth-mechfollowup-readyfix-6r-gpt55-20260623T115013Z-claw`.
+    Because the root launched before the latest local/WSL sync and the runner
+    checkout changed while the process was live, use it as caveated live-run
+    research evidence, not as clean acceptance for Designs L/M or for the
+    current synchronized code point.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

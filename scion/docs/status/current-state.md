@@ -41,7 +41,9 @@ chronology belongs in focused experiment reports and git history.
   `git diff --check` is clean.
 - The WSL reverse SSH tunnel is restored. The current local repair files were
   synced to the WSL runner worktree, and WSL conda `scion` focused validation
-  passes (`108 passed`). Local and WSL sync commits have been recorded.
+  passes (`108 passed`). Local and WSL sync commits have been recorded. The
+  current recorded runtime-code sync points are local `3937f709` and WSL
+  `17673b1c`.
 
 ## Current Decision
 
@@ -52,15 +54,26 @@ chronology belongs in focused experiment reports and git history.
   follow-up, and MDE-aware rejection. It still lacks solver improvement or
   promotion.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work and a
-  prepared/current positive-control path. The next run should start only after
-  local runtime-semantics repairs are synchronized and validated on WSL.
-- The next operational action is to inspect or launch the prepared warehouse
-  positive-control and CVRP follow-up runs from the recorded sync points.
-- A CVRP solver-depth follow-up process is currently still running on WSL from
-  the older launch commit `9b1db176`. Because the runner worktree was synced
-  while that process was live, treat that root as caveated live-run evidence and
-  do not launch warehouse concurrently. Wait for it to finish, run postrun
-  checks, then launch fresh roots from the recorded sync point.
+  prepared/current positive-control path. The next run should start from the
+  recorded synchronized WSL checkout, not from stale prepared roots unless
+  strict launch readiness proves they match the current checkout and manifest
+  contract.
+- The old live CVRP solver-depth follow-up root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-mechfollowup-readyfix-6r-gpt55-20260623T115013Z-claw`
+  has finished and was mirrored locally to
+  `/home/clawd/research/scion-experiments/v04-cvrp-solverdepth-mechfollowup-readyfix-6r-gpt55-20260623T115013Z-claw`.
+  WSL postrun acceptance is ready and current-run analysis ready: 6 of 6
+  effective Protocol rows, 0 proposal quality blocks, 0 active-slot blocks, max
+  branch depth 4, and 4 of 4 observed same-mechanism follow-up opportunities
+  selected. It is solver-negative and caveated: champion stayed `v1`, there
+  were 0 promotions, all rows were below MDE, direct large-two-opt signal was
+  missing, and launch/readiness reports the checkout changed while the process
+  was live. Use it as live-run research evidence only, not as clean acceptance
+  for Designs L/M.
+- The next operational action is to strict-check and launch a fresh warehouse
+  positive-control run from the recorded sync point, then inspect whether
+  warehouse continuous optimization has recovered under the current runtime and
+  guidance repairs.
 
 ## WSL Runner
 
@@ -125,11 +138,11 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 
 ## Next Actions
 
-1. Monitor the live CVRP root launched from `9b1db176` until it exits, then run
-   postrun checks with the caveat that the worktree was synced during the live
-   process.
-2. Launch the warehouse positive-control root from the recorded sync point after
-   the live CVRP run is no longer active.
+1. Strict-check the prepared warehouse positive-control root against the current
+   synchronized WSL checkout. If it is stale or mismatched, prepare a fresh root
+   from WSL head `17673b1c` before launch.
+2. Launch one warehouse positive-control run, then run WSL postrun rebuild and
+   readiness before interpreting plateau or promotion behavior.
 3. Evaluate runs for effective research behavior: warehouse continuous
    optimization, CVRP branch depth and solver-design follow-up, MDE-aware
    rejection, and absence of framework-control blockers.
