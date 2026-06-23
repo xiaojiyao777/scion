@@ -53,11 +53,14 @@ chronology belongs in focused experiment reports and git history.
   weak-positive follow-up, target-intent authority, mechanism-evidence
   follow-up, and MDE-aware rejection. It still lacks solver improvement or
   promotion.
-- Warehouse has positive movement evidence from earlier v2-to-v3 work and a
-  prepared/current positive-control path. The next run should start from the
-  recorded synchronized WSL checkout, not from stale prepared roots unless
-  strict launch readiness proves they match the current checkout and manifest
-  contract.
+- Warehouse has positive movement evidence from earlier v2-to-v3 work. A fresh
+  positive-control run is now active on WSL from synchronized status/runtime
+  commit `2f8e9f21`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-2f8e9f21-current-8r-gpt55-20260623T161630Z-claw`.
+  Strict launch readiness passed before launch, including runtime commit match,
+  clean runtime guard paths, complete prepared contract, warehouse v2 follow-up
+  handoff, prepared prompt-context readiness, and healthy `gpt-5.5` completion
+  preflight. Root `run_status.json` is `running`; `run.sh` PID is `838819`.
 - The old live CVRP solver-depth follow-up root
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-mechfollowup-readyfix-6r-gpt55-20260623T115013Z-claw`
   has finished and was mirrored locally to
@@ -70,10 +73,10 @@ chronology belongs in focused experiment reports and git history.
   missing, and launch/readiness reports the checkout changed while the process
   was live. Use it as live-run research evidence only, not as clean acceptance
   for Designs L/M.
-- The next operational action is to strict-check and launch a fresh warehouse
-  positive-control run from the recorded sync point, then inspect whether
-  warehouse continuous optimization has recovered under the current runtime and
-  guidance repairs.
+- The next operational action is to monitor the active warehouse
+  positive-control run, then run WSL postrun rebuild/readiness and inspect
+  whether warehouse continuous optimization has recovered under the current
+  runtime and guidance repairs.
 
 ## WSL Runner
 
@@ -138,11 +141,11 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 
 ## Next Actions
 
-1. Strict-check the prepared warehouse positive-control root against the current
-   synchronized WSL checkout. If it is stale or mismatched, prepare a fresh root
-   from WSL head `17673b1c` before launch.
-2. Launch one warehouse positive-control run, then run WSL postrun rebuild and
-   readiness before interpreting plateau or promotion behavior.
+1. Monitor active WSL warehouse root
+   `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-2f8e9f21-current-8r-gpt55-20260623T161630Z-claw`
+   until it exits.
+2. Run WSL postrun rebuild/readiness, mirror the root locally, and only then
+   interpret plateau or promotion behavior.
 3. Evaluate runs for effective research behavior: warehouse continuous
    optimization, CVRP branch depth and solver-design follow-up, MDE-aware
    rejection, and absence of framework-control blockers.

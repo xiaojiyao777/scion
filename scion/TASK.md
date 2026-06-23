@@ -21,9 +21,13 @@ quality blocks, no active-slot blocks, branch depth 4, and 4 of 4 observed
 same-mechanism follow-ups selected. It remains solver-negative and caveated:
 champion stayed `v1`, there were 0 promotions, all rows were below MDE, direct
 large-two-opt signal was missing, and the runner checkout changed while the
-process was live. The next resume point is to launch/inspect a fresh warehouse
-positive-control run from the recorded local/WSL sync point for effective
-research behavior.*
+process was live. A fresh warehouse positive-control run is now active on WSL
+from status/runtime commit `2f8e9f21`:
+`/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-2f8e9f21-current-8r-gpt55-20260623T161630Z-claw`.
+Strict launch readiness passed before launch, including `gpt-5.5` completion
+preflight. The next resume point is to monitor that root, run WSL postrun
+rebuild/readiness after exit, mirror it locally, and then inspect effective
+warehouse research behavior.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -297,6 +301,15 @@ Current checkpoint:
   Design H repair keeps those warehouse ids `context_only` and preserves CVRP's
   hard-bound `large_instance_intra_route_two_opt_seed`. Detailed report:
   `scion/docs/experiments/v0.4/v04-warehouse-guidance-binding-launcher-status-20260623.md`.
+- Current active warehouse positive-control root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-2f8e9f21-current-8r-gpt55-20260623T161630Z-claw`
+  was prepared from WSL status/runtime commit `2f8e9f21`, resumed champion `v2`,
+  passed strict launch readiness, and is running 8 rounds with `gpt-5.5`,
+  completion preflight enabled, proposal/APS headroom caps disabled by exact
+  `0`, fresh-runtime replay drain disabled by exact `0`, and stage-transition
+  drain `4`. Monitor it as the current warehouse continuous-optimization
+  positive control; do not interpret plateau or promotion until WSL postrun
+  rebuild/readiness completes.
 - CVRP/VRP continuation has current-run-ready complete post-repair evidence:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2e1bc5ae-postrepair-4r-gpt55-20260622T021910Z-claw`.
   It launched from WSL commit `2e1bc5ae`, finished naturally with wrapper exit
