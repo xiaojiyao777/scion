@@ -12,21 +12,25 @@ not solver improvements. The latest CVRP missing-primary run from WSL commit
 `8d28bc30` verified the feedback-tier repair but stopped after 3 of 4 requested
 rounds with `last_stop_reason=scheduler_active_slot_blocked`; copied/resumed
 weak-positive branches consumed all active slots while the current branch was
-inactive diagnostic evidence. In the current worktree,
-`scion/design/v0.4-effective-research-repair-design.md` Design A, Design B, and
-Design C are implemented and focused-tested: scheduler, active-slot inventory,
-and branch cards consume one problem-neutral scheduling-status model; prepared
-manifests carry typed `ResearchGuidanceContract` payloads; generic
-context/readiness code validates schema and rendered-path coverage; free-form
-`opportunity_diagnostics` text no longer creates actionable-loss
-fresh-runtime lifecycle or scheduler pressure; and CVRP/warehouse semantics
-stay in problem-owned providers/tests. The earlier WSL `d75ed849` root is
-slot-release/progress evidence only because its live worktree was later
-changed. The clean scheduler-status validation root from WSL commit `d0dded44`,
+inactive diagnostic evidence. The clean scheduler-status validation root from
+WSL commit `d0dded44`,
 `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-schedstatus-d0dded44-clean-missingprimary-4r-gpt55-20260623T025241Z-claw`,
-is the active acceptance line; latest observed status is 1 of 4 effective
-rounds with `scheduler_active_slot_blocked_attempts=0`, so final
-current-run-ready acceptance is still pending.*
+is accepted current-run-ready evidence for that generic active-slot blocker:
+postrun acceptance exit `0`, 4 of 4 effective rounds,
+`last_stop_reason=max_rounds_exhausted`, and
+`scheduler_active_slot_blocked_attempts=0`. It is framework validation, not a
+solver improvement. In the current worktree,
+`scion/design/v0.4-effective-research-repair-design.md` Designs A-E are
+implemented and focused-tested: scheduler, active-slot inventory, and branch
+cards consume one problem-neutral scheduling-status model; prepared manifests
+carry typed `ResearchGuidanceContract` payloads; generic context/readiness code
+validates schema and rendered-path coverage; free-form `opportunity_diagnostics`
+text no longer creates actionable-loss fresh-runtime lifecycle or scheduler
+pressure; lifecycle policy blocks and live campaign attempt accounting require
+typed signals; and CVRP/warehouse semantics stay in problem-owned
+providers/tests. The latest local repair commits were synced to WSL after the
+clean run finished; WSL head `84799ba6` passed focused tests and launch
+readiness.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -498,10 +502,18 @@ Current checkpoint:
     held: current missing-primary evidence on `9faaf70b` was classified as
     inactive. The remaining blocker is generic active-slot semantics: copied or
     resumed weak-positive branches (`bba3d45f`, `ec052599`) still consumed
-    active slots and prevented the fourth round. The current worktree now has
-    focused Design A coverage for this generic branch shape; the next CVRP run,
-    if launched, should be a controlled validation that the active-slot stop no
-    longer recurs rather than a new CVRP heuristic experiment.
+    active slots and prevented the fourth round.
+  - Clean scheduler-status validation root:
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-schedstatus-d0dded44-clean-missingprimary-4r-gpt55-20260623T025241Z-claw`
+    launched from WSL commit `d0dded44` and finished current-run-ready:
+    postrun acceptance exit `0`, validity `valid`, completeness `complete`,
+    4 effective screening rounds, 4 protocol-evaluated candidates,
+    0 quality blocks, 0 proposal quality blocks, 0 promotions, champion still
+    `v1`, `last_stop_reason=max_rounds_exhausted`, and
+    `scheduler_active_slot_blocked_attempts=0`. This accepts Design A for the
+    active-slot blocker. The result is not solver progress: all rows were
+    below MDE and non-positive. Detailed report:
+    `scion/docs/experiments/v0.4/v04-cvrp-scheduler-status-clean-validation-20260623.md`.
   - Design B migration is implemented in the current worktree: CVRP and
     warehouse prepared research guidance live in problem-owned providers,
     launchers write typed `research_guidance_contract` payloads while retaining
@@ -530,6 +542,10 @@ Current checkpoint:
     same-family, or schema-quality control kinds from `StepResult.reason`
     prose. Producers must set typed `attempt_kind`; reason text remains
     reporting material.
+  - Latest WSL sync after clean validation: local commits through `fc1b0e68`
+    were applied to WSL as head `84799ba6`; WSL conda `scion` passed the
+    focused campaign/lifecycle/proposal suite (`38 passed`) and launch
+    readiness (`115 passed`).
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

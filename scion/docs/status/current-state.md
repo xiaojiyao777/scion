@@ -47,12 +47,13 @@ history when exact old chronology is needed.
   warehouse and CVRP follow-up.
 - v0.4 is not closed until the latest current-run-ready evidence is reviewed
   against the effective-research gate. Warehouse now has both positive movement
-  evidence and a post-repair current-run-ready partial run. CVRP now has three
-  current-run-ready complete post-repair roots showing branch depth, expanded
-  screening, MDE-aware rejection, forced non-acceptance target control, and
-  clean prompt/source evidence, but still lacks a solver improvement or
-  promotion.
-- Latest CVRP missing-primary follow-up:
+  evidence and a post-repair current-run-ready partial run. CVRP now has
+  multiple current-run-ready complete post-repair roots showing branch depth,
+  expanded screening, MDE-aware rejection, forced non-acceptance target control,
+  and clean prompt/source evidence, plus a clean scheduler-status validation
+  root showing the active-slot blocker is repaired. CVRP still lacks a solver
+  improvement or promotion.
+- Prior CVRP missing-primary follow-up:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-missingprimary-8d28bc30-narrowavoid-4r-gpt55-20260622T171659Z-claw`
   launched from WSL commit `8d28bc30`. It passed postrun acceptance readiness
   with no postrun failures and wrapper exit `0`, but campaign completeness is
@@ -80,7 +81,10 @@ history when exact old chronology is needed.
   lifecycle keyword detection remains report/run-validity compatibility only.
   Proposal/circuit-breaker accounting recognizes repair-first and
   branch-lifecycle policy blocks from exact `RepairPolicyCheck.detail` payloads,
-  including agentic wrappers, not from arbitrary failure prose.
+  including agentic wrappers, not from arbitrary failure prose. Live
+  `CampaignLoop` attempt accounting requires explicit `StepResult.attempt_kind`
+  or existing structured scheduler/reconcile signals for lifecycle, repair,
+  same-family, and schema-quality attempt classes.
 - Controlled scheduler-status validation roots:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-schedstatus-d75ed849-resume-missingprimary-4r-gpt55-20260623T014159Z-claw`
   launched from WSL commit `d75ed849` after strict readiness passed. It showed
@@ -94,10 +98,16 @@ history when exact old chronology is needed.
   WSL worktree was later updated while it was live. The clean active validation
   root is
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-schedstatus-d0dded44-clean-missingprimary-4r-gpt55-20260623T025241Z-claw`,
-  launched from WSL commit `d0dded44` after strict readiness passed. Latest
-  observed status is 1 of 4 effective rounds, 1 screening/protocol metric row,
-  2 proposal attempts total, 0 scheduler-active-slot blocked attempts, and the
-  process still running. Final current-run-ready acceptance remains pending.
+  launched from WSL commit `d0dded44` after strict readiness passed. It
+  finished current-run-ready with postrun acceptance exit `0`, 4 of 4 effective
+  rounds, 4 protocol-evaluated candidates, 0 quality blocks, 0 promotions,
+  `last_stop_reason=max_rounds_exhausted`, and
+  `scheduler_active_slot_blocked_attempts=0`. This accepts Design A for the
+  generic active-slot blocker. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-scheduler-status-clean-validation-20260623.md`.
+  After the clean run ended, local commits through `fc1b0e68` were synced to
+  WSL as head `84799ba6`; WSL conda `scion` passed focused
+  campaign/lifecycle/proposal tests and launch readiness.
 - WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
   for the latest warehouse and CVRP reruns before launch, and live
   prompt/source evidence passed under the patched postrun checker.
@@ -590,26 +600,26 @@ CVRP/VRP:
   `large_instance_intra_route_two_opt_seed`; the following missing-primary
   repair root from WSL commit `8d28bc30` verified that missing declared primary
   telemetry is now inactive feedback, not weak-positive pair noise.
-- The current CVRP blocker is no longer the missing-primary feedback tier
-  itself. The blocker is generic state/scheduler design: copied or resumed
-  weak-positive records can still occupy all active slots and stop the campaign
-  at `scheduler_active_slot_blocked`. Do not treat this as a CVRP mechanism
-  failure or solve it with CVRP-specific exceptions.
-- Next CVRP launch can be used as validation of the generic scheduling-status
-  repair once the current worktree is the intended launch baseline. Keep any
-  CVRP follow-up problem-owned: forced or otherwise audited non-acceptance
-  target control may remain useful, but bounded two-opt, CMT protection, and
-  mechanism ids must not leak into generic scheduler or projection code.
+- The active-slot blocker exposed by the missing-primary root is now repaired
+  and accepted by the clean scheduler-status validation root. Do not treat the
+  accepted clean root as solver progress: it produced no promotion and all
+  available protocol effects were below MDE.
+- Next CVRP work should target effective research quality rather than another
+  scheduler validation. The postrun actionability gap is same-mechanism
+  follow-up selection (`same_mechanism_followup.selection_rate=0.25`); keep any
+  CVRP follow-up problem-owned, and keep bounded two-opt, CMT protection, and
+  mechanism ids out of generic scheduler or projection code.
 
 ## Next Actions
 
-1. Let the clean WSL scheduler-status validation root finish, then run postrun
-   acceptance against that same root without changing its live worktree.
-2. After the clean root is no longer live, sync the current local repair slice
-   to WSL and rerun focused tests in the WSL `scion` conda environment.
-3. If the clean root finishes without scheduler-active-slot blockage, use the
-   result as current-run-ready validation for Design A; otherwise inspect the
-   branch/status artifact before launching any new CVRP run.
+1. Treat the clean scheduler-status validation root as accepted Design A
+   evidence; do not relaunch that validation shape unless new scheduler
+   evidence regresses.
+2. Continue the remaining text-to-control-plane cleanup in generic proposal
+   boundary code: typed proposal failure/circuit-breaker signals first, then
+   typed repair/bridge intent schema. Do not add CVRP/warehouse exceptions.
+3. Analyze the clean CVRP root's same-mechanism follow-up misses before any new
+   CVRP heuristic campaign; use problem-owned guidance if a relaunch is needed.
 4. Keep warehouse as current-run-ready partial evidence unless a targeted
    follow-up is needed to refine validation-transfer quality guidance around
    `runtime_bounded_acceptance` / `bounded_candidate_policy`.
