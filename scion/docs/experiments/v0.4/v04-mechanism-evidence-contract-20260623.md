@@ -4,7 +4,8 @@ Date: 2026-06-23
 Branch: `codex/v04-evidence-repair-plan`
 Status: local and WSL focused tests pass; the old-checkout WSL solver-depth run
 has finished and is accepted as Design K trigger evidence. The next step is a
-synchronized CVRP solver-depth rerun from WSL head `92fff094`.
+synchronized CVRP solver-depth rerun from the current clean WSL runner after
+the tested code-sync commit `92fff094`.
 
 ## Purpose
 
@@ -117,12 +118,13 @@ it was not counted as coverage.
 ## Residual Work
 
 WSL sync and focused verification are complete. Local head `416aec82` was
-synced to WSL head `92fff094`; WSL conda passed the Design K/core groups
+synced to WSL code-sync commit `92fff094`; WSL conda passed the Design K/core groups
 (`53`, `35`, and `30` tests), launcher/guidance tests (`48 passed`),
 launch/postrun tool tests (`227 passed`), direct launcher entry checks,
 py-compile, and diff checks.
 
-Relaunch a synchronized CVRP solver-depth check from WSL head `92fff094`.
-Acceptance requires showing that a declared not-triggered mechanism is routed
-as branch-local diagnostic follow-up rather than being counted as ordinary
-inactive clean-fork breadth.
+Relaunch a synchronized CVRP solver-depth check from the current clean WSL
+runner after the tested code-sync commit `92fff094`. Acceptance requires
+showing that a declared not-triggered mechanism is routed as branch-local
+diagnostic follow-up rather than being counted as ordinary inactive clean-fork
+breadth.

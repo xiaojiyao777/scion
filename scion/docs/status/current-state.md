@@ -52,7 +52,7 @@ history when exact old chronology is needed.
   evaluated no-effect remains no-effect evidence rather than wiring repair. No
   CVRP-specific scheduler, target-intent, launcher-lifecycle, projection, or
   mechanism-evidence exception is accepted. Local head `416aec82` is synced to
-  WSL head `92fff094`; WSL conda passed the focused Design K/core tests
+  WSL code-sync commit `92fff094`; WSL conda passed the focused Design K/core tests
   (`53`, `35`, and `30` tests), launcher/guidance tests (`48 passed`),
   launch/postrun tool tests (`227 passed`), direct launcher entry checks,
   py-compile, and diff checks.
@@ -340,7 +340,8 @@ CVRP solver-depth old-checkout root:
   reached by the formal runtime path should create branch-local integration
   follow-up pressure rather than clean-fork breadth or solver-quality
   conclusions. The run has been mirrored locally; the next CVRP solver-depth
-  check should launch only from the synchronized WSL head `92fff094`.
+  check should launch only from the current clean WSL runner after the tested
+  code-sync commit `92fff094`.
 
 CVRP evidence root:
 
@@ -723,8 +724,9 @@ Warehouse:
   concrete operator telemetry identities. The current local repair separates
   rendered context from hard mechanism binding.
 - Next question: rerun the warehouse champion-`v2` positive-control path from
-  the synchronized WSL head `92fff094` to test whether valid operator ids can
-  now pass proposal quality and recover useful continuous optimization.
+  the current clean WSL runner after the tested code-sync commit `92fff094` to
+  test whether valid operator ids can now pass proposal quality and recover
+  useful continuous optimization.
 - Accept a plateau conclusion only with protocol evidence below MDE,
   review-ready runtime evidence, and substantive continuity evidence without
   fully missed same-mechanism follow-up opportunities.
@@ -766,9 +768,10 @@ CVRP/VRP:
 1. Treat the clean scheduler-status validation root and the target-intent
    authority validation root as accepted framework evidence; do not relaunch
    either validation shape unless a later run regresses the generic behavior.
-2. Launch the next CVRP solver-depth check only from synchronized WSL head
-   `92fff094`; continue CVRP as problem-owned solver research, interpret effects
-   against MDE, and do not add VRP/CVRP exceptions to generic scheduler,
+2. Launch the next CVRP solver-depth check only from the current clean WSL
+   runner after the tested code-sync commit `92fff094`; continue CVRP as
+   problem-owned solver research, interpret effects against MDE, and do not add
+   VRP/CVRP exceptions to generic scheduler,
    proposal authority, actionability, projection, or `DecisionFeatures`.
 3. Rerun warehouse from champion `v2` as the simpler positive-control path from
    the same synchronized WSL head. Do not accept the latest quality-blocked
