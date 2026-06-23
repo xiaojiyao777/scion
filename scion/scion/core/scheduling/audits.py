@@ -10,6 +10,7 @@ from scion.core.branch_hygiene import branch_lineage_status
 from scion.core.models import Branch
 from scion.core.scheduling.runtime_pressure import (
     RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON,
+    _explicit_current_evidence_tier,
     _runtime_aggregate_excluded,
     _runtime_evidence_low_or_incomplete,
     _runtime_evidence_pressure_count,
@@ -17,6 +18,7 @@ from scion.core.scheduling.runtime_pressure import (
     _summary_nonnegative_int,
     _summary_text,
     branch_runtime_evidence_clean_fork_pressure_summary,
+    current_weak_positive_without_case_loss,
 )
 from scion.core.scheduling.signals import (
     LOW_VALUE_CLEAN_FORK_MATERIAL_DIFFERENCE_REASON,
@@ -338,8 +340,9 @@ def weak_positive_runtime_evidence_suppression_audit(
         return {}
     wins = _summary_nonnegative_int(summary, "wins")
     losses = _summary_nonnegative_int(summary, "losses")
-    if wins <= 0 or losses != 0:
+    if not current_weak_positive_without_case_loss(branch):
         return {}
+    pair_wins = _summary_nonnegative_int(summary, "pair_wins")
     return {
         "runtime_evidence_clean_fork_suppression": "weak_positive_exception",
         "runtime_evidence_clean_fork_reason": (
@@ -348,6 +351,12 @@ def weak_positive_runtime_evidence_suppression_audit(
         "runtime_evidence_pressure_count": pressure_count,
         "case_wins": wins,
         "case_losses": losses,
+        "pair_wins": pair_wins,
+        "evidence_tier": _explicit_current_evidence_tier(
+            branch,
+            summary,
+        )
+        or "unknown",
         "runtime_evidence_confidence": _summary_text(
             summary,
             "runtime_evidence_confidence",

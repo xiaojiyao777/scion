@@ -10,7 +10,9 @@ from .boundaries import (
     _declared_solver_design_surface_names,
 )
 from .classification import (
+    AgenticFailureRoutingSignal,
     _agentic_detail_is_framework_boundary,
+    _agentic_failure_routing_signal,
     _agentic_output_is_control_timeout,
     _agentic_output_is_quality_blocked,
     _agentic_primary_secondary_failures,
@@ -32,6 +34,7 @@ from .protocols import (
 
 __all__ = [
     "AgenticProposalSessionLike",
+    "AgenticFailureRoutingSignal",
     "BranchControllerLike",
     "CircuitBreakerLike",
     "ClassifierLike",
@@ -41,6 +44,7 @@ __all__ = [
     "ProposalPipeline",
     "_active_problem_boundary_surfaces_for_runtime",
     "_agentic_detail_is_framework_boundary",
+    "_agentic_failure_routing_signal",
     "_agentic_output_is_control_timeout",
     "_agentic_output_is_quality_blocked",
     "_agentic_primary_secondary_failures",

@@ -20,26 +20,21 @@ history when exact old chronology is needed.
 - Current posture: avoid broad budgets, generic truncation/compression, and
   decorative gates. Keep CVRP/warehouse semantics problem-owned and keep
   `DecisionFeatures` problem-neutral.
-- Current design gate: the generic scheduling-status repair, Design B
-  research-guidance contract migration, typed fresh-runtime opportunity signal,
-  typed lifecycle policy-block cleanup, and typed live attempt accounting in
+- Current design gate: Designs A-F in
   `scion/design/v0.4-effective-research-repair-design.md` are implemented and
   focused-tested in the current worktree. Scheduler, active-slot inventory, and
   branch cards share one problem-neutral scheduling-status model. Prepared
-  manifests now carry typed `ResearchGuidanceContract` payloads, generic
+  manifests carry typed `ResearchGuidanceContract` payloads, generic
   context/readiness code validates schema and rendered-path coverage, and
-  CVRP/warehouse guidance remains problem-owned. Generic schema preview records
-  legacy `default_avoid_directions` only as rendered guidance, reports
-  structured avoid rules without making them a generic veto, and keeps hard
-  mechanism guards on typed ids. Ordinary pre-protocol patch/contract failures
-  remain visible feedback but do not create hard branch-lesson requirements.
-  Free-form `opportunity_diagnostics` text remains proposal/reporting material
-  and no longer creates actionable-loss fresh-runtime lifecycle or scheduler
-  pressure without structured phase or reason-code signal. No CVRP-specific
-  scheduler or projection exception is accepted. Live `CampaignLoop`
-  accounting now relies on explicit `StepResult.attempt_kind` or existing
-  structured scheduler/reconcile signals, not `reason` prose, when classifying
-  lifecycle, repair, same-family, or schema-quality attempts.
+  CVRP/warehouse guidance remains problem-owned. Free-form
+  `opportunity_diagnostics` text remains proposal/reporting material and no
+  longer creates actionable-loss fresh-runtime lifecycle or scheduler pressure
+  without structured phase or reason-code signal. Lifecycle policy blocks, live
+  attempt accounting, and agentic proposal failure routing now require typed or
+  exact machine-readable signals before they affect control-plane state.
+  Runtime-evidence completeness pressure now yields to current weak-positive
+  follow-up when there is no case-level loss. No CVRP-specific scheduler or
+  projection exception is accepted.
 
 ## Current Decision
 
@@ -85,6 +80,11 @@ history when exact old chronology is needed.
   `CampaignLoop` attempt accounting requires explicit `StepResult.attempt_kind`
   or existing structured scheduler/reconcile signals for lifecycle, repair,
   same-family, and schema-quality attempt classes.
+- Agentic proposal failure routing is now centralized in a typed
+  `AgenticFailureRoutingSignal`: typed output timeout/transient categories drive
+  framework-control or infra routing, while diagnostic text that merely mentions
+  legacy timeout or service keywords stays a proposal/circuit failure.
+  Exact policy-check payloads still stay outside proposal streaks.
 - Controlled scheduler-status validation roots:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-schedstatus-d75ed849-resume-missingprimary-4r-gpt55-20260623T014159Z-claw`
   launched from WSL commit `d75ed849` after strict readiness passed. It showed
@@ -108,6 +108,16 @@ history when exact old chronology is needed.
   After the clean run ended, local commits through `fc1b0e68` were synced to
   WSL as head `84799ba6`; WSL conda `scion` passed focused
   campaign/lifecycle/proposal tests and launch readiness.
+- Clean-root same-mechanism audit: the accepted scheduler-status root is not
+  solver progress, and it exposed a generic scheduler-policy gap instead of a
+  CVRP heuristic gap. Same-mechanism follow-up was observed 4 times and selected
+  once. Local replay of the clean root's database after the runtime-pressure
+  repair selects an existing weak-positive branch for
+  `weak_positive_signal_followup` / `exploit_weak_positive` instead of a clean
+  fork. This repair is problem-neutral: weak-positive branches with case losses
+  still prefer a clean fork, while current weak-positive branches without case
+  loss can receive bounded follow-up. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-weak-positive-runtime-pressure-scheduler-repair-20260623.md`.
 - WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
   for the latest warehouse and CVRP reruns before launch, and live
   prompt/source evidence passed under the patched postrun checker.
@@ -604,26 +614,29 @@ CVRP/VRP:
   and accepted by the clean scheduler-status validation root. Do not treat the
   accepted clean root as solver progress: it produced no promotion and all
   available protocol effects were below MDE.
-- Next CVRP work should target effective research quality rather than another
-  scheduler validation. The postrun actionability gap is same-mechanism
-  follow-up selection (`same_mechanism_followup.selection_rate=0.25`); keep any
-  CVRP follow-up problem-owned, and keep bounded two-opt, CMT protection, and
-  mechanism ids out of generic scheduler or projection code.
+- The clean root's actionability gap is same-mechanism follow-up selection
+  (`same_mechanism_followup.selection_rate=0.25`). The generic scheduler-policy
+  repair now keeps current weak-positive branches with no case-level loss in
+  the weak-positive follow-up lane instead of forcing a clean fork. Keep the
+  next CVRP relaunch problem-owned, and keep bounded two-opt, CMT protection,
+  and mechanism ids out of generic scheduler or projection code.
 
 ## Next Actions
 
 1. Treat the clean scheduler-status validation root as accepted Design A
    evidence; do not relaunch that validation shape unless new scheduler
    evidence regresses.
-2. Continue the remaining text-to-control-plane cleanup in generic proposal
-   boundary code: typed proposal failure/circuit-breaker signals first, then
-   typed repair/bridge intent schema. Do not add CVRP/warehouse exceptions.
-3. Analyze the clean CVRP root's same-mechanism follow-up misses before any new
-   CVRP heuristic campaign; use problem-owned guidance if a relaunch is needed.
-4. Keep warehouse as current-run-ready partial evidence unless a targeted
+2. Before another CVRP heuristic campaign, run focused readiness/tests on the
+   target runtime checkout and use the repaired scheduler policy so current
+   weak-positive/no-case-loss branches can receive same-mechanism follow-up.
+3. Relaunch CVRP only as a problem-owned research-quality check; interpret all
+   effects against MDE and do not add VRP/CVRP exceptions to generic core.
+4. Continue the remaining typed repair/bridge intent cleanup if it is still
+   needed for control-plane state mutation; do not infer it from prose.
+5. Keep warehouse as current-run-ready partial evidence unless a targeted
    follow-up is needed to refine validation-transfer quality guidance around
    `runtime_bounded_acceptance` / `bounded_candidate_policy`.
-5. Update this file and `scion/TASK.md` only when operating truth changes; keep
+6. Update this file and `scion/TASK.md` only when operating truth changes; keep
    detailed run evidence in focused experiment reports.
 
 ## Pointers

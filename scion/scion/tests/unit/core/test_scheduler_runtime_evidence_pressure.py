@@ -58,7 +58,7 @@ def _runtime_pressure_protocol() -> ProtocolResult:
     )
 
 
-def test_runtime_pressure_summary_module_matches_scheduler_facade() -> None:
+def test_runtime_pressure_summary_module_matches_scheduler_facade_for_case_loss() -> None:
     branch = Branch(
         branch_id="runtime-pressure-summary-facade",
         state=BranchState.EXPLORE,
@@ -69,7 +69,7 @@ def test_runtime_pressure_summary_module_matches_scheduler_facade() -> None:
         direction="tainted proposal text must not appear",
         branch_evidence_summary={
             "wins": "0",
-            "losses": "-1",
+            "losses": "1",
             "runtime_evidence_confidence": " low_cached_champion ",
             "runtime_evidence_status": "fresh_required",
             "runtime_aggregate_exclusion": {"excluded": True},
@@ -89,8 +89,8 @@ def test_runtime_pressure_summary_module_matches_scheduler_facade() -> None:
     assert summary["policy"] == "prefer_clean_fork"
     assert summary["runtime_evidence_pressure_count"] == 2
     assert summary["case_wins"] == 0
-    assert summary["case_losses"] == 0
-    assert summary["case_balance"] == "no_case_win"
+    assert summary["case_losses"] == 1
+    assert summary["case_balance"] == "case_loss"
     assert summary["runtime_evidence_confidence"] == "low_cached_champion"
     assert summary["runtime_evidence_status"] == "fresh_required"
     assert summary["runtime_aggregate_excluded"] is True
@@ -469,7 +469,7 @@ def test_weak_positive_runtime_pressure_with_loss_prefers_clean_fork() -> None:
     ]
 
 
-def test_weak_positive_runtime_pressure_without_case_win_prefers_clean_fork() -> None:
+def test_weak_positive_runtime_pressure_without_case_win_follows_up() -> None:
     branch = Branch(
         branch_id="weak-positive-zero-win-runtime-pressure",
         state=BranchState.EXPLORE,
@@ -479,6 +479,7 @@ def test_weak_positive_runtime_pressure_without_case_win_prefers_clean_fork() ->
         last_screening_feedback_tier="weak_positive",
         direction="generic weak-positive research direction",
         branch_evidence_summary={
+            "tier": "weak_positive",
             "wins": 0,
             "losses": 0,
             "runtime_evidence_confidence": "low_cached_champion",
@@ -486,13 +487,24 @@ def test_weak_positive_runtime_pressure_without_case_win_prefers_clean_fork() ->
             "runtime_evidence_pressure_count": 2,
         },
     )
-
     action = Scheduler(max_active_branches=2).select_next([branch])
 
-    assert action.action == "create_new"
-    assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason == RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.slot == "exploit_weak_positive"
+    assert action.reason == "weak_positive_signal_followup"
+    assert action.audit_metadata["runtime_evidence_clean_fork_suppression"] == (
+        "weak_positive_exception"
+    )
+    assert action.audit_metadata["runtime_evidence_pressure_count"] == 2
+    assert action.audit_metadata["case_wins"] == 0
+    assert action.audit_metadata["case_losses"] == 0
+    assert action.audit_metadata["pair_wins"] == 0
+    assert action.audit_metadata["evidence_tier"] == "weak_positive"
+    assert action.audit_metadata["runtime_evidence_pressure_triggers"] == [
+        "low_or_cached_runtime_confidence",
+        "runtime_evidence_status:incomplete",
+    ]
 
 
 def test_no_effect_branch_gets_one_same_branch_sample_before_clean_fork() -> None:

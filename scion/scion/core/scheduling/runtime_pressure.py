@@ -25,7 +25,7 @@ def branch_runtime_evidence_clean_fork_pressure_summary(
         return {}
     wins = _summary_nonnegative_int(summary, "wins")
     losses = _summary_nonnegative_int(summary, "losses")
-    if wins > 0 and losses == 0:
+    if current_weak_positive_without_case_loss(branch):
         return {}
     return {
         "reason": RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON,
@@ -58,6 +58,47 @@ def _branch_is_weak_positive_lineage(branch: Any) -> bool:
         "active_weak_positive",
         "restored_weak_positive",
     }
+
+
+def current_weak_positive_without_case_loss(branch: Any | None) -> bool:
+    if branch is None or not _branch_is_weak_positive_lineage(branch):
+        return False
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if not isinstance(summary, Mapping):
+        summary = {}
+    if _summary_nonnegative_int(summary, "losses") > 0:
+        return False
+    return (
+        _summary_nonnegative_int(summary, "wins") > 0
+        or _summary_nonnegative_int(summary, "pair_wins") > 0
+        or _explicit_current_weak_positive_signal(branch, summary)
+    )
+
+
+def _explicit_current_weak_positive_signal(
+    branch: Any,
+    summary: Mapping[str, Any],
+) -> bool:
+    tier = _explicit_current_evidence_tier(branch, summary)
+    if tier:
+        return tier == "weak_positive"
+    return _branch_current_status_is_weak_positive(branch)
+
+
+def _explicit_current_evidence_tier(
+    branch: Any,
+    summary: Mapping[str, Any],
+) -> str:
+    tier = _summary_text(summary, "tier").lower()
+    if tier:
+        return tier
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "").strip()
+    return tier.lower()
+
+
+def _branch_current_status_is_weak_positive(branch: Any) -> bool:
+    status = str(getattr(branch, "branch_code_status", "") or "").strip().lower()
+    return status in {"active_weak_positive", "restored_weak_positive"}
 
 
 def _runtime_evidence_pressure_count(summary: Mapping[str, Any]) -> int:
@@ -139,4 +180,3 @@ def _runtime_evidence_pressure_triggers(summary: Mapping[str, Any]) -> list[str]
     if _runtime_aggregate_excluded(summary):
         triggers.append("runtime_aggregate_excluded")
     return list(dict.fromkeys(triggers))
-

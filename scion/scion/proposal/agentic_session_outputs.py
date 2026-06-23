@@ -232,6 +232,7 @@ class AgenticSessionOutputMixin:
             detail: str,
             evidence_used: tuple[AgenticEvidenceRef, ...] = (),
             failure_category: AgenticFailureCategory | str | None = None,
+            structured_rejection: Mapping[str, Any] | None = None,
         ) -> AgenticProposalOutput:
             return AgenticProposalOutput(
                 status=status,
@@ -251,6 +252,7 @@ class AgenticSessionOutputMixin:
                 termination_reason=termination_reason,
                 failure_detail=detail,
                 failure_category=failure_category,
+                structured_rejection=structured_rejection,
             )
 
     def _campaign_abort_output(

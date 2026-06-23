@@ -5,9 +5,6 @@ import logging
 from dataclasses import replace
 from typing import Any, Mapping
 
-from scion.core.branch_repair_policy import (
-    repair_policy_check_violation_code_from_detail,
-)
 from scion.core.models import (
     Branch,
     ChampionState,
@@ -44,10 +41,8 @@ from scion.proposal.negative_facts import render_negative_fact_block
 
 from .boundaries import _active_problem_boundary_surfaces_for_runtime
 from .classification import (
-    _agentic_detail_is_framework_boundary,
-    _agentic_output_is_llm_transient_api_error,
-    _agentic_output_is_control_timeout,
-    _agentic_output_is_quality_blocked,
+    AgenticFailureRoutingSignal,
+    _agentic_failure_routing_signal,
 )
 from .constants import FRAMEWORK_CONTROL_FAILURE
 from .utils import _agentic_value, _now_iso
@@ -325,15 +320,17 @@ class AgenticLifecycleMixin:
             self.mark_balance_exhausted()
             self.circuit_breaker.record_failure(detail)
             return None, None
-        self._record_agentic_failure_lifecycle(branch, detail, output)
-        if output is not None and _agentic_output_is_quality_blocked(output):
+        routing_signal = _agentic_failure_routing_signal(output, detail)
+        self._record_agentic_failure_lifecycle(
+            branch,
+            detail,
+            output,
+            routing_signal,
+        )
+        if output is not None and routing_signal.quality_blocked:
             self._remember_agentic_quality_block(branch, detail, output)
             return None, None
-        if _agentic_detail_is_framework_boundary(detail):
-            return None, None
-        if _agentic_output_is_control_timeout(output, detail):
-            return None, None
-        if _agentic_output_is_llm_transient_api_error(output, detail):
+        if not routing_signal.record_circuit_failure:
             return None, None
         self.circuit_breaker.record_failure(detail)
         return None, None
@@ -350,15 +347,17 @@ class AgenticLifecycleMixin:
             self.mark_balance_exhausted()
             self.circuit_breaker.record_failure(detail)
             return
-        self._record_agentic_failure_lifecycle(branch, detail, output)
-        if output is not None and _agentic_output_is_quality_blocked(output):
+        routing_signal = _agentic_failure_routing_signal(output, detail)
+        self._record_agentic_failure_lifecycle(
+            branch,
+            detail,
+            output,
+            routing_signal,
+        )
+        if output is not None and routing_signal.quality_blocked:
             self._remember_agentic_quality_block(branch, detail, output)
             return
-        if _agentic_detail_is_framework_boundary(detail):
-            return
-        if _agentic_output_is_control_timeout(output, detail):
-            return
-        if _agentic_output_is_llm_transient_api_error(output, detail):
+        if not routing_signal.record_circuit_failure:
             return
         self.circuit_breaker.record_failure(detail)
 
@@ -367,15 +366,18 @@ class AgenticLifecycleMixin:
         branch: Branch,
         detail: str,
         output: AgenticProposalOutput | None,
+        routing_signal: AgenticFailureRoutingSignal | None = None,
     ) -> None:
-        if output is not None and _agentic_output_is_quality_blocked(output):
+        if routing_signal is None:
+            routing_signal = _agentic_failure_routing_signal(output, detail)
+        if routing_signal.quality_blocked:
             logger.info(
                 "Branch %s: agentic quality block recorded outside infra/proposal streaks: %s",
                 branch.branch_id,
                 detail,
             )
             return
-        if repair_policy_check_violation_code_from_detail(detail) is not None:
+        if routing_signal.repair_policy_violation:
             logger.info(
                 "Branch %s: agentic repair policy block recorded outside "
                 "infra/proposal streaks: %s",
@@ -383,7 +385,7 @@ class AgenticLifecycleMixin:
                 detail,
             )
             return
-        if _agentic_output_is_control_timeout(output, detail):
+        if routing_signal.lifecycle_category == FRAMEWORK_CONTROL_FAILURE:
             logger.info(
                 "Branch %s: agentic control timeout recorded outside proposal streaks: %s",
                 branch.branch_id,
@@ -394,7 +396,7 @@ class AgenticLifecycleMixin:
                 FailureEvent(category=FRAMEWORK_CONTROL_FAILURE, detail=detail),
             )
             return
-        if _agentic_output_is_llm_transient_api_error(output, detail):
+        if routing_signal.lifecycle_category == "infra":
             logger.info(
                 "Branch %s: agentic transient LLM API failure routed as infra: %s",
                 branch.branch_id,

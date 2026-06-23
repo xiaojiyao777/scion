@@ -362,6 +362,13 @@ class AgenticSessionHypothesisMixin(
                     request=request,
                 )
                 if forced_violation is not None:
+                    boundary_failure_code = (
+                        "active_problem_boundary_constraint"
+                        if forced_violation.startswith(
+                            "active_problem_boundary_constraint"
+                        )
+                        else "forced_surface_constraint"
+                    )
                     output = self._failed_output(
                         request=request,
                         session_id=session_id,
@@ -370,6 +377,16 @@ class AgenticSessionHypothesisMixin(
                         detail=forced_violation,
                         evidence_used=tuple(evidence),
                         failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+                        structured_rejection={
+                            "source": "hypothesis_boundary_gate",
+                            "failure_code": boundary_failure_code,
+                            "failure_category": (
+                                AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value
+                            ),
+                            "reason": forced_violation,
+                            "selected_surface": hypothesis.change_locus,
+                            "target_file": hypothesis.target_file,
+                        },
                     )
                     state.status = output.status
                     state.note(

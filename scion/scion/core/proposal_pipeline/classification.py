@@ -1,6 +1,7 @@
 """Agentic proposal output classification and bounded failure payloads."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Mapping
 
 from scion.core.branch_repair_policy import (
@@ -26,6 +27,7 @@ from .constants import (
     BOUNDARY_CONTRADICTED,
     BRANCH_FOLLOWUP_POLICY_VIOLATION,
     LEGACY_PREMISE_CONTRADICTED,
+    FRAMEWORK_CONTROL_FAILURE,
     LLM_TRANSIENT_API_ERROR,
     OBJECTIVE_POLICY_CONTRADICTED,
     PROPOSAL_ACTIVATION_DIAGNOSTIC,
@@ -34,6 +36,29 @@ from .constants import (
     TOOL_BUDGET_EXHAUSTED,
 )
 from .utils import _agentic_value
+
+
+_AGENTIC_FRAMEWORK_BOUNDARY_FAILURE_CODES = frozenset(
+    {
+        "active_problem_boundary_constraint",
+        "forced_surface_constraint",
+    }
+)
+
+
+@dataclass(frozen=True)
+class AgenticFailureRoutingSignal:
+    """Routing decision for one agentic failure at the proposal boundary."""
+
+    origin: str
+    source: str
+    lifecycle_category: str | None
+    record_circuit_failure: bool
+    quality_blocked: bool = False
+    framework_boundary: bool = False
+    repair_policy_violation: bool = False
+    control_timeout: bool = False
+    llm_transient_api_error: bool = False
 
 
 def _agentic_self_check_failure_detail(
@@ -271,12 +296,42 @@ def _agentic_detail_is_framework_boundary(detail: str | None) -> bool:
     )
 
 
+def _agentic_framework_boundary_signal(
+    output: AgenticProposalOutput | None,
+    detail: str | None,
+) -> bool:
+    if output is None:
+        return _agentic_detail_is_framework_boundary(detail)
+    if repair_policy_check_violation_code_from_detail(detail) is not None:
+        return True
+    structured = (
+        output.structured_rejection
+        if isinstance(output.structured_rejection, Mapping)
+        else {}
+    )
+    failure_code = str(structured.get("failure_code") or "").strip()
+    failure_category = (
+        _agentic_value(structured.get("failure_category"))
+        or _agentic_value(getattr(output, "failure_category", None))
+    )
+    return (
+        failure_category == AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value
+        and failure_code in _AGENTIC_FRAMEWORK_BOUNDARY_FAILURE_CODES
+    )
+
+
 def _agentic_output_is_control_timeout(
     output: AgenticProposalOutput | None,
     detail: str | None = None,
 ) -> bool:
     reason = _agentic_value(getattr(output, "termination_reason", None))
     category = _agentic_value(getattr(output, "failure_category", None))
+    if output is not None:
+        return (
+            reason == SESSION_TIMEOUT
+            or category == AGENTIC_BUDGET_CONTROL
+            or (category == TOOL_BUDGET_EXHAUSTED and reason == SESSION_TIMEOUT)
+        )
     combined_detail = " ".join(
         part
         for part in (
@@ -285,12 +340,6 @@ def _agentic_output_is_control_timeout(
         )
         if part
     ).lower()
-    if reason == SESSION_TIMEOUT:
-        return True
-    if category == AGENTIC_BUDGET_CONTROL:
-        return True
-    if category == TOOL_BUDGET_EXHAUSTED and reason == SESSION_TIMEOUT:
-        return True
     return (
         "session_timeout" in combined_detail
         and ("agentic" in combined_detail or "max_wall_time_sec" in combined_detail)
@@ -302,8 +351,8 @@ def _agentic_output_is_llm_transient_api_error(
     detail: str | None = None,
 ) -> bool:
     category = _agentic_value(getattr(output, "failure_category", None))
-    if category == LLM_TRANSIENT_API_ERROR:
-        return True
+    if output is not None:
+        return category == LLM_TRANSIENT_API_ERROR
     combined_detail = " ".join(
         part
         for part in (
@@ -319,6 +368,52 @@ def _agentic_output_is_llm_transient_api_error(
         or "bad gateway" in combined_detail
         or "gateway timeout" in combined_detail
         or "service unavailable" in combined_detail
+    )
+
+
+def _agentic_failure_routing_signal(
+    output: AgenticProposalOutput | None,
+    detail: str | None,
+) -> AgenticFailureRoutingSignal:
+    quality_blocked = (
+        output is not None and _agentic_output_is_quality_blocked(output)
+    )
+    repair_policy_violation = (
+        repair_policy_check_violation_code_from_detail(detail) is not None
+    )
+    framework_boundary = _agentic_framework_boundary_signal(output, detail)
+    control_timeout = _agentic_output_is_control_timeout(output, detail)
+    llm_transient_api_error = _agentic_output_is_llm_transient_api_error(
+        output,
+        detail,
+    )
+    source = "typed_output" if output is not None else "legacy_detail_compat"
+    origin = "agentic_proposal_output" if output is not None else "exception_detail"
+
+    lifecycle_category = "proposal"
+    if quality_blocked or repair_policy_violation:
+        lifecycle_category = None
+    elif control_timeout:
+        lifecycle_category = FRAMEWORK_CONTROL_FAILURE
+    elif llm_transient_api_error:
+        lifecycle_category = "infra"
+
+    return AgenticFailureRoutingSignal(
+        origin=origin,
+        source=source,
+        lifecycle_category=lifecycle_category,
+        record_circuit_failure=not (
+            quality_blocked
+            or framework_boundary
+            or repair_policy_violation
+            or control_timeout
+            or llm_transient_api_error
+        ),
+        quality_blocked=quality_blocked,
+        framework_boundary=framework_boundary,
+        repair_policy_violation=repair_policy_violation,
+        control_timeout=control_timeout,
+        llm_transient_api_error=llm_transient_api_error,
     )
 
 
