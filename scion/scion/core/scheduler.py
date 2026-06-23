@@ -20,6 +20,7 @@ from scion.core.scheduling.active_slots import (
     branch_active_slot_release_reason as _branch_active_slot_release_reason,
     branch_counts_toward_active_slots as _branch_counts_toward_active_slots,
     branch_has_decision_origin_park_marker as _branch_has_decision_origin_park_marker,
+    branch_scheduling_status as _branch_scheduling_status,
     reclaim_active_slot_for_new_branch as _reclaim_active_slot_for_new_branch,
     reconcile_active_slot_overflow as _reconcile_active_slot_overflow,
 )
@@ -146,13 +147,18 @@ class Scheduler:
         are broken by oldest updated_at as a last-run approximation.
         """
         active = [b for b in branches if b.state not in _TERMINAL_STATES]
+        scheduling_statuses = {
+            b.branch_id: branch_scheduling_status(b)
+            for b in active
+        }
         active_for_slots = active_slot_branches(active)
         # BLOCKED_INFRA branches are not schedulable, though they still count
         # toward the active-branch cap until recovery/abandon clears them.
         schedulable = [
             b
             for b in active
-            if b.state != BranchState.BLOCKED_INFRA
+            if scheduling_statuses[b.branch_id].schedulable
+            and b.state != BranchState.BLOCKED_INFRA
             and not branch_is_parked_lineage(b)
             and not _branch_has_decision_origin_park_marker(b)
             and (
@@ -487,6 +493,14 @@ def branch_counts_toward_active_slots(branch: Branch) -> bool:
 def branch_active_slot_release_reason(branch: Branch | None) -> str:
     """Return why ``branch`` is excluded from active-slot accounting, if known."""
     return _branch_active_slot_release_reason(
+        branch,
+        policy=_active_slot_policy(),
+    )
+
+
+def branch_scheduling_status(branch: Branch | None):
+    """Return the shared scheduling status used by scheduler consumers."""
+    return _branch_scheduling_status(
         branch,
         policy=_active_slot_policy(),
     )

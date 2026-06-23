@@ -89,7 +89,7 @@ from scion.core.models import Branch
 from scion.core.scheduler import (
     branch_runtime_evidence_clean_fork_pressure_summary,
     branch_active_slot_release_reason,
-    branch_counts_toward_active_slots,
+    branch_scheduling_status,
 )
 
 
@@ -121,9 +121,12 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     same_mechanism_followup_required = branch_requires_same_mechanism_followup(
         branch
     )
-    weak_positive_followup = (
-        status == "active_weak_positive"
-        or last_screening_feedback_tier == "weak_positive"
+    scheduling_status = (
+        branch_scheduling_status(branch) if branch is not None else None
+    )
+    weak_positive_followup = bool(
+        scheduling_status
+        and scheduling_status.lane == "weak_positive_followup"
     )
     parked_lineage = branch_is_parked_lineage(branch)
     final_classification = branch_lifecycle_closure_classification(branch)
@@ -192,17 +195,29 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     else:
         baseline_policy = "clean"
         repair_focus_reason = None
-    lineage_status = branch_lineage_status(branch)
+    lineage_status = (
+        scheduling_status.lineage_status
+        if scheduling_status is not None
+        else branch_lineage_status(branch)
+    )
     current_head_status = status
     state_value = _branch_state_value(branch)
     counts_toward_active_slots = (
-        branch_counts_toward_active_slots(branch) if branch is not None else False
+        scheduling_status.consumes_active_slot
+        if scheduling_status is not None
+        else False
     )
     if replay_blocked:
         counts_toward_active_slots = False
     current_head_active_slot_release_reason = (
-        branch_active_slot_release_reason(branch) if branch is not None else ""
+        scheduling_status.release_reason
+        if scheduling_status is not None
+        else ""
     )
+    if not current_head_active_slot_release_reason and branch is not None:
+        current_head_active_slot_release_reason = branch_active_slot_release_reason(
+            branch
+        )
     if replay_blocked and not current_head_active_slot_release_reason:
         current_head_active_slot_release_reason = (
             "fresh_runtime_replay_blocked_missing_identity"
@@ -288,9 +303,10 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
             "active_slot"
             if counts_toward_active_slots
             else "parked_lineage"
-            if branch_is_parked_lineage(branch)
+            if current_head_active_slot_release_reason == "parked_lineage"
+            or branch_is_parked_lineage(branch)
             else "released_active_slot"
-            if replay_blocked
+            if current_head_active_slot_release_reason
             else "inactive"
         ),
         "counts_toward_active_slots": counts_toward_active_slots,
@@ -300,6 +316,21 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         "retained_checkpoint_no_effect_current_head_released": (
             current_head_active_slot_release_reason
             == "retained_checkpoint_no_effect_current_head"
+        ),
+        "branch_scheduling_status": (
+            scheduling_status.as_dict()
+            if scheduling_status is not None
+            else None
+        ),
+        "branch_scheduling_lane": (
+            scheduling_status.lane
+            if scheduling_status is not None
+            else "not_schedulable"
+        ),
+        "branch_scheduling_next_action_reason": (
+            scheduling_status.next_action_reason
+            if scheduling_status is not None
+            else "inspect_branch_state"
         ),
         "best_checkpoint_status": best_checkpoint_status,
         "best_quality_checkpoint_id": (

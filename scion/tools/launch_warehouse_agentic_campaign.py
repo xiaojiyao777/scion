@@ -13,7 +13,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import yaml
 
@@ -53,66 +53,6 @@ PREPARED_RUN_MANIFEST_SCHEMA = "scion.launcher_prepared_run_manifest.v1"
 TASK_DOC = "scion/TASK.md"
 CURRENT_STATE_DOC = "scion/docs/status/current-state.md"
 ANALYSIS_HANDOFF_DOC = "scion/docs/operations/postrun-analysis-handoff.md"
-WAREHOUSE_ANALYSIS_INTENT = (
-    "Warehouse champion-v2 continuous-improvement follow-up. Verify whether "
-    "the accepted v0.4 positive research path can produce additional useful "
-    "research without regressing promotion behavior; inspect branch transfer, "
-    "prompt context, runtime/model explanation, and whether any plateau is real "
-    "or a missed continuous-promotion opportunity."
-)
-WAREHOUSE_DEFAULT_AVOID_DIRECTIONS = (
-    "restart from baseline instead of champion v2",
-    "treat proposal-quality blocks as plateau evidence",
-    "treat fast completion as incidental noise rather than runtime-model evidence",
-    "treat split_delta_sum==0 as no effect when cost_delta_sum is positive",
-    "repeat unbounded merge_vehicles or swap_orders variants without validation-transfer risk controls",
-    "launch a broad warehouse matrix before the focused v2 follow-up is analyzed",
-)
-WAREHOUSE_ADAPTER_OPPORTUNITY_FIELDS = (
-    "transfer_risk",
-    "required_diagnostics",
-    "measurable_opportunity_classes",
-    "opportunity_diagnostics",
-    "policy",
-)
-WAREHOUSE_ADAPTER_FORBIDDEN_KEY_FRAGMENTS = (
-    "pair_evidence",
-    "pair_rows",
-    "raw_pair",
-    "raw_calibration",
-    "calibration_pair",
-    "validation_case",
-    "frozen_case",
-    "holdout",
-    "prompt_ratio",
-    "llm_text",
-)
-WAREHOUSE_CURRENT_RESEARCH_FOCUS = {
-    "schema_version": "scion.warehouse_research_focus.v1",
-    "scope": "report_only_prepared_handoff",
-    "accepted_checkpoint": (
-        "Champion v2 promoted from the validation-transfer acceptance-contract "
-        "run via split-preserving cost compression in pack_compatible_vehicles."
-    ),
-    "current_question": (
-        "Starting from champion v2, determine whether warehouse can produce "
-        "additional useful research or whether the observed behavior is a real "
-        "post-v2 plateau."
-    ),
-    "required_evidence": [
-        "preserve or improve promotion behavior relative to the v2 checkpoint",
-        "inspect branch transfer from the v2 source campaign before judging plateau",
-        "distinguish quality-blocked proposals from protocol-evaluated no-effect candidates",
-        "interpret split-preserving cost-compression with cost_delta and improving-move telemetry, not split_delta alone",
-        "explain fast completion through the declared warehouse runtime/problem model",
-    ],
-    "default_avoid_directions": list(WAREHOUSE_DEFAULT_AVOID_DIRECTIONS),
-    "decision_boundary": (
-        "This focus is proposal/delegated-analysis guidance only and must not "
-        "enter DecisionFeatures, Protocol gates, promotion input, or scheduler "
-        "state."
-    ),
-}
 
 POSTRUN_ACCEPTANCE_FAMILIES = (
     "summaries",
@@ -400,341 +340,25 @@ def _resolve_source_path(repo_root: Path, spec_path: str) -> Path:
     return repo_root / path
 
 
-def _warehouse_measurement_opportunity_diagnostics(
-    scion_dir: Path,
-    problem_v1: Path,
-) -> dict[str, Any]:
-    """Build proposal-visible warehouse measurement/runtime guidance."""
-
+def _warehouse_guidance_manifest_fields(
+    env: dict[str, object],
+) -> tuple[str, dict[str, Any]]:
+    scion_dir = Path(env["SCION_DIR"])
     if str(scion_dir) not in sys.path:
         sys.path.insert(0, str(scion_dir))
 
-    from scion.measurement.readiness import measurement_readiness_status  # noqa: PLC0415
-    from scion.problem.bridge import load_problem_spec_v1_from_yaml  # noqa: PLC0415
-
-    if not problem_v1.is_file():
-        raise SystemExit(
-            "Warehouse agentic launcher requires problem-v1 measurement "
-            f"declaration: {problem_v1}"
-        )
-
-    spec = load_problem_spec_v1_from_yaml(problem_v1)
-    measurement = spec.measurement
-    readiness = measurement_readiness_status(spec)
-    if readiness.status != "ready":
-        raise SystemExit(
-            "Warehouse measurement calibration is not launch-ready: "
-            f"{readiness.reason_code}"
-        )
-
-    calibration_ref = str(measurement.calibration_ref or "").strip()
-    calibration_path = _resolve_calibration_ref(spec.root_dir, calibration_ref)
-    calibration_artifact = _read_calibration_artifact(calibration_path)
-    power = _mapping_or_empty(calibration_artifact.get("protocol_power"))
-    effect_scale = measurement.effect_scale
-    practical_screen_delta = float(effect_scale.practical_delta_screen)
-    mde_at_power_80 = float(readiness.mde_at_power_80 or 0.0)
-    reason_codes = _warehouse_measurement_reason_codes(
-        runtime_model=measurement.runtime_model,
-        pairing_validity=measurement.pairing_validity,
-        practical_screen_delta=practical_screen_delta,
-        mde_at_power_80=mde_at_power_80,
-    )
-    recommended_min_seeds = _positive_int_or_none(power.get("recommended_min_seeds"))
-    related_calibrations = _warehouse_related_calibrations(calibration_artifact)
-
-    diagnostic: dict[str, Any] = {
-        "schema_version": "warehouse_measurement_runtime_handoff.v1",
-        "source": "problem_v1.measurement.calibration_ref",
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "metric": effect_scale.metric,
-        "unit": effect_scale.unit,
-        "runtime_model": measurement.runtime_model,
-        "pairing_validity": measurement.pairing_validity,
-        "practical_screen_delta": practical_screen_delta,
-        "practical_validate_delta": float(effect_scale.practical_delta_validate),
-        "screening_mde_at_power_80": mde_at_power_80,
-        "measurement_readiness": readiness.to_status_payload(),
-        "calibration": _calibration_handoff(
-            calibration_artifact=calibration_artifact,
-            calibration_ref=calibration_ref,
-            calibration_path=calibration_path,
-            n_pairs=readiness.n_pairs,
-        ),
-        "summary": _warehouse_measurement_summary(
-            metric=effect_scale.metric,
-            mde_at_power_80=mde_at_power_80,
-            practical_screen_delta=practical_screen_delta,
-        ),
-        "reason_codes": reason_codes,
-    }
-    diagnostic.update(_warehouse_adapter_opportunity_projection(spec))
-    if recommended_min_seeds is not None:
-        diagnostic["recommended_min_seeds"] = recommended_min_seeds
-    if related_calibrations:
-        diagnostic["related_calibrations"] = related_calibrations
-    return diagnostic
-
-
-def _warehouse_adapter_opportunity_projection(spec: Any) -> dict[str, Any]:
-    """Project problem-owned warehouse follow-up diagnostics into launch focus."""
-
-    from scion.problem.loader import load_problem_adapter  # noqa: PLC0415
-
-    adapter = load_problem_adapter(spec)
-    hook = getattr(adapter, "render_problem_measurement_diagnostics", None)
-    if not callable(hook):
-        raise SystemExit(
-            "Warehouse agentic launcher requires adapter measurement "
-            "follow-up diagnostics"
-        )
-    payload = hook()
-    if not isinstance(payload, Mapping):
-        raise SystemExit(
-            "Warehouse adapter measurement follow-up diagnostics must be a mapping"
-        )
-    redacted = _redact_warehouse_adapter_opportunity_payload(dict(payload))
-    if not isinstance(redacted, Mapping):
-        raise SystemExit("Warehouse adapter measurement diagnostics invalid")
-    projection: dict[str, Any] = {
-        "opportunity_projection_source": (
-            "problem_adapter.render_problem_measurement_diagnostics"
-        ),
-        "adapter_payload_schema": str(redacted.get("schema_version") or "").strip(),
-    }
-    for field in WAREHOUSE_ADAPTER_OPPORTUNITY_FIELDS:
-        value = redacted.get(field)
-        if value not in ("", None, [], {}, ()):
-            projection[field] = value
-    missing = [
-        field
-        for field in WAREHOUSE_ADAPTER_OPPORTUNITY_FIELDS
-        if projection.get(field) in ("", None, [], {}, ())
-    ]
-    if missing:
-        raise SystemExit(
-            "Warehouse adapter measurement follow-up diagnostics missing fields: "
-            + ", ".join(missing)
-        )
-    return projection
-
-
-def _redact_warehouse_adapter_opportunity_payload(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        projected: dict[str, Any] = {}
-        for key, child in value.items():
-            key_text = str(key)
-            if not _warehouse_adapter_key_allowed(key_text):
-                continue
-            redacted = _redact_warehouse_adapter_opportunity_payload(child)
-            if redacted not in ("", None, [], {}, ()):
-                projected[key_text] = redacted
-        return projected
-    if isinstance(value, (list, tuple)):
-        projected_items = [
-            _redact_warehouse_adapter_opportunity_payload(item)
-            for item in value
-        ]
-        return [
-            item
-            for item in projected_items
-            if item not in ("", None, [], {}, ())
-        ]
-    return value
-
-
-def _warehouse_adapter_key_allowed(key: str) -> bool:
-    lowered = key.lower()
-    return not any(
-        fragment in lowered
-        for fragment in WAREHOUSE_ADAPTER_FORBIDDEN_KEY_FRAGMENTS
+    from scion.problems.warehouse_delivery.research_guidance import (  # noqa: PLC0415
+        WAREHOUSE_ANALYSIS_INTENT,
+        build_warehouse_legacy_research_focus,
     )
 
-
-def _resolve_calibration_ref(root_dir: str, calibration_ref: str) -> Path:
-    ref = Path(calibration_ref).expanduser()
-    if ref.is_absolute():
-        return ref
-    return Path(root_dir).expanduser().resolve() / ref
-
-
-def _read_calibration_artifact(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise SystemExit(
-            f"unable to read warehouse calibration artifact {path}: {exc}"
-        ) from exc
-    if not isinstance(payload, dict):
-        raise SystemExit(f"Warehouse calibration artifact must be a JSON object: {path}")
-    return payload
-
-
-def _calibration_handoff(
-    *,
-    calibration_artifact: Mapping[str, Any],
-    calibration_ref: str,
-    calibration_path: Path,
-    n_pairs: int,
-) -> dict[str, Any]:
-    calibration_run = _compact_calibration_run(
-        calibration_artifact.get("calibration_run")
-    )
-    payload: dict[str, Any] = {
-        "schema": calibration_artifact.get("schema"),
-        "ref": calibration_ref,
-        "path": str(calibration_path),
-        "calibrated_at": calibration_artifact.get("calibrated_at"),
-        "n_pairs": n_pairs,
-        "decision_features_excluded": calibration_artifact.get(
-            "decision_features_excluded"
-        ),
-        "calibration_run_action": calibration_run.get("action"),
-    }
-    source_artifact = _compact_source_artifact(
-        calibration_artifact.get("source_artifact")
-    )
-    if source_artifact:
-        payload["source_artifact"] = source_artifact
-    if calibration_run:
-        payload["calibration_run"] = calibration_run
-    return {
-        key: value
-        for key, value in payload.items()
-        if value not in ("", None, [], {}, ())
-    }
-
-
-def _compact_source_artifact(value: Any) -> dict[str, Any]:
-    source = _mapping_or_empty(value)
-    payload = {
-        "ref": str(source.get("ref") or ""),
-        "sha256": str(source.get("sha256") or ""),
-    }
-    return {
-        key: item
-        for key, item in payload.items()
-        if item not in ("", None)
-    }
-
-
-def _compact_calibration_run(value: Any) -> dict[str, Any]:
-    run = _mapping_or_empty(value)
-    payload: dict[str, Any] = {}
-    for key in (
-        "action",
-        "replicate_count",
-        "selected_surface",
-        "selected_case_count",
-        "selected_seed_count",
-        "seed_offset",
-        "bootstrap_samples",
-        "decision_features_excluded",
-    ):
-        item = run.get(key)
-        if item not in ("", None, [], {}, ()):
-            payload[key] = item
-    runtime_policy = _compact_runtime_policy(run.get("runtime_policy"))
-    if runtime_policy:
-        payload["runtime_policy"] = runtime_policy
-    return payload
-
-
-def _compact_runtime_policy(value: Any) -> dict[str, Any]:
-    policy = _mapping_or_empty(value)
-    payload: dict[str, Any] = {}
-    for key in (
-        "selected_policy",
-        "runner_timeout_sec",
-        "uniform_time_limit_sec",
-        "time_limit_sec",
-    ):
-        item = policy.get(key)
-        if item not in ("", None, [], {}, ()):
-            payload[key] = item
-    return payload
-
-
-def _mapping_or_empty(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
-
-
-def _positive_int_or_none(value: Any) -> int | None:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return None
-    return parsed if parsed > 0 else None
-
-
-def _warehouse_related_calibrations(artifact: dict[str, Any]) -> list[dict[str, Any]]:
-    related = artifact.get("related_calibrations")
-    if not isinstance(related, list):
-        return []
-    items: list[dict[str, Any]] = []
-    for item in related:
-        if not isinstance(item, dict):
-            continue
-        payload = {
-            "action": str(item.get("action") or ""),
-            "n_pairs": item.get("n_pairs"),
-            "mde_at_power_80": item.get("mde_at_power_80"),
-        }
-        items.append(
-            {
-                key: value
-                for key, value in payload.items()
-                if value not in ("", None)
-            }
-        )
-    return items
-
-
-def _warehouse_measurement_reason_codes(
-    *,
-    runtime_model: str,
-    pairing_validity: str,
-    practical_screen_delta: float,
-    mde_at_power_80: float,
-) -> list[str]:
-    reason_codes: list[str] = []
-    if mde_at_power_80 > practical_screen_delta:
-        reason_codes.append("WAREHOUSE_MDE_EXCEEDS_PRACTICAL_DELTA")
-    if pairing_validity == "trajectory_divergent":
-        reason_codes.append("TRAJECTORY_DIVERGENT_LOW_SNR")
-    if runtime_model == "comparative":
-        reason_codes.append("WAREHOUSE_COMPARATIVE_RUNTIME_REPORT_ONLY")
-    return reason_codes
-
-
-def _warehouse_measurement_summary(
-    *,
-    metric: str,
-    mde_at_power_80: float,
-    practical_screen_delta: float,
-) -> str:
-    if mde_at_power_80 > practical_screen_delta:
-        return (
-            f"Warehouse screening is low-power for raw {metric} effects below "
-            "the measured MDE; interpret split-preserving cost compression "
-            "against the A/A noise floor and current-run runtime evidence."
-        )
     return (
-        f"Warehouse screening MDE is within the declared practical {metric} delta; "
-        "interpret effects against the measured A/A noise floor."
-    )
-
-
-def _current_research_focus(env: dict[str, object]) -> dict[str, Any]:
-    focus = json.loads(json.dumps(WAREHOUSE_CURRENT_RESEARCH_FOCUS))
-    focus["measurement_opportunity_diagnostics"] = (
-        _warehouse_measurement_opportunity_diagnostics(
-            Path(env["SCION_DIR"]),
+        WAREHOUSE_ANALYSIS_INTENT,
+        build_warehouse_legacy_research_focus(
+            scion_dir,
             Path(env["PROBLEM_V1"]),
-        )
+        ),
     )
-    return focus
 
 
 def _build_command(env: dict[str, object]) -> str:
@@ -1065,6 +689,7 @@ def _write_prepared_run_manifest(
     *,
     command: str,
 ) -> None:
+    analysis_intent, research_focus = _warehouse_guidance_manifest_fields(env)
     manifest = {
         "schema_version": PREPARED_RUN_MANIFEST_SCHEMA,
         "report_only": True,
@@ -1074,8 +699,8 @@ def _write_prepared_run_manifest(
         "scheduler_state_mutated": False,
         "promotion_state_mutated": False,
         "problem_family": "warehouse_delivery",
-        "analysis_intent": WAREHOUSE_ANALYSIS_INTENT,
-        "research_focus": _current_research_focus(env),
+        "analysis_intent": analysis_intent,
+        "research_focus": research_focus,
         "task_doc": TASK_DOC,
         "current_state_doc": CURRENT_STATE_DOC,
         "analysis_handoff_doc": ANALYSIS_HANDOFF_DOC,

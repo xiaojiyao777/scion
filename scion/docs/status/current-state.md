@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-06-22
+Last updated: 2026-06-23
 
 This file is the operational resume point, not a run log. Replace stale facts
 instead of appending history. Put detailed repair evidence in focused
@@ -20,6 +20,15 @@ history when exact old chronology is needed.
 - Current posture: avoid broad budgets, generic truncation/compression, and
   decorative gates. Keep CVRP/warehouse semantics problem-owned and keep
   `DecisionFeatures` problem-neutral.
+- Current design gate: the generic scheduling-status repair and
+  research-guidance contract scaffold in
+  `scion/design/v0.4-effective-research-repair-design.md` are implemented and
+  focused-tested in the current worktree. CVRP and warehouse guidance providers
+  are also problem-owned now; the remaining projection/readiness compatibility
+  layer must be migrated from legacy string probes to contract rendered-path
+  coverage before treating Design B as closed. The next CVRP launch should
+  validate the scheduler stop repair; it should not introduce CVRP-specific
+  scheduler or projection exceptions.
 
 ## Current Decision
 
@@ -32,6 +41,25 @@ history when exact old chronology is needed.
   screening, MDE-aware rejection, forced non-acceptance target control, and
   clean prompt/source evidence, but still lacks a solver improvement or
   promotion.
+- Latest CVRP missing-primary follow-up:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-missingprimary-8d28bc30-narrowavoid-4r-gpt55-20260622T171659Z-claw`
+  launched from WSL commit `8d28bc30`. It passed postrun acceptance readiness
+  with no postrun failures and wrapper exit `0`, but campaign completeness is
+  `valid_partial_interrupted`: 3 of 4 requested effective rounds,
+  `last_stop_reason=scheduler_active_slot_blocked`, 0 quality blocks,
+  0 promotions, champion still `v1`. This verifies the missing-primary
+  feedback repair on current evidence (`9faaf70b` is inactive rather than
+  weak-positive), but exposes a generic framework blocker: copied or resumed
+  weak-positive branches (`bba3d45f`, `ec052599`) can consume all active slots
+  even when they are not the next useful research action.
+- Current design-first framework repair is in place in the current worktree:
+  scheduler, active-slot inventory, and branch cards now route through a
+  problem-neutral branch scheduling-status model, and the generic
+  research-guidance contract scaffold exists for problem-owned guidance
+  providers. CVRP and warehouse launchers now obtain prepared research guidance
+  from problem-owned providers while preserving the legacy `research_focus`
+  manifest shape. CVRP mechanism names and case names still belong in CVRP
+  provider work, not generic scheduler or projection code.
 - WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
   for the latest warehouse and CVRP reruns before launch, and live
   prompt/source evidence passed under the patched postrun checker.
@@ -520,34 +548,36 @@ CVRP/VRP:
   from complete postrun-ready evidence. This is effective negative research,
   not solver progress; v0.4 still lacks continuous CVRP improvement or
   promotion.
-- The latest required-mechanism root reached Protocol for
-  `large_instance_intra_route_two_opt_seed`, but the sparse refinement exposed a
-  feedback semantics bug: missing declared primary telemetry must be inactive
-  feedback, not weak-positive pair noise. That repair is synchronized and tested
-  in WSL commit `01b1abb4`.
-- Next CVRP work should relaunch from `01b1abb4` or later, not from the old
-  `f80d990f` feedback semantics. Avoid unchanged
-  `bounded_interroute_2opt_bridge`, its high-asymmetric-promise refinement,
-  `cmt_slack_aware_segment_swap`, and sparse/missing-primary-telemetry variants
-  unless the causal activation path is materially changed. Keep the forced or
-  otherwise audited `local_search.py` target-control path until unaided target
-  selection is reliable.
+- The required-mechanism root reached Protocol for
+  `large_instance_intra_route_two_opt_seed`; the following missing-primary
+  repair root from WSL commit `8d28bc30` verified that missing declared primary
+  telemetry is now inactive feedback, not weak-positive pair noise.
+- The current CVRP blocker is no longer the missing-primary feedback tier
+  itself. The blocker is generic state/scheduler design: copied or resumed
+  weak-positive records can still occupy all active slots and stop the campaign
+  at `scheduler_active_slot_blocked`. Do not treat this as a CVRP mechanism
+  failure or solve it with CVRP-specific exceptions.
+- Next CVRP launch can be used as validation of the generic scheduling-status
+  repair once the current worktree is the intended launch baseline. Keep any
+  CVRP follow-up problem-owned: forced or otherwise audited non-acceptance
+  target control may remain useful, but bounded two-opt, CMT protection, and
+  mechanism ids must not leak into generic scheduler or projection code.
 
 ## Next Actions
 
-1. Relaunch CVRP from WSL commit `01b1abb4` or later after strict launch
-   readiness. The run should avoid treating the stale `ec052599` weak-positive
-   state as accepted evidence; if it resumes from the old root, inspect prompt
-   and branch cards for the corrected missing-primary-telemetry lesson.
-2. Do not return to unchanged rank-gap, route-pressure, or generic
-   acceptance/adaptive-weight variants unless the prepared research focus is
-   explicitly changed. The next CVRP root should keep the forced or otherwise
-   audited non-acceptance target-control path until unaided target selection is
-   demonstrably reliable.
-3. Keep warehouse as current-run-ready partial evidence unless a targeted
+1. Review and commit the current repair slice: Design A scheduling-status
+   integration, Design B research-guidance contract scaffold, and CVRP/warehouse
+   problem-owned provider migration. Keep this commit free of heuristic changes.
+2. Migrate prepared projection/readiness from legacy `research_focus` field
+   probes to `ResearchGuidanceContract` rendered-path coverage. Keep legacy
+   manifest compatibility until current prepared roots are no longer needed.
+3. Run a controlled CVRP validation launch from the intended baseline to prove
+   the observed `scheduler_active_slot_blocked` branch shape no longer stops
+   the campaign.
+4. Keep warehouse as current-run-ready partial evidence unless a targeted
    follow-up is needed to refine validation-transfer quality guidance around
    `runtime_bounded_acceptance` / `bounded_candidate_policy`.
-4. Update this file and `scion/TASK.md` only when operating truth changes; keep
+5. Update this file and `scion/TASK.md` only when operating truth changes; keep
    detailed run evidence in focused experiment reports.
 
 ## Pointers

@@ -5476,6 +5476,12 @@ def _prepared_research_focus_fixture(problem_family: str) -> dict[str, object]:
             "construction_seed_rule": (
                 "Use same-run seed baseline and same-mechanism comparison."
             ),
+            "missing_primary_telemetry_rule": (
+                "Treat missing primary mechanism telemetry with "
+                "not_evaluated/not_triggered activation as inactive rather "
+                "than weak_positive evidence unless "
+                "large_instance_intra_route_two_opt_seed is observed."
+            ),
             "case_protection_requirements": {
                 "proposal_visibility_only": True,
                 "decision_features_excluded": True,

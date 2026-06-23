@@ -10,6 +10,7 @@ from scion.core.scheduler import (
     Scheduler,
     active_slot_inventory,
     branch_active_slot_release_reason,
+    branch_scheduling_status,
     reclaim_active_slot_for_new_branch,
 )
 from scion.core.scheduling.signals import (
@@ -624,6 +625,111 @@ def test_repeated_weak_signal_does_not_bypass_hard_cap():
     assert inventory["used"] == 1
     assert inventory["available"] == 0
     assert inventory["branch_ids"] == [branch.branch_id]
+
+
+def test_copied_nonactionable_weak_positive_heads_do_not_fill_active_slots():
+    copied_heads = []
+    for index, offset in enumerate((0, 10)):
+        branch = _branch(BranchState.EXPLORE, created_offset_s=offset)
+        branch.branch_id = f"copied-weak-{index}"
+        branch.direction = "generic copied weak signal"
+        branch.branch_code_status = "active_weak_positive"
+        branch.last_screening_feedback_tier = (
+            "weak_positive" if index == 0 else "inactive"
+        )
+        branch.best_quality_checkpoint_id = f"checkpoint-{index}"
+        branch.rollback_count = 1
+        branch.branch_evidence_summary = {
+            "stage": "screening",
+            "tier": "inactive",
+            "activation_status": "inactive",
+            "decision_features_excluded": True,
+        }
+        copied_heads.append(branch)
+    diagnostic = _branch(BranchState.EXPLORE, created_offset_s=20)
+    diagnostic.branch_id = "current-diagnostic"
+    diagnostic.direction = "generic diagnostic follow-up"
+    diagnostic.branch_code_status = "telemetry_wiring_suspect"
+    diagnostic.last_screening_feedback_tier = "inactive"
+    diagnostic.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
+    diagnostic.telemetry_repair_mechanism_ids = ("activation_probe",)
+
+    branches = [*copied_heads, diagnostic]
+    action = Scheduler(max_active_branches=3).select_next(branches)
+    inventory = active_slot_inventory(branches, max_active_branches=3)
+
+    assert action.action == "run_existing"
+    assert action.branch is diagnostic
+    assert action.slot == "repair_diagnostic"
+    assert action.reason == "telemetry_diagnostic_followup"
+    assert inventory["used"] == 1
+    assert inventory["available"] == 2
+    assert inventory["branch_ids"] == [diagnostic.branch_id]
+    assert inventory["released_active_slot_ids"] == [
+        branch.branch_id for branch in copied_heads
+    ]
+    assert set(inventory["released_active_slot_reasons"].values()) == {
+        "inactive_current_evidence_slot_release"
+    }
+    assert all(
+        branch_scheduling_status(branch).lane == "not_schedulable"
+        for branch in copied_heads
+    )
+    assert branch_scheduling_status(diagnostic).lane == "diagnostic_followup"
+
+
+def test_current_weak_positive_head_keeps_active_slot_priority():
+    weak = _branch(BranchState.EXPLORE, created_offset_s=10)
+    weak.branch_id = "current-weak"
+    weak.direction = "generic current weak signal"
+    weak.branch_code_status = "active_weak_positive"
+    weak.last_screening_feedback_tier = "weak_positive"
+    weak.branch_evidence_summary = {
+        "stage": "screening",
+        "tier": "weak_positive",
+        "decision_features_excluded": True,
+    }
+    clean = _branch(BranchState.EXPLORE, created_offset_s=0)
+    clean.branch_id = "clean-open"
+
+    action = Scheduler(max_active_branches=3).select_next([clean, weak])
+    inventory = active_slot_inventory([clean, weak], max_active_branches=3)
+    status = branch_scheduling_status(weak)
+
+    assert action.action == "run_existing"
+    assert action.branch is weak
+    assert action.slot == "exploit_weak_positive"
+    assert action.reason == "weak_positive_signal_followup"
+    assert status.lane == "weak_positive_followup"
+    assert status.consumes_active_slot is True
+    assert weak.branch_id in inventory["branch_ids"]
+
+
+def test_current_quality_regression_releases_stale_weak_positive_slot():
+    branch = _branch(BranchState.EXPLORE)
+    branch.branch_id = "current-quality-regression"
+    branch.direction = "generic stale weak signal"
+    branch.branch_code_status = "active_weak_positive"
+    branch.last_screening_feedback_tier = "quality_regression"
+    branch.branch_evidence_summary = {
+        "stage": "screening",
+        "tier": "quality_regression",
+        "decision_features_excluded": True,
+    }
+
+    action = Scheduler(max_active_branches=1).select_next([branch])
+    inventory = active_slot_inventory([branch], max_active_branches=1)
+    status = branch_scheduling_status(branch)
+
+    assert action.action == "create_new"
+    assert action.slot == "explore_new"
+    assert inventory["used"] == 0
+    assert inventory["available"] == 1
+    assert inventory["released_active_slot_ids"] == [branch.branch_id]
+    assert status.release_reason == (
+        "quality_regression_without_actionable_diagnostic_slot_release"
+    )
+    assert status.decision_features_excluded is True
 
 
 @pytest.mark.parametrize(

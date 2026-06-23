@@ -2,32 +2,32 @@
 
 *Branch: `codex/v04-evidence-repair-plan`*
 *Status: v0.4 framework/readiness/launcher repairs are accepted enough for
-focused warehouse and CVRP follow-up, but v0.4 is not closed until current
-evidence is reviewed against the effective-research gate. WSL `gpt-5.5` auth
-has recovered. Warehouse has shown renewed continuous improvement from champion
-`v2` to `v3`; the latest post-repair APS retry root is current-run
-postrun-ready partial evidence and verifies live prompt/source visibility,
-repeated quality-block fail-closed behavior, and fresh proposal recovery after
-quality feedback. CVRP rank-gap, route-pressure, forced-local, and
-required-intra-two-opt roots are current-run-ready rejection or repair evidence,
-not solver improvements. The forced-local root from WSL commit `eb2627e5`
-recovered non-acceptance local-search research and rejected weak/negative
-mechanisms. The identity-supported default-avoid repair was then verified by
-the WSL commit `f80d990f` root: the run finished valid/complete with postrun
-acceptance `ready`, 4 effective screening rows, 0 quality blocks, and 0
-promotions, and it finally crossed proposal/code/Protocol for
-`large_instance_intra_route_two_opt_seed`. Its dense candidate had direct
-mechanism telemetry and was correctly abandoned after expansion. Its sparse
-refinement exposed a framework feedback bug: the old run kept
-`ec052599` as `weak_positive` even though raw metrics showed the declared
-primary mechanism was not evaluated or triggered. Local commit `e9ec3635` and
-WSL commit `01b1abb4` now treat missing primary telemetry as inactive feedback;
-future CVRP relaunches must not treat the stale `ec052599` weak-positive state
-as accepted evidence. The next CVRP run should launch from `01b1abb4` or later
-with the forced or otherwise audited `local_search.py` target-control path,
-while avoiding unchanged rank-gap, route-pressure, bridge, CMT slack-swap, and
-missing-primary-telemetry variants.*
-*Updated: 2026-06-22*
+focused warehouse and CVRP follow-up, but v0.4 is not closed until Scion
+demonstrates stable effective research behavior. WSL `gpt-5.5` auth has
+recovered. Warehouse has renewed positive movement from champion `v2` to `v3`,
+and the latest warehouse APS retry root is current-run postrun-ready partial
+evidence. CVRP rank-gap, route-pressure, forced-local, required-intra-two-opt,
+and missing-primary roots are current-run-ready rejection or repair evidence,
+not solver improvements. The latest CVRP missing-primary run from WSL commit
+`8d28bc30` verified the feedback-tier repair: missing declared primary
+mechanism telemetry is now routed to inactive feedback rather than retained as
+weak-positive pair-level noise. That run still stopped after 3 of 4 requested
+rounds with `last_stop_reason=scheduler_active_slot_blocked`; copied/resumed
+weak-positive branches consumed all active slots while the current branch was
+inactive diagnostic evidence. The next repair is therefore design-first,
+generic framework work, not another CVRP-specific relaunch. In the current
+worktree, `scion/design/v0.4-effective-research-repair-design.md` Design A
+first slice and Design B scaffold are implemented and focused-tested: scheduler,
+active-slot inventory, and branch cards consume one problem-neutral
+scheduling-status model, and the research-guidance contract exists as a
+problem-neutral schema/renderer. CVRP and warehouse now have problem-owned
+research-guidance providers and launchers call those providers while preserving
+the legacy prepared-manifest compatibility shape. Remaining Design B work is to
+replace legacy prepared projection/readiness string probes with contract
+rendered-path validators, then run a controlled CVRP relaunch to validate that
+the active-slot stop is gone, with CVRP/warehouse semantics still kept out of
+generic core and projection code.*
+*Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
 experiments. The goal is not to keep tuning campaign knobs blindly. The goal is
@@ -157,10 +157,11 @@ Task-specific references:
 2. `scion/reports/v04-core-framework-code-review-20260611.md`
 3. `scion/reports/v04-core-framework-review-20260611.md`
 4. `scion/design/v0.5-evidence-uplift-roadmap.md`
-5. `scion/reports/v04-audit-agent-experiment-guide-20260609.md`
-6. `scion/docs/AGENT_ONBOARDING.md`
-7. `scion/docs/status/current-state.md`
-8. `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`
+5. `scion/design/v0.4-effective-research-repair-design.md`
+6. `scion/reports/v04-audit-agent-experiment-guide-20260609.md`
+7. `scion/docs/AGENT_ONBOARDING.md`
+8. `scion/docs/status/current-state.md`
+9. `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`
 
 Exception: explicitly designated independent VRP-only control agents are not
 Scion subagents. They must not read Scion design, task, audit, status, or
@@ -487,16 +488,25 @@ Current checkpoint:
     blocks, 0 promotions, and `champion_version=1`. It confirms that another
     acceptance-family path is insufficient: `route_pressure_acceptance` had no
     positive-at-MDE effect and no large-two-opt signal.
-  - Next fresh CVRP launch should start from WSL commit `01b1abb4` or later and
-    avoid repeating unchanged rank-gap, route-pressure acceptance gates,
-    unchanged `bounded_interroute_2opt_bridge`, its high-asymmetric-promise
-    refinement, `cmt_slack_aware_segment_swap`, or sparse
-    missing-primary-telemetry variants unless the causal activation path is
-    materially changed. Keep forced or otherwise audited non-acceptance target
-    control until unaided target selection is demonstrably reliable. If the run
-    resumes from the `f80d990f` root, inspect prompt and branch-card context for
-    the corrected missing-primary-telemetry lesson before interpreting
-    same-branch continuation.
+  - Latest CVRP missing-primary follow-up root:
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-missingprimary-8d28bc30-narrowavoid-4r-gpt55-20260622T171659Z-claw`
+    launched from WSL commit `8d28bc30`, passed postrun acceptance readiness,
+    and produced current-run partial evidence: wrapper exit `0`, postrun
+    failures `0`, `valid_partial_interrupted`, 3 effective screening rows,
+    0 quality blocks, 0 promotions, champion still `v1`, and
+    `last_stop_reason=scheduler_active_slot_blocked`. The feedback-tier repair
+    held: current missing-primary evidence on `9faaf70b` was classified as
+    inactive. The remaining blocker is generic active-slot semantics: copied or
+    resumed weak-positive branches (`bba3d45f`, `ec052599`) still consumed
+    active slots and prevented the fourth round. The current worktree now has
+    focused Design A coverage for this generic branch shape; the next CVRP run,
+    if launched, should be a controlled validation that the active-slot stop no
+    longer recurs rather than a new CVRP heuristic experiment.
+  - Design B provider migration has started: CVRP and warehouse prepared
+    research guidance now live in problem-owned providers under
+    `scion/scion/problems/<problem>/research_guidance.py`, and both launchers
+    call those providers while retaining the current legacy `research_focus`
+    manifest shape for one compatibility window.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

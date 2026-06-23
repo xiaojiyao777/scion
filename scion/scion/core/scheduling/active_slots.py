@@ -9,10 +9,13 @@ from typing import Any, Callable, Iterable, Literal, Mapping, Protocol
 from scion.core.branch_hygiene import (
     BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE,
     BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
-    branch_is_parked_lineage,
 )
 from scion.core.branch_lifecycle_policy import BRANCH_LIFECYCLE_PARK_LINEAGE
 from scion.core.models import Branch, BranchState
+from scion.core.scheduling.status import (
+    BranchSchedulingStatus,
+    branch_scheduling_status as _branch_scheduling_status,
+)
 
 
 ACTIVE_SLOT_HARD_CAP_RECONCILED = "active_slot_hard_cap_reconciled"
@@ -21,13 +24,6 @@ ACTIVE_SLOT_HARD_CAP_BLOCKED = "active_slot_hard_cap_blocked"
 SCHEDULER_ACTIVE_SLOT_RECLAIM_PARK_LINEAGE = (
     "SCHEDULER_ACTIVE_SLOT_RECLAIM_PARK_LINEAGE"
 )
-
-_TERMINAL_STATES = frozenset({
-    BranchState.PROMOTED,
-    BranchState.ABANDONED,
-    BranchState.PARKED_LINEAGE,
-})
-
 
 class ActiveSlotPolicy(Protocol):
     scheduler_owned_release_reason: Callable[[Branch | None], str]
@@ -109,16 +105,10 @@ def branch_counts_toward_active_slots(
     policy: ActiveSlotPolicy,
 ) -> bool:
     """Return whether ``branch`` consumes a reported active lineage slot."""
-    if branch.state in _TERMINAL_STATES:
-        return False
-    if (
-        branch_is_parked_lineage(branch)
-        and branch_has_decision_origin_park_marker(branch)
-    ):
-        return False
-    if policy.scheduler_owned_release_reason(branch):
-        return False
-    return True
+    return branch_scheduling_status(
+        branch,
+        policy=policy,
+    ).consumes_active_slot
 
 
 def branch_active_slot_release_reason(
@@ -129,19 +119,29 @@ def branch_active_slot_release_reason(
     """Return why ``branch`` is excluded from active-slot accounting, if known."""
     if branch is None:
         return ""
-    if branch.state in _TERMINAL_STATES:
-        if branch_is_parked_lineage(branch):
-            return "parked_lineage"
-        return "terminal_state"
-    if (
-        branch_is_parked_lineage(branch)
-        and branch_has_decision_origin_park_marker(branch)
-    ):
-        return "parked_lineage"
-    release_reason = policy.scheduler_owned_release_reason(branch)
-    if release_reason:
-        return release_reason
-    return ""
+    return branch_scheduling_status(
+        branch,
+        policy=policy,
+    ).release_reason
+
+
+def branch_scheduling_status(
+    branch: Branch | None,
+    *,
+    policy: ActiveSlotPolicy,
+) -> BranchSchedulingStatus:
+    """Return the shared scheduling status used by active-slot consumers."""
+    return _branch_scheduling_status(
+        branch,
+        scheduler_owned_release_reason=(
+            policy.scheduler_owned_release_reason(branch)
+            if branch is not None
+            else ""
+        ),
+        has_decision_origin_park_marker=branch_has_decision_origin_park_marker(
+            branch
+        ),
+    )
 
 
 def branch_has_decision_origin_park_marker(branch: Branch | None) -> bool:
@@ -189,19 +189,25 @@ def active_slot_inventory(
 ) -> dict[str, Any]:
     """Build a status/summary inventory for active scheduling slots."""
     branch_list = list(branches)
-    active = active_slot_branches(branch_list, policy=policy)
+    statuses = {
+        branch.branch_id: branch_scheduling_status(branch, policy=policy)
+        for branch in branch_list
+    }
+    active = [
+        branch
+        for branch in branch_list
+        if statuses[branch.branch_id].consumes_active_slot
+    ]
     parked = [
         branch
         for branch in branch_list
-        if branch_active_slot_release_reason(branch, policy=policy)
-        == "parked_lineage"
+        if statuses[branch.branch_id].release_reason == "parked_lineage"
     ]
     released = [
         branch
         for branch in branch_list
-        if branch_active_slot_release_reason(branch, policy=policy)
-        and branch_active_slot_release_reason(branch, policy=policy)
-        != "parked_lineage"
+        if statuses[branch.branch_id].release_reason
+        and statuses[branch.branch_id].release_reason != "parked_lineage"
     ]
     limit = max(0, int(max_active_branches))
     used = len(active)
@@ -215,12 +221,13 @@ def active_slot_inventory(
         "released_active_slots": len(released),
         "released_active_slot_ids": [branch.branch_id for branch in released],
         "released_active_slot_reasons": {
-            branch.branch_id: branch_active_slot_release_reason(
-                branch,
-                policy=policy,
-            )
+            branch.branch_id: statuses[branch.branch_id].release_reason
             for branch in released
         },
+        "branch_scheduling_statuses": [
+            statuses[branch.branch_id].as_dict()
+            for branch in branch_list
+        ],
     }
 
 
@@ -279,13 +286,26 @@ def active_slot_capacity_block_metadata(
     max_active_branches: int,
     policy: ActiveSlotPolicy,
 ) -> dict[str, Any]:
-    active = active_slot_branches(list(branches), policy=policy)
+    branch_list = list(branches)
+    statuses = {
+        branch.branch_id: branch_scheduling_status(branch, policy=policy)
+        for branch in branch_list
+    }
+    active = [
+        branch
+        for branch in branch_list
+        if statuses[branch.branch_id].consumes_active_slot
+    ]
     limit = max(0, int(max_active_branches))
     return {
         "reason": ACTIVE_SLOT_HARD_CAP_BLOCKED,
         "used": len(active),
         "max_active_branches": limit,
         "branch_ids": [branch.branch_id for branch in active],
+        "branch_scheduling_statuses": [
+            statuses[branch.branch_id].as_dict()
+            for branch in branch_list
+        ],
     }
 
 
