@@ -4908,6 +4908,15 @@ def _prepared_contract_checks_comparison_value(
         check = dict(raw_check)
         if key == "git_runtime_consistent" and check.get("passed") is True:
             check["detail"] = "runtime_guard_paths_consistent"
+        if key == "cvrp_protected_cases_in_split" and isinstance(
+            check.get("detail"),
+            dict,
+        ):
+            # Compare the stable split identity, not an environment-local path.
+            detail = dict(check["detail"])
+            if "split" in detail:
+                detail["split_path"] = detail["split"]
+            check["detail"] = detail
         normalized[key] = check
     return normalized
 

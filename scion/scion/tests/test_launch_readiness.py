@@ -1295,6 +1295,60 @@ def test_launch_readiness_allows_doc_only_prepared_contract_check_drift() -> Non
     }
 
 
+def test_launch_readiness_normalizes_cvrp_split_path_in_contract_checks() -> None:
+    relative = readiness_tool._prepared_contract_checks_comparison_value(
+        {
+            "cvrp_protected_cases_in_split": {
+                "passed": True,
+                "detail": {
+                    "split": "config/split.yaml",
+                    "split_path": "config/split.yaml",
+                    "stage_membership": {
+                        "CMT2": ["screening"],
+                        "CMT4": ["screening"],
+                    },
+                    "required_stage": "screening",
+                },
+            }
+        }
+    )
+    absolute = readiness_tool._prepared_contract_checks_comparison_value(
+        {
+            "cvrp_protected_cases_in_split": {
+                "passed": True,
+                "detail": {
+                    "split": "config/split.yaml",
+                    "split_path": "/tmp/run-root/config/split.yaml",
+                    "stage_membership": {
+                        "CMT2": ["screening"],
+                        "CMT4": ["screening"],
+                    },
+                    "required_stage": "screening",
+                },
+            }
+        }
+    )
+    different_split = readiness_tool._prepared_contract_checks_comparison_value(
+        {
+            "cvrp_protected_cases_in_split": {
+                "passed": True,
+                "detail": {
+                    "split": "config/other-split.yaml",
+                    "split_path": "/tmp/run-root/config/split.yaml",
+                    "stage_membership": {
+                        "CMT2": ["screening"],
+                        "CMT4": ["screening"],
+                    },
+                    "required_stage": "screening",
+                },
+            }
+        }
+    )
+
+    assert relative == absolute
+    assert relative != different_split
+
+
 def test_launch_readiness_rejects_dirty_runtime_guard_worktree(
     tmp_path: Path,
 ) -> None:
