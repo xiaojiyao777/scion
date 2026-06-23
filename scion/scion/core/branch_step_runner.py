@@ -42,6 +42,7 @@ from scion.core.branch_lifecycle_policy import (
 )
 from scion.core.step_result import StepResult
 from scion.core.frozen_budget import FROZEN_BUDGET_EXHAUSTED
+from scion.core.fresh_runtime_signals import fresh_runtime_actionable_loss_signal
 from scion.core.runtime_budget_diagnostics import runtime_model_from_summary
 from scion.core.telemetry_validation import screened_experiment_effective
 from scion.core.verification_call import run_verification_gate
@@ -1623,6 +1624,8 @@ def _materializable_fresh_runtime_pending_branch(
             == "budget_exhausting"
         ):
             continue
+        if not _fresh_runtime_replay_signal_eligible(summary, marker):
+            continue
         state = getattr(branch, "state", "")
         if str(getattr(state, "value", state) or "") != BranchState.EXPLORE.value:
             continue
@@ -1680,8 +1683,14 @@ def _fresh_runtime_replay_signal_trigger(
     ):
         return ""
     trigger = str(marker_payload.get("trigger") or "").strip()
-    if trigger in {"pair_level_win_no_loss", "actionable_loss_diagnostic"}:
+    if trigger == "pair_level_win_no_loss":
         return trigger
+    if trigger == "actionable_loss_diagnostic":
+        if _fresh_runtime_actionable_loss_signal(
+            summary
+        ) or _marker_actionable_loss_signal(marker_payload):
+            return trigger
+        return ""
     if (
         bool(marker_payload.get("fresh_runtime_pending"))
         and str(marker_payload.get("scheduler_marker") or "")
@@ -1720,33 +1729,24 @@ def _fresh_runtime_summary_runtime_model(
 
 
 def _fresh_runtime_actionable_loss_signal(summary: Mapping[str, Any]) -> bool:
-    diagnostics = summary.get("opportunity_diagnostics")
-    if isinstance(diagnostics, str) and diagnostics.strip():
-        return True
-    if isinstance(diagnostics, (list, tuple, set)) and any(
-        str(item).strip() for item in diagnostics
-    ):
-        return True
-    phase = summary.get("phase_activation_summary")
-    if isinstance(phase, Mapping):
-        activation = str(phase.get("activation_status") or "").strip().lower()
-        effect = str(phase.get("effect_status") or "").strip().lower()
-        objective = str(phase.get("objective_effect_status") or "").strip().lower()
-        telemetry = str(phase.get("telemetry_outcome") or "").strip().lower()
-        if activation == "observed":
-            return True
-        if effect not in {"", "unknown", "no_objective_effect"}:
-            return True
-        if objective not in {"", "unknown", "zero", "no_effect"}:
-            return True
-        if telemetry not in {"", "unknown"}:
-            return True
-    reason_codes = _summary_reason_codes(summary)
-    return any(
-        token in code
-        for code in reason_codes
-        for token in ("DIAGNOSTIC", "TELEMETRY", "RUNTIME_TIE_FRESH_CHAMPION")
-    )
+    return fresh_runtime_actionable_loss_signal(
+        summary,
+        _summary_reason_codes(summary),
+    ).has_actionable_loss_signal
+
+
+def _marker_actionable_loss_signal(marker_payload: Mapping[str, Any]) -> bool:
+    signal = marker_payload.get("actionable_loss_signal")
+    if not isinstance(signal, Mapping):
+        return False
+    if not bool(signal.get("has_actionable_loss_signal")):
+        return False
+    source_codes = signal.get("source_codes")
+    if isinstance(source_codes, str):
+        return bool(source_codes.strip())
+    if isinstance(source_codes, (list, tuple, set)):
+        return any(str(code).strip() for code in source_codes)
+    return False
 
 
 def _fresh_runtime_non_replayable_reason(

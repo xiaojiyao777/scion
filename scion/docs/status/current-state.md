@@ -20,8 +20,9 @@ history when exact old chronology is needed.
 - Current posture: avoid broad budgets, generic truncation/compression, and
   decorative gates. Keep CVRP/warehouse semantics problem-owned and keep
   `DecisionFeatures` problem-neutral.
-- Current design gate: the generic scheduling-status repair and Design B
-  research-guidance contract migration in
+- Current design gate: the generic scheduling-status repair, Design B
+  research-guidance contract migration, and typed fresh-runtime opportunity
+  signal cleanup in
   `scion/design/v0.4-effective-research-repair-design.md` are implemented and
   focused-tested in the current worktree. Scheduler, active-slot inventory, and
   branch cards share one problem-neutral scheduling-status model. Prepared
@@ -32,7 +33,10 @@ history when exact old chronology is needed.
   structured avoid rules without making them a generic veto, and keeps hard
   mechanism guards on typed ids. Ordinary pre-protocol patch/contract failures
   remain visible feedback but do not create hard branch-lesson requirements.
-  No CVRP-specific scheduler or projection exception is accepted.
+  Free-form `opportunity_diagnostics` text remains proposal/reporting material
+  and no longer creates actionable-loss fresh-runtime lifecycle or scheduler
+  pressure without structured phase or reason-code signal. No CVRP-specific
+  scheduler or projection exception is accepted.
 
 ## Current Decision
 
@@ -64,25 +68,27 @@ history when exact old chronology is needed.
   write typed `research_guidance_contract` payloads, and preserve legacy
   `research_focus` for one compatibility window. Generic projection/readiness
   no longer probes CVRP/warehouse strings; it checks contract schema,
-  proposal-only visibility, and rendered-path coverage.
-- Controlled scheduler-status validation root:
+  proposal-only visibility, and rendered-path coverage. Fresh-runtime
+  actionable-loss follow-up now uses a shared typed opportunity signal, so raw
+  `opportunity_diagnostics` prose and stale text-only actionable markers cannot
+  schedule replay.
+- Controlled scheduler-status validation roots:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-schedstatus-d75ed849-resume-missingprimary-4r-gpt55-20260623T014159Z-claw`
-  launched from WSL commit `d75ed849` after strict readiness passed. Live
-  status has already shown the intended generic scheduler behavior:
+  launched from WSL commit `d75ed849` after strict readiness passed. It showed
+  the intended generic scheduler behavior:
   `9faaf70b` is released from active-slot accounting with
   `inactive_current_evidence_slot_release`; branches
   `c8aa2555-62c0-4d19-b4ba-ac04cea257ea` and
   `08d996dd-8500-445d-98a5-3ded35c1a069` then entered active slots, completed
-  effective protocol rows, and were also released as inactive current evidence.
-  Latest observed live status is at least 2 of 4 effective rounds, 0 scheduler
-  active-slot blocked attempts, and new branch
-  `698ac3de-6775-4438-b568-6435a6fde334` in active slots instead of the run
-  immediately stopping as `scheduler_active_slot_blocked`. The process is still
-  running and has not produced a current-run-ready postrun result. Because the
-  WSL worktree was later updated with the Design B implementation while this
-  root was live, use this root only as slot-release/progress validation
-  evidence; final current-run-ready acceptance needs a clean post-commit
-  relaunch.
+  effective protocol rows, and were also released as inactive current evidence;
+  use this root only as slot-release/progress validation evidence because the
+  WSL worktree was later updated while it was live. The clean active validation
+  root is
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-schedstatus-d0dded44-clean-missingprimary-4r-gpt55-20260623T025241Z-claw`,
+  launched from WSL commit `d0dded44` after strict readiness passed. Latest
+  observed status is 1 of 4 effective rounds, 1 screening/protocol metric row,
+  2 proposal attempts total, 0 scheduler-active-slot blocked attempts, and the
+  process still running. Final current-run-ready acceptance remains pending.
 - WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
   for the latest warehouse and CVRP reruns before launch, and live
   prompt/source evidence passed under the patched postrun checker.
@@ -588,15 +594,13 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Review and commit the current repair slice: Design A scheduling-status
-   integration, Design B research-guidance contract scaffold, and CVRP/warehouse
-   problem-owned provider migration. Keep this commit free of heuristic changes.
-2. Migrate prepared projection/readiness from legacy `research_focus` field
-   probes to `ResearchGuidanceContract` rendered-path coverage. Keep legacy
-   manifest compatibility until current prepared roots are no longer needed.
-3. Run a controlled CVRP validation launch from the intended baseline to prove
-   the observed `scheduler_active_slot_blocked` branch shape no longer stops
-   the campaign.
+1. Let the clean WSL scheduler-status validation root finish, then run postrun
+   acceptance against that same root without changing its live worktree.
+2. After the clean root is no longer live, sync the current local repair slice
+   to WSL and rerun focused tests in the WSL `scion` conda environment.
+3. If the clean root finishes without scheduler-active-slot blockage, use the
+   result as current-run-ready validation for Design A; otherwise inspect the
+   branch/status artifact before launching any new CVRP run.
 4. Keep warehouse as current-run-ready partial evidence unless a targeted
    follow-up is needed to refine validation-transfer quality guidance around
    `runtime_bounded_acceptance` / `bounded_candidate_policy`.

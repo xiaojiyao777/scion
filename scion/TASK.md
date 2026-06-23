@@ -9,29 +9,24 @@ and the latest warehouse APS retry root is current-run postrun-ready partial
 evidence. CVRP rank-gap, route-pressure, forced-local, required-intra-two-opt,
 and missing-primary roots are current-run-ready rejection or repair evidence,
 not solver improvements. The latest CVRP missing-primary run from WSL commit
-`8d28bc30` verified the feedback-tier repair: missing declared primary
-mechanism telemetry is now routed to inactive feedback rather than retained as
-weak-positive pair-level noise. That run still stopped after 3 of 4 requested
+`8d28bc30` verified the feedback-tier repair but stopped after 3 of 4 requested
 rounds with `last_stop_reason=scheduler_active_slot_blocked`; copied/resumed
 weak-positive branches consumed all active slots while the current branch was
-inactive diagnostic evidence. The next repair is therefore design-first,
-generic framework work, not another CVRP-specific relaunch. In the current
-worktree, `scion/design/v0.4-effective-research-repair-design.md` Design A and
-Design B are implemented and focused-tested: scheduler, active-slot inventory,
-and branch cards consume one problem-neutral scheduling-status model, prepared
-manifests carry typed `ResearchGuidanceContract` payloads, generic
-context/readiness code validates schema and rendered-path coverage, and
-CVRP/warehouse semantics stay in problem-owned providers/tests. A controlled
-CVRP scheduler-status validation root from WSL commit `d75ed849` has already
-shown the important Design A behavior: inactive current evidence on `9faaf70b`,
-`c8aa2555`, and `08d996dd` is released with
-`inactive_current_evidence_slot_release`; latest observed live status is at
-least 2 new effective protocol rounds with 0 scheduler-active-slot blocked
-attempts, and later branch `698ac3de` entered active slots instead of the
-campaign immediately stopping as `scheduler_active_slot_blocked`. That root is
-still running and was later exposed to WSL worktree changes from the Design B
-sync, so treat it as slot-release/progress validation evidence only; a clean
-post-commit relaunch is still needed for final current-run-ready acceptance.*
+inactive diagnostic evidence. In the current worktree,
+`scion/design/v0.4-effective-research-repair-design.md` Design A, Design B, and
+Design C are implemented and focused-tested: scheduler, active-slot inventory,
+and branch cards consume one problem-neutral scheduling-status model; prepared
+manifests carry typed `ResearchGuidanceContract` payloads; generic
+context/readiness code validates schema and rendered-path coverage; free-form
+`opportunity_diagnostics` text no longer creates actionable-loss
+fresh-runtime lifecycle or scheduler pressure; and CVRP/warehouse semantics
+stay in problem-owned providers/tests. The earlier WSL `d75ed849` root is
+slot-release/progress evidence only because its live worktree was later
+changed. The clean scheduler-status validation root from WSL commit `d0dded44`,
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-schedstatus-d0dded44-clean-missingprimary-4r-gpt55-20260623T025241Z-claw`,
+is the active acceptance line; latest observed status is 1 of 4 effective
+rounds with `scheduler_active_slot_blocked_attempts=0`, so final
+current-run-ready acceptance is still pending.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -516,6 +511,11 @@ Current checkpoint:
     longer turns legacy `default_avoid_directions` free-form text into a hard
     gate, and ordinary pre-protocol patch/contract failures do not create hard
     branch-lesson usage requirements.
+  - Design C cleanup is implemented in the current worktree: fresh-runtime
+    actionable-loss follow-up now uses a typed
+    `FreshRuntimeOpportunitySignal`, free-form `opportunity_diagnostics` prose
+    is recorded only as ignored proposal/reporting text, and stale text-only
+    `actionable_loss_diagnostic` markers do not materialize scheduler replay.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

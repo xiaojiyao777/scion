@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from scion.core.branch import BranchController
 from scion.core.branch_cards import branch_hygiene_context
@@ -15,6 +16,7 @@ from scion.core.evidence_recording.replay_identity import (
     FORMAL_REPLAY_IDENTITY_SCHEMA,
     formal_replay_identity_payload,
 )
+from scion.core.fresh_runtime_signals import fresh_runtime_actionable_loss_signal
 from scion.core.formal_candidate_artifacts import (
     FormalCandidatePatchArtifactRecorder,
 )
@@ -744,6 +746,152 @@ def test_no_effect_fresh_required_runtime_tie_does_not_mark_followup() -> None:
     assert summary.get("fresh_runtime_pending") is not True
     assert summary.get("fresh_runtime_required") is not True
     assert "fresh_runtime_followup" not in summary
+
+
+def test_text_only_loss_diagnostic_fresh_required_does_not_mark_followup() -> None:
+    branch = Branch(
+        branch_id="text-only-loss-diagnostic",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=1,
+            ties=3,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=-1.0,
+            ci_high=1.0,
+            runtime_pairs=0,
+            runtime_evidence_status="fresh_champion_required",
+        ),
+        gate_outcome="unclear",
+        reason_codes=("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",),
+        exposed_summary="free-form opportunity note only",
+        raw_metrics_ref="/tmp/metrics.json",
+        runtime_confidence="low_cached_champion",
+        runtime_evidence_status="fresh_champion_required",
+        champion_cached_runtime_pairs=2,
+    )
+    feedback = SimpleNamespace(
+        tier="quality_regression",
+        pair_wins=0,
+        pair_losses=1,
+        pair_ties=1,
+        activation_status="unknown",
+        effect_status="unknown",
+        opportunity_status="low_confidence",
+        opportunity_diagnostics=("proposal-only diagnostic text",),
+        runtime_confidence="low_cached_champion",
+        gate_observation_reason_codes=(),
+        lifecycle_action_reason_codes=(),
+    )
+
+    from scion.core.decision_lifecycle_actions import (
+        update_branch_screening_evidence_summary,
+    )
+
+    update_branch_screening_evidence_summary(
+        branch,
+        protocol_result=protocol,
+        screening_feedback=feedback,
+        decision_reason_codes=("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",),
+    )
+
+    summary = branch.branch_evidence_summary
+    signal = fresh_runtime_actionable_loss_signal(
+        summary,
+        ("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",),
+    )
+
+    assert summary["losses"] == 1
+    assert summary["opportunity_diagnostics"] == ["proposal-only diagnostic text"]
+    assert signal.ignored_text_diagnostics is True
+    assert signal.source_codes == ()
+    assert signal.has_actionable_loss_signal is False
+    assert summary.get("fresh_runtime_pending") is not True
+    assert summary.get("fresh_runtime_required") is not True
+    assert "fresh_runtime_followup" not in summary
+
+
+def test_structured_diagnostic_reason_fresh_required_marks_loss_followup() -> None:
+    branch = Branch(
+        branch_id="structured-loss-diagnostic",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=1,
+            ties=3,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=-1.0,
+            ci_high=1.0,
+            runtime_pairs=0,
+            runtime_evidence_status="fresh_champion_required",
+        ),
+        gate_outcome="unclear",
+        reason_codes=("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",),
+        exposed_summary="structured diagnostic needs fresh runtime",
+        raw_metrics_ref="/tmp/metrics.json",
+        runtime_confidence="low_cached_champion",
+        runtime_evidence_status="fresh_champion_required",
+        champion_cached_runtime_pairs=2,
+    )
+    feedback = SimpleNamespace(
+        tier="quality_regression",
+        pair_wins=0,
+        pair_losses=1,
+        pair_ties=1,
+        activation_status="unknown",
+        effect_status="unknown",
+        opportunity_status="unknown",
+        opportunity_diagnostics=(),
+        runtime_confidence="low_cached_champion",
+        gate_observation_reason_codes=(),
+        lifecycle_action_reason_codes=(),
+    )
+
+    from scion.core.decision_lifecycle_actions import (
+        update_branch_screening_evidence_summary,
+    )
+
+    update_branch_screening_evidence_summary(
+        branch,
+        protocol_result=protocol,
+        screening_feedback=feedback,
+        decision_reason_codes=(
+            "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",
+            "SCREENING_RUNTIME_SATURATION_DIAGNOSTIC",
+        ),
+    )
+
+    summary = branch.branch_evidence_summary
+    signal = fresh_runtime_actionable_loss_signal(summary)
+    marker = summary["fresh_runtime_followup"]
+
+    assert signal.source_codes == ("reason_code.diagnostic",)
+    assert signal.has_actionable_loss_signal is True
+    assert marker["trigger"] == "actionable_loss_diagnostic"
+    assert marker["actionable_loss_signal"] == {
+        "schema_version": "fresh_runtime_opportunity_signal.v1",
+        "has_actionable_loss_signal": True,
+        "source_codes": ["reason_code.diagnostic"],
+        "ignored_text_diagnostics": False,
+        "decision_features_excluded": True,
+    }
+    assert marker["fresh_runtime_required"] is True
+    assert summary["fresh_runtime_pending"] is True
+    assert summary["fresh_runtime_required"] is True
 
 
 def test_budget_exhausting_stale_fresh_runtime_marker_does_not_preserve_replay() -> None:

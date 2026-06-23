@@ -22,6 +22,7 @@ from scion.core.branch_lifecycle_policy import (
     generic_effect_status,
     generic_evidence_signature,
 )
+from scion.core.fresh_runtime_signals import fresh_runtime_actionable_loss_signal
 from scion.core.models import Branch, BranchState, ProtocolResult
 from scion.core.reason_code_groups import classify_reason_codes
 from scion.core.runtime_budget_diagnostics import (
@@ -806,9 +807,13 @@ def _fresh_runtime_followup_marker(
     pair_losses = max(0, int(summary.get("pair_losses") or 0))
     losses = max(0, int(summary.get("losses") or 0))
     pair_win_no_loss = pair_wins > 0 and pair_losses == 0
+    actionable_loss_signal = fresh_runtime_actionable_loss_signal(
+        summary,
+        reason_codes,
+    )
     actionable_loss_diagnostic = (
         (losses > 0 or pair_losses > 0)
-        and _has_actionable_loss_diagnostic(summary, reason_codes)
+        and actionable_loss_signal.has_actionable_loss_signal
     )
     if not pair_win_no_loss and not actionable_loss_diagnostic:
         return {}
@@ -818,7 +823,7 @@ def _fresh_runtime_followup_marker(
         else "actionable_loss_diagnostic"
     )
     required = pair_win_no_loss or actionable_loss_diagnostic
-    return {
+    marker = {
         "schema_version": "fresh_runtime_followup.v1",
         "stage": "screening",
         "queue_intent": "fresh_champion_runtime_replay",
@@ -859,6 +864,9 @@ def _fresh_runtime_followup_marker(
         "proposal_visibility_only": True,
         "decision_features_excluded": True,
     }
+    if actionable_loss_diagnostic:
+        marker["actionable_loss_signal"] = actionable_loss_signal.as_metadata()
+    return marker
 
 
 def _fresh_runtime_replay_closure(
@@ -931,28 +939,10 @@ def _has_actionable_loss_diagnostic(
     summary: Mapping[str, Any],
     reason_codes: tuple[str, ...],
 ) -> bool:
-    if _string_tuple(summary.get("opportunity_diagnostics")):
-        return True
-    phase = summary.get("phase_activation_summary")
-    if isinstance(phase, Mapping):
-        activation = str(phase.get("activation_status") or "").strip().lower()
-        effect = str(phase.get("effect_status") or "").strip().lower()
-        objective = str(phase.get("objective_effect_status") or "").strip().lower()
-        telemetry = str(phase.get("telemetry_outcome") or "").strip().lower()
-        if activation == "observed":
-            return True
-        if effect not in {"", "unknown", "no_objective_effect"}:
-            return True
-        if objective not in {"", "unknown", "zero", "no_effect"}:
-            return True
-        if telemetry not in {"", "unknown"}:
-            return True
-    reason_set = {str(code).strip().upper() for code in reason_codes}
-    return any(
-        token in code
-        for code in reason_set
-        for token in ("DIAGNOSTIC", "TELEMETRY", "RUNTIME_TIE_FRESH_CHAMPION")
-    )
+    return fresh_runtime_actionable_loss_signal(
+        summary,
+        reason_codes,
+    ).has_actionable_loss_signal
 
 
 def _fresh_runtime_followup_reason_code(code: str) -> bool:
