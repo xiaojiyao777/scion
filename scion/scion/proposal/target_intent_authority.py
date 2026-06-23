@@ -35,7 +35,7 @@ class _BranchMechanismAuthority:
 
     @property
     def authority_ids(self) -> tuple[str, ...]:
-        return self.allowed_ids or self.protected_ids
+        return _unique_strings(self.protected_ids, self.allowed_ids)
 
 
 def resolve_target_intent_authority(
@@ -53,7 +53,7 @@ def resolve_target_intent_authority(
     current_id = _clean_string(intent.get("mechanism_id"))
     original = _original_target_intent_mechanism(intent)
 
-    if branch_authority.branch_local and branch_authority.protected_ids:
+    if branch_authority.branch_local and branch_authority.authority_ids:
         intersecting_id = _first_in_order(
             required_ids,
             branch_authority.authority_ids,
@@ -65,6 +65,7 @@ def resolve_target_intent_authority(
                 intent,
                 selected_id,
                 status=status,
+                action=_branch_local_followup_action(intent),
                 mechanism_sketch=(
                     "Prepared launch-focus required mechanism also belongs to "
                     f"the selected branch-local mechanism authority: {selected_id}."
@@ -81,8 +82,14 @@ def resolve_target_intent_authority(
                 branch_authority=branch_authority,
                 selected_id=selected_id,
                 original=original,
+                original_action=_clean_string(intent.get("action")),
+                selected_action=_branch_local_followup_action(intent),
                 prepared_focus_applied=True,
-                target_intent_updated=selected_id != current_id,
+                target_intent_updated=(
+                    selected_id != current_id
+                    or _branch_local_followup_action(intent)
+                    != _normalize_action(intent.get("action"))
+                ),
             )
             updated["target_intent_authority"] = diagnostics
             updated["launch_focus_required_mechanism"] = diagnostics
@@ -101,10 +108,11 @@ def resolve_target_intent_authority(
             intent,
             selected_id,
             status=status,
+            action=_branch_local_followup_action(intent),
             mechanism_sketch=(
                 "Branch-local follow-up mechanism authority selected "
                 f"{selected_id}; prepared launch-focus required ids were "
-                "deferred because they do not intersect the branch protected set."
+                "deferred because they do not intersect the branch authority set."
             ),
             formal_schema_id_policy=(
                 "mechanism_id is the branch-local protected/allowed id for this "
@@ -118,8 +126,14 @@ def resolve_target_intent_authority(
             branch_authority=branch_authority,
             selected_id=selected_id,
             original=original,
+            original_action=_clean_string(intent.get("action")),
+            selected_action=_branch_local_followup_action(intent),
             prepared_focus_applied=False,
-            target_intent_updated=selected_id != current_id,
+            target_intent_updated=(
+                selected_id != current_id
+                or _branch_local_followup_action(intent)
+                != _normalize_action(intent.get("action"))
+            ),
             deferred_required_ids=required_ids,
         )
         effective_focus = _launch_focus_with_deferred_required_ids(
@@ -130,8 +144,6 @@ def resolve_target_intent_authority(
         overrides = {"launch_research_focus": effective_focus} if effective_focus else {}
         updated["target_intent_authority"] = diagnostics
         updated["launch_focus_required_mechanism"] = diagnostics
-        if overrides:
-            updated["tool_context_overrides"] = overrides
         return TargetIntentAuthorityResolution(
             intent=updated,
             diagnostics=diagnostics,
@@ -146,6 +158,8 @@ def resolve_target_intent_authority(
             branch_authority=branch_authority,
             selected_id=current_id,
             original=original,
+            original_action=_clean_string(intent.get("action")),
+            selected_action=_normalize_action(intent.get("action")),
             prepared_focus_applied=True,
             target_intent_updated=False,
         )
@@ -178,6 +192,8 @@ def resolve_target_intent_authority(
         branch_authority=branch_authority,
         selected_id=selected_id,
         original=original,
+        original_action=_clean_string(intent.get("action")),
+        selected_action=_normalize_action(intent.get("action")),
         prepared_focus_applied=True,
         target_intent_updated=selected_id != current_id,
     )
@@ -261,7 +277,7 @@ def _is_branch_local_authority_mode(
     protected_ids: tuple[str, ...] | list[str],
     allowed_ids: tuple[str, ...] | list[str],
 ) -> bool:
-    if not protected_ids:
+    if not protected_ids and not allowed_ids:
         return False
     if same_required or weak_positive_followup:
         return True
@@ -288,6 +304,7 @@ def _with_selected_mechanism(
     selected_id: str,
     *,
     status: str,
+    action: str | None = None,
     mechanism_sketch: str,
     formal_schema_id_policy: str,
 ) -> dict[str, Any]:
@@ -303,6 +320,8 @@ def _with_selected_mechanism(
     updated["mechanism_id_status"] = status
     updated["mechanism_sketch"] = mechanism_sketch
     updated["formal_schema_id_policy"] = formal_schema_id_policy
+    if action:
+        updated["action"] = action
     return updated
 
 
@@ -314,6 +333,8 @@ def _authority_diagnostics(
     branch_authority: _BranchMechanismAuthority,
     selected_id: str,
     original: Mapping[str, Any],
+    original_action: str,
+    selected_action: str,
     prepared_focus_applied: bool,
     target_intent_updated: bool,
     deferred_required_ids: list[str] | None = None,
@@ -333,6 +354,11 @@ def _authority_diagnostics(
             "prepared_required_mechanism_ids": prepared_required_ids,
             "deferred_required_mechanism_ids": deferred_required_ids or [],
             "selected_mechanism_id": selected_id,
+            "original_target_intent_action": original_action,
+            "selected_target_intent_action": selected_action,
+            "target_intent_action_updated": (
+                selected_action != _normalize_action(original_action)
+            ),
             "selected_required_mechanism_id": (
                 selected_id if selected_id in set(prepared_required_ids) else ""
             ),
@@ -427,6 +453,16 @@ def _launch_focus_required_mechanism_ids_from_context(
     if not isinstance(research_focus, Mapping):
         research_focus = focus
     return list(_unique_strings(research_focus.get("required_mechanism_ids")))
+
+
+def _branch_local_followup_action(intent: Mapping[str, Any]) -> str:
+    action = _normalize_action(intent.get("action"))
+    return action if action == "modify" else "modify"
+
+
+def _normalize_action(value: Any) -> str:
+    action = _clean_string(value)
+    return "create_new" if action == "create" else action
 
 
 def _original_target_intent_mechanism(
