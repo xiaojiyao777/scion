@@ -14,6 +14,7 @@ from scion.core.branch_hygiene import (
     branch_lineage_status,
     branch_requires_repair_focus,
 )
+from scion.core.fresh_runtime_signals import fresh_runtime_replay_trigger
 from scion.core.models import Branch, BranchState
 from scion.core.scheduling.runtime_pressure import (
     RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON,
@@ -431,6 +432,16 @@ def branch_fresh_runtime_replay_marker(branch: Branch | None) -> Mapping[str, An
     return marker if isinstance(marker, Mapping) else {}
 
 
+def branch_fresh_runtime_replay_trigger(branch: Branch | None) -> str:
+    if branch is None:
+        return ""
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if not isinstance(summary, Mapping):
+        return ""
+    marker = branch_fresh_runtime_replay_marker(branch)
+    return fresh_runtime_replay_trigger(summary, marker)
+
+
 def branch_fresh_runtime_replay_pending(branch: Branch | None) -> bool:
     marker = branch_fresh_runtime_replay_marker(branch)
     if not marker:
@@ -439,6 +450,7 @@ def branch_fresh_runtime_replay_pending(branch: Branch | None) -> bool:
         bool(marker.get("fresh_runtime_pending"))
         and str(marker.get("scheduler_marker") or "")
         == "fresh_champion_runtime_replay_pending"
+        and bool(branch_fresh_runtime_replay_trigger(branch))
     )
 
 

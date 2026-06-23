@@ -70,8 +70,9 @@ history when exact old chronology is needed.
   no longer probes CVRP/warehouse strings; it checks contract schema,
   proposal-only visibility, and rendered-path coverage. Fresh-runtime
   actionable-loss follow-up now uses a shared typed opportunity signal, so raw
-  `opportunity_diagnostics` prose and stale text-only actionable markers cannot
-  schedule replay.
+  `opportunity_diagnostics` prose and stale/text-only pending replay markers
+  cannot schedule replay without current pair-level or structured
+  actionable-loss signal.
 - Controlled scheduler-status validation roots:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-schedstatus-d75ed849-resume-missingprimary-4r-gpt55-20260623T014159Z-claw`
   launched from WSL commit `d75ed849` after strict readiness passed. It showed

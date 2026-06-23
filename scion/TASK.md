@@ -514,8 +514,9 @@ Current checkpoint:
   - Design C cleanup is implemented in the current worktree: fresh-runtime
     actionable-loss follow-up now uses a typed
     `FreshRuntimeOpportunitySignal`, free-form `opportunity_diagnostics` prose
-    is recorded only as ignored proposal/reporting text, and stale text-only
-    `actionable_loss_diagnostic` markers do not materialize scheduler replay.
+    is recorded only as ignored proposal/reporting text, and stale/text-only
+    pending replay markers do not materialize scheduler replay without current
+    pair-level or structured actionable-loss signal.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

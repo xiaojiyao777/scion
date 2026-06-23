@@ -407,6 +407,9 @@ def test_fresh_runtime_replay_scheduler_action_skips_proposal_and_is_non_counted
     branch.current_code_hash = "candidate-hash"
     branch.last_clean_code_hash = "candidate-hash"
     branch.branch_evidence_summary = {
+        "pair_wins": 1,
+        "pair_losses": 0,
+        "pair_ties": 3,
         "protocol_stage": "screening",
         "replay_identity": _complete_replay_identity(),
         "fresh_runtime_followup": {
@@ -553,6 +556,9 @@ def test_fresh_runtime_replay_selected_without_identity_blocks_materialization()
     branch.last_screening_feedback_tier = "weak_positive"
     branch.current_code_hash = "candidate-hash"
     branch.branch_evidence_summary = {
+        "pair_wins": 1,
+        "pair_losses": 0,
+        "pair_ties": 3,
         "protocol_stage": "screening",
         "fresh_runtime_followup": {
             "schema_version": "fresh_runtime_followup.v1",
@@ -631,6 +637,9 @@ def test_fresh_runtime_replay_selected_without_identity_blocks_materialization()
 def test_fresh_runtime_replay_with_artifact_but_no_live_state_blocks_materialization() -> None:
     branch = _branch("fresh-replay-artifact-only")
     branch.branch_evidence_summary = {
+        "pair_wins": 1,
+        "pair_losses": 0,
+        "pair_ties": 3,
         "fresh_runtime_followup": {
             "schema_version": "fresh_runtime_followup.v1",
             "queue_intent": "fresh_champion_runtime_replay",

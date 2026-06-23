@@ -62,6 +62,29 @@ def fresh_runtime_actionable_loss_signal(
     )
 
 
+def fresh_runtime_replay_trigger(
+    summary: Mapping[str, Any],
+    marker_payload: Mapping[str, Any] | None = None,
+    reason_codes: Iterable[str] = (),
+) -> str:
+    """Return a replay trigger supported by current structured summary evidence."""
+
+    marker = marker_payload if isinstance(marker_payload, Mapping) else {}
+    requested = str(marker.get("trigger") or "").strip()
+    pair_trigger = _pair_level_win_no_loss(summary)
+    loss_trigger = _actionable_loss_replay(summary, reason_codes)
+
+    if requested == "pair_level_win_no_loss":
+        return requested if pair_trigger else ""
+    if requested == "actionable_loss_diagnostic":
+        return requested if loss_trigger else ""
+    if pair_trigger:
+        return "pair_level_win_no_loss"
+    if loss_trigger:
+        return "actionable_loss_diagnostic"
+    return ""
+
+
 def _reason_codes(
     summary: Mapping[str, Any],
     reason_codes: Iterable[str],
@@ -81,6 +104,33 @@ def _reason_codes(
             if str(value).strip()
         )
     )
+
+
+def _pair_level_win_no_loss(summary: Mapping[str, Any]) -> bool:
+    pair_wins = _nonnegative_int(summary.get("pair_wins"))
+    pair_losses = _nonnegative_int(summary.get("pair_losses"))
+    return pair_wins > 0 and pair_losses == 0
+
+
+def _actionable_loss_replay(
+    summary: Mapping[str, Any],
+    reason_codes: Iterable[str],
+) -> bool:
+    losses = _nonnegative_int(summary.get("losses"))
+    pair_losses = _nonnegative_int(summary.get("pair_losses"))
+    if losses <= 0 and pair_losses <= 0:
+        return False
+    return fresh_runtime_actionable_loss_signal(
+        summary,
+        reason_codes,
+    ).has_actionable_loss_signal
+
+
+def _nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _lower_text(value: Any) -> str:
@@ -106,4 +156,5 @@ def _string_tuple(value: Any) -> tuple[str, ...]:
 __all__ = [
     "FreshRuntimeOpportunitySignal",
     "fresh_runtime_actionable_loss_signal",
+    "fresh_runtime_replay_trigger",
 ]

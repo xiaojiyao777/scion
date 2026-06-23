@@ -42,7 +42,10 @@ from scion.core.branch_lifecycle_policy import (
 )
 from scion.core.step_result import StepResult
 from scion.core.frozen_budget import FROZEN_BUDGET_EXHAUSTED
-from scion.core.fresh_runtime_signals import fresh_runtime_actionable_loss_signal
+from scion.core.fresh_runtime_signals import (
+    fresh_runtime_actionable_loss_signal,
+    fresh_runtime_replay_trigger,
+)
 from scion.core.runtime_budget_diagnostics import runtime_model_from_summary
 from scion.core.telemetry_validation import screened_experiment_effective
 from scion.core.verification_call import run_verification_gate
@@ -679,6 +682,31 @@ class BranchStepRunner:
         call hypothesis/code proposal generation.
         """
         bid = branch.branch_id
+        raw_summary = getattr(branch, "branch_evidence_summary", None)
+        summary = raw_summary if isinstance(raw_summary, Mapping) else {}
+        marker = (
+            summary.get("fresh_runtime_followup")
+            if isinstance(summary.get("fresh_runtime_followup"), Mapping)
+            else {}
+        )
+        trigger = _fresh_runtime_replay_signal_trigger(summary, marker)
+        if not trigger:
+            return StepResult(
+                action="skip",
+                branch_id=bid,
+                reason=(
+                    "fresh runtime replay marker lacks current structured signal"
+                ),
+                counts_toward_max_rounds=False,
+                attempt_kind="other",
+                scheduler_audit_metadata={
+                    "fresh_runtime_replay": {
+                        "schema_version": "fresh_runtime_replay.v1",
+                        "closure_status": "not_replayable_without_current_signal",
+                        "decision_features_excluded": True,
+                    }
+                },
+            )
         workspace = self.branch_workspaces.get(bid)
         hypothesis = self.branch_hypotheses.get(bid)
         h_record = self.branch_current_hypothesis.get(bid)
@@ -1682,37 +1710,11 @@ def _fresh_runtime_replay_signal_trigger(
         "budget_exhausting"
     ):
         return ""
-    trigger = str(marker_payload.get("trigger") or "").strip()
-    if trigger == "pair_level_win_no_loss":
-        return trigger
-    if trigger == "actionable_loss_diagnostic":
-        if _fresh_runtime_actionable_loss_signal(
-            summary
-        ) or _marker_actionable_loss_signal(marker_payload):
-            return trigger
-        return ""
-    if (
-        bool(marker_payload.get("fresh_runtime_pending"))
-        and str(marker_payload.get("scheduler_marker") or "")
-        == "fresh_champion_runtime_replay_pending"
-    ):
-        return trigger or "fresh_runtime_replay_pending"
-    pair_summary = marker_payload.get("pair_summary")
-    pair_map = pair_summary if isinstance(pair_summary, Mapping) else {}
-    case_summary = marker_payload.get("case_summary")
-    case_map = case_summary if isinstance(case_summary, Mapping) else {}
-    pair_wins = _nonnegative_int(summary.get("pair_wins") or pair_map.get("wins"))
-    pair_losses = _nonnegative_int(
-        summary.get("pair_losses") or pair_map.get("losses")
+    return fresh_runtime_replay_trigger(
+        summary,
+        marker_payload,
+        _summary_reason_codes(summary),
     )
-    losses = _nonnegative_int(summary.get("losses") or case_map.get("losses"))
-    if pair_wins > 0 and pair_losses == 0:
-        return "pair_level_win_no_loss"
-    if losses <= 0 and pair_losses <= 0:
-        return ""
-    if _fresh_runtime_actionable_loss_signal(summary):
-        return "actionable_loss_diagnostic"
-    return ""
 
 
 def _fresh_runtime_summary_runtime_model(
@@ -1733,20 +1735,6 @@ def _fresh_runtime_actionable_loss_signal(summary: Mapping[str, Any]) -> bool:
         summary,
         _summary_reason_codes(summary),
     ).has_actionable_loss_signal
-
-
-def _marker_actionable_loss_signal(marker_payload: Mapping[str, Any]) -> bool:
-    signal = marker_payload.get("actionable_loss_signal")
-    if not isinstance(signal, Mapping):
-        return False
-    if not bool(signal.get("has_actionable_loss_signal")):
-        return False
-    source_codes = signal.get("source_codes")
-    if isinstance(source_codes, str):
-        return bool(source_codes.strip())
-    if isinstance(source_codes, (list, tuple, set)):
-        return any(str(code).strip() for code in source_codes)
-    return False
 
 
 def _fresh_runtime_non_replayable_reason(
