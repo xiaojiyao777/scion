@@ -69,6 +69,9 @@ from scion.proposal.agentic_session_hypothesis_preview_retry import (
     _same_mechanism_preview_retry_feedback,
 )
 from scion.proposal.session_trace_index import attach_agentic_trace_context
+from scion.proposal.target_intent_authority import (
+    tool_context_with_target_intent_authority_overrides as _target_intent_tool_context,
+)
 from scion.proposal.schemas import normalize_mechanism_changes_with_repair_attribution
 from scion.proposal.target_intent_binding import (
     target_intent_binding_retry_feedback as _target_intent_binding_retry_feedback,
@@ -187,6 +190,7 @@ class AgenticSessionHypothesisMixin(
                 observations=observations,
                 evidence=evidence,
             )
+            tool_context = _target_intent_tool_context(tool_context, target_intent)
             max_attempts = (
                 1
                 + _MAX_HYPOTHESIS_SEMANTIC_RETRIES

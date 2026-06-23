@@ -8,6 +8,7 @@ from scion.proposal.agentic_session_common import *
 from scion.proposal.agentic_session_hypothesis_schema_retry import _hypothesis_retry_anchor
 from scion.proposal.schemas import HypothesisTargetIntentInput
 from scion.proposal.session_trace_index import attach_agentic_trace_context
+from scion.proposal.target_intent_authority import resolve_target_intent_authority
 from scion.proposal.target_intent_binding import (
     canonical_formal_mechanism_id as _canonical_formal_mechanism_id,
     formal_hypothesis_target_payload as _formal_hypothesis_target_payload,
@@ -88,12 +89,12 @@ class AgenticSessionHypothesisTargetMixin:
                 )
                 raw_intent = generator(intent_context)
                 intent = _normalize_hypothesis_target_intent(raw_intent)
-                intent, launch_focus_diagnostics = (
-                    _apply_launch_focus_required_mechanism_to_target_intent(
-                        intent,
-                        tool_context,
-                    )
+                authority_resolution = resolve_target_intent_authority(
+                    intent,
+                    tool_context,
                 )
+                intent = authority_resolution.intent
+                authority_diagnostics = authority_resolution.diagnostics
             except Exception as exc:
                 self._record_hypothesis_target_intent_audit(
                     state,
@@ -126,10 +127,15 @@ class AgenticSessionHypothesisTargetMixin:
                 "decision_input": False,
                 "intent": intent,
             }
-            if launch_focus_diagnostics:
+            if authority_diagnostics:
                 result["host_adjustments"] = {
-                    "launch_focus_required_mechanism": launch_focus_diagnostics
+                    "target_intent_authority": authority_diagnostics,
+                    "launch_focus_required_mechanism": authority_diagnostics,
                 }
+            if authority_resolution.tool_context_overrides:
+                result["tool_context_overrides"] = (
+                    authority_resolution.tool_context_overrides
+                )
             action = _normalize_target_intent_action(intent.get("action"))
             if action in {"modify", "remove"}:
                 grounding = self._ground_hypothesis_target_intent(
@@ -150,9 +156,8 @@ class AgenticSessionHypothesisTargetMixin:
                 intent=result,
                 diagnostics=_drop_empty_dict(
                     {
-                        "launch_focus_required_mechanism": (
-                            launch_focus_diagnostics
-                        ),
+                        "target_intent_authority": authority_diagnostics,
+                        "launch_focus_required_mechanism": authority_diagnostics,
                     }
                 ),
             )
@@ -166,9 +171,17 @@ class AgenticSessionHypothesisTargetMixin:
                     "target_file": intent.get("target_file"),
                     "mechanism_id": intent.get("mechanism_id"),
                     "launch_focus_required_mechanism_applied": bool(
-                        launch_focus_diagnostics.get("applied")
-                        if launch_focus_diagnostics
+                        authority_diagnostics.get("prepared_focus_applied")
+                        if authority_diagnostics
                         else False
+                    ),
+                    "target_intent_authority_status": (
+                        authority_diagnostics.get("authority_status")
+                        if authority_diagnostics
+                        else ""
+                    ),
+                    "target_intent_authority_context_overridden": bool(
+                        authority_resolution.tool_context_overrides
                     ),
                     "artifact_ref": artifact_ref,
                     "digest": digest,
@@ -832,84 +845,6 @@ def _mechanism_id_schema_output_retry_feedback(
             ),
         }
     )
-
-
-def _apply_launch_focus_required_mechanism_to_target_intent(
-    intent: Mapping[str, Any],
-    tool_context: ProposalToolContext,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    required_ids = _launch_focus_required_mechanism_ids_from_context(tool_context)
-    if not required_ids:
-        return dict(intent), {}
-    current_id = str(intent.get("mechanism_id") or "").strip()
-    if current_id in required_ids:
-        return dict(intent), {}
-
-    required_id = required_ids[0]
-    updated = dict(intent)
-    original = _drop_empty_dict(
-        {
-            "mechanism_id": current_id,
-            "raw_mechanism_id": intent.get("raw_mechanism_id"),
-            "mechanism_family": intent.get("mechanism_family"),
-            "mechanism_sketch": intent.get("mechanism_sketch"),
-            "mechanism_id_status": intent.get("mechanism_id_status"),
-        }
-    )
-    required_identity = _target_intent_mechanism_identity(
-        mechanism_id=required_id,
-        mechanism_family="",
-        mechanism_sketch=f"Prepared launch-focus required mechanism {required_id}.",
-    )
-    updated.update(required_identity)
-    updated["mechanism_id"] = required_id
-    updated["raw_mechanism_id"] = required_id
-    updated["mechanism_id_status"] = "launch_focus_required_mechanism"
-    updated["mechanism_sketch"] = (
-        f"Prepared launch-focus required mechanism {required_id}; "
-        "draft the formal hypothesis around this id."
-    )
-    updated["formal_schema_id_policy"] = (
-        "mechanism_id is the prepared launch-focus required id and must be "
-        "used exactly in formal mechanism_changes and expected telemetry refs"
-    )
-    diagnostics = _drop_empty_dict(
-        {
-            "applied": True,
-            "source": "prepared_launch_research_focus",
-            "required_mechanism_ids": required_ids,
-            "selected_required_mechanism_id": required_id,
-            "original_target_intent_mechanism": original,
-            "rule": (
-                "Prepared launch research_focus required_mechanism_ids bind "
-                "target-intent preflight before formal hypothesis generation."
-            ),
-        }
-    )
-    updated["launch_focus_required_mechanism"] = diagnostics
-    return updated, diagnostics
-
-
-def _launch_focus_required_mechanism_ids_from_context(
-    tool_context: ProposalToolContext,
-) -> list[str]:
-    focus = getattr(tool_context, "launch_research_focus", {}) or {}
-    if not isinstance(focus, Mapping):
-        return []
-    research_focus = focus.get("research_focus")
-    if not isinstance(research_focus, Mapping):
-        research_focus = focus
-    return _launch_focus_string_items(research_focus.get("required_mechanism_ids"))
-
-
-def _launch_focus_string_items(value: Any) -> list[str]:
-    if isinstance(value, str):
-        items = [value]
-    elif isinstance(value, (list, tuple, set)):
-        items = [str(item) for item in value]
-    else:
-        items = []
-    return [item.strip() for item in items if item.strip()]
 
 
 def _normalize_hypothesis_target_intent(raw: Any) -> dict[str, Any]:

@@ -20,7 +20,7 @@ history when exact old chronology is needed.
 - Current posture: avoid broad budgets, generic truncation/compression, and
   decorative gates. Keep CVRP/warehouse semantics problem-owned and keep
   `DecisionFeatures` problem-neutral.
-- Current design gate: Designs A-F in
+- Current design gate: Designs A-G in
   `scion/design/v0.4-effective-research-repair-design.md` are implemented and
   focused-tested in the current worktree. Scheduler, active-slot inventory, and
   branch cards share one problem-neutral scheduling-status model. Prepared
@@ -33,8 +33,10 @@ history when exact old chronology is needed.
   attempt accounting, and agentic proposal failure routing now require typed or
   exact machine-readable signals before they affect control-plane state.
   Runtime-evidence completeness pressure now yields to current weak-positive
-  follow-up when there is no case-level loss. No CVRP-specific scheduler or
-  projection exception is accepted.
+  follow-up when there is no case-level loss. Target-intent authority now
+  resolves prepared required mechanisms against existing branch-local protected
+  mechanism policy before final hypothesis generation. No CVRP-specific
+  scheduler, target-intent, or projection exception is accepted.
 
 ## Current Decision
 
@@ -119,6 +121,25 @@ history when exact old chronology is needed.
   still prefer a clean fork, while current weak-positive branches without case
   loss can receive bounded follow-up. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-weak-positive-runtime-pressure-scheduler-repair-20260623.md`.
+- Target-intent authority checkpoint: the postweak-pressure continuity root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-continuity-77f4abe7-postweakpressure-4r-gpt55-20260623T051921Z-claw`
+  was launched from WSL commit `77f4abe7` after strict readiness passed and
+  resumed the accepted scheduler-status campaign. It is not solver evidence:
+  wrapper exit `64`, postrun acceptance failed, 0 effective rounds,
+  `last_stop_reason=circuit_breaker`, and 3 proposal quality blocks. It does
+  positively verify the scheduler repair in live flow:
+  `bba3d45f` was selected under `exploit_weak_positive` /
+  `weak_positive_signal_followup` with `scheduler_active_slot_blocked_attempts=0`.
+  The failure was generic proposal-control authority ordering: prepared
+  `required_mechanism_ids` hard-bound target intent to a new mechanism while
+  the selected existing branch required branch-local protected mechanism
+  follow-up, producing a loop between `same_mechanism_only_violation` and
+  `target_intent_binding_mismatch`. Design G now adds proposal-layer
+  target-intent authority resolution so branch-local protected ids outrank
+  disjoint prepared focus for existing branch follow-up while preserving
+  prepared binding for non-conflicting contexts. Local and WSL conda `scion`
+  focused target-intent/proposal tests passed (`118 passed`). Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-conflict-20260623.md`.
 - WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
   for the latest warehouse and CVRP reruns before launch, and live
   prompt/source evidence passed under the patched postrun checker.
@@ -615,29 +636,36 @@ CVRP/VRP:
   and accepted by the clean scheduler-status validation root. Do not treat the
   accepted clean root as solver progress: it produced no promotion and all
   available protocol effects were below MDE.
-- The clean root's actionability gap is same-mechanism follow-up selection
+- The clean root's actionability gap was same-mechanism follow-up selection
   (`same_mechanism_followup.selection_rate=0.25`). The generic scheduler-policy
   repair now keeps current weak-positive branches with no case-level loss in
-  the weak-positive follow-up lane instead of forcing a clean fork. Keep the
-  next CVRP relaunch problem-owned, and keep bounded two-opt, CMT protection,
-  and mechanism ids out of generic scheduler or projection code.
+  the weak-positive follow-up lane instead of forcing a clean fork. The next
+  exposed blocker was target-intent authority ordering, now repaired generically
+  in proposal-layer code. Keep the next CVRP relaunch problem-owned, and keep
+  bounded two-opt, CMT protection, and mechanism ids out of generic scheduler,
+  target-intent authority, or projection code.
 
 ## Next Actions
 
 1. Treat the clean scheduler-status validation root as accepted Design A
    evidence; do not relaunch that validation shape unless new scheduler
    evidence regresses.
-2. Before another CVRP heuristic campaign, run focused readiness/tests on the
-   target runtime checkout and use the repaired scheduler policy so current
-   weak-positive/no-case-loss branches can receive same-mechanism follow-up.
-3. Relaunch CVRP only as a problem-owned research-quality check; interpret all
+2. Treat the postweak-pressure continuity root as accepted Design G failure
+   evidence, not solver evidence. The next relaunch should verify that
+   `exploit_weak_positive` can reach branch-local formal hypothesis/code or a
+   typed host-owned reroute instead of cycling between target-intent binding and
+   same-mechanism guards.
+3. Before another CVRP heuristic campaign, run strict launch readiness from the
+   committed clean WSL checkout and use both the repaired scheduler policy and
+   repaired target-intent authority.
+4. Relaunch CVRP only as a problem-owned research-quality check; interpret all
    effects against MDE and do not add VRP/CVRP exceptions to generic core.
-4. Continue the remaining typed repair/bridge intent cleanup if it is still
+5. Continue the remaining typed repair/bridge intent cleanup if it is still
    needed for control-plane state mutation; do not infer it from prose.
-5. Keep warehouse as current-run-ready partial evidence unless a targeted
+6. Keep warehouse as current-run-ready partial evidence unless a targeted
    follow-up is needed to refine validation-transfer quality guidance around
    `runtime_bounded_acceptance` / `bounded_candidate_policy`.
-6. Update this file and `scion/TASK.md` only when operating truth changes; keep
+7. Update this file and `scion/TASK.md` only when operating truth changes; keep
    detailed run evidence in focused experiment reports.
 
 ## Pointers

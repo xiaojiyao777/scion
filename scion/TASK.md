@@ -8,7 +8,7 @@ recovered. Warehouse has renewed positive movement from champion `v2` to `v3`,
 and the latest warehouse APS retry root is current-run postrun-ready partial
 evidence. CVRP rank-gap, route-pressure, forced-local, required-intra-two-opt,
 and missing-primary roots are current-run-ready rejection or repair evidence,
-not solver improvements. The latest CVRP missing-primary run from WSL commit
+not solver improvements. The CVRP missing-primary run from WSL commit
 `8d28bc30` verified the feedback-tier repair but stopped after 3 of 4 requested
 rounds with `last_stop_reason=scheduler_active_slot_blocked`; copied/resumed
 weak-positive branches consumed all active slots while the current branch was
@@ -19,8 +19,15 @@ is accepted current-run-ready evidence for that generic active-slot blocker:
 postrun acceptance exit `0`, 4 of 4 effective rounds,
 `last_stop_reason=max_rounds_exhausted`, and
 `scheduler_active_slot_blocked_attempts=0`. It is framework validation, not a
-solver improvement. In the current worktree,
-`scion/design/v0.4-effective-research-repair-design.md` Designs A-F are
+solver improvement. The postweak-pressure CVRP continuity root from WSL commit
+`77f4abe7`,
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-continuity-77f4abe7-postweakpressure-4r-gpt55-20260623T051921Z-claw`,
+verified live `exploit_weak_positive` selection with
+`scheduler_active_slot_blocked_attempts=0`, but failed before Protocol rows
+because prepared target-intent required-mechanism authority conflicted with
+existing branch-local protected mechanism authority. This is Design G
+framework failure evidence, not solver evidence. In the current worktree,
+`scion/design/v0.4-effective-research-repair-design.md` Designs A-G are
 implemented and focused-tested: scheduler, active-slot inventory, and branch
 cards consume one problem-neutral scheduling-status model; prepared manifests
 carry typed `ResearchGuidanceContract` payloads; generic context/readiness code
@@ -29,10 +36,12 @@ text no longer creates actionable-loss fresh-runtime lifecycle or scheduler
 pressure; lifecycle policy blocks, live campaign attempt accounting, and
 agentic proposal failure routing require typed or exact machine-readable
 signals; runtime-evidence completeness pressure now yields to current
-weak-positive follow-up when there is no case-level loss; and CVRP/warehouse
-semantics stay in problem-owned providers/tests. Local commit `10707890` was
-synced to WSL as head `09094b5c`; local and WSL conda `scion` focused
-scheduler/proposal tests and launch readiness passed.*
+weak-positive follow-up when there is no case-level loss; target-intent
+authority resolves prepared required mechanisms against existing branch-local
+protected mechanisms before final hypothesis generation; and CVRP/warehouse
+semantics stay in problem-owned providers/tests. Local and WSL conda `scion`
+focused scheduler/proposal/target-intent tests have passed on the current
+repair slice.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -560,10 +569,24 @@ Current checkpoint:
     weak-positive branch `bba3d45f` for `exploit_weak_positive` instead of a
     clean fork. Detailed repair report:
     `scion/docs/experiments/v0.4/v04-cvrp-weak-positive-runtime-pressure-scheduler-repair-20260623.md`.
-  - Latest WSL sync: local commit `10707890` was applied to WSL as head
-    `09094b5c`; WSL conda `scion` passed scheduler runtime-pressure tests
-    (`73 passed`), proposal-boundary/lifecycle tests (`68 passed`), and launch
-    readiness (`115 passed`).
+  - Target-intent authority resolution is implemented in the current worktree:
+    prepared launch-focus `required_mechanism_ids` still bind target intent for
+    non-conflicting open/clean-fork contexts, but existing branch-local
+    follow-up now resolves authority against protected/allowed branch mechanism
+    ids before final hypothesis generation. Disjoint prepared ids are recorded
+    as deferred proposal-layer diagnostics rather than remaining hard schema
+    requirements that conflict with same-mechanism guards. The postweak-pressure
+    continuity root is the failure evidence, not solver evidence:
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-continuity-77f4abe7-postweakpressure-4r-gpt55-20260623T051921Z-claw`.
+    Local and WSL conda `scion` focused target-intent/proposal tests passed
+    (`118 passed`). Detailed report:
+    `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-conflict-20260623.md`.
+  - Latest committed WSL sync before the target-intent authority repair:
+    local commit `10707890` was applied to WSL as head `09094b5c`; WSL conda
+    `scion` passed scheduler runtime-pressure tests (`73 passed`),
+    proposal-boundary/lifecycle tests (`68 passed`), and launch readiness
+    (`115 passed`). The next clean WSL sync should be from the target-intent
+    authority repair commit.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded
