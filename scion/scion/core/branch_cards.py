@@ -21,6 +21,7 @@ from scion.core.branch_cards_evidence import (
     _branch_generic_evidence_summary,
     _branch_lifecycle_block,
     _branch_lifecycle_block_codes,
+    _branch_mechanism_evidence_contract,
     _branch_phase_activation_summary,
     _branch_rollback_codes,
     _branch_runtime_evidence_confidence,
@@ -230,11 +231,17 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     fresh_runtime_required = bool(
         fresh_runtime_followup.get("fresh_runtime_required")
     )
+    mechanism_evidence_contract = _branch_mechanism_evidence_contract(branch)
+    mechanism_followup_required = bool(
+        mechanism_evidence_contract.get("followup_required")
+        and mechanism_evidence_contract.get("decision_features_excluded") is True
+    )
     candidate_code_retention_status = _branch_code_retention_status(branch)
     evidence_retention_status = _branch_evidence_retention_status(branch)
     followup_required = bool(
         fresh_runtime_required
         or fresh_runtime_followup.get("followup_required")
+        or mechanism_followup_required
     )
     followup_recommended = bool(
         followup_required
@@ -295,6 +302,8 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         "fresh_runtime_pending": fresh_runtime_pending,
         "fresh_runtime_required": fresh_runtime_required,
         "fresh_runtime_followup": fresh_runtime_followup,
+        "mechanism_evidence_contract": mechanism_evidence_contract,
+        "mechanism_followup_required": mechanism_followup_required,
         "final_branch_classification": final_classification,
         "branch_final_classification": classification,
         "branch_next_action": final_classification.get("next_action"),

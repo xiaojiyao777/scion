@@ -20,7 +20,7 @@ history when exact old chronology is needed.
 - Current posture: avoid broad budgets, generic truncation/compression, and
   decorative gates. Keep CVRP/warehouse semantics problem-owned and keep
   `DecisionFeatures` problem-neutral.
-- Current design gate: Designs A-G in
+- Current design gate: Designs A-K in
   `scion/design/v0.4-effective-research-repair-design.md` are implemented and
   focused-tested in the current worktree. Scheduler, active-slot inventory, and
   branch cards share one problem-neutral scheduling-status model. Prepared
@@ -39,14 +39,19 @@ history when exact old chronology is needed.
   Protected and allowed mechanism ids use an ordered union, branch-local
   authority normalizes selected target intent to existing-file `modify`, and
   host transport overrides stay outside the intent body. The current worktree
-  also implements the Design H/I/J follow-ups: typed required mechanisms now
+  also implements the Design H/I/J/K follow-ups: typed required mechanisms now
   distinguish hard hypothesis binding from context-only rendered guidance, and
   generated launch wrappers mark root `run_status.json` as running before
   campaign execution. The duplicated CVRP/warehouse outer launcher lifecycle
   is now behind a generic typed lifecycle plan and renderer while problem
-  commands and problem-owned guards remain in their launchers. No CVRP-specific
-  scheduler, target-intent, launcher-lifecycle, or projection exception is
-  accepted.
+  commands and problem-owned guards remain in their launchers. Structured
+  declared-mechanism runtime diagnostics now normalize through a generic
+  mechanism-evidence contract: `not_evaluated/not_triggered`, wiring-suspect,
+  runtime-starved, and effect-attribution cases can become branch-local
+  diagnostic follow-up without becoming Protocol gates or Decision input, while
+  evaluated no-effect remains no-effect evidence rather than wiring repair. No
+  CVRP-specific scheduler, target-intent, launcher-lifecycle, projection, or
+  mechanism-evidence exception is accepted.
 
 ## Current Decision
 
@@ -64,7 +69,11 @@ history when exact old chronology is needed.
   to report-classifier false positives and repaired in the current worktree, so
   the next question is solver direction quality and warehouse/CVRP effective
   research behavior rather than more authority-loop or actionability-classifier
-  repair.
+  repair. The live CVRP solver-depth root has also exposed a mechanism-evidence
+  contract gap: current screening rows can declare the target mechanism while
+  formal telemetry shows the mechanism was not evaluated or triggered. Treat
+  that as integration/activation diagnostic evidence until the Design K repair
+  is validated on a synchronized rerun.
 - Prior CVRP missing-primary follow-up:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-missingprimary-8d28bc30-narrowavoid-4r-gpt55-20260622T171659Z-claw`
   launched from WSL commit `8d28bc30`. It passed postrun acceptance readiness
@@ -300,17 +309,33 @@ Warehouse current positive-control root:
   report:
   `scion/docs/experiments/v0.4/v04-warehouse-guidance-binding-launcher-status-20260623.md`.
 
-CVRP solver-depth live root:
+CVRP solver-depth old-checkout root:
 
 - `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-65115459-postauthority-6r-gpt55-20260623T084213Z-claw`
+- Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-solverdepth-65115459-postauthority-6r-gpt55-20260623T084213Z-claw`.
+  WSL postrun acceptance is the authority for this old-checkout run; the local
+  mirror preserves artifacts for audit, but local postrun identity checks see
+  the WSL `run_root` embedded in rebuild manifests.
 - Prepared from WSL commit `65115459` after strict launch readiness passed and
-  resumed from the accepted authority validation campaign. It is running on the
-  old WSL checkout while the local Design H/I/J repairs remain unsynced. Do not
-  rsync new runtime code into WSL until this run exits.
-- Current live status: `campaign/run_status.json` is `running`, champion still
-  `v1`, no effective rounds counted yet, and the live root reproduces the
-  pre-repair operator-status issue where root `run_status.json` remains
-  prepared until final wrapper status is written.
+  resumed from the accepted authority validation campaign. It finished before
+  the local Design H/I/J/K repairs were synced to WSL.
+- The run finished current-run-ready with wrapper/postrun exit `0`, postrun
+  acceptance `ready`, validity `valid`, completeness `complete`, 6 of 6
+  effective Protocol rows, 6 protocol-evaluated candidates, 0 proposal quality
+  blocks, 0 active-slot blocks, champion still `v1`, and
+  `last_stop_reason=max_rounds_exhausted`.
+- Evidence interpretation: this is framework/integration evidence, not solver
+  progress. The postrun brief reports all six rows below CVRP MDE, 0 promotions,
+  research continuity `wide_shallow`, max branch depth 1, and no
+  large-two-opt direct mechanism signal. The final current screening rows
+  declared `large_instance_intra_route_two_opt_seed` while structured telemetry
+  showed `not_evaluated/not_triggered` and no matching phase bucket. Interpret
+  those rows as Design K trigger evidence: declared mechanisms that are not
+  reached by the formal runtime path should create branch-local integration
+  follow-up pressure rather than clean-fork breadth or solver-quality
+  conclusions. The run is now safe to mirror; sync local Design H/I/J/K repairs
+  to WSL only after recording this old-checkout evidence.
 
 CVRP evidence root:
 
@@ -741,7 +766,7 @@ CVRP/VRP:
    WSL. Continue CVRP only as problem-owned solver research; interpret effects
    against MDE and do not add VRP/CVRP exceptions to generic scheduler,
    proposal authority, actionability, projection, or `DecisionFeatures`.
-3. After syncing the current Design H/I/J repairs, rerun warehouse from champion
+3. After syncing the current Design H/I/J/K repairs, rerun warehouse from champion
    `v2` as the simpler positive-control path. Do not accept the latest
    quality-blocked positive-control root as plateau evidence.
 4. Update this file and `scion/TASK.md` only when operating truth changes; keep

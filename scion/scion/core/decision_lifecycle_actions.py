@@ -23,6 +23,9 @@ from scion.core.branch_lifecycle_policy import (
     generic_evidence_signature,
 )
 from scion.core.fresh_runtime_signals import fresh_runtime_actionable_loss_signal
+from scion.core.mechanism_evidence_contract import (
+    mechanism_evidence_contract_for_protocol,
+)
 from scion.core.models import Branch, BranchState, ProtocolResult
 from scion.core.reason_code_groups import classify_reason_codes
 from scion.core.runtime_budget_diagnostics import (
@@ -172,6 +175,7 @@ def update_branch_screening_evidence_summary(
         return
     stats = protocol_result.stats
     mechanism_evidence = mechanism_evidence_for_protocol(protocol_result)
+    mechanism_contract = mechanism_evidence_contract_for_protocol(protocol_result)
     runtime_aggregate_exclusion = runtime_aggregate_exclusion_for_protocol(
         protocol_result
     )
@@ -293,6 +297,14 @@ def update_branch_screening_evidence_summary(
             ),
         },
     }
+    if mechanism_contract:
+        summary["mechanism_evidence_contract"] = mechanism_contract
+        summary["phase_activation_summary"]["mechanism_contract_status"] = (
+            mechanism_contract.get("primary_status") or "unknown"
+        )
+        summary["phase_activation_summary"]["mechanism_followup_required"] = bool(
+            mechanism_contract.get("followup_required")
+        )
     phase_telemetry = getattr(
         protocol_result,
         "candidate_phase_telemetry_summary",

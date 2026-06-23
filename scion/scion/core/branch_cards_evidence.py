@@ -150,6 +150,8 @@ def _branch_phase_activation_summary(branch: Branch | None) -> dict[str, Any]:
                 raw.get("opportunity_status") or "unknown"
             ),
             "telemetry_outcome": raw.get("telemetry_outcome"),
+            "mechanism_contract_status": raw.get("mechanism_contract_status"),
+            "mechanism_followup_required": raw.get("mechanism_followup_required"),
         }
     return {
         "stage": "unknown",
@@ -228,6 +230,12 @@ def _branch_fresh_runtime_followup(branch: Branch | None) -> dict[str, Any]:
         "followup_required": True,
         "decision_features_excluded": True,
     }
+
+
+def _branch_mechanism_evidence_contract(branch: Branch | None) -> dict[str, Any]:
+    evidence = _branch_evidence_summary(branch)
+    value = evidence.get("mechanism_evidence_contract")
+    return dict(value) if isinstance(value, Mapping) else {}
 
 
 def _branch_code_retention_status(branch: Branch | None) -> str:
@@ -419,6 +427,19 @@ def _branch_generic_evidence_summary(
         summary["fresh_runtime_trigger"] = str(
             fresh_runtime_followup.get("trigger") or ""
         )
+    mechanism_contract = _branch_mechanism_evidence_contract(branch)
+    if mechanism_contract:
+        summary["mechanism_contract_status"] = str(
+            mechanism_contract.get("primary_status") or "unknown"
+        )
+        summary["mechanism_followup_required"] = bool(
+            mechanism_contract.get("followup_required")
+        )
+        repair_ids = mechanism_contract.get("repair_mechanism_ids")
+        if isinstance(repair_ids, (list, tuple)) and repair_ids:
+            summary["mechanism_repair_ids"] = [
+                str(item) for item in repair_ids if str(item)
+            ]
     return summary
 
 

@@ -195,6 +195,11 @@ def _format_evidence_summary(summary: Mapping[str, Any]) -> str:
     if summary.get("fresh_runtime_pending"):
         trigger = summary.get("fresh_runtime_trigger") or "fresh_runtime_required"
         parts.append(f"fresh_runtime_pending:{trigger}")
+    mechanism_status = summary.get("mechanism_contract_status")
+    if mechanism_status:
+        parts.append(f"mechanism_contract_status:{mechanism_status}")
+    if summary.get("mechanism_followup_required"):
+        parts.append("mechanism_followup_required:true")
     return ",".join(parts)
 
 
@@ -230,6 +235,8 @@ def _format_phase_activation_summary(summary: Mapping[str, Any]) -> str:
             "objective_effect_status",
             "opportunity_status",
             "telemetry_outcome",
+            "mechanism_contract_status",
+            "mechanism_followup_required",
         )
         if summary.get(key) is not None
     ) or "none"

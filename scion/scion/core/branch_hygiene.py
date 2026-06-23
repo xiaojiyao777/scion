@@ -5,6 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Iterable, Mapping, MutableMapping
 
+from scion.core.mechanism_evidence_contract import (
+    mechanism_contract_followup_required,
+)
 from scion.core.models import Branch
 from scion.core.replay_identity_contract import formal_replay_identity_missing_keys
 
@@ -264,7 +267,16 @@ def branch_has_actionable_diagnostic(branch: Branch | None) -> bool:
         return True
     if getattr(branch, "branch_lifecycle_policy_blocks", 0):
         return True
+    if _branch_mechanism_contract_followup_required(branch):
+        return True
     return False
+
+
+def _branch_mechanism_contract_followup_required(branch: Branch | None) -> bool:
+    summary = _branch_evidence_summary(branch)
+    return mechanism_contract_followup_required(
+        summary.get("mechanism_evidence_contract")
+    )
 
 
 def branch_fresh_runtime_replay_blocked(branch: Branch | None) -> bool:

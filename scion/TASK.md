@@ -11,14 +11,19 @@ guidance-binding design mismatch rather than a real plateau. CVRP rank-gap,
 route-pressure, forced-local, required-intra-two-opt, missing-primary,
 scheduler-status, and target-intent authority roots are current-run-ready
 rejection or repair evidence, not solver improvements. In the current
-worktree, `scion/design/v0.4-effective-research-repair-design.md` Designs A-J
+worktree, `scion/design/v0.4-effective-research-repair-design.md` Designs A-K
 are implemented and focused-tested: scheduling status, research-guidance
 contracts, context/readiness schema checks, typed
 opportunity/lifecycle/failure routing, weak-positive runtime-pressure
 follow-up, target-intent authority, report-only actionability classification,
 research-guidance binding semantics, launcher running status, and the generic
 launcher lifecycle contract all stay problem-neutral while CVRP/warehouse
-semantics remain problem-owned. Local and
+semantics remain problem-owned. Design K adds a generic mechanism-evidence
+contract so structured telemetry diagnostics such as a declared mechanism that
+was not evaluated or triggered become branch-local integration follow-up
+signals instead of ordinary inactive clean-fork pressure; this remains
+proposal/lifecycle/scheduler evidence and stays out of `DecisionFeatures`.
+Local and
 WSL conda `scion` focused target-intent/proposal tests pass at the tightened
 semantics (`121 passed`). The authority validation root launched from WSL
 commit `542d1f99`,
@@ -40,11 +45,22 @@ problem-neutrally; a temporary rebuild of the accepted authority root reports
 `actionability_gaps=[]`, `same_mechanism_missed=0`, and
 `branch_lesson_semantic_gap_count=0` while preserving
 `accepted_clean_fork_policy_choice_count=1` as diagnostic evidence. The
-current local Design H/I/J repair is not yet synced to WSL because the CVRP
+current local Design H/I/J/K repair is not yet synced to WSL; the CVRP
 solver-depth root
 `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-65115459-postauthority-6r-gpt55-20260623T084213Z-claw`
-is running from WSL commit `65115459`; wait for it to exit before rsyncing
-runtime paths.*
+finished from old WSL commit `65115459` before the local repairs were synced.
+It is current-run-ready framework evidence: wrapper/postrun exit `0`, postrun
+acceptance `ready`, validity `valid`, completeness `complete`, 6 of 6
+effective Protocol rows, 0 proposal quality blocks, 0 active-slot blocks, and
+`last_stop_reason=max_rounds_exhausted`. It is not solver progress or branch
+depth evidence: champion remained `v1`, there were 0 promotions, all six
+current rows were below the CVRP MDE, research continuity was `wide_shallow`
+with max branch depth 1, and the large-two-opt summary reported missing direct
+mechanism signal. The final current screening rows exposed the Design K trigger
+shape: the declared `large_instance_intra_route_two_opt_seed` mechanism had
+structured `not_evaluated/not_triggered` diagnostics and no same-name phase
+telemetry, so those rows are mechanism-integration evidence, not solver-quality
+conclusions.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -625,7 +641,7 @@ Current checkpoint:
     is currently running from WSL commit `65115459` after strict launch
     readiness passed, resuming from the accepted authority validation campaign.
     It should be interpreted only as problem-owned solver-direction research;
-    do not sync the current local Design H/I/J runtime-path changes into WSL
+    do not sync the current local Design H/I/J/K runtime-path changes into WSL
     until this live run exits.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
