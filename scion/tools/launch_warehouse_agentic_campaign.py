@@ -17,6 +17,10 @@ from typing import Any
 
 import yaml
 
+SCION_PROJECT_DIR = Path(__file__).resolve().parents[1]
+if str(SCION_PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCION_PROJECT_DIR))
+
 from scion.launcher.lifecycle import (
     CampaignCommandPlan,
     LauncherLifecyclePlan,
