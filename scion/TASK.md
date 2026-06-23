@@ -14,7 +14,17 @@ of `DecisionFeatures`, Protocol gates, and raw artifacts. Local conda `claw`
 focused validation passes (`108 passed`) plus
 `git diff --check`. The WSL reverse SSH tunnel is restored, the current local
 repair files were synced to the WSL runner worktree, and WSL conda `scion`
-focused validation also passes (`108 passed`). The CVRP solver-depth
+focused validation also passes (`108 passed`). The warehouse postrun audit
+exposed a generic postrun acceptance recheck drift: historical roots could fail
+after checkout advances because the checker mixed live rebuilt inventory with
+stored postrun analysis artifacts. The checker now prefers the stored inventory
+declared by the rebuild manifest, falls back to live rebuild only for legacy
+roots, and passes local/WSL postrun acceptance tests (`86 passed` each). The
+warehouse root recheck now reports `current_run_analysis_ready=true` with
+`checks.inventory_loaded.detail.source=stored_postrun_inventory`. Detailed
+repair report:
+`scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
+The CVRP solver-depth
 mechanism-follow-up root that launched from old WSL commit `9b1db176` finished
 valid/complete and postrun-ready, with 6 of 6 effective Protocol rows, no
 quality blocks, no active-slot blocks, branch depth 4, and 4 of 4 observed
@@ -31,8 +41,11 @@ It is clean warehouse effective-research evidence and a plateau-review
 candidate, not continuous promotion: starting/current champion is `v2`/`v2`,
 all rows are below MDE, max branch depth is 8, same-mechanism follow-up is
 11/11, and postrun interpretation is `protocol_evaluated_plateau_review_ready`.
-The next resume point is branch-level plateau vs missed-continuous-improvement
-analysis of that mirrored root.*
+The plateau postrun report is recorded in
+`scion/docs/experiments/v0.4/v04-warehouse-v2-positive-plateau-postrun-20260623.md`.
+Default next action is to pivot back to CVRP/VRP solver-design follow-up; one
+narrow warehouse repeat is optional only if an independent solver-level plateau
+confirmation is required.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -323,8 +336,19 @@ Current checkpoint:
   follow-up is 11/11, branch-lesson semantic gaps are 0, and research-context
   actionability gaps are empty. The local mirror is
   `/home/clawd/research/scion-experiments/v04-wh-v2-positive-2f8e9f21-current-8r-gpt55-20260623T161630Z-claw`.
-  Next action: analyze whether this is a real post-v2 plateau or whether one
-  narrow repeat is needed before accepting plateau.
+  Detailed report:
+  `scion/docs/experiments/v0.4/v04-warehouse-v2-positive-plateau-postrun-20260623.md`.
+  Current interpretation: enough to accept restored warehouse effective
+  research and plateau-review readiness for v0.4 framework evidence. Do not
+  launch another warehouse root by default; run one narrow repeat only if an
+  independent solver-level plateau confirmation is explicitly needed.
+- Postrun acceptance stored-inventory repair:
+  `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
+  Historical root rechecks now use the stored inventory artifact declared by the
+  rebuild manifest before falling back to live inventory rebuild. This prevents
+  normal checkout advancement from creating false prepared-contract git
+  mismatches while preserving stored analysis-brief vs stored-inventory drift
+  detection.
 - CVRP/VRP continuation has current-run-ready complete post-repair evidence:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-2e1bc5ae-postrepair-4r-gpt55-20260622T021910Z-claw`.
   It launched from WSL commit `2e1bc5ae`, finished naturally with wrapper exit

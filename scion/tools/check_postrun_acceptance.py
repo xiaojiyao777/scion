@@ -138,7 +138,24 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
             "detail": detail,
         }
 
-    inventory = build_inventory(root)
+    report_dir = root / "postrun_acceptance"
+    rebuild_manifest = _read_rebuild_manifest(report_dir)
+    inventory_path = _artifact_json_path_from_rebuild_manifest(
+        rebuild_manifest,
+        report_dir,
+        "inventory",
+    )
+    stored_inventory = (
+        _read_json_object(inventory_path)
+        if inventory_path is not None
+        else {}
+    )
+    if stored_inventory:
+        inventory = stored_inventory
+        inventory_source = "stored_postrun_inventory"
+    else:
+        inventory = build_inventory(root)
+        inventory_source = "live_inventory_rebuild"
     lifecycle = _mapping_or_empty(inventory.get("lifecycle"))
     validity = _mapping_or_empty(inventory.get("validity"))
     phase4 = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
@@ -147,8 +164,6 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
     launcher = _mapping_or_empty(inventory.get("launcher"))
     run_log_markers = _mapping_or_empty(launcher.get("run_log_markers"))
 
-    report_dir = root / "postrun_acceptance"
-    rebuild_manifest = _read_rebuild_manifest(report_dir)
     analysis_brief_path = _analysis_brief_path_from_rebuild_manifest(
         rebuild_manifest,
         report_dir,
@@ -159,7 +174,15 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         else {}
     )
 
-    add_check("inventory_loaded", "ok", str(root))
+    add_check(
+        "inventory_loaded",
+        "ok",
+        {
+            "run_root": str(root),
+            "source": inventory_source,
+            "stored_inventory_path": str(inventory_path) if inventory_path else "",
+        },
+    )
     add_check(
         "postrun_acceptance_present",
         "ok" if report_dir.exists() else "failed",
@@ -547,9 +570,21 @@ def _analysis_brief_path_from_rebuild_manifest(
     rebuild_manifest: Mapping[str, Any],
     report_dir: Path,
 ) -> Path | None:
+    return _artifact_json_path_from_rebuild_manifest(
+        rebuild_manifest,
+        report_dir,
+        "analysis_brief",
+    )
+
+
+def _artifact_json_path_from_rebuild_manifest(
+    rebuild_manifest: Mapping[str, Any],
+    report_dir: Path,
+    family_name: str,
+) -> Path | None:
     families = _mapping_or_empty(rebuild_manifest.get("families"))
-    analysis_brief = _mapping_or_empty(families.get("analysis_brief"))
-    outputs = analysis_brief.get("outputs")
+    family = _mapping_or_empty(families.get(family_name))
+    outputs = family.get("outputs")
     if not isinstance(outputs, list):
         return None
     for item in outputs:
@@ -558,7 +593,7 @@ def _analysis_brief_path_from_rebuild_manifest(
         if (
             path.suffix == ".json"
             and path.is_file()
-            and _manifest_output_in_family(path, report_dir, "analysis_brief")
+            and _manifest_output_in_family(path, report_dir, family_name)
         ):
             return path
     return None
