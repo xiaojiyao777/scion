@@ -12,7 +12,10 @@ def adopt_verified_hypothesis_identity(
     """Record the verified hypothesis identity on its branch.
 
     The stored branch identity is proposal/lifecycle context only. Decision
-    inputs still come from deterministic protocol features.
+    inputs still come from deterministic protocol features. Branch direction is
+    intentionally left to decision finalization paths that preserve branch-local
+    continuation state; merely verifying a hypothesis must not mark a clean
+    CONTINUE_EXPLORE branch as established for scheduling.
     """
 
     changed = False
@@ -38,13 +41,6 @@ def adopt_verified_hypothesis_identity(
         )
         if merged != tuple(branch.branch_mechanism_ids or ()):
             branch.branch_mechanism_ids = merged
-            changed = True
-
-    if branch.direction is None:
-        change_locus = str(getattr(hypothesis, "change_locus", "") or "").strip()
-        text = str(getattr(hypothesis, "hypothesis_text", "") or "")[:100]
-        if change_locus or text:
-            branch.direction = f"{change_locus}: {text}"
             changed = True
 
     return changed

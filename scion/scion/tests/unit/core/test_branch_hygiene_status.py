@@ -98,7 +98,7 @@ def test_explore_status_progress_includes_suspect_branch_hygiene() -> None:
     assert payload["telemetry_repair_attempts"] == {"probe": 1}
 
 
-def test_verified_hypothesis_identity_updates_branch_card_mechanisms() -> None:
+def test_verified_hypothesis_identity_updates_branch_card_mechanisms_only() -> None:
     branch = Branch(
         branch_id="active-identity",
         state=BranchState.EXPLORE,
@@ -124,10 +124,10 @@ def test_verified_hypothesis_identity_updates_branch_card_mechanisms() -> None:
         "existing_probe",
         "bounded_assignment_probe",
     )
-    assert branch.direction == "solver_design: Refine the bounded assignment probe."
+    assert branch.direction is None
     card = branch_prompt_card(branch)
     assert "mechanism_ids=existing_probe,bounded_assignment_probe" in card
-    assert "direction=solver_design:_Refine_the_bounded_assignment_probe." in card
+    assert "direction=none" in card
 
 
 def test_explore_pipeline_persists_verified_hypothesis_identity() -> None:
