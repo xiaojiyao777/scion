@@ -41,7 +41,7 @@ chronology belongs in focused experiment reports and git history.
   `git diff --check` is clean.
 - The WSL reverse SSH tunnel is restored. The current local repair files were
   synced to the WSL runner worktree, and WSL conda `scion` focused validation
-  passes (`108 passed`).
+  passes (`108 passed`). Local and WSL sync commits have been recorded.
 
 ## Current Decision
 
@@ -54,9 +54,8 @@ chronology belongs in focused experiment reports and git history.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work and a
   prepared/current positive-control path. The next run should start only after
   local runtime-semantics repairs are synchronized and validated on WSL.
-- The next operational action is to record a clean WSL/local sync point, then
-  inspect or launch the prepared warehouse positive-control and CVRP follow-up
-  runs.
+- The next operational action is to inspect or launch the prepared warehouse
+  positive-control and CVRP follow-up runs from the recorded sync points.
 
 ## WSL Runner
 
@@ -121,12 +120,10 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 
 ## Next Actions
 
-1. Record the current local/WSL sync point so experiment roots have an auditable
-   code baseline.
-2. Launch or inspect the prepared warehouse
+1. Launch or inspect the prepared warehouse
    positive-control root and the next CVRP follow-up from the synchronized
    checkout.
-3. Evaluate runs for effective research behavior: warehouse continuous
+2. Evaluate runs for effective research behavior: warehouse continuous
    optimization, CVRP branch depth and solver-design follow-up, MDE-aware
    rejection, and absence of framework-control blockers.
 
