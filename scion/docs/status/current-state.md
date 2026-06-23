@@ -34,8 +34,11 @@ history when exact old chronology is needed.
   exact machine-readable signals before they affect control-plane state.
   Runtime-evidence completeness pressure now yields to current weak-positive
   follow-up when there is no case-level loss. Target-intent authority now
-  resolves prepared required mechanisms against existing branch-local protected
-  mechanism policy before final hypothesis generation. No CVRP-specific
+  resolves prepared required mechanisms against existing branch-local
+  protected/allowed mechanism authority before final hypothesis generation.
+  Protected and allowed mechanism ids use an ordered union, branch-local
+  authority normalizes selected target intent to existing-file `modify`, and
+  host transport overrides stay outside the intent body. No CVRP-specific
   scheduler, target-intent, or projection exception is accepted.
 
 ## Current Decision
@@ -135,10 +138,19 @@ history when exact old chronology is needed.
   the selected existing branch required branch-local protected mechanism
   follow-up, producing a loop between `same_mechanism_only_violation` and
   `target_intent_binding_mismatch`. Design G now adds proposal-layer
-  target-intent authority resolution so branch-local protected ids outrank
-  disjoint prepared focus for existing branch follow-up while preserving
-  prepared binding for non-conflicting contexts. Local and WSL conda `scion`
-  focused target-intent/proposal tests passed (`118 passed`). Detailed report:
+  target-intent authority resolution so branch-local protected/allowed ids
+  outrank disjoint prepared focus for existing branch follow-up while
+  preserving prepared binding for non-conflicting contexts. Local head
+  `ac33df06` tightens this semantics with allowed-only/union coverage,
+  branch-local action normalization, and top-level-only host transport
+  overrides; local focused target-intent/proposal tests passed (`121 passed`).
+  WSL head `542d1f99` passed the pre-tightening focused set (`118 passed`) and
+  is running the authority validation root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-authority-542d1f99-postweakpressure-4r-gpt55-20260623T055230Z-claw`.
+  That root has already crossed target-intent preflight, branch-local formal
+  hypothesis binding, code generation, and formal solver evaluation startup
+  with 0 proposal quality blocks and 0 active-slot blocks, but it is not
+  postrun-accepted evidence until it finishes. Detailed failure report:
   `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-conflict-20260623.md`.
 - WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
   for the latest warehouse and CVRP reruns before launch, and live
@@ -651,13 +663,14 @@ CVRP/VRP:
    evidence; do not relaunch that validation shape unless new scheduler
    evidence regresses.
 2. Treat the postweak-pressure continuity root as accepted Design G failure
-   evidence, not solver evidence. The next relaunch should verify that
-   `exploit_weak_positive` can reach branch-local formal hypothesis/code or a
-   typed host-owned reroute instead of cycling between target-intent binding and
-   same-mechanism guards.
-3. Before another CVRP heuristic campaign, run strict launch readiness from the
-   committed clean WSL checkout and use both the repaired scheduler policy and
-   repaired target-intent authority.
+   evidence, not solver evidence. The active authority validation root should
+   finish or fail before drawing solver conclusions; so far it verifies that
+   `exploit_weak_positive` can reach branch-local target intent, formal
+   hypothesis/code, and formal solver evaluation instead of cycling between
+   target-intent binding and same-mechanism guards.
+3. After the active authority validation root finishes, run postrun acceptance,
+   mirror the root locally, and sync local head `ac33df06` to WSL before any
+   follow-up launch.
 4. Relaunch CVRP only as a problem-owned research-quality check; interpret all
    effects against MDE and do not add VRP/CVRP exceptions to generic core.
 5. Continue the remaining typed repair/bridge intent cleanup if it is still

@@ -38,10 +38,14 @@ agentic proposal failure routing require typed or exact machine-readable
 signals; runtime-evidence completeness pressure now yields to current
 weak-positive follow-up when there is no case-level loss; target-intent
 authority resolves prepared required mechanisms against existing branch-local
-protected mechanisms before final hypothesis generation; and CVRP/warehouse
-semantics stay in problem-owned providers/tests. Local and WSL conda `scion`
-focused scheduler/proposal/target-intent tests have passed on the current
-repair slice.*
+protected/allowed mechanism authority before final hypothesis generation; and
+CVRP/warehouse semantics stay in problem-owned providers/tests. Local focused
+target-intent/proposal tests passed at head `ac33df06` (`121 passed`); WSL head
+`542d1f99` passed the pre-tightening target-intent/proposal set (`118 passed`)
+and is running the authority validation root
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-authority-542d1f99-postweakpressure-4r-gpt55-20260623T055230Z-claw`, which has crossed target intent,
+branch-local formal hypothesis/code, and formal solver evaluation startup but
+is not postrun-accepted evidence until it finishes.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -573,20 +577,27 @@ Current checkpoint:
     prepared launch-focus `required_mechanism_ids` still bind target intent for
     non-conflicting open/clean-fork contexts, but existing branch-local
     follow-up now resolves authority against protected/allowed branch mechanism
-    ids before final hypothesis generation. Disjoint prepared ids are recorded
-    as deferred proposal-layer diagnostics rather than remaining hard schema
-    requirements that conflict with same-mechanism guards. The postweak-pressure
-    continuity root is the failure evidence, not solver evidence:
+    ids before final hypothesis generation. Protected and allowed ids form an
+    ordered authority set, branch-local authority normalizes selected target
+    intent to existing-file `modify`, and host transport overrides stay outside
+    the intent body. Disjoint prepared ids are recorded as deferred
+    proposal-layer diagnostics rather than remaining hard schema requirements
+    that conflict with same-mechanism guards. The postweak-pressure continuity
+    root is the failure evidence, not solver evidence:
     `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-continuity-77f4abe7-postweakpressure-4r-gpt55-20260623T051921Z-claw`.
-    Local and WSL conda `scion` focused target-intent/proposal tests passed
-    (`118 passed`). Detailed report:
+    Local head `ac33df06` focused target-intent/proposal tests passed
+    (`121 passed`); WSL head `542d1f99` passed the pre-tightening focused set
+    (`118 passed`) and is running authority validation root
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-authority-542d1f99-postweakpressure-4r-gpt55-20260623T055230Z-claw`.
+    The active validation root has crossed target-intent preflight,
+    branch-local formal hypothesis binding, code generation, and formal solver
+    evaluation startup with no proposal quality blocks or active-slot blocks so
+    far, but it is not postrun-accepted evidence until it finishes. Detailed
+    failure report:
     `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-conflict-20260623.md`.
-  - Latest committed WSL sync before the target-intent authority repair:
-    local commit `10707890` was applied to WSL as head `09094b5c`; WSL conda
-    `scion` passed scheduler runtime-pressure tests (`73 passed`),
-    proposal-boundary/lifecycle tests (`68 passed`), and launch readiness
-    (`115 passed`). The next clean WSL sync should be from the target-intent
-    authority repair commit.
+  - Latest clean WSL authority validation sync before local tightening:
+    local commit `43c090fe` was applied to WSL as head `542d1f99`; do not sync
+    local head `ac33df06` until the active validation root finishes.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded
