@@ -12,10 +12,11 @@ from scion.core.branch_hygiene import (
     record_branch_lifecycle_policy_block,
 )
 from scion.core.branch_repair_policy import (
+    BranchLifecyclePolicyBlockSignal,
     REPAIR_FIRST_POLICY_VIOLATION,
+    branch_lifecycle_policy_block_signal_from_detail,
     branch_continuation_mechanism_ids,
     branch_repair_mechanism_ids,
-    is_branch_lifecycle_policy_block_detail,
     validate_repair_focused_patch,
 )
 from scion.core.models import (
@@ -470,13 +471,24 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         session_ref,
                     )
                 self._record_proposal_fail_event(bid, failure_detail)
-                attempt_kind, repair_ids, repair_policy_reason = (
-                    self._repair_attempt_metadata(branch, failure_detail)
+                lifecycle_signal = branch_lifecycle_policy_block_signal_from_detail(
+                    failure_detail
                 )
-                if attempt_kind == "branch_lifecycle_policy":
+                attempt_kind, repair_ids, repair_policy_reason = (
+                    self._repair_attempt_metadata(
+                        branch,
+                        failure_detail,
+                        lifecycle_signal=lifecycle_signal,
+                    )
+                )
+                if (
+                    attempt_kind == "branch_lifecycle_policy"
+                    and lifecycle_signal is not None
+                ):
                     self._record_branch_lifecycle_policy_block(
                         branch,
                         failure_detail,
+                        lifecycle_signal=lifecycle_signal,
                     )
                 self.record_step(
                     StepRecord(
@@ -814,22 +826,34 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         )
         if not repair_patch_check.allowed:
             detail = repair_patch_check.detail
+            lifecycle_signal = repair_patch_check.lifecycle_block_signal
             logger.info(
                 "Branch %s: branch continuation patch policy failed: %s",
                 bid,
                 detail,
             )
-            if not is_branch_lifecycle_policy_block_detail(detail):
+            if lifecycle_signal is None:
                 self.handle_failure(
                     branch,
                     FailureEvent(category="proposal", detail=detail),
                 )
             self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
             attempt_kind, repair_ids, repair_policy_reason = (
-                self._repair_attempt_metadata(branch, detail)
+                self._repair_attempt_metadata(
+                    branch,
+                    detail,
+                    lifecycle_signal=lifecycle_signal,
+                )
             )
-            if attempt_kind == "branch_lifecycle_policy":
-                self._record_branch_lifecycle_policy_block(branch, detail)
+            if (
+                attempt_kind == "branch_lifecycle_policy"
+                and lifecycle_signal is not None
+            ):
+                self._record_branch_lifecycle_policy_block(
+                    branch,
+                    detail,
+                    lifecycle_signal=lifecycle_signal,
+                )
             if not repair_ids:
                 repair_ids = (
                     repair_patch_check.protected_mechanism_ids
@@ -1220,6 +1244,8 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         self,
         branch: Branch,
         failure_detail: str | None,
+        *,
+        lifecycle_signal: BranchLifecyclePolicyBlockSignal | None = None,
     ) -> tuple[str, tuple[str, ...], str | None]:
         if (
             failure_category_for_run_validity(
@@ -1233,7 +1259,11 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             return "schema_quality_block", (), str(failure_detail or "")
         if "stale_source" in str(failure_detail or "").lower():
             return "proposal_retry", (), "stale_source_refresh"
-        if is_branch_lifecycle_policy_block_detail(failure_detail):
+        signal = (
+            lifecycle_signal
+            or branch_lifecycle_policy_block_signal_from_detail(failure_detail)
+        )
+        if signal is not None:
             ids = branch_continuation_mechanism_ids(
                 branch,
                 self.step_history,
@@ -1255,10 +1285,20 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         self,
         branch: Branch,
         detail: str | None,
+        *,
+        lifecycle_signal: BranchLifecyclePolicyBlockSignal | None = None,
     ) -> None:
-        if not is_branch_lifecycle_policy_block_detail(detail):
+        signal = (
+            lifecycle_signal
+            or branch_lifecycle_policy_block_signal_from_detail(detail)
+        )
+        if signal is None:
             return
-        record_branch_lifecycle_policy_block(branch, detail)
+        record_branch_lifecycle_policy_block(
+            branch,
+            detail,
+            lifecycle_signal=signal,
+        )
         try:
             self.persist_branch_state(branch.branch_id)
         except Exception:  # pragma: no cover - reroute persistence is best effort

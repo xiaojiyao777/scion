@@ -11,7 +11,8 @@ from scion.core.branch_hygiene import (
     branch_workspace_for_proposal,
 )
 from scion.core.branch_repair_policy import (
-    is_branch_lifecycle_policy_block_detail,
+    BRANCH_LIFECYCLE_POLICY_VIOLATION,
+    REPAIR_FIRST_POLICY_VIOLATION,
     validate_repair_focused_hypothesis,
 )
 from scion.core.models import (
@@ -365,9 +366,12 @@ class ProposalPipeline(
         )
         if not repair_check.allowed:
             self.hypothesis_failure_details[bid] = repair_check.detail
-            if is_branch_lifecycle_policy_block_detail(repair_check.detail):
+            if repair_check.violation_code in {
+                BRANCH_LIFECYCLE_POLICY_VIOLATION,
+                REPAIR_FIRST_POLICY_VIOLATION,
+            }:
                 logger.info(
-                    "Branch %s: branch lifecycle policy blocked proposal: %s",
+                    "Branch %s: repair policy blocked proposal: %s",
                     bid,
                     repair_check.detail,
                 )

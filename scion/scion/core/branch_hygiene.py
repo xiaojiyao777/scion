@@ -467,6 +467,10 @@ def branch_prompt_card(branch: Branch | None) -> str:
 def record_branch_lifecycle_policy_block(
     branch: Branch | None,
     detail: str | None,
+    *,
+    lifecycle_signal: Any | None = None,
+    candidate_routing: str | None = None,
+    clean_fork_signal: bool = False,
 ) -> dict[str, Any]:
     """Record a generic branch-lifecycle reroute marker on the branch."""
     if branch is None:
@@ -489,8 +493,20 @@ def record_branch_lifecycle_policy_block(
             "clean_branch_or_clean_fork_unless_same_mechanism_followup_forced"
         ),
     }
-    if "new_mechanism_requires_clean_fork" in str(detail or "").lower():
-        block["candidate_routing"] = "new_mechanism_requires_clean_fork_signal"
+    if lifecycle_signal is not None:
+        signal_reason = str(getattr(lifecycle_signal, "reason", "") or "")
+        if signal_reason:
+            block["reason"] = signal_reason
+        signal_candidate_routing = str(
+            getattr(lifecycle_signal, "candidate_routing", "") or ""
+        )
+        if signal_candidate_routing:
+            candidate_routing = signal_candidate_routing
+        if getattr(lifecycle_signal, "clean_fork_signal", False) is True:
+            clean_fork_signal = True
+    if candidate_routing:
+        block["candidate_routing"] = candidate_routing
+    if clean_fork_signal:
         block["clean_fork_signal"] = True
     branch.branch_lifecycle_policy_blocks = block_count
     branch.branch_lifecycle_new_mechanism_ineligible = True

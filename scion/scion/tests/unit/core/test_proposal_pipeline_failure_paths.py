@@ -1,6 +1,7 @@
 """Focused tests split from test_proposal_pipeline.py."""
 
 from .proposal_pipeline_test_support import *  # noqa: F401,F403
+from scion.core.models import MechanismChange
 
 def test_agentic_failed_session_returns_typed_hypothesis_failure() -> None:
     failed_output = AgenticProposalOutput(
@@ -27,6 +28,87 @@ def test_agentic_failed_session_returns_typed_hypothesis_failure() -> None:
     detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
     assert detail == "agentic_proposal:hypothesis_generation_failed: no valid surface"
     assert len(failures) == 1
+    assert circuit.failures == [detail]
+
+
+def test_agentic_lifecycle_policy_payload_stays_outside_proposal_streak() -> None:
+    creative = FakeCreative()
+    creative.hypothesis = HypothesisProposal(
+        hypothesis_text="Add a distinct restart after no-effect screening.",
+        change_locus="local_search",
+        action="create_new",
+        target_file="operators/new_restart.py",
+        mechanism_changes=(MechanismChange(id="new_restart", change_type="add"),),
+    )
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.COMPLETED,
+        session_id="session-lifecycle",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        hypothesis=creative.hypothesis,
+        termination_reason=AgenticTerminationReason.COMPLETED,
+    )
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        creative=creative,
+        use_agentic_proposal=True,
+        agentic_session=AgenticProposalSession(injected_output=output),
+    )
+    branch.branch_code_status = "active_no_effect"
+    branch.last_screening_feedback_tier = "no_effect"
+    branch.last_telemetry_outcome = "no_objective_effect"
+    branch.branch_mechanism_ids = ("bounded_probe",)
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is None
+    assert record is None
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    assert detail is not None
+    assert detail.startswith(
+        "agentic_proposal:anchor_validation_failed: "
+        "branch_lifecycle_policy_violation:"
+    )
+    assert "new_mechanism_requires_clean_fork" in detail
+    assert failures == []
+    assert circuit.failures == []
+
+
+def test_agentic_text_only_lifecycle_keywords_count_as_proposal_failure() -> None:
+    failure_text = (
+        "agent note mentions branch_lifecycle_policy_violation and "
+        "new_mechanism_requires_clean_fork, but this is not policy output"
+    )
+    failed_output = AgenticProposalOutput(
+        status=AgenticProposalStatus.FAILED,
+        session_id="session-text-only",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+        failure_detail=failure_text,
+    )
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        use_agentic_proposal=True,
+        agentic_session=AgenticProposalSession(injected_output=failed_output),
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is None
+    assert record is None
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    assert detail == f"agentic_proposal:hypothesis_generation_failed: {failure_text}"
+    assert len(failures) == 1
+    failed_branch, failure = failures[0]
+    assert failed_branch is branch
+    assert failure.category == "proposal"
     assert circuit.failures == [detail]
 
 

@@ -517,6 +517,14 @@ Current checkpoint:
     is recorded only as ignored proposal/reporting text, and stale/text-only
     pending replay markers do not materialize scheduler replay without current
     pair-level or structured actionable-loss signal.
+  - Lifecycle policy-block cleanup is implemented in the current worktree:
+    branch state mutation now requires typed `BranchLifecyclePolicyBlockSignal`
+    or exact machine policy-check payloads, while broad keyword classification
+    remains report/run-validity compatibility only.
+    Proposal/circuit-breaker policy-block accounting now uses exact
+    `RepairPolicyCheck.detail` violation parsing, including agentic wrappers,
+    so repair-first/lifecycle policy blocks remain structured but free-form
+    keyword prose does not suppress failures.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

@@ -29,6 +29,12 @@ REPAIR_INTENT_REQUIRED = "telemetry_wiring_trigger_repair_intent_required"
 NEW_MECHANISM_REQUIRES_CLEAN_FORK = "new_mechanism_requires_clean_fork"
 MISSING_DECLARED_REPAIR_MECHANISM = "missing_declared_repair_mechanism"
 MISSING_DECLARED_BRANCH_MECHANISM = "missing_declared_branch_mechanism"
+_POLICY_CHECK_VIOLATION_CODES = frozenset(
+    {
+        BRANCH_LIFECYCLE_POLICY_VIOLATION,
+        REPAIR_FIRST_POLICY_VIOLATION,
+    }
+)
 
 _TELEMETRY_REPAIR_TERMS = frozenset(
     {
@@ -44,6 +50,20 @@ _TELEMETRY_REPAIR_TERMS = frozenset(
         "repair",
     }
 )
+
+
+@dataclass(frozen=True)
+class BranchLifecyclePolicyBlockSignal:
+    """Typed signal from an exact branch-lifecycle policy-check detail."""
+
+    reason: str
+    violation_code: str = BRANCH_LIFECYCLE_POLICY_VIOLATION
+    branch_followup_policy: str = ""
+    clean_fork_policy: str = ""
+    protected_mechanism_ids: tuple[str, ...] = ()
+    proposed_mechanism_ids: tuple[str, ...] = ()
+    candidate_routing: str = ""
+    clean_fork_signal: bool = False
 
 
 @dataclass(frozen=True)
@@ -78,6 +98,143 @@ class RepairPolicyCheck:
             ]
         )
         return "; ".join(parts)
+
+    @property
+    def lifecycle_block_signal(self) -> BranchLifecyclePolicyBlockSignal | None:
+        if (
+            self.allowed
+            or self.violation_code != BRANCH_LIFECYCLE_POLICY_VIOLATION
+        ):
+            return None
+        return branch_lifecycle_policy_block_signal_from_detail(self.detail)
+
+
+def branch_lifecycle_policy_block_signal_from_detail(
+    detail: str | None,
+) -> BranchLifecyclePolicyBlockSignal | None:
+    """Parse only the exact machine-generated lifecycle policy-check detail."""
+    text = _policy_check_detail_payload(detail)
+    if text is None:
+        return None
+    violation_code, separator, payload = text.partition(":")
+    if (
+        separator != ":"
+        or violation_code.strip() != BRANCH_LIFECYCLE_POLICY_VIOLATION
+    ):
+        return None
+    segments = [segment.strip() for segment in payload.split(";")]
+    if not segments or not segments[0]:
+        return None
+    values: dict[str, str] = {}
+    for segment in segments[1:]:
+        if not segment:
+            continue
+        key, key_separator, value = segment.partition("=")
+        if key_separator != "=":
+            return None
+        values[key.strip()] = value.strip()
+    required_keys = {
+        "branch_followup_policy",
+        "clean_fork_policy",
+        "protected_mechanism_ids",
+        "proposed_mechanism_ids",
+    }
+    if not required_keys.issubset(values):
+        return None
+    clean_fork_policy = values["clean_fork_policy"]
+    if clean_fork_policy != CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM:
+        return None
+    reason = segments[0]
+    clean_fork_signal = reason == NEW_MECHANISM_REQUIRES_CLEAN_FORK
+    return BranchLifecyclePolicyBlockSignal(
+        reason=reason,
+        branch_followup_policy=values["branch_followup_policy"],
+        clean_fork_policy=clean_fork_policy,
+        protected_mechanism_ids=_detail_mechanism_ids(
+            values["protected_mechanism_ids"]
+        ),
+        proposed_mechanism_ids=_detail_mechanism_ids(
+            values["proposed_mechanism_ids"]
+        ),
+        candidate_routing=(
+            "new_mechanism_requires_clean_fork_signal"
+            if clean_fork_signal
+            else ""
+        ),
+        clean_fork_signal=clean_fork_signal,
+    )
+
+
+def repair_policy_check_violation_code_from_detail(
+    detail: str | None,
+) -> str | None:
+    """Return the violation code from an exact machine policy-check detail."""
+    text = _policy_check_detail_payload(detail)
+    if text is None:
+        return None
+    violation_code, separator, payload = text.partition(":")
+    violation_code = violation_code.strip()
+    if separator != ":" or violation_code not in _POLICY_CHECK_VIOLATION_CODES:
+        return None
+    segments = [segment.strip() for segment in payload.split(";")]
+    if not segments or not segments[0]:
+        return None
+    keys: set[str] = set()
+    for segment in segments[1:]:
+        if not segment:
+            continue
+        key, key_separator, _value = segment.partition("=")
+        if key_separator != "=":
+            return None
+        keys.add(key.strip())
+    required_keys = {
+        "branch_followup_policy",
+        "clean_fork_policy",
+        "protected_mechanism_ids",
+        "proposed_mechanism_ids",
+    }
+    if not required_keys.issubset(keys):
+        return None
+    if violation_code == REPAIR_FIRST_POLICY_VIOLATION and not {
+        "repair_focus",
+        "repair_policy",
+    }.issubset(keys):
+        return None
+    if (
+        violation_code == BRANCH_LIFECYCLE_POLICY_VIOLATION
+        and "repair_focus_required" not in keys
+    ):
+        return None
+    return violation_code
+
+
+def _policy_check_detail_payload(detail: str | None) -> str | None:
+    raw_text = str(detail or "").strip()
+    if any(
+        raw_text.startswith(f"{code}:")
+        for code in _POLICY_CHECK_VIOLATION_CODES
+    ):
+        return raw_text
+    prefix, prefix_separator, suffix = raw_text.partition(": ")
+    if (
+        prefix_separator != ": "
+        or not prefix.startswith("agentic_proposal:")
+        or not any(
+            suffix.startswith(f"{code}:")
+            for code in _POLICY_CHECK_VIOLATION_CODES
+        )
+    ):
+        return None
+    return suffix
+
+
+def _detail_mechanism_ids(value: str) -> tuple[str, ...]:
+    text = str(value or "").strip()
+    if text in {"", "none", "unknown"}:
+        return ()
+    return tuple(
+        dict.fromkeys(item.strip() for item in text.split(",") if item.strip())
+    )
 
 
 def mechanism_ids_for_repair(proposal: Any | None) -> tuple[str, ...]:
@@ -382,10 +539,13 @@ __all__ = [
     "BRANCH_LIFECYCLE_POLICY_VIOLATION",
     "REPAIR_FIRST_POLICY_VIOLATION",
     "REPAIR_INTENT_REQUIRED",
+    "BranchLifecyclePolicyBlockSignal",
     "RepairPolicyCheck",
+    "branch_lifecycle_policy_block_signal_from_detail",
     "branch_continuation_mechanism_ids",
     "branch_repair_mechanism_ids",
     "mechanism_ids_for_repair",
+    "repair_policy_check_violation_code_from_detail",
     "is_branch_lifecycle_policy_block_detail",
     "repair_attempt_key",
     "repair_attempt_key_label",

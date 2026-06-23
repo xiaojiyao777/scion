@@ -268,6 +268,31 @@ def test_repair_policy_violation_on_repair_branch_counts_as_telemetry_repair() -
     assert reason == f"{REPAIR_FIRST_POLICY_VIOLATION}: unrelated mechanism"
 
 
+def test_text_only_lifecycle_keywords_do_not_mark_branch_lifecycle_attempt() -> None:
+    branch = Branch(
+        branch_id="active-no-effect",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="hash-1",
+    )
+    branch.branch_code_status = "active_no_effect"
+    branch.last_screening_feedback_tier = "no_effect"
+    branch.branch_mechanism_ids = ("bounded_probe",)
+
+    attempt_kind, repair_ids, reason = ExploreStepPipeline._repair_attempt_metadata(
+        SimpleNamespace(step_history=()),
+        branch,
+        (
+            "agent note says branch_lifecycle_policy_violation and "
+            "new_mechanism_requires_clean_fork, but this is not policy payload"
+        ),
+    )
+
+    assert attempt_kind == "proposal_block"
+    assert repair_ids == ()
+    assert reason is None
+
+
 def test_generate_hypothesis_rejects_new_mechanism_on_suspect_branch() -> None:
     creative = FakeCreative()
     creative.hypothesis = HypothesisProposal(

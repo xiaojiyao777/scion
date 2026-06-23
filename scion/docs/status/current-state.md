@@ -22,7 +22,7 @@ history when exact old chronology is needed.
   `DecisionFeatures` problem-neutral.
 - Current design gate: the generic scheduling-status repair, Design B
   research-guidance contract migration, and typed fresh-runtime opportunity
-  signal cleanup in
+  signal plus lifecycle policy-block cleanup in
   `scion/design/v0.4-effective-research-repair-design.md` are implemented and
   focused-tested in the current worktree. Scheduler, active-slot inventory, and
   branch cards share one problem-neutral scheduling-status model. Prepared
@@ -72,7 +72,12 @@ history when exact old chronology is needed.
   actionable-loss follow-up now uses a shared typed opportunity signal, so raw
   `opportunity_diagnostics` prose and stale/text-only pending replay markers
   cannot schedule replay without current pair-level or structured
-  actionable-loss signal.
+  actionable-loss signal. Lifecycle policy-block state mutation now uses typed
+  `BranchLifecyclePolicyBlockSignal` or exact policy-check payloads; broad
+  lifecycle keyword detection remains report/run-validity compatibility only.
+  Proposal/circuit-breaker accounting recognizes repair-first and
+  branch-lifecycle policy blocks from exact `RepairPolicyCheck.detail` payloads,
+  including agentic wrappers, not from arbitrary failure prose.
 - Controlled scheduler-status validation roots:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-schedstatus-d75ed849-resume-missingprimary-4r-gpt55-20260623T014159Z-claw`
   launched from WSL commit `d75ed849` after strict readiness passed. It showed

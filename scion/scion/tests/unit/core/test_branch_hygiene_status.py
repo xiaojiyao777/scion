@@ -977,7 +977,7 @@ def test_repeated_no_effect_fresh_runtime_missing_replay_identity_is_replay_bloc
     assert "lineage_status=replay_blocked" in text
 
 
-def test_lifecycle_policy_block_marks_branch_for_clean_fork_reroute() -> None:
+def test_lifecycle_policy_block_detail_does_not_infer_clean_fork_signal() -> None:
     branch = Branch(
         branch_id="blocked-no-effect",
         state=BranchState.EXPLORE,
@@ -1004,8 +1004,8 @@ def test_lifecycle_policy_block_marks_branch_for_clean_fork_reroute() -> None:
     assert block["reason"] == "new_mechanism_requires_clean_fork"
     assert block["diagnostic_kind"] == "branch_routing_diagnostic"
     assert block["failure_accounting"] == "not_run_validity_failure"
-    assert block["candidate_routing"] == "new_mechanism_requires_clean_fork_signal"
-    assert block["clean_fork_signal"] is True
+    assert "candidate_routing" not in block
+    assert "clean_fork_signal" not in block
     assert payload["branch_lifecycle_policy_blocks"] == 1
     assert payload["branch_lifecycle_new_mechanism_ineligible"] is True
     assert payload["branch_lifecycle_reroute_reason"] == (

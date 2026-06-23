@@ -5,7 +5,9 @@ import logging
 from dataclasses import replace
 from typing import Any, Mapping
 
-from scion.core.branch_repair_policy import is_branch_lifecycle_policy_block_detail
+from scion.core.branch_repair_policy import (
+    repair_policy_check_violation_code_from_detail,
+)
 from scion.core.models import (
     Branch,
     ChampionState,
@@ -373,9 +375,9 @@ class AgenticLifecycleMixin:
                 detail,
             )
             return
-        if is_branch_lifecycle_policy_block_detail(detail):
+        if repair_policy_check_violation_code_from_detail(detail) is not None:
             logger.info(
-                "Branch %s: agentic branch lifecycle block recorded outside "
+                "Branch %s: agentic repair policy block recorded outside "
                 "infra/proposal streaks: %s",
                 branch.branch_id,
                 detail,
