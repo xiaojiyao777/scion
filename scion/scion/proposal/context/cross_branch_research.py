@@ -250,6 +250,8 @@ def _lesson_cards(
     for summary in branch_summaries:
         outcome = summary.get("outcome_summary", {})
         lesson_type = outcome.get("outcome_pattern") or "unknown"
+        if not _branch_local_lesson_card_allowed(str(lesson_type)):
+            continue
         cards.append(_branch_lesson_card(summary, lesson_type))
 
     for hint in similarity_hints:
@@ -303,6 +305,18 @@ def _lesson_cards(
             )
         )
     return cards[:max_lessons]
+
+
+def _branch_local_lesson_card_allowed(lesson_type: str) -> bool:
+    return lesson_type in {
+        "abandoned",
+        "blocked",
+        "no_effect",
+        "parked",
+        "positive",
+        "regression",
+        "weak_positive",
+    }
 
 
 def _branch_lesson_card(

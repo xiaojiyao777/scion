@@ -183,7 +183,7 @@ def _proposal_guidance(
     if not guidance:
         guidance.append(
             "Use branch depth and outcome distribution to choose deepen, "
-            "diversify, or repair; do not treat this as promotion evidence."
+            "diversify, or repair; do not treat this as an acceptance signal."
         )
     return guidance[:3]
 

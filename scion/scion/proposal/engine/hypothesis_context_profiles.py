@@ -693,7 +693,7 @@ def _compact_problem_measurement_diagnostics(payload: Any) -> str:
     return (
         "Problem-owned measurement/noise/opportunity diagnostics for proposal "
         "planning only. These are tainted status diagnostics, excluded from "
-        "DecisionFeatures, and must not be treated as promotion evidence. "
+        "DecisionFeatures, and must not be treated as an acceptance signal. "
         "Validation/frozen per-case detail, raw calibration rows, BKS/gap "
         "details, LLM text, prompt ratios, and raw cross-branch lessons are "
         "intentionally omitted.\n"

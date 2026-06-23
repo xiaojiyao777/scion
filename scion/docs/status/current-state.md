@@ -27,8 +27,12 @@ history when exact old chronology is needed.
   branch cards share one problem-neutral scheduling-status model. Prepared
   manifests now carry typed `ResearchGuidanceContract` payloads, generic
   context/readiness code validates schema and rendered-path coverage, and
-  CVRP/warehouse guidance remains problem-owned. No CVRP-specific scheduler or
-  projection exception is accepted.
+  CVRP/warehouse guidance remains problem-owned. Generic schema preview records
+  legacy `default_avoid_directions` only as rendered guidance, reports
+  structured avoid rules without making them a generic veto, and keeps hard
+  mechanism guards on typed ids. Ordinary pre-protocol patch/contract failures
+  remain visible feedback but do not create hard branch-lesson requirements.
+  No CVRP-specific scheduler or projection exception is accepted.
 
 ## Current Decision
 

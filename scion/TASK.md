@@ -512,7 +512,10 @@ Current checkpoint:
     launchers write typed `research_guidance_contract` payloads while retaining
     legacy `research_focus`, and generic projection/readiness now checks
     contract schema, proposal-only visibility, and rendered-path coverage
-    without interpreting CVRP or warehouse content.
+    without interpreting CVRP or warehouse content. Generic schema preview no
+    longer turns legacy `default_avoid_directions` free-form text into a hard
+    gate, and ordinary pre-protocol patch/contract failures do not create hard
+    branch-lesson usage requirements.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

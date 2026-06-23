@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -805,82 +804,6 @@ def _branch_continuation_schema_preview(
     }
     return _drop_empty_items(payload)
 
-_LAUNCH_FOCUS_AVOID_TOKEN_STOPWORDS = frozenset(
-    {
-        "after",
-        "before",
-        "branch",
-        "branches",
-        "causal",
-        "current",
-        "direct",
-        "direction",
-        "directions",
-        "effect",
-        "effects",
-        "evidence",
-        "experiment",
-        "experiments",
-        "expansion",
-        "focus",
-        "generic",
-        "large",
-        "mechanism",
-        "mechanisms",
-        "objective",
-        "objectives",
-        "path",
-        "paths",
-        "result",
-        "results",
-        "run",
-        "slot",
-        "slots",
-        "telemetry",
-        "unless",
-        "variant",
-        "variants",
-        "without",
-    }
-)
-_LAUNCH_FOCUS_STRONG_SINGLE_AVOID_TERMS = frozenset(
-    {
-        "acceptance",
-        "adaptive",
-        "gating",
-        "rankgap",
-        "reheat",
-        "reheating",
-        "scheduler",
-        "weighting",
-    }
-)
-_LAUNCH_FOCUS_WEAK_IDENTITY_OVERLAP_TERMS = frozenset(
-    {
-        "action",
-        "add",
-        "baseline",
-        "file",
-        "instance",
-        "large",
-        "local",
-        "module",
-        "modules",
-        "modify",
-        "opt",
-        "policies",
-        "policy",
-        "py",
-        "route",
-        "routes",
-        "search",
-        "seed",
-        "solver",
-        "target",
-    }
-)
-
-
 def _launch_focus_default_avoid_guard(
     context: ProposalToolContext,
     hypothesis: HypothesisProposal,
@@ -898,67 +821,53 @@ def _launch_focus_default_avoid_guard(
     default_avoid = _launch_focus_string_items(
         research_focus.get("default_avoid_directions")
     )
-    if not default_avoid:
+    structured_avoid_rules = _launch_focus_structured_avoid_rules(
+        focus,
+        research_focus,
+    )
+    if not default_avoid and not structured_avoid_rules:
         return {
             "name": "launch_research_focus_default_avoid",
             "passed": True,
             "configured": False,
         }
 
-    identity_tokens, full_tokens = _launch_focus_candidate_tokens(hypothesis)
-    for avoid_direction in default_avoid:
-        match = _launch_focus_default_avoid_match(
-            avoid_direction,
-            identity_tokens=identity_tokens,
-            full_tokens=full_tokens,
-        )
-        if not match:
-            continue
-        reason = (
-            "launch_research_focus_default_avoid: proposed hypothesis matches "
-            f"prepared default_avoid_direction={avoid_direction!r}; choose a "
-            "non-default-avoid mechanism or update the prepared research_focus "
-            "before retrying."
-        )
-        return _drop_empty_items(
-            {
-                "name": "launch_research_focus_default_avoid",
-                "passed": False,
-                "configured": True,
-                "failure_code": "launch_research_focus_default_avoid",
-                "reason": reason,
-                "matched_default_avoid_direction": avoid_direction,
-                "matched_terms": sorted(match.get("matched_terms") or ()),
-                "matched_identity_terms": sorted(
-                    match.get("matched_identity_terms") or ()
-                ),
-                "matched_phrase": match.get("matched_phrase"),
-                "default_avoid_count": len(default_avoid),
-                "candidate_target_file": hypothesis.target_file,
-                "candidate_change_locus": hypothesis.change_locus,
-                "candidate_mechanism_ids": [
-                    str(change.id).strip()
-                    for change in mechanism_changes(hypothesis)
-                    if str(change.id).strip()
-                ],
-                "proposal_visibility_only": True,
-                "decision_features_excluded": True,
-                "retry_constraint": (
-                    "Rewrite the hypothesis around a direction that does not "
-                    "match any prepared default_avoid_directions. If this "
-                    "avoid direction is now intentionally allowed, regenerate "
-                    "or edit the prepared launch research_focus first so the "
-                    "constraint is explicit in the run manifest."
-                ),
-            }
-        )
-
-    return {
-        "name": "launch_research_focus_default_avoid",
-        "passed": True,
-        "configured": True,
-        "default_avoid_count": len(default_avoid),
-    }
+    candidate_ids = [
+        str(change.id).strip()
+        for change in mechanism_changes(hypothesis)
+        if str(change.id).strip()
+    ]
+    matching_structured_rules = [
+        rule["rule_id"]
+        for rule in structured_avoid_rules
+        if set(rule.get("applies_to") or ()) & set(candidate_ids)
+    ]
+    return _drop_empty_items(
+        {
+            "name": "launch_research_focus_default_avoid",
+            "passed": True,
+            "configured": True,
+            "legacy_default_avoid_count": len(default_avoid),
+            "legacy_default_avoid_interpretation": (
+                "rendered_only_not_schema_gate" if default_avoid else ""
+            ),
+            "structured_avoid_rule_count": len(structured_avoid_rules),
+            "structured_avoid_rule_ids": [
+                rule["rule_id"] for rule in structured_avoid_rules
+            ],
+            "structured_avoid_rule_categories": sorted(
+                {
+                    rule["category"]
+                    for rule in structured_avoid_rules
+                    if rule.get("category")
+                }
+            ),
+            "candidate_mechanism_ids": candidate_ids,
+            "matching_structured_avoid_rule_ids": matching_structured_rules,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        }
+    )
 
 
 def _launch_focus_required_mechanism_guard(
@@ -1034,183 +943,38 @@ def _launch_focus_required_mechanism_guard(
     )
 
 
-def _launch_focus_default_avoid_match(
-    avoid_direction: str,
-    *,
-    identity_tokens: set[str],
-    full_tokens: set[str],
-) -> dict[str, Any] | None:
-    terms = _launch_focus_signal_terms(avoid_direction)
-    if not terms:
-        return None
-    if (
-        _launch_focus_avoid_requires_absent_deadline_scope(terms)
-        and "deadline_scoped" in full_tokens
-    ):
-        return None
-    identity_matches = (
-        terms
-        & identity_tokens
-        & _LAUNCH_FOCUS_STRONG_SINGLE_AVOID_TERMS
-    )
-    if identity_matches:
-        return {
-            "matched_terms": identity_matches,
-            "matched_identity_terms": identity_matches,
-        }
-    for phrase in _launch_focus_signal_phrases(avoid_direction):
-        phrase_terms = set(phrase)
-        identity_support = _launch_focus_default_avoid_identity_support(
-            phrase_terms,
-            identity_tokens,
-        )
-        if phrase_terms.issubset(full_tokens) and identity_support:
-            return {
-                "matched_terms": phrase_terms,
-                "matched_identity_terms": identity_support,
-                "matched_phrase": " ".join(phrase),
-            }
-    matched_terms = terms & full_tokens
-    identity_support = _launch_focus_default_avoid_identity_support(
-        matched_terms,
-        identity_tokens,
-    )
-    if len(matched_terms) >= 2 and identity_support:
-        return {
-            "matched_terms": matched_terms,
-            "matched_identity_terms": identity_support,
-        }
-    return None
-
-
-def _launch_focus_default_avoid_identity_support(
-    terms: set[str],
-    identity_tokens: set[str],
-) -> set[str]:
-    return (
-        terms
-        & identity_tokens
-        - _LAUNCH_FOCUS_WEAK_IDENTITY_OVERLAP_TERMS
-    )
-
-
-def _launch_focus_avoid_requires_absent_deadline_scope(terms: set[str]) -> bool:
-    return "unbounded" in terms and (
-        "deadline" in terms or {"wall", "clock"}.issubset(terms)
-    )
-
-
-def _launch_focus_signal_phrases(value: str) -> tuple[tuple[str, ...], ...]:
-    phrases: list[tuple[str, ...]] = []
-    text = str(value or "").strip().lower().replace("/", " ")
-    for match in re.finditer(r"[a-z0-9]+(?:[-_][a-z0-9]+)+", text):
-        phrase = tuple(_launch_focus_signal_term_sequence(match.group(0)))
-        if len(phrase) >= 2:
-            phrases.append(phrase)
-    return tuple(phrases)
-
-
-def _launch_focus_signal_terms(value: str) -> set[str]:
-    return set(_launch_focus_signal_term_sequence(value))
-
-
-def _launch_focus_signal_term_sequence(value: str) -> tuple[str, ...]:
-    seen: set[str] = set()
-    terms: list[str] = []
-    for token in _launch_focus_token_sequence(str(value or "")):
-        if (
-            token in seen
-            or token in _LAUNCH_FOCUS_AVOID_TOKEN_STOPWORDS
-            or (len(token) < 4 and token not in {"sa", "vns", "alns", "opt"})
-        ):
+def _launch_focus_structured_avoid_rules(
+    focus: Mapping[str, Any],
+    research_focus: Mapping[str, Any],
+) -> tuple[dict[str, Any], ...]:
+    rules: list[dict[str, Any]] = []
+    candidates = [
+        focus.get("avoid_rules"),
+        research_focus.get("avoid_rules"),
+    ]
+    contract = focus.get("research_guidance_contract")
+    if isinstance(contract, Mapping):
+        candidates.append(contract.get("avoid_rules"))
+    for candidate in candidates:
+        if not isinstance(candidate, (list, tuple)):
             continue
-        seen.add(token)
-        terms.append(token)
-    return tuple(terms)
-
-
-def _launch_focus_token_sequence(value: str) -> tuple[str, ...]:
-    text = str(value or "").lower().replace("_", " ").replace("-", " ")
-    return tuple(re.findall(r"[a-z0-9]+", text))
-
-
-def _launch_focus_tokens(value: str) -> set[str]:
-    return {
-        token
-        for token in _launch_focus_token_sequence(value)
-    }
-
-
-def _launch_focus_candidate_tokens(
-    hypothesis: HypothesisProposal,
-) -> tuple[set[str], set[str]]:
-    mechanism_ids = [
-        str(change.id).strip()
-        for change in mechanism_changes(hypothesis)
-        if str(change.id).strip()
-    ]
-    identity_parts: list[str] = [
-        str(hypothesis.change_locus or ""),
-        str(hypothesis.target_file or ""),
-        *mechanism_ids,
-    ]
-    narrative_parts: list[str] = [
-        str(hypothesis.hypothesis_text or ""),
-        str(hypothesis.target_weakness or ""),
-        str(hypothesis.expected_effect or ""),
-        str(hypothesis.objective_tradeoff_policy or ""),
-        str(hypothesis.no_op_condition or ""),
-        str(hypothesis.risk_to_higher_priority or ""),
-        str(hypothesis.target_runtime_effect or ""),
-        str(hypothesis.complexity_claim or ""),
-        str(hypothesis.runtime_budget_strategy or ""),
-    ]
-    narrative_parts.extend(_launch_focus_leaf_texts(hypothesis.novelty_signature))
-    narrative_parts.extend(_launch_focus_leaf_texts(hypothesis.expected_telemetry))
-    narrative_parts.extend(_launch_focus_leaf_texts(hypothesis.branch_lesson_usage))
-    identity_tokens = _launch_focus_tokens(" ".join(identity_parts))
-    full_tokens = set(identity_tokens)
-    narrative_text = " ".join(narrative_parts)
-    full_tokens.update(_launch_focus_tokens(narrative_text))
-    if _launch_focus_has_positive_deadline_scope(narrative_text):
-        full_tokens.add("deadline_scoped")
-    if {"simulated", "annealing"}.issubset(full_tokens):
-        full_tokens.add("acceptance")
-    return identity_tokens, full_tokens
-
-
-def _launch_focus_has_positive_deadline_scope(value: str) -> bool:
-    text = str(value or "").lower().replace("_", " ").replace("-", " ")
-    if re.search(
-        r"\b(deadline aware|deadline guarded|remaining time|wall clock|"
-        r"time limit|budget capped|budget guarded|context remaining time)\b",
-        text,
-    ):
-        return True
-    tokens = set(_launch_focus_token_sequence(value))
-    if "bounded" in tokens and (
-        "deadline" in tokens
-        or {"remaining", "time"}.issubset(tokens)
-        or {"wall", "clock"}.issubset(tokens)
-    ):
-        return True
-    return False
-
-
-def _launch_focus_leaf_texts(value: Any) -> list[str]:
-    if isinstance(value, Mapping):
-        texts: list[str] = []
-        for child in value.values():
-            texts.extend(_launch_focus_leaf_texts(child))
-        return texts
-    if isinstance(value, (list, tuple, set, frozenset)):
-        texts: list[str] = []
-        for child in value:
-            texts.extend(_launch_focus_leaf_texts(child))
-        return texts
-    if value is None:
-        return []
-    return [str(value)]
+        for item in candidate:
+            if not isinstance(item, Mapping):
+                continue
+            rule_id = str(item.get("rule_id") or "").strip()
+            category = str(item.get("category") or "").strip()
+            if not rule_id and not category:
+                continue
+            rules.append(
+                {
+                    "rule_id": rule_id,
+                    "category": category,
+                    "applies_to": list(
+                        _launch_focus_string_items(item.get("applies_to"))
+                    ),
+                }
+            )
+    return tuple(rules)
 
 
 def _launch_focus_string_items(value: Any) -> tuple[str, ...]:

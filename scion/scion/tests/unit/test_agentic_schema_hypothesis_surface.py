@@ -101,7 +101,7 @@ def test_cvrp_active_boundary_exposes_solver_design_novelty_requirements(
     assert "nonempty_sequence_fields" not in requirements
 
 
-def test_schema_preview_blocks_launch_focus_default_avoid_acceptance_family(
+def test_schema_preview_records_legacy_default_avoid_without_blocking_acceptance_family(
     tmp_path: Path,
 ) -> None:
     registry = ProposalToolRegistry.default_read_only()
@@ -153,18 +153,19 @@ def test_schema_preview_blocks_launch_focus_default_avoid_acceptance_family(
 
     section = preview.structured_payload["hypothesis"]
     guard = section["launch_research_focus_default_avoid_guard"]
-    assert preview.structured_payload["passed"] is False
-    assert section["passed"] is False
-    assert guard["passed"] is False
-    assert guard["failure_code"] == "launch_research_focus_default_avoid"
-    assert "acceptance" in guard["matched_terms"]
-    assert guard["matched_default_avoid_direction"].startswith("route-pressure")
-    assert "launch_research_focus_default_avoid" in section["failure_reason"]
+    assert preview.structured_payload["passed"] is True
+    assert section["passed"] is True
+    assert guard["passed"] is True
+    assert guard["legacy_default_avoid_count"] == 3
+    assert (
+        guard["legacy_default_avoid_interpretation"]
+        == "rendered_only_not_schema_gate"
+    )
     assert guard["proposal_visibility_only"] is True
     assert guard["decision_features_excluded"] is True
 
 
-def test_schema_preview_blocks_launch_focus_default_avoid_local_search_mechanism(
+def test_schema_preview_records_legacy_default_avoid_without_blocking_mechanism_id(
     tmp_path: Path,
 ) -> None:
     registry = ProposalToolRegistry.default_read_only()
@@ -207,18 +208,14 @@ def test_schema_preview_blocks_launch_focus_default_avoid_local_search_mechanism
 
     section = preview.structured_payload["hypothesis"]
     guard = section["launch_research_focus_default_avoid_guard"]
-    assert preview.structured_payload["passed"] is False
-    assert section["passed"] is False
-    assert guard["passed"] is False
-    assert guard["failure_code"] == "launch_research_focus_default_avoid"
-    assert guard["matched_default_avoid_direction"].startswith(
-        "unchanged bounded_interroute_2opt_bridge"
-    )
-    assert {"bounded", "interroute", "bridge"} <= set(guard["matched_terms"])
+    assert preview.structured_payload["passed"] is True
+    assert section["passed"] is True
+    assert guard["passed"] is True
+    assert guard["legacy_default_avoid_count"] == 2
     assert guard["candidate_mechanism_ids"] == ["bounded_interroute_2opt_bridge"]
 
 
-def test_schema_preview_blocks_unbounded_large_twoopt_default_avoid(
+def test_schema_preview_records_unbounded_large_twoopt_legacy_default_avoid(
     tmp_path: Path,
 ) -> None:
     registry = ProposalToolRegistry.default_read_only()
@@ -265,11 +262,9 @@ def test_schema_preview_blocks_unbounded_large_twoopt_default_avoid(
     guard = preview.structured_payload["hypothesis"][
         "launch_research_focus_default_avoid_guard"
     ]
-    assert preview.structured_payload["passed"] is False
-    assert guard["passed"] is False
-    assert guard["matched_default_avoid_direction"].startswith(
-        "unbounded large-instance two-opt fallback"
-    )
+    assert preview.structured_payload["passed"] is True
+    assert guard["passed"] is True
+    assert guard["legacy_default_avoid_count"] == 1
 
 
 def test_schema_preview_allows_deadline_scoped_required_twoopt_default_avoid(
@@ -481,7 +476,7 @@ def test_schema_preview_allows_required_twoopt_with_missing_primary_avoid_lesson
     assert mechanism_id in required_guard["matched_mechanism_ids"]
 
 
-def test_schema_preview_still_blocks_actual_route_merge_default_avoid(
+def test_schema_preview_allows_actual_route_merge_legacy_default_avoid(
     tmp_path: Path,
 ) -> None:
     registry = ProposalToolRegistry.default_read_only()
@@ -523,10 +518,13 @@ def test_schema_preview_still_blocks_actual_route_merge_default_avoid(
     guard = preview.structured_payload["hypothesis"][
         "launch_research_focus_default_avoid_guard"
     ]
-    assert preview.structured_payload["passed"] is False
-    assert guard["passed"] is False
-    assert guard["matched_default_avoid_direction"] == "route-merge absorption"
-    assert "merge" in guard["matched_identity_terms"]
+    assert preview.structured_payload["passed"] is True
+    assert guard["passed"] is True
+    assert guard["legacy_default_avoid_count"] == 1
+    assert (
+        guard["legacy_default_avoid_interpretation"]
+        == "rendered_only_not_schema_gate"
+    )
 
 
 def test_schema_preview_allows_nonmatching_launch_focus_default_avoid(
@@ -578,6 +576,64 @@ def test_schema_preview_allows_nonmatching_launch_focus_default_avoid(
     ]
     assert guard["passed"] is True
     assert guard["configured"] is True
+    assert guard["legacy_default_avoid_count"] == 1
+
+
+def test_schema_preview_reports_structured_avoid_rules_without_blocking(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+        launch_research_focus={
+            "research_guidance_contract": {
+                "avoid_rules": [
+                    {
+                        "rule_id": "avoid_route_merge_absorption",
+                        "category": "default_avoid_direction",
+                        "description": "Problem-owned description.",
+                        "applies_to": ["route_merge_absorption"],
+                    },
+                ],
+            },
+        },
+    )
+    hypothesis = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/baseline_modules/local_search.py",
+        hypothesis_text="Add a route-merge absorption pass.",
+        expected_effect="Improve total distance through direct route merges.",
+        mechanism_changes=[
+            {"id": "route_merge_absorption", "change_type": "add"},
+        ],
+        novelty_signature={
+            "algorithm_family": "route_merge_absorption",
+            "construction_strategy": "unchanged_feasible_seed_portfolio",
+            "improvement_strategy": "route_merge_absorption",
+            "acceptance_strategy": "strict_feasible_merge_only",
+            "runtime_budget_strategy": "bounded_merge_candidates",
+        },
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    guard = preview.structured_payload["hypothesis"][
+        "launch_research_focus_default_avoid_guard"
+    ]
+    assert preview.structured_payload["passed"] is True
+    assert guard["passed"] is True
+    assert guard["legacy_default_avoid_count"] == 0
+    assert guard["structured_avoid_rule_count"] == 1
+    assert guard["structured_avoid_rule_ids"] == ["avoid_route_merge_absorption"]
+    assert guard["structured_avoid_rule_categories"] == ["default_avoid_direction"]
+    assert guard["matching_structured_avoid_rule_ids"] == [
+        "avoid_route_merge_absorption"
+    ]
 
 
 def test_schema_preview_blocks_missing_launch_focus_required_mechanism(
