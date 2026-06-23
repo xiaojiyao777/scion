@@ -136,6 +136,21 @@ PYTHONPATH=scion pytest \
 
 Result: `68 passed`.
 
+Clean-worktree local launch readiness:
+
+```bash
+PYTHONPATH=scion pytest scion/scion/tests/test_launch_readiness.py -q
+```
+
+Result: `115 passed`.
+
+The repair was synced to WSL as head `09094b5c` from local commit `10707890`.
+WSL conda `scion` verification passed:
+
+- scheduler runtime-pressure tests: `73 passed`
+- proposal-boundary/lifecycle tests: `68 passed`
+- launch readiness: `115 passed`
+
 The proposal-boundary routing check was tightened during review: typed agentic
 failure detail is now report material. Timeout/transient routing uses typed
 termination/category fields, and framework-boundary circuit suppression requires
@@ -145,7 +160,6 @@ proposal/circuit failure.
 
 ## Next Use
 
-After syncing this repair to WSL and passing launch readiness, the next CVRP run
-should test research continuity under the repaired scheduler, not relaunch the
-old active-slot validation shape. Interpret any solver evidence against MDE and
-keep CVRP mechanism guidance in problem-owned providers.
+The next CVRP run should test research continuity under the repaired scheduler,
+not relaunch the old active-slot validation shape. Interpret any solver evidence
+against MDE and keep CVRP mechanism guidance in problem-owned providers.

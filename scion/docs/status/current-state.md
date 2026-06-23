@@ -105,9 +105,10 @@ history when exact old chronology is needed.
   `scheduler_active_slot_blocked_attempts=0`. This accepts Design A for the
   generic active-slot blocker. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-scheduler-status-clean-validation-20260623.md`.
-  After the clean run ended, local commits through `fc1b0e68` were synced to
-  WSL as head `84799ba6`; WSL conda `scion` passed focused
-  campaign/lifecycle/proposal tests and launch readiness.
+  After the same-mechanism scheduler-policy repair, local commit `10707890` was
+  synced to WSL as head `09094b5c`; WSL conda `scion` passed scheduler
+  runtime-pressure tests (`73 passed`), proposal-boundary/lifecycle tests
+  (`68 passed`), and launch readiness (`115 passed`).
 - Clean-root same-mechanism audit: the accepted scheduler-status root is not
   solver progress, and it exposed a generic scheduler-policy gap instead of a
   CVRP heuristic gap. Same-mechanism follow-up was observed 4 times and selected

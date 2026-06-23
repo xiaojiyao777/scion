@@ -30,10 +30,9 @@ pressure; lifecycle policy blocks, live campaign attempt accounting, and
 agentic proposal failure routing require typed or exact machine-readable
 signals; runtime-evidence completeness pressure now yields to current
 weak-positive follow-up when there is no case-level loss; and CVRP/warehouse
-semantics stay in problem-owned providers/tests. The previous local repair
-commits were synced to WSL after the clean run finished; WSL head `84799ba6`
-passed focused tests and launch readiness. The current worktree adds the
-proposal-boundary routing and weak-positive runtime-pressure repairs.*
+semantics stay in problem-owned providers/tests. Local commit `10707890` was
+synced to WSL as head `09094b5c`; local and WSL conda `scion` focused
+scheduler/proposal tests and launch readiness passed.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -545,23 +544,25 @@ Current checkpoint:
     same-family, or schema-quality control kinds from `StepResult.reason`
     prose. Producers must set typed `attempt_kind`; reason text remains
     reporting material.
-  - Agentic proposal-boundary failure routing is implemented in the current
-    worktree: typed `AgenticProposalOutput` termination/category fields drive
-    timeout and transient-service routing, while diagnostic text that merely
-    mentions legacy control-plane keywords remains a proposal failure and
-    circuit-breaker event. Exact `RepairPolicyCheck.detail` payloads still stay
-    outside proposal/circuit streaks.
-  - Weak-positive runtime-pressure follow-up is implemented in the current
-    worktree: runtime-evidence completeness pressure still prefers clean fork
-    for weak-positive branches with case-level losses, but it is suppressed for
-    current weak-positive/no-case-loss branches so the scheduler can select
-    `weak_positive_signal_followup`. Local replay of the clean scheduler-status
-    validation database now selects existing weak-positive branch `bba3d45f` for
-    `exploit_weak_positive` instead of a clean fork. Detailed repair report:
+  - Agentic proposal-boundary failure routing is implemented in local commit
+    `10707890` / WSL head `09094b5c`: typed `AgenticProposalOutput`
+    termination/category fields drive timeout and transient-service routing,
+    while diagnostic text that merely mentions legacy control-plane keywords
+    remains a proposal failure and circuit-breaker event. Exact
+    `RepairPolicyCheck.detail` payloads still stay outside proposal/circuit
+    streaks.
+  - Weak-positive runtime-pressure follow-up is implemented in local commit
+    `10707890` / WSL head `09094b5c`: runtime-evidence completeness pressure
+    still prefers clean fork for weak-positive branches with case-level losses,
+    but it is suppressed for current weak-positive/no-case-loss branches so the
+    scheduler can select `weak_positive_signal_followup`. Local replay of the
+    clean scheduler-status validation database now selects existing
+    weak-positive branch `bba3d45f` for `exploit_weak_positive` instead of a
+    clean fork. Detailed repair report:
     `scion/docs/experiments/v0.4/v04-cvrp-weak-positive-runtime-pressure-scheduler-repair-20260623.md`.
-  - Latest WSL sync after clean validation: local commits through `fc1b0e68`
-    were applied to WSL as head `84799ba6`; WSL conda `scion` passed the
-    focused campaign/lifecycle/proposal suite (`38 passed`) and launch
+  - Latest WSL sync: local commit `10707890` was applied to WSL as head
+    `09094b5c`; WSL conda `scion` passed scheduler runtime-pressure tests
+    (`73 passed`), proposal-boundary/lifecycle tests (`68 passed`), and launch
     readiness (`115 passed`).
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
