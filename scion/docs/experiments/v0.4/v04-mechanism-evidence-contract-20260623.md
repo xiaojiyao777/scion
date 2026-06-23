@@ -5,7 +5,7 @@ Branch: `codex/v04-evidence-repair-plan`
 Status: local and WSL focused tests pass; the old-checkout WSL solver-depth run
 has finished and is accepted as Design K trigger evidence. The next step is a
 synchronized CVRP solver-depth rerun from the current clean WSL runner after
-the tested code-sync commit `92fff094`.
+the tested follow-up commit `650d9c65`.
 
 ## Purpose
 
@@ -77,8 +77,11 @@ Thin integrations:
   `followup_required=true` and `decision_features_excluded=true` as an
   actionable diagnostic, allowing existing diagnostic scheduling lanes to
   select the branch.
-- Branch cards expose compact mechanism contract status for proposal and
-  operator visibility.
+- Branch hygiene/card/scheduler surfaces carry contract `repair_mechanism_ids`
+  into protected/allowed mechanism ids, prompt guidance, compact card rendering,
+  scheduler action reasons, and lifecycle classification. A declared mechanism
+  that was not triggered therefore stays branch-local integration follow-up
+  rather than becoming open exploration or clean-fork depth.
 
 The contract maps structured telemetry guard diagnostics generically:
 
@@ -117,14 +120,16 @@ it was not counted as coverage.
 
 ## Residual Work
 
-WSL sync and focused verification are complete. Local head `416aec82` was
-synced to WSL code-sync commit `92fff094`; WSL conda passed the Design K/core groups
-(`53`, `35`, and `30` tests), launcher/guidance tests (`48 passed`),
-launch/postrun tool tests (`227 passed`), direct launcher entry checks,
-py-compile, and diff checks.
+WSL sync and focused verification are complete. Local head `dcccbc43` was
+synced to WSL follow-up code commit `650d9c65`; WSL conda passed the
+Design K/core group (`54 passed`), branch/card/telemetry group (`35 passed`),
+screening/protocol group (`30 passed`), py-compile, diff checks, and minimal
+launch-readiness/direct launcher entry checks. The same synchronized code line
+also passed launcher/guidance (`48 passed`) and launch/postrun tool
+(`227 passed`) groups before the follow-up propagation patch.
 
 Relaunch a synchronized CVRP solver-depth check from the current clean WSL
-runner after the tested code-sync commit `92fff094`. Acceptance requires
+runner after the tested follow-up commit `650d9c65`. Acceptance requires
 showing that a declared not-triggered mechanism is routed as branch-local
 diagnostic follow-up rather than being counted as ordinary inactive clean-fork
 breadth.

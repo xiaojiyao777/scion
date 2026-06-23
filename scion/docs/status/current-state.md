@@ -51,11 +51,17 @@ history when exact old chronology is needed.
   diagnostic follow-up without becoming Protocol gates or Decision input, while
   evaluated no-effect remains no-effect evidence rather than wiring repair. No
   CVRP-specific scheduler, target-intent, launcher-lifecycle, projection, or
-  mechanism-evidence exception is accepted. Local head `416aec82` is synced to
-  WSL code-sync commit `92fff094`; WSL conda passed the focused Design K/core tests
-  (`53`, `35`, and `30` tests), launcher/guidance tests (`48 passed`),
-  launch/postrun tool tests (`227 passed`), direct launcher entry checks,
-  py-compile, and diff checks.
+  mechanism-evidence exception is accepted. The Design K follow-up also carries
+  contract repair ids into protected/allowed mechanism ids, branch-card
+  guidance/rendering, scheduler action reasons, and lifecycle classification so
+  a not-triggered declared mechanism remains a branch-local integration focus
+  rather than open exploration. Local head `dcccbc43` is synced to WSL follow-up
+  code commit `650d9c65`; WSL conda passed the Design K/core group
+  (`54 passed`), branch/card/telemetry group (`35 passed`),
+  screening/protocol group (`30 passed`), py-compile, diff checks, minimal
+  launch-readiness/direct launcher entry checks, plus the earlier
+  launcher/guidance (`48 passed`) and launch/postrun tool (`227 passed`) groups
+  from the same synchronized code line.
 
 ## Current Decision
 
@@ -77,8 +83,8 @@ history when exact old chronology is needed.
   mechanism-evidence contract gap: screening rows can declare the target
   mechanism while formal telemetry shows the mechanism was not evaluated or
   triggered. Treat that as integration/activation diagnostic evidence; the
-  Design K repair is now synced to WSL and still requires a synchronized rerun
-  to prove branch-local diagnostic follow-up.
+  Design K repair and follow-up focus propagation are now synced to WSL and
+  still require a synchronized rerun to prove branch-local diagnostic follow-up.
 - Prior CVRP missing-primary follow-up:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-missingprimary-8d28bc30-narrowavoid-4r-gpt55-20260622T171659Z-claw`
   launched from WSL commit `8d28bc30`. It passed postrun acceptance readiness
@@ -341,7 +347,7 @@ CVRP solver-depth old-checkout root:
   follow-up pressure rather than clean-fork breadth or solver-quality
   conclusions. The run has been mirrored locally; the next CVRP solver-depth
   check should launch only from the current clean WSL runner after the tested
-  code-sync commit `92fff094`.
+  follow-up commit `650d9c65`.
 
 CVRP evidence root:
 
@@ -724,7 +730,7 @@ Warehouse:
   concrete operator telemetry identities. The current local repair separates
   rendered context from hard mechanism binding.
 - Next question: rerun the warehouse champion-`v2` positive-control path from
-  the current clean WSL runner after the tested code-sync commit `92fff094` to
+  the current clean WSL runner after the tested follow-up commit `650d9c65` to
   test whether valid operator ids can now pass proposal quality and recover
   useful continuous optimization.
 - Accept a plateau conclusion only with protocol evidence below MDE,
@@ -769,7 +775,7 @@ CVRP/VRP:
    authority validation root as accepted framework evidence; do not relaunch
    either validation shape unless a later run regresses the generic behavior.
 2. Launch the next CVRP solver-depth check only from the current clean WSL
-   runner after the tested code-sync commit `92fff094`; continue CVRP as
+   runner after the tested follow-up commit `650d9c65`; continue CVRP as
    problem-owned solver research, interpret effects against MDE, and do not add
    VRP/CVRP exceptions to generic scheduler,
    proposal authority, actionability, projection, or `DecisionFeatures`.

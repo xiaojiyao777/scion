@@ -25,11 +25,13 @@ signals instead of ordinary inactive clean-fork pressure; this remains
 proposal/lifecycle/scheduler evidence and stays out of `DecisionFeatures`.
 Local and WSL conda `scion` focused target-intent/proposal tests pass at the
 tightened semantics (`121 passed`). After the old WSL solver-depth run exited,
-local head `416aec82` was synced to WSL code-sync commit `92fff094`; WSL conda
-passed the Design K/core groups (`53`, `35`, and `30` tests),
-launcher/guidance tests (`48 passed`), launch/postrun tool tests
-(`227 passed`), direct launcher entry checks, py-compile, and diff checks. The
-authority validation root launched from WSL
+local head `dcccbc43` was synced to WSL follow-up code commit `650d9c65`.
+WSL conda passed the Design K/core group (`54 passed`), branch/card/telemetry
+group (`35 passed`), screening/protocol group (`30 passed`), py-compile, diff
+checks, minimal launch-readiness/direct launcher entry checks, plus the earlier
+launcher/guidance (`48 passed`) and launch/postrun tool (`227 passed`) groups
+from the same synchronized code line. The authority validation root launched
+from WSL
 commit `542d1f99`,
 `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-authority-542d1f99-postweakpressure-4r-gpt55-20260623T055230Z-claw`,
 is now accepted Design G framework evidence: wrapper/postrun exit `0`, postrun
@@ -649,7 +651,7 @@ Current checkpoint:
     continuity was `wide_shallow`, max branch depth was 1, and direct
     large-two-opt mechanism signal was missing. The run has been mirrored
     locally; use it as Design K trigger evidence, then relaunch from the
-    current clean WSL runner after the tested code-sync commit `92fff094`.
+    current clean WSL runner after the tested follow-up commit `650d9c65`.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded
