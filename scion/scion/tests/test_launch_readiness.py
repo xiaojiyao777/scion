@@ -7,6 +7,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from scion.research_guidance import (
+    legacy_research_focus_to_contract,
+    research_guidance_contract_to_dict,
+)
+
 
 SCION_DIR = Path(__file__).resolve().parents[2]
 TOOL_PATH = SCION_DIR / "tools" / "check_launch_readiness.py"
@@ -94,10 +99,9 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert prompt_artifact_summary["raw_provider_prompt_rendered"] is False
     focus_summary = prompt_artifact_summary["prepared_focus_prompt_summary"]
     assert focus_summary["missing_rendered_paths"] == []
-    assert focus_summary["cvrp_case_protection_present"] is True
-    assert focus_summary["cvrp_resume_continuity_present"] is True
-    assert focus_summary["cvrp_next_required_direction_present"] is True
-    assert focus_summary["cvrp_bounded_twoopt_present"] is True
+    assert focus_summary["contract_present"] is True
+    assert focus_summary["schema_valid"] is True
+    assert focus_summary["guidance_text_digest_present"] is True
     code_summary = prompt_artifact_summary[
         "active_subject_code_constraints_summary"
     ]
@@ -1588,11 +1592,11 @@ def test_launch_readiness_rejects_stale_research_focus_projection(
     )
     payload = json.loads(artifact_path.read_text(encoding="utf-8"))
     detail = payload["signals"]["prepared_research_focus_projection"]["detail"]
-    detail["projected_keys"] = [
-        key
-        for key in detail["projected_keys"]
-        if key != "case_protection_requirements"
+    removed_path = detail["rendered_paths"][0]
+    detail["rendered_paths"] = [
+        path for path in detail["rendered_paths"] if path != removed_path
     ]
+    detail["rendered_path_count"] = len(detail["rendered_paths"])
     artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     report = readiness_tool.build_readiness(run_root)
@@ -1603,9 +1607,9 @@ def test_launch_readiness_rejects_stale_research_focus_projection(
     assert prompt_check["status"] == "failed"
     assert any(
         failure["reason"] == "prepared_focus_projection_field_mismatch"
-        and failure["field"] == "projected_keys"
-        and "case_protection_requirements" in failure["expected"]
-        and "case_protection_requirements" not in failure["actual"]
+        and failure["field"] == "rendered_paths"
+        and removed_path in failure["expected"]
+        and removed_path not in failure["actual"]
         for failure in prompt_check["detail"]["failures"]
     )
 
@@ -1622,11 +1626,7 @@ def test_launch_readiness_rejects_stale_research_focus_nested_projection(
     )
     payload = json.loads(artifact_path.read_text(encoding="utf-8"))
     detail = payload["signals"]["prepared_research_focus_projection"]["detail"]
-    detail["projected_paths"] = [
-        path
-        for path in detail["projected_paths"]
-        if path != "case_protection_requirements.protected_cases"
-    ]
+    detail["rendered_path_count"] = 0
     artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     report = readiness_tool.build_readiness(run_root)
@@ -1637,9 +1637,9 @@ def test_launch_readiness_rejects_stale_research_focus_nested_projection(
     assert prompt_check["status"] == "failed"
     assert any(
         failure["reason"] == "prepared_focus_projection_field_mismatch"
-        and failure["field"] == "projected_paths"
-        and "case_protection_requirements.protected_cases" in failure["expected"]
-        and "case_protection_requirements.protected_cases" not in failure["actual"]
+        and failure["field"] == "rendered_path_count"
+        and failure["expected"] > 0
+        and failure["actual"] == 0
         for failure in prompt_check["detail"]["failures"]
     )
 
@@ -1686,12 +1686,7 @@ def test_launch_readiness_rejects_stale_research_focus_prompt_summary(
     summary = payload["signals"]["prepared_research_focus_prompt_bridge"][
         "detail"
     ]["prompt_summary"]
-    summary["cvrp_case_protection_present"] = False
-    summary["rendered_required_paths"] = [
-        path
-        for path in summary["rendered_required_paths"]
-        if path != "case_protection_requirements.protected_cases"
-    ]
+    summary["guidance_text_digest_present"] = False
     artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     report = readiness_tool.build_readiness(run_root)
@@ -1702,7 +1697,7 @@ def test_launch_readiness_rejects_stale_research_focus_prompt_summary(
     assert prompt_check["status"] == "failed"
     assert any(
         failure["reason"] == "prepared_focus_prompt_summary_field_mismatch"
-        and failure["field"] == "cvrp_case_protection_present"
+        and failure["field"] == "guidance_text_digest_present"
         and failure["expected"] is True
         and failure["actual"] is False
         for failure in prompt_check["detail"]["failures"]
@@ -1723,7 +1718,7 @@ def test_launch_readiness_rejects_missing_calibration_provenance_prompt_summary(
     summary = payload["signals"]["prepared_research_focus_prompt_bridge"][
         "detail"
     ]["prompt_summary"]
-    summary["cvrp_measurement_calibration_source_artifact_present"] = False
+    summary["contract_schema_present"] = False
     artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     report = readiness_tool.build_readiness(run_root)
@@ -1734,8 +1729,7 @@ def test_launch_readiness_rejects_missing_calibration_provenance_prompt_summary(
     assert prompt_check["status"] == "failed"
     assert any(
         failure["reason"] == "prepared_focus_prompt_summary_field_mismatch"
-        and failure["field"]
-        == "cvrp_measurement_calibration_source_artifact_present"
+        and failure["field"] == "contract_schema_present"
         and failure["expected"] is True
         and failure["actual"] is False
         for failure in prompt_check["detail"]["failures"]
@@ -1760,8 +1754,7 @@ def test_launch_readiness_rejects_key_only_warehouse_research_focus_evidence(
     summary = payload["signals"]["prepared_research_focus_prompt_bridge"][
         "detail"
     ]["prompt_summary"]
-    summary["warehouse_required_evidence_rendered_count"] = 0
-    summary["warehouse_required_evidence_all_present"] = False
+    summary["schema_valid"] = False
     artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     report = readiness_tool.build_readiness(run_root)
@@ -1772,7 +1765,7 @@ def test_launch_readiness_rejects_key_only_warehouse_research_focus_evidence(
     assert prompt_check["status"] == "failed"
     assert any(
         failure["reason"] == "prepared_focus_prompt_summary_field_mismatch"
-        and failure["field"] == "warehouse_required_evidence_all_present"
+        and failure["field"] == "schema_valid"
         and failure["expected"] is True
         and failure["actual"] is False
         for failure in prompt_check["detail"]["failures"]
@@ -1793,8 +1786,7 @@ def test_launch_readiness_rejects_key_only_cvrp_large_twoopt_pair_evidence(
     summary = payload["signals"]["prepared_research_focus_prompt_bridge"][
         "detail"
     ]["prompt_summary"]
-    summary["cvrp_large_twoopt_required_pair_evidence_rendered_count"] = 0
-    summary["cvrp_large_twoopt_required_pair_evidence_all_present"] = False
+    summary["rendered_required_path_count"] = 0
     artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     report = readiness_tool.build_readiness(run_root)
@@ -1805,10 +1797,9 @@ def test_launch_readiness_rejects_key_only_cvrp_large_twoopt_pair_evidence(
     assert prompt_check["status"] == "failed"
     assert any(
         failure["reason"] == "prepared_focus_prompt_summary_field_mismatch"
-        and failure["field"]
-        == "cvrp_large_twoopt_required_pair_evidence_all_present"
-        and failure["expected"] is True
-        and failure["actual"] is False
+        and failure["field"] == "rendered_required_path_count"
+        and failure["expected"] > 0
+        and failure["actual"] == 0
         for failure in prompt_check["detail"]["failures"]
     )
 
@@ -3929,8 +3920,13 @@ def _write_prepared_root(
         },
     }
     if include_research_focus:
-        manifest["research_focus"] = (
-            research_focus if research_focus is not None else _cvrp_research_focus()
+        focus = research_focus if research_focus is not None else _cvrp_research_focus()
+        manifest["research_focus"] = focus
+        manifest["research_guidance_contract"] = research_guidance_contract_to_dict(
+            legacy_research_focus_to_contract(
+                focus,
+                problem_family=problem_family,
+            )
         )
     _write_json(run_root / "prepared_run_manifest.v1.json", manifest)
     (run_root / "prepared_run_manifest.md").write_text("# prepared\n", encoding="utf-8")

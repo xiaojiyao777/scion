@@ -114,6 +114,21 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert prepared_manifest["report_only"] is True
     assert prepared_manifest["decision_features_excluded"] is True
     assert prepared_manifest["problem_family"] == "warehouse_delivery"
+    typed_contract = prepared_manifest["research_guidance_contract"]
+    assert typed_contract["schema_version"] == (
+        "scion.warehouse_research_guidance_contract.v1"
+    )
+    assert typed_contract["problem_family"] == "warehouse_delivery"
+    assert typed_contract["proposal_visibility_only"] is True
+    assert typed_contract["decision_features_excluded"] is True
+    assert any(
+        mechanism["mechanism_id"] == "warehouse_champion_v2_checkpoint"
+        for mechanism in typed_contract["required_mechanisms"]
+    )
+    assert any(
+        block["block_id"] == "warehouse_prepared_followup_focus"
+        for block in typed_contract["guidance_blocks"]
+    )
     assert prepared_manifest["research_focus"]["scope"] == (
         "report_only_prepared_handoff"
     )
@@ -555,11 +570,22 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     prompt_summary = prepared_prompt_context["signals"][
         "prepared_research_focus_prompt_bridge"
     ]["detail"]["prompt_summary"]
-    assert (
-        prompt_summary["warehouse_measurement_calibration_source_artifact_present"]
-        is True
+    assert prompt_summary["contract_present"] is True
+    assert prompt_summary["contract_source"] == "typed_manifest"
+    assert prompt_summary["schema_valid"] is True
+    assert prompt_summary["contract_schema_version"] == (
+        "scion.warehouse_research_guidance_contract.v1"
     )
-    assert prompt_summary["warehouse_measurement_calibration_run_present"] is True
+    assert prompt_summary["missing_rendered_paths"] == []
+    assert prompt_summary["guidance_text_digest_present"] is True
+    assert (
+        "required_mechanisms.warehouse_champion_v2_checkpoint"
+        in prompt_summary["rendered_paths"]
+    )
+    assert (
+        "guidance_blocks.warehouse_prepared_followup_focus"
+        in prompt_summary["rendered_paths"]
+    )
     measurement_signal = prepared_prompt_context["signals"][
         "warehouse_measurement_runtime_handoff"
     ]

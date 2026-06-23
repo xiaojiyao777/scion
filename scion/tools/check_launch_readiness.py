@@ -3743,51 +3743,24 @@ def _prompt_context_artifact_summary(payload: Any, *, artifact: str) -> dict[str
         "prepared_focus_prompt_summary": {
             "available": focus_summary.get("available"),
             "problem_family": focus_summary.get("problem_family"),
+            "contract_present": focus_summary.get("contract_present"),
+            "contract_source": focus_summary.get("contract_source"),
+            "schema_valid": focus_summary.get("schema_valid"),
+            "contract_schema_version": focus_summary.get(
+                "contract_schema_version"
+            ),
+            "proposal_visibility_only": focus_summary.get(
+                "proposal_visibility_only"
+            ),
+            "expected_rendered_path_count": len(
+                focus_summary.get("expected_rendered_paths") or []
+            ),
             "rendered_required_path_count": focus_summary.get(
                 "rendered_required_path_count"
             ),
             "missing_rendered_paths": focus_summary.get("missing_rendered_paths"),
-            "cvrp_case_protection_present": focus_summary.get(
-                "cvrp_case_protection_present"
-            ),
-            "cvrp_resume_continuity_present": focus_summary.get(
-                "cvrp_resume_continuity_present"
-            ),
-            "cvrp_next_required_direction_present": focus_summary.get(
-                "cvrp_next_required_direction_present"
-            ),
-            "cvrp_bounded_twoopt_present": focus_summary.get(
-                "cvrp_bounded_twoopt_present"
-            ),
-            "cvrp_required_evidence_all_present": focus_summary.get(
-                "cvrp_required_evidence_all_present"
-            ),
-            "cvrp_measurement_calibration_source_artifact_present": (
-                focus_summary.get(
-                    "cvrp_measurement_calibration_source_artifact_present"
-                )
-            ),
-            "cvrp_measurement_calibration_run_present": focus_summary.get(
-                "cvrp_measurement_calibration_run_present"
-            ),
-            "cvrp_measurement_calibration_runtime_policy_present": (
-                focus_summary.get(
-                    "cvrp_measurement_calibration_runtime_policy_present"
-                )
-            ),
-            "warehouse_v2_followup_present": focus_summary.get(
-                "warehouse_v2_followup_present"
-            ),
-            "warehouse_required_evidence_all_present": focus_summary.get(
-                "warehouse_required_evidence_all_present"
-            ),
-            "warehouse_measurement_calibration_source_artifact_present": (
-                focus_summary.get(
-                    "warehouse_measurement_calibration_source_artifact_present"
-                )
-            ),
-            "warehouse_measurement_calibration_run_present": focus_summary.get(
-                "warehouse_measurement_calibration_run_present"
+            "guidance_text_digest_present": focus_summary.get(
+                "guidance_text_digest_present"
             ),
         },
         "active_subject_code_constraints_summary": {
@@ -4125,6 +4098,15 @@ def _research_focus_prompt_summary_failures(
     compare_fields = (
         "problem_family",
         "manifest_path",
+        "contract_present",
+        "legacy_research_focus_present",
+        "contract_source",
+        "schema_valid",
+        "contract_schema_version",
+        "visibility_policy",
+        "proposal_visibility_only",
+        "expected_rendered_paths",
+        "rendered_paths",
         "launch_focus_schema_present",
         "launch_focus_taint_present",
         "prompt_section_present",
@@ -4132,62 +4114,11 @@ def _research_focus_prompt_summary_failures(
         "launch_research_focus_key_present",
         "decision_features_exclusion_present",
         "manifest_path_present",
+        "contract_schema_present",
+        "guidance_text_digest_present",
         "rendered_required_paths",
         "rendered_required_path_count",
         "required_rendered_path_count",
-        "warehouse_v2_followup_present",
-        "warehouse_current_question_present",
-        "warehouse_required_evidence_present",
-        "warehouse_required_evidence_item_count",
-        "warehouse_required_evidence_rendered_count",
-        "warehouse_required_evidence_all_present",
-        "warehouse_avoid_directions_present",
-        "warehouse_default_avoid_direction_item_count",
-        "warehouse_default_avoid_direction_rendered_count",
-        "warehouse_default_avoid_direction_all_present",
-        "warehouse_measurement_handoff_present",
-        "warehouse_measurement_calibration_source_artifact_present",
-        "warehouse_measurement_calibration_run_present",
-        "cvrp_case_protection_present",
-        "cvrp_next_required_direction_present",
-        "cvrp_bounded_twoopt_present",
-        "cvrp_direct_effect_rules_present",
-        "cvrp_measurement_handoff_present",
-        "cvrp_measurement_calibration_source_artifact_present",
-        "cvrp_measurement_calibration_run_present",
-        "cvrp_measurement_calibration_runtime_policy_present",
-        "cvrp_required_evidence_present",
-        "cvrp_required_evidence_item_count",
-        "cvrp_required_evidence_rendered_count",
-        "cvrp_required_evidence_all_present",
-        "cvrp_measurable_opportunity_class_item_count",
-        "cvrp_measurable_opportunity_class_rendered_count",
-        "cvrp_measurable_opportunity_class_all_present",
-        "cvrp_large_twoopt_implementation_constraint_item_count",
-        "cvrp_large_twoopt_implementation_constraint_rendered_count",
-        "cvrp_large_twoopt_implementation_constraint_all_present",
-        "cvrp_large_twoopt_required_pair_evidence_item_count",
-        "cvrp_large_twoopt_required_pair_evidence_rendered_count",
-        "cvrp_large_twoopt_required_pair_evidence_all_present",
-        "cvrp_large_twoopt_default_reject_direction_item_count",
-        "cvrp_large_twoopt_default_reject_direction_rendered_count",
-        "cvrp_large_twoopt_default_reject_direction_all_present",
-        "cvrp_case_protection_rule_item_count",
-        "cvrp_case_protection_rule_rendered_count",
-        "cvrp_case_protection_rule_all_present",
-        "cvrp_case_protection_required_evidence_item_count",
-        "cvrp_case_protection_required_evidence_rendered_count",
-        "cvrp_case_protection_required_evidence_all_present",
-        "cvrp_resume_continuity_present",
-        "cvrp_resume_continuity_fallback_source_item_count",
-        "cvrp_resume_continuity_fallback_source_rendered_count",
-        "cvrp_resume_continuity_fallback_source_all_present",
-        "cvrp_resume_continuity_rule_item_count",
-        "cvrp_resume_continuity_rule_rendered_count",
-        "cvrp_resume_continuity_rule_all_present",
-        "cvrp_resume_continuity_required_evidence_item_count",
-        "cvrp_resume_continuity_required_evidence_rendered_count",
-        "cvrp_resume_continuity_required_evidence_all_present",
     )
     for field in compare_fields:
         if payload.get(field) != expected.get(field):
@@ -4225,8 +4156,10 @@ def _research_focus_projection_summary_failures(
         "raw_prompt_excluded": True,
         "available": True,
         "reason": "ok",
-        "missing_projected_keys": [],
-        "missing_projected_paths": [],
+        "schema_valid": True,
+        "proposal_visibility_only": True,
+        "missing_rendered_paths": [],
+        "forbidden_prompt_tokens_present": [],
     }
     for field, expected_value in boundary_expectations.items():
         if payload.get(field) != expected_value:
@@ -4251,14 +4184,18 @@ def _research_focus_projection_summary_failures(
     compare_fields = (
         "problem_family",
         "manifest_path",
-        "manifest_keys",
-        "projected_keys",
-        "required_projected_keys",
-        "projected_paths",
-        "required_projected_paths",
-        "projected_path_count",
-        "projected_field_count",
-        "manifest_field_count",
+        "contract_present",
+        "legacy_research_focus_present",
+        "contract_source",
+        "schema_valid",
+        "contract_schema_version",
+        "visibility_policy",
+        "proposal_visibility_only",
+        "expected_rendered_paths",
+        "rendered_paths",
+        "missing_rendered_paths",
+        "rendered_path_count",
+        "forbidden_prompt_tokens_present",
     )
     for field in compare_fields:
         if payload.get(field) != expected.get(field):

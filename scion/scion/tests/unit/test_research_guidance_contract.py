@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 
 import pytest
 
@@ -17,7 +18,11 @@ from scion.research_guidance import (
     ResearchGuidanceValidationError,
     collect_research_guidance_errors,
     expected_research_guidance_rendered_paths,
+    launch_research_guidance_payload,
     render_research_guidance_contract,
+    research_guidance_contract_from_dict,
+    research_guidance_contract_to_dict,
+    research_guidance_projection_summary,
     validate_research_guidance_contract,
     validate_research_guidance_rendered_paths,
 )
@@ -64,6 +69,85 @@ def test_rendered_path_coverage_fails_closed_when_projection_is_missing() -> Non
 
     with pytest.raises(ResearchGuidanceValidationError, match="missing rendered paths"):
         validate_research_guidance_rendered_paths(contract, incomplete_paths)
+
+
+def test_contract_serializes_round_trips_and_summarizes_manifest_paths() -> None:
+    contract = _valid_contract()
+    manifest = {
+        "problem_family": contract.problem_family,
+        "analysis_intent": "Dummy prepared guidance.",
+        "acceptance_focus": ["Keep guidance proposal-only."],
+        "research_guidance_contract": research_guidance_contract_to_dict(contract),
+        "research_focus": {"current_question": contract.current_question},
+    }
+
+    parsed = research_guidance_contract_from_dict(
+        manifest["research_guidance_contract"]
+    )
+    summary = research_guidance_projection_summary(
+        manifest_path="/tmp/prepared_run_manifest.v1.json",
+        manifest=manifest,
+        schema_version="test.research_guidance_projection.v1",
+    )
+
+    assert parsed == contract
+    assert summary["contract_present"] is True
+    assert summary["contract_source"] == "typed_manifest"
+    assert summary["schema_valid"] is True
+    assert summary["expected_rendered_paths"] == list(
+        expected_research_guidance_rendered_paths(contract)
+    )
+    assert summary["rendered_paths"] == summary["expected_rendered_paths"]
+    assert summary["missing_rendered_paths"] == []
+    assert summary["available"] is True
+
+
+def test_typed_manifest_flows_into_context_manager_payload(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    contract = _valid_contract()
+    manifest_path = tmp_path / "prepared_run_manifest.v1.json"
+    manifest = {
+        "problem_family": contract.problem_family,
+        "analysis_intent": "Dummy prepared guidance.",
+        "acceptance_focus": ["Keep guidance proposal-only."],
+        "research_guidance_contract": research_guidance_contract_to_dict(contract),
+        "research_focus": {"current_question": contract.current_question},
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setenv("PREPARED_RUN_MANIFEST", str(manifest_path))
+
+    from scion.proposal.context_manager.manager import _build_launch_research_focus
+
+    payload = _build_launch_research_focus()
+    direct_payload = launch_research_guidance_payload(
+        manifest_path=manifest_path,
+        manifest=manifest,
+    )
+
+    assert payload == direct_payload
+    assert payload["schema_version"] == "scion.launch_research_guidance_prompt.v1"
+    assert payload["contract_source"] == "typed_manifest"
+    assert payload["contract_schema_version"] == contract.schema_version
+    assert payload["current_question"] == contract.current_question
+    assert payload["decision_boundary"] == contract.decision_boundary
+    assert payload["required_mechanism_ids"] == ["foo_activation_probe"]
+    assert payload["rendered_paths"] == list(
+        expected_research_guidance_rendered_paths(contract)
+    )
+    assert "foo_activation_probe" in payload["guidance_text"]
+    assert "excluded from DecisionFeatures" in payload["guidance_text"]
+
+    from scion.proposal.engine.hypothesis_prompts import (
+        _target_intent_launch_focus_required_mechanism_lines,
+    )
+
+    guard_lines = _target_intent_launch_focus_required_mechanism_lines(
+        {"launch_research_focus": payload}
+    )
+    assert any("foo_activation_probe" in line for line in guard_lines)
+    assert any(contract.current_question in line for line in guard_lines)
 
 
 @pytest.mark.parametrize(

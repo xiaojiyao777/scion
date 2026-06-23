@@ -598,21 +598,31 @@ def _measurement_summary(
     )
 
 
-def _current_research_focus(env: dict[str, object]) -> dict[str, Any]:
+def _current_research_guidance_manifest_fields(
+    env: dict[str, object],
+) -> tuple[dict[str, Any], dict[str, Any]]:
     scion_dir = Path(env["SCION_DIR"])
     if str(scion_dir) not in sys.path:
         sys.path.insert(0, str(scion_dir))
 
     from scion.problems.cvrp.research_guidance import (  # noqa: PLC0415
         build_cvrp_legacy_research_focus,
+        build_cvrp_research_guidance_contract,
+    )
+    from scion.research_guidance import (  # noqa: PLC0415
+        research_guidance_contract_to_dict,
     )
 
-    return build_cvrp_legacy_research_focus(
-        measurement_opportunity_diagnostics=_cvrp_measurement_opportunity_diagnostics(
-            scion_dir,
-            str(env["PROBLEM"]),
-        )
+    measurement = _cvrp_measurement_opportunity_diagnostics(
+        scion_dir,
+        str(env["PROBLEM"]),
     )
+    contract = build_cvrp_research_guidance_contract(
+        measurement_opportunity_diagnostics=measurement,
+    )
+    return build_cvrp_legacy_research_focus(
+        measurement_opportunity_diagnostics=measurement,
+    ), research_guidance_contract_to_dict(contract)
 
 
 def _build_command(env: dict[str, object]) -> str:
@@ -963,6 +973,9 @@ def _write_prepared_run_manifest(
     *,
     command: str,
 ) -> None:
+    research_focus, research_guidance_contract = _current_research_guidance_manifest_fields(
+        env
+    )
     manifest = {
         "schema_version": PREPARED_RUN_MANIFEST_SCHEMA,
         "report_only": True,
@@ -973,7 +986,8 @@ def _write_prepared_run_manifest(
         "promotion_state_mutated": False,
         "problem_family": "cvrp",
         "analysis_intent": CVRP_ANALYSIS_INTENT,
-        "research_focus": _current_research_focus(env),
+        "research_focus": research_focus,
+        "research_guidance_contract": research_guidance_contract,
         "task_doc": TASK_DOC,
         "current_state_doc": CURRENT_STATE_DOC,
         "analysis_handoff_doc": ANALYSIS_HANDOFF_DOC,

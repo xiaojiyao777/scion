@@ -16,17 +16,21 @@ rounds with `last_stop_reason=scheduler_active_slot_blocked`; copied/resumed
 weak-positive branches consumed all active slots while the current branch was
 inactive diagnostic evidence. The next repair is therefore design-first,
 generic framework work, not another CVRP-specific relaunch. In the current
-worktree, `scion/design/v0.4-effective-research-repair-design.md` Design A
-first slice and Design B scaffold are implemented and focused-tested: scheduler,
-active-slot inventory, and branch cards consume one problem-neutral
-scheduling-status model, and the research-guidance contract exists as a
-problem-neutral schema/renderer. CVRP and warehouse now have problem-owned
-research-guidance providers and launchers call those providers while preserving
-the legacy prepared-manifest compatibility shape. Remaining Design B work is to
-replace legacy prepared projection/readiness string probes with contract
-rendered-path validators, then run a controlled CVRP relaunch to validate that
-the active-slot stop is gone, with CVRP/warehouse semantics still kept out of
-generic core and projection code.*
+worktree, `scion/design/v0.4-effective-research-repair-design.md` Design A and
+Design B are implemented and focused-tested: scheduler, active-slot inventory,
+and branch cards consume one problem-neutral scheduling-status model, prepared
+manifests carry typed `ResearchGuidanceContract` payloads, generic
+context/readiness code validates schema and rendered-path coverage, and
+CVRP/warehouse semantics stay in problem-owned providers/tests. A controlled
+CVRP scheduler-status validation root from WSL commit `d75ed849` has already
+shown the important Design A behavior: inactive current evidence on `9faaf70b`
+and then on `c8aa2555` is released with
+`inactive_current_evidence_slot_release`, the run completed 1 new effective
+protocol round, and a later branch `08d996dd` entered active slots instead of
+the campaign immediately stopping as `scheduler_active_slot_blocked`. That root
+is still running and was later exposed to WSL worktree changes from the Design
+B sync, so treat it as slot-release/progress validation evidence only; a clean
+post-commit relaunch is still needed for final current-run-ready acceptance.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -502,11 +506,12 @@ Current checkpoint:
     focused Design A coverage for this generic branch shape; the next CVRP run,
     if launched, should be a controlled validation that the active-slot stop no
     longer recurs rather than a new CVRP heuristic experiment.
-  - Design B provider migration has started: CVRP and warehouse prepared
-    research guidance now live in problem-owned providers under
-    `scion/scion/problems/<problem>/research_guidance.py`, and both launchers
-    call those providers while retaining the current legacy `research_focus`
-    manifest shape for one compatibility window.
+  - Design B migration is implemented in the current worktree: CVRP and
+    warehouse prepared research guidance live in problem-owned providers,
+    launchers write typed `research_guidance_contract` payloads while retaining
+    legacy `research_focus`, and generic projection/readiness now checks
+    contract schema, proposal-only visibility, and rendered-path coverage
+    without interpreting CVRP or warehouse content.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded

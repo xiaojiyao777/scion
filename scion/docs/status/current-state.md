@@ -20,15 +20,15 @@ history when exact old chronology is needed.
 - Current posture: avoid broad budgets, generic truncation/compression, and
   decorative gates. Keep CVRP/warehouse semantics problem-owned and keep
   `DecisionFeatures` problem-neutral.
-- Current design gate: the generic scheduling-status repair and
-  research-guidance contract scaffold in
+- Current design gate: the generic scheduling-status repair and Design B
+  research-guidance contract migration in
   `scion/design/v0.4-effective-research-repair-design.md` are implemented and
-  focused-tested in the current worktree. CVRP and warehouse guidance providers
-  are also problem-owned now; the remaining projection/readiness compatibility
-  layer must be migrated from legacy string probes to contract rendered-path
-  coverage before treating Design B as closed. The next CVRP launch should
-  validate the scheduler stop repair; it should not introduce CVRP-specific
-  scheduler or projection exceptions.
+  focused-tested in the current worktree. Scheduler, active-slot inventory, and
+  branch cards share one problem-neutral scheduling-status model. Prepared
+  manifests now carry typed `ResearchGuidanceContract` payloads, generic
+  context/readiness code validates schema and rendered-path coverage, and
+  CVRP/warehouse guidance remains problem-owned. No CVRP-specific scheduler or
+  projection exception is accepted.
 
 ## Current Decision
 
@@ -55,11 +55,27 @@ history when exact old chronology is needed.
 - Current design-first framework repair is in place in the current worktree:
   scheduler, active-slot inventory, and branch cards now route through a
   problem-neutral branch scheduling-status model, and the generic
-  research-guidance contract scaffold exists for problem-owned guidance
-  providers. CVRP and warehouse launchers now obtain prepared research guidance
-  from problem-owned providers while preserving the legacy `research_focus`
-  manifest shape. CVRP mechanism names and case names still belong in CVRP
-  provider work, not generic scheduler or projection code.
+  research-guidance contract migration is implemented. CVRP and warehouse
+  launchers now obtain prepared research guidance from problem-owned providers,
+  write typed `research_guidance_contract` payloads, and preserve legacy
+  `research_focus` for one compatibility window. Generic projection/readiness
+  no longer probes CVRP/warehouse strings; it checks contract schema,
+  proposal-only visibility, and rendered-path coverage.
+- Controlled scheduler-status validation root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-schedstatus-d75ed849-resume-missingprimary-4r-gpt55-20260623T014159Z-claw`
+  launched from WSL commit `d75ed849` after strict readiness passed. Live
+  status has already shown the intended generic scheduler behavior:
+  `9faaf70b` is released from active-slot accounting with
+  `inactive_current_evidence_slot_release`; branch
+  `c8aa2555-62c0-4d19-b4ba-ac04cea257ea` entered active slots, completed
+  1 effective protocol round, and was also released as inactive current
+  evidence; branch `08d996dd-8500-445d-98a5-3ded35c1a069` then entered active
+  slots instead of the run immediately stopping as
+  `scheduler_active_slot_blocked`. The process is still running and has not
+  produced a current-run-ready postrun result. Because the WSL worktree was
+  later updated with the Design B implementation while this root was live, use
+  this root only as slot-release/progress validation evidence; final
+  current-run-ready acceptance needs a clean post-commit relaunch.
 - WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
   for the latest warehouse and CVRP reruns before launch, and live
   prompt/source evidence passed under the patched postrun checker.

@@ -120,6 +120,20 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["report_only"] is True
     assert prepared_manifest["decision_features_excluded"] is True
     assert prepared_manifest["problem_family"] == "cvrp"
+    typed_contract = prepared_manifest["research_guidance_contract"]
+    assert typed_contract["schema_version"] == (
+        "scion.cvrp_research_guidance_contract.v1"
+    )
+    assert typed_contract["problem_family"] == "cvrp"
+    assert typed_contract["proposal_visibility_only"] is True
+    assert typed_contract["decision_features_excluded"] is True
+    assert typed_contract["required_mechanisms"][0]["mechanism_id"] == (
+        "large_instance_intra_route_two_opt_seed"
+    )
+    assert any(
+        block["block_id"] == "large_instance_two_opt_constraints"
+        for block in typed_contract["guidance_blocks"]
+    )
     assert prepared_manifest["research_focus"]["scope"] == (
         "report_only_prepared_handoff"
     )
@@ -748,24 +762,21 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     prompt_summary = prepared_prompt_context["signals"][
         "prepared_research_focus_prompt_bridge"
     ]["detail"]["prompt_summary"]
-    assert prompt_summary["cvrp_next_required_direction_present"] is True
-    assert prompt_summary["cvrp_required_evidence_item_count"] == 9
-    assert prompt_summary["cvrp_required_evidence_rendered_count"] == 9
-    assert prompt_summary["cvrp_required_evidence_all_present"] is True
-    assert prompt_summary["cvrp_missing_primary_telemetry_rule_present"] is True
-    assert (
-        prompt_summary["cvrp_measurement_calibration_source_artifact_present"]
-        is True
+    assert prompt_summary["contract_present"] is True
+    assert prompt_summary["contract_source"] == "typed_manifest"
+    assert prompt_summary["schema_valid"] is True
+    assert prompt_summary["contract_schema_version"] == (
+        "scion.cvrp_research_guidance_contract.v1"
     )
-    assert prompt_summary["cvrp_measurement_calibration_run_present"] is True
+    assert prompt_summary["missing_rendered_paths"] == []
+    assert prompt_summary["guidance_text_digest_present"] is True
     assert (
-        prompt_summary["cvrp_measurement_calibration_runtime_policy_present"]
-        is True
+        "required_mechanisms.large_instance_intra_route_two_opt_seed"
+        in prompt_summary["rendered_paths"]
     )
-    assert prompt_summary["cvrp_resume_continuity_present"] is True
     assert (
-        prompt_summary["cvrp_resume_continuity_required_evidence_all_present"]
-        is True
+        "guidance_blocks.large_instance_two_opt_constraints"
+        in prompt_summary["rendered_paths"]
     )
     assert prepared_rebuild["schema_version"] == "scion.prepared_handoff_rebuild.v1"
     assert prepared_rebuild["complete"] is True

@@ -208,13 +208,16 @@ def build_warehouse_research_guidance_contract(
 def build_warehouse_legacy_research_focus(
     scion_dir: str | Path,
     problem_v1: str | Path,
+    *,
+    measurement_diagnostics: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return the compatibility dict consumed by prepared manifests today."""
 
-    measurement_diagnostics = build_warehouse_measurement_opportunity_diagnostics(
-        Path(scion_dir),
-        Path(problem_v1),
-    )
+    if measurement_diagnostics is None:
+        measurement_diagnostics = build_warehouse_measurement_opportunity_diagnostics(
+            Path(scion_dir),
+            Path(problem_v1),
+        )
     build_warehouse_research_guidance_contract(
         GuidanceContext(problem_family=WAREHOUSE_PROBLEM_FAMILY),
         measurement_diagnostics=measurement_diagnostics,

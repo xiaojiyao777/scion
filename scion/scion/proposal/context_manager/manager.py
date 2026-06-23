@@ -73,6 +73,7 @@ from scion.proposal.context.surfaces import (
     _solver_design_surface_names,
     _surface_target_files_for_names,
 )
+from scion.research_guidance import launch_research_guidance_payload
 
 from .code_context import (
     _build_solver_design_api_manifest,
@@ -165,7 +166,7 @@ def _render_new_file_target_placeholder(target_file: str) -> str:
 
 
 def _build_launch_research_focus() -> dict[str, Any]:
-    """Project prepared launch research focus into proposal-only context."""
+    """Project prepared launch research guidance into proposal-only context."""
 
     manifest_path = (
         os.environ.get("PREPARED_RUN_MANIFEST")
@@ -181,348 +182,42 @@ def _build_launch_research_focus() -> dict[str, Any]:
         return {}
     if not isinstance(manifest, Mapping):
         return {}
-    research_focus = manifest.get("research_focus")
-    if not isinstance(research_focus, Mapping):
+    try:
+        return launch_research_guidance_payload(
+            manifest_path=manifest_path,
+            manifest=manifest,
+        )
+    except Exception:
         return {}
-    projected_focus = _project_launch_research_focus(research_focus)
-    if not projected_focus:
-        return {}
-    return {
-        "schema_version": "scion.launch_research_focus_prompt.v1",
-        "taint": "prepared_launch_research_focus",
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "decision_input_policy": "excluded_from_decision_features",
-        "source": "PREPARED_RUN_MANIFEST",
-        "manifest_path": manifest_path,
-        "problem_family": _string_or_empty(manifest.get("problem_family")),
-        "analysis_intent": _string_or_empty(manifest.get("analysis_intent")),
-        "acceptance_focus": _string_items(manifest.get("acceptance_focus")),
-        "research_focus": projected_focus,
-    }
 
 
 def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
-    fields = (
-        "schema_version",
-        "scope",
-        "accepted_checkpoint",
-        "next_required_direction",
-        "current_question",
-        "decision_boundary",
-    )
-    projected: dict[str, Any] = {
-        field: _string_or_empty(value.get(field))
-        for field in fields
-        if _string_or_empty(value.get(field))
-    }
-    list_fields = (
-        "default_avoid_directions",
-        "required_mechanism_ids",
-        "required_evidence",
-        "measurable_opportunity_classes",
-    )
-    handled_fields = set(fields) | set(list_fields) | {
-        "measurement_opportunity_diagnostics",
-    }
-    for field, child in value.items():
-        if field in handled_fields or not isinstance(field, str):
-            continue
-        text = _string_or_empty(child)
-        if text:
-            projected[field] = text
-    for field in list_fields:
-        items = _string_items(value.get(field))
-        if items:
-            projected[field] = items
-    measurement = value.get("measurement_opportunity_diagnostics")
-    if isinstance(measurement, Mapping):
-        projected["measurement_opportunity_diagnostics"] = {
-            key: child
-            for key, child in {
-                "schema_version": _string_or_empty(
-                    measurement.get("schema_version")
-                ),
-                "metric": _string_or_empty(measurement.get("metric")),
-                "runtime_model": _string_or_empty(
-                    measurement.get("runtime_model")
-                ),
-                "pairing_validity": _string_or_empty(
-                    measurement.get("pairing_validity")
-                ),
-                "practical_screen_delta": measurement.get(
-                    "practical_screen_delta"
-                ),
-                "screening_mde_at_power_80": measurement.get(
-                    "screening_mde_at_power_80"
-                ),
-                "recommended_min_seeds": measurement.get("recommended_min_seeds"),
-                "opportunity_projection_source": _string_or_empty(
-                    measurement.get("opportunity_projection_source")
-                ),
-                "adapter_payload_schema": _string_or_empty(
-                    measurement.get("adapter_payload_schema")
-                ),
-                "reason_codes": _string_items(measurement.get("reason_codes")),
-                "summary": _string_or_empty(measurement.get("summary")),
-                "transfer_risk": _project_launch_focus_mapping(
-                    measurement.get("transfer_risk"),
-                    fields=(
-                        "risk_model",
-                        "historical_pattern",
-                        "latest_field_gate_pattern",
-                        "latest_formal_no_gain_pattern",
-                        "required_hypothesis_claims",
-                    ),
-                ),
-                "required_diagnostics": _project_launch_focus_mapping(
-                    measurement.get("required_diagnostics"),
-                    fields=("activation", "effect"),
-                ),
-                "screening_headroom": _project_launch_focus_mapping(
-                    measurement.get("screening_headroom"),
-                    fields=(
-                        "scope",
-                        "metric",
-                        "case_count",
-                        "gap_pct_min",
-                        "gap_pct_max",
-                        "case_count_gap_pct_at_least_3",
-                        "case_details_omitted",
-                        "planning_use",
-                    ),
-                ),
-                "measurable_opportunity_classes": _project_launch_focus_items(
-                    measurement.get("measurable_opportunity_classes"),
-                    fields=(
-                        "mechanism_family",
-                        "required_evidence",
-                        "seed_report",
-                        "confidence",
-                        "reason_codes",
-                    ),
-                ),
-                "mechanism_effect_ranking": _project_launch_focus_items(
-                    measurement.get("mechanism_effect_ranking"),
-                    fields=(
-                        "rank",
-                        "mechanism_family",
-                        "evidence_status",
-                        "opportunity_status",
-                        "effect_status",
-                        "objective_effect_status",
-                        "summary",
-                        "recommended_action",
-                        "confidence",
-                        "reason_codes",
-                    ),
-                ),
-                "opportunity_diagnostics": _project_launch_focus_items(
-                    measurement.get("opportunity_diagnostics"),
-                    fields=(
-                        "diagnostic_type",
-                        "surface",
-                        "mechanism_family",
-                        "metric",
-                        "summary",
-                        "recommended_action",
-                        "confidence",
-                        "reason_codes",
-                    ),
-                ),
-                "calibration": _project_launch_focus_calibration(
-                    measurement.get("calibration")
-                ),
-                "policy": _string_or_empty(measurement.get("policy")),
-                "decision_features_excluded": measurement.get(
-                    "decision_features_excluded"
-                ),
-                "proposal_visibility_only": measurement.get(
-                    "proposal_visibility_only"
-                ),
-            }.items()
-            if child not in ("", [], {}, None)
-        }
-    large_twoopt = value.get("large_instance_two_opt_constraints")
-    if isinstance(large_twoopt, Mapping):
-        projected["large_instance_two_opt_constraints"] = {
-            key: child
-            for key, child in {
-                "schema_version": _string_or_empty(
-                    large_twoopt.get("schema_version")
-                ),
-                "scope": _string_or_empty(large_twoopt.get("scope")),
-                "seed_report": _string_or_empty(large_twoopt.get("seed_report")),
-                "proposal_visibility_only": large_twoopt.get(
-                    "proposal_visibility_only"
-                ),
-                "decision_features_excluded": large_twoopt.get(
-                    "decision_features_excluded"
-                ),
-                "implementation_constraints": _string_items(
-                    large_twoopt.get("implementation_constraints")
-                ),
-                "required_pair_evidence": _string_items(
-                    large_twoopt.get("required_pair_evidence")
-                ),
-                "default_reject_directions": _string_items(
-                    large_twoopt.get("default_reject_directions")
-                ),
-            }.items()
-            if child not in ("", [], {}, None)
-        }
-    case_protection = value.get("case_protection_requirements")
-    if isinstance(case_protection, Mapping):
-        projected["case_protection_requirements"] = {
-            key: child
-            for key, child in {
-                "schema_version": _string_or_empty(
-                    case_protection.get("schema_version")
-                ),
-                "scope": _string_or_empty(case_protection.get("scope")),
-                "proposal_visibility_only": case_protection.get(
-                    "proposal_visibility_only"
-                ),
-                "decision_features_excluded": case_protection.get(
-                    "decision_features_excluded"
-                ),
-                "protected_cases": _string_items(
-                    case_protection.get("protected_cases")
-                ),
-                "rules": _string_items(case_protection.get("rules")),
-                "required_evidence": _string_items(
-                    case_protection.get("required_evidence")
-                ),
-            }.items()
-            if child not in ("", [], {}, None)
-        }
-    resume_continuity = value.get("resume_continuity_requirements")
-    if isinstance(resume_continuity, Mapping):
-        projected["resume_continuity_requirements"] = {
-            key: child
-            for key, child in {
-                "schema_version": _string_or_empty(
-                    resume_continuity.get("schema_version")
-                ),
-                "scope": _string_or_empty(resume_continuity.get("scope")),
-                "proposal_visibility_only": resume_continuity.get(
-                    "proposal_visibility_only"
-                ),
-                "decision_features_excluded": resume_continuity.get(
-                    "decision_features_excluded"
-                ),
-                "fallback_sources": _string_items(
-                    resume_continuity.get("fallback_sources")
-                ),
-                "rules": _string_items(resume_continuity.get("rules")),
-                "required_evidence": _string_items(
-                    resume_continuity.get("required_evidence")
-                ),
-            }.items()
-            if child not in ("", [], {}, None)
-        }
-    return projected
+    """Return a JSON-safe legacy fallback without interpreting problem keys."""
+
+    projected = _project_launch_focus_value(value)
+    return projected if isinstance(projected, dict) else {}
 
 
-def _project_launch_focus_calibration(value: Any) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        return {}
-    source_artifact = _project_launch_focus_mapping(
-        value.get("source_artifact"),
-        fields=("sha256",),
-    )
-    runtime_policy = _project_launch_focus_mapping(
-        (value.get("calibration_run") or {}).get("runtime_policy")
-        if isinstance(value.get("calibration_run"), Mapping)
-        else {},
-        fields=(
-            "selected_policy",
-            "runner_timeout_sec",
-            "uniform_time_limit_sec",
-        ),
-    )
-    calibration_run = _project_launch_focus_mapping(
-        value.get("calibration_run"),
-        fields=(
-            "action",
-            "replicate_count",
-            "selected_surface",
-            "selected_case_count",
-            "selected_seed_count",
-        ),
-    )
-    if runtime_policy:
-        calibration_run["runtime_policy"] = runtime_policy
-    return {
-        key: child
-        for key, child in {
-            "schema": _string_or_empty(value.get("schema")),
-            "decision_features_excluded": value.get("decision_features_excluded"),
-            "source_artifact": source_artifact,
-            "calibration_run_action": _string_or_empty(
-                value.get("calibration_run_action")
-            ),
-            "calibration_run": calibration_run,
-        }.items()
-        if child not in ("", [], {}, None)
-    }
-
-
-def _project_launch_focus_mapping(
-    value: Any,
-    *,
-    fields: tuple[str, ...],
-) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        return {}
-    projected: dict[str, Any] = {}
-    for field in fields:
-        child = value.get(field)
-        if isinstance(child, str):
-            child = child.strip()
-        if child not in ("", [], {}, None):
-            projected[field] = child
-    return projected
-
-
-def _project_launch_focus_items(
-    value: Any,
-    *,
-    fields: tuple[str, ...],
-    limit: int = 8,
-) -> list[dict[str, Any]]:
-    if not isinstance(value, (list, tuple)):
-        return []
-    items: list[dict[str, Any]] = []
-    for raw in value:
-        if not isinstance(raw, Mapping):
-            continue
-        projected = _project_launch_focus_mapping(raw, fields=fields)
-        reason_codes = raw.get("reason_codes")
-        if "reason_codes" in fields and isinstance(reason_codes, (list, tuple)):
-            codes = _string_items(reason_codes)
-            if codes:
-                projected["reason_codes"] = codes
-        if projected:
-            items.append(projected)
-        if len(items) >= limit:
-            break
-    return items
-
-
-def _string_or_empty(value: Any) -> str:
-    return str(value or "").strip()
-
-
-def _string_items(value: Any) -> list[str]:
-    if not isinstance(value, (list, tuple)):
-        return []
-    items: list[str] = []
-    for item in value:
-        text = str(item or "").strip()
-        if text:
-            items.append(text)
-    return items
+def _project_launch_focus_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        projected: dict[str, Any] = {}
+        for key, child in value.items():
+            if not isinstance(key, str):
+                continue
+            child_value = _project_launch_focus_value(child)
+            if child_value not in ("", [], {}, None):
+                projected[key] = child_value
+        return projected
+    if isinstance(value, (list, tuple)):
+        items = [
+            child
+            for item in value
+            if (child := _project_launch_focus_value(item)) not in ("", [], {}, None)
+        ]
+        return items
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value.strip() if isinstance(value, str) else value
+    return str(value).strip()
 
 
 def _proposal_material_difference_requirement(branch: Branch) -> dict[str, Any]:

@@ -200,25 +200,16 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
     focus = ctx["launch_research_focus"]
     assert focus["decision_features_excluded"] is True
     assert focus["problem_family"] == "cvrp"
-    assert (
-        focus["research_focus"]["current_question"]
-        == "Select a materially different CVRP solver-design mechanism."
+    assert focus["contract_source"] == "legacy_research_focus_adapter"
+    assert focus["current_question"] == (
+        "Select a materially different CVRP solver-design mechanism."
     )
-    assert focus["research_focus"]["next_required_direction"] == (
-        "First attempt large_instance_intra_route_two_opt_seed."
-    )
-    assert focus["research_focus"]["required_mechanism_ids"] == [
+    assert focus["required_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed"
     ]
-    assert focus["research_focus"]["large_instance_two_opt_constraints"][
-        "implementation_constraints"
-    ] == [
-        "derive a deadline from solver time_limit",
-        "do not call unbounded two_opt_intra",
-    ]
-    assert focus["research_focus"]["case_protection_requirements"][
-        "protected_cases"
-    ] == ["CMT2", "CMT4"]
+    assert "large_instance_two_opt_constraints" in focus["guidance_text"]
+    assert "derive a deadline from solver time_limit" in focus["guidance_text"]
+    assert "case_protection_requirements.protected_cases[0]" in focus["guidance_text"]
 
     system_blocks, user_prompt = _split_hypothesis_context(ctx)
     prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt

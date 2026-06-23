@@ -342,22 +342,41 @@ def _resolve_source_path(repo_root: Path, spec_path: str) -> Path:
 
 def _warehouse_guidance_manifest_fields(
     env: dict[str, object],
-) -> tuple[str, dict[str, Any]]:
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
     scion_dir = Path(env["SCION_DIR"])
     if str(scion_dir) not in sys.path:
         sys.path.insert(0, str(scion_dir))
 
     from scion.problems.warehouse_delivery.research_guidance import (  # noqa: PLC0415
         WAREHOUSE_ANALYSIS_INTENT,
+        build_warehouse_measurement_opportunity_diagnostics,
         build_warehouse_legacy_research_focus,
+        build_warehouse_research_guidance_contract,
+    )
+    from scion.research_guidance import (  # noqa: PLC0415
+        GuidanceContext,
+        research_guidance_contract_to_dict,
     )
 
+    measurement_diagnostics = build_warehouse_measurement_opportunity_diagnostics(
+        scion_dir,
+        Path(env["PROBLEM_V1"]),
+    )
+    contract = build_warehouse_research_guidance_contract(
+        GuidanceContext(
+            problem_family="warehouse_delivery",
+            metadata={"measurement_opportunity_diagnostics": measurement_diagnostics},
+        ),
+        measurement_diagnostics=measurement_diagnostics,
+    )
     return (
         WAREHOUSE_ANALYSIS_INTENT,
         build_warehouse_legacy_research_focus(
             scion_dir,
             Path(env["PROBLEM_V1"]),
+            measurement_diagnostics=measurement_diagnostics,
         ),
+        research_guidance_contract_to_dict(contract),
     )
 
 
@@ -689,7 +708,11 @@ def _write_prepared_run_manifest(
     *,
     command: str,
 ) -> None:
-    analysis_intent, research_focus = _warehouse_guidance_manifest_fields(env)
+    (
+        analysis_intent,
+        research_focus,
+        research_guidance_contract,
+    ) = _warehouse_guidance_manifest_fields(env)
     manifest = {
         "schema_version": PREPARED_RUN_MANIFEST_SCHEMA,
         "report_only": True,
@@ -701,6 +724,7 @@ def _write_prepared_run_manifest(
         "problem_family": "warehouse_delivery",
         "analysis_intent": analysis_intent,
         "research_focus": research_focus,
+        "research_guidance_contract": research_guidance_contract,
         "task_doc": TASK_DOC,
         "current_state_doc": CURRENT_STATE_DOC,
         "analysis_handoff_doc": ANALYSIS_HANDOFF_DOC,

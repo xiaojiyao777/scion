@@ -7,6 +7,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from scion.research_guidance import (
+    legacy_research_focus_to_contract,
+    research_guidance_contract_to_dict,
+)
+
 
 TOOL_PATH = Path(__file__).parents[2] / "tools" / "rebuild_prepared_handoff.py"
 SPEC = importlib.util.spec_from_file_location("rebuild_prepared_handoff", TOOL_PATH)
@@ -35,6 +40,7 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
         f"--seeds {config_dir / 'seeds.yaml'} "
         f"--campaign-dir {campaign_dir} --rounds 1 --agentic-proposal"
     )
+    research_focus = _cvrp_research_focus()
     _write_json(
         run_root / "run_status.json",
         {
@@ -60,7 +66,13 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
             "problem_family": "cvrp",
             "analysis_intent": "Prepared handoff rebuild fixture.",
             "acceptance_focus": ["Keep handoff report-only."],
-            "research_focus": _cvrp_research_focus(),
+            "research_focus": research_focus,
+            "research_guidance_contract": research_guidance_contract_to_dict(
+                legacy_research_focus_to_contract(
+                    research_focus,
+                    problem_family="cvrp",
+                )
+            ),
             "resume_from_campaign": "/tmp/source-campaign",
             "command": command,
             "execution": {
@@ -314,32 +326,12 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
     assert projection_detail["available"] is True
     assert projection_detail["raw_prompt_excluded"] is True
     assert projection_detail["decision_features_excluded"] is True
-    assert projection_detail["missing_projected_keys"] == []
-    assert projection_detail["missing_projected_paths"] == []
-    assert "case_protection_requirements" in projection_detail["projected_keys"]
+    assert projection_detail["contract_present"] is True
+    assert projection_detail["schema_valid"] is True
+    assert projection_detail["missing_rendered_paths"] == []
     assert (
-        "case_protection_requirements"
-        in projection_detail["required_projected_keys"]
-    )
-    assert (
-        "case_protection_requirements.protected_cases"
-        in projection_detail["projected_paths"]
-    )
-    assert (
-        "case_protection_requirements.protected_cases"
-        in projection_detail["required_projected_paths"]
-    )
-    assert (
-        "case_protection_requirements.required_evidence"
-        in projection_detail["required_projected_paths"]
-    )
-    assert (
-        "resume_continuity_requirements"
-        in projection_detail["required_projected_keys"]
-    )
-    assert (
-        "resume_continuity_requirements.rules"
-        in projection_detail["required_projected_paths"]
+        projection_detail["rendered_paths"]
+        == projection_detail["expected_rendered_paths"]
     )
     case_protection = prompt_context["signals"]["cvrp_case_protection_requirements"]
     assert case_protection["available"] is True
@@ -385,27 +377,9 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
     assert prompt_summary["prompt_section_present"] is True
     assert prompt_summary["compact_prompt_value_present"] is True
     assert prompt_summary["launch_research_focus_key_present"] is True
-    assert prompt_summary["cvrp_case_protection_present"] is True
-    assert prompt_summary["cvrp_next_required_direction_present"] is True
-    assert prompt_summary["cvrp_bounded_twoopt_present"] is True
-    assert prompt_summary["cvrp_direct_effect_rules_present"] is True
-    assert prompt_summary["cvrp_measurement_handoff_present"] is True
-    assert prompt_summary["cvrp_measurement_screening_headroom_present"] is True
-    assert prompt_summary["cvrp_measurement_measurable_opportunities_present"] is True
-    assert prompt_summary["cvrp_measurement_mechanism_ranking_present"] is True
-    assert prompt_summary["cvrp_measurement_opportunity_diagnostics_present"] is True
-    assert prompt_summary["cvrp_resume_continuity_present"] is True
-    assert (
-        prompt_summary["cvrp_resume_continuity_fallback_source_all_present"]
-        is True
-    )
-    assert prompt_summary["cvrp_resume_continuity_rule_all_present"] is True
-    assert (
-        prompt_summary["cvrp_resume_continuity_required_evidence_all_present"]
-        is True
-    )
-    assert prompt_summary["cvrp_measurement_mechanism_rank_count"] == 1
-    assert prompt_summary["cvrp_measurement_opportunity_diagnostic_count"] == 1
+    assert prompt_summary["contract_present"] is True
+    assert prompt_summary["schema_valid"] is True
+    assert prompt_summary["guidance_text_digest_present"] is True
     assert prompt_summary["missing_rendered_paths"] == []
     assert prompt_summary["forbidden_prompt_tokens_present"] == []
     code_bridge = prompt_context["signals"][
@@ -560,20 +534,9 @@ def test_rebuild_prepared_handoff_adds_warehouse_code_constraint_bridge(
     assert focus_summary["prompt_section_present"] is True
     assert focus_summary["compact_prompt_value_present"] is True
     assert focus_summary["launch_research_focus_key_present"] is True
-    assert focus_summary["warehouse_v2_followup_present"] is True
-    assert focus_summary["warehouse_current_question_present"] is True
-    assert focus_summary["warehouse_required_evidence_present"] is True
-    assert focus_summary["warehouse_avoid_directions_present"] is True
-    assert focus_summary["warehouse_measurement_handoff_present"] is True
-    assert focus_summary["warehouse_measurement_transfer_risk_present"] is True
-    assert (
-        focus_summary["warehouse_measurement_required_diagnostics_present"] is True
-    )
-    assert (
-        focus_summary["warehouse_measurement_followup_opportunity_present"] is True
-    )
-    assert focus_summary["warehouse_measurement_plateau_guard_present"] is True
-    assert focus_summary["warehouse_measurement_opportunity_diagnostic_count"] == 1
+    assert focus_summary["contract_present"] is True
+    assert focus_summary["schema_valid"] is True
+    assert focus_summary["guidance_text_digest_present"] is True
     assert focus_summary["missing_rendered_paths"] == []
     assert focus_summary["forbidden_prompt_tokens_present"] == []
     measurement_signal = prompt_context["signals"][
@@ -777,6 +740,12 @@ def _write_rebuild_fixture_root(
             "analysis_intent": "Prepared handoff rebuild fixture.",
             "acceptance_focus": ["Keep handoff report-only."],
             "research_focus": research_focus,
+            "research_guidance_contract": research_guidance_contract_to_dict(
+                legacy_research_focus_to_contract(
+                    research_focus,
+                    problem_family=problem_family,
+                )
+            ),
             "resume_from_campaign": "/tmp/source-campaign",
             "command": command,
             "execution": {

@@ -5,6 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from scion.research_guidance import (
+    launch_research_guidance_payload,
+    research_guidance_projection_summary,
+)
+
 
 RESEARCH_FOCUS_PROJECTION_SUMMARY_SCHEMA = (
     "scion.prepared_research_focus_projection_summary.v1"
@@ -324,95 +329,14 @@ def research_focus_projection_summary(
     manifest_path: Path,
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
-    """Summarize manifest research focus fields that reach launch prompts."""
+    """Summarize typed prepared research guidance rendered-path coverage."""
 
-    research_focus = _mapping_or_empty(manifest.get("research_focus"))
-    problem_family = str(manifest.get("problem_family") or "").strip()
-    base = {
-        "schema_version": RESEARCH_FOCUS_PROJECTION_SUMMARY_SCHEMA,
-        "problem_family": problem_family,
-        "manifest_path": str(manifest_path),
-        "report_only": True,
-        "quality_judgment": False,
-        "decision_features_excluded": True,
-        "raw_prompt_excluded": True,
-    }
-    if not research_focus:
-        return {
-            **base,
-            "available": False,
-            "reason": "missing_research_focus",
-            "manifest_keys": [],
-            "projected_keys": [],
-            "required_projected_keys": [],
-            "missing_projected_keys": [],
-            "projected_paths": [],
-            "required_projected_paths": [],
-            "missing_projected_paths": [],
-            "projected_path_count": 0,
-        }
-    try:
-        from scion.proposal.context_manager.manager import (
-            _project_launch_research_focus,
-        )
-
-        projected = _project_launch_research_focus(research_focus)
-    except Exception as exc:  # pragma: no cover - surfaced as readiness detail.
-        return {
-            **base,
-            "available": False,
-            "reason": "projection_error",
-            "error_type": type(exc).__name__,
-            "error": str(exc),
-            "manifest_keys": sorted(research_focus),
-            "projected_keys": [],
-            "required_projected_keys": [],
-            "missing_projected_keys": [],
-            "projected_paths": [],
-            "required_projected_paths": [],
-            "missing_projected_paths": [],
-            "projected_path_count": 0,
-        }
-
-    projected_dict = projected if isinstance(projected, dict) else {}
-    required_keys = _required_research_focus_projection_keys(
-        problem_family,
-        research_focus,
+    return research_guidance_projection_summary(
+        manifest_path=manifest_path,
+        manifest=manifest,
+        schema_version=RESEARCH_FOCUS_PROJECTION_SUMMARY_SCHEMA,
+        forbidden_tokens=PROBLEM_MEASUREMENT_DIAGNOSTICS_FORBIDDEN_PROMPT_TOKENS,
     )
-    missing_keys = [
-        key
-        for key in required_keys
-        if key not in projected_dict or projected_dict.get(key) in ({}, [], "", None)
-    ]
-    required_paths = _required_research_focus_projection_paths(
-        problem_family,
-        research_focus,
-    )
-    projected_paths = _non_empty_leaf_paths(projected_dict)
-    missing_paths = [
-        path
-        for path in required_paths
-        if _path_value(projected_dict, path) in ({}, [], "", None)
-    ]
-    return {
-        **base,
-        "available": bool(projected_dict) and not missing_keys and not missing_paths,
-        "reason": (
-            "ok"
-            if projected_dict and not missing_keys and not missing_paths
-            else "missing_projection"
-        ),
-        "manifest_keys": sorted(research_focus),
-        "projected_keys": sorted(projected_dict),
-        "required_projected_keys": required_keys,
-        "missing_projected_keys": missing_keys,
-        "projected_paths": projected_paths,
-        "required_projected_paths": required_paths,
-        "missing_projected_paths": missing_paths,
-        "projected_path_count": len(projected_paths),
-        "projected_field_count": len(projected_dict),
-        "manifest_field_count": len(research_focus),
-    }
 
 
 def research_focus_prompt_summary(
@@ -420,10 +344,13 @@ def research_focus_prompt_summary(
     manifest_path: Path,
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
-    """Summarize prepared research focus content that reaches prompts."""
+    """Summarize typed prepared research guidance that reaches prompts."""
 
-    research_focus = _mapping_or_empty(manifest.get("research_focus"))
     problem_family = str(manifest.get("problem_family") or "").strip()
+    projection = research_focus_projection_summary(
+        manifest_path=manifest_path,
+        manifest=manifest,
+    )
     base = {
         "schema_version": RESEARCH_FOCUS_PROMPT_SUMMARY_SCHEMA,
         "problem_family": problem_family,
@@ -432,21 +359,41 @@ def research_focus_prompt_summary(
         "quality_judgment": False,
         "decision_features_excluded": True,
         "raw_prompt_excluded": True,
+        "contract_present": projection.get("contract_present") is True,
+        "legacy_research_focus_present": projection.get(
+            "legacy_research_focus_present"
+        ) is True,
+        "contract_source": str(projection.get("contract_source") or ""),
+        "schema_valid": projection.get("schema_valid") is True,
+        "contract_schema_version": str(projection.get("contract_schema_version") or ""),
+        "visibility_policy": str(projection.get("visibility_policy") or ""),
+        "proposal_visibility_only": projection.get("proposal_visibility_only") is True,
+        "expected_rendered_paths": list(projection.get("expected_rendered_paths") or []),
+        "rendered_paths": list(projection.get("rendered_paths") or []),
+        "missing_rendered_paths": list(projection.get("missing_rendered_paths") or []),
+        "rendered_path_count": int(projection.get("rendered_path_count") or 0),
     }
-    if not research_focus:
+    if projection.get("available") is not True:
         return {
             **base,
             "available": False,
-            "reason": "missing_research_focus",
-            "rendered_required_paths": [],
-            "missing_rendered_paths": [],
-            "rendered_required_path_count": 0,
+            "reason": "projection_unavailable",
+            "launch_focus_schema_present": False,
+            "launch_focus_taint_present": False,
+            "prompt_section_present": False,
+            "compact_prompt_value_present": False,
+            "launch_research_focus_key_present": False,
+            "decision_features_exclusion_present": False,
+            "manifest_path_present": False,
+            "contract_schema_present": False,
+            "guidance_text_digest_present": False,
+            "rendered_required_paths": list(base["rendered_paths"]),
+            "rendered_required_path_count": int(base["rendered_path_count"]),
+            "required_rendered_path_count": len(base["expected_rendered_paths"]),
+            "forbidden_prompt_tokens_present": [],
         }
 
     try:
-        from scion.proposal.context_manager.manager import (
-            _project_launch_research_focus,
-        )
         from scion.proposal.engine.hypothesis_context_profiles import (
             filter_hypothesis_context_for_prompt,
         )
@@ -454,12 +401,9 @@ def research_focus_prompt_summary(
             _split_hypothesis_context,
         )
 
-        projected = _project_launch_research_focus(research_focus)
-        projected_dict = projected if isinstance(projected, dict) else {}
-        launch_payload = _launch_research_focus_payload(
+        launch_payload = launch_research_guidance_payload(
             manifest_path=manifest_path,
             manifest=manifest,
-            projected_focus=projected_dict,
         )
         filtered = filter_hypothesis_context_for_prompt(
             _minimal_research_focus_context(
@@ -482,174 +426,36 @@ def research_focus_prompt_summary(
             "reason": "prompt_bridge_error",
             "error_type": type(exc).__name__,
             "error": str(exc),
-            "rendered_required_paths": [],
-            "missing_rendered_paths": [],
-            "rendered_required_path_count": 0,
+            "launch_focus_schema_present": False,
+            "launch_focus_taint_present": False,
+            "prompt_section_present": False,
+            "compact_prompt_value_present": False,
+            "launch_research_focus_key_present": False,
+            "decision_features_exclusion_present": False,
+            "manifest_path_present": False,
+            "contract_schema_present": False,
+            "guidance_text_digest_present": False,
+            "rendered_required_paths": list(base["rendered_paths"]),
+            "rendered_required_path_count": int(base["rendered_path_count"]),
+            "required_rendered_path_count": len(base["expected_rendered_paths"]),
+            "forbidden_prompt_tokens_present": [],
         }
 
-    required_paths = _required_research_focus_projection_paths(
-        problem_family,
-        research_focus,
-    )
-    rendered_required_paths = [
-        path for path in required_paths if _prompt_contains_path(rendered_prompt, path)
-    ]
-    missing_rendered_paths = [
-        path for path in required_paths if path not in rendered_required_paths
-    ]
     rendered_lower = rendered_prompt.lower()
     forbidden_present = [
         token
         for token in PROBLEM_MEASUREMENT_DIAGNOSTICS_FORBIDDEN_PROMPT_TOKENS
         if token in rendered_lower
     ]
-    required_evidence_counts = _rendered_sequence_item_counts(
-        rendered_prompt,
-        research_focus.get("required_evidence"),
-    )
-    default_avoid_counts = _rendered_sequence_item_counts(
-        rendered_prompt,
-        research_focus.get("default_avoid_directions"),
-    )
-    measurable_opportunity_counts = _rendered_sequence_item_counts(
-        rendered_prompt,
-        research_focus.get("measurable_opportunity_classes"),
-    )
-    large_twoopt = _mapping_or_empty(
-        research_focus.get("large_instance_two_opt_constraints")
-    )
-    large_twoopt_implementation_counts = _rendered_sequence_item_counts(
-        rendered_prompt,
-        large_twoopt.get("implementation_constraints"),
-    )
-    large_twoopt_pair_evidence_counts = _rendered_sequence_item_counts(
-        rendered_prompt,
-        large_twoopt.get("required_pair_evidence"),
-    )
-    large_twoopt_reject_counts = _rendered_sequence_item_counts(
-        rendered_prompt,
-        large_twoopt.get("default_reject_directions"),
-    )
-    case_protection = _mapping_or_empty(
-        research_focus.get("case_protection_requirements")
-    )
-    case_protection_rule_counts = _rendered_sequence_item_counts(
-        rendered_prompt,
-        case_protection.get("rules"),
-    )
-    case_protection_evidence_counts = _rendered_sequence_item_counts(
-        rendered_prompt,
-        case_protection.get("required_evidence"),
-    )
-    resume_continuity = _mapping_or_empty(
-        research_focus.get("resume_continuity_requirements")
-    )
-    resume_continuity_fallback_counts = _rendered_sequence_item_counts(
-        rendered_prompt,
-        resume_continuity.get("fallback_sources"),
-    )
-    resume_continuity_rule_counts = _rendered_sequence_item_counts(
-        rendered_prompt,
-        resume_continuity.get("rules"),
-    )
-    resume_continuity_evidence_counts = _rendered_sequence_item_counts(
-        rendered_prompt,
-        resume_continuity.get("required_evidence"),
-    )
-    measurement = _mapping_or_empty(
-        research_focus.get("measurement_opportunity_diagnostics")
-    )
-    calibration = _mapping_or_empty(measurement.get("calibration"))
-    calibration_source_artifact = _mapping_or_empty(
-        calibration.get("source_artifact")
-    )
-    calibration_run = _mapping_or_empty(calibration.get("calibration_run"))
-    calibration_runtime_policy = _mapping_or_empty(
-        calibration_run.get("runtime_policy")
-    )
-    calibration_source_sha256 = str(
-        calibration_source_artifact.get("sha256") or ""
-    ).strip()
-    calibration_run_action = str(
-        calibration_run.get("action")
-        or calibration.get("calibration_run_action")
-        or ""
-    ).strip()
-    calibration_runtime_policy_name = str(
-        calibration_runtime_policy.get("selected_policy") or ""
-    ).strip()
-    empty_sequence_counts = {
-        "item_count": 0,
-        "rendered_count": 0,
-        "all_present": False,
-    }
-    warehouse_required_evidence_counts = (
-        required_evidence_counts
-        if problem_family == "warehouse_delivery"
-        else empty_sequence_counts
-    )
-    warehouse_default_avoid_counts = (
-        default_avoid_counts
-        if problem_family == "warehouse_delivery"
-        else empty_sequence_counts
-    )
-    cvrp_measurable_opportunity_counts = (
-        measurable_opportunity_counts
-        if problem_family == "cvrp"
-        else empty_sequence_counts
-    )
-    cvrp_required_evidence_counts = (
-        required_evidence_counts
-        if problem_family == "cvrp"
-        else empty_sequence_counts
-    )
-    cvrp_large_twoopt_implementation_counts = (
-        large_twoopt_implementation_counts
-        if problem_family == "cvrp"
-        else empty_sequence_counts
-    )
-    cvrp_large_twoopt_pair_evidence_counts = (
-        large_twoopt_pair_evidence_counts
-        if problem_family == "cvrp"
-        else empty_sequence_counts
-    )
-    cvrp_large_twoopt_reject_counts = (
-        large_twoopt_reject_counts
-        if problem_family == "cvrp"
-        else empty_sequence_counts
-    )
-    cvrp_case_protection_rule_counts = (
-        case_protection_rule_counts
-        if problem_family == "cvrp"
-        else empty_sequence_counts
-    )
-    cvrp_case_protection_evidence_counts = (
-        case_protection_evidence_counts
-        if problem_family == "cvrp"
-        else empty_sequence_counts
-    )
-    cvrp_resume_continuity_fallback_counts = (
-        resume_continuity_fallback_counts
-        if problem_family == "cvrp"
-        else empty_sequence_counts
-    )
-    cvrp_resume_continuity_rule_counts = (
-        resume_continuity_rule_counts
-        if problem_family == "cvrp"
-        else empty_sequence_counts
-    )
-    cvrp_resume_continuity_evidence_counts = (
-        resume_continuity_evidence_counts
-        if problem_family == "cvrp"
-        else empty_sequence_counts
-    )
+    contract_schema_version = base["contract_schema_version"]
+    guidance_digest = str(launch_payload.get("guidance_text_sha256") or "")
     summary = {
         **base,
         "launch_focus_schema_present": (
-            "scion.launch_research_focus_prompt.v1" in rendered_prompt
+            "scion.launch_research_guidance_prompt.v1" in rendered_prompt
         ),
         "launch_focus_taint_present": (
-            "prepared_launch_research_focus" in rendered_prompt
+            "prepared_launch_research_guidance" in rendered_prompt
         ),
         "prompt_section_present": "## Compact Research Signals" in rendered_prompt,
         "compact_prompt_value_present": bool(compact.strip()),
@@ -659,284 +465,20 @@ def research_focus_prompt_summary(
             or "excluded_from_decision_features" in rendered_prompt
         ),
         "manifest_path_present": str(manifest_path) in rendered_prompt,
-        "rendered_required_paths": rendered_required_paths,
-        "missing_rendered_paths": missing_rendered_paths,
-        "rendered_required_path_count": len(rendered_required_paths),
-        "required_rendered_path_count": len(required_paths),
+        "contract_schema_present": bool(
+            contract_schema_version and contract_schema_version in rendered_prompt
+        ),
+        "guidance_text_digest_present": bool(
+            guidance_digest and guidance_digest in rendered_prompt
+        ),
+        "rendered_required_paths": list(base["rendered_paths"]),
+        "rendered_required_path_count": int(base["rendered_path_count"]),
+        "required_rendered_path_count": len(base["expected_rendered_paths"]),
         "forbidden_prompt_tokens_present": forbidden_present,
-        "warehouse_v2_followup_present": (
-            problem_family == "warehouse_delivery"
-            and (
-                "champion v2" in rendered_lower
-                or "champion-v2" in rendered_lower
-            )
-        ),
-        "warehouse_current_question_present": (
-            problem_family == "warehouse_delivery"
-            and "current_question" in rendered_prompt
-        ),
-        "warehouse_required_evidence_present": (
-            problem_family == "warehouse_delivery"
-            and "required_evidence" in rendered_prompt
-        ),
-        "warehouse_required_evidence_item_count": warehouse_required_evidence_counts[
-            "item_count"
-        ],
-        "warehouse_required_evidence_rendered_count": warehouse_required_evidence_counts[
-            "rendered_count"
-        ],
-        "warehouse_required_evidence_all_present": warehouse_required_evidence_counts[
-            "all_present"
-        ],
-        "warehouse_avoid_directions_present": (
-            problem_family == "warehouse_delivery"
-            and "default_avoid_directions" in rendered_prompt
-        ),
-        "warehouse_default_avoid_direction_item_count": warehouse_default_avoid_counts[
-            "item_count"
-        ],
-        "warehouse_default_avoid_direction_rendered_count": warehouse_default_avoid_counts[
-            "rendered_count"
-        ],
-        "warehouse_default_avoid_direction_all_present": warehouse_default_avoid_counts[
-            "all_present"
-        ],
-        "warehouse_measurement_handoff_present": (
-            problem_family == "warehouse_delivery"
-            and "measurement_opportunity_diagnostics" in rendered_prompt
-            and "runtime_model" in rendered_prompt
-        ),
-        "warehouse_measurement_calibration_source_artifact_present": (
-            problem_family == "warehouse_delivery"
-            and bool(calibration_source_sha256)
-            and "source_artifact" in rendered_prompt
-            and "sha256" in rendered_prompt
-            and calibration_source_sha256 in rendered_prompt
-        ),
-        "warehouse_measurement_calibration_run_present": (
-            problem_family == "warehouse_delivery"
-            and bool(calibration_run)
-            and "calibration_run" in rendered_prompt
-            and (
-                not calibration_run_action
-                or calibration_run_action in rendered_prompt
-            )
-        ),
-        "warehouse_measurement_transfer_risk_present": (
-            problem_family == "warehouse_delivery"
-            and "transfer_risk" in rendered_prompt
-            and "latest_formal_no_gain_pattern" in rendered_prompt
-        ),
-        "warehouse_measurement_required_diagnostics_present": (
-            problem_family == "warehouse_delivery"
-            and "required_diagnostics" in rendered_prompt
-            and "operator_invocations" in rendered_prompt
-            and "cost_delta_sum" in rendered_prompt
-        ),
-        "warehouse_measurement_followup_opportunity_present": (
-            problem_family == "warehouse_delivery"
-            and "opportunity_diagnostics" in rendered_prompt
-            and "validation_transfer_continuation" in rendered_prompt
-        ),
-        "warehouse_measurement_plateau_guard_present": (
-            problem_family == "warehouse_delivery"
-            and "PLATEAU_REQUIRES_PROTOCOL_EVIDENCE" in rendered_prompt
-            and "SCREENING_ONLY_NOT_PLATEAU_EVIDENCE" in rendered_prompt
-        ),
-        "warehouse_measurement_opportunity_diagnostic_count": _sequence_count(
-            measurement.get("opportunity_diagnostics")
-        )
-        if problem_family == "warehouse_delivery"
-        else 0,
-        "cvrp_case_protection_present": (
-            problem_family == "cvrp"
-            and "CMT2" in rendered_prompt
-            and "CMT4" in rendered_prompt
-        ),
-        "cvrp_next_required_direction_present": (
-            problem_family == "cvrp"
-            and "next_required_direction" in rendered_prompt
-            and "large_instance_intra_route_two_opt_seed" in rendered_prompt
-        ),
-        "cvrp_bounded_twoopt_present": (
-            problem_family == "cvrp"
-            and "large_instance_two_opt_constraints" in rendered_prompt
-            and (
-                "deadline" in rendered_lower
-                or "remaining-time" in rendered_lower
-                or "remaining time" in rendered_lower
-            )
-        ),
-        "cvrp_direct_effect_rules_present": (
-            problem_family == "cvrp"
-            and "route_merge_exception_rule" in rendered_prompt
-            and "construction_seed_rule" in rendered_prompt
-        ),
-        "cvrp_missing_primary_telemetry_rule_present": (
-            problem_family == "cvrp"
-            and "missing_primary_telemetry_rule" in rendered_prompt
-            and "not_evaluated/not_triggered" in rendered_prompt
-            and "weak_positive" in rendered_prompt
-            and "large_instance_intra_route_two_opt_seed" in rendered_prompt
-        ),
-        "cvrp_measurement_handoff_present": (
-            problem_family == "cvrp"
-            and "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in rendered_prompt
-        ),
-        "cvrp_measurement_calibration_source_artifact_present": (
-            problem_family == "cvrp"
-            and bool(calibration_source_sha256)
-            and "source_artifact" in rendered_prompt
-            and "sha256" in rendered_prompt
-            and calibration_source_sha256 in rendered_prompt
-        ),
-        "cvrp_measurement_calibration_run_present": (
-            problem_family == "cvrp"
-            and bool(calibration_run)
-            and "calibration_run" in rendered_prompt
-        ),
-        "cvrp_measurement_calibration_runtime_policy_present": (
-            problem_family == "cvrp"
-            and bool(calibration_runtime_policy)
-            and "runtime_policy" in rendered_prompt
-            and (
-                not calibration_runtime_policy_name
-                or calibration_runtime_policy_name in rendered_prompt
-            )
-        ),
-        "cvrp_required_evidence_present": (
-            problem_family == "cvrp"
-            and "required_evidence" in rendered_prompt
-        ),
-        "cvrp_required_evidence_item_count": cvrp_required_evidence_counts[
-            "item_count"
-        ],
-        "cvrp_required_evidence_rendered_count": cvrp_required_evidence_counts[
-            "rendered_count"
-        ],
-        "cvrp_required_evidence_all_present": cvrp_required_evidence_counts[
-            "all_present"
-        ],
-        "cvrp_measurement_screening_headroom_present": (
-            problem_family == "cvrp"
-            and "screening_headroom" in rendered_prompt
-            and "case_count_gap_pct_at_least_3" in rendered_prompt
-        ),
-        "cvrp_measurement_measurable_opportunities_present": (
-            problem_family == "cvrp"
-            and "measurement_opportunity_diagnostics" in rendered_prompt
-            and "measurable_opportunity_classes" in rendered_prompt
-        ),
-        "cvrp_measurement_mechanism_ranking_present": (
-            problem_family == "cvrp"
-            and "mechanism_effect_ranking" in rendered_prompt
-            and "highest_current_followup" in rendered_prompt
-        ),
-        "cvrp_measurement_opportunity_diagnostics_present": (
-            problem_family == "cvrp"
-            and "opportunity_diagnostics" in rendered_prompt
-            and "measurement_power" in rendered_prompt
-        ),
-        "cvrp_measurement_mechanism_rank_count": _sequence_count(
-            measurement.get("mechanism_effect_ranking")
-        )
-        if problem_family == "cvrp"
-        else 0,
-        "cvrp_measurement_opportunity_diagnostic_count": _sequence_count(
-            measurement.get("opportunity_diagnostics")
-        )
-        if problem_family == "cvrp"
-        else 0,
-        "cvrp_measurable_opportunity_class_item_count": (
-            cvrp_measurable_opportunity_counts["item_count"]
-        ),
-        "cvrp_measurable_opportunity_class_rendered_count": (
-            cvrp_measurable_opportunity_counts["rendered_count"]
-        ),
-        "cvrp_measurable_opportunity_class_all_present": (
-            cvrp_measurable_opportunity_counts["all_present"]
-        ),
-        "cvrp_large_twoopt_implementation_constraint_item_count": (
-            cvrp_large_twoopt_implementation_counts["item_count"]
-        ),
-        "cvrp_large_twoopt_implementation_constraint_rendered_count": (
-            cvrp_large_twoopt_implementation_counts["rendered_count"]
-        ),
-        "cvrp_large_twoopt_implementation_constraint_all_present": (
-            cvrp_large_twoopt_implementation_counts["all_present"]
-        ),
-        "cvrp_large_twoopt_required_pair_evidence_item_count": (
-            cvrp_large_twoopt_pair_evidence_counts["item_count"]
-        ),
-        "cvrp_large_twoopt_required_pair_evidence_rendered_count": (
-            cvrp_large_twoopt_pair_evidence_counts["rendered_count"]
-        ),
-        "cvrp_large_twoopt_required_pair_evidence_all_present": (
-            cvrp_large_twoopt_pair_evidence_counts["all_present"]
-        ),
-        "cvrp_large_twoopt_default_reject_direction_item_count": (
-            cvrp_large_twoopt_reject_counts["item_count"]
-        ),
-        "cvrp_large_twoopt_default_reject_direction_rendered_count": (
-            cvrp_large_twoopt_reject_counts["rendered_count"]
-        ),
-        "cvrp_large_twoopt_default_reject_direction_all_present": (
-            cvrp_large_twoopt_reject_counts["all_present"]
-        ),
-        "cvrp_case_protection_rule_item_count": (
-            cvrp_case_protection_rule_counts["item_count"]
-        ),
-        "cvrp_case_protection_rule_rendered_count": (
-            cvrp_case_protection_rule_counts["rendered_count"]
-        ),
-        "cvrp_case_protection_rule_all_present": (
-            cvrp_case_protection_rule_counts["all_present"]
-        ),
-        "cvrp_case_protection_required_evidence_item_count": (
-            cvrp_case_protection_evidence_counts["item_count"]
-        ),
-        "cvrp_case_protection_required_evidence_rendered_count": (
-            cvrp_case_protection_evidence_counts["rendered_count"]
-        ),
-        "cvrp_case_protection_required_evidence_all_present": (
-            cvrp_case_protection_evidence_counts["all_present"]
-        ),
-        "cvrp_resume_continuity_present": (
-            problem_family == "cvrp"
-            and "resume_continuity_requirements" in rendered_prompt
-            and "zero branch cards" in rendered_lower
-            and "target-intent" in rendered_lower
-            and "copied" in rendered_lower
-        ),
-        "cvrp_resume_continuity_fallback_source_item_count": (
-            cvrp_resume_continuity_fallback_counts["item_count"]
-        ),
-        "cvrp_resume_continuity_fallback_source_rendered_count": (
-            cvrp_resume_continuity_fallback_counts["rendered_count"]
-        ),
-        "cvrp_resume_continuity_fallback_source_all_present": (
-            cvrp_resume_continuity_fallback_counts["all_present"]
-        ),
-        "cvrp_resume_continuity_rule_item_count": (
-            cvrp_resume_continuity_rule_counts["item_count"]
-        ),
-        "cvrp_resume_continuity_rule_rendered_count": (
-            cvrp_resume_continuity_rule_counts["rendered_count"]
-        ),
-        "cvrp_resume_continuity_rule_all_present": (
-            cvrp_resume_continuity_rule_counts["all_present"]
-        ),
-        "cvrp_resume_continuity_required_evidence_item_count": (
-            cvrp_resume_continuity_evidence_counts["item_count"]
-        ),
-        "cvrp_resume_continuity_required_evidence_rendered_count": (
-            cvrp_resume_continuity_evidence_counts["rendered_count"]
-        ),
-        "cvrp_resume_continuity_required_evidence_all_present": (
-            cvrp_resume_continuity_evidence_counts["all_present"]
-        ),
     }
     required_true_fields = [
+        "schema_valid",
+        "proposal_visibility_only",
         "launch_focus_schema_present",
         "launch_focus_taint_present",
         "prompt_section_present",
@@ -944,169 +486,11 @@ def research_focus_prompt_summary(
         "launch_research_focus_key_present",
         "decision_features_exclusion_present",
         "manifest_path_present",
+        "contract_schema_present",
+        "guidance_text_digest_present",
     ]
-    if problem_family == "warehouse_delivery":
-        if research_focus.get("accepted_checkpoint") not in ({}, [], "", None):
-            required_true_fields.append("warehouse_v2_followup_present")
-        if research_focus.get("current_question") not in ({}, [], "", None):
-            required_true_fields.append("warehouse_current_question_present")
-        if research_focus.get("required_evidence") not in ({}, [], "", None):
-            required_true_fields.append("warehouse_required_evidence_present")
-            required_true_fields.append("warehouse_required_evidence_all_present")
-        if research_focus.get("default_avoid_directions") not in ({}, [], "", None):
-            required_true_fields.append("warehouse_avoid_directions_present")
-            required_true_fields.append("warehouse_default_avoid_direction_all_present")
-        if (
-            research_focus.get("measurement_opportunity_diagnostics")
-            not in ({}, [], "", None)
-        ):
-            required_true_fields.append("warehouse_measurement_handoff_present")
-            if calibration_source_artifact not in ({}, [], "", None):
-                required_true_fields.append(
-                    "warehouse_measurement_calibration_source_artifact_present"
-                )
-            if calibration_run not in ({}, [], "", None):
-                required_true_fields.append(
-                    "warehouse_measurement_calibration_run_present"
-                )
-            if measurement.get("transfer_risk") not in ({}, [], "", None):
-                required_true_fields.append(
-                    "warehouse_measurement_transfer_risk_present"
-                )
-            if measurement.get("required_diagnostics") not in ({}, [], "", None):
-                required_true_fields.append(
-                    "warehouse_measurement_required_diagnostics_present"
-                )
-            if measurement.get("opportunity_diagnostics") not in ({}, [], "", None):
-                required_true_fields.append(
-                    "warehouse_measurement_followup_opportunity_present"
-                )
-                required_true_fields.append(
-                    "warehouse_measurement_plateau_guard_present"
-                )
-    elif problem_family == "cvrp":
-        if research_focus.get("next_required_direction") not in ({}, [], "", None):
-            required_true_fields.append("cvrp_next_required_direction_present")
-        if research_focus.get("required_evidence") not in ({}, [], "", None):
-            required_true_fields.append("cvrp_required_evidence_present")
-            required_true_fields.append("cvrp_required_evidence_all_present")
-        if research_focus.get("case_protection_requirements") not in (
-            {},
-            [],
-            "",
-            None,
-        ):
-            required_true_fields.append("cvrp_case_protection_present")
-            required_true_fields.append("cvrp_case_protection_rule_all_present")
-            required_true_fields.append(
-                "cvrp_case_protection_required_evidence_all_present"
-            )
-        if research_focus.get("large_instance_two_opt_constraints") not in (
-            {},
-            [],
-            "",
-            None,
-        ):
-            required_true_fields.append("cvrp_bounded_twoopt_present")
-            required_true_fields.append(
-                "cvrp_large_twoopt_implementation_constraint_all_present"
-            )
-            required_true_fields.append(
-                "cvrp_large_twoopt_required_pair_evidence_all_present"
-            )
-            required_true_fields.append(
-                "cvrp_large_twoopt_default_reject_direction_all_present"
-            )
-        if research_focus.get("measurable_opportunity_classes") not in (
-            {},
-            [],
-            "",
-            None,
-        ):
-            required_true_fields.append(
-                "cvrp_measurable_opportunity_class_all_present"
-            )
-        if (
-            research_focus.get("route_merge_exception_rule")
-            not in ({}, [], "", None)
-            or research_focus.get("construction_seed_rule")
-            not in ({}, [], "", None)
-        ):
-            required_true_fields.append("cvrp_direct_effect_rules_present")
-        if research_focus.get("missing_primary_telemetry_rule") not in (
-            {},
-            [],
-            "",
-            None,
-        ):
-            required_true_fields.append(
-                "cvrp_missing_primary_telemetry_rule_present"
-            )
-        if research_focus.get("resume_continuity_requirements") not in (
-            {},
-            [],
-            "",
-            None,
-        ):
-            required_true_fields.append("cvrp_resume_continuity_present")
-            required_true_fields.append(
-                "cvrp_resume_continuity_fallback_source_all_present"
-            )
-            required_true_fields.append("cvrp_resume_continuity_rule_all_present")
-            required_true_fields.append(
-                "cvrp_resume_continuity_required_evidence_all_present"
-            )
-        if (
-            research_focus.get("measurement_opportunity_diagnostics")
-            not in ({}, [], "", None)
-        ):
-            required_true_fields.append("cvrp_measurement_handoff_present")
-            if calibration_source_artifact not in ({}, [], "", None):
-                required_true_fields.append(
-                    "cvrp_measurement_calibration_source_artifact_present"
-                )
-            if calibration_run not in ({}, [], "", None):
-                required_true_fields.append(
-                    "cvrp_measurement_calibration_run_present"
-                )
-            if calibration_runtime_policy not in ({}, [], "", None):
-                required_true_fields.append(
-                    "cvrp_measurement_calibration_runtime_policy_present"
-                )
-            if measurement.get("screening_headroom") not in ({}, [], "", None):
-                required_true_fields.append(
-                    "cvrp_measurement_screening_headroom_present"
-                )
-            if measurement.get("measurable_opportunity_classes") not in (
-                {},
-                [],
-                "",
-                None,
-            ):
-                required_true_fields.append(
-                    "cvrp_measurement_measurable_opportunities_present"
-                )
-            if measurement.get("mechanism_effect_ranking") not in (
-                {},
-                [],
-                "",
-                None,
-            ):
-                required_true_fields.append(
-                    "cvrp_measurement_mechanism_ranking_present"
-                )
-            if measurement.get("opportunity_diagnostics") not in (
-                {},
-                [],
-                "",
-                None,
-            ):
-                required_true_fields.append(
-                    "cvrp_measurement_opportunity_diagnostics_present"
-                )
     available = (
-        bool(projected_dict)
-        and not missing_rendered_paths
+        not summary["missing_rendered_paths"]
         and not forbidden_present
         and all(summary[field] is True for field in required_true_fields)
     )
@@ -1115,7 +499,6 @@ def research_focus_prompt_summary(
         "available": available,
         "reason": "ok" if available else "missing_prompt_projection",
     }
-
 
 def problem_measurement_diagnostics_prompt_summary(
     *,
@@ -1375,17 +758,17 @@ def _minimal_code_constraints_context(
         ),
         "import_whitelist": "math, time, random",
         "champion_operators_code": "def solve(context):\\n    return context.nearest_neighbor()\\n",
-        "hypothesis_implementation_brief": {
-            "action": "modify",
-            "target_file": "policies/baseline_algorithm.py",
-            "hypothesis_text": "Prepared code constraint audit.",
-            "mechanism_changes": [
-                {
-                    "id": "large_instance_intra_route_two_opt_seed",
-                    "action": "modify",
-                }
-            ],
-        },
+            "hypothesis_implementation_brief": {
+                "action": "modify",
+                "target_file": "policies/baseline_algorithm.py",
+                "hypothesis_text": "Prepared code constraint audit.",
+                "mechanism_changes": [
+                    {
+                        "id": "prepared_code_constraint_probe",
+                        "action": "modify",
+                    }
+                ],
+            },
         "target_file": "policies/baseline_algorithm.py",
         "target_file_code": "def solve(context):\\n    return context.nearest_neighbor()\\n",
         "editable_patterns": "policies/*.py",
@@ -1413,26 +796,16 @@ def _minimal_research_focus_context(
     problem_family: str,
     launch_research_focus: dict[str, Any],
 ) -> dict[str, Any]:
-    family = str(problem_family or "")
-    if family == "warehouse_delivery":
-        return {
-            "problem_summary": "Warehouse prepared research-focus audit.",
-            "research_surfaces": "Research surfaces: warehouse_operator",
-            "operator_categories": "warehouse_operator",
-            "available_actions": "modify, create_new",
-            "targetable_files": "operators/*.py",
-            "champion_operators_code": "class MergeVehicles:\n    pass\n",
-            "champion_stats": "champion_v2",
-            "launch_research_focus": launch_research_focus,
-        }
     return {
-        "problem_summary": "CVRP prepared research-focus audit.",
+        "problem_summary": (
+            f"Prepared research-guidance audit for {problem_family or 'unknown'}."
+        ),
         "research_surfaces": "Research surfaces: solver_design",
         "operator_categories": "solver_design",
         "available_actions": "modify, create_new",
-        "targetable_files": "policies/baseline_algorithm.py",
-        "champion_operators_code": "def solve():\n    return best\n",
-        "champion_stats": "prepared_focus_audit",
+        "targetable_files": "policies/example_algorithm.py",
+        "champion_operators_code": "def solve():\n    return incumbent\n",
+        "champion_stats": "prepared_guidance_audit",
         "launch_research_focus": launch_research_focus,
     }
 
@@ -1443,23 +816,11 @@ def _launch_research_focus_payload(
     manifest: dict[str, Any],
     projected_focus: dict[str, Any],
 ) -> dict[str, Any]:
-    return {
-        "schema_version": "scion.launch_research_focus_prompt.v1",
-        "taint": "prepared_launch_research_focus",
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "decision_input_policy": "excluded_from_decision_features",
-        "source": "PREPARED_RUN_MANIFEST",
-        "manifest_path": str(manifest_path),
-        "problem_family": str(manifest.get("problem_family") or ""),
-        "analysis_intent": str(manifest.get("analysis_intent") or ""),
-        "acceptance_focus": [
-            str(item)
-            for item in (manifest.get("acceptance_focus") or [])
-            if str(item).strip()
-        ],
-        "research_focus": projected_focus,
-    }
+    del projected_focus
+    return launch_research_guidance_payload(
+        manifest_path=manifest_path,
+        manifest=manifest,
+    )
 
 
 def _research_shape_payload_from_campaign(
@@ -1545,263 +906,6 @@ def _expected_adapter_diagnostic_schema(problem_family: str) -> str:
     if problem_family == "warehouse_delivery":
         return "warehouse_validation_transfer_diagnostic.v1"
     return ""
-
-
-def _required_research_focus_projection_keys(
-    problem_family: str,
-    research_focus: dict[str, Any],
-) -> list[str]:
-    common = [
-        key
-        for key in (
-            "schema_version",
-            "scope",
-            "next_required_direction",
-            "decision_boundary",
-            "measurement_opportunity_diagnostics",
-            "default_avoid_directions",
-            "required_mechanism_ids",
-            "required_evidence",
-            "measurable_opportunity_classes",
-        )
-        if key in research_focus
-    ]
-    if problem_family == "cvrp":
-        common.extend(
-            key
-            for key in (
-                "large_instance_two_opt_constraints",
-                "case_protection_requirements",
-                "resume_continuity_requirements",
-                "route_merge_exception_rule",
-                "construction_seed_rule",
-                "missing_primary_telemetry_rule",
-            )
-            if key in research_focus
-        )
-    elif problem_family == "warehouse_delivery":
-        common.extend(
-            key
-            for key in (
-                "accepted_checkpoint",
-                "current_question",
-            )
-            if key in research_focus
-        )
-    return sorted(dict.fromkeys(common))
-
-
-def _required_research_focus_projection_paths(
-    problem_family: str,
-    research_focus: dict[str, Any],
-) -> list[str]:
-    paths: list[str] = [
-        key
-        for key in _required_research_focus_projection_keys(
-            problem_family,
-            research_focus,
-        )
-        if key in research_focus
-    ]
-    paths.extend(
-        _supported_nested_paths(
-            "measurement_opportunity_diagnostics",
-            research_focus,
-            (
-                "schema_version",
-                "metric",
-                "runtime_model",
-                "pairing_validity",
-                "practical_screen_delta",
-                "screening_mde_at_power_80",
-                "recommended_min_seeds",
-                "opportunity_projection_source",
-                "adapter_payload_schema",
-                "reason_codes",
-                "summary",
-                "transfer_risk",
-                "required_diagnostics",
-                "screening_headroom",
-                "measurable_opportunity_classes",
-                "mechanism_effect_ranking",
-                "opportunity_diagnostics",
-                "policy",
-                "decision_features_excluded",
-                "proposal_visibility_only",
-                "calibration",
-            ),
-        )
-    )
-    paths.extend(
-        _supported_measurement_nested_paths(
-            research_focus,
-            "calibration",
-            (
-                "schema",
-                "source_artifact",
-                "calibration_run",
-                "calibration_run_action",
-            ),
-        )
-    )
-    if problem_family == "cvrp":
-        paths.extend(
-            _supported_measurement_nested_paths(
-                research_focus,
-                "screening_headroom",
-                (
-                    "scope",
-                    "metric",
-                    "case_count",
-                    "gap_pct_min",
-                    "gap_pct_max",
-                    "case_count_gap_pct_at_least_3",
-                    "case_details_omitted",
-                    "planning_use",
-                ),
-            )
-        )
-        paths.extend(
-            _supported_nested_paths(
-                "large_instance_two_opt_constraints",
-                research_focus,
-                (
-                    "schema_version",
-                    "scope",
-                    "seed_report",
-                    "proposal_visibility_only",
-                    "decision_features_excluded",
-                    "implementation_constraints",
-                    "required_pair_evidence",
-                    "default_reject_directions",
-                ),
-            )
-        )
-        paths.extend(
-            _supported_nested_paths(
-                "case_protection_requirements",
-                research_focus,
-                (
-                    "schema_version",
-                    "scope",
-                    "proposal_visibility_only",
-                    "decision_features_excluded",
-                    "protected_cases",
-                    "rules",
-                    "required_evidence",
-                ),
-            )
-        )
-        paths.extend(
-            _supported_nested_paths(
-                "resume_continuity_requirements",
-                research_focus,
-                (
-                    "schema_version",
-                    "scope",
-                    "proposal_visibility_only",
-                    "decision_features_excluded",
-                    "fallback_sources",
-                    "rules",
-                    "required_evidence",
-                ),
-            )
-        )
-    elif problem_family == "warehouse_delivery":
-        paths.extend(
-            _supported_measurement_nested_paths(
-                research_focus,
-                "transfer_risk",
-                (
-                    "risk_model",
-                    "historical_pattern",
-                    "latest_field_gate_pattern",
-                    "latest_formal_no_gain_pattern",
-                    "required_hypothesis_claims",
-                ),
-            )
-        )
-        paths.extend(
-            _supported_measurement_nested_paths(
-                research_focus,
-                "required_diagnostics",
-                ("activation", "effect"),
-            )
-        )
-    return sorted(dict.fromkeys(paths))
-
-
-def _supported_measurement_nested_paths(
-    research_focus: dict[str, Any],
-    child_key: str,
-    grandchild_keys: tuple[str, ...],
-) -> list[str]:
-    measurement = research_focus.get("measurement_opportunity_diagnostics")
-    if not isinstance(measurement, dict):
-        return []
-    value = measurement.get(child_key)
-    if not isinstance(value, dict):
-        return []
-    return [
-        f"measurement_opportunity_diagnostics.{child_key}.{grandchild_key}"
-        for grandchild_key in grandchild_keys
-        if value.get(grandchild_key) not in ({}, [], "", None)
-    ]
-
-
-def _supported_nested_paths(
-    parent_key: str,
-    research_focus: dict[str, Any],
-    child_keys: tuple[str, ...],
-) -> list[str]:
-    value = research_focus.get(parent_key)
-    if not isinstance(value, dict):
-        return []
-    return [
-        f"{parent_key}.{child_key}"
-        for child_key in child_keys
-        if value.get(child_key) not in ({}, [], "", None)
-    ]
-
-
-def _non_empty_leaf_paths(value: Any, *, prefix: str = "") -> list[str]:
-    if isinstance(value, dict):
-        paths: list[str] = []
-        for key, child in value.items():
-            child_prefix = f"{prefix}.{key}" if prefix else str(key)
-            paths.extend(_non_empty_leaf_paths(child, prefix=child_prefix))
-        return sorted(paths)
-    if value in ({}, [], "", None):
-        return []
-    return [prefix] if prefix else []
-
-
-def _path_value(value: dict[str, Any], path: str) -> Any:
-    current: Any = value
-    for part in path.split("."):
-        if not isinstance(current, dict):
-            return None
-        current = current.get(part)
-    return current
-
-
-def _prompt_contains_path(rendered_prompt: str, path: str) -> bool:
-    parts = [part for part in path.split(".") if part]
-    return bool(parts) and all(part in rendered_prompt for part in parts)
-
-
-def _rendered_sequence_item_counts(
-    rendered_prompt: str,
-    value: Any,
-) -> dict[str, Any]:
-    sequence = value if isinstance(value, (list, tuple)) else []
-    items = [str(item).strip() for item in sequence if str(item).strip()]
-    rendered_count = sum(1 for item in items if item in rendered_prompt)
-    return {
-        "item_count": len(items),
-        "rendered_count": rendered_count,
-        "all_present": rendered_count == len(items),
-    }
 
 
 def _rendered_constraint_item_counts(
