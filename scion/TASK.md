@@ -23,13 +23,14 @@ manifests carry typed `ResearchGuidanceContract` payloads, generic
 context/readiness code validates schema and rendered-path coverage, and
 CVRP/warehouse semantics stay in problem-owned providers/tests. A controlled
 CVRP scheduler-status validation root from WSL commit `d75ed849` has already
-shown the important Design A behavior: inactive current evidence on `9faaf70b`
-and then on `c8aa2555` is released with
-`inactive_current_evidence_slot_release`, the run completed 1 new effective
-protocol round, and a later branch `08d996dd` entered active slots instead of
-the campaign immediately stopping as `scheduler_active_slot_blocked`. That root
-is still running and was later exposed to WSL worktree changes from the Design
-B sync, so treat it as slot-release/progress validation evidence only; a clean
+shown the important Design A behavior: inactive current evidence on `9faaf70b`,
+`c8aa2555`, and `08d996dd` is released with
+`inactive_current_evidence_slot_release`; latest observed live status is at
+least 2 new effective protocol rounds with 0 scheduler-active-slot blocked
+attempts, and later branch `698ac3de` entered active slots instead of the
+campaign immediately stopping as `scheduler_active_slot_blocked`. That root is
+still running and was later exposed to WSL worktree changes from the Design B
+sync, so treat it as slot-release/progress validation evidence only; a clean
 post-commit relaunch is still needed for final current-run-ready acceptance.*
 *Updated: 2026-06-23*
 

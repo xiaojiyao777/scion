@@ -66,16 +66,19 @@ history when exact old chronology is needed.
   launched from WSL commit `d75ed849` after strict readiness passed. Live
   status has already shown the intended generic scheduler behavior:
   `9faaf70b` is released from active-slot accounting with
-  `inactive_current_evidence_slot_release`; branch
-  `c8aa2555-62c0-4d19-b4ba-ac04cea257ea` entered active slots, completed
-  1 effective protocol round, and was also released as inactive current
-  evidence; branch `08d996dd-8500-445d-98a5-3ded35c1a069` then entered active
-  slots instead of the run immediately stopping as
-  `scheduler_active_slot_blocked`. The process is still running and has not
-  produced a current-run-ready postrun result. Because the WSL worktree was
-  later updated with the Design B implementation while this root was live, use
-  this root only as slot-release/progress validation evidence; final
-  current-run-ready acceptance needs a clean post-commit relaunch.
+  `inactive_current_evidence_slot_release`; branches
+  `c8aa2555-62c0-4d19-b4ba-ac04cea257ea` and
+  `08d996dd-8500-445d-98a5-3ded35c1a069` then entered active slots, completed
+  effective protocol rows, and were also released as inactive current evidence.
+  Latest observed live status is at least 2 of 4 effective rounds, 0 scheduler
+  active-slot blocked attempts, and new branch
+  `698ac3de-6775-4438-b568-6435a6fde334` in active slots instead of the run
+  immediately stopping as `scheduler_active_slot_blocked`. The process is still
+  running and has not produced a current-run-ready postrun result. Because the
+  WSL worktree was later updated with the Design B implementation while this
+  root was live, use this root only as slot-release/progress validation
+  evidence; final current-run-ready acceptance needs a clean post-commit
+  relaunch.
 - WSL `gpt-5.5` auth is no longer the active blocker. Strict readiness passed
   for the latest warehouse and CVRP reruns before launch, and live
   prompt/source evidence passed under the patched postrun checker.
