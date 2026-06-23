@@ -51,8 +51,11 @@ history when exact old chronology is needed.
   screening, MDE-aware rejection, forced non-acceptance target control, clean
   prompt/source evidence, accepted scheduler-status repair, and accepted
   target-intent authority repair. CVRP still lacks a solver improvement or
-  promotion, so the next question is research quality/actionability rather than
-  more authority-loop repair.
+  promotion. The authority root's postrun actionability gaps have been traced
+  to report-classifier false positives and repaired in the current worktree, so
+  the next question is solver direction quality and warehouse/CVRP effective
+  research behavior rather than more authority-loop or actionability-classifier
+  repair.
 - Prior CVRP missing-primary follow-up:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-missingprimary-8d28bc30-narrowavoid-4r-gpt55-20260622T171659Z-claw`
   launched from WSL commit `8d28bc30`. It passed postrun acceptance readiness
@@ -140,7 +143,14 @@ history when exact old chronology is needed.
   target intent, formal hypothesis/code generation, canary/formal evaluation,
   and screening. This is not solver evidence: champion remained `v1`, there
   were 0 promotions, and all four current rows had median effect at or below
-  0 with CI high below the CVRP MDE. Detailed reports:
+  0 with CI high below the CVRP MDE. The follow-up actionability audit found
+  report-classifier noise rather than missing prompt/context evidence:
+  accepted clean-fork policy choices no longer count as missed same-mechanism
+  opportunities, voluntary branch-lesson usage no longer creates semantic
+  gaps, and a temporary postrun acceptance rebuild of this root reports
+  `actionability_gaps=[]`, `same_mechanism_missed=0`,
+  `branch_lesson_semantic_gap_count=0`, and
+  `accepted_clean_fork_policy_choice_count=1`. Detailed reports:
   `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-conflict-20260623.md`
   and
   `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-validation-20260623.md`.
@@ -666,26 +676,25 @@ CVRP/VRP:
   repair now keeps current weak-positive branches with no case-level loss in
   the weak-positive follow-up lane instead of forcing a clean fork. The next
   exposed blocker was target-intent authority ordering, now repaired and
-  accepted by the authority validation root. The remaining generic gaps are
-  research-context actionability and branch-lesson semantic usage, not a need
-  for CVRP-specific scheduler, target-intent authority, or projection
-  exceptions.
+  accepted by the authority validation root. The follow-up actionability
+  classifier audit is also repaired: accepted clean-fork policy choices and
+  voluntary branch-lesson usage are report-only diagnostics, not missed
+  research-context opportunities. The remaining gap is solver direction quality
+  and positive-control effective research, not a need for CVRP-specific
+  scheduler, target-intent authority, actionability, or projection exceptions.
 
 ## Next Actions
 
 1. Treat the clean scheduler-status validation root and the target-intent
    authority validation root as accepted framework evidence; do not relaunch
    either validation shape unless a later run regresses the generic behavior.
-2. Audit research-context actionability before adding more framework code:
-   explain the one missed same-mechanism opportunity and the one branch-lesson
-   semantic gap reported by the accepted authority root.
-3. Continue CVRP only as problem-owned solver research; interpret effects
+2. Continue CVRP only as problem-owned solver research; interpret effects
    against MDE and do not add VRP/CVRP exceptions to generic scheduler,
-   proposal authority, projection, or `DecisionFeatures`.
-4. Keep warehouse as the simpler positive-control path unless a targeted
+   proposal authority, actionability, projection, or `DecisionFeatures`.
+3. Keep warehouse as the simpler positive-control path unless a targeted
    follow-up is needed to refine validation-transfer quality guidance around
    `runtime_bounded_acceptance` / `bounded_candidate_policy`.
-5. Update this file and `scion/TASK.md` only when operating truth changes; keep
+4. Update this file and `scion/TASK.md` only when operating truth changes; keep
    detailed run evidence in focused experiment reports.
 
 ## Pointers

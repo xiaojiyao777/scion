@@ -158,6 +158,145 @@ def test_research_efficiency_report_write_to_file_from_campaign_dir(tmp_path):
     assert data["run_status"]["wrapper_exit_status"] == 0
 
 
+def test_research_efficiency_report_ignores_voluntary_branch_lesson_usage_gap(
+    tmp_path,
+):
+    campaign_dir = _write_research_efficiency_observability_fixture(
+        tmp_path,
+        {
+            "schema_version": "cross_branch_research_observability.v1",
+            "policy": "proposal_observability_only",
+            "decision_input_policy": "excluded_from_decision_features",
+            "branch_lesson_usage_requirement_count": 0,
+            "branch_lesson_usage_present_count": 1,
+            "branch_lesson_usage_satisfied_count": 0,
+        },
+    )
+
+    result = runner.invoke(
+        app,
+        ["report", "research-efficiency", "--campaign-dir", str(campaign_dir)],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    lessons = data["research_continuity"]["branch_lesson_usage"]
+    assert lessons["requirement_count"] == 0
+    assert lessons["present_count"] == 1
+    assert lessons["satisfied_count"] == 0
+    assert lessons["semantic_gap_count"] == 0
+    assert lessons["semantic_gap_rate"] == 0.0
+    assert lessons["semantic_failure_counts"] == {}
+
+
+def test_research_efficiency_report_counts_branch_lesson_semantic_failures_as_gap(
+    tmp_path,
+):
+    campaign_dir = _write_research_efficiency_observability_fixture(
+        tmp_path,
+        {
+            "schema_version": "cross_branch_research_observability.v1",
+            "policy": "proposal_observability_only",
+            "decision_input_policy": "excluded_from_decision_features",
+            "branch_lesson_usage_requirement_count": 0,
+            "branch_lesson_usage_present_count": 3,
+            "branch_lesson_usage_satisfied_count": 0,
+            "branch_lesson_usage_missing_block_count": 1,
+            "branch_lesson_usage_metadata_only_count": 1,
+            "branch_lesson_usage_metadata_only_block_count": 1,
+            "branch_lesson_usage_linkage_unrecognized_count": 1,
+            "branch_lesson_usage_linkage_unrecognized_block_count": 1,
+            "branch_lesson_usage_semantic_mismatch_count": 1,
+            "branch_lesson_usage_semantic_mismatch_block_count": 1,
+        },
+    )
+
+    result = runner.invoke(
+        app,
+        ["report", "research-efficiency", "--campaign-dir", str(campaign_dir)],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    lessons = data["research_continuity"]["branch_lesson_usage"]
+    assert lessons["semantic_failure_counts"] == {
+        "linkage_unrecognized": 1,
+        "metadata_only": 1,
+        "missing": 1,
+        "semantic_mismatch": 1,
+    }
+    assert lessons["semantic_block_counts"] == {
+        "linkage_unrecognized": 1,
+        "metadata_only": 1,
+        "missing": 1,
+        "semantic_mismatch": 1,
+    }
+    assert lessons["semantic_gap_count"] == 4
+    assert lessons["semantic_gap_rate"] == 1.0
+
+
+def test_research_efficiency_report_reclassifies_legacy_clean_fork_miss(
+    tmp_path,
+):
+    campaign_dir = _write_research_efficiency_observability_fixture(
+        tmp_path,
+        {
+            "schema_version": "cross_branch_research_observability.v1",
+            "policy": "proposal_observability_only",
+            "decision_input_policy": "excluded_from_decision_features",
+            "same_branch_refinement_allowance_count": 1,
+            "same_branch_refinement_not_selected_count": 1,
+        },
+        steps=[
+            {
+                "scheduler_audit_metadata": {
+                    "same_branch_refinement_selected": True,
+                    "post_finalizer_actual_branch_action": "continue_same_branch",
+                }
+            },
+            {
+                "scheduler_slot": "explore_new",
+                "scheduler_reason": "runtime_evidence_completeness_clean_fork",
+                "result_action": "skip",
+                "scheduler_audit_metadata": {
+                    "runtime_evidence_clean_fork_selected": True,
+                    "runtime_evidence_clean_fork_reason": (
+                        "runtime_evidence_completeness_clean_fork"
+                    ),
+                    "same_mechanism_clean_fork_justification": {
+                        "reason": "clean_fork_selected_instead_of_same_branch",
+                        "clean_fork_reason": (
+                            "runtime_evidence_completeness_clean_fork"
+                        ),
+                        "active_branch_cap_context": {
+                            "scheduler_slot": "explore_new",
+                            "scheduler_reason": (
+                                "runtime_evidence_completeness_clean_fork"
+                            ),
+                        },
+                    },
+                },
+            },
+        ],
+    )
+
+    result = runner.invoke(
+        app,
+        ["report", "research-efficiency", "--campaign-dir", str(campaign_dir)],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    followup = data["research_continuity"]["same_mechanism_followup"]
+    assert followup["selected_same_branch_refinement_count"] == 1
+    assert followup["not_selected_same_branch_refinement_count"] == 0
+    assert followup["observed_opportunity_count"] == 1
+    assert followup["selection_rate"] == 1.0
+    assert data["cross_branch_observability"][
+        "accepted_clean_fork_policy_choice_count"
+    ] == 1
+
+
 def test_research_efficiency_report_falls_back_to_copied_calibration(tmp_path):
     campaign_dir = tmp_path / "campaign"
     calibration_dir = campaign_dir / "champions" / "champion_v1" / "formal" / "calibration"
@@ -249,6 +388,28 @@ def test_existing_failures_report_still_works(tmp_path):
     data = json.loads(result.output)
     assert "total_failures" in data
     assert "by_type" in data
+
+
+def _write_research_efficiency_observability_fixture(
+    tmp_path: Path,
+    observability: dict,
+    *,
+    steps: list[dict] | None = None,
+) -> Path:
+    campaign_dir = tmp_path / "campaign"
+    campaign_dir.mkdir()
+    summary = {
+        "campaign_id": "observability-fixture",
+        "cross_branch_research_observability": observability,
+        "steps": steps or [],
+    }
+    (campaign_dir / "campaign_summary.json").write_text(
+        json.dumps(summary),
+        encoding="utf-8",
+    )
+    (campaign_dir / "status.json").write_text("{}", encoding="utf-8")
+    (campaign_dir / "run_status.json").write_text("{}", encoding="utf-8")
+    return campaign_dir
 
 
 def _make_research_efficiency_fixture(tmp_path: Path) -> tuple[Path, Path]:

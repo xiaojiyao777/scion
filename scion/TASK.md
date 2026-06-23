@@ -27,7 +27,15 @@ follow-up can reach target intent, formal hypothesis/code, Protocol screening,
 evidence-backed abandon, expanded screening, and same-branch continuation. It
 does not show solver progress: champion remains `v1`, there are 0 promotions,
 and all four current rows have median effect at or below 0 with CI high below
-the CVRP MDE.*
+the CVRP MDE. The post-validation research-context actionability audit found
+two report-classifier false positives rather than a new prompt/context design
+gap: accepted clean-fork policy choices were counted as missed same-mechanism
+opportunities, and voluntary branch-lesson usage was counted as a semantic gap.
+The current worktree now reclassifies those report-only signals
+problem-neutrally; a temporary rebuild of the accepted authority root reports
+`actionability_gaps=[]`, `same_mechanism_missed=0`, and
+`branch_lesson_semantic_gap_count=0` while preserving
+`accepted_clean_fork_policy_choice_count=1` as diagnostic evidence.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -580,6 +588,11 @@ Current checkpoint:
     Protocol screening instead of cycling between target-intent binding and
     same-mechanism guards. It is still not solver progress: champion remained
     `v1`, there were 0 promotions, and all current rows were below MDE.
+    The post-validation actionability audit is now resolved as report-layer
+    classifier noise, not a new CVRP/VRP exception: accepted clean-fork policy
+    choices no longer count as missed same-mechanism opportunities, voluntary
+    branch-lesson usage no longer creates semantic gaps, and a temporary
+    postrun acceptance rebuild of this root reports empty actionability gaps.
     Detailed reports:
     `scion/docs/experiments/v0.4/v04-cvrp-target-intent-authority-conflict-20260623.md`
     and

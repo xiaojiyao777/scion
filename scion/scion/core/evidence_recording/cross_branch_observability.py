@@ -5,6 +5,13 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from typing import Any, Iterable, Mapping
 
+from scion.core.evidence_recording.actionability_classification import (
+    same_branch_refinement_followup_counts,
+    scheduler_metadata_with_result_context,
+)
+from scion.core.evidence_recording.research_shape_diagnostics import (
+    build_campaign_research_shape_diagnostics,
+)
 from scion.core.explore_step.branch_lesson_usage import (
     branch_lesson_usage_missing_block_prefix,
     branch_lesson_usage_reason_prefixes,
@@ -18,9 +25,6 @@ from scion.core.explore_step.generic_mechanism_signature import (
     generic_signature_payload_from_key,
 )
 from scion.core.models import StepRecord
-from scion.core.evidence_recording.research_shape_diagnostics import (
-    build_campaign_research_shape_diagnostics,
-)
 
 _SCHEMA_VERSION = "cross_branch_research_observability.v1"
 _POLICY = "proposal_observability_only"
@@ -118,6 +122,9 @@ def build_cross_branch_research_observability(
     )
     same_branch_refinement_not_selected_count = (
         _same_branch_refinement_not_selected_count(scheduler_metadata)
+    )
+    accepted_clean_fork_policy_choice_count = (
+        _accepted_clean_fork_policy_choice_count(scheduler_metadata)
     )
     repeated_contract_reroute_count = _repeated_contract_reroute_count(
         safe_steps,
@@ -227,6 +234,9 @@ def build_cross_branch_research_observability(
         "same_branch_refinement_not_selected_count": (
             same_branch_refinement_not_selected_count
         ),
+        "accepted_clean_fork_policy_choice_count": (
+            accepted_clean_fork_policy_choice_count
+        ),
         "repeated_contract_reroute_count": repeated_contract_reroute_count,
         "novelty_pressure_seen_count": novelty_pressure_seen_count,
         "cross_branch_map_seen_count": cross_branch_map_seen_count,
@@ -303,8 +313,7 @@ def _scheduler_metadata(
     for record in records:
         if not isinstance(record, Mapping):
             continue
-        value = record.get("scheduler_audit_metadata")
-        metadata.append(value if isinstance(value, Mapping) else record)
+        metadata.append(scheduler_metadata_with_result_context(record))
     return metadata
 
 
@@ -716,14 +725,9 @@ def _same_branch_refinement_allowance_count(
     steps: Iterable[StepRecord],
     metadata: Iterable[Mapping[str, Any]],
 ) -> int:
-    selected = sum(
-        1
-        for item in metadata
-        if item.get("same_branch_refinement_selected") is True
-        or item.get("pre_finalizer_same_branch_refinement_selected") is True
-        or str(item.get("post_finalizer_actual_branch_action") or "")
-        == "continue_same_branch"
-    )
+    selected = same_branch_refinement_followup_counts(metadata)[
+        "selected_same_branch_refinement_count"
+    ]
     if selected:
         return selected
     return len(
@@ -734,12 +738,17 @@ def _same_branch_refinement_allowance_count(
 def _same_branch_refinement_not_selected_count(
     metadata: Iterable[Mapping[str, Any]],
 ) -> int:
-    count = 0
-    for item in metadata:
-        reason = str(item.get("same_branch_refinement_not_selected_reason") or "")
-        if reason or item.get("clean_fork_selected") is True:
-            count += 1
-    return count
+    return same_branch_refinement_followup_counts(metadata)[
+        "not_selected_same_branch_refinement_count"
+    ]
+
+
+def _accepted_clean_fork_policy_choice_count(
+    metadata: Iterable[Mapping[str, Any]],
+) -> int:
+    return same_branch_refinement_followup_counts(metadata)[
+        "accepted_clean_fork_policy_choice_count"
+    ]
 
 
 def _repeated_contract_reroute_count(

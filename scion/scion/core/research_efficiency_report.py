@@ -11,10 +11,14 @@ import re
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 import yaml
 
+from scion.core.evidence_recording.actionability_classification import (
+    same_branch_refinement_followup_counts,
+    scheduler_metadata_with_result_context,
+)
 from scion.core.evidence_recording.common import reduced_measurement_readiness_payload
 
 SCHEMA_VERSION = "scion.research_efficiency_report.v1"
@@ -107,6 +111,9 @@ def build_research_efficiency_report(
     cross_branch_observability = _mapping_value(
         summary.get("cross_branch_research_observability")
     ) or _mapping_value(status.get("cross_branch_research_observability"))
+    same_branch_followup_projection = _same_branch_followup_projection_from_steps(
+        steps
+    )
     research_shape_diagnostics = _mapping_value(
         cross_branch_observability.get("research_shape_diagnostics")
     )
@@ -272,11 +279,13 @@ def build_research_efficiency_report(
             research_shape_diagnostics
         ),
         "cross_branch_observability": _compact_cross_branch_observability(
-            cross_branch_observability
+            cross_branch_observability,
+            same_branch_followup_projection=same_branch_followup_projection,
         ),
         "research_continuity": _research_continuity_metrics(
             cross_branch_observability,
             research_shape_diagnostics,
+            same_branch_followup_projection=same_branch_followup_projection,
         ),
         "fresh_runtime_replay_drain": {
             "attempts": _first_int(
@@ -766,11 +775,36 @@ def _compact_research_shape_diagnostics(
     }
 
 
+def _same_branch_followup_projection_from_steps(
+    steps: Iterable[Any],
+) -> dict[str, int]:
+    metadata: list[Mapping[str, Any]] = []
+    for step in steps:
+        if not isinstance(step, Mapping):
+            continue
+        audit = step.get("scheduler_audit_metadata")
+        if not isinstance(audit, Mapping):
+            continue
+        metadata.append(scheduler_metadata_with_result_context(step))
+    if not metadata:
+        return {}
+    counts = same_branch_refinement_followup_counts(metadata)
+    return counts if any(counts.values()) else {}
+
+
 def _compact_cross_branch_observability(
     observability: Mapping[str, Any],
+    *,
+    same_branch_followup_projection: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
     if not isinstance(observability, Mapping) or not observability:
         return {}
+    followup = same_branch_followup_projection or {}
+    projected_selected = (
+        followup.get("selected_same_branch_refinement_count")
+        if _int_or_zero(followup.get("selected_same_branch_refinement_count")) > 0
+        else None
+    )
     return {
         "schema_version": _first_str(observability.get("schema_version")),
         "policy": _first_str(observability.get("policy")),
@@ -844,10 +878,16 @@ def _compact_cross_branch_observability(
             observability.get("weak_positive_transfer_reject_count")
         ),
         "same_branch_refinement_allowance_count": _first_int(
+            projected_selected,
             observability.get("same_branch_refinement_allowance_count")
         ),
         "same_branch_refinement_not_selected_count": _first_int(
+            followup.get("not_selected_same_branch_refinement_count"),
             observability.get("same_branch_refinement_not_selected_count")
+        ),
+        "accepted_clean_fork_policy_choice_count": _first_int(
+            followup.get("accepted_clean_fork_policy_choice_count"),
+            observability.get("accepted_clean_fork_policy_choice_count")
         ),
         "reason_code_counts": _mapping_value(observability.get("reason_code_counts")),
     }
@@ -856,15 +896,29 @@ def _compact_cross_branch_observability(
 def _research_continuity_metrics(
     observability: Mapping[str, Any],
     research_shape_diagnostics: Mapping[str, Any],
+    *,
+    same_branch_followup_projection: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
     if not isinstance(observability, Mapping) or not observability:
         return {}
     shape = _mapping_value(research_shape_diagnostics)
+    followup = same_branch_followup_projection or {}
+    projected_selected = (
+        followup.get("selected_same_branch_refinement_count")
+        if _int_or_zero(followup.get("selected_same_branch_refinement_count")) > 0
+        else None
+    )
     selected_same_branch = _int_or_zero(
-        observability.get("same_branch_refinement_allowance_count")
+        _first_int(
+            projected_selected,
+            observability.get("same_branch_refinement_allowance_count"),
+        )
     )
     not_selected_same_branch = _int_or_zero(
-        observability.get("same_branch_refinement_not_selected_count")
+        _first_int(
+            followup.get("not_selected_same_branch_refinement_count"),
+            observability.get("same_branch_refinement_not_selected_count"),
+        )
     )
     same_branch_opportunities = selected_same_branch + not_selected_same_branch
 
@@ -900,6 +954,35 @@ def _research_continuity_metrics(
     )
     semantic_mismatch_blocks = _int_or_zero(
         observability.get("branch_lesson_usage_semantic_mismatch_block_count")
+    )
+    semantic_failure_counts = _nonzero_counts(
+        {
+            "missing": missing_blocks,
+            "metadata_only": metadata_only,
+            "linkage_unrecognized": linkage_unrecognized,
+            "semantic_mismatch": semantic_mismatch,
+        }
+    )
+    semantic_block_counts = _nonzero_counts(
+        {
+            "missing": missing_blocks,
+            "metadata_only": metadata_only_blocks,
+            "linkage_unrecognized": linkage_unrecognized_blocks,
+            "semantic_mismatch": semantic_mismatch_blocks,
+        }
+    )
+    semantic_failure_total = sum(semantic_failure_counts.values())
+    semantic_block_total = sum(semantic_block_counts.values())
+    semantic_gap_count = max(
+        0,
+        lesson_requirements - lessons_satisfied,
+        semantic_failure_total,
+        semantic_block_total,
+    )
+    semantic_gap_denominator = max(
+        semantic_gap_count,
+        lessons_present,
+        lesson_requirements,
     )
     weak_positive_accepts = _int_or_zero(
         observability.get("weak_positive_transfer_count")
@@ -945,31 +1028,17 @@ def _research_continuity_metrics(
             "linkage_unrecognized_block_count": linkage_unrecognized_blocks,
             "semantic_mismatch_count": semantic_mismatch,
             "semantic_mismatch_block_count": semantic_mismatch_blocks,
-            "semantic_failure_counts": _nonzero_counts(
-                {
-                    "missing": missing_blocks,
-                    "metadata_only": metadata_only,
-                    "linkage_unrecognized": linkage_unrecognized,
-                    "semantic_mismatch": semantic_mismatch,
-                }
-            ),
-            "semantic_block_counts": _nonzero_counts(
-                {
-                    "missing": missing_blocks,
-                    "metadata_only": metadata_only_blocks,
-                    "linkage_unrecognized": linkage_unrecognized_blocks,
-                    "semantic_mismatch": semantic_mismatch_blocks,
-                }
-            ),
+            "semantic_failure_counts": semantic_failure_counts,
+            "semantic_block_counts": semantic_block_counts,
             "satisfaction_rate": _safe_ratio(
                 lessons_satisfied,
                 lesson_requirements,
             ),
             "present_rate": _safe_ratio(lessons_present, lesson_requirements),
-            "semantic_gap_count": max(0, lessons_present - lessons_satisfied),
+            "semantic_gap_count": semantic_gap_count,
             "semantic_gap_rate": _safe_ratio(
-                max(0, lessons_present - lessons_satisfied),
-                max(lessons_present, lesson_requirements),
+                semantic_gap_count,
+                semantic_gap_denominator,
             ),
         },
         "weak_positive_transfer": {
