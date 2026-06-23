@@ -11,6 +11,7 @@ from scion.core.branch_hygiene import (
     branch_has_actionable_diagnostic,
     branch_has_retained_checkpoint,
     branch_is_parked_lineage,
+    branch_mechanism_evidence_contract,
     is_branch_lifecycle_policy_block,
 )
 from scion.core.models import Branch
@@ -233,9 +234,7 @@ def _branch_fresh_runtime_followup(branch: Branch | None) -> dict[str, Any]:
 
 
 def _branch_mechanism_evidence_contract(branch: Branch | None) -> dict[str, Any]:
-    evidence = _branch_evidence_summary(branch)
-    value = evidence.get("mechanism_evidence_contract")
-    return dict(value) if isinstance(value, Mapping) else {}
+    return branch_mechanism_evidence_contract(branch)
 
 
 def _branch_code_retention_status(branch: Branch | None) -> str:

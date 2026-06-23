@@ -4,6 +4,9 @@ import uuid
 from datetime import datetime, timedelta
 import pytest
 
+from scion.core.branch_hygiene import (
+    MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON,
+)
 from scion.core.branch_lifecycle_policy import BRANCH_LIFECYCLE_PARK_LINEAGE
 from scion.core.models import Branch, BranchState
 from scion.core.scheduler import (
@@ -311,6 +314,69 @@ def test_quality_regression_without_actionable_diagnostic_releases_active_slot()
     assert action.slot == "explore_new"
     assert action.reason == "new_exploration_slot_available"
     assert action.audit_metadata["low_value_active_slot_release"] is True
+
+
+def test_quality_regression_mechanism_contract_followup_beats_clean_fork_pressure():
+    diagnostic = _branch(
+        BranchState.EXPLORE,
+        created_offset_s=10,
+        updated_offset_s=10,
+    )
+    diagnostic.branch_id = "mechanism-contract-diagnostic"
+    diagnostic.direction = "generic mechanism diagnostic"
+    diagnostic.branch_code_status = "active_quality_regression"
+    diagnostic.last_screening_feedback_tier = "quality_regression"
+    diagnostic.branch_mechanism_ids = ("quality_probe",)
+    diagnostic.branch_evidence_summary = {
+        "stage": "screening",
+        "tier": "quality_regression",
+        "wins": 0,
+        "losses": 1,
+        "ties": 7,
+        "mechanism_evidence_contract": {
+            "schema_version": "scion.mechanism_evidence_contract.v1",
+            "primary_status": "declared_not_triggered",
+            "followup_required": True,
+            "decision_features_excluded": True,
+            "repair_mechanism_ids": ["quality_probe"],
+            "reason_codes": ["MECHANISM_DECLARED_NOT_TRIGGERED"],
+        },
+    }
+    pressure = _branch(
+        BranchState.EXPLORE,
+        created_offset_s=0,
+        updated_offset_s=0,
+    )
+    pressure.branch_id = "runtime-pressure-no-effect"
+    pressure.direction = "generic runtime pressure"
+    pressure.branch_code_status = "active_no_effect"
+    pressure.last_screening_feedback_tier = "no_effect"
+    pressure.branch_mechanism_ids = ("runtime_probe",)
+    pressure.branch_evidence_summary = {
+        "stage": "screening",
+        "tier": "no_effect",
+        "wins": 0,
+        "losses": 0,
+        "ties": 8,
+        "runtime_evidence_confidence": "low_cached_champion",
+        "runtime_evidence_status": "insufficient",
+        "runtime_evidence_pressure_count": 2,
+    }
+
+    action = Scheduler(max_active_branches=3).select_next([pressure, diagnostic])
+    inventory = active_slot_inventory([pressure, diagnostic], max_active_branches=3)
+    status = branch_scheduling_status(diagnostic)
+
+    assert status.lane == "diagnostic_followup"
+    assert status.next_action_reason == (
+        MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON
+    )
+    assert branch_active_slot_release_reason(diagnostic) == ""
+    assert inventory["used"] == 2
+    assert action.action == "run_existing"
+    assert action.branch is diagnostic
+    assert action.slot == "repair_diagnostic"
+    assert action.reason == MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON
 
 
 def test_scheduler_facade_uses_extracted_low_value_release_signal():

@@ -142,6 +142,10 @@ def branch_mechanism_ids(branch: Branch | None) -> tuple[str, ...]:
     return tuple(dict.fromkeys(ids))
 
 
+def branch_mechanism_evidence_contract(branch: Branch | None) -> dict[str, Any]:
+    return dict(_branch_mechanism_evidence_contract(branch))
+
+
 def branch_mechanism_contract_repair_ids(branch: Branch | None) -> tuple[str, ...]:
     detail = branch_mechanism_contract_followup(branch)
     return tuple(detail.get("repair_mechanism_ids", ()))
@@ -993,6 +997,7 @@ __all__ = [
     "branch_hygiene_guidance",
     "branch_is_parked_lineage",
     "branch_lineage_status",
+    "branch_mechanism_evidence_contract",
     "branch_mechanism_contract_followup",
     "branch_mechanism_contract_followup_required",
     "branch_mechanism_contract_repair_ids",

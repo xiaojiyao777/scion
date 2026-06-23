@@ -4,6 +4,7 @@ from typing import Any, Callable, Iterable, List, Literal, Mapping, Optional
 
 from scion.core.branch_hygiene import (
     BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
+    MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON,
     branch_is_parked_lineage,
     branch_lifecycle_new_mechanism_ineligible,
     branch_requires_same_mechanism_followup,
@@ -161,20 +162,9 @@ class Scheduler:
             and b.state != BranchState.BLOCKED_INFRA
             and not branch_is_parked_lineage(b)
             and not _branch_has_decision_origin_park_marker(b)
-            and (
-                not _retained_checkpoint_no_effect_current_head(b)
-                or _same_mechanism_low_signal_followup_candidate(b)
-            )
-            and (
-                not _no_effect_slot_release_preferred(b)
-                or _branch_same_branch_refinement_sampling_candidate(b)
-                or _same_mechanism_low_signal_followup_candidate(b)
-            )
-            and not _quality_regression_slot_release_preferred(b)
-            and (
-                not _branch_lifecycle_budget_exhausted(b)
-                or _branch_plateau_gate_same_branch_candidate(b)
-                or _same_mechanism_low_signal_followup_candidate(b)
+            and _low_value_filters_allow(
+                b,
+                scheduling_statuses[b.branch_id],
             )
         ]
 
@@ -209,6 +199,9 @@ class Scheduler:
                     not _branch_lifecycle_budget_exhausted(branch)
                     or _branch_plateau_gate_same_branch_candidate(branch)
                     or _same_mechanism_low_signal_followup_candidate(branch)
+                    or _required_branch_local_diagnostic_followup(
+                        scheduling_statuses[branch.branch_id]
+                    )
                 )
             ]
             if not eligible_research:
@@ -249,6 +242,23 @@ class Scheduler:
                             selected
                         )
                     ),
+                )
+            required_branch_local_followup_candidates = [
+                branch
+                for branch in eligible_research
+                if _required_branch_local_diagnostic_followup(
+                    scheduling_statuses[branch.branch_id]
+                )
+            ]
+            if required_branch_local_followup_candidates:
+                selected = _select_budgeted(
+                    required_branch_local_followup_candidates
+                )
+                return SchedulerAction(
+                    action="run_existing",
+                    branch=selected,
+                    reason=_reason_for_branch(selected),
+                    slot=_slot_for_branch(selected),
                 )
             same_branch_sample_candidates = [
                 branch
@@ -449,6 +459,40 @@ def _merge_audit_metadata(*items: Mapping[str, Any]) -> dict[str, Any]:
         if item:
             merged.update(dict(item))
     return merged
+
+
+def _required_branch_local_diagnostic_followup(status: Any) -> bool:
+    return bool(
+        getattr(status, "schedulable", False)
+        and not str(getattr(status, "release_reason", "") or "")
+        and str(getattr(status, "lane", "") or "") == "diagnostic_followup"
+        and str(getattr(status, "next_action_reason", "") or "")
+        == MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON
+    )
+
+
+def _low_value_filters_allow(branch: Branch, scheduling_status: Any) -> bool:
+    # BranchSchedulingStatus owns required follow-up semantics; older
+    # low-value release predicates must not override that generic contract.
+    if _required_branch_local_diagnostic_followup(scheduling_status):
+        return True
+    return (
+        (
+            not _retained_checkpoint_no_effect_current_head(branch)
+            or _same_mechanism_low_signal_followup_candidate(branch)
+        )
+        and (
+            not _no_effect_slot_release_preferred(branch)
+            or _branch_same_branch_refinement_sampling_candidate(branch)
+            or _same_mechanism_low_signal_followup_candidate(branch)
+        )
+        and not _quality_regression_slot_release_preferred(branch)
+        and (
+            not _branch_lifecycle_budget_exhausted(branch)
+            or _branch_plateau_gate_same_branch_candidate(branch)
+            or _same_mechanism_low_signal_followup_candidate(branch)
+        )
+    )
 
 
 def _same_mechanism_low_signal_followup_candidate(branch: Branch) -> bool:
