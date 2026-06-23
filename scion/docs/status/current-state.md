@@ -53,14 +53,24 @@ chronology belongs in focused experiment reports and git history.
   weak-positive follow-up, target-intent authority, mechanism-evidence
   follow-up, and MDE-aware rejection. It still lacks solver improvement or
   promotion.
-- Warehouse has positive movement evidence from earlier v2-to-v3 work. A fresh
-  positive-control run is now active on WSL from synchronized status/runtime
-  commit `2f8e9f21`:
+- Warehouse has positive movement evidence from earlier v2-to-v3 work. The
+  fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
+  finished valid/complete and postrun-ready:
   `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-2f8e9f21-current-8r-gpt55-20260623T161630Z-claw`.
+  The local mirror is
+  `/home/clawd/research/scion-experiments/v04-wh-v2-positive-2f8e9f21-current-8r-gpt55-20260623T161630Z-claw`.
   Strict launch readiness passed before launch, including runtime commit match,
   clean runtime guard paths, complete prepared contract, warehouse v2 follow-up
   handoff, prepared prompt-context readiness, and healthy `gpt-5.5` completion
-  preflight. Root `run_status.json` is `running`; `run.sh` PID is `838819`.
+  preflight. Run counters: 8 of 8 effective Protocol rows, 10 screening metric
+  rows, 6 proposal quality blocks, 0 active-slot blocks, wrapper/postrun exit
+  `0`, and no postrun readiness failures. It did not produce a new champion:
+  starting/current champion version is `2`/`2`, champion version gain is `0`,
+  and every protocol-effect row is below MDE. Postrun interpretation is
+  `protocol_evaluated_plateau_review_ready`, with no evidence gaps and no
+  research-context actionability gaps. Research behavior is nevertheless
+  effective: max branch depth is 8, all 11 observed same-mechanism follow-up
+  opportunities were selected, and the active shape is `deep_focused`.
 - The old live CVRP solver-depth follow-up root
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-mechfollowup-readyfix-6r-gpt55-20260623T115013Z-claw`
   has finished and was mirrored locally to
@@ -73,10 +83,11 @@ chronology belongs in focused experiment reports and git history.
   missing, and launch/readiness reports the checkout changed while the process
   was live. Use it as live-run research evidence only, not as clean acceptance
   for Designs L/M.
-- The next operational action is to monitor the active warehouse
-  positive-control run, then run WSL postrun rebuild/readiness and inspect
-  whether warehouse continuous optimization has recovered under the current
-  runtime and guidance repairs.
+- The next operational action is branch-level analysis of the completed
+  warehouse plateau-review root. Treat it as clean evidence for effective
+  warehouse research and as a current plateau candidate, not as continuous
+  promotion. Do not launch another warehouse run until this plateau/continuity
+  analysis says whether a repeat is needed.
 
 ## WSL Runner
 
@@ -130,8 +141,10 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 
 ## Problem Frontiers
 
-- Warehouse: recover continuous improvement behavior from champion `v2` without
-  misclassifying guidance-binding or quality-feedback defects as a true plateau.
+- Warehouse: the current clean v2 follow-up is plateau-review-ready rather than
+  a new promotion. Analyze whether the `deep_focused` no-effect trajectory is a
+  real post-v2 plateau or whether a narrow repeat is required before accepting
+  plateau.
 - CVRP: use A/A MDE and case variance while seeking branch depth,
   same-mechanism follow-up, and solver-design improvements. Existing framework
   roots show rejection/repair behavior but no solver promotion yet.
@@ -141,13 +154,13 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 
 ## Next Actions
 
-1. Monitor active WSL warehouse root
-   `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-2f8e9f21-current-8r-gpt55-20260623T161630Z-claw`
-   until it exits.
-2. Run WSL postrun rebuild/readiness, mirror the root locally, and only then
-   interpret plateau or promotion behavior.
-3. Evaluate runs for effective research behavior: warehouse continuous
-   optimization, CVRP branch depth and solver-design follow-up, MDE-aware
+1. Analyze the mirrored warehouse root for plateau vs missed continuous
+   improvement: branch depth 8, same-mechanism follow-up 11/11, no positive
+   effect at or above MDE, proposal-quality taxonomy, and branch lessons.
+2. Decide whether one narrow warehouse repeat is needed for plateau confidence
+   or whether v0.4 should pivot back to CVRP/VRP solver-design follow-up.
+3. Keep evaluating v0.4 against effective research behavior: warehouse plateau
+   evidence, CVRP branch depth and solver-design follow-up, MDE-aware
    rejection, and absence of framework-control blockers.
 
 ## Pointers
