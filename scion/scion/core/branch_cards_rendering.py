@@ -200,6 +200,15 @@ def _format_evidence_summary(summary: Mapping[str, Any]) -> str:
         parts.append(f"mechanism_contract_status:{mechanism_status}")
     if summary.get("mechanism_followup_required"):
         parts.append("mechanism_followup_required:true")
+    mechanism_repair_ids = summary.get("mechanism_repair_ids")
+    if isinstance(mechanism_repair_ids, (list, tuple)) and mechanism_repair_ids:
+        repair_text = "|".join(
+            str(item).strip()
+            for item in mechanism_repair_ids
+            if str(item).strip()
+        )
+        if repair_text:
+            parts.append(f"mechanism_repair_ids:{repair_text}")
     return ",".join(parts)
 
 

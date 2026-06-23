@@ -56,6 +56,9 @@ BRANCH_FINAL_CLASSIFICATION_SCHEMA = "scion.branch_final_classification.v1"
 FRESH_RUNTIME_REPLAY_BLOCKED_MISSING_IDENTITY = (
     "fresh_runtime_replay_blocked_missing_identity"
 )
+MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON = (
+    "mechanism_contract_branch_local_followup"
+)
 PARKED_BRANCH_CODE_STATUSES = frozenset(
     {
         "parked",
@@ -118,26 +121,51 @@ def branch_requires_same_mechanism_followup(branch: Branch | None) -> bool:
         status in FOLLOWUP_ONLY_BRANCH_CODE_STATUSES
         or status.startswith("active_")
         or branch_requires_repair_focus(branch)
+        or branch_mechanism_contract_followup_required(branch)
     )
 
 
 def branch_mechanism_ids(branch: Branch | None) -> tuple[str, ...]:
     if branch is None:
         return ()
-    ids = [
+    ids: list[str] = [
         str(item).strip()
         for item in (getattr(branch, "branch_mechanism_ids", ()) or ())
         if str(item).strip()
     ]
-    if not ids:
-        ids = [
-            str(item).strip()
-            for item in (
-                getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
-            )
-            if str(item).strip()
-        ]
+    ids.extend(
+        str(item).strip()
+        for item in (getattr(branch, "telemetry_repair_mechanism_ids", ()) or ())
+        if str(item).strip()
+    )
+    ids.extend(branch_mechanism_contract_repair_ids(branch))
     return tuple(dict.fromkeys(ids))
+
+
+def branch_mechanism_contract_repair_ids(branch: Branch | None) -> tuple[str, ...]:
+    detail = branch_mechanism_contract_followup(branch)
+    return tuple(detail.get("repair_mechanism_ids", ()))
+
+
+def branch_mechanism_contract_followup(branch: Branch | None) -> dict[str, Any]:
+    contract = _branch_mechanism_evidence_contract(branch)
+    if not mechanism_contract_followup_required(contract):
+        return {}
+    repair_ids = _contract_repair_mechanism_ids(contract)
+    if not repair_ids:
+        repair_ids = _contract_declared_mechanism_ids(contract)
+    return {
+        "schema_version": "scion.mechanism_contract_branch_followup.v1",
+        "followup_required": True,
+        "reason": MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON,
+        "primary_status": str(contract.get("primary_status") or "unknown"),
+        "primary_mechanism_id": str(contract.get("primary_mechanism_id") or ""),
+        "repair_mechanism_ids": list(repair_ids),
+        "declared_mechanism_ids": list(_contract_declared_mechanism_ids(contract)),
+        "reason_codes": list(_contract_reason_codes(contract)),
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+    }
 
 
 def hard_telemetry_repair_reason_present(reason_codes: Iterable[str] | None) -> bool:
@@ -267,16 +295,13 @@ def branch_has_actionable_diagnostic(branch: Branch | None) -> bool:
         return True
     if getattr(branch, "branch_lifecycle_policy_blocks", 0):
         return True
-    if _branch_mechanism_contract_followup_required(branch):
+    if branch_mechanism_contract_followup_required(branch):
         return True
     return False
 
 
-def _branch_mechanism_contract_followup_required(branch: Branch | None) -> bool:
-    summary = _branch_evidence_summary(branch)
-    return mechanism_contract_followup_required(
-        summary.get("mechanism_evidence_contract")
-    )
+def branch_mechanism_contract_followup_required(branch: Branch | None) -> bool:
+    return bool(branch_mechanism_contract_followup(branch))
 
 
 def branch_fresh_runtime_replay_blocked(branch: Branch | None) -> bool:
@@ -289,6 +314,7 @@ def branch_lifecycle_closure_classification(
     """Return deterministic branch lifecycle/status classification for reports."""
     state = _branch_state_value(branch)
     blocked = _fresh_runtime_replay_blocked_diagnostic(branch)
+    mechanism_followup = branch_mechanism_contract_followup(branch)
     if branch is None:
         classification = "unknown"
         next_action = "inspect_branch_state"
@@ -309,6 +335,11 @@ def branch_lifecycle_closure_classification(
         next_action = "clean_fork_or_restore_replay_identity"
         reason = FRESH_RUNTIME_REPLAY_BLOCKED_MISSING_IDENTITY
         detail = blocked
+    elif mechanism_followup:
+        classification = "active_with_required_follow_up"
+        next_action = "required_follow_up"
+        reason = MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON
+        detail = mechanism_followup
     else:
         followup = _fresh_runtime_followup_marker(branch)
         if _fresh_runtime_required(branch, followup) or bool(
@@ -754,6 +785,36 @@ def _branch_evidence_summary(branch: Branch | None) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
+def _branch_mechanism_evidence_contract(branch: Branch | None) -> Mapping[str, Any]:
+    summary = _branch_evidence_summary(branch)
+    value = summary.get("mechanism_evidence_contract")
+    return value if isinstance(value, Mapping) else {}
+
+
+def _contract_repair_mechanism_ids(contract: Mapping[str, Any]) -> tuple[str, ...]:
+    return _clean_string_tuple(contract.get("repair_mechanism_ids"))
+
+
+def _contract_declared_mechanism_ids(contract: Mapping[str, Any]) -> tuple[str, ...]:
+    ids = list(_clean_string_tuple(contract.get("declared_mechanism_ids")))
+    primary = str(contract.get("primary_mechanism_id") or "").strip()
+    if primary:
+        ids.append(primary)
+    return tuple(dict.fromkeys(ids))
+
+
+def _contract_reason_codes(contract: Mapping[str, Any]) -> tuple[str, ...]:
+    return _clean_string_tuple(contract.get("reason_codes"))
+
+
+def _clean_string_tuple(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value.strip(),) if value.strip() else ()
+    if not isinstance(value, Iterable) or isinstance(value, Mapping):
+        return ()
+    return tuple(dict.fromkeys(str(item).strip() for item in value if str(item).strip()))
+
+
 def _fresh_runtime_followup_marker(branch: Branch | None) -> Mapping[str, Any]:
     summary = _branch_evidence_summary(branch)
     value = summary.get("fresh_runtime_followup")
@@ -904,6 +965,7 @@ __all__ = [
     "CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM",
     "FRESH_RUNTIME_REPLAY_BLOCKED_MISSING_IDENTITY",
     "FOLLOWUP_ONLY_BRANCH_CODE_STATUSES",
+    "MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON",
     "OPEN_EXPLORATION_ALLOWED",
     "PARKED_BRANCH_CODE_STATUSES",
     "REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK",
@@ -931,6 +993,9 @@ __all__ = [
     "branch_hygiene_guidance",
     "branch_is_parked_lineage",
     "branch_lineage_status",
+    "branch_mechanism_contract_followup",
+    "branch_mechanism_contract_followup_required",
+    "branch_mechanism_contract_repair_ids",
     "branch_mechanism_ids",
     "branch_prompt_card",
     "branch_requires_repair_focus",

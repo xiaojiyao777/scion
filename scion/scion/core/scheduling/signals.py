@@ -7,11 +7,13 @@ from typing import Any, Literal, Mapping
 
 from scion.core.branch_hygiene import (
     BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE,
+    MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON,
     branch_has_actionable_diagnostic,
     branch_has_retained_checkpoint,
     branch_is_parked_lineage,
     branch_lifecycle_new_mechanism_ineligible,
     branch_lineage_status,
+    branch_mechanism_contract_followup_required,
     branch_requires_repair_focus,
 )
 from scion.core.fresh_runtime_signals import fresh_runtime_replay_trigger
@@ -691,6 +693,8 @@ def reason_for_branch(branch: Branch) -> str:
     if branch_lineage_status(branch) == "restored_checkpoint":
         return "restored_checkpoint_followup"
     if slot == "repair_diagnostic":
+        if branch_mechanism_contract_followup_required(branch):
+            return MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON
         if (
             status in {"telemetry_wiring_suspect", "telemetry_invalid"}
             or branch_requires_repair_focus(branch)

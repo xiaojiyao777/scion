@@ -20,6 +20,32 @@ def branch_hygiene_guidance_from_context(
     status = context["branch_code_status"]
     outcome = context.get("last_telemetry_outcome") or "unknown"
     tier = context.get("last_screening_feedback_tier") or "unknown"
+    if context.get("mechanism_followup_required"):
+        reroute_suffix = _branch_lifecycle_guidance_suffix(context)
+        protected = _protected_mechanism_text(context)
+        repair_ids = _mechanism_contract_repair_text(context)
+        allowed_actions = _allowed_actions_text(context)
+        mechanism_status = context.get("mechanism_contract_status") or "unknown"
+        return (
+            f"{card}; "
+            f"branch_code_status={status}; telemetry_outcome={outcome}; "
+            f"screening_tier={tier}; "
+            f"mechanism_contract_status={mechanism_status}; "
+            f"mechanism_contract_repair_ids={repair_ids}; "
+            f"branch_followup_policy={context['branch_followup_policy']}; "
+            f"clean_fork_policy={context['clean_fork_policy']}; "
+            f"allowed_mechanism_ids={protected}; "
+            f"protected_mechanism_ids={protected}; "
+            f"same_mechanism_allowed_actions={allowed_actions}. "
+            "Formal telemetry did not provide usable activation/effect "
+            "evidence for the declared mechanism. Continue this branch only "
+            "as a branch-local integration, activation, effect-attribution, "
+            "or telemetry follow-up for the listed repair mechanism ids. "
+            "Do not rename the mechanism, introduce unrelated "
+            "mechanism_changes ids, or treat a later clean fork as depth on "
+            "this branch. If a different mechanism is needed, start from a "
+            f"clean branch/fork before drafting it.{reroute_suffix}"
+        )
     if context["repair_focus_required"]:
         reroute_suffix = _branch_lifecycle_guidance_suffix(context)
         protected = _protected_mechanism_text(context)
@@ -141,6 +167,21 @@ def _protected_mechanism_text(context: Mapping[str, Any]) -> str:
         for item in (context.get("protected_mechanism_ids") or ())
         if str(item).strip()
     ]
+    return ", ".join(ids) if ids else "unknown"
+
+
+def _mechanism_contract_repair_text(context: Mapping[str, Any]) -> str:
+    ids = [
+        str(item).strip()
+        for item in (context.get("mechanism_contract_repair_ids") or ())
+        if str(item).strip()
+    ]
+    if not ids:
+        ids = [
+            str(item).strip()
+            for item in (context.get("repair_mechanism_ids") or ())
+            if str(item).strip()
+        ]
     return ", ".join(ids) if ids else "unknown"
 
 

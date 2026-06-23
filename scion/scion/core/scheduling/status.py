@@ -6,11 +6,13 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from scion.core.branch_hygiene import (
+    MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON,
     branch_code_status,
     branch_fresh_runtime_replay_blocked,
     branch_has_actionable_diagnostic,
     branch_is_parked_lineage,
     branch_lineage_status,
+    branch_mechanism_contract_followup_required,
     branch_requires_repair_focus,
     branch_requires_same_mechanism_followup,
 )
@@ -268,6 +270,8 @@ def _schedulable_lane(
         getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
     ):
         return "diagnostic_followup", "telemetry_diagnostic_followup"
+    if branch_mechanism_contract_followup_required(branch):
+        return "diagnostic_followup", MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON
     if explicit_current_tier and evidence_tier in _NON_ACTIONABLE_TIERS:
         if _has_actionable_recovery(branch):
             return "diagnostic_followup", "current_evidence_diagnostic_followup"

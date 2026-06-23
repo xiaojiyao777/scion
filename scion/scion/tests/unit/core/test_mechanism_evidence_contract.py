@@ -2,7 +2,18 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from scion.core.branch_cards import (
+    branch_hygiene_context,
+    branch_hygiene_guidance,
+    branch_prompt_card,
+)
 from scion.core.branch_hygiene import branch_has_actionable_diagnostic
+from scion.core.branch_hygiene import (
+    MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON,
+    branch_lifecycle_closure_classification,
+    branch_mechanism_ids,
+    branch_requires_same_mechanism_followup,
+)
 from scion.core.decision_lifecycle_actions import (
     update_branch_screening_evidence_summary,
 )
@@ -84,6 +95,31 @@ def test_evaluated_no_effect_contract_is_not_repair_followup() -> None:
     ]
 
 
+def test_evaluated_no_effect_ignores_repairable_flag() -> None:
+    protocol = _protocol_with_guard(
+        {
+            "declared_mechanisms": ["mechanism_beta"],
+            "mechanism_diagnostics": [
+                {
+                    "mechanism": "mechanism_beta",
+                    "activation_status": "observed",
+                    "runtime_status": "observed",
+                    "effect_status": "zero",
+                    "diagnostic_kind": EVALUATED_NO_EFFECT,
+                    "repairable": True,
+                }
+            ],
+        }
+    )
+
+    contract = mechanism_evidence_contract_for_protocol(protocol)
+
+    assert contract["primary_status"] == "observed_no_effect"
+    assert contract["followup_required"] is False
+    assert contract["repairable"] is False
+    assert contract["repair_mechanism_ids"] == []
+
+
 def test_inactive_branch_with_mechanism_contract_followup_is_schedulable() -> None:
     branch = Branch(
         branch_id="inactive-mechanism-followup",
@@ -117,6 +153,10 @@ def test_inactive_branch_with_mechanism_contract_followup_is_schedulable() -> No
     status = branch_scheduling_status(branch)
     action = Scheduler(max_active_branches=1).select_next([branch])
     summary = branch.branch_evidence_summary
+    context = branch_hygiene_context(branch)
+    guidance = branch_hygiene_guidance(branch)
+    card = branch_prompt_card(branch)
+    classification = branch_lifecycle_closure_classification(branch)
 
     assert summary["mechanism_evidence_contract"]["followup_required"] is True
     assert summary["mechanism_evidence_contract"]["repair_mechanism_ids"] == [
@@ -127,12 +167,25 @@ def test_inactive_branch_with_mechanism_contract_followup_is_schedulable() -> No
     )
     assert summary["phase_activation_summary"]["mechanism_followup_required"] is True
     assert branch_has_actionable_diagnostic(branch) is True
+    assert branch_requires_same_mechanism_followup(branch) is True
+    assert branch_mechanism_ids(branch) == ("mechanism_gamma",)
     assert status.lane == "diagnostic_followup"
+    assert status.next_action_reason == MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON
     assert status.release_reason == ""
     assert status.consumes_active_slot is True
     assert action.action == "run_existing"
     assert action.branch is branch
     assert action.slot == "repair_diagnostic"
+    assert action.reason == MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON
+    assert classification["classification"] == "active_with_required_follow_up"
+    assert classification["reason"] == MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON
+    assert classification["detail"]["repair_mechanism_ids"] == ["mechanism_gamma"]
+    assert context["mechanism_contract_repair_ids"] == ["mechanism_gamma"]
+    assert context["protected_mechanism_ids"] == ["mechanism_gamma"]
+    assert context["allowed_mechanism_ids"] == ["mechanism_gamma"]
+    assert context["repair_mechanism_ids"] == ["mechanism_gamma"]
+    assert "mechanism_contract_repair_ids=mechanism_gamma" in guidance
+    assert "mechanism_repair_ids:mechanism_gamma" in card
 
 
 def test_inactive_branch_without_contract_followup_releases_slot() -> None:

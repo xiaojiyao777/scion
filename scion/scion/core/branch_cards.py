@@ -82,6 +82,7 @@ from scion.core.branch_hygiene import (
     branch_lifecycle_closure_classification,
     branch_lifecycle_reroute_context,
     branch_lineage_status,
+    branch_mechanism_contract_followup,
     branch_mechanism_ids,
     branch_requires_repair_focus,
     branch_requires_same_mechanism_followup,
@@ -232,10 +233,20 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         fresh_runtime_followup.get("fresh_runtime_required")
     )
     mechanism_evidence_contract = _branch_mechanism_evidence_contract(branch)
+    mechanism_contract_followup = branch_mechanism_contract_followup(branch)
     mechanism_followup_required = bool(
-        mechanism_evidence_contract.get("followup_required")
-        and mechanism_evidence_contract.get("decision_features_excluded") is True
+        mechanism_contract_followup.get("followup_required")
     )
+    mechanism_contract_repair_ids = [
+        str(item)
+        for item in (mechanism_contract_followup.get("repair_mechanism_ids") or ())
+        if str(item).strip()
+    ]
+    mechanism_contract_reason_codes = [
+        str(item)
+        for item in (mechanism_contract_followup.get("reason_codes") or ())
+        if str(item).strip()
+    ]
     candidate_code_retention_status = _branch_code_retention_status(branch)
     evidence_retention_status = _branch_evidence_retention_status(branch)
     followup_required = bool(
@@ -303,7 +314,15 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         "fresh_runtime_required": fresh_runtime_required,
         "fresh_runtime_followup": fresh_runtime_followup,
         "mechanism_evidence_contract": mechanism_evidence_contract,
+        "mechanism_contract_followup": mechanism_contract_followup,
         "mechanism_followup_required": mechanism_followup_required,
+        "mechanism_contract_status": str(
+            mechanism_evidence_contract.get("primary_status") or "unknown"
+        )
+        if mechanism_evidence_contract
+        else "unknown",
+        "mechanism_contract_repair_ids": mechanism_contract_repair_ids,
+        "mechanism_contract_reason_codes": mechanism_contract_reason_codes,
         "final_branch_classification": final_classification,
         "branch_final_classification": classification,
         "branch_next_action": final_classification.get("next_action"),
@@ -443,7 +462,19 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
             if strict_same_mechanism_followup
             else None
         ),
-        "repair_mechanism_ids": list(
+        "repair_mechanism_ids": list(dict.fromkeys([
+            *(
+                str(item).strip()
+                for item in (
+                    getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
+                )
+                if str(item).strip()
+            ),
+            *mechanism_contract_repair_ids,
+        ]))
+        if branch is not None
+        else [],
+        "telemetry_repair_mechanism_ids": list(
             getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
         )
         if branch is not None
