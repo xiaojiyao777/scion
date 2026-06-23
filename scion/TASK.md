@@ -33,7 +33,15 @@ launcher/guidance (`48 passed`) and launch/postrun tool (`227 passed`) groups.
 The current launch-readiness comparison repair is local commit `d12a2ec8` /
 WSL commit `9b1db176`: prepared-contract consistency now compares stable split
 identity rather than environment-local `split_path` projection, and WSL conda
-`scion/scion/tests/test_launch_readiness.py` passes (`116 passed`). The
+`scion/scion/tests/test_launch_readiness.py` passes (`116 passed`). The live
+CVRP follow-up from WSL commit `9b1db176` then exposed a generic branch-card
+projection gap: the active hypothesis/code path carried
+`large_instance_intra_route_two_opt_seed`, but the branch card still reported
+`mechanism_ids=none` / `open_exploration`. Local commit `16227337` records
+verified hypothesis mechanism identity on the branch after verification pass;
+local focused branch/scheduler/verification/finalizer tests pass
+(`116 passed`). This repair is not yet synced to WSL while the live run is
+active. The
 authority validation root launched
 from WSL
 commit `542d1f99`,
@@ -75,7 +83,9 @@ is now running from WSL commit `9b1db176` after strict launch readiness passed.
 The warehouse champion-`v2` positive-control root
 `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-9b1db176-current-8r-gpt55-20260623T115446Z-claw`
 is prepared-only and strict launch-ready, but intentionally not started while
-the CVRP follow-up is live.*
+the CVRP follow-up is live. Do not use the live root's branch-card mechanism
+fields as accepted Design K evidence without accounting for the local
+`16227337` projection repair.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -664,7 +674,11 @@ Current checkpoint:
     root
     `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-mechfollowup-readyfix-6r-gpt55-20260623T115013Z-claw`
     is now running from WSL commit `9b1db176` after strict launch readiness
-    passed.
+    passed. Early live evidence shows the hypothesis/code path carrying
+    `large_instance_intra_route_two_opt_seed`, but the in-progress branch card
+    still reporting no mechanism id; local commit `16227337` fixes this generic
+    verified-hypothesis-to-branch identity persistence and should be synced only
+    after the live run is no longer using the WSL checkout.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded
