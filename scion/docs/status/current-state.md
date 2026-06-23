@@ -61,7 +61,11 @@ history when exact old chronology is needed.
   screening/protocol group (`30 passed`), py-compile, diff checks, minimal
   launch-readiness/direct launcher entry checks, plus the earlier
   launcher/guidance (`48 passed`) and launch/postrun tool (`227 passed`) groups
-  from the same synchronized code line.
+  from the same synchronized code line. The current runner is WSL commit
+  `9b1db176` / local commit `d12a2ec8`, which adds a launch-readiness comparison
+  normalization for environment-local prepared-contract `split_path`
+  projections without changing CVRP/warehouse scheduler, Decision, or Protocol
+  semantics. Local and WSL conda launch-readiness tests pass (`116 passed`).
 
 ## Current Decision
 
@@ -82,9 +86,15 @@ history when exact old chronology is needed.
   repair. The old-checkout CVRP solver-depth root also exposed the
   mechanism-evidence contract gap: screening rows can declare the target
   mechanism while formal telemetry shows the mechanism was not evaluated or
-  triggered. Treat that as integration/activation diagnostic evidence; the
-  Design K repair and follow-up focus propagation are now synced to WSL and
-  still require a synchronized rerun to prove branch-local diagnostic follow-up.
+  triggered. Treat that as integration/activation diagnostic evidence. The
+  Design K repair and follow-up focus propagation are now under synchronized
+  validation in the live CVRP solver-depth root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-mechfollowup-readyfix-6r-gpt55-20260623T115013Z-claw`,
+  launched from WSL commit `9b1db176` after strict launch readiness passed.
+  The warehouse champion-`v2` positive-control root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-9b1db176-current-8r-gpt55-20260623T115446Z-claw`
+  is prepared-only and strict launch-ready, but not launched while the CVRP
+  follow-up is live.
 - Prior CVRP missing-primary follow-up:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-missingprimary-8d28bc30-narrowavoid-4r-gpt55-20260622T171659Z-claw`
   launched from WSL commit `8d28bc30`. It passed postrun acceptance readiness
@@ -345,9 +355,11 @@ CVRP solver-depth old-checkout root:
   those rows as Design K trigger evidence: declared mechanisms that are not
   reached by the formal runtime path should create branch-local integration
   follow-up pressure rather than clean-fork breadth or solver-quality
-  conclusions. The run has been mirrored locally; the next CVRP solver-depth
-  check should launch only from the current clean WSL runner after the tested
-  follow-up commit `650d9c65`.
+  conclusions. The run has been mirrored locally. The synchronized CVRP
+  solver-depth follow-up root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-mechfollowup-readyfix-6r-gpt55-20260623T115013Z-claw`
+  is now running from WSL commit `9b1db176` after strict launch readiness
+  passed.
 
 CVRP evidence root:
 
@@ -774,13 +786,13 @@ CVRP/VRP:
 1. Treat the clean scheduler-status validation root and the target-intent
    authority validation root as accepted framework evidence; do not relaunch
    either validation shape unless a later run regresses the generic behavior.
-2. Launch the next CVRP solver-depth check only from the current clean WSL
-   runner after the tested follow-up commit `650d9c65`; continue CVRP as
-   problem-owned solver research, interpret effects against MDE, and do not add
-   VRP/CVRP exceptions to generic scheduler,
+2. Monitor the live CVRP solver-depth follow-up root from WSL commit
+   `9b1db176`; continue CVRP as problem-owned solver research, interpret
+   effects against MDE, and do not add VRP/CVRP exceptions to generic scheduler,
    proposal authority, actionability, projection, or `DecisionFeatures`.
-3. Rerun warehouse from champion `v2` as the simpler positive-control path from
-   the same synchronized WSL head. Do not accept the latest quality-blocked
+3. Launch the prepared warehouse champion-`v2` positive-control root from the
+   same synchronized WSL head after the CVRP follow-up is no longer competing
+   for live LLM/runtime resources. Do not accept the latest quality-blocked
    positive-control root as plateau evidence.
 4. Update this file and `scion/TASK.md` only when operating truth changes; keep
    detailed run evidence in focused experiment reports.

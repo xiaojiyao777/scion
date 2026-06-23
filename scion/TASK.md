@@ -25,12 +25,16 @@ signals instead of ordinary inactive clean-fork pressure; this remains
 proposal/lifecycle/scheduler evidence and stays out of `DecisionFeatures`.
 Local and WSL conda `scion` focused target-intent/proposal tests pass at the
 tightened semantics (`121 passed`). After the old WSL solver-depth run exited,
-local head `dcccbc43` was synced to WSL follow-up code commit `650d9c65`.
-WSL conda passed the Design K/core group (`54 passed`), branch/card/telemetry
-group (`35 passed`), screening/protocol group (`30 passed`), py-compile, diff
-checks, minimal launch-readiness/direct launcher entry checks, plus the earlier
-launcher/guidance (`48 passed`) and launch/postrun tool (`227 passed`) groups
-from the same synchronized code line. The authority validation root launched
+local head `dcccbc43` was synced to WSL follow-up code commit `650d9c65`, which
+passed the Design K/core group (`54 passed`), branch/card/telemetry group
+(`35 passed`), screening/protocol group (`30 passed`), py-compile, diff checks,
+minimal launch-readiness/direct launcher entry checks, plus the earlier
+launcher/guidance (`48 passed`) and launch/postrun tool (`227 passed`) groups.
+The current launch-readiness comparison repair is local commit `d12a2ec8` /
+WSL commit `9b1db176`: prepared-contract consistency now compares stable split
+identity rather than environment-local `split_path` projection, and WSL conda
+`scion/scion/tests/test_launch_readiness.py` passes (`116 passed`). The
+authority validation root launched
 from WSL
 commit `542d1f99`,
 `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-authority-542d1f99-postweakpressure-4r-gpt55-20260623T055230Z-claw`,
@@ -65,7 +69,13 @@ mechanism signal. The final current screening rows exposed the Design K trigger
 shape: the declared `large_instance_intra_route_two_opt_seed` mechanism had
 structured `not_evaluated/not_triggered` diagnostics and no same-name phase
 telemetry, so those rows are mechanism-integration evidence, not solver-quality
-conclusions.*
+conclusions. A synchronized CVRP solver-depth follow-up root
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-mechfollowup-readyfix-6r-gpt55-20260623T115013Z-claw`
+is now running from WSL commit `9b1db176` after strict launch readiness passed.
+The warehouse champion-`v2` positive-control root
+`/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-positive-9b1db176-current-8r-gpt55-20260623T115446Z-claw`
+is prepared-only and strict launch-ready, but intentionally not started while
+the CVRP follow-up is live.*
 *Updated: 2026-06-23*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -650,8 +660,11 @@ Current checkpoint:
     champion stayed `v1`, there were 0 promotions, all six rows were below MDE,
     continuity was `wide_shallow`, max branch depth was 1, and direct
     large-two-opt mechanism signal was missing. The run has been mirrored
-    locally; use it as Design K trigger evidence, then relaunch from the
-    current clean WSL runner after the tested follow-up commit `650d9c65`.
+    locally; use it as Design K trigger evidence. The synchronized follow-up
+    root
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-solverdepth-mechfollowup-readyfix-6r-gpt55-20260623T115013Z-claw`
+    is now running from WSL commit `9b1db176` after strict launch readiness
+    passed.
 - Current framework guarantees, all report-only/control-plane or problem-owned
   unless explicitly part of Protocol:
   - Measurement declarations and A/A calibration are problem-owned and excluded
