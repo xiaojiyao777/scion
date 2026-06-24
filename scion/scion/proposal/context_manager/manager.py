@@ -111,6 +111,7 @@ from .io import (
     _read_branch_code,
     _read_target_file_from_root,
 )
+from .opportunity import problem_opportunity_summary_from_adapter
 from .rendering import _format_hypothesis, _hypothesis_implementation_brief
 from .runtime import _build_runtime_feedback, _build_runtime_failure_guidance
 
@@ -938,6 +939,11 @@ class ContextManager:
             if measurement_governance_mode == "on"
             else {}
         )
+        problem_opportunity_summary = (
+            problem_opportunity_summary_from_adapter(self._adapter)
+            if measurement_governance_mode == "on"
+            else {}
+        )
         launch_research_focus = _build_launch_research_focus() or ""
 
         return {
@@ -1003,6 +1009,7 @@ class ContextManager:
             ),
             "objective_policy_guidance": objective_policy_guidance,
             "problem_measurement_diagnostics": problem_measurement_diagnostics,
+            "problem_opportunity_summary": problem_opportunity_summary,
             "objective_opportunity_profile": objective_opportunity_profile,
             "objective_guidance": objective_guidance,
             "solver_design_prompt_provider": solver_design_prompt_provider,

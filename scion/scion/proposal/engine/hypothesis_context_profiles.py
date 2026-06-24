@@ -12,6 +12,7 @@ import json
 import re
 from typing import Any, Literal, Mapping
 
+from scion.opportunity import compact_problem_opportunity_summary
 from scion.proposal.context_ablation import normalize_proposal_context_ablation
 
 HypothesisContextProfile = Literal["algorithm", "repair"]
@@ -86,6 +87,7 @@ _REPAIR_TRIGGER_KEYS = frozenset(
 _COMPACT_LEARNING_SCHEMA = "compact_cross_branch_learning.v1"
 _PROFILE_METADATA_SCHEMA = "hypothesis_context_profile.v1"
 _COMPACT_MEASUREMENT_DIAGNOSTICS_KEY = "compact_problem_measurement_diagnostics"
+_PROBLEM_OPPORTUNITY_SUMMARY_KEY = "problem_opportunity_summary"
 _COMPACT_SIGNAL_ITEM_LIMIT = 8
 _COMPACT_SIGNAL_SEQUENCE_LIMIT = 6
 _COMPACT_SIGNAL_TEXT_CHARS = 220
@@ -206,6 +208,33 @@ def filter_hypothesis_context_for_prompt(
     )
     metadata["measurement_diagnostics_standalone_section"] = (
         measurement_visibility == "full"
+    )
+
+    compact_opportunity_summary = (
+        ""
+        if measurement_governance == "record_only"
+        else compact_problem_opportunity_summary(
+            context.get(_PROBLEM_OPPORTUNITY_SUMMARY_KEY)
+        )
+    )
+    opportunity_visibility = "absent"
+    if measurement_governance == "record_only":
+        filtered.pop(_PROBLEM_OPPORTUNITY_SUMMARY_KEY, None)
+        opportunity_visibility = "suppressed"
+    elif compact_opportunity_summary:
+        filtered[_PROBLEM_OPPORTUNITY_SUMMARY_KEY] = compact_opportunity_summary
+        opportunity_visibility = "full"
+    else:
+        filtered.pop(_PROBLEM_OPPORTUNITY_SUMMARY_KEY, None)
+
+    metadata["problem_opportunity_summary_visibility"] = opportunity_visibility
+    metadata["problem_opportunity_summary_prompt_key"] = (
+        _PROBLEM_OPPORTUNITY_SUMMARY_KEY
+        if opportunity_visibility == "full"
+        else ""
+    )
+    metadata["problem_opportunity_summary_standalone_section"] = (
+        opportunity_visibility == "full"
     )
 
     if (

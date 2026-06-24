@@ -238,6 +238,9 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
         "measurement_diagnostics_visibility": "absent",
         "measurement_diagnostics_prompt_key": "",
         "measurement_diagnostics_standalone_section": False,
+        "problem_opportunity_summary_visibility": "absent",
+        "problem_opportunity_summary_prompt_key": "",
+        "problem_opportunity_summary_standalone_section": False,
     }
     assert "branch_dossier" not in filtered
     assert "branch_dossier_payload" not in filtered

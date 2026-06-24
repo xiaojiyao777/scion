@@ -83,13 +83,16 @@ chronology belongs in focused experiment reports and git history.
   conda `scion` postrun/measurement focused tests pass (`54 passed` each).
   Launch-readiness and postrun brief paths consume reduced prepared/report
   payloads rather than interpreting measurement declarations directly.
-- Design P skeleton is implemented locally as `scion.opportunity` plus
+- Design P proposal-context slice is implemented locally as `scion.opportunity` plus
   `scion.problems.cvrp.opportunity.CvrpOpportunityProvider`. The generic schema
   owns only proposal-only visibility/redaction and contains no CVRP solver
   semantics; CVRP residual opportunity, mechanism evidence, protected cases,
   measurement view, and default-avoid summaries live in the problem-owned
-  provider. Focused local validation passes (`33 passed`). Proposal rendering,
-  prompt-manifest visibility, and postrun visibility wiring are still open.
+  provider. Adapter/context-manager hooks now expose the typed summary to
+  hypothesis context; the generic prompt projection renders a bounded
+  standalone `Problem Opportunity Summary` section; prompt manifests classify
+  the section as `research_signal`. Focused local/WSL validation passes
+  (`57 passed` each). Problem-owned postrun visibility wiring is still open.
 
 ## Current Decision
 
@@ -244,8 +247,9 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    copied calibration artifacts. Migrate individual legacy postrun checks and
    problem review summaries behind typed ports next, then start the
    problem-owned CVRP/VRP opportunity provider.
-2. Wire the Design P opportunity summary into proposal-only context rendering:
-   generic core should only render/audit `ProblemOpportunitySummary`, while
+2. Finish the remaining Design P postrun review/report wiring after the
+   proposal-context slice: generic core should only render/audit
+   `ProblemOpportunitySummary`, while
    CVRP/VRP residual opportunity, protected cases, mechanism evidence,
    direct-effect requirements, and MDE comparison stay in problem-owned
    providers and out of `DecisionFeatures`.

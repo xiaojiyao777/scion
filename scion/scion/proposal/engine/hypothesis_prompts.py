@@ -156,6 +156,11 @@ def _split_hypothesis_context(
             "## Problem Measurement Diagnostics\n"
             f"{D['problem_measurement_diagnostics']}"
         )
+    if D.get("problem_opportunity_summary"):
+        branch_context_parts.append(
+            "## Problem Opportunity Summary\n"
+            f"{D['problem_opportunity_summary']}"
+        )
     if D.get("objective_opportunity_profile"):
         branch_context_parts.append(D["objective_opportunity_profile"])
     if D["weight_opt_feedback"]:
@@ -695,6 +700,9 @@ def _compact_research_signals(
             "problem_measurement_diagnostics": _compact_text_signal(
                 D.get("compact_problem_measurement_diagnostics")
                 or D.get("problem_measurement_diagnostics"),
+            ),
+            "problem_opportunity_summary": _compact_text_signal(
+                D.get("problem_opportunity_summary")
             ),
             "runtime_feedback": _compact_runtime_feedback_signal(
                 D["runtime_feedback"]

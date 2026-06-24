@@ -439,6 +439,17 @@ class CvrpAdapter:
             ),
         }
 
+    def render_problem_opportunity_summary(self) -> Mapping[str, Any]:
+        """Return the typed CVRP opportunity summary for proposal context."""
+
+        from scion.problems.cvrp.opportunity import CvrpOpportunityProvider
+
+        return (
+            CvrpOpportunityProvider(problem_spec=self._spec, adapter=self)
+            .build_opportunity_summary()
+            .to_payload()
+        )
+
     def preview_research_surface_patch(
         self,
         *,
