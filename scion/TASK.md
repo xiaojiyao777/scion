@@ -78,6 +78,10 @@ reimplementing readiness/MDE/noise semantics. Local conda `claw` and WSL conda
 `scion` postrun/measurement focused tests pass (`54 passed` each). The
 launch-readiness checker and postrun brief now consume reduced prepared/report
 payloads rather than interpreting measurement declarations directly.
+Design P skeleton is implemented locally as `scion.opportunity` plus
+`scion.problems.cvrp.opportunity.CvrpOpportunityProvider`: generic schema and
+problem-owned CVRP summary generation are focused-tested (`33 passed` local).
+It is not yet wired into proposal rendering or postrun visibility reports.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-24*
@@ -419,6 +423,14 @@ Current checkpoint:
   focused tests pass (`54 passed` each). Launch-readiness and postrun brief
   paths now consume reduced payload summaries; further work there belongs with
   the Design N port split, not more measurement helper logic.
+- Design P skeleton implementation is present in `scion.opportunity` and
+  `scion.problems.cvrp.opportunity`: generic `ProblemOpportunitySummary`
+  schema/redaction stays problem-neutral, while `CvrpOpportunityProvider`
+  converts existing CVRP adapter diagnostics and measurement view into
+  proposal-only residual-opportunity, mechanism-evidence, protected-case, and
+  default-avoid summaries. Focused local validation passes (`33 passed`).
+  Remaining Design P work: wire this summary into proposal context/rendering,
+  prompt manifest visibility, and later problem-owned postrun review reports.
 - Postrun acceptance stored-inventory repair:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
   Historical root rechecks now use the stored inventory artifact declared by the

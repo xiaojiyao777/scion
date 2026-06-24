@@ -83,6 +83,13 @@ chronology belongs in focused experiment reports and git history.
   conda `scion` postrun/measurement focused tests pass (`54 passed` each).
   Launch-readiness and postrun brief paths consume reduced prepared/report
   payloads rather than interpreting measurement declarations directly.
+- Design P skeleton is implemented locally as `scion.opportunity` plus
+  `scion.problems.cvrp.opportunity.CvrpOpportunityProvider`. The generic schema
+  owns only proposal-only visibility/redaction and contains no CVRP solver
+  semantics; CVRP residual opportunity, mechanism evidence, protected cases,
+  measurement view, and default-avoid summaries live in the problem-owned
+  provider. Focused local validation passes (`33 passed`). Proposal rendering,
+  prompt-manifest visibility, and postrun visibility wiring are still open.
 
 ## Current Decision
 
@@ -237,11 +244,11 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    copied calibration artifacts. Migrate individual legacy postrun checks and
    problem review summaries behind typed ports next, then start the
    problem-owned CVRP/VRP opportunity provider.
-2. Build a compact CVRP/VRP solver-opportunity provider for proposal-only
-   context: residual gap/opportunity, protected cases, mechanism
-   activation/effect counters, direct objective deltas, and MDE comparison.
-   Generic core should only render and audit this context, and must keep it out
-   of `DecisionFeatures`.
+2. Wire the Design P opportunity summary into proposal-only context rendering:
+   generic core should only render/audit `ProblemOpportunitySummary`, while
+   CVRP/VRP residual opportunity, protected cases, mechanism evidence,
+   direct-effect requirements, and MDE comparison stay in problem-owned
+   providers and out of `DecisionFeatures`.
 3. Keep warehouse as positive effective-research evidence. Launch one narrow
    warehouse repeat only if an independent solver-level plateau confirmation is
    explicitly needed.

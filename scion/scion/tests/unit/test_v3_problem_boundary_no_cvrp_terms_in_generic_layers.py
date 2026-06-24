@@ -14,6 +14,7 @@ GENERIC_LAYER_DIRS = (
     "protocol",
     "verification",
     "evidence",
+    "opportunity",
 )
 GENERIC_PREVIEW_PATHS = (
     PACKAGE_ROOT / "proposal" / "agentic_preview.py",
@@ -65,6 +66,7 @@ LEGACY_ALLOWLIST: dict[tuple[str, str], str] = {
     ("core/campaign_adapters.py", "capacity"): "branch scheduler capacity action",
     ("core/branch_step_runner.py", "capacity"): "branch scheduler capacity action",
     ("core/scheduler.py", "capacity"): "branch portfolio capacity, not problem capacity",
+    ("core/scheduling/status.py", "capacity"): "branch scheduler capacity, not problem capacity",
     ("core/failure_lifecycle.py", "route"): "FailureRouter.route method name",
 }
 
