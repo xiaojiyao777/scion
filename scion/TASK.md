@@ -62,6 +62,10 @@ adding more behavior there. Next v0.4 work should be port-based design and
 problem-owned CVRP/VRP opportunity evidence, not CVRP-specific generic gates.
 Design basis:
 `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`.
+Design N skeleton is implemented locally as `scion.postrun`, with
+problem-neutral typed ports and generic tests. Existing postrun CLIs have not
+yet migrated to the ports, and CVRP/warehouse review summaries still need to
+move behind problem-owned providers.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-24*
@@ -381,6 +385,12 @@ Current checkpoint:
   problem-owned CVRP/VRP solver-opportunity provider, not more generic
   two-opt/CMT/ALNS/VNS rules. Design basis:
   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`.
+- Design N skeleton implementation is present in `scion.postrun`: typed ports
+  for postrun inventory, run-evidence lifecycle, exposure policy,
+  problem-owned review, registry, and readiness orchestration. The current
+  implementation is intentionally non-invasive and does not change
+  `check_postrun_acceptance.py` output yet. Focused generic tests:
+  `scion/scion/tests/test_postrun_readiness_ports.py`.
 - Postrun acceptance stored-inventory repair:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
   Historical root rechecks now use the stored inventory artifact declared by the

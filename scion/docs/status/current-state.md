@@ -60,6 +60,14 @@ chronology belongs in focused experiment reports and git history.
 - The current WSL reverse SSH channel is available. A server-side probe on
   2026-06-24 returned `SSH_OK`, host `xjy-workspace`, user `xjy-ubuntu`, and
   WSL conda `scion` Python `3.10.20`.
+- Design N skeleton from
+  `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md` is
+  implemented locally as the problem-neutral `scion.postrun` package:
+  typed postrun inventory, lifecycle, exposure, problem-review, registry, and
+  readiness-orchestrator ports with dummy generic tests. Existing
+  postrun/readiness CLIs still use their current code paths; CVRP/warehouse
+  review migration behind problem-owned providers is the next implementation
+  step.
 
 ## Current Decision
 
@@ -206,7 +214,9 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    fail-closed lifecycle/readiness status, schema validation, and exposure
    boundaries; CVRP/warehouse/VRP review semantics should sit in problem-owned
    validators/providers. Design basis:
-   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`.
+   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`. Design N
+   skeleton is implemented; migrate the existing postrun CLI and problem review
+   summaries behind these ports next.
 2. Build a compact CVRP/VRP solver-opportunity provider for proposal-only
    context: residual gap/opportunity, protected cases, mechanism
    activation/effect counters, direct objective deltas, and MDE comparison.
