@@ -14,8 +14,16 @@ from typing import Any, Callable, Mapping
 TOOLS_DIR = Path(__file__).resolve().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
+SCION_ROOT = TOOLS_DIR.parent
+if str(SCION_ROOT) not in sys.path:
+    sys.path.insert(0, str(SCION_ROOT))
 
 from postrun_artifact_inventory import HANDOFF_DOC, build_inventory  # noqa: E402
+from scion.postrun.opportunity_visibility import (  # noqa: E402
+    add_problem_opportunity_visibility,
+    empty_problem_opportunity_visibility_aggregate,
+    merge_problem_opportunity_visibility,
+)
 
 
 SCHEMA_VERSION = "scion.postrun_analysis_brief.v1"
@@ -3011,6 +3019,9 @@ def _empty_prompt_context_aggregate() -> dict[str, Any]:
         "omitted_section_counts": {},
         "truncated_section_counts": {},
         "source_visibility": _empty_prompt_source_visibility_aggregate(),
+        "problem_opportunity_visibility": (
+            empty_problem_opportunity_visibility_aggregate()
+        ),
         "signal_density": {},
         "hypothesis_generation_signal_density": {},
     }
@@ -3066,6 +3077,9 @@ def _proposal_trajectory_context_entry(path: Path) -> dict[str, Any]:
         "omitted_section_counts": {},
         "truncated_section_counts": {},
         "source_visibility": _empty_prompt_source_visibility_aggregate(),
+        "problem_opportunity_visibility": (
+            empty_problem_opportunity_visibility_aggregate()
+        ),
     }
     for session in sessions:
         if not isinstance(session, Mapping):
@@ -3092,6 +3106,11 @@ def _add_prompt_trace_context(entry: dict[str, Any], trace: Mapping[str, Any]) -
     _add_prompt_source_visibility(
         entry["source_visibility"],
         trace.get("source_visibility_summary"),
+    )
+    add_problem_opportunity_visibility(
+        entry["problem_opportunity_visibility"],
+        trace.get("problem_opportunity_visibility"),
+        is_hypothesis_generation=is_hypothesis_generation,
     )
 
     block_summary = _mapping_or_empty(trace.get("block_family_summary"))
@@ -3150,6 +3169,10 @@ def _merge_prompt_context_aggregate(
     _merge_prompt_source_visibility(
         aggregate["source_visibility"],
         _mapping_or_empty(entry.get("source_visibility")),
+    )
+    merge_problem_opportunity_visibility(
+        aggregate["problem_opportunity_visibility"],
+        _mapping_or_empty(entry.get("problem_opportunity_visibility")),
     )
     families = entry.get("block_family_totals")
     if isinstance(families, Mapping):

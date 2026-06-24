@@ -92,7 +92,12 @@ chronology belongs in focused experiment reports and git history.
   hypothesis context; the generic prompt projection renders a bounded
   standalone `Problem Opportunity Summary` section; prompt manifests classify
   the section as `research_signal`. Focused local/WSL validation passes
-  (`57 passed` each). Problem-owned postrun visibility wiring is still open.
+  (`57 passed` each). Postrun proposal-visibility reports now aggregate
+  problem-opportunity section presence/visibility from prompt manifests without
+  parsing raw prompts, raw responses, or problem semantics; local/WSL postrun
+  visibility suites pass (`144 passed` each). Remaining Design P work is
+  problem-owned review interpretation of whether later proposals used,
+  contrasted, or ignored the rendered opportunity summary.
 
 ## Current Decision
 
@@ -247,8 +252,8 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    copied calibration artifacts. Migrate individual legacy postrun checks and
    problem review summaries behind typed ports next, then start the
    problem-owned CVRP/VRP opportunity provider.
-2. Finish the remaining Design P postrun review/report wiring after the
-   proposal-context slice: generic core should only render/audit
+2. Finish the remaining Design P problem-owned review interpretation after the
+   rendering/visibility slice: generic core should only render/audit
    `ProblemOpportunitySummary`, while
    CVRP/VRP residual opportunity, protected cases, mechanism evidence,
    direct-effect requirements, and MDE comparison stay in problem-owned

@@ -20,6 +20,9 @@ from scion.core.explore_step.branch_lesson_usage import (
     BRANCH_LESSON_USAGE_REPORT_PROJECTION_SCHEMA,
     branch_lesson_usage_report_projection,
 )
+from scion.postrun.opportunity_visibility import (
+    problem_opportunity_visibility_fingerprint,
+)
 
 SCHEMA_VERSION = "scion.proposal_trajectory_manifest.v1"
 COMPARISON_SCHEMA_VERSION = "scion.proposal_trajectory_comparison.v1"
@@ -560,6 +563,9 @@ def _trace_fingerprints(
                     ),
                     "source_visibility_summary": _prompt_source_visibility_summary(
                         prompt_manifest
+                    ),
+                    "problem_opportunity_visibility": (
+                        problem_opportunity_visibility_fingerprint(prompt_manifest)
                     ),
                     "omitted_sections": _string_list(
                         prompt_manifest.get("omitted_sections")

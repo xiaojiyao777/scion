@@ -39,6 +39,10 @@ from scion.postrun import (  # noqa: E402
     MappingPostrunInventoryPort,
     PostrunReadinessOrchestrator,
 )
+from scion.postrun.opportunity_visibility import (  # noqa: E402
+    PROBLEM_OPPORTUNITY_VISIBILITY_SCHEMA,
+    problem_opportunity_visibility_signature,
+)
 
 
 SCHEMA_VERSION = "scion.postrun_acceptance_readiness.v1"
@@ -2202,6 +2206,9 @@ def _prompt_source_visibility_actionability(
     summary = _mapping_or_empty(brief.get("prompt_context_visibility_summary"))
     aggregate = _mapping_or_empty(summary.get("aggregate"))
     source_visibility = _mapping_or_empty(aggregate.get("source_visibility"))
+    opportunity_visibility = _mapping_or_empty(
+        aggregate.get("problem_opportunity_visibility")
+    )
     call_kind_counts = _mapping_or_empty(aggregate.get("call_kind_counts"))
     hypothesis_density = _mapping_or_empty(
         aggregate.get("hypothesis_generation_signal_density")
@@ -2234,6 +2241,17 @@ def _prompt_source_visibility_actionability(
         _boundary_marker_failures(
             "prompt_source_visibility",
             source_visibility,
+            require_quality=False,
+        )
+    )
+    if opportunity_visibility and opportunity_visibility.get("schema_version") != (
+        PROBLEM_OPPORTUNITY_VISIBILITY_SCHEMA
+    ):
+        failures.append("problem_opportunity_visibility_schema_stale")
+    failures.extend(
+        _boundary_marker_failures(
+            "problem_opportunity_visibility",
+            opportunity_visibility,
             require_quality=False,
         )
     )
@@ -2599,6 +2617,12 @@ def _prompt_context_visibility_consistency_failures(
             prefix="prompt_hypothesis_generation_signal_density",
         )
     )
+    if problem_opportunity_visibility_signature(
+        aggregate.get("problem_opportunity_visibility")
+    ) != problem_opportunity_visibility_signature(
+        expected_aggregate.get("problem_opportunity_visibility")
+    ):
+        failures.append("prompt_context_visibility_problem_opportunity_mismatch")
     if _prompt_context_entries_signature(summary.get("entries")) != (
         _prompt_context_entries_signature(expected.get("entries"))
     ):
@@ -2737,6 +2761,11 @@ def _prompt_context_entries_signature(value: Any) -> list[dict[str, Any]]:
                 ),
                 "source_visibility": _prompt_source_visibility_signature(
                     entry.get("source_visibility")
+                ),
+                "problem_opportunity_visibility": (
+                    problem_opportunity_visibility_signature(
+                        entry.get("problem_opportunity_visibility")
+                    )
                 ),
             }
         )

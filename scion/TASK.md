@@ -83,7 +83,11 @@ plus `scion.problems.cvrp.opportunity.CvrpOpportunityProvider`: generic schema,
 problem-owned CVRP summary generation, adapter/context-manager hook collection,
 bounded prompt projection, standalone prompt section, and prompt-manifest
 `research_signal` visibility are focused-tested (`57 passed` local and WSL).
-It is not yet wired into problem-owned postrun visibility reports.
+Postrun proposal-visibility reports now carry problem-opportunity section
+fingerprints and aggregate visibility counts, focused-tested with local/WSL
+postrun suites (`144 passed` each). The remaining Design P review gap is
+problem-owned interpretation of whether later proposals used, contrasted, or
+ignored the rendered opportunity summary.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-24*
@@ -434,8 +438,12 @@ Current checkpoint:
   typed summary to hypothesis context, the generic prompt projection renders a
   bounded `Problem Opportunity Summary` section, and prompt manifests classify
   that section as `research_signal`. Focused local/WSL validation passes
-  (`57 passed` each). Remaining Design P work: later problem-owned postrun
-  review reports.
+  (`57 passed` each). Postrun proposal-visibility reports now aggregate
+  `Problem Opportunity Summary` section presence/visibility from prompt
+  manifests without parsing raw prompts or making quality judgments; local/WSL
+  postrun visibility suites pass (`144 passed` each). Remaining Design P work:
+  problem-owned review interpretation of whether later proposals used,
+  contrasted, or ignored the rendered opportunity summary.
 - Postrun acceptance stored-inventory repair:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
   Historical root rechecks now use the stored inventory artifact declared by the
