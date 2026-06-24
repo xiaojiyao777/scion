@@ -23,7 +23,7 @@ from scion.core.explore_step.branch_lesson_usage import (
 from scion.core.repeated_contract_failures import (
     contract_preview_failure_signature_feedback,
 )
-from scion.measurement.readiness import measurement_readiness_status
+from scion.measurement.consumer_view import measurement_consumer_view
 from scion.problem.providers import (
     active_subject_code_constraints_payload,
     active_subject_taxonomy_payload,
@@ -305,8 +305,7 @@ def _problem_measurement_diagnostics(
         if adapter_opportunities:
             payload["opportunity_diagnostics"] = adapter_opportunities
         return payload
-    effect_scale = getattr(measurement, "effect_scale", None)
-    readiness = measurement_readiness_status(problem_spec)
+    measurement_view = measurement_consumer_view(problem_spec)
     payload = {
         "schema_version": "problem_measurement_proposal_diagnostic.v1",
         "taint": "problem_owned_proposal_diagnostic",
@@ -318,27 +317,19 @@ def _problem_measurement_diagnostics(
             "case details, LLM text, prompt ratios, and cross-branch lessons "
             "remain excluded from DecisionFeatures."
         ),
-        "runtime_model": str(getattr(measurement, "runtime_model", "") or ""),
-        "pairing_validity": str(getattr(measurement, "pairing_validity", "") or ""),
+        "runtime_model": measurement_view.runtime_model,
+        "pairing_validity": measurement_view.pairing_validity,
         "effect_scale": {
             key: value
             for key, value in {
-                "metric": str(getattr(effect_scale, "metric", "") or ""),
-                "unit": str(getattr(effect_scale, "unit", "") or ""),
-                "practical_delta_screen": getattr(
-                    effect_scale,
-                    "practical_delta_screen",
-                    None,
-                ),
-                "practical_delta_validate": getattr(
-                    effect_scale,
-                    "practical_delta_validate",
-                    None,
-                ),
+                "metric": measurement_view.effect_metric,
+                "unit": measurement_view.effect_unit,
+                "practical_delta_screen": measurement_view.practical_delta_screen,
+                "practical_delta_validate": measurement_view.practical_delta_validate,
             }.items()
             if value not in ("", None, [], {}, ())
         },
-        "measurement_readiness": readiness.to_status_payload(),
+        "measurement_readiness": measurement_view.to_readiness_status_payload(),
         "calibration": {
             key: value
             for key, value in {

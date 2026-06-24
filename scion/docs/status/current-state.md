@@ -74,10 +74,11 @@ chronology belongs in focused experiment reports and git history.
   measurement declarations to generic status/runtime/pairing/effect/MDE fields
   without calibration refs, replay rows, BKS, case gaps, or mechanism rankings.
   `ProtocolConfig.with_problem_measurement()` now consumes that typed view
-  while preserving its legacy readiness payload. Local conda `claw` and WSL
-  conda `scion` measurement/config focused tests pass (`30 passed` each).
-  Launch-readiness, proposal-context, and postrun-summary consumers still need
-  migration.
+  while preserving its legacy readiness payload. Proposal-context measurement
+  diagnostics now consume the same view while keeping calibration provenance
+  proposal-only. Local conda `claw` and WSL conda `scion`
+  measurement/config/proposal-context focused tests pass (`68 passed` each).
+  Launch-readiness and postrun-summary consumers still need migration.
 
 ## Current Decision
 
@@ -227,10 +228,10 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`. Design N
    skeleton and the `check_postrun_acceptance.py` compatibility adapter are
    implemented, and Design O's typed measurement consumer now feeds protocol
-   config. Migrate individual legacy postrun checks, problem review summaries,
-   launch-readiness measurement consumption, proposal-context measurement
-   consumption, and postrun-summary measurement consumption behind these typed
-   ports/views next.
+   config and proposal-context measurement diagnostics. Migrate individual
+   legacy postrun checks, problem review summaries, launch-readiness
+   measurement consumption, and postrun-summary measurement consumption behind
+   these typed ports/views next.
 2. Build a compact CVRP/VRP solver-opportunity provider for proposal-only
    context: residual gap/opportunity, protected cases, mechanism
    activation/effect counters, direct objective deltas, and MDE comparison.
