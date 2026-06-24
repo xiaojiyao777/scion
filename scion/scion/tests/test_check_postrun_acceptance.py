@@ -46,6 +46,10 @@ def test_postrun_acceptance_readiness_accepts_complete_current_run(
     )
 
     readiness = check_tool.build_readiness(run_root)
+    typed_readiness = check_tool.build_readiness(
+        run_root,
+        include_typed_summary=True,
+    )
     markdown = check_tool.render_markdown(readiness)
 
     assert readiness["schema_version"] == "scion.postrun_acceptance_readiness.v1"
@@ -59,6 +63,14 @@ def test_postrun_acceptance_readiness_accepts_complete_current_run(
     assert readiness["checks"]["analysis_brief_current_run_evidence"]["status"] == "ok"
     assert readiness["checks"]["problem_summary_actionability"]["status"] == "skipped"
     assert readiness["checks"]["problem_summary_actionability"]["required"] is False
+    assert "typed_readiness_summary" not in readiness
+    typed_summary = typed_readiness["typed_readiness_summary"]
+    assert typed_summary["schema_version"] == "scion.postrun_readiness_summary.v1"
+    assert typed_summary["current_run_analysis_ready"] is True
+    assert typed_summary["delegation_ready"] is True
+    assert typed_summary["decision_features_excluded"] is True
+    assert typed_summary["lifecycle"]["ready"] is True
+    assert typed_summary["exposure"]["ready"] is True
     assert "Current-run analysis ready: `True`" in markdown
     assert "Failed required checks: `[]`" in markdown
     assert check_tool.main([str(run_root), "--require-current-run-ready"]) == 0

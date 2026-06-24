@@ -64,10 +64,11 @@ chronology belongs in focused experiment reports and git history.
   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md` is
   implemented locally as the problem-neutral `scion.postrun` package:
   typed postrun inventory, lifecycle, exposure, problem-review, registry, and
-  readiness-orchestrator ports with dummy generic tests. Existing
-  postrun/readiness CLIs still use their current code paths; CVRP/warehouse
-  review migration behind problem-owned providers is the next implementation
-  step.
+  readiness-orchestrator ports with dummy generic tests. `check_postrun_acceptance.py`
+  now computes a typed readiness summary through an explicit compatibility
+  adapter path while preserving default JSON/Markdown output. Individual legacy
+  checks and CVRP/warehouse review summaries still need migration behind the
+  typed ports.
 
 ## Current Decision
 
@@ -215,8 +216,9 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    boundaries; CVRP/warehouse/VRP review semantics should sit in problem-owned
    validators/providers. Design basis:
    `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`. Design N
-   skeleton is implemented; migrate the existing postrun CLI and problem review
-   summaries behind these ports next.
+   skeleton and the `check_postrun_acceptance.py` compatibility adapter are
+   implemented; migrate individual legacy checks and problem review summaries
+   behind these ports next.
 2. Build a compact CVRP/VRP solver-opportunity provider for proposal-only
    context: residual gap/opportunity, protected cases, mechanism
    activation/effect counters, direct objective deltas, and MDE comparison.

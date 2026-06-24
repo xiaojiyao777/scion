@@ -13,6 +13,9 @@ from typing import Any, Mapping
 TOOLS_DIR = Path(__file__).resolve().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
+SCION_ROOT = TOOLS_DIR.parent
+if str(SCION_ROOT) not in sys.path:
+    sys.path.insert(0, str(SCION_ROOT))
 
 from postrun_artifact_inventory import build_inventory  # noqa: E402
 from postrun_analysis_brief import (  # noqa: E402
@@ -31,6 +34,10 @@ from postrun_analysis_brief import (  # noqa: E402
     _warehouse_followup_summary,
     _warehouse_followup_continuity_signal,
     _warehouse_followup_measurement_signal,
+)
+from scion.postrun import (  # noqa: E402
+    MappingPostrunInventoryPort,
+    PostrunReadinessOrchestrator,
 )
 
 
@@ -119,7 +126,11 @@ PHASE4_COVERAGE_IDENTITY_FIELDS = (
 )
 
 
-def build_readiness(run_root: Path | str) -> dict[str, Any]:
+def build_readiness(
+    run_root: Path | str,
+    *,
+    include_typed_summary: bool = False,
+) -> dict[str, Any]:
     """Return report-only readiness for delegated postrun analysis."""
 
     root = Path(run_root).expanduser().resolve()
@@ -474,7 +485,8 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         checks["analysis_brief_present"]["status"] == "ok"
         and checks["inventory_artifact_present"]["status"] == "ok"
     )
-    return {
+    typed_readiness = _typed_postrun_readiness_payload(root, inventory)
+    payload = {
         "schema_version": SCHEMA_VERSION,
         "report_only": True,
         "quality_judgment": False,
@@ -490,6 +502,24 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         "failed_optional_checks": failed_optional_checks,
         "checks": checks,
     }
+    if include_typed_summary:
+        payload["typed_readiness_summary"] = typed_readiness
+    return payload
+
+
+def _typed_postrun_readiness_payload(
+    root: Path,
+    inventory: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return the Design N typed-port summary without changing legacy output."""
+
+    return (
+        PostrunReadinessOrchestrator(
+            MappingPostrunInventoryPort(inventory),
+        )
+        .build(root)
+        .to_payload()
+    )
 
 
 def _failed_check_names(
