@@ -5,6 +5,10 @@ from scion.measurement.aa_calibration import (
     estimate_protocol_power,
     summarize_aa_records,
 )
+from scion.measurement.consumer_view import (
+    MeasurementConsumerView,
+    measurement_consumer_view,
+)
 from scion.measurement.readiness import (
     MeasurementReadiness,
     measurement_readiness_status,
@@ -12,8 +16,10 @@ from scion.measurement.readiness import (
 
 __all__ = [
     "AAPairRecord",
+    "MeasurementConsumerView",
     "MeasurementReadiness",
     "estimate_protocol_power",
+    "measurement_consumer_view",
     "measurement_readiness_status",
     "summarize_aa_records",
 ]

@@ -69,6 +69,15 @@ chronology belongs in focused experiment reports and git history.
   adapter path while preserving default JSON/Markdown output. Individual legacy
   checks and CVRP/warehouse review summaries still need migration behind the
   typed ports.
+- Design O initial slice is implemented locally as
+  `scion.measurement.MeasurementConsumerView`. It reduces problem-owned
+  measurement declarations to generic status/runtime/pairing/effect/MDE fields
+  without calibration refs, replay rows, BKS, case gaps, or mechanism rankings.
+  `ProtocolConfig.with_problem_measurement()` now consumes that typed view
+  while preserving its legacy readiness payload. Local conda `claw` and WSL
+  conda `scion` measurement/config focused tests pass (`30 passed` each).
+  Launch-readiness, proposal-context, and postrun-summary consumers still need
+  migration.
 
 ## Current Decision
 
@@ -217,8 +226,11 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    validators/providers. Design basis:
    `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`. Design N
    skeleton and the `check_postrun_acceptance.py` compatibility adapter are
-   implemented; migrate individual legacy checks and problem review summaries
-   behind these ports next.
+   implemented, and Design O's typed measurement consumer now feeds protocol
+   config. Migrate individual legacy postrun checks, problem review summaries,
+   launch-readiness measurement consumption, proposal-context measurement
+   consumption, and postrun-summary measurement consumption behind these typed
+   ports/views next.
 2. Build a compact CVRP/VRP solver-opportunity provider for proposal-only
    context: residual gap/opportunity, protected cases, mechanism
    activation/effect counters, direct objective deltas, and MDE comparison.

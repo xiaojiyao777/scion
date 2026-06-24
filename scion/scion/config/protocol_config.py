@@ -14,7 +14,7 @@ from typing import Any, Literal, Optional
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from scion.measurement.readiness import measurement_readiness_status
+from scion.measurement.consumer_view import measurement_consumer_view
 
 
 MeasurementGovernanceMode = Literal["on", "record_only"]
@@ -261,18 +261,6 @@ def _case_dimension(case_path: str) -> int | None:
         match = re.search(pattern, stem, flags=re.IGNORECASE)
         if match:
             return int(match.group("dimension"))
-    return None
-
-
-def _problem_measurement(problem_spec: Any | None) -> Any | None:
-    if problem_spec is None:
-        return None
-    measurement = getattr(problem_spec, "measurement", None)
-    if measurement is not None:
-        return measurement
-    spec_v1 = getattr(problem_spec, "spec_v1", None)
-    if spec_v1 is not None:
-        return getattr(spec_v1, "measurement", None)
     return None
 
 
@@ -617,43 +605,31 @@ class ProtocolConfig(BaseModel):
         mode = _normalize_measurement_governance_mode(
             self.measurement_governance if governance_mode is None else governance_mode
         )
-        measurement = _problem_measurement(problem_spec)
-        data = self.model_dump()
-        data["measurement_governance"] = mode
-        data["measurement_readiness"] = measurement_readiness_status(
+        measurement_view = measurement_consumer_view(
             problem_spec,
             as_of=measurement_readiness_as_of,
-        ).to_status_payload()
-        if mode == "record_only" or measurement is None:
+        )
+        data = self.model_dump()
+        data["measurement_governance"] = mode
+        data["measurement_readiness"] = measurement_view.to_readiness_status_payload()
+        if mode == "record_only" or not measurement_view.measurement_declared:
             return type(self).model_validate(data)
 
-        effect_scale = getattr(measurement, "effect_scale", None)
         updates: dict[str, float] = {}
-        if effect_scale is not None:
-            for field_name in ("practical_delta_screen", "practical_delta_validate"):
-                value = getattr(effect_scale, field_name, None)
-                if value is not None:
-                    updates[field_name] = _nonnegative_float(field_name, value)
-        runtime_model = getattr(measurement, "runtime_model", None)
-        if runtime_model is not None:
-            runtime_model_text = str(runtime_model).strip()
-            if runtime_model_text not in {"comparative", "budget_exhausting"}:
-                raise ValueError(
-                    "measurement.runtime_model must be comparative or "
-                    "budget_exhausting"
-                )
-            runtime_payload = dict(self.runtime.model_dump())
-            runtime_payload["runtime_model"] = runtime_model_text
-            data["runtime"] = runtime_payload
-        pairing_validity = getattr(measurement, "pairing_validity", None)
-        if pairing_validity is not None:
-            pairing_text = str(pairing_validity).strip()
-            if pairing_text not in {"trajectory_stable", "trajectory_divergent"}:
-                raise ValueError(
-                    "measurement.pairing_validity must be trajectory_stable "
-                    "or trajectory_divergent"
-                )
-            data["pairing_validity"] = pairing_text
+        if measurement_view.practical_delta_screen is not None:
+            updates["practical_delta_screen"] = _nonnegative_float(
+                "practical_delta_screen",
+                measurement_view.practical_delta_screen,
+            )
+        if measurement_view.practical_delta_validate is not None:
+            updates["practical_delta_validate"] = _nonnegative_float(
+                "practical_delta_validate",
+                measurement_view.practical_delta_validate,
+            )
+        runtime_payload = dict(self.runtime.model_dump())
+        runtime_payload["runtime_model"] = measurement_view.runtime_model
+        data["runtime"] = runtime_payload
+        data["pairing_validity"] = measurement_view.pairing_validity
         if not updates:
             return type(self).model_validate(data)
         data.update(updates)

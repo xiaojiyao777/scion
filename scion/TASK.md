@@ -67,7 +67,12 @@ problem-neutral typed ports and generic tests. `check_postrun_acceptance.py`
 now has an explicit compatibility adapter that can include the typed readiness
 summary without changing default output. Individual legacy checks and
 CVRP/warehouse review summaries still need to move behind problem-owned
-providers.
+providers. Design O initial slice is implemented locally as
+`scion.measurement.MeasurementConsumerView`; `ProtocolConfig` now consumes the
+typed view while preserving its legacy readiness payload shape. Local conda
+`claw` and WSL conda `scion` measurement/config focused tests pass
+(`30 passed` each). Remaining Design O consumers are launch readiness,
+proposal context, and postrun summaries.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-24*
@@ -394,6 +399,16 @@ Current checkpoint:
   can compute the typed summary via `include_typed_summary=True` while default
   CLI output remains unchanged. Focused generic/adapter tests:
   `scion/scion/tests/test_postrun_readiness_ports.py`.
+- Design O initial implementation is present in
+  `scion.measurement.MeasurementConsumerView`: generic consumers receive
+  normalized readiness, runtime model, pairing validity, effect scale,
+  practical deltas, MDE, calibration freshness, and evidence-depth fields while
+  excluding calibration refs, replay rows, BKS, case gaps, and mechanism
+  rankings. `ProtocolConfig.with_problem_measurement()` consumes this typed
+  view and preserves the existing readiness config shape. Local and WSL
+  measurement/config focused tests pass (`30 passed` each). Remaining
+  consumers still to migrate: launch readiness, proposal context, and postrun
+  summaries.
 - Postrun acceptance stored-inventory repair:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
   Historical root rechecks now use the stored inventory artifact declared by the
