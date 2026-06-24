@@ -247,7 +247,7 @@ def build_warehouse_measurement_opportunity_diagnostics(
     if str(scion_dir) not in sys.path:
         sys.path.insert(0, str(scion_dir))
 
-    from scion.measurement.readiness import measurement_readiness_status  # noqa: PLC0415
+    from scion.measurement.consumer_view import measurement_consumer_view  # noqa: PLC0415
     from scion.problem.bridge import load_problem_spec_v1_from_yaml  # noqa: PLC0415
 
     if not problem_v1.is_file():
@@ -258,23 +258,23 @@ def build_warehouse_measurement_opportunity_diagnostics(
 
     spec = load_problem_spec_v1_from_yaml(problem_v1)
     measurement = spec.measurement
-    readiness = measurement_readiness_status(spec)
-    if readiness.status != "ready":
+    measurement_view = measurement_consumer_view(spec)
+    if measurement_view.readiness_status != "ready":
         raise SystemExit(
             "Warehouse measurement calibration is not launch-ready: "
-            f"{readiness.reason_code}"
+            f"{measurement_view.readiness_reason_code}"
         )
 
     calibration_ref = str(measurement.calibration_ref or "").strip()
     calibration_path = _resolve_calibration_ref(spec.root_dir, calibration_ref)
     calibration_artifact = _read_calibration_artifact(calibration_path)
     power = _mapping_or_empty(calibration_artifact.get("protocol_power"))
-    effect_scale = measurement.effect_scale
-    practical_screen_delta = float(effect_scale.practical_delta_screen)
-    mde_at_power_80 = float(readiness.mde_at_power_80 or 0.0)
+    practical_screen_delta = float(measurement_view.practical_delta_screen or 0.0)
+    practical_validate_delta = float(measurement_view.practical_delta_validate or 0.0)
+    mde_at_power_80 = float(measurement_view.mde_at_power_80 or 0.0)
     reason_codes = _warehouse_measurement_reason_codes(
-        runtime_model=measurement.runtime_model,
-        pairing_validity=measurement.pairing_validity,
+        runtime_model=measurement_view.runtime_model,
+        pairing_validity=measurement_view.pairing_validity,
         practical_screen_delta=practical_screen_delta,
         mde_at_power_80=mde_at_power_80,
     )
@@ -286,22 +286,22 @@ def build_warehouse_measurement_opportunity_diagnostics(
         "source": "problem_v1.measurement.calibration_ref",
         "proposal_visibility_only": True,
         "decision_features_excluded": True,
-        "metric": effect_scale.metric,
-        "unit": effect_scale.unit,
-        "runtime_model": measurement.runtime_model,
-        "pairing_validity": measurement.pairing_validity,
+        "metric": measurement_view.effect_metric,
+        "unit": measurement_view.effect_unit,
+        "runtime_model": measurement_view.runtime_model,
+        "pairing_validity": measurement_view.pairing_validity,
         "practical_screen_delta": practical_screen_delta,
-        "practical_validate_delta": float(effect_scale.practical_delta_validate),
+        "practical_validate_delta": practical_validate_delta,
         "screening_mde_at_power_80": mde_at_power_80,
-        "measurement_readiness": readiness.to_status_payload(),
+        "measurement_readiness": measurement_view.to_readiness_status_payload(),
         "calibration": _calibration_handoff(
             calibration_artifact=calibration_artifact,
             calibration_ref=calibration_ref,
             calibration_path=calibration_path,
-            n_pairs=readiness.n_pairs,
+            n_pairs=measurement_view.n_pairs,
         ),
         "summary": _warehouse_measurement_summary(
-            metric=effect_scale.metric,
+            metric=measurement_view.effect_metric,
             mde_at_power_80=mde_at_power_80,
             practical_screen_delta=practical_screen_delta,
         ),
