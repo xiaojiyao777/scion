@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-06-23
+Last updated: 2026-06-24
 
 This file is the operational resume point, not a run log. Historical root
 chronology belongs in focused experiment reports and git history.
@@ -52,6 +52,14 @@ chronology belongs in focused experiment reports and git history.
   `checks.inventory_loaded.detail.source=stored_postrun_inventory`. Detailed
   report:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
+- Read-only v3-boundary/code-quality audit found no blocker for Designs L/M or
+  stored-inventory rechecks. The remaining engineering-quality constraint is to
+  freeze new semantics in the oversized postrun/helper scripts; future work in
+  that area needs a design split into named ports or problem-owned validators
+  rather than more helper/projection growth.
+- The current WSL reverse SSH channel is available. A server-side probe on
+  2026-06-24 returned `SSH_OK`, host `xjy-workspace`, user `xjy-ubuntu`, and
+  WSL conda `scion` Python `3.10.20`.
 
 ## Current Decision
 
@@ -59,7 +67,8 @@ chronology belongs in focused experiment reports and git history.
   behavior, not more broad framework churn.
 - CVRP has accepted framework evidence for active-slot scheduling,
   weak-positive follow-up, target-intent authority, mechanism-evidence
-  follow-up, and MDE-aware rejection. It still lacks solver improvement or
+  follow-up, MDE-aware rejection, prompt/source visibility, and
+  budget-exhausting runtime semantics. It still lacks solver improvement or
   promotion.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
@@ -99,7 +108,30 @@ chronology belongs in focused experiment reports and git history.
   promotion and not as a universal warehouse plateau proof. Do not launch
   another warehouse run by default; one narrow repeat is optional only if an
   independent solver-level plateau confirmation is needed. The main next
-  operational action is CVRP/VRP solver-design follow-up.
+  operational action is design-first CVRP/VRP solver-opportunity work.
+- The clean CVRP current-sync follow-up finished and was mirrored locally:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-current-sync-d3efc3cb-postsolverdepth-6r-gpt55-20260623T182433Z-claw`.
+  It resumed the old solver-depth campaign from clean WSL commit `d3efc3cb`,
+  passed strict launch readiness and `gpt-5.5` completion preflight, and
+  finished wrapper/postrun-ready with validity `valid`, completeness
+  `complete`, and `last_stop_reason=max_rounds_exhausted`. The local mirror is
+  `/home/clawd/research/scion-experiments/v04-cvrp-current-sync-d3efc3cb-postsolverdepth-6r-gpt55-20260623T182433Z-claw`.
+  Counters: 6 of 6 effective-budget rounds, 7 completed Protocol metric rows,
+  7 screening rows, 8 proposal attempts, 2 proposal quality blocks, 0
+  active-slot blocks, and no validation/frozen rows. This is clean framework
+  research evidence, not solver progress: champion stayed `v1`, promotions
+  were `0`, all 7 rows were below CVRP MDE `9.9`, rows at or above MDE were
+  `0`, direct large-twoopt evidence was not ready, and the postrun
+  interpretation is `protocol_evaluated_without_large_twoopt_signal`.
+  Framework behavior is nevertheless materially improved: max branch depth is
+  5, same-mechanism follow-up is 8/8, research-context actionability gaps are
+  empty, prompt/source visibility has no missing required target-source
+  evidence, and runtime budget saturation remained observational under
+  `budget_exhausting`. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-current-sync-large-twoopt-postrun-20260624.md`.
+  Accepted conclusion: current-sync CVRP validates the repaired research loop
+  for continuation/rejection, while leaving the solver-opportunity problem
+  open in the CVRP/VRP problem-owned layer.
 
 ## WSL Runner
 
@@ -158,21 +190,32 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   research and current plateau-review readiness for v0.4; a narrow repeat is
   optional only for independent solver-level plateau confirmation.
 - CVRP: use A/A MDE and case variance while seeking branch depth,
-  same-mechanism follow-up, and solver-design improvements. Existing framework
-  roots show rejection/repair behavior but no solver promotion yet.
+  same-mechanism follow-up, and solver-design improvements. The current-sync
+  root above is now clean acceptance evidence for repaired continuation and
+  MDE-aware rejection, but not for solver improvement. The next CVRP/VRP work
+  should improve problem-owned solver-opportunity evidence and proposal context,
+  not add CVRP-specific core gates.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
 
 ## Next Actions
 
-1. Pivot back to CVRP/VRP solver-design follow-up: seek branch depth,
-   same-mechanism iteration, MDE-aware rejection, and actual solver improvement
-   without adding problem-specific shortcuts to generic core.
-2. Keep warehouse as positive effective-research evidence. Launch one narrow
+1. Design the next repair as ports, not more helper/projection patches:
+   generic core should own artifact identity, current-run evidence,
+   fail-closed lifecycle/readiness status, schema validation, and exposure
+   boundaries; CVRP/warehouse/VRP review semantics should sit in problem-owned
+   validators/providers. Design basis:
+   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`.
+2. Build a compact CVRP/VRP solver-opportunity provider for proposal-only
+   context: residual gap/opportunity, protected cases, mechanism
+   activation/effect counters, direct objective deltas, and MDE comparison.
+   Generic core should only render and audit this context, and must keep it out
+   of `DecisionFeatures`.
+3. Keep warehouse as positive effective-research evidence. Launch one narrow
    warehouse repeat only if an independent solver-level plateau confirmation is
    explicitly needed.
-3. Keep evaluating v0.4 against effective research behavior: warehouse plateau
+4. Keep evaluating v0.4 against effective research behavior: warehouse plateau
    evidence, CVRP branch depth and solver-design follow-up, MDE-aware
    rejection, and absence of framework-control blockers.
 
@@ -180,8 +223,12 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 
 - Architecture: `scion/design/scion-architecture-v3.md`
 - Repair design: `scion/design/v0.4-effective-research-repair-design.md`
+- Next port design:
+  `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`
 - Postrun checker repair:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`
+- CVRP current-sync postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-current-sync-large-twoopt-postrun-20260624.md`
 - Task source: `scion/TASK.md`
 - Audit basis:
   `scion/reports/v04-core-framework-review-20260611.md`,

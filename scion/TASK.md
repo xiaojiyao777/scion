@@ -43,10 +43,28 @@ all rows are below MDE, max branch depth is 8, same-mechanism follow-up is
 11/11, and postrun interpretation is `protocol_evaluated_plateau_review_ready`.
 The plateau postrun report is recorded in
 `scion/docs/experiments/v0.4/v04-warehouse-v2-positive-plateau-postrun-20260623.md`.
-Default next action is to pivot back to CVRP/VRP solver-design follow-up; one
-narrow warehouse repeat is optional only if an independent solver-level plateau
-confirmation is required.*
-*Updated: 2026-06-23*
+The clean current-sync CVRP follow-up finished valid/complete and
+postrun-ready:
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-current-sync-d3efc3cb-postsolverdepth-6r-gpt55-20260623T182433Z-claw`.
+It resumed the solver-depth campaign from clean WSL commit `d3efc3cb`, passed
+strict launch readiness and `gpt-5.5` completion preflight, and produced clean
+framework research evidence: 6 of 6 effective-budget rounds, 7 screening
+Protocol rows, 0 active-slot blocks, branch depth 5, and 8 of 8 observed
+same-mechanism follow-ups selected. It remains solver-negative: champion stayed
+`v1`, promotions were `0`, all rows were below CVRP MDE, direct large-twoopt
+evidence was not ready, and postrun interpretation is
+`protocol_evaluated_without_large_twoopt_signal`. Detailed report:
+`scion/docs/experiments/v0.4/v04-cvrp-current-sync-large-twoopt-postrun-20260624.md`.
+A read-only v3/code-quality audit found no blocker for Designs L/M or
+stored-inventory rechecks; the remaining quality constraint is to freeze new
+semantics in oversized postrun/helper scripts and require a design split before
+adding more behavior there. Next v0.4 work should be port-based design and
+problem-owned CVRP/VRP opportunity evidence, not CVRP-specific generic gates.
+Design basis:
+`scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`.
+One narrow warehouse repeat is optional only if an independent solver-level
+plateau confirmation is required.*
+*Updated: 2026-06-24*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
 experiments. The goal is not to keep tuning campaign knobs blindly. The goal is
@@ -342,6 +360,27 @@ Current checkpoint:
   research and plateau-review readiness for v0.4 framework evidence. Do not
   launch another warehouse root by default; run one narrow repeat only if an
   independent solver-level plateau confirmation is explicitly needed.
+- Current-sync CVRP solver-depth continuation root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-current-sync-d3efc3cb-postsolverdepth-6r-gpt55-20260623T182433Z-claw`
+  finished wrapper/postrun-ready from clean WSL commit `d3efc3cb` and was
+  mirrored to
+  `/home/clawd/research/scion-experiments/v04-cvrp-current-sync-d3efc3cb-postsolverdepth-6r-gpt55-20260623T182433Z-claw`.
+  It is clean CVRP framework research evidence and a solver-negative result:
+  validity `valid`, completeness `complete`, 6 of 6 effective-budget rounds,
+  7 screening Protocol metric rows, 2 proposal quality blocks, 0 active-slot
+  blocks, champion still `v1`, 0 promotions, all rows below MDE, direct
+  large-twoopt evidence not ready, and interpretation
+  `protocol_evaluated_without_large_twoopt_signal`. Research behavior is
+  materially repaired: max branch depth 5, same-mechanism follow-up 8/8,
+  research-context actionability gaps 0, and budget-exhausting runtime
+  saturation stayed observational. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-current-sync-large-twoopt-postrun-20260624.md`.
+  Current interpretation: enough to accept CVRP continuation/rejection
+  framework behavior for this v0.4 slice, not enough to close CVRP solver
+  improvement. The next step should be design-first port cleanup and a
+  problem-owned CVRP/VRP solver-opportunity provider, not more generic
+  two-opt/CMT/ALNS/VNS rules. Design basis:
+  `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`.
 - Postrun acceptance stored-inventory repair:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
   Historical root rechecks now use the stored inventory artifact declared by the
@@ -511,7 +550,7 @@ Current checkpoint:
   is not written for ordinary low-signal branches without a Decision-origin
   park marker. Quality-regression slot release and Decision-origin parked
   lineage reclaim remain fail-closed.
-- Active WSL roots:
+- Superseded WSL evidence roots retained for lineage reference:
   - Warehouse evidence root:
     `/home/xjy-ubuntu/research/scion-experiments/v04-wh-v2-33f0e976-transfer-6r-gpt55-20260621T183412Z-claw`
     completed 6 effective rounds and reached champion `v3`, but was generated
