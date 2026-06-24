@@ -5,8 +5,12 @@ from dataclasses import fields
 from datetime import date
 from typing import Any
 
+from scion.core.evidence_recording.common import reduced_measurement_readiness_payload
 from scion.core.models import DecisionFeatures
-from scion.measurement.consumer_view import measurement_consumer_view
+from scion.measurement.consumer_view import (
+    measurement_consumer_view,
+    measurement_consumer_view_from_mapping,
+)
 
 
 class _EffectScale:
@@ -159,6 +163,50 @@ def test_stale_calibration_is_reduced_to_freshness_tier(tmp_path) -> None:
     assert view.readiness_reason_code == "calibration_stale"
     assert view.calibration_freshness == "stale"
     assert view.calibration_age_days == 161
+
+
+def test_mapping_consumer_view_uses_overridden_calibration_ref(tmp_path) -> None:
+    _write_artifact(tmp_path)
+    problem = {
+        "id": "demo",
+        "measurement": {
+            "runtime_model": "comparative",
+            "pairing_validity": "trajectory_stable",
+            "effect_scale": {
+                "metric": "total_cost",
+                "unit": "raw_delta",
+                "practical_delta_screen": 2.0,
+                "practical_delta_validate": 1.0,
+            },
+            "calibration_ref": "missing/aa_noise_floor.json",
+            "calibration_max_age_days": 90,
+        },
+    }
+
+    view = measurement_consumer_view_from_mapping(
+        problem,
+        root_dir=str(tmp_path),
+        calibration_ref_override=str(
+            tmp_path / "formal" / "calibration" / "aa_noise_floor.json"
+        ),
+        as_of=date(2026, 6, 11),
+    )
+
+    assert view.readiness_status == "ready"
+    assert view.readiness_reason_code == "ok"
+    assert view.mde_at_power_80 == 4.0
+    assert view.evidence_depth == "full_replay"
+
+
+def test_reduced_readiness_accepts_consumer_view() -> None:
+    view = measurement_consumer_view(type("Problem", (), {"measurement": None})())
+
+    payload = reduced_measurement_readiness_payload(view)
+
+    assert payload is not None
+    assert payload["status"] == "not_ready"
+    assert payload["reason_code"] == "missing_measurement"
+    assert payload["decision_features_excluded"] is True
 
 
 def test_decision_features_stay_free_of_measurement_consumer_raw_fields() -> None:

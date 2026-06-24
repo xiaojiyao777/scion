@@ -63,7 +63,9 @@ def reduced_measurement_readiness_payload(value: Any) -> dict[str, Any] | None:
 
     if value is None:
         return None
-    if hasattr(value, "to_status_payload"):
+    if hasattr(value, "to_readiness_status_payload"):
+        raw = value.to_readiness_status_payload()
+    elif hasattr(value, "to_status_payload"):
         raw = value.to_status_payload()
     elif hasattr(value, "model_dump"):
         try:

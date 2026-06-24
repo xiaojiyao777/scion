@@ -20,6 +20,7 @@ from scion.core.evidence_recording.actionability_classification import (
     scheduler_metadata_with_result_context,
 )
 from scion.core.evidence_recording.common import reduced_measurement_readiness_payload
+from scion.measurement.consumer_view import measurement_consumer_view_from_mapping
 
 SCHEMA_VERSION = "scion.research_efficiency_report.v1"
 DEFAULT_REPORT_FILENAME = "research_efficiency_report.v1.json"
@@ -1463,10 +1464,20 @@ def _artifact_measurement_readiness(
         )
         if artifact_path is None:
             continue
-        artifact = _read_json_object(artifact_path)
-        if not _calibration_compatible(problem, measurement, artifact):
+        view = measurement_consumer_view_from_mapping(
+            problem,
+            root_dir=str(problem_path.parent),
+            calibration_ref_override=str(artifact_path),
+        )
+        if view.readiness_reason_code in {
+            "missing_measurement",
+            "missing_calibration_ref",
+            "calibration_not_found",
+            "calibration_unreadable",
+            "calibration_incompatible",
+        }:
             continue
-        return _readiness_from_calibration_artifact(measurement, artifact)
+        return view.to_readiness_status_payload()
     return None
 
 
@@ -1526,113 +1537,12 @@ def _find_calibration_artifact(
     return None
 
 
-def _calibration_compatible(
-    problem: Mapping[str, Any],
-    measurement: Mapping[str, Any],
-    artifact: Mapping[str, Any],
-) -> bool:
-    if artifact.get("schema") != "scion.aa_noise_floor.v1":
-        return False
-    if artifact.get("decision_features_excluded") is not True:
-        return False
-    problem_id = _first_str(problem.get("id"), problem.get("name"))
-    artifact_problem_id = _first_str(artifact.get("problem_id"))
-    if problem_id and artifact_problem_id and problem_id != artifact_problem_id:
-        return False
-    effect_scale = _mapping_value(measurement.get("effect_scale"))
-    metric = _first_str(effect_scale.get("metric"))
-    unit = _first_str(effect_scale.get("unit"))
-    if metric and _first_str(artifact.get("measurement_metric")) != metric:
-        return False
-    if unit and _first_str(artifact.get("measurement_unit")) != unit:
-        return False
-    return True
-
-
-def _readiness_from_calibration_artifact(
-    measurement: Mapping[str, Any],
-    artifact: Mapping[str, Any],
-) -> dict[str, Any]:
-    max_age_days = _nonnegative_int(measurement.get("calibration_max_age_days"))
-    calibrated_at = _parse_datetime(artifact.get("calibrated_at"))
-    age_days = (
-        max(0, (datetime.now(timezone.utc).date() - calibrated_at.date()).days)
-        if calibrated_at is not None
-        else None
-    )
-    power = _mapping_value(artifact.get("protocol_power"))
-    mde = _first_float(power.get("mde_at_power_80"))
-    effect_scale = _mapping_value(measurement.get("effect_scale"))
-    practical_delta = _first_float(effect_scale.get("practical_delta_screen"))
-    effect_to_mde = (
-        practical_delta / mde
-        if practical_delta is not None and mde is not None and mde > 0
-        else None
-    )
-    status = "ready"
-    reason_code = "ok"
-    if calibrated_at is None or mde is None:
-        status = "degraded"
-        reason_code = "calibration_incomplete"
-    elif age_days is not None and age_days > max_age_days:
-        status = "degraded"
-        reason_code = "calibration_stale"
-    return {
-        "status": status,
-        "reason_code": reason_code,
-        "calibration_age_days": age_days,
-        "calibration_max_age_days": max_age_days,
-        "n_pairs": _nonnegative_int(artifact.get("n_pairs")),
-        "mde_at_power_80": mde,
-        "noise_band_p90_abs": _noise_band_p90_abs(artifact.get("per_case")),
-        "effect_to_mde_ratio": effect_to_mde,
-        "signal_to_noise_tier": _signal_to_noise_tier(effect_to_mde),
-        "decision_features_excluded": True,
-    }
-
-
 def _read_yaml_object(path: Path) -> dict[str, Any]:
     try:
         loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError):
         return {}
     return dict(loaded) if isinstance(loaded, Mapping) else {}
-
-
-def _parse_datetime(value: Any) -> datetime | None:
-    text = _first_str(value)
-    if not text:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
-def _noise_band_p90_abs(value: Any) -> float | None:
-    if not isinstance(value, list):
-        return None
-    values = [
-        parsed
-        for row in value
-        if isinstance(row, Mapping)
-        for parsed in [_first_float(row.get("delta_p90_abs"))]
-        if parsed is not None
-    ]
-    return max(values) if values else None
-
-
-def _signal_to_noise_tier(ratio: float | None) -> str:
-    if ratio is None:
-        return "unknown"
-    if ratio >= 1.0:
-        return "ready"
-    if ratio >= 1.0 / 3.0:
-        return "marginal"
-    return "low_power"
 
 
 def _existing_unique_paths(candidates: list[Path]) -> list[Path]:

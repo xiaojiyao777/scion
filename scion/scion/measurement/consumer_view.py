@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any, Literal
+from types import SimpleNamespace
+from typing import Any, Literal, Mapping
 
 from scion.measurement.readiness import (
     CalibrationEvidenceLevel,
@@ -154,6 +155,35 @@ def measurement_consumer_view(
     )
 
 
+def measurement_consumer_view_from_mapping(
+    problem: Mapping[str, Any],
+    *,
+    root_dir: str,
+    calibration_ref_override: str | None = None,
+    as_of: date | datetime | None = None,
+) -> MeasurementConsumerView:
+    """Build the consumer view from a parsed problem-v1 mapping."""
+
+    measurement = problem.get("measurement")
+    adapted_measurement = (
+        _measurement_namespace(
+            measurement,
+            calibration_ref_override=calibration_ref_override,
+        )
+        if isinstance(measurement, Mapping)
+        else None
+    )
+    spec = SimpleNamespace(
+        id=_text(problem.get("id")),
+        name=_text(problem.get("name")),
+        problem_family=_text(problem.get("problem_family")),
+        family=_text(problem.get("family")),
+        root_dir=root_dir,
+        measurement=adapted_measurement,
+    )
+    return measurement_consumer_view(spec, as_of=as_of)
+
+
 def _problem_measurement(problem_spec: Any | None) -> Any | None:
     if problem_spec is None:
         return None
@@ -203,6 +233,40 @@ def _optional_nonnegative_float(name: str, value: Any) -> float | None:
     if number < 0.0:
         raise ValueError(f"{name} must be a non-negative number")
     return number
+
+
+def _measurement_namespace(
+    value: Mapping[str, Any],
+    *,
+    calibration_ref_override: str | None,
+) -> SimpleNamespace:
+    effect_scale = _mapping_value(value.get("effect_scale"))
+    readiness_summary = value.get("readiness_summary")
+    return SimpleNamespace(
+        runtime_model=value.get("runtime_model", "comparative"),
+        pairing_validity=value.get("pairing_validity", "trajectory_stable"),
+        effect_scale=SimpleNamespace(
+            metric=_text(effect_scale.get("metric")),
+            unit=_text(effect_scale.get("unit")),
+            practical_delta_screen=effect_scale.get("practical_delta_screen"),
+            practical_delta_validate=effect_scale.get("practical_delta_validate"),
+        ),
+        calibration_ref=(
+            calibration_ref_override
+            if calibration_ref_override is not None
+            else value.get("calibration_ref", "")
+        ),
+        calibration_max_age_days=value.get("calibration_max_age_days", 0),
+        readiness_summary=(
+            SimpleNamespace(**dict(readiness_summary))
+            if isinstance(readiness_summary, Mapping)
+            else None
+        ),
+    )
+
+
+def _mapping_value(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
 
 
 def _calibration_freshness(

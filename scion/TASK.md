@@ -72,10 +72,12 @@ providers. Design O initial slice is implemented locally as
 typed view while preserving its legacy readiness payload shape. Proposal
 context measurement diagnostics now consume the same typed view while keeping
 calibration provenance proposal-only. Prepared CVRP/warehouse measurement
-handoff builders now consume the typed view as well. Local conda `claw` and
-WSL conda `scion` launcher/handoff focused tests pass (`34 passed` each).
-Remaining Design O consumers are the launch-readiness checker and postrun
-summaries.
+handoff builders now consume the typed view as well. Postrun
+research-efficiency calibration fallback also uses the typed view instead of
+reimplementing readiness/MDE/noise semantics. Local conda `claw` and WSL conda
+`scion` postrun/measurement focused tests pass (`54 passed` each). The
+launch-readiness checker and postrun brief now consume reduced prepared/report
+payloads rather than interpreting measurement declarations directly.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-24*
@@ -411,9 +413,12 @@ Current checkpoint:
   view and preserves the existing readiness config shape. Proposal context
   measurement diagnostics also consume this view while preserving proposal-only
   calibration provenance, and prepared CVRP/warehouse measurement handoff
-  builders consume it for launch focus. Local and WSL launcher/handoff focused
-  tests pass (`34 passed` each). Remaining consumers still to migrate:
-  launch-readiness checker and postrun summaries.
+  builders consume it for launch focus. Postrun research-efficiency artifact
+  fallback uses the same typed view for copied calibration artifacts instead of
+  hand-rolled readiness reconstruction. Local and WSL postrun/measurement
+  focused tests pass (`54 passed` each). Launch-readiness and postrun brief
+  paths now consume reduced payload summaries; further work there belongs with
+  the Design N port split, not more measurement helper logic.
 - Postrun acceptance stored-inventory repair:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
   Historical root rechecks now use the stored inventory artifact declared by the

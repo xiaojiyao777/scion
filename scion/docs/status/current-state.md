@@ -77,9 +77,12 @@ chronology belongs in focused experiment reports and git history.
   while preserving its legacy readiness payload. Proposal-context measurement
   diagnostics now consume the same view while keeping calibration provenance
   proposal-only. Prepared CVRP/warehouse measurement handoff builders now
-  consume the typed view for launch focus. Local conda `claw` and WSL conda
-  `scion` launcher/handoff focused tests pass (`34 passed` each). The
-  launch-readiness checker and postrun-summary consumers still need migration.
+  consume the typed view for launch focus. Postrun research-efficiency
+  calibration fallback now uses the typed view for copied calibration artifacts
+  instead of hand-rolled readiness reconstruction. Local conda `claw` and WSL
+  conda `scion` postrun/measurement focused tests pass (`54 passed` each).
+  Launch-readiness and postrun brief paths consume reduced prepared/report
+  payloads rather than interpreting measurement declarations directly.
 
 ## Current Decision
 
@@ -230,9 +233,10 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    skeleton and the `check_postrun_acceptance.py` compatibility adapter are
    implemented, and Design O's typed measurement consumer now feeds protocol
    config, proposal-context measurement diagnostics, and prepared measurement
-   handoff builders. Migrate individual legacy postrun checks, problem review
-   summaries, launch-readiness checker measurement consumption, and
-   postrun-summary measurement consumption behind these typed ports/views next.
+   handoff builders; postrun research-efficiency fallback also uses it for
+   copied calibration artifacts. Migrate individual legacy postrun checks and
+   problem review summaries behind typed ports next, then start the
+   problem-owned CVRP/VRP opportunity provider.
 2. Build a compact CVRP/VRP solver-opportunity provider for proposal-only
    context: residual gap/opportunity, protected cases, mechanism
    activation/effect counters, direct objective deltas, and MDE comparison.
