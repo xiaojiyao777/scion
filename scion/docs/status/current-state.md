@@ -114,18 +114,25 @@ chronology belongs in focused experiment reports and git history.
   `scion.problems.cvrp.opportunity.CvrpOpportunityProvider`. The generic schema
   owns only proposal-only visibility/redaction and contains no CVRP solver
   semantics; CVRP residual opportunity, mechanism evidence, protected cases,
-  measurement view, and default-avoid summaries live in the problem-owned
-  provider. Adapter/context-manager hooks now expose the typed summary to
+  evidence requirements, measurement view, and default-avoid summaries live in
+  the problem-owned provider. The current CVRP opportunity-quality slice adds a
+  compact prepared large-instance two-opt evidence recipe, CMT2/CMT4 protection
+  requirements, and measurable-opportunity evidence requirements; current-run
+  large-twoopt postrun summaries can update requirement status when supplied.
+  Adapter/context-manager hooks now expose the typed summary to
   hypothesis context; the generic prompt projection renders a bounded
   standalone `Problem Opportunity Summary` section; prompt manifests classify
   the section as `research_signal`. Focused local/WSL validation passes
-  (`57 passed` each). Postrun proposal-visibility reports now aggregate
+  (`57 passed` each), and the current opportunity-quality slice passes locally
+  and on WSL (`15 passed` each). Postrun proposal-visibility reports now aggregate
   problem-opportunity section presence/visibility from prompt manifests without
   parsing raw prompts, raw responses, or problem semantics; local/WSL postrun
   visibility suites pass (`144 passed` each). CVRP-owned postrun review now
   adds `cvrp_opportunity_usage_summary`, which classifies structured proposal
-  fingerprints as used, contrasted, ignored/unproven, or default-avoid repeats
-  without making the summary a Decision input.
+  fingerprints as used, contrasted, ignored/unproven, default-avoid repeats, or
+  selected-with-checklist-unproven for the prepared top opportunity without
+  making the summary a Decision input. The current broader local/WSL
+  acceptance/visibility set passes (`92 passed` each).
 
 ## Current Decision
 

@@ -89,6 +89,32 @@ class MechanismEvidenceSummary:
 
 
 @dataclass(frozen=True)
+class OpportunityEvidenceRequirement:
+    requirement_id: str
+    mechanism_family: str = ""
+    status: str = ""
+    summary: str = ""
+    recommended_action: str = ""
+    required_observations: tuple[str, ...] = ()
+    protected_cases: tuple[str, ...] = ()
+    reason_codes: tuple[str, ...] = ()
+
+    def to_payload(self) -> dict[str, Any]:
+        return _drop_empty(
+            {
+                "requirement_id": self.requirement_id,
+                "mechanism_family": self.mechanism_family,
+                "status": self.status,
+                "summary": self.summary,
+                "recommended_action": self.recommended_action,
+                "required_observations": list(self.required_observations),
+                "protected_cases": list(self.protected_cases),
+                "reason_codes": list(self.reason_codes),
+            }
+        )
+
+
+@dataclass(frozen=True)
 class ProtectedCaseSummary:
     case_id: str
     reason: str = ""
@@ -124,6 +150,7 @@ class ProblemOpportunitySummary:
     objective: str
     residual_opportunity: tuple[OpportunityAxis, ...] = ()
     mechanism_evidence: tuple[MechanismEvidenceSummary, ...] = ()
+    evidence_requirements: tuple[OpportunityEvidenceRequirement, ...] = ()
     protected_cases: tuple[ProtectedCaseSummary, ...] = ()
     measurement: MeasurementConsumerView | None = None
     default_avoid: tuple[AvoidedMechanismSummary, ...] = ()
@@ -141,6 +168,9 @@ class ProblemOpportunitySummary:
             ],
             "mechanism_evidence": [
                 item.to_payload() for item in self.mechanism_evidence
+            ],
+            "evidence_requirements": [
+                item.to_payload() for item in self.evidence_requirements
             ],
             "protected_cases": [item.to_payload() for item in self.protected_cases],
             "measurement": (

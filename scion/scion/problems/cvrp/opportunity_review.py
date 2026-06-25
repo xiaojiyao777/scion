@@ -210,12 +210,23 @@ def _proposal_usage_entry(
     default_avoid_families = _matched_default_avoid_families(terms)
     has_contrast = _has_structured_contrast(session)
     if opportunity_families:
-        usage_status = (
-            "contrasted_opportunity" if has_contrast else "used_opportunity"
+        checklist_unproven = _required_checklist_unproven(
+            opportunity_families,
+            session,
         )
-        reason_codes = ["matched_opportunity_family"]
-        if has_contrast:
-            reason_codes.append("structured_lesson_contrast_present")
+        if checklist_unproven:
+            usage_status = "opportunity_evidence_checklist_unproven"
+            reason_codes = [
+                "matched_opportunity_family",
+                "required_evidence_checklist_unproven",
+            ]
+        else:
+            usage_status = (
+                "contrasted_opportunity" if has_contrast else "used_opportunity"
+            )
+            reason_codes = ["matched_opportunity_family"]
+            if has_contrast:
+                reason_codes.append("structured_lesson_contrast_present")
     elif default_avoid_families:
         usage_status = "default_avoid_repeat"
         reason_codes = ["matched_default_avoid_family_without_opportunity_family"]
@@ -288,6 +299,15 @@ def _has_structured_contrast(session: Mapping[str, Any]) -> bool:
     return any(fields.get(field, 0) > 0 for field in _CONTRAST_FIELD_NAMES)
 
 
+def _required_checklist_unproven(
+    opportunity_families: list[str],
+    session: Mapping[str, Any],
+) -> bool:
+    if REQUIRED_MECHANISM_ID not in opportunity_families:
+        return False
+    return not _has_structured_contrast(session)
+
+
 def _opportunity_visibility(prompt_summary: Mapping[str, Any]) -> dict[str, Any]:
     aggregate = _mapping(prompt_summary.get("aggregate"))
     visibility = _mapping(aggregate.get("problem_opportunity_visibility"))
@@ -320,13 +340,18 @@ def _aggregate_usage_status(
     used = _int(counts.get("used_opportunity")) + _int(
         counts.get("contrasted_opportunity")
     )
+    checklist_unproven = _int(
+        counts.get("opportunity_evidence_checklist_unproven")
+    )
     ignored = _int(counts.get("ignored_or_unproven"))
     default_repeat = _int(counts.get("default_avoid_repeat"))
-    if used > 0 and ignored == 0 and default_repeat == 0:
+    if used > 0 and checklist_unproven == 0 and ignored == 0 and default_repeat == 0:
         if _int(counts.get("contrasted_opportunity")) > 0:
             return "contrasted"
         return "used"
-    if used > 0:
+    if checklist_unproven > 0 and used == 0 and ignored == 0 and default_repeat == 0:
+        return "checklist_unproven"
+    if used > 0 or checklist_unproven > 0:
         return "mixed"
     if default_repeat > 0 and ignored == 0:
         return "default_avoid_repeat"
@@ -350,9 +375,16 @@ def _evidence_gaps(
     used = _int(counts.get("used_opportunity")) + _int(
         counts.get("contrasted_opportunity")
     )
+    checklist_unproven = _int(
+        counts.get("opportunity_evidence_checklist_unproven")
+    )
     if current_run_evidence and opportunity_visible and proposal_session_count > 0:
-        if used <= 0:
+        if used + checklist_unproven <= 0:
             gaps.append("no_structured_proposal_match_to_opportunity_summary")
+        if checklist_unproven > 0:
+            gaps.append(
+                "proposal_selected_opportunity_without_required_evidence_checklist"
+            )
         if _int(counts.get("default_avoid_repeat")) > 0:
             gaps.append("proposal_repeats_default_avoid_family")
     return gaps
@@ -399,6 +431,7 @@ def _empty_counts() -> dict[str, int]:
     return {
         "used_opportunity": 0,
         "contrasted_opportunity": 0,
+        "opportunity_evidence_checklist_unproven": 0,
         "ignored_or_unproven": 0,
         "default_avoid_repeat": 0,
         "uninterpretable": 0,

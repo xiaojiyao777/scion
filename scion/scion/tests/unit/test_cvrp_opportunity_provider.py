@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from scion.problem.bridge import load_problem_spec_v1_from_yaml
+from scion.opportunity import OpportunityContext
 from scion.problems.cvrp.adapter import CvrpAdapter
 from scion.problems.cvrp.opportunity import CvrpOpportunityProvider
 
@@ -63,3 +64,75 @@ def test_cvrp_opportunity_provider_preserves_problem_owned_signals() -> None:
     assert {"CMT2", "CMT4"} <= protected_cases
     assert "broad_vns_removal" in default_avoid
     assert "CVRP_LARGE_INSTANCE_TWO_OPT_SEED" in reason_codes
+
+
+def test_cvrp_opportunity_provider_projects_required_evidence_recipe() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_PROBLEM)
+    adapter = CvrpAdapter(spec)
+
+    payload = (
+        CvrpOpportunityProvider(problem_spec=spec, adapter=adapter)
+        .build_opportunity_summary()
+        .to_payload()
+    )
+
+    requirements = {
+        item["requirement_id"]: item
+        for item in payload["evidence_requirements"]
+    }
+    pair_evidence = requirements[
+        "large_instance_two_opt_objective_runtime_requirement"
+    ]
+    protected = requirements["cmt2_cmt4_case_protection"]
+    required_text = json.dumps(pair_evidence, sort_keys=True)
+
+    assert pair_evidence["mechanism_family"] == (
+        "large_instance_intra_route_two_opt_seed"
+    )
+    assert pair_evidence["status"] == "current_run_required"
+    assert "elapsed wall-clock" in required_text
+    assert "same split" in required_text
+    assert {"CMT2", "CMT4"} <= set(pair_evidence["protected_cases"])
+    assert {"CMT2", "CMT4"} <= set(protected["protected_cases"])
+
+
+def test_cvrp_opportunity_provider_uses_postrun_large_twoopt_status() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_PROBLEM)
+    adapter = CvrpAdapter(spec)
+    context = OpportunityContext(
+        source_payload=adapter.render_problem_measurement_diagnostics(),
+        postrun_reports=(
+            {
+                "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
+                "current_run_evidence": True,
+                "available": True,
+                "interpretation": "protocol_evaluated_without_large_twoopt_signal",
+                "evidence_gaps": ["missing_large_twoopt_mechanism_signal"],
+                "evidence": {
+                    "large_twoopt_mechanism": {
+                        "mechanism_family_available": False,
+                        "direct_evidence_ready": False,
+                    }
+                },
+            },
+        ),
+    )
+
+    payload = (
+        CvrpOpportunityProvider(problem_spec=spec, adapter=adapter)
+        .build_opportunity_summary(context)
+        .to_payload()
+    )
+
+    requirements = {
+        item["requirement_id"]: item
+        for item in payload["evidence_requirements"]
+    }
+    pair_evidence = requirements[
+        "large_instance_two_opt_objective_runtime_requirement"
+    ]
+
+    assert pair_evidence["status"] == "current_run_checklist_not_ready"
+    assert "missing_large_twoopt_mechanism_signal" in (
+        pair_evidence["reason_codes"]
+    )

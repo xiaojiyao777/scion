@@ -126,12 +126,20 @@ plus `scion.problems.cvrp.opportunity.CvrpOpportunityProvider`: generic schema,
 problem-owned CVRP summary generation, adapter/context-manager hook collection,
 bounded prompt projection, standalone prompt section, and prompt-manifest
 `research_signal` visibility are focused-tested (`57 passed` local and WSL).
+The CVRP opportunity-quality slice now carries proposal-only
+`evidence_requirements` for the prepared large-instance two-opt recipe,
+CMT2/CMT4 protection, and other measurable opportunity classes without adding
+CVRP semantics to generic core or `DecisionFeatures`. Current-run large-twoopt
+postrun summaries can be folded into the requirement status when supplied.
 Postrun proposal-visibility reports now carry problem-opportunity section
 fingerprints and aggregate visibility counts, focused-tested with local/WSL
 postrun suites (`144 passed` each). Design P review interpretation is now
 problem-owned for CVRP: `cvrp_opportunity_usage_summary` classifies proposal
-fingerprints as used, contrasted, ignored/unproven, or default-avoid repeats
-without parsing raw prompts/responses or feeding DecisionFeatures.
+fingerprints as used, contrasted, ignored/unproven, default-avoid repeats, or
+selected-with-checklist-unproven for the prepared top family without parsing
+raw prompts/responses or feeding DecisionFeatures. The opportunity-quality
+focused slice passes locally and on WSL (`15 passed` each), and the broader
+postrun acceptance/visibility set passes locally and on WSL (`92 passed` each).
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-25*
@@ -565,19 +573,26 @@ Current checkpoint:
   `scion.problems.cvrp.opportunity`: generic `ProblemOpportunitySummary`
   schema/redaction stays problem-neutral, while `CvrpOpportunityProvider`
   converts existing CVRP adapter diagnostics and measurement view into
-  proposal-only residual-opportunity, mechanism-evidence, protected-case, and
-  default-avoid summaries. The adapter/context-manager hooks now expose the
-  typed summary to hypothesis context, the generic prompt projection renders a
-  bounded `Problem Opportunity Summary` section, and prompt manifests classify
-  that section as `research_signal`. Focused local/WSL validation passes
-  (`57 passed` each). Postrun proposal-visibility reports now aggregate
+  proposal-only residual-opportunity, mechanism-evidence, evidence-requirement,
+  protected-case, and default-avoid summaries. CVRP now exposes a compact
+  prepared large-instance two-opt evidence recipe, CMT2/CMT4 protection
+  requirements, and measurable-opportunity evidence requirements through the
+  problem-owned provider; generic core only redacts/renders/audits the typed
+  block. The adapter/context-manager hooks now expose the typed summary to
+  hypothesis context, the generic prompt projection renders a bounded
+  `Problem Opportunity Summary` section, and prompt manifests classify that
+  section as `research_signal`. Focused local/WSL validation passes
+  (`57 passed` each), with the current opportunity-quality slice passing
+  locally and on WSL (`15 passed` each). Postrun proposal-visibility reports now aggregate
   `Problem Opportunity Summary` section presence/visibility from prompt
   manifests without parsing raw prompts or making quality judgments; local/WSL
   postrun visibility suites pass (`144 passed` each). CVRP-owned postrun
   review interpretation now summarizes whether later proposal fingerprints
-  used, contrasted, ignored/unproved, or repeated default-avoid opportunity
-  families. The checker rebuilds the summary as a nonblocking report-only
-  consistency check.
+  used, contrasted, ignored/unproved, repeated default-avoid opportunity
+  families, or selected the prepared top opportunity without a proved required
+  evidence checklist. The checker rebuilds the summary as a nonblocking
+  report-only consistency check; the current broader local/WSL
+  acceptance/visibility set passes (`92 passed` each).
 - Postrun acceptance stored-inventory repair:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
   Historical root rechecks now use the stored inventory artifact declared by the

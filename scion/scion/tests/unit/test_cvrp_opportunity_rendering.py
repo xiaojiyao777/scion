@@ -33,6 +33,8 @@ def test_cvrp_adapter_exposes_typed_problem_opportunity_summary() -> None:
     assert payload["proposal_visibility_only"] is True
     assert payload["decision_features_excluded"] is True
     assert "large_instance_intra_route_two_opt_seed" in rendered
+    assert "large_instance_two_opt_objective_runtime_requirement" in rendered
+    assert "elapsed wall-clock" in rendered
     assert "CMT2" in rendered
     assert "CMT4" in rendered
     assert "calibration_ref" not in rendered
@@ -61,6 +63,11 @@ def test_cvrp_problem_opportunity_summary_reaches_prompt_and_manifest() -> None:
 
     assert "scion.problem_opportunity_summary.v1" in rendered_summary
     assert "large_instance_intra_route_two_opt_seed" in rendered_summary
+    assert (
+        "large_instance_two_opt_objective_runtime_requirement"
+        in rendered_summary
+    )
+    assert "elapsed wall-clock" in rendered_summary
     assert "CVRP_LARGE_INSTANCE_TWO_OPT_SEED" in rendered_summary
     assert "CMT2" in rendered_summary
     assert "CMT4" in rendered_summary

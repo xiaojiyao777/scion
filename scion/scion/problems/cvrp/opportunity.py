@@ -8,6 +8,7 @@ from scion.measurement import MeasurementConsumerView, measurement_consumer_view
 from scion.opportunity import (
     AvoidedMechanismSummary,
     MechanismEvidenceSummary,
+    OpportunityEvidenceRequirement,
     OpportunityAxis,
     OpportunityContext,
     ProblemOpportunitySummary,
@@ -16,6 +17,7 @@ from scion.opportunity import (
 from scion.problems.cvrp.research_guidance import (
     CVRP_PROBLEM_FAMILY,
     PROTECTED_CASES,
+    REQUIRED_MECHANISM_ID,
 )
 
 
@@ -48,6 +50,10 @@ class CvrpOpportunityProvider:
             objective=objective,
             residual_opportunity=_residual_opportunity(source),
             mechanism_evidence=_mechanism_evidence(source),
+            evidence_requirements=_evidence_requirements(
+                source,
+                context.postrun_reports,
+            ),
             protected_cases=_protected_cases(),
             measurement=measurement,
             default_avoid=_default_avoid(source),
@@ -133,6 +139,114 @@ def _mechanism_evidence(
     return tuple(summaries)
 
 
+def _evidence_requirements(
+    source: Mapping[str, Any],
+    postrun_reports: tuple[Mapping[str, Any], ...],
+) -> tuple[OpportunityEvidenceRequirement, ...]:
+    requirements: list[OpportunityEvidenceRequirement] = []
+    recipe = _mapping_or_empty(source.get("top_opportunity_recipe"))
+    large_twoopt_signal = _large_twoopt_postrun_signal(postrun_reports)
+    if recipe:
+        family = str(recipe.get("mechanism_family") or REQUIRED_MECHANISM_ID)
+        requirements.append(
+            OpportunityEvidenceRequirement(
+                requirement_id="large_instance_two_opt_objective_runtime_requirement",
+                mechanism_family=family,
+                status=_large_twoopt_requirement_status(large_twoopt_signal),
+                summary=(
+                    "Bounded large-instance intra-route two-opt needs "
+                    "current-run pair-level objective, feasibility, route-count, "
+                    "and wall-clock evidence before solver-improvement claims."
+                ),
+                recommended_action=str(recipe.get("next_required_direction") or ""),
+                required_observations=_string_tuple(
+                    recipe.get("required_observations")
+                ),
+                protected_cases=_string_tuple(recipe.get("protected_cases")),
+                reason_codes=_large_twoopt_requirement_reason_codes(
+                    large_twoopt_signal
+                ),
+            )
+        )
+        protected_observations = _string_tuple(
+            recipe.get("protected_case_required_evidence")
+        )
+        if protected_observations:
+            requirements.append(
+                OpportunityEvidenceRequirement(
+                    requirement_id="cmt2_cmt4_case_protection",
+                    mechanism_family=family,
+                    status=_large_twoopt_requirement_status(large_twoopt_signal),
+                    summary=(
+                        "Prepared CVRP follow-up must keep CMT2/CMT4 protection "
+                        "visible or record an unresolved protection caveat."
+                    ),
+                    required_observations=protected_observations,
+                    protected_cases=_string_tuple(recipe.get("protected_cases")),
+                    reason_codes=("CVRP_PROTECTED_CASE_REVIEW_REQUIRED",),
+                )
+            )
+    for item in _list_of_mappings(source.get("measurable_opportunity_classes")):
+        family = str(item.get("mechanism_family") or "").strip()
+        if not family or family == REQUIRED_MECHANISM_ID:
+            continue
+        requirements.append(
+            OpportunityEvidenceRequirement(
+                requirement_id=f"{_slug(family)}_required_evidence",
+                mechanism_family=family,
+                status="eligible_if_required_evidence_declared",
+                summary=str(item.get("required_evidence") or ""),
+                required_observations=_string_tuple(item.get("required_evidence")),
+                reason_codes=("DIRECT_EFFECT_EVIDENCE_REQUIRED",),
+            )
+        )
+    return tuple(requirements)
+
+
+def _large_twoopt_postrun_signal(
+    postrun_reports: tuple[Mapping[str, Any], ...],
+) -> dict[str, Any]:
+    for report in postrun_reports:
+        payload = _mapping_or_empty(report)
+        nested = _mapping_or_empty(payload.get("cvrp_large_twoopt_summary"))
+        if nested:
+            payload = nested
+        if (
+            payload.get("schema_version")
+            == "scion.postrun_cvrp_large_twoopt_summary.v1"
+        ):
+            return payload
+    return {}
+
+
+def _large_twoopt_requirement_status(signal: Mapping[str, Any]) -> str:
+    if not signal:
+        return "current_run_required"
+    if signal.get("current_run_evidence") is not True:
+        return "current_run_required"
+    if signal.get("available") is not True:
+        return "postrun_summary_unavailable"
+    evidence = _mapping_or_empty(signal.get("evidence"))
+    mechanism = _mapping_or_empty(evidence.get("large_twoopt_mechanism"))
+    if mechanism.get("direct_evidence_ready") is True:
+        return "current_run_direct_evidence_ready"
+    if mechanism.get("mechanism_family_available") is True:
+        return "current_run_selected_but_direct_evidence_not_ready"
+    return "current_run_checklist_not_ready"
+
+
+def _large_twoopt_requirement_reason_codes(
+    signal: Mapping[str, Any],
+) -> tuple[str, ...]:
+    if not signal:
+        return ("CURRENT_RUN_EVIDENCE_REQUIRED",)
+    gaps = _string_tuple(signal.get("evidence_gaps"))
+    if gaps:
+        return gaps
+    interpretation = str(signal.get("interpretation") or "").strip()
+    return (interpretation,) if interpretation else ()
+
+
 def _protected_cases() -> tuple[ProtectedCaseSummary, ...]:
     required = (
         "paired objective delta",
@@ -179,3 +293,9 @@ def _string_tuple(value: Any) -> tuple[str, ...]:
         except TypeError:
             return ()
     return tuple(str(item).strip() for item in items if str(item).strip())
+
+
+def _slug(value: str) -> str:
+    return "_".join(
+        part for part in value.lower().replace("-", "_").split("_") if part
+    )

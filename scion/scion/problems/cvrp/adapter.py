@@ -33,6 +33,13 @@ from scion.problems.cvrp.preview import synthetic as _preview_synthetic
 from scion.problems.cvrp.preview.dispatch import (
     preview_research_surface_patch as _preview_research_surface_patch,
 )
+from scion.problems.cvrp.research_guidance import (
+    CASE_PROTECTION_REQUIREMENTS,
+    LARGE_INSTANCE_TWO_OPT_CONSTRAINTS,
+    NEXT_REQUIRED_DIRECTION,
+    PROTECTED_CASES,
+    REQUIRED_MECHANISM_ID,
+)
 from scion.problems.cvrp.surface_policy import (
     ACTIVE_RESEARCH_SURFACE_NAMES,
     LEGACY_RESEARCH_SURFACE_NAMES,
@@ -232,6 +239,32 @@ class CvrpAdapter:
                     ),
                 },
             ],
+            "top_opportunity_recipe": {
+                "schema_version": "scion.cvrp_opportunity_recipe.v1",
+                "proposal_visibility_only": True,
+                "decision_features_excluded": True,
+                "mechanism_family": REQUIRED_MECHANISM_ID,
+                "target_surface": "solver_design",
+                "target_files": ["policies/baseline_modules/local_search.py"],
+                "next_required_direction": NEXT_REQUIRED_DIRECTION,
+                "required_observations": list(
+                    LARGE_INSTANCE_TWO_OPT_CONSTRAINTS["required_pair_evidence"]
+                ),
+                "implementation_constraints": list(
+                    LARGE_INSTANCE_TWO_OPT_CONSTRAINTS[
+                        "implementation_constraints"
+                    ]
+                ),
+                "protected_cases": list(PROTECTED_CASES),
+                "protected_case_required_evidence": list(
+                    CASE_PROTECTION_REQUIREMENTS["required_evidence"]
+                ),
+                "default_reject_directions": list(
+                    LARGE_INSTANCE_TWO_OPT_CONSTRAINTS[
+                        "default_reject_directions"
+                    ]
+                ),
+            },
             "mechanism_effect_ranking": [
                 {
                     "rank": 1,

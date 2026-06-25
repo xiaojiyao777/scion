@@ -70,6 +70,19 @@ def compact_problem_opportunity_summary(payload: Any) -> str:
                     "reason_codes",
                 ),
             ),
+            "evidence_requirements": _project_items(
+                redacted.get("evidence_requirements"),
+                fields=(
+                    "requirement_id",
+                    "mechanism_family",
+                    "status",
+                    "summary",
+                    "recommended_action",
+                    "required_observations",
+                    "protected_cases",
+                    "reason_codes",
+                ),
+            ),
             "protected_cases": _project_items(
                 redacted.get("protected_cases"),
                 fields=("case_id", "reason", "required_evidence"),

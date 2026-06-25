@@ -54,6 +54,41 @@ def test_cvrp_opportunity_usage_classifies_structured_fingerprints() -> None:
     assert "proposal_repeats_default_avoid_family" in summary["evidence_gaps"]
 
 
+def test_cvrp_opportunity_usage_marks_top_family_checklist_unproven() -> None:
+    summary = build_cvrp_opportunity_usage_summary(
+        problem_family="cvrp",
+        current_run_evidence=True,
+        prompt_context_visibility_summary=_visible_prompt_summary(),
+        proposal_trajectory_manifests=[
+            {
+                "sessions": [
+                    _session(
+                        "s-large-twoopt-no-checklist",
+                        mechanism_ids=["large_instance_intra_route_two_opt_seed"],
+                        target_file="policies/baseline_modules/local_search.py",
+                    )
+                ],
+            }
+        ],
+    )
+
+    assert summary["usage_status"] == "checklist_unproven"
+    assert summary["counts"]["opportunity_evidence_checklist_unproven"] == 1
+    assert summary["entries"][0]["usage_status"] == (
+        "opportunity_evidence_checklist_unproven"
+    )
+    assert "required_evidence_checklist_unproven" in (
+        summary["entries"][0]["reason_codes"]
+    )
+    assert (
+        "proposal_selected_opportunity_without_required_evidence_checklist"
+        in summary["evidence_gaps"]
+    )
+    assert "no_structured_proposal_match_to_opportunity_summary" not in (
+        summary["evidence_gaps"]
+    )
+
+
 def test_cvrp_opportunity_usage_requires_visible_summary() -> None:
     summary = build_cvrp_opportunity_usage_summary(
         problem_family="cvrp",
