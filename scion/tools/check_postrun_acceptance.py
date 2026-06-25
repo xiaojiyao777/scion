@@ -34,6 +34,7 @@ from scion.postrun import (  # noqa: E402
     MappingPostrunInventoryPort,
     PostrunReadinessOrchestrator,
     PostrunArtifactAcceptancePort,
+    PostrunEvidenceConsistencyAcceptancePort,
     PostrunLifecycleAcceptancePort,
     ProblemReviewRegistry,
 )
@@ -98,7 +99,6 @@ PROMPT_CONTEXT_VISIBILITY_SCHEMA = (
 )
 PROMPT_SOURCE_VISIBILITY_SCHEMA = "scion.postrun_prompt_source_visibility_summary.v1"
 PROMPT_SIGNAL_DENSITY_SCHEMA = "scion.postrun_prompt_signal_density.v1"
-PHASE4_EVIDENCE_COVERAGE_SCHEMA = "scion.postrun_phase4_evidence_coverage.v1"
 RESEARCH_CONTEXT_ACTIONABILITY_SCHEMA = (
     "scion.postrun_research_context_actionability_summary.v1"
 )
@@ -136,14 +136,6 @@ REVIEW_INPUT_SUMMARIES = {
         "continuity_report_count",
     ),
 }
-PHASE4_COVERAGE_IDENTITY_FIELDS = (
-    "evidence_scope",
-    "prepared_only",
-    "pre_campaign_completion_preflight_failed",
-    "invalid_infra_only",
-    "current_run_evidence",
-)
-
 
 def build_readiness(
     run_root: Path | str,
@@ -217,33 +209,10 @@ def build_readiness(
         .summarize(inventory, analysis_brief)
         .to_payloads()
     )
-    phase4_status, phase4_detail = _phase4_evidence_coverage_actionability(
-        analysis_brief,
-        inventory,
-    )
-    add_check(
-        "phase4_evidence_coverage_actionability",
-        phase4_status,
-        phase4_detail,
-    )
-    contract_status, contract_detail = _prepared_contract_consistency(
-        analysis_brief,
-        inventory,
-    )
-    add_check(
-        "analysis_brief_prepared_contract_consistency",
-        contract_status,
-        contract_detail,
-    )
-    add_check(
-        "current_run_report_families_present",
-        "ok"
-        if all(
-            _int_or_zero(postrun_counts.get(name)) > 0
-            for name in ("summaries", "failures", "research_efficiency", "manifests")
-        )
-        else "failed",
-        postrun_counts,
+    checks.update(
+        PostrunEvidenceConsistencyAcceptancePort()
+        .summarize(analysis_brief=analysis_brief, inventory=inventory)
+        .to_payloads()
     )
     problem_status, problem_detail = _problem_summary_actionability(
         analysis_brief,
@@ -484,133 +453,6 @@ def _brief_current_run_evidence(brief: Mapping[str, Any]) -> bool:
     return (
         lifecycle.get("current_run_evidence") is True
         and phase4.get("current_run_evidence") is True
-    )
-
-
-def _phase4_evidence_coverage_actionability(
-    brief: Mapping[str, Any],
-    inventory: Mapping[str, Any],
-) -> tuple[str, Any]:
-    summary = _mapping_or_empty(brief.get("phase4_evidence_coverage"))
-    expected = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
-    failures: list[str] = []
-
-    if summary.get("schema_version") != PHASE4_EVIDENCE_COVERAGE_SCHEMA:
-        failures.append("phase4_evidence_coverage_schema_stale")
-    failures.extend(_boundary_marker_failures("phase4_evidence_coverage", summary))
-    if summary.get("current_run_evidence") is not True:
-        failures.append("phase4_evidence_coverage_not_current_run_evidence")
-
-    field_mismatches: list[dict[str, Any]] = []
-    for field in PHASE4_COVERAGE_IDENTITY_FIELDS:
-        expected_value = expected.get(field)
-        actual_value = summary.get(field)
-        if actual_value != expected_value:
-            field_mismatches.append(
-                {
-                    "field": field,
-                    "expected": expected_value,
-                    "actual": actual_value,
-                }
-            )
-    if field_mismatches:
-        failures.append("phase4_evidence_coverage_inventory_mismatch")
-
-    expected_problem_specific = _phase4_requirement_signature_map(
-        expected.get("problem_specific_requirements")
-    )
-    actual_problem_specific = _phase4_requirement_signature_map(
-        summary.get("problem_specific_requirements")
-    )
-    if actual_problem_specific != expected_problem_specific:
-        failures.append("phase4_problem_specific_requirements_mismatch")
-    unavailable_problem_specific = sorted(
-        key
-        for key, item in actual_problem_specific.items()
-        if item.get("available") is not True
-    )
-    if unavailable_problem_specific:
-        failures.append("phase4_problem_specific_requirements_unavailable")
-
-    return (
-        "ok" if not failures else "failed",
-        {
-            "failures": failures,
-            "schema_version": summary.get("schema_version"),
-            "current_run_evidence": summary.get("current_run_evidence"),
-            "expected_current_run_evidence": expected.get("current_run_evidence"),
-            "coverage_field_mismatches": field_mismatches,
-            "problem_specific_keys": sorted(actual_problem_specific),
-            "expected_problem_specific_keys": sorted(expected_problem_specific),
-            "problem_specific_unavailable": unavailable_problem_specific,
-        },
-    )
-
-
-def _phase4_requirement_signature_map(value: Any) -> dict[str, dict[str, Any]]:
-    requirements = _mapping_or_empty(value)
-    return {
-        str(key): {
-            "available": item.get("available") is True,
-            "count": _int_or_zero(item.get("count")),
-            "source": str(item.get("source") or ""),
-        }
-        for key, item in sorted(requirements.items())
-        if isinstance(item, Mapping)
-    }
-
-
-def _prepared_contract_consistency(
-    brief: Mapping[str, Any],
-    inventory: Mapping[str, Any],
-) -> tuple[str, Any]:
-    brief_contract = _mapping_or_empty(brief.get("prepared_run_contract"))
-    launcher = _mapping_or_empty(inventory.get("launcher"))
-    inventory_contract = _mapping_or_empty(launcher.get("prepared_run_contract"))
-    failures: list[str] = []
-    if not brief_contract:
-        failures.append("analysis_brief_prepared_contract_missing")
-    if not inventory_contract:
-        failures.append("inventory_prepared_contract_missing")
-    for field in (
-        "schema_version",
-        "report_only",
-        "quality_judgment",
-        "decision_features_excluded",
-        "manifest_present",
-        "contract_complete",
-        "problem_family",
-        "model",
-        "resume_from_campaign",
-        "control_pair_key",
-        "completion_preflight",
-        "postrun_reports",
-    ):
-        if brief_contract.get(field) != inventory_contract.get(field):
-            failures.append(f"prepared_contract_{field}_mismatch")
-    if _mapping_or_empty(brief_contract.get("execution")) != _mapping_or_empty(
-        inventory_contract.get("execution")
-    ):
-        failures.append("prepared_contract_execution_mismatch")
-    if _mapping_or_empty(brief_contract.get("git")) != _mapping_or_empty(
-        inventory_contract.get("git")
-    ):
-        failures.append("prepared_contract_git_mismatch")
-    return (
-        "ok" if not failures else "failed",
-        {
-            "failures": failures,
-            "brief_problem_family": brief_contract.get("problem_family"),
-            "inventory_problem_family": inventory_contract.get("problem_family"),
-            "brief_model": brief_contract.get("model"),
-            "inventory_model": inventory_contract.get("model"),
-            "brief_control_pair_key": brief_contract.get("control_pair_key"),
-            "inventory_control_pair_key": inventory_contract.get("control_pair_key"),
-            "brief_resume_from_campaign": brief_contract.get("resume_from_campaign"),
-            "inventory_resume_from_campaign": inventory_contract.get(
-                "resume_from_campaign"
-            ),
-        },
     )
 
 

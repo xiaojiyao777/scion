@@ -78,8 +78,13 @@ names and payloads. Artifact identity/schema acceptance checks now run through
 `PostrunArtifactAcceptancePort` while preserving legacy check names and
 payloads; local conda `claw` and WSL conda `scion` postrun acceptance
 validation passes (`85 passed` each) plus focused artifact/lifecycle/readiness
-port tests (`11 passed` each). Remaining generic consistency/actionability
-checks still need migration behind typed ports. Design O initial slice is implemented locally as
+port tests (`11 passed` each). Evidence/brief consistency checks for Phase 4
+coverage, prepared contract consistency, and current-run report families now
+run through `PostrunEvidenceConsistencyAcceptancePort`; local and WSL focused
+port tests pass (`13 passed` each), and full postrun acceptance still passes
+(`85 passed` each). Remaining prompt/source visibility, review-input,
+research-telemetry, and problem-owned summary consistency/actionability checks
+still need migration behind typed ports. Design O initial slice is implemented locally as
 `scion.measurement.MeasurementConsumerView`; `ProtocolConfig` now consumes the
 typed view while preserving its legacy readiness payload shape. Proposal
 context measurement diagnostics now consume the same typed view while keeping
@@ -457,6 +462,15 @@ Current checkpoint:
   without changing check names or JSON shape. Local conda `claw` and WSL conda
   `scion` validation passes for artifact/lifecycle/readiness port tests
   (`11 passed` each) and full postrun acceptance tests (`85 passed` each).
+- Design N generic evidence-consistency migration is present:
+  `scion.postrun.PostrunEvidenceConsistencyAcceptancePort` now owns
+  legacy-compatible checks for Phase 4 evidence coverage actionability,
+  analysis-brief prepared-contract consistency, and current-run report-family
+  presence. It treats problem-specific Phase 4 requirements as opaque
+  coverage keys and does not interpret CVRP/warehouse/VRP semantics. Local
+  conda `claw` and WSL conda `scion` validation passes for the focused
+  artifact/lifecycle/evidence/readiness port tests (`13 passed` each) and
+  full postrun acceptance tests (`85 passed` each).
 - Design O initial implementation is present in
   `scion.measurement.MeasurementConsumerView`: generic consumers receive
   normalized readiness, runtime model, pairing validity, effect scale,

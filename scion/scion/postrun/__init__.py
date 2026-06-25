@@ -2,9 +2,11 @@
 
 from scion.postrun.acceptance_checks import (
     ANALYSIS_BRIEF_SCHEMA,
+    PHASE4_EVIDENCE_COVERAGE_SCHEMA,
     PostrunAcceptanceCheck,
     PostrunAcceptanceCheckBundle,
     PostrunArtifactAcceptancePort,
+    PostrunEvidenceConsistencyAcceptancePort,
     PostrunLifecycleAcceptancePort,
     REBUILD_SCHEMA,
 )
@@ -31,6 +33,7 @@ from scion.postrun.readiness import (
 
 __all__ = [
     "ANALYSIS_BRIEF_SCHEMA",
+    "PHASE4_EVIDENCE_COVERAGE_SCHEMA",
     "ExposurePolicyPort",
     "ExposureSummary",
     "MappingPostrunInventoryPort",
@@ -39,6 +42,7 @@ __all__ = [
     "PostrunAcceptanceCheck",
     "PostrunAcceptanceCheckBundle",
     "PostrunArtifactAcceptancePort",
+    "PostrunEvidenceConsistencyAcceptancePort",
     "PostrunLifecycleAcceptancePort",
     "PostrunReadinessOrchestrator",
     "PostrunReadinessSummary",
