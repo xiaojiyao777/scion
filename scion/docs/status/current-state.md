@@ -155,12 +155,20 @@ chronology belongs in focused experiment reports and git history.
   bodies, and does not alter `DecisionFeatures`, Protocol, scheduler,
   lifecycle, runtime-pressure, or promotion behavior. Focused local
   opportunity/prompt-visibility tests pass (`18 passed`), and broader local
-  postrun brief/acceptance tests pass (`124 passed`). The completed WSL CVRP
-  opportunity-recipe root launched before Designs Q/R, so live prompt/postrun
-  validation of the code-prompt commitment relay requires the next launch.
-  The WSL checkout has been synced to head `7394757b`, and WSL conda `scion`
-  focused opportunity/prompt-visibility tests pass (`18 passed`) plus broader
-  postrun brief/acceptance tests pass (`124 passed`).
+  postrun brief/acceptance tests pass (`124 passed`). The WSL checkout was
+  synced to head `7394757b`, and an isolated WSL no-resume worktree at commit
+  `23f24bca` ran the fresh Design Q/R root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-designqr-codeprompt-fresh-23f24bca-data-2r-gpt55-20260625T140430Z-claw`.
+  It passed strict launch readiness, finished valid/complete and
+  postrun-ready, and was mirrored locally to
+  `/home/clawd/research/scion-experiments/v04-cvrp-designqr-codeprompt-fresh-23f24bca-data-2r-gpt55-20260625T140430Z-claw`.
+  This live-validates the code-prompt commitment relay: the code prompt
+  rendered `Opportunity Evidence Commitment` for
+  `large_instance_intra_route_two_opt_seed`, postrun visibility reported
+  `code_section_visible_trace_count=1`, `commitment_summary_trace_count=1`,
+  and both summary-without-section counts `0`. It remains solver-negative and
+  checklist-unproven; detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-designqr-codeprompt-postrun-20260625.md`.
 
 ## Current Decision
 
@@ -254,6 +262,33 @@ chronology belongs in focused experiment reports and git history.
   launched before Designs Q/R, so code prompts are not expected to include
   `Opportunity Evidence Commitment`. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-opportunity-recipe-postrun-20260625.md`.
+- The fresh no-resume CVRP Design Q/R root finished valid/complete and
+  postrun-ready:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-designqr-codeprompt-fresh-23f24bca-data-2r-gpt55-20260625T140430Z-claw`.
+  Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-designqr-codeprompt-fresh-23f24bca-data-2r-gpt55-20260625T140430Z-claw`.
+  It launched from isolated WSL worktree commit `23f24bca` after strict
+  readiness and `gpt-5.5` completion preflight. WSL postrun acceptance is
+  authoritative and ready: `current_run_analysis_ready=true`,
+  `delegation_ready=true`, no required readiness failures, optional
+  `postrun_report_status_marker` only. This root validates Designs Q/R on a
+  clean no-resume launch: one code prompt rendered
+  `Opportunity Evidence Commitment`, the manifest-safe commitment digest was
+  `a70515cce42ea190`, selected mechanism id was
+  `large_instance_intra_route_two_opt_seed`, requirement ids were
+  `large_instance_two_opt_objective_runtime_requirement` and
+  `cmt2_cmt4_case_protection`, and postrun visibility reported
+  `code_section_visible_trace_count=1` with both summary-without-section counts
+  `0`. It is not solver progress: 2 of 2 effective rounds, 2 screening
+  Protocol rows, 0 proposal quality blocks, 0 active-slot blocks, max branch
+  depth 2, same-mechanism follow-up 1/1, champion still `v1`, promotions `0`,
+  positive rows `0`, rows at or above MDE `0`, and CVRP review interpretation
+  `protocol_evaluated_without_large_twoopt_signal`. The useful next problem
+  signal is `cvrp_opportunity_usage_summary.usage_status=checklist_unproven`:
+  both structured proposal fingerprints selected the prepared opportunity but
+  did not prove the required objective/runtime plus CMT2/CMT4 evidence
+  checklist. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-designqr-codeprompt-postrun-20260625.md`.
 
 ## WSL Runner
 
@@ -315,10 +350,11 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   same-mechanism follow-up, and solver-design improvements. The current-sync
   and opportunity-recipe roots are clean acceptance evidence for repaired
   continuation, MDE-aware rejection, and problem-owned opportunity-summary
-  visibility, but not for solver improvement. The next CVRP/VRP work should
-  validate the Design Q/R code-prompt commitment relay on a synced launch and
-  improve problem-owned solver-opportunity evidence, not add CVRP-specific core
-  gates.
+  visibility, but not for solver improvement. The fresh no-resume Q/R root
+  validates code-phase opportunity commitment visibility on a synced launch.
+  The next CVRP/VRP work should improve problem-owned solver-opportunity
+  evidence and the required-evidence checklist follow-through, not add
+  CVRP-specific core gates.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
@@ -351,9 +387,10 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    selected opportunity commitments visible to code prompts and auditable in
    postrun reports as ids/digests only, including report-only counts for
    commitment summaries that were not accompanied by a rendered code prompt
-   section. The next v0.4 work is a synced CVRP/VRP launch that validates
-   code-phase opportunity commitment visibility plus problem-owned
-   opportunity/review evidence, not more generic checker growth.
+   section. A fresh no-resume CVRP launch has validated code-phase opportunity
+   commitment visibility; the next v0.4 work is problem-owned
+   opportunity/review evidence quality and checklist follow-through, not more
+   generic checker growth.
 2. Extend problem-owned opportunity providers/reviews beyond the CVRP initial
    slice only when a concrete problem package needs it. Generic core should
    continue to render/audit `ProblemOpportunitySummary`; residual opportunity,

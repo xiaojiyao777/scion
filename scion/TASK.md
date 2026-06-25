@@ -147,19 +147,9 @@ and prompt manifests as proposal-only `research_signal`. The relay is generic,
 redacted, excluded from `DecisionFeatures`, and does not change Protocol,
 scheduler, lifecycle, runtime-pressure, or promotion behavior. Local focused
 opportunity tests pass (`15 passed`) and the broader postrun
-visibility/agentic-prompt set passes (`117 passed`). The WSL CVRP
-opportunity-recipe root launched before Design Q and has now finished
-valid/complete and postrun-ready. It validates Design P proposal visibility,
-not the Design Q code-prompt relay: hypothesis prompts showed the problem-owned
-opportunity summary and selected `large_instance_intra_route_two_opt_seed`,
-while code prompts are not expected to include Design Q until the next synced
-launch. The run remains solver-negative: 4 of 4 effective rounds, 0 proposal
-quality blocks, champion still `v1`, 0 promotions, 0 positive rows, 0 rows at
-or above MDE, and CVRP review interpretation
-`protocol_evaluated_without_large_twoopt_signal`. Useful opportunity evidence:
-`cvrp_opportunity_usage_summary` is `mixed`, with `used_opportunity=4`,
-`contrasted_opportunity=56`, and only
-`proposal_repeats_default_avoid_family` as evidence gap. Detailed report:
+visibility/agentic-prompt set passes (`117 passed`). The earlier WSL CVRP
+opportunity-recipe root launched before Design Q/R and validates Design P
+proposal visibility, not the code-prompt relay; detailed report:
 `scion/docs/experiments/v0.4/v04-cvrp-opportunity-recipe-postrun-20260625.md`.
 Design R initial postrun visibility is implemented locally: prompt manifests
 carry bounded commitment ids/digests, proposal trajectory fingerprints expose
@@ -173,12 +163,25 @@ parsing or problem semantics. This remains report-only and does not change
 `DecisionFeatures`, Protocol, scheduler, lifecycle, runtime-pressure, or
 promotion behavior. Focused local opportunity/prompt-visibility validation
 passes (`18 passed`), and broader local postrun brief/acceptance validation
-passes (`124 passed`). The WSL checkout is synced to head `7394757b`; WSL
-conda `scion` focused opportunity/prompt-visibility validation passes
-(`18 passed`) and broader postrun brief/acceptance validation passes
-(`124 passed`). Live validation of the code-prompt commitment relay still
-requires the next launch because the completed opportunity-recipe root started
-before Design Q/R.
+passes (`124 passed`). The WSL checkout was synced to head `7394757b`, and an
+isolated WSL no-resume worktree at commit `23f24bca` ran the fresh Design Q/R
+smoke root
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-designqr-codeprompt-fresh-23f24bca-data-2r-gpt55-20260625T140430Z-claw`;
+local mirror:
+`/home/clawd/research/scion-experiments/v04-cvrp-designqr-codeprompt-fresh-23f24bca-data-2r-gpt55-20260625T140430Z-claw`.
+It finished valid/complete and postrun-ready after strict launch readiness:
+wrapper/campaign exit `0`, `current_run_analysis_ready=true`,
+`delegation_ready=true`, and no required readiness failures. This live-validates
+Design Q/R: the code prompt rendered `Opportunity Evidence Commitment` for
+`large_instance_intra_route_two_opt_seed`, postrun visibility reported
+`code_section_visible_trace_count=1`, `commitment_summary_trace_count=1`, and
+both summary-without-section counts `0`. The run remains solver-negative and
+checklist-unproven: 2 of 2 effective rounds, 2 screening Protocol rows,
+proposal quality blocks `0`, max branch depth `2`, same-mechanism follow-up
+`1/1`, champion still `v1`, promotions `0`, positive rows `0`, rows at or
+above MDE `0`, and `cvrp_opportunity_usage_summary.usage_status` is
+`checklist_unproven`. Detailed report:
+`scion/docs/experiments/v0.4/v04-cvrp-designqr-codeprompt-postrun-20260625.md`.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-25*
@@ -642,9 +645,11 @@ Current checkpoint:
   runtime-pressure, and promotion paths; problem-specific requirement semantics
   remain in the problem provider. Local focused opportunity validation passes
   (`15 passed`) and the broader postrun visibility/agentic prompt suite passes
-  (`117 passed`). The completed WSL CVRP opportunity-recipe root started before
-  this local Design Q slice, so its postrun trace is evidence for Design P
-  opportunity-summary visibility, not for the new code-prompt commitment relay.
+  (`117 passed`). The fresh WSL no-resume Design Q/R root from isolated commit
+  `23f24bca` now live-validates the code-prompt relay: the code prompt
+  rendered `Opportunity Evidence Commitment` for
+  `large_instance_intra_route_two_opt_seed`, and postrun readiness stayed
+  current-run-ready.
 - Design R initial postrun visibility is present for Design Q commitments:
   prompt manifests carry a manifest-safe
   `opportunity_evidence_commitment_summary` with selected mechanism ids,
@@ -659,7 +664,15 @@ Current checkpoint:
   prompt/response/patch bodies, and does not interpret problem-owned
   requirement semantics. Focused local opportunity/prompt-visibility
   validation passes (`18 passed`), and broader local postrun brief/acceptance
-  validation passes (`124 passed`).
+  validation passes (`124 passed`). The fresh WSL no-resume Q/R root finished
+  valid/complete and postrun-ready with `commitment_summary_trace_count=1`,
+  `code_section_visible_trace_count=1`, and both summary-without-section counts
+  `0`. It remains solver-negative and checklist-unproven: 2 screening Protocol
+  rows, max branch depth `2`, same-mechanism follow-up `1/1`, champion `v1`,
+  promotions `0`, positive rows `0`, rows at or above MDE `0`, and
+  `cvrp_opportunity_usage_summary.usage_status=checklist_unproven`. Detailed
+  report:
+  `scion/docs/experiments/v0.4/v04-cvrp-designqr-codeprompt-postrun-20260625.md`.
 - Postrun acceptance stored-inventory repair:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
   Historical root rechecks now use the stored inventory artifact declared by the
