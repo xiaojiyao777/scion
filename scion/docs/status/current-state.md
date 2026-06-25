@@ -142,6 +142,15 @@ chronology belongs in focused experiment reports and git history.
   not change Protocol, scheduler, lifecycle, runtime-pressure, or promotion
   behavior. Local focused opportunity/code-prompt tests pass (`15 passed`), and
   the broader postrun visibility/agentic prompt set passes (`117 passed`).
+- Design R initial visibility slice is implemented locally: prompt manifests
+  now carry manifest-safe opportunity commitment ids/digests, proposal
+  trajectory traces project `opportunity_commitment_visibility`, postrun prompt
+  context summaries aggregate code-phase commitment section visibility, and
+  prompt-visibility consistency checks compare stored vs recomputed commitment
+  visibility only when a commitment section or summary is actually present.
+  This is report-only, excludes raw prompt/response/patch bodies, and does not
+  alter `DecisionFeatures`, Protocol, scheduler, lifecycle, runtime-pressure,
+  or promotion behavior. Focused local tests pass (`17 passed`).
 
 ## Current Decision
 
@@ -316,9 +325,11 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    retaining only compatibility dispatch.
    Design O's typed measurement consumer feeds protocol config,
    proposal-context measurement diagnostics, prepared measurement handoff
-   builders, and postrun research-efficiency fallback. The next v0.4 work is
-   effective-research validation and problem-owned opportunity/review evidence,
-   not more generic checker growth.
+   builders, and postrun research-efficiency fallback. Designs Q/R now make
+   selected opportunity commitments visible to code prompts and auditable in
+   postrun reports as ids/digests only. The next v0.4 work is effective-
+   research validation and problem-owned opportunity/review evidence, not more
+   generic checker growth.
 2. Extend problem-owned opportunity providers/reviews beyond the CVRP initial
    slice only when a concrete problem package needs it. Generic core should
    continue to render/audit `ProblemOpportunitySummary`; residual opportunity,

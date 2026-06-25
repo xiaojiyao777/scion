@@ -258,6 +258,14 @@ def test_problem_opportunity_commitment_reaches_code_prompt_and_manifest() -> No
     assert manifest["section_statuses"]["opportunity_evidence_commitment"][
         "status"
     ] == "included"
+    commitment_summary = manifest["opportunity_evidence_commitment_summary"]
+    assert commitment_summary["selected_mechanism_ids"] == ["bounded_operator"]
+    assert commitment_summary["requirement_ids"] == [
+        "bounded_operator_required_evidence"
+    ]
+    assert commitment_summary["source_summary_digest"]
+    assert commitment_summary["commitment_digest"]
+    assert commitment_summary["decision_features_excluded"] is True
 
 
 def _minimal_code_context(commitment: dict[str, object]) -> dict[str, object]:

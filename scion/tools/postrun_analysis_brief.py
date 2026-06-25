@@ -21,8 +21,11 @@ if str(SCION_ROOT) not in sys.path:
 from postrun_artifact_inventory import HANDOFF_DOC, build_inventory  # noqa: E402
 from scion.postrun import ProblemPostrunReviewContext  # noqa: E402
 from scion.postrun.opportunity_visibility import (  # noqa: E402
+    add_opportunity_commitment_visibility,
     add_problem_opportunity_visibility,
+    empty_opportunity_commitment_visibility_aggregate,
     empty_problem_opportunity_visibility_aggregate,
+    merge_opportunity_commitment_visibility,
     merge_problem_opportunity_visibility,
 )
 from scion.problems.cvrp.postrun_review import (  # noqa: E402
@@ -970,6 +973,21 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 f"{_display(source_visibility.get('active_subject_code_constraints_not_full_visible_count'))}",
                 "- Active subject code constraint statuses: "
                 f"{_mapping_text(source_visibility.get('active_subject_code_constraints_status_counts'))}",
+            ]
+        )
+    commitment_visibility = _mapping_or_empty(
+        aggregate.get("opportunity_commitment_visibility")
+    )
+    if commitment_visibility:
+        lines.extend(
+            [
+                "- Opportunity commitment code traces present/visible: "
+                f"{_display(commitment_visibility.get('code_section_present_trace_count'))} / "
+                f"{_display(commitment_visibility.get('code_section_visible_trace_count'))}",
+                "- Opportunity commitment summaries / selected mechanisms / requirements: "
+                f"{_display(commitment_visibility.get('commitment_summary_trace_count'))} / "
+                f"{_mapping_text(commitment_visibility.get('selected_mechanism_id_counts'))} / "
+                f"{_mapping_text(commitment_visibility.get('requirement_id_counts'))}",
             ]
         )
     density = _mapping_or_empty(aggregate.get("signal_density"))
@@ -3084,6 +3102,9 @@ def _empty_prompt_context_aggregate() -> dict[str, Any]:
         "problem_opportunity_visibility": (
             empty_problem_opportunity_visibility_aggregate()
         ),
+        "opportunity_commitment_visibility": (
+            empty_opportunity_commitment_visibility_aggregate()
+        ),
         "signal_density": {},
         "hypothesis_generation_signal_density": {},
     }
@@ -3158,6 +3179,9 @@ def _proposal_trajectory_context_entry(path: Path) -> dict[str, Any]:
         "problem_opportunity_visibility": (
             empty_problem_opportunity_visibility_aggregate()
         ),
+        "opportunity_commitment_visibility": (
+            empty_opportunity_commitment_visibility_aggregate()
+        ),
     }
     for session in sessions:
         if not isinstance(session, Mapping):
@@ -3189,6 +3213,11 @@ def _add_prompt_trace_context(entry: dict[str, Any], trace: Mapping[str, Any]) -
         entry["problem_opportunity_visibility"],
         trace.get("problem_opportunity_visibility"),
         is_hypothesis_generation=is_hypothesis_generation,
+    )
+    add_opportunity_commitment_visibility(
+        entry["opportunity_commitment_visibility"],
+        trace.get("opportunity_commitment_visibility"),
+        is_code_generation=call_kind == "code",
     )
 
     block_summary = _mapping_or_empty(trace.get("block_family_summary"))
@@ -3251,6 +3280,10 @@ def _merge_prompt_context_aggregate(
     merge_problem_opportunity_visibility(
         aggregate["problem_opportunity_visibility"],
         _mapping_or_empty(entry.get("problem_opportunity_visibility")),
+    )
+    merge_opportunity_commitment_visibility(
+        aggregate["opportunity_commitment_visibility"],
+        _mapping_or_empty(entry.get("opportunity_commitment_visibility")),
     )
     families = entry.get("block_family_totals")
     if isinstance(families, Mapping):

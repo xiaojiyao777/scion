@@ -11,7 +11,9 @@ from scion.postrun.acceptance_checks import (
     PostrunAcceptanceCheckBundle,
 )
 from scion.postrun.opportunity_visibility import (
+    OPPORTUNITY_COMMITMENT_VISIBILITY_SCHEMA,
     PROBLEM_OPPORTUNITY_VISIBILITY_SCHEMA,
+    opportunity_commitment_visibility_signature,
     problem_opportunity_visibility_signature,
 )
 
@@ -81,6 +83,9 @@ def _prompt_source_visibility_actionability(
     opportunity_visibility = _mapping_or_empty(
         aggregate.get("problem_opportunity_visibility")
     )
+    commitment_visibility = _mapping_or_empty(
+        aggregate.get("opportunity_commitment_visibility")
+    )
     call_kind_counts = _mapping_or_empty(aggregate.get("call_kind_counts"))
     hypothesis_density = _mapping_or_empty(
         aggregate.get("hypothesis_generation_signal_density")
@@ -127,6 +132,20 @@ def _prompt_source_visibility_actionability(
             require_quality=False,
         )
     )
+    if _commitment_visibility_has_signal(
+        commitment_visibility
+    ) and commitment_visibility.get("schema_version") != (
+        OPPORTUNITY_COMMITMENT_VISIBILITY_SCHEMA
+    ):
+        failures.append("opportunity_commitment_visibility_schema_stale")
+    if commitment_visibility:
+        failures.extend(
+            _boundary_marker_failures(
+                "opportunity_commitment_visibility",
+                commitment_visibility,
+                require_quality=False,
+            )
+        )
     if summary.get("current_run_evidence") is not True:
         failures.append("prompt_context_not_current_run_evidence")
     if summary.get("available") is not True:
@@ -522,6 +541,15 @@ def _prompt_context_visibility_consistency_failures(
         expected_aggregate.get("problem_opportunity_visibility")
     ):
         failures.append("prompt_context_visibility_problem_opportunity_mismatch")
+    if _commitment_visibility_comparison_required(
+        aggregate.get("opportunity_commitment_visibility"),
+        expected_aggregate.get("opportunity_commitment_visibility"),
+    ) and opportunity_commitment_visibility_signature(
+        aggregate.get("opportunity_commitment_visibility")
+    ) != opportunity_commitment_visibility_signature(
+        expected_aggregate.get("opportunity_commitment_visibility")
+    ):
+        failures.append("prompt_context_visibility_opportunity_commitment_mismatch")
     if _prompt_context_entries_signature(summary.get("entries")) != (
         _prompt_context_entries_signature(expected.get("entries"))
     ):
@@ -619,6 +647,28 @@ def _prompt_signal_density_consistency_failures(
     return failures
 
 
+def _commitment_visibility_comparison_required(left: Any, right: Any) -> bool:
+    return _commitment_visibility_has_signal(left) or _commitment_visibility_has_signal(
+        right
+    )
+
+
+def _commitment_visibility_has_signal(value: Any) -> bool:
+    visibility = _mapping_or_empty(value)
+    if not visibility:
+        return False
+    for key in (
+        "section_present_trace_count",
+        "section_visible_trace_count",
+        "code_section_present_trace_count",
+        "code_section_visible_trace_count",
+        "commitment_summary_trace_count",
+    ):
+        if _int_or_zero(visibility.get(key)) > 0:
+            return True
+    return False
+
+
 def _prompt_context_entries_signature(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
@@ -627,60 +677,64 @@ def _prompt_context_entries_signature(value: Any) -> list[dict[str, Any]]:
         entry = _mapping_or_empty(raw)
         if not entry:
             continue
-        entries.append(
-            {
-                "report": str(entry.get("report") or ""),
-                "path": _path_tail_signature(entry.get("path")),
-                "prompt_manifest_ref_count": _int_or_zero(
-                    entry.get("prompt_manifest_ref_count")
-                ),
-                "prompt_manifest_loaded_count": _int_or_zero(
-                    entry.get("prompt_manifest_loaded_count")
-                ),
-                "trace_count": _int_or_zero(entry.get("trace_count")),
-                "visibility_digest_count": _int_or_zero(
-                    entry.get("visibility_digest_count")
-                ),
-                "block_family_trace_count": _int_or_zero(
-                    entry.get("block_family_trace_count")
-                ),
-                "hypothesis_generation_trace_count": _int_or_zero(
-                    entry.get("hypothesis_generation_trace_count")
-                ),
-                "hypothesis_generation_block_family_trace_count": _int_or_zero(
-                    entry.get("hypothesis_generation_block_family_trace_count")
-                ),
-                "omitted_section_trace_count": _int_or_zero(
-                    entry.get("omitted_section_trace_count")
-                ),
-                "truncated_section_trace_count": _int_or_zero(
-                    entry.get("truncated_section_trace_count")
-                ),
-                "call_kind_counts": _int_mapping(entry.get("call_kind_counts")),
-                "block_family_totals": _block_family_totals_signature(
-                    entry.get("block_family_totals")
-                ),
-                "hypothesis_generation_block_family_totals": (
-                    _block_family_totals_signature(
-                        entry.get("hypothesis_generation_block_family_totals")
-                    )
-                ),
-                "omitted_section_counts": _int_mapping(
-                    entry.get("omitted_section_counts")
-                ),
-                "truncated_section_counts": _int_mapping(
-                    entry.get("truncated_section_counts")
-                ),
-                "source_visibility": _prompt_source_visibility_signature(
-                    entry.get("source_visibility")
-                ),
-                "problem_opportunity_visibility": (
-                    problem_opportunity_visibility_signature(
-                        entry.get("problem_opportunity_visibility")
-                    )
-                ),
-            }
-        )
+        signature = {
+            "report": str(entry.get("report") or ""),
+            "path": _path_tail_signature(entry.get("path")),
+            "prompt_manifest_ref_count": _int_or_zero(
+                entry.get("prompt_manifest_ref_count")
+            ),
+            "prompt_manifest_loaded_count": _int_or_zero(
+                entry.get("prompt_manifest_loaded_count")
+            ),
+            "trace_count": _int_or_zero(entry.get("trace_count")),
+            "visibility_digest_count": _int_or_zero(
+                entry.get("visibility_digest_count")
+            ),
+            "block_family_trace_count": _int_or_zero(
+                entry.get("block_family_trace_count")
+            ),
+            "hypothesis_generation_trace_count": _int_or_zero(
+                entry.get("hypothesis_generation_trace_count")
+            ),
+            "hypothesis_generation_block_family_trace_count": _int_or_zero(
+                entry.get("hypothesis_generation_block_family_trace_count")
+            ),
+            "omitted_section_trace_count": _int_or_zero(
+                entry.get("omitted_section_trace_count")
+            ),
+            "truncated_section_trace_count": _int_or_zero(
+                entry.get("truncated_section_trace_count")
+            ),
+            "call_kind_counts": _int_mapping(entry.get("call_kind_counts")),
+            "block_family_totals": _block_family_totals_signature(
+                entry.get("block_family_totals")
+            ),
+            "hypothesis_generation_block_family_totals": (
+                _block_family_totals_signature(
+                    entry.get("hypothesis_generation_block_family_totals")
+                )
+            ),
+            "omitted_section_counts": _int_mapping(
+                entry.get("omitted_section_counts")
+            ),
+            "truncated_section_counts": _int_mapping(
+                entry.get("truncated_section_counts")
+            ),
+            "source_visibility": _prompt_source_visibility_signature(
+                entry.get("source_visibility")
+            ),
+            "problem_opportunity_visibility": (
+                problem_opportunity_visibility_signature(
+                    entry.get("problem_opportunity_visibility")
+                )
+            ),
+        }
+        commitment_visibility = entry.get("opportunity_commitment_visibility")
+        if _commitment_visibility_has_signal(commitment_visibility):
+            signature["opportunity_commitment_visibility"] = (
+                opportunity_commitment_visibility_signature(commitment_visibility)
+            )
+        entries.append(signature)
     return sorted(entries, key=lambda item: item["report"])
 
 

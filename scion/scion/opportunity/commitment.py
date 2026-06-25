@@ -12,6 +12,9 @@ from scion.opportunity.summary import redact_problem_opportunity_payload
 
 
 SCHEMA_VERSION = "scion.problem_opportunity_evidence_commitment.v1"
+MANIFEST_SUMMARY_SCHEMA_VERSION = (
+    "scion.problem_opportunity_evidence_commitment_manifest_summary.v1"
+)
 _TEXT_CHARS = 320
 _REQUIREMENT_LIMIT = 8
 _SEQUENCE_LIMIT = 8
@@ -169,6 +172,53 @@ def compact_opportunity_evidence_commitment(value: Any) -> str:
     )
 
 
+def opportunity_evidence_commitment_manifest_summary(value: Any) -> dict[str, Any]:
+    """Project a commitment into manifest-safe ids and digests.
+
+    Prompt manifests must not store raw prompt text or problem evidence bodies.
+    This summary keeps only bounded identifiers needed for postrun visibility
+    checks and report-only linkage.
+    """
+
+    if not isinstance(value, Mapping):
+        return {}
+    payload = redact_problem_opportunity_payload(dict(value))
+    requirements = _project_requirements(payload.get("requirements"))
+    if not requirements:
+        return {}
+    requirement_ids = _unique_strings(
+        item.get("requirement_id") for item in requirements
+    )
+    mechanism_families = _unique_strings(
+        item.get("mechanism_family") for item in requirements
+    )
+    selected_mechanism_ids = _project_sequence(payload.get("selected_mechanism_ids"))
+    return _drop_empty(
+        {
+            "schema_version": MANIFEST_SUMMARY_SCHEMA_VERSION,
+            "commitment_schema_version": str(
+                payload.get("schema_version") or SCHEMA_VERSION
+            ),
+            "problem_family": _project_scalar(payload.get("problem_family")),
+            "objective": _project_scalar(payload.get("objective")),
+            "selected_mechanism_ids": selected_mechanism_ids,
+            "requirement_ids": requirement_ids,
+            "mechanism_families": mechanism_families,
+            "requirement_count": len(requirements),
+            "source_schema_version": _project_scalar(
+                payload.get("source_schema_version")
+            ),
+            "source_summary_digest": _project_scalar(
+                payload.get("source_summary_digest")
+            ),
+            "commitment_digest": _digest(payload),
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "report_only": True,
+        }
+    )
+
+
 def _mechanism_ids_from_hypothesis(hypothesis: Any) -> tuple[str, ...]:
     if isinstance(hypothesis, Mapping):
         changes = hypothesis.get("mechanism_changes")
@@ -262,6 +312,17 @@ def _string_tuple(value: Any) -> tuple[str, ...]:
     return tuple(result)
 
 
+def _unique_strings(values: Any) -> list[str]:
+    result: list[str] = []
+    for item in values:
+        text = _project_scalar(item)
+        if not isinstance(text, str):
+            text = str(text or "").strip()
+        if text and text not in result:
+            result.append(text)
+    return result[:_SEQUENCE_LIMIT]
+
+
 def _digest(value: Any) -> str:
     rendered = json.dumps(
         redact_problem_opportunity_payload(value),
@@ -281,8 +342,10 @@ def _drop_empty(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 __all__ = [
+    "MANIFEST_SUMMARY_SCHEMA_VERSION",
     "OpportunityEvidenceCommitment",
     "OpportunityRequirementCommitment",
     "compact_opportunity_evidence_commitment",
     "opportunity_evidence_commitment_from_summary",
+    "opportunity_evidence_commitment_manifest_summary",
 ]

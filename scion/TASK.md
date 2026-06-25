@@ -152,6 +152,14 @@ opportunity-recipe root launched before Design Q, so its hypothesis prompts
 already show the problem-owned opportunity summary and selected
 `large_instance_intra_route_two_opt_seed`, while its current code prompts are
 not expected to include Design Q until the next synced launch.
+Design R initial postrun visibility is implemented locally: prompt manifests
+carry bounded commitment ids/digests, proposal trajectory fingerprints expose
+`opportunity_commitment_visibility`, postrun prompt-context summaries aggregate
+code-phase commitment section visibility, and consistency checks compare
+stored vs recomputed commitment visibility only when a commitment section or
+summary is present. This remains report-only and does not change
+`DecisionFeatures`, Protocol, scheduler, lifecycle, runtime-pressure, or
+promotion behavior. Focused local validation passes (`17 passed`).
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-25*
@@ -618,6 +626,17 @@ Current checkpoint:
   (`117 passed`). The current WSL CVRP opportunity-recipe run started before
   this local Design Q slice, so its live trace is evidence for Design P
   opportunity-summary visibility, not for the new code-prompt commitment relay.
+- Design R initial postrun visibility is present for Design Q commitments:
+  prompt manifests carry a manifest-safe
+  `opportunity_evidence_commitment_summary` with selected mechanism ids,
+  requirement ids, source-summary digest, and commitment digest; proposal
+  trajectory traces project `opportunity_commitment_visibility`; postrun
+  prompt-context summaries aggregate code-phase section visibility and
+  id/digest counts; and prompt-visibility consistency checks compare stored vs
+  recomputed commitment visibility only when the section or summary is present.
+  This is report-only, excludes raw prompt/response/patch bodies, and does not
+  interpret problem-owned requirement semantics. Focused local validation
+  passes (`17 passed`).
 - Postrun acceptance stored-inventory repair:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
   Historical root rechecks now use the stored inventory artifact declared by the

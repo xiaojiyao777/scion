@@ -21,6 +21,7 @@ from scion.core.explore_step.branch_lesson_usage import (
     branch_lesson_usage_report_projection,
 )
 from scion.postrun.opportunity_visibility import (
+    opportunity_commitment_visibility_fingerprint,
     problem_opportunity_visibility_fingerprint,
 )
 
@@ -566,6 +567,9 @@ def _trace_fingerprints(
                     ),
                     "problem_opportunity_visibility": (
                         problem_opportunity_visibility_fingerprint(prompt_manifest)
+                    ),
+                    "opportunity_commitment_visibility": (
+                        opportunity_commitment_visibility_fingerprint(prompt_manifest)
                     ),
                     "omitted_sections": _string_list(
                         prompt_manifest.get("omitted_sections")

@@ -14,6 +14,7 @@ from typing import Any, Mapping
 
 from scion.proposal.agentic_models import AGENTIC_CODE_PHASE_CONTEXT_PROFILE
 from scion.proposal.agentic_utils import _enum_value, _sanitize_agentic_value
+from scion.opportunity import opportunity_evidence_commitment_manifest_summary
 from scion.proposal.prompt_manifest_accounting import (
     _cacheability_summary,
     _json_chars,
@@ -160,6 +161,11 @@ def build_api_visible_prompt_manifest(
             section_statuses=section_statuses,
         )
     )
+    opportunity_evidence_commitment_summary = (
+        opportunity_evidence_commitment_manifest_summary(
+            safe_context.get("opportunity_evidence_commitment")
+        )
+    )
     system_chars = _system_text_chars(rendered_system_blocks)
     user_chars = len(rendered_user_prompt) if rendered_available else 0
     total_chars = system_chars + user_chars
@@ -283,6 +289,9 @@ def build_api_visible_prompt_manifest(
         ),
         "active_subject_code_constraints_visibility": (
             active_subject_code_constraints_visibility
+        ),
+        "opportunity_evidence_commitment_summary": (
+            opportunity_evidence_commitment_summary
         ),
         "material_difference_requirement_visible": bool(
             material_difference_requirement_visibility_ledger.get("visible")

@@ -204,3 +204,14 @@ def test_cvrp_problem_opportunity_commitment_reaches_code_prompt_manifest() -> N
     assert manifest["section_statuses"]["opportunity_evidence_commitment"][
         "status"
     ] == "included"
+    commitment_summary = manifest["opportunity_evidence_commitment_summary"]
+    assert commitment_summary["selected_mechanism_ids"] == [
+        "large_instance_intra_route_two_opt_seed"
+    ]
+    assert commitment_summary["requirement_ids"] == [
+        "large_instance_two_opt_objective_runtime_requirement",
+        "cmt2_cmt4_case_protection",
+    ]
+    assert commitment_summary["source_summary_digest"]
+    assert commitment_summary["commitment_digest"]
+    assert commitment_summary["decision_features_excluded"] is True
