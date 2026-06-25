@@ -74,29 +74,22 @@ chronology belongs in focused experiment reports and git history.
   `scion.problems.warehouse_delivery.postrun_review.WarehousePostrunSummaryProvider`
   builds `warehouse_followup_summary`. The typed adapter registers both
   problem review ports, and checker recomputation imports both review summaries
-  from problem packages. Generic lifecycle/current-run evidence and wrapper
-  marker acceptance checks now run through
-  `scion.postrun.PostrunLifecycleAcceptancePort` while preserving legacy check
-  names and payloads. Generic artifact identity/schema acceptance checks now
-  run through `scion.postrun.PostrunArtifactAcceptancePort` while preserving
-  legacy check names and payloads. Generic evidence/brief consistency checks
-  for Phase 4 evidence coverage, prepared-contract consistency, and current-run
-  report-family presence now run through
-  `scion.postrun.PostrunEvidenceConsistencyAcceptancePort` while preserving
-  legacy check names and payloads. Prompt/source visibility envelope checks now
-  run through `scion.postrun.PostrunPromptVisibilityAcceptancePort` while
-  preserving legacy check names and payloads; the checker still supplies the
-  expected prompt visibility summary and active-subject legacy failure-prefix
-  policy. Remaining research-telemetry and problem-owned summary
-  consistency/actionability checks still need migration behind typed ports.
-  Review-input summary
-  schema/count/consistency validation now runs through
-  `scion.postrun.PostrunReviewInputAcceptancePort`; the checker/problem policy
-  still supplies the required-summary set for each interpretation. Local and
-  WSL focused validation passes for provider/readiness/boundary, postrun brief,
-  acceptance, and opportunity visibility suites; the
-  artifact/lifecycle/evidence/review-input/prompt-visibility/readiness port
-  tests pass (`23 passed` each), and full postrun acceptance passes
+  from problem packages. Generic acceptance is now split across named ports:
+  `PostrunLifecycleAcceptancePort`, `PostrunArtifactAcceptancePort`,
+  `PostrunEvidenceConsistencyAcceptancePort`,
+  `PostrunReviewInputAcceptancePort`,
+  `PostrunPromptVisibilityAcceptancePort`, and
+  `PostrunResearchTelemetryAcceptancePort`. The checker still supplies
+  required-summary policy, expected-summary rebuilds, active-subject legacy
+  prompt policy, and problem-family enablement; generic ports preserve legacy
+  check names/payloads and do not interpret CVRP/warehouse/VRP review
+  semantics. Failure-taxonomy signature comparison lives in a named telemetry
+  evaluator. Remaining problem-owned summary consistency/actionability checks
+  still need migration behind typed ports. Local and WSL focused validation
+  passes for provider/readiness/boundary, postrun brief, acceptance, and
+  opportunity visibility suites; the
+  artifact/lifecycle/evidence/review-input/prompt-visibility/research-telemetry
+  port tests pass (`19 passed` each), and full postrun acceptance passes
   (`85 passed` each) in both environments.
 - Design O initial slice is implemented locally as
   `scion.measurement.MeasurementConsumerView`. It reduces problem-owned
@@ -282,13 +275,15 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    behind `PostrunArtifactAcceptancePort`; evidence/brief consistency checks
    are behind `PostrunEvidenceConsistencyAcceptancePort`; review-input summary
    validation is behind `PostrunReviewInputAcceptancePort`; prompt/source
-   visibility envelope checks are behind `PostrunPromptVisibilityAcceptancePort`.
-   All five preserve legacy check payloads.
+   visibility envelope checks are behind `PostrunPromptVisibilityAcceptancePort`;
+   research-telemetry checks are behind
+   `PostrunResearchTelemetryAcceptancePort`. All six preserve legacy check
+   payloads.
    Design O's typed measurement consumer feeds protocol config,
    proposal-context measurement diagnostics, prepared measurement handoff
    builders, and postrun research-efficiency fallback. Migrate remaining
-   research-telemetry and problem-owned summary consistency/actionability checks
-   behind typed ports next.
+   problem-owned summary consistency/actionability checks behind typed ports
+   next.
 2. Extend problem-owned opportunity providers/reviews beyond the CVRP initial
    slice only when a concrete problem package needs it. Generic core should
    continue to render/audit `ProblemOpportunitySummary`; residual opportunity,

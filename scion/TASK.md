@@ -92,7 +92,12 @@ each). Prompt/source visibility envelope checks now run through
 summary rebuilds and active-subject legacy prefix policy, so generic core does
 not interpret CVRP/warehouse/VRP semantics. Local and WSL focused port tests
 pass (`23 passed` each), and full postrun acceptance still passes (`85 passed`
-each). Remaining research-telemetry and problem-owned summary
+each). Research-telemetry acceptance checks now run through
+`PostrunResearchTelemetryAcceptancePort`; the checker still supplies expected
+summary rebuilds and problem-family enablement, and failure-taxonomy evidence
+is kept in a named telemetry evaluator rather than generic problem semantics.
+Local and WSL focused port tests pass (`19 passed` each), and full postrun
+acceptance still passes (`85 passed` each). Remaining problem-owned summary
 consistency/actionability checks still need migration behind typed ports.
 Design O initial slice is implemented locally as
 `scion.measurement.MeasurementConsumerView`; `ProtocolConfig` now consumes the
@@ -500,6 +505,17 @@ Current checkpoint:
   CVRP/warehouse/VRP semantics. Local conda `claw` and WSL conda `scion`
   validation passes for the focused port/readiness tests (`23 passed` each)
   and full postrun acceptance tests (`85 passed` each).
+- Design N generic research-telemetry migration is present:
+  `scion.postrun.PostrunResearchTelemetryAcceptancePort` now owns
+  legacy-compatible checks for research-context actionability, branch research
+  state, champion progress, and failure taxonomy. The checker still owns
+  problem-family enablement and expected-summary rebuilds, so the generic port
+  compares opaque telemetry summaries without interpreting CVRP/warehouse/VRP
+  review semantics. `scion.postrun.failure_taxonomy_acceptance` keeps
+  failure-taxonomy entry, path-tail, proposal-quality, run-status, and
+  top-example signatures in a named telemetry evaluator. Local conda `claw`
+  and WSL conda `scion` validation passes for the focused port tests
+  (`19 passed` each) and full postrun acceptance tests (`85 passed` each).
 - Design O initial implementation is present in
   `scion.measurement.MeasurementConsumerView`: generic consumers receive
   normalized readiness, runtime model, pairing validity, effect scale,
