@@ -33,6 +33,7 @@ from postrun_analysis_brief import (  # noqa: E402
 from scion.postrun import (  # noqa: E402
     MappingPostrunInventoryPort,
     PostrunReadinessOrchestrator,
+    PostrunArtifactAcceptancePort,
     PostrunLifecycleAcceptancePort,
     ProblemReviewRegistry,
 )
@@ -62,8 +63,6 @@ from scion.problems.warehouse_delivery.postrun_review import (  # noqa: E402
 
 
 SCHEMA_VERSION = "scion.postrun_acceptance_readiness.v1"
-ANALYSIS_BRIEF_SCHEMA = "scion.postrun_analysis_brief.v1"
-REBUILD_SCHEMA = "scion.postrun_acceptance_rebuild.v1"
 UNREADY_EXIT = 64
 BLOCKING_PROBLEM_SUMMARY_GAPS = {
     "cvrp_large_twoopt_handoff_requirements_incomplete",
@@ -169,15 +168,16 @@ def build_readiness(
             "detail": detail,
         }
 
+    artifact_port = PostrunArtifactAcceptancePort()
     report_dir = root / "postrun_acceptance"
-    rebuild_manifest = _read_rebuild_manifest(report_dir)
-    inventory_path = _artifact_json_path_from_rebuild_manifest(
+    rebuild_manifest = artifact_port.read_rebuild_manifest(report_dir)
+    inventory_path = artifact_port.artifact_json_path_from_manifest(
         rebuild_manifest,
         report_dir,
         "inventory",
     )
     stored_inventory = (
-        _read_json_object(inventory_path)
+        artifact_port.read_json_object(inventory_path)
         if inventory_path is not None
         else {}
     )
@@ -190,120 +190,27 @@ def build_readiness(
     postrun_reports = _mapping_or_empty(inventory.get("postrun_reports"))
     postrun_counts = _mapping_or_empty(postrun_reports.get("counts"))
 
-    analysis_brief_path = _analysis_brief_path_from_rebuild_manifest(
+    analysis_brief_path = artifact_port.analysis_brief_path_from_manifest(
         rebuild_manifest,
         report_dir,
     )
     analysis_brief = (
-        _read_json_object(analysis_brief_path)
+        artifact_port.read_json_object(analysis_brief_path)
         if analysis_brief_path
         else {}
     )
 
-    add_check(
-        "inventory_loaded",
-        "ok",
-        {
-            "run_root": str(root),
-            "source": inventory_source,
-            "stored_inventory_path": str(inventory_path) if inventory_path else "",
-        },
-    )
-    add_check(
-        "postrun_acceptance_present",
-        "ok" if report_dir.exists() else "failed",
-        str(report_dir),
-    )
-    add_check(
-        "rebuild_manifest_present",
-        "ok" if rebuild_manifest else "failed",
-        _artifact_paths(report_dir / "rebuild"),
-    )
-    add_check(
-        "rebuild_manifest_schema",
-        "ok"
-        if rebuild_manifest.get("schema_version") == REBUILD_SCHEMA
-        else "failed",
-        rebuild_manifest.get("schema_version"),
-    )
-    add_check(
-        "rebuild_manifest_run_identity",
-        "ok"
-        if _payload_path_matches(rebuild_manifest.get("run_root"), root)
-        else "failed",
-        {
-            "expected_run_root": str(root),
-            "manifest_run_root": rebuild_manifest.get("run_root"),
-        },
-    )
-    identity_status, identity_detail = _rebuild_manifest_identity_boundary(
-        root,
-        report_dir,
-        rebuild_manifest,
-    )
-    add_check(
-        "rebuild_manifest_identity_boundary",
-        identity_status,
-        identity_detail,
-    )
-    add_check(
-        "rebuild_manifest_complete",
-        "ok" if rebuild_manifest.get("complete") is True else "failed",
-        {
-            "complete": rebuild_manifest.get("complete"),
-            "families": rebuild_manifest.get("families"),
-        },
-    )
-    manifest_outputs_status, manifest_outputs_detail = (
-        _rebuild_manifest_declared_outputs_present(rebuild_manifest, report_dir)
-    )
-    add_check(
-        "rebuild_manifest_declared_outputs_present",
-        manifest_outputs_status,
-        manifest_outputs_detail,
-    )
-    add_check(
-        "analysis_brief_present",
-        "ok" if analysis_brief else "failed",
-        {
-            "selected_from_rebuild_manifest": str(analysis_brief_path)
-            if analysis_brief_path
-            else "",
-            "available_artifacts": _artifact_paths(report_dir / "analysis_brief"),
-        },
-    )
-    add_check(
-        "analysis_brief_schema",
-        "ok"
-        if analysis_brief.get("schema_version") == ANALYSIS_BRIEF_SCHEMA
-        else "failed",
-        analysis_brief.get("schema_version"),
-    )
-    add_check(
-        "analysis_brief_run_identity",
-        "ok"
-        if _payload_path_matches(analysis_brief.get("run_root"), root)
-        else "failed",
-        {
-            "expected_run_root": str(root),
-            "analysis_brief_run_root": analysis_brief.get("run_root"),
-            "analysis_brief_path": str(analysis_brief_path)
-            if analysis_brief_path
-            else "",
-        },
-    )
-    brief_boundary_status, brief_boundary_detail = _analysis_brief_boundary(
-        analysis_brief
-    )
-    add_check(
-        "analysis_brief_boundary",
-        brief_boundary_status,
-        brief_boundary_detail,
-    )
-    add_check(
-        "inventory_artifact_present",
-        "ok" if _int_or_zero(postrun_counts.get("inventory")) > 0 else "failed",
-        postrun_counts,
+    checks.update(
+        artifact_port.summarize(
+            root=root,
+            report_dir=report_dir,
+            rebuild_manifest=rebuild_manifest,
+            inventory_source=inventory_source,
+            inventory_path=inventory_path,
+            analysis_brief_path=analysis_brief_path,
+            analysis_brief=analysis_brief,
+            postrun_counts=postrun_counts,
+        ).to_payloads()
     )
     checks.update(
         PostrunLifecycleAcceptancePort()
@@ -571,258 +478,6 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _read_rebuild_manifest(report_dir: Path) -> dict[str, Any]:
-    return _read_json_object(report_dir / "rebuild" / "rebuild_manifest.v1.json")
-
-
-def _analysis_brief_path_from_rebuild_manifest(
-    rebuild_manifest: Mapping[str, Any],
-    report_dir: Path,
-) -> Path | None:
-    return _artifact_json_path_from_rebuild_manifest(
-        rebuild_manifest,
-        report_dir,
-        "analysis_brief",
-    )
-
-
-def _artifact_json_path_from_rebuild_manifest(
-    rebuild_manifest: Mapping[str, Any],
-    report_dir: Path,
-    family_name: str,
-) -> Path | None:
-    families = _mapping_or_empty(rebuild_manifest.get("families"))
-    family = _mapping_or_empty(families.get(family_name))
-    outputs = family.get("outputs")
-    if not isinstance(outputs, list):
-        return None
-    for item in outputs:
-        output = str(item)
-        path = _manifest_output_path(output, report_dir)
-        if (
-            path.suffix == ".json"
-            and path.is_file()
-            and _manifest_output_in_family(path, report_dir, family_name)
-        ):
-            return path
-    return None
-
-
-def _rebuild_manifest_identity_boundary(
-    root: Path,
-    report_dir: Path,
-    rebuild_manifest: Mapping[str, Any],
-) -> tuple[str, Any]:
-    if not rebuild_manifest:
-        return "failed", {"reason": "missing_rebuild_manifest", "failures": []}
-
-    failures: list[dict[str, Any]] = []
-    expected_identity = {
-        "artifact_kind": "postrun_acceptance_rebuild",
-        "run_root": str(root),
-        "campaign_dir": str(root / "campaign"),
-        "report_dir": str(report_dir),
-    }
-    for field, expected in expected_identity.items():
-        actual = rebuild_manifest.get(field)
-        matches = (
-            _payload_path_matches(actual, Path(expected))
-            if field in {"run_root", "campaign_dir", "report_dir"}
-            else actual == expected
-        )
-        if not matches:
-            failures.append(
-                {
-                    "reason": "manifest_identity_mismatch",
-                    "field": field,
-                    "expected": expected,
-                    "actual": actual,
-                }
-            )
-
-    boundary_expectations = {
-        "report_only": True,
-        "quality_judgment": False,
-        "decision_features_excluded": True,
-        "campaign_state_mutated": False,
-        "scheduler_state_mutated": False,
-        "promotion_state_mutated": False,
-    }
-    for field, expected in boundary_expectations.items():
-        if rebuild_manifest.get(field) is not expected:
-            failures.append(
-                {
-                    "reason": "manifest_boundary_flag_mismatch",
-                    "field": field,
-                    "expected": expected,
-                    "actual": rebuild_manifest.get(field),
-                }
-            )
-
-    return (
-        "ok" if not failures else "failed",
-        {
-            "failures": failures,
-            "expected_identity": expected_identity,
-            "boundary_expectations": boundary_expectations,
-        },
-    )
-
-
-def _rebuild_manifest_declared_outputs_present(
-    rebuild_manifest: Mapping[str, Any],
-    report_dir: Path,
-) -> tuple[str, Any]:
-    if not rebuild_manifest:
-        return "failed", {"reason": "missing_rebuild_manifest"}
-    families = _mapping_or_empty(rebuild_manifest.get("families"))
-    if not families:
-        return "failed", {"reason": "missing_rebuild_manifest_families"}
-
-    ok_families: list[str] = []
-    skipped_families: list[str] = []
-    missing_outputs: list[dict[str, Any]] = []
-    inconsistent_outputs: list[dict[str, Any]] = []
-    unexpected_outputs: list[dict[str, Any]] = []
-    out_of_scope_outputs: list[dict[str, Any]] = []
-    family_failures: list[dict[str, Any]] = []
-    for family_name, raw_family in sorted(families.items()):
-        family = _mapping_or_empty(raw_family)
-        family_status = family.get("status")
-        outputs = _string_items(family.get("outputs"))
-        outputs_present = _mapping_or_empty(family.get("outputs_present"))
-        if family_status == "skipped":
-            skipped_families.append(str(family_name))
-            continue
-        if family_status != "ok":
-            family_failures.append(
-                {
-                    "family": str(family_name),
-                    "status": family_status,
-                    "reason": "family_status_not_ok",
-                }
-            )
-            continue
-        ok_families.append(str(family_name))
-        if not outputs:
-            family_failures.append(
-                {
-                    "family": str(family_name),
-                    "status": family_status,
-                    "reason": "ok_family_without_outputs",
-                }
-                )
-            continue
-        declared_paths: set[Path] = set()
-        for output in outputs:
-            path = _manifest_output_path(output, report_dir)
-            in_scope = _manifest_output_in_family(path, report_dir, str(family_name))
-            if not in_scope:
-                out_of_scope_outputs.append(
-                    {
-                        "family": str(family_name),
-                        "path": str(path),
-                        "manifest_output": output,
-                        "expected_directory": str(report_dir / str(family_name)),
-                        "reason": "manifest_output_outside_family_directory",
-                    }
-                )
-            else:
-                declared_paths.add(path.resolve())
-            actual_present = path.is_file()
-            manifest_present = outputs_present.get(output)
-            if actual_present is False:
-                missing_outputs.append(
-                    {
-                        "family": str(family_name),
-                        "path": str(path),
-                        "manifest_output": output,
-                    }
-                )
-            if isinstance(manifest_present, bool):
-                if manifest_present is not actual_present:
-                    inconsistent_outputs.append(
-                        {
-                            "family": str(family_name),
-                            "path": str(path),
-                            "manifest_output": output,
-                            "manifest_outputs_present": manifest_present,
-                            "actual_present": actual_present,
-                        }
-                    )
-            else:
-                inconsistent_outputs.append(
-                    {
-                        "family": str(family_name),
-                        "path": str(path),
-                        "manifest_output": output,
-                        "manifest_outputs_present": manifest_present,
-                        "actual_present": actual_present,
-                        "reason": "missing_outputs_present_entry",
-                    }
-                )
-        family_dir = report_dir / str(family_name)
-        if family_dir.is_dir():
-            for path in sorted(family_dir.iterdir()):
-                if not path.is_file() or path.suffix not in {".json", ".md"}:
-                    continue
-                if path.resolve() not in declared_paths:
-                    unexpected_outputs.append(
-                        {
-                            "family": str(family_name),
-                            "path": str(path),
-                            "reason": "undeclared_generated_output",
-                        }
-                    )
-
-    failures_present = bool(
-        missing_outputs
-        or inconsistent_outputs
-        or unexpected_outputs
-        or out_of_scope_outputs
-        or family_failures
-    )
-    return (
-        "failed" if failures_present else "ok",
-        {
-            "ok_families": ok_families,
-            "skipped_families": skipped_families,
-            "missing_outputs": missing_outputs,
-            "inconsistent_outputs": inconsistent_outputs,
-            "unexpected_outputs": unexpected_outputs,
-            "out_of_scope_outputs": out_of_scope_outputs,
-            "family_failures": family_failures,
-        },
-    )
-
-
-def _manifest_output_path(value: str, report_dir: Path) -> Path:
-    path = Path(value).expanduser()
-    if path.is_absolute():
-        return path
-    return (report_dir / path).resolve()
-
-
-def _manifest_output_in_family(path: Path, report_dir: Path, family_name: str) -> bool:
-    try:
-        return path.resolve().parent == (report_dir / family_name).resolve()
-    except OSError:
-        return False
-
-
-def _artifact_paths(directory: Path) -> list[str]:
-    return sorted(str(path) for path in directory.glob("*.json") if path.is_file())
-
-
-def _payload_path_matches(value: Any, expected: Path) -> bool:
-    if not isinstance(value, str) or not value:
-        return False
-    try:
-        return Path(value).expanduser().resolve() == expected
-    except OSError:
-        return False
-
-
 def _brief_current_run_evidence(brief: Mapping[str, Any]) -> bool:
     lifecycle = _mapping_or_empty(brief.get("lifecycle"))
     phase4 = _mapping_or_empty(brief.get("phase4_evidence_coverage"))
@@ -903,30 +558,6 @@ def _phase4_requirement_signature_map(value: Any) -> dict[str, dict[str, Any]]:
         for key, item in sorted(requirements.items())
         if isinstance(item, Mapping)
     }
-
-
-def _analysis_brief_boundary(brief: Mapping[str, Any]) -> tuple[str, Any]:
-    failures: list[str] = []
-    failures.extend(_boundary_marker_failures("analysis_brief", brief))
-    for mutation_field in (
-        "campaign_state_mutated",
-        "scheduler_state_mutated",
-        "promotion_state_mutated",
-    ):
-        if brief.get(mutation_field) is not False:
-            failures.append(f"analysis_brief_{mutation_field}_not_false")
-    return (
-        "ok" if not failures else "failed",
-        {
-            "failures": failures,
-            "report_only": brief.get("report_only"),
-            "quality_judgment": brief.get("quality_judgment"),
-            "decision_features_excluded": brief.get("decision_features_excluded"),
-            "campaign_state_mutated": brief.get("campaign_state_mutated"),
-            "scheduler_state_mutated": brief.get("scheduler_state_mutated"),
-            "promotion_state_mutated": brief.get("promotion_state_mutated"),
-        },
-    )
 
 
 def _prepared_contract_consistency(
@@ -3793,14 +3424,6 @@ def _string_items(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if str(item)]
-
-
-def _read_json_object(path: Path) -> dict[str, Any]:
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return dict(loaded) if isinstance(loaded, Mapping) else {}
 
 
 def _mapping_or_empty(value: Any) -> dict[str, Any]:

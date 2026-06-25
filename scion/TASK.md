@@ -74,8 +74,12 @@ imports both summaries from problem-owned modules. Remaining legacy checks
 still need migration behind typed ports. The next generic Design N migration is
 also implemented: lifecycle/current-run evidence and wrapper marker checks now
 run through `PostrunLifecycleAcceptancePort` while preserving legacy check
-names and payloads. Artifact identity/schema and consistency checks remain to
-migrate behind typed ports. Design O initial slice is implemented locally as
+names and payloads. Artifact identity/schema acceptance checks now run through
+`PostrunArtifactAcceptancePort` while preserving legacy check names and
+payloads; local conda `claw` and WSL conda `scion` postrun acceptance
+validation passes (`85 passed` each) plus focused artifact/lifecycle/readiness
+port tests (`11 passed` each). Remaining generic consistency/actionability
+checks still need migration behind typed ports. Design O initial slice is implemented locally as
 `scion.measurement.MeasurementConsumerView`; `ProtocolConfig` now consumes the
 typed view while preserving its legacy readiness payload shape. Proposal
 context measurement diagnostics now consume the same typed view while keeping
@@ -444,6 +448,15 @@ Current checkpoint:
   merges the port payload without changing check names or JSON shape. Local and
   WSL focused validation passes for the new port tests, readiness tests, and
   postrun acceptance tests.
+- Design N generic artifact acceptance migration is present:
+  `scion.postrun.PostrunArtifactAcceptancePort` now owns legacy-compatible
+  artifact identity/schema checks for stored inventory loading, rebuild
+  manifest presence/schema/run identity/boundary/completeness/declared outputs,
+  analysis-brief presence/schema/run identity/boundary, and inventory artifact
+  presence. The checker reads artifacts through the port and merges its payload
+  without changing check names or JSON shape. Local conda `claw` and WSL conda
+  `scion` validation passes for artifact/lifecycle/readiness port tests
+  (`11 passed` each) and full postrun acceptance tests (`85 passed` each).
 - Design O initial implementation is present in
   `scion.measurement.MeasurementConsumerView`: generic consumers receive
   normalized readiness, runtime model, pairing validity, effect scale,

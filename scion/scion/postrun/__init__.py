@@ -1,9 +1,12 @@
 """Typed postrun readiness ports."""
 
 from scion.postrun.acceptance_checks import (
+    ANALYSIS_BRIEF_SCHEMA,
     PostrunAcceptanceCheck,
     PostrunAcceptanceCheckBundle,
+    PostrunArtifactAcceptancePort,
     PostrunLifecycleAcceptancePort,
+    REBUILD_SCHEMA,
 )
 from scion.postrun.ports import (
     ExposurePolicyPort,
@@ -27,6 +30,7 @@ from scion.postrun.readiness import (
 )
 
 __all__ = [
+    "ANALYSIS_BRIEF_SCHEMA",
     "ExposurePolicyPort",
     "ExposureSummary",
     "MappingPostrunInventoryPort",
@@ -34,6 +38,7 @@ __all__ = [
     "PostrunInventoryPort",
     "PostrunAcceptanceCheck",
     "PostrunAcceptanceCheckBundle",
+    "PostrunArtifactAcceptancePort",
     "PostrunLifecycleAcceptancePort",
     "PostrunReadinessOrchestrator",
     "PostrunReadinessSummary",
@@ -42,6 +47,7 @@ __all__ = [
     "ProblemReviewSummary",
     "ProblemPostrunReviewContext",
     "ProblemPostrunSummaryProvider",
+    "REBUILD_SCHEMA",
     "RunEvidenceLifecycle",
     "RunEvidenceLifecyclePort",
 ]

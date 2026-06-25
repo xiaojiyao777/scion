@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-06-24
+Last updated: 2026-06-25
 
 This file is the operational resume point, not a run log. Historical root
 chronology belongs in focused experiment reports and git history.
@@ -77,10 +77,14 @@ chronology belongs in focused experiment reports and git history.
   from problem packages. Generic lifecycle/current-run evidence and wrapper
   marker acceptance checks now run through
   `scion.postrun.PostrunLifecycleAcceptancePort` while preserving legacy check
-  names and payloads. Remaining artifact identity/schema and consistency
-  checks still need migration behind typed ports. Local and WSL focused
-  validation passes for provider/readiness/boundary, postrun brief,
-  acceptance, and opportunity visibility suites.
+  names and payloads. Generic artifact identity/schema acceptance checks now
+  run through `scion.postrun.PostrunArtifactAcceptancePort` while preserving
+  legacy check names and payloads. Remaining consistency/actionability checks
+  still need migration behind typed ports. Local and WSL focused validation
+  passes for provider/readiness/boundary, postrun brief, acceptance, and
+  opportunity visibility suites; the artifact/lifecycle/readiness port tests
+  pass (`11 passed` each), and full postrun acceptance passes (`85 passed`
+  each) in both environments.
 - Design O initial slice is implemented locally as
   `scion.measurement.MeasurementConsumerView`. It reduces problem-owned
   measurement declarations to generic status/runtime/pairing/effect/MDE fields
@@ -261,11 +265,13 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    skeleton and the `check_postrun_acceptance.py` compatibility adapter are
    implemented, CVRP large-twoopt plus warehouse follow-up reviews are now
    problem-owned, and generic lifecycle/marker acceptance checks are behind
-   `PostrunLifecycleAcceptancePort` while preserving legacy check payloads.
+   `PostrunLifecycleAcceptancePort` while artifact identity/schema checks are
+   behind `PostrunArtifactAcceptancePort`, both preserving legacy check
+   payloads.
    Design O's typed measurement consumer feeds protocol config,
    proposal-context measurement diagnostics, prepared measurement handoff
-   builders, and postrun research-efficiency fallback. Migrate artifact
-   identity/schema and consistency checks behind typed ports next.
+   builders, and postrun research-efficiency fallback. Migrate remaining
+   consistency/actionability checks behind typed ports next.
 2. Extend problem-owned opportunity providers/reviews beyond the CVRP initial
    slice only when a concrete problem package needs it. Generic core should
    continue to render/audit `ProblemOpportunitySummary`; residual opportunity,
