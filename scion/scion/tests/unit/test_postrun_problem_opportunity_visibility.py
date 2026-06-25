@@ -11,6 +11,9 @@ from scion.postrun.opportunity_visibility import (
     empty_problem_opportunity_visibility_aggregate,
     problem_opportunity_visibility_fingerprint,
 )
+from scion.postrun.prompt_visibility_acceptance import (
+    prompt_context_visibility_consistency_failures,
+)
 
 
 TOOLS_DIR = Path(__file__).parents[3] / "tools"
@@ -88,7 +91,6 @@ def test_postrun_brief_and_checker_compare_opportunity_visibility(
     tmp_path: Path,
 ) -> None:
     brief_tool = _load_tool("postrun_analysis_brief")
-    check_tool = _load_tool("check_postrun_acceptance")
     fingerprint = problem_opportunity_visibility_fingerprint(_prompt_manifest())
     report_path = tmp_path / "proposal_trajectory_manifest.v1.json"
     report_path.write_text(
@@ -131,7 +133,7 @@ def test_postrun_brief_and_checker_compare_opportunity_visibility(
     }
     expected = dict(summary)
     assert (
-        check_tool._prompt_context_visibility_consistency_failures(
+        prompt_context_visibility_consistency_failures(
             summary=summary,
             expected=expected,
         )
@@ -142,7 +144,7 @@ def test_postrun_brief_and_checker_compare_opportunity_visibility(
         "section_visible_trace_count"
     ] = 0
     assert "prompt_context_visibility_problem_opportunity_mismatch" in (
-        check_tool._prompt_context_visibility_consistency_failures(
+        prompt_context_visibility_consistency_failures(
             summary=tampered,
             expected=expected,
         )

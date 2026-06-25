@@ -26,6 +26,9 @@ from scion.postrun.problem_summary_provider import (
     ProblemPostrunReviewContext,
     ProblemPostrunSummaryProvider,
 )
+from scion.postrun.prompt_visibility_acceptance import (
+    PostrunPromptVisibilityAcceptancePort,
+)
 from scion.postrun.readiness import (
     MappingPostrunInventoryPort,
     PostrunReadinessOrchestrator,
@@ -55,6 +58,7 @@ __all__ = [
     "ProblemReviewSummary",
     "ProblemPostrunReviewContext",
     "ProblemPostrunSummaryProvider",
+    "PostrunPromptVisibilityAcceptancePort",
     "REBUILD_SCHEMA",
     "RunEvidenceLifecycle",
     "RunEvidenceLifecyclePort",

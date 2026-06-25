@@ -87,9 +87,14 @@ now runs through `PostrunReviewInputAcceptancePort`; the checker still supplies
 the problem/policy required-summary set, so generic core does not interpret
 CVRP/warehouse/VRP review semantics. Local and WSL focused port tests pass
 (`16 passed` each), and full postrun acceptance still passes (`85 passed`
-each). Remaining prompt/source visibility, research-telemetry, and
-problem-owned summary consistency/actionability checks still need migration
-behind typed ports. Design O initial slice is implemented locally as
+each). Prompt/source visibility envelope checks now run through
+`PostrunPromptVisibilityAcceptancePort`; the checker still supplies expected
+summary rebuilds and active-subject legacy prefix policy, so generic core does
+not interpret CVRP/warehouse/VRP semantics. Local and WSL focused port tests
+pass (`23 passed` each), and full postrun acceptance still passes (`85 passed`
+each). Remaining research-telemetry and problem-owned summary
+consistency/actionability checks still need migration behind typed ports.
+Design O initial slice is implemented locally as
 `scion.measurement.MeasurementConsumerView`; `ProtocolConfig` now consumes the
 typed view while preserving its legacy readiness payload shape. Proposal
 context measurement diagnostics now consume the same typed view while keeping
@@ -485,6 +490,16 @@ Current checkpoint:
   CVRP/warehouse/VRP review semantics. Local conda `claw` and WSL conda
   `scion` validation passes for the focused port/readiness tests (`16 passed`
   each) and full postrun acceptance tests (`85 passed` each).
+- Design N generic prompt/source visibility migration is present:
+  `scion.postrun.PostrunPromptVisibilityAcceptancePort` now owns
+  legacy-compatible prompt/source visibility envelope checks, redaction and
+  report-only boundary checks, prompt/source/signal-density consistency
+  signatures, and problem-opportunity visibility signature comparison. The
+  checker still supplies the expected prompt visibility summary and
+  active-subject legacy failure-prefix policy; the generic port does not own
+  CVRP/warehouse/VRP semantics. Local conda `claw` and WSL conda `scion`
+  validation passes for the focused port/readiness tests (`23 passed` each)
+  and full postrun acceptance tests (`85 passed` each).
 - Design O initial implementation is present in
   `scion.measurement.MeasurementConsumerView`: generic consumers receive
   normalized readiness, runtime model, pairing validity, effect scale,
