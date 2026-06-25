@@ -8,6 +8,7 @@ from scion.postrun import (
     ProblemPostrunReviewContext,
     ProblemReviewSummary,
     ProblemSummaryActionabilitySpec,
+    problem_summary_common_input_consistency_detail,
 )
 from scion.problems.warehouse_delivery.research_guidance import (
     WAREHOUSE_PROBLEM_FAMILY,
@@ -342,6 +343,173 @@ def warehouse_followup_summary(
             invalid_infra_only=invalid_infra_only,
         ),
     }
+
+
+def warehouse_followup_input_consistency(
+    inventory: Mapping[str, Any],
+    *,
+    summary: Mapping[str, Any],
+    protocol_accounting_summary: Mapping[str, Any],
+    measurement_effect_summary: Mapping[str, Any],
+    runtime_feedback_summary: Mapping[str, Any],
+    failure_taxonomy_summary: Mapping[str, Any],
+    research_continuity_summary: Mapping[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    expected_summary = warehouse_followup_summary(
+        inventory,
+        protocol_accounting_summary=protocol_accounting_summary,
+        measurement_effect_summary=measurement_effect_summary,
+        runtime_feedback_summary=runtime_feedback_summary,
+        failure_taxonomy_summary=failure_taxonomy_summary,
+        research_continuity_summary=research_continuity_summary,
+    )
+    detail = problem_summary_common_input_consistency_detail(
+        problem_family=WAREHOUSE_PROBLEM_FAMILY,
+        summary_key=WAREHOUSE_FOLLOWUP_ACTIONABILITY_SPEC.summary_key,
+        summary=summary,
+        expected_problem_summary=expected_summary,
+        inventory=inventory,
+        protocol_accounting_summary=protocol_accounting_summary,
+        measurement_effect_summary=measurement_effect_summary,
+        runtime_feedback_summary=runtime_feedback_summary,
+        failure_taxonomy_summary=failure_taxonomy_summary,
+        research_continuity_summary=research_continuity_summary,
+    )
+    failures = detail["failures"]
+    evidence = _mapping_or_empty(summary.get("evidence"))
+    measurement_evidence = _mapping_or_empty(evidence.get("measurement_effect"))
+    continuity_evidence = _mapping_or_empty(evidence.get("research_continuity"))
+    interpretation = str(summary.get("interpretation") or "")
+    measurement_signal = warehouse_followup_measurement_signal(
+        measurement_effect_summary
+    )
+    for field in (
+        "effect_signal",
+        "positive_effect_at_or_above_mde",
+        "plateau_consistent",
+        "all_ci_high_below_mde",
+    ):
+        if not interpretation.startswith("protocol_evaluated_"):
+            continue
+        summary_value = measurement_evidence.get(field)
+        input_value = measurement_signal.get(field)
+        if isinstance(input_value, bool):
+            if summary_value is not input_value:
+                failures.append(
+                    f"problem_summary_warehouse_measurement_{field}_mismatch"
+                )
+        elif str(summary_value or "") != str(input_value or ""):
+            failures.append(
+                f"problem_summary_warehouse_measurement_{field}_mismatch"
+            )
+
+    continuity_signal = warehouse_followup_continuity_signal(
+        research_continuity_summary
+    )
+    for field in (
+        "substantive",
+        "max_branch_depth",
+        "same_mechanism_selected",
+        "same_mechanism_observed",
+        "same_mechanism_missed",
+        "branch_lessons_satisfied",
+        "branch_lessons_required",
+        "weak_positive_accepted",
+        "weak_positive_observed",
+    ):
+        summary_value = continuity_evidence.get(field)
+        input_value = continuity_signal.get(field)
+        if isinstance(input_value, bool):
+            if summary_value is not input_value:
+                failures.append(
+                    f"problem_summary_warehouse_continuity_{field}_mismatch"
+                )
+        elif _int_or_zero(summary_value) != _int_or_zero(input_value):
+            failures.append(
+                f"problem_summary_warehouse_continuity_{field}_mismatch"
+            )
+    if (
+        interpretation == "protocol_evaluated_plateau_review_ready"
+        and continuity_evidence.get("substantive") is not True
+    ):
+        failures.append("warehouse_plateau_continuity_not_substantive")
+    if interpretation == "protocol_evaluated_plateau_review_ready":
+        if measurement_signal.get("plateau_consistent") is not True:
+            failures.append("review_input_warehouse_measurement_not_plateau_consistent")
+        if measurement_signal.get("positive_effect_at_or_above_mde") is True:
+            failures.append("review_input_warehouse_positive_effect_not_plateau")
+        if continuity_signal.get("substantive") is not True:
+            failures.append("review_input_warehouse_continuity_not_substantive")
+    if interpretation == "protocol_evaluated_positive_effect_review_ready":
+        if measurement_signal.get("positive_effect_at_or_above_mde") is not True:
+            failures.append("review_input_warehouse_positive_effect_missing")
+    if interpretation == "protocol_evaluated_measurement_effect_inconclusive":
+        if measurement_signal.get("plateau_consistent") is True:
+            failures.append(
+                "review_input_warehouse_measurement_inconclusive_has_plateau_signal"
+            )
+        if measurement_signal.get("positive_effect_at_or_above_mde") is True:
+            failures.append(
+                "review_input_warehouse_measurement_inconclusive_has_positive_effect"
+            )
+
+    detail.update(
+        {
+            "summary_measurement_effect_signal": measurement_evidence.get(
+                "effect_signal"
+            ),
+            "input_measurement_effect_signal": measurement_signal.get(
+                "effect_signal"
+            ),
+            "summary_measurement_plateau_consistent": measurement_evidence.get(
+                "plateau_consistent"
+            ),
+            "input_measurement_plateau_consistent": measurement_signal.get(
+                "plateau_consistent"
+            ),
+            "summary_measurement_positive_effect_at_or_above_mde": (
+                measurement_evidence.get("positive_effect_at_or_above_mde")
+            ),
+            "input_measurement_positive_effect_at_or_above_mde": (
+                measurement_signal.get("positive_effect_at_or_above_mde")
+            ),
+            "summary_continuity_substantive": continuity_evidence.get(
+                "substantive"
+            ),
+            "input_continuity_substantive": continuity_signal.get("substantive"),
+            "summary_continuity_max_branch_depth": continuity_evidence.get(
+                "max_branch_depth"
+            ),
+            "input_continuity_max_branch_depth": continuity_signal.get(
+                "max_branch_depth"
+            ),
+            "summary_continuity_same_mechanism_selected": continuity_evidence.get(
+                "same_mechanism_selected"
+            ),
+            "input_continuity_same_mechanism_selected": continuity_signal.get(
+                "same_mechanism_selected"
+            ),
+            "summary_continuity_same_mechanism_missed": continuity_evidence.get(
+                "same_mechanism_missed"
+            ),
+            "input_continuity_same_mechanism_missed": continuity_signal.get(
+                "same_mechanism_missed"
+            ),
+            "summary_continuity_branch_lessons_satisfied": continuity_evidence.get(
+                "branch_lessons_satisfied"
+            ),
+            "input_continuity_branch_lessons_satisfied": continuity_signal.get(
+                "branch_lessons_satisfied"
+            ),
+            "summary_continuity_weak_positive_accepted": continuity_evidence.get(
+                "weak_positive_accepted"
+            ),
+            "input_continuity_weak_positive_accepted": continuity_signal.get(
+                "weak_positive_accepted"
+            ),
+        }
+    )
+    return "ok" if not failures else "failed", detail
 
 
 def warehouse_handoff_requirements(

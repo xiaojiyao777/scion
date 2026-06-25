@@ -8,6 +8,7 @@ from scion.postrun import (
     ProblemPostrunReviewContext,
     ProblemReviewSummary,
     ProblemSummaryActionabilitySpec,
+    problem_summary_common_input_consistency_detail,
 )
 from scion.problems.cvrp.large_twoopt_review import (
     CVRP_LARGE_TWOOPT_REVIEW_AXES,
@@ -326,6 +327,246 @@ def cvrp_large_twoopt_summary(
     }
 
 
+def cvrp_large_twoopt_input_consistency(
+    inventory: Mapping[str, Any],
+    *,
+    summary: Mapping[str, Any],
+    protocol_accounting_summary: Mapping[str, Any],
+    measurement_effect_summary: Mapping[str, Any],
+    runtime_feedback_summary: Mapping[str, Any],
+    failure_taxonomy_summary: Mapping[str, Any],
+    research_continuity_summary: Mapping[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    expected_summary = cvrp_large_twoopt_summary(
+        inventory,
+        protocol_accounting_summary=protocol_accounting_summary,
+        measurement_effect_summary=measurement_effect_summary,
+        runtime_feedback_summary=runtime_feedback_summary,
+        failure_taxonomy_summary=failure_taxonomy_summary,
+        research_continuity_summary=research_continuity_summary,
+    )
+    detail = problem_summary_common_input_consistency_detail(
+        problem_family=CVRP_PROBLEM_FAMILY,
+        summary_key=CVRP_LARGE_TWOOPT_ACTIONABILITY_SPEC.summary_key,
+        summary=summary,
+        expected_problem_summary=expected_summary,
+        inventory=inventory,
+        protocol_accounting_summary=protocol_accounting_summary,
+        measurement_effect_summary=measurement_effect_summary,
+        runtime_feedback_summary=runtime_feedback_summary,
+        failure_taxonomy_summary=failure_taxonomy_summary,
+        research_continuity_summary=research_continuity_summary,
+    )
+    failures = detail["failures"]
+    evidence = _mapping_or_empty(summary.get("evidence"))
+    measurement_evidence = _mapping_or_empty(evidence.get("measurement_effect"))
+    large_twoopt_evidence = _mapping_or_empty(evidence.get("large_twoopt_mechanism"))
+    continuity_evidence = _mapping_or_empty(evidence.get("research_continuity"))
+    interpretation = str(summary.get("interpretation") or "")
+    measurement_aggregate = _mapping_or_empty(
+        _mapping_or_empty(measurement_effect_summary).get("aggregate")
+    )
+    large_twoopt_signal = cvrp_large_twoopt_mechanism_signal(
+        measurement_effect_summary=measurement_effect_summary,
+        research_continuity_summary=research_continuity_summary,
+    )
+    continuity_signal = problem_research_continuity_signal(research_continuity_summary)
+    continuity_fields = (
+        "substantive",
+        "max_branch_depth",
+        "same_mechanism_selected",
+        "same_mechanism_observed",
+        "same_mechanism_missed",
+        "branch_lessons_required",
+        "branch_lessons_satisfied",
+        "weak_positive_observed",
+        "weak_positive_accepted",
+    )
+    continuity_present = (
+        continuity_evidence.get("available") is True
+        or _mapping_or_empty(research_continuity_summary).get("available") is True
+        or any(field in continuity_evidence for field in continuity_fields)
+    )
+    if continuity_present:
+        for field in continuity_fields:
+            summary_value = continuity_evidence.get(field)
+            input_value = continuity_signal.get(field)
+            if isinstance(input_value, bool):
+                if summary_value is not input_value:
+                    failures.append(f"problem_summary_cvrp_continuity_{field}_mismatch")
+            elif _int_or_zero(summary_value) != _int_or_zero(input_value):
+                failures.append(f"problem_summary_cvrp_continuity_{field}_mismatch")
+    if large_twoopt_evidence:
+        for field in (
+            "available",
+            "mechanism_family_available",
+            "direct_evidence_ready",
+        ):
+            if large_twoopt_evidence.get(field) is not large_twoopt_signal.get(field):
+                failures.append(f"problem_summary_large_twoopt_{field}_mismatch")
+        if _int_or_zero(large_twoopt_evidence.get("protocol_row_count")) != (
+            _int_or_zero(large_twoopt_signal.get("protocol_row_count"))
+        ):
+            failures.append("problem_summary_large_twoopt_protocol_rows_mismatch")
+        if interpretation == "bounded_twoopt_review_ready":
+            for field in (
+                "mechanism_family_mapped_row_count",
+                "mechanism_family_unmapped_row_count",
+            ):
+                if _int_or_zero(measurement_evidence.get(field)) != _int_or_zero(
+                    measurement_aggregate.get(field)
+                ):
+                    failures.append(f"problem_summary_measurement_{field}_mismatch")
+            if _large_twoopt_direct_evidence_signature(
+                large_twoopt_evidence.get("direct_evidence")
+            ) != _large_twoopt_direct_evidence_signature(
+                large_twoopt_signal.get("direct_evidence")
+            ):
+                failures.append("problem_summary_large_twoopt_direct_evidence_mismatch")
+            for field in (
+                "families",
+                "protocol_families",
+                "continuity_families",
+                "rejected_protocol_families",
+                "rejected_continuity_families",
+            ):
+                if _string_items(large_twoopt_evidence.get(field)) != _string_items(
+                    large_twoopt_signal.get(field)
+                ):
+                    failures.append(f"problem_summary_large_twoopt_{field}_mismatch")
+            if _int_mapping(large_twoopt_evidence.get("rejection_reason_counts")) != (
+                _int_mapping(large_twoopt_signal.get("rejection_reason_counts"))
+            ):
+                failures.append(
+                    "problem_summary_large_twoopt_rejection_reason_counts_mismatch"
+                )
+            if _int_or_zero(large_twoopt_evidence.get("top_row_signal_count")) != (
+                _int_or_zero(large_twoopt_signal.get("top_row_signal_count"))
+            ):
+                failures.append(
+                    "problem_summary_large_twoopt_top_row_signal_count_mismatch"
+                )
+    if interpretation == "bounded_twoopt_review_ready":
+        if large_twoopt_evidence.get("available") is not True:
+            failures.append("problem_summary_large_twoopt_available_missing")
+        if large_twoopt_signal.get("available") is not True:
+            failures.append("review_input_large_twoopt_direct_evidence_missing")
+
+    detail.update(
+        {
+            "summary_cvrp_continuity_substantive": continuity_evidence.get(
+                "substantive"
+            ),
+            "input_cvrp_continuity_substantive": continuity_signal.get(
+                "substantive"
+            ),
+            "summary_cvrp_continuity_max_branch_depth": continuity_evidence.get(
+                "max_branch_depth"
+            ),
+            "input_cvrp_continuity_max_branch_depth": continuity_signal.get(
+                "max_branch_depth"
+            ),
+            "summary_cvrp_continuity_same_mechanism_selected": (
+                continuity_evidence.get("same_mechanism_selected")
+            ),
+            "input_cvrp_continuity_same_mechanism_selected": (
+                continuity_signal.get("same_mechanism_selected")
+            ),
+            "summary_cvrp_continuity_same_mechanism_missed": (
+                continuity_evidence.get("same_mechanism_missed")
+            ),
+            "input_cvrp_continuity_same_mechanism_missed": (
+                continuity_signal.get("same_mechanism_missed")
+            ),
+            "summary_cvrp_continuity_branch_lessons_satisfied": (
+                continuity_evidence.get("branch_lessons_satisfied")
+            ),
+            "input_cvrp_continuity_branch_lessons_satisfied": (
+                continuity_signal.get("branch_lessons_satisfied")
+            ),
+            "summary_cvrp_continuity_weak_positive_accepted": (
+                continuity_evidence.get("weak_positive_accepted")
+            ),
+            "input_cvrp_continuity_weak_positive_accepted": (
+                continuity_signal.get("weak_positive_accepted")
+            ),
+            "summary_large_twoopt_available": large_twoopt_evidence.get("available"),
+            "input_large_twoopt_available": large_twoopt_signal.get("available"),
+            "summary_large_twoopt_mechanism_family_available": (
+                large_twoopt_evidence.get("mechanism_family_available")
+            ),
+            "input_large_twoopt_mechanism_family_available": (
+                large_twoopt_signal.get("mechanism_family_available")
+            ),
+            "summary_large_twoopt_direct_evidence_ready": (
+                large_twoopt_evidence.get("direct_evidence_ready")
+            ),
+            "input_large_twoopt_direct_evidence_ready": (
+                large_twoopt_signal.get("direct_evidence_ready")
+            ),
+            "summary_large_twoopt_protocol_row_count": (
+                large_twoopt_evidence.get("protocol_row_count")
+            ),
+            "input_large_twoopt_protocol_row_count": (
+                large_twoopt_signal.get("protocol_row_count")
+            ),
+            "summary_large_twoopt_direct_evidence": (
+                _large_twoopt_direct_evidence_signature(
+                    large_twoopt_evidence.get("direct_evidence")
+                )
+            ),
+            "input_large_twoopt_direct_evidence": (
+                _large_twoopt_direct_evidence_signature(
+                    large_twoopt_signal.get("direct_evidence")
+                )
+            ),
+            "summary_large_twoopt_families": _string_items(
+                large_twoopt_evidence.get("families")
+            ),
+            "input_large_twoopt_families": _string_items(
+                large_twoopt_signal.get("families")
+            ),
+            "summary_large_twoopt_protocol_families": _string_items(
+                large_twoopt_evidence.get("protocol_families")
+            ),
+            "input_large_twoopt_protocol_families": _string_items(
+                large_twoopt_signal.get("protocol_families")
+            ),
+            "summary_large_twoopt_continuity_families": _string_items(
+                large_twoopt_evidence.get("continuity_families")
+            ),
+            "input_large_twoopt_continuity_families": _string_items(
+                large_twoopt_signal.get("continuity_families")
+            ),
+            "summary_large_twoopt_rejected_protocol_families": _string_items(
+                large_twoopt_evidence.get("rejected_protocol_families")
+            ),
+            "input_large_twoopt_rejected_protocol_families": _string_items(
+                large_twoopt_signal.get("rejected_protocol_families")
+            ),
+            "summary_large_twoopt_rejected_continuity_families": _string_items(
+                large_twoopt_evidence.get("rejected_continuity_families")
+            ),
+            "input_large_twoopt_rejected_continuity_families": _string_items(
+                large_twoopt_signal.get("rejected_continuity_families")
+            ),
+            "summary_large_twoopt_rejection_reason_counts": _int_mapping(
+                large_twoopt_evidence.get("rejection_reason_counts")
+            ),
+            "input_large_twoopt_rejection_reason_counts": _int_mapping(
+                large_twoopt_signal.get("rejection_reason_counts")
+            ),
+            "summary_large_twoopt_top_row_signal_count": _int_or_zero(
+                large_twoopt_evidence.get("top_row_signal_count")
+            ),
+            "input_large_twoopt_top_row_signal_count": _int_or_zero(
+                large_twoopt_signal.get("top_row_signal_count")
+            ),
+        }
+    )
+    return "ok" if not failures else "failed", detail
+
+
 def _summary_from_inventory(
     inventory: Mapping[str, Any],
     key: str,
@@ -342,6 +583,42 @@ def _runtime_feedback_review_ready(summary: Mapping[str, Any]) -> bool:
         summary.get("available") is True
         and summary.get("drain_status_complete") is True
     )
+
+
+def _large_twoopt_direct_evidence_signature(value: Any) -> dict[str, Any]:
+    evidence = _mapping_or_empty(value)
+    return {
+        "ready": evidence.get("ready") is True,
+        "missing": _string_items(evidence.get("missing")),
+        "required_protected_cases": _string_items(
+            evidence.get("required_protected_cases")
+        ),
+        "protected_cases_observed": _string_items(
+            evidence.get("protected_cases_observed")
+        ),
+        "top_rows_checked": _int_or_zero(evidence.get("top_rows_checked")),
+        "complete_direct_evidence_row_count": _int_or_zero(
+            evidence.get("complete_direct_evidence_row_count")
+        ),
+        "positive_effect_row_count": _int_or_zero(
+            evidence.get("positive_effect_row_count")
+        ),
+        "activation_observed_count": _int_or_zero(
+            evidence.get("activation_observed_count")
+        ),
+        "objective_effect_observed_count": _int_or_zero(
+            evidence.get("objective_effect_observed_count")
+        ),
+        "phase_telemetry_observed_count": _int_or_zero(
+            evidence.get("phase_telemetry_observed_count")
+        ),
+        "protected_case_evidence_row_count": _int_or_zero(
+            evidence.get("protected_case_evidence_row_count")
+        ),
+        "protected_case_complete_row_count": _int_or_zero(
+            evidence.get("protected_case_complete_row_count")
+        ),
+    }
 
 
 def _review_axes_actionability(

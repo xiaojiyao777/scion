@@ -29,6 +29,7 @@ from scion.postrun.problem_summary_provider import (
     problem_summary_actionability_detail,
     problem_summary_actionability_status,
     problem_summary_blocking_gaps,
+    problem_summary_common_input_consistency_detail,
 )
 from scion.postrun.prompt_visibility_acceptance import (
     PostrunPromptVisibilityAcceptancePort,
@@ -70,6 +71,7 @@ __all__ = [
     "problem_summary_actionability_detail",
     "problem_summary_actionability_status",
     "problem_summary_blocking_gaps",
+    "problem_summary_common_input_consistency_detail",
     "PostrunPromptVisibilityAcceptancePort",
     "REBUILD_SCHEMA",
     "RunEvidenceLifecycle",

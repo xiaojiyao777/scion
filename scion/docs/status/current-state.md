@@ -87,10 +87,12 @@ chronology belongs in focused experiment reports and git history.
   evaluator. Problem-summary actionability policy is now problem-owned through
   `ProblemSummaryActionabilitySpec` in the CVRP and warehouse packages; the
   checker keeps only a compatibility registry derived from those specs.
-  Remaining problem-summary input-consistency checks still need migration
-  behind problem-owned review ports/signatures. Local and WSL focused
-  validation passes for provider/readiness/boundary, postrun brief,
-  acceptance, and opportunity visibility suites; the
+  Problem-summary input consistency now dispatches to problem-owned review
+  signatures: warehouse owns follow-up/plateau consistency and CVRP owns
+  large-twoopt consistency, while `scion.postrun` owns only the common
+  protocol/measurement/runtime/continuity/quality-block projection. Local and
+  WSL focused validation passes for provider/readiness/boundary, postrun
+  brief, acceptance, and opportunity visibility suites; the
   artifact/lifecycle/evidence/review-input/prompt-visibility/research-telemetry
   port tests pass (`19 passed` each), and full postrun acceptance passes
   (`85 passed` each) in both environments.
@@ -287,9 +289,9 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    retaining only compatibility dispatch.
    Design O's typed measurement consumer feeds protocol config,
    proposal-context measurement diagnostics, prepared measurement handoff
-   builders, and postrun research-efficiency fallback. Migrate remaining
-   problem-summary input-consistency checks behind problem-owned review
-   ports/signatures next.
+   builders, and postrun research-efficiency fallback. The next v0.4 work is
+   effective-research validation and problem-owned opportunity/review evidence,
+   not more generic checker growth.
 2. Extend problem-owned opportunity providers/reviews beyond the CVRP initial
    slice only when a concrete problem package needs it. Generic core should
    continue to render/audit `ProblemOpportunitySummary`; residual opportunity,

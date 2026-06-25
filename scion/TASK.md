@@ -102,8 +102,14 @@ policy is now problem-owned through `ProblemSummaryActionabilitySpec` in the
 CVRP and warehouse packages; the checker keeps only a compatibility registry
 derived from those specs. Local and WSL focused provider/actionability tests
 pass (`12 passed` each), and full postrun acceptance still passes (`85 passed`
-each). Remaining problem-summary input-consistency checks still need migration
-behind problem-owned review ports/signatures.
+each). Problem-summary input-consistency checks now dispatch to problem-owned
+review signatures: `warehouse_followup_input_consistency` and
+`cvrp_large_twoopt_input_consistency` own plateau/follow-up and large-twoopt
+semantics, while `scion.postrun.problem_summary_common_input_consistency_detail`
+owns only common protocol/measurement/runtime/continuity/quality-block input
+projection. `check_postrun_acceptance.py` is now back under the 1000-line
+warning threshold. Local and WSL full postrun acceptance still passes
+(`85 passed` each).
 Design O initial slice is implemented locally as
 `scion.measurement.MeasurementConsumerView`; `ProtocolConfig` now consumes the
 typed view while preserving its legacy readiness payload shape. Proposal
@@ -530,6 +536,16 @@ Current checkpoint:
   Local conda `claw` and WSL conda `scion` validation passes for focused
   provider/actionability tests (`12 passed` each) and full postrun acceptance
   tests (`85 passed` each).
+- Design N problem-summary input-consistency migration is present:
+  common protocol, measurement, runtime, continuity, and quality-block
+  projection lives in
+  `scion.postrun.problem_summary_common_input_consistency_detail`; warehouse
+  follow-up and CVRP large-twoopt semantic checks live in their problem-owned
+  modules as `warehouse_followup_input_consistency` and
+  `cvrp_large_twoopt_input_consistency`. The checker only dispatches to the
+  expected problem summary function and preserves the legacy check name and
+  payload shape. Local conda `claw` and WSL conda `scion` full postrun
+  acceptance tests pass (`85 passed` each).
 - Design O initial implementation is present in
   `scion.measurement.MeasurementConsumerView`: generic consumers receive
   normalized readiness, runtime model, pairing validity, effect scale,
