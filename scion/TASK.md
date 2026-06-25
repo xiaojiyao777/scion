@@ -71,8 +71,11 @@ legacy `cvrp_large_twoopt_summary` field,
 `WarehousePostrunSummaryProvider` builds `warehouse_followup_summary`, both
 typed review ports are registered in the adapter, and checker recomputation
 imports both summaries from problem-owned modules. Remaining legacy checks
-still need migration behind typed ports. Design O initial slice is implemented
-locally as
+still need migration behind typed ports. The next generic Design N migration is
+also implemented: lifecycle/current-run evidence and wrapper marker checks now
+run through `PostrunLifecycleAcceptancePort` while preserving legacy check
+names and payloads. Artifact identity/schema and consistency checks remain to
+migrate behind typed ports. Design O initial slice is implemented locally as
 `scion.measurement.MeasurementConsumerView`; `ProtocolConfig` now consumes the
 typed view while preserving its legacy readiness payload shape. Proposal
 context measurement diagnostics now consume the same typed view while keeping
@@ -433,6 +436,14 @@ Current checkpoint:
   `claw` and WSL conda `scion` focused validation passes for the
   provider/readiness/boundary tests, postrun brief tests, acceptance tests, and
   opportunity visibility tests.
+- Design N generic lifecycle acceptance migration is present:
+  `scion.postrun.PostrunLifecycleAcceptancePort` now owns legacy-compatible
+  checks for current-run evidence, analysis-brief current-run evidence,
+  launcher wrapper status, wrapper markers, infra/prepared/preflight lifecycle,
+  and the optional postrun report status marker. `check_postrun_acceptance.py`
+  merges the port payload without changing check names or JSON shape. Local and
+  WSL focused validation passes for the new port tests, readiness tests, and
+  postrun acceptance tests.
 - Design O initial implementation is present in
   `scion.measurement.MeasurementConsumerView`: generic consumers receive
   normalized readiness, runtime model, pairing validity, effect scale,

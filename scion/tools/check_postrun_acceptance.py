@@ -33,6 +33,7 @@ from postrun_analysis_brief import (  # noqa: E402
 from scion.postrun import (  # noqa: E402
     MappingPostrunInventoryPort,
     PostrunReadinessOrchestrator,
+    PostrunLifecycleAcceptancePort,
     ProblemReviewRegistry,
 )
 from scion.postrun.opportunity_visibility import (  # noqa: E402
@@ -186,13 +187,8 @@ def build_readiness(
     else:
         inventory = build_inventory(root)
         inventory_source = "live_inventory_rebuild"
-    lifecycle = _mapping_or_empty(inventory.get("lifecycle"))
-    validity = _mapping_or_empty(inventory.get("validity"))
-    phase4 = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
     postrun_reports = _mapping_or_empty(inventory.get("postrun_reports"))
     postrun_counts = _mapping_or_empty(postrun_reports.get("counts"))
-    launcher = _mapping_or_empty(inventory.get("launcher"))
-    run_log_markers = _mapping_or_empty(launcher.get("run_log_markers"))
 
     analysis_brief_path = _analysis_brief_path_from_rebuild_manifest(
         rebuild_manifest,
@@ -309,43 +305,10 @@ def build_readiness(
         "ok" if _int_or_zero(postrun_counts.get("inventory")) > 0 else "failed",
         postrun_counts,
     )
-    add_check(
-        "current_run_evidence",
-        "ok"
-        if lifecycle.get("current_run_evidence") is True
-        and phase4.get("current_run_evidence") is True
-        else "failed",
-        {
-            "lifecycle": lifecycle,
-            "phase4": {
-                "current_run_evidence": phase4.get("current_run_evidence"),
-                "evidence_scope": phase4.get("evidence_scope"),
-            },
-        },
-    )
-    add_check(
-        "analysis_brief_current_run_evidence",
-        "ok"
-        if _brief_current_run_evidence(analysis_brief)
-        else "failed",
-        {
-            "lifecycle": _mapping_or_empty(analysis_brief.get("lifecycle")),
-            "phase4": _mapping_or_empty(
-                analysis_brief.get("phase4_evidence_coverage")
-            ),
-        },
-    )
-    wrapper_status, wrapper_detail = _launcher_wrapper_status_ok(inventory)
-    add_check(
-        "launcher_wrapper_status_ok",
-        wrapper_status,
-        wrapper_detail,
-    )
-    marker_status, marker_detail = _launcher_wrapper_marker_status_ok(inventory)
-    add_check(
-        "launcher_wrapper_marker_status_ok",
-        marker_status,
-        marker_detail,
+    checks.update(
+        PostrunLifecycleAcceptancePort()
+        .summarize(inventory, analysis_brief)
+        .to_payloads()
     )
     phase4_status, phase4_detail = _phase4_evidence_coverage_actionability(
         analysis_brief,
@@ -364,26 +327,6 @@ def build_readiness(
         "analysis_brief_prepared_contract_consistency",
         contract_status,
         contract_detail,
-    )
-    add_check(
-        "not_invalid_infra_only",
-        "ok"
-        if validity.get("invalid_infra_only") is not True
-        and lifecycle.get("invalid_infra_only") is not True
-        else "failed",
-        {"lifecycle": lifecycle, "validity": validity},
-    )
-    add_check(
-        "not_prepared_only",
-        "ok" if lifecycle.get("prepared_only") is not True else "failed",
-        lifecycle,
-    )
-    add_check(
-        "not_pre_campaign_preflight_failed",
-        "ok"
-        if lifecycle.get("pre_campaign_completion_preflight_failed") is not True
-        else "failed",
-        lifecycle,
     )
     add_check(
         "current_run_report_families_present",
@@ -495,15 +438,6 @@ def build_readiness(
         failure_taxonomy_detail,
         required=failure_taxonomy_status != "skipped",
     )
-    add_check(
-        "postrun_report_status_marker",
-        "ok"
-        if _int_or_zero(run_log_markers.get("POSTRUN_REPORTS_EXIT_STATUS")) > 0
-        else "missing",
-        run_log_markers,
-        required=False,
-    )
-
     current_run_analysis_ready = all(
         check["status"] == "ok"
         for check in checks.values()
@@ -895,71 +829,6 @@ def _brief_current_run_evidence(brief: Mapping[str, Any]) -> bool:
     return (
         lifecycle.get("current_run_evidence") is True
         and phase4.get("current_run_evidence") is True
-    )
-
-
-def _launcher_wrapper_status_ok(
-    inventory: Mapping[str, Any],
-) -> tuple[str, dict[str, Any]]:
-    launcher = _mapping_or_empty(inventory.get("launcher"))
-    status_fields = _mapping_or_empty(launcher.get("status_fields"))
-    failures: list[str] = []
-
-    wrapper_exit = _int_or_none(status_fields.get("wrapper_exit_status"))
-    if wrapper_exit is None:
-        failures.append("wrapper_exit_status_missing")
-    elif wrapper_exit != 0:
-        failures.append("wrapper_exit_status_nonzero")
-
-    campaign_exit = _int_or_none(status_fields.get("campaign_wrapper_exit_status"))
-    if campaign_exit not in (None, 0):
-        failures.append("campaign_wrapper_exit_status_nonzero")
-
-    if status_fields.get("postrun_acceptance_failed") is True:
-        failures.append("postrun_acceptance_failed")
-    if str(status_fields.get("postrun_acceptance_status") or "").lower() == "failed":
-        failures.append("postrun_acceptance_status_failed")
-
-    for key in ("postrun_readiness_exit_status", "postrun_reports_exit_status"):
-        value = _int_or_none(status_fields.get(key))
-        if value not in (None, 0):
-            failures.append(f"{key}_nonzero")
-
-    return (
-        "ok" if not failures else "failed",
-        {
-            "failures": failures,
-            "status_fields": status_fields,
-        },
-    )
-
-
-def _launcher_wrapper_marker_status_ok(
-    inventory: Mapping[str, Any],
-) -> tuple[str, dict[str, Any]]:
-    launcher = _mapping_or_empty(inventory.get("launcher"))
-    run_log_markers = _mapping_or_empty(launcher.get("run_log_markers"))
-    exit_markers = _mapping_or_empty(launcher.get("exit_markers"))
-    failures: list[str] = []
-
-    if _int_or_zero(run_log_markers.get("POSTRUN_STATUS_WRITE_EXIT_STATUS")) > 0:
-        failures.append("postrun_status_write_exit_status_marker_present")
-    if _int_or_zero(exit_markers.get("POSTRUN_ACCEPTANCE_FAILED")) > 0:
-        failures.append("postrun_acceptance_failed_marker_present")
-    if _int_or_zero(exit_markers.get("POSTRUN_REPORTS_EFFECTIVE_EXIT_STATUS")) > 0:
-        failures.append("postrun_reports_effective_exit_status_marker_present")
-    if _int_or_zero(exit_markers.get("POSTRUN_READINESS_EFFECTIVE_EXIT_STATUS")) > 0:
-        failures.append("postrun_readiness_effective_exit_status_marker_present")
-    if _int_or_zero(exit_markers.get("WRAPPER_EXIT_STATUS_EFFECTIVE")) > 0:
-        failures.append("wrapper_exit_status_effective_marker_present")
-
-    return (
-        "ok" if not failures else "failed",
-        {
-            "failures": failures,
-            "run_log_markers": run_log_markers,
-            "exit_markers": exit_markers,
-        },
     )
 
 

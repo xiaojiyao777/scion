@@ -1,5 +1,10 @@
 """Typed postrun readiness ports."""
 
+from scion.postrun.acceptance_checks import (
+    PostrunAcceptanceCheck,
+    PostrunAcceptanceCheckBundle,
+    PostrunLifecycleAcceptancePort,
+)
 from scion.postrun.ports import (
     ExposurePolicyPort,
     ExposureSummary,
@@ -27,6 +32,9 @@ __all__ = [
     "MappingPostrunInventoryPort",
     "PostrunInventory",
     "PostrunInventoryPort",
+    "PostrunAcceptanceCheck",
+    "PostrunAcceptanceCheckBundle",
+    "PostrunLifecycleAcceptancePort",
     "PostrunReadinessOrchestrator",
     "PostrunReadinessSummary",
     "ProblemReviewPort",
