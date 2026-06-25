@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import json
 
-from scion.core.models import Branch, BranchState, ChampionState, HypothesisProposal
+from scion.core.models import (
+    Branch,
+    BranchState,
+    ChampionState,
+    HypothesisProposal,
+    MechanismChange,
+)
 from scion.problem.bridge import legacy_problem_spec_from_v1, load_problem_spec_v1_from_yaml
 from scion.problems.cvrp.adapter import CvrpAdapter
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import _split_code_context, _split_hypothesis_context
+from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.research_surface_helpers import _CVRP_ROOT
 
 
@@ -316,3 +323,75 @@ def test_cvrp_solver_design_code_prompt_gets_provider_from_context_manager() -> 
     assert "large_instance_intra_route_two_opt_seed" in rendered
     assert "UNBOUNDED_TWO_OPT_DEFAULT_REJECT" in rendered
     assert "Do not edit `policies/baseline_modules/state.py`" in rendered
+
+
+def test_cvrp_code_context_relays_opportunity_commitment_from_mechanism_changes() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(_CVRP_ROOT),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="b4",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Refine the large-instance intra-route two-opt seed with a "
+            "deadline-aware bounded pass."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        predicted_direction="improve",
+        target_objectives=("total_distance",),
+        protected_objectives=("fleet_violation",),
+        mechanism_changes=(
+            MechanismChange(
+                id="large_instance_intra_route_two_opt_seed",
+                change_type="modify",
+            ),
+        ),
+    )
+
+    ctx = ContextManager(adapter=CvrpAdapter(spec_v1)).build_code_context(
+        branch,
+        hypothesis,
+        champion,
+        legacy,
+    )
+    system_blocks, user_prompt = _split_code_context(ctx)
+    rendered = "\n".join(block["text"] for block in system_blocks) + user_prompt
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-cvrp-context-manager-opportunity-commitment",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context=ctx,
+        observations=[],
+        call_index=2,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    assert "opportunity_evidence_commitment" in ctx
+    assert "## Opportunity Evidence Commitment" in rendered
+    assert "large_instance_two_opt_objective_runtime_requirement" in rendered
+    assert "cmt2_cmt4_case_protection" in rendered
+    assert "opportunity_evidence_commitment" in manifest["section_names"]
+    assert manifest["section_statuses"]["opportunity_evidence_commitment"][
+        "status"
+    ] == "included"
+    commitment_summary = manifest["opportunity_evidence_commitment_summary"]
+    assert commitment_summary["selected_mechanism_ids"] == [
+        "large_instance_intra_route_two_opt_seed"
+    ]
+    assert commitment_summary["requirement_ids"] == [
+        "large_instance_two_opt_objective_runtime_requirement",
+        "cmt2_cmt4_case_protection",
+    ]
