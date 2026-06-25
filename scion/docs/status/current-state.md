@@ -156,8 +156,11 @@ chronology belongs in focused experiment reports and git history.
   lifecycle, runtime-pressure, or promotion behavior. Focused local
   opportunity/prompt-visibility tests pass (`18 passed`), and broader local
   postrun brief/acceptance tests pass (`124 passed`). The completed WSL CVRP
-  opportunity-recipe root launched before Designs Q/R, so WSL validation of
-  the code-prompt commitment relay requires the next synced launch.
+  opportunity-recipe root launched before Designs Q/R, so live prompt/postrun
+  validation of the code-prompt commitment relay requires the next launch.
+  The WSL checkout has been synced to head `7394757b`, and WSL conda `scion`
+  focused opportunity/prompt-visibility tests pass (`18 passed`) plus broader
+  postrun brief/acceptance tests pass (`124 passed`).
 
 ## Current Decision
 

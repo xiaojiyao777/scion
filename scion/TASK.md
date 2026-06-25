@@ -173,9 +173,12 @@ parsing or problem semantics. This remains report-only and does not change
 `DecisionFeatures`, Protocol, scheduler, lifecycle, runtime-pressure, or
 promotion behavior. Focused local opportunity/prompt-visibility validation
 passes (`18 passed`), and broader local postrun brief/acceptance validation
-passes (`124 passed`). WSL validation for the code-prompt commitment relay
-requires the next synced launch because the completed opportunity-recipe root
-started before Design Q/R.
+passes (`124 passed`). The WSL checkout is synced to head `7394757b`; WSL
+conda `scion` focused opportunity/prompt-visibility validation passes
+(`18 passed`) and broader postrun brief/acceptance validation passes
+(`124 passed`). Live validation of the code-prompt commitment relay still
+requires the next launch because the completed opportunity-recipe root started
+before Design Q/R.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-25*
