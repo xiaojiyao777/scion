@@ -24,6 +24,9 @@ from scion.postrun.opportunity_visibility import (  # noqa: E402
     empty_problem_opportunity_visibility_aggregate,
     merge_problem_opportunity_visibility,
 )
+from scion.problems.cvrp.opportunity_review import (  # noqa: E402
+    build_cvrp_opportunity_usage_summary,
+)
 
 
 SCHEMA_VERSION = "scion.postrun_analysis_brief.v1"
@@ -77,6 +80,12 @@ CVRP_LARGE_TWOOPT_REQUIRED_QUESTION = (
     "For CVRP large-twoopt follow-up, did cvrp_large_twoopt_summary distinguish "
     "prepared-only, incomplete handoff, missing review inputs, missing two-opt "
     "mechanism signal, and review-ready evidence?"
+)
+
+CVRP_OPPORTUNITY_USAGE_REQUIRED_QUESTION = (
+    "For CVRP opportunity follow-up, did cvrp_opportunity_usage_summary prove "
+    "whether a rendered opportunity summary was used, contrasted, or ignored "
+    "by later proposal fingerprints?"
 )
 
 WAREHOUSE_FOLLOWUP_REQUIREMENT_KEYS = (
@@ -141,6 +150,10 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         run_root_path,
         inventory,
     )
+    proposal_trajectory_manifests = _proposal_trajectory_manifests(
+        run_root_path,
+        inventory,
+    )
     research_continuity_summary = _research_continuity_summary(
         run_root_path,
         inventory,
@@ -167,6 +180,12 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         runtime_feedback_summary=runtime_feedback_summary,
         failure_taxonomy_summary=failure_taxonomy_summary,
         research_continuity_summary=research_continuity_summary,
+    )
+    cvrp_opportunity_usage_summary = build_cvrp_opportunity_usage_summary(
+        problem_family=_inventory_problem_family(inventory),
+        current_run_evidence=_inventory_current_run_evidence(inventory),
+        prompt_context_visibility_summary=prompt_context_visibility_summary,
+        proposal_trajectory_manifests=proposal_trajectory_manifests,
     )
     return {
         "schema_version": SCHEMA_VERSION,
@@ -207,11 +226,13 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "champion_progress_summary": champion_progress_summary,
         "warehouse_followup_summary": warehouse_followup_summary,
         "cvrp_large_twoopt_summary": cvrp_large_twoopt_summary,
+        "cvrp_opportunity_usage_summary": cvrp_opportunity_usage_summary,
         "stop_conditions": _stop_conditions(inventory),
         "required_questions": _required_questions(
             lifecycle=inventory["lifecycle"],
             warehouse_followup_summary=warehouse_followup_summary,
             cvrp_large_twoopt_summary=cvrp_large_twoopt_summary,
+            cvrp_opportunity_usage_summary=cvrp_opportunity_usage_summary,
         ),
     }
 
@@ -221,6 +242,7 @@ def _required_questions(
     lifecycle: Mapping[str, Any],
     warehouse_followup_summary: Mapping[str, Any],
     cvrp_large_twoopt_summary: Mapping[str, Any],
+    cvrp_opportunity_usage_summary: Mapping[str, Any],
 ) -> list[str]:
     if lifecycle.get("prepared_only") is True:
         questions = list(PREPARED_ONLY_REQUIRED_QUESTIONS)
@@ -230,7 +252,23 @@ def _required_questions(
         questions.append(WAREHOUSE_FOLLOWUP_REQUIRED_QUESTION)
     if cvrp_large_twoopt_summary.get("available") is True:
         questions.append(CVRP_LARGE_TWOOPT_REQUIRED_QUESTION)
+    if (
+        cvrp_opportunity_usage_summary.get("available") is True
+        and cvrp_opportunity_usage_summary.get("current_run_evidence") is True
+    ):
+        questions.append(CVRP_OPPORTUNITY_USAGE_REQUIRED_QUESTION)
     return questions
+
+
+def _inventory_problem_family(inventory: Mapping[str, Any]) -> str:
+    launcher = _mapping_or_empty(inventory.get("launcher"))
+    contract = _mapping_or_empty(launcher.get("prepared_run_contract"))
+    return str(contract.get("problem_family") or "")
+
+
+def _inventory_current_run_evidence(inventory: Mapping[str, Any]) -> bool:
+    phase4 = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
+    return phase4.get("current_run_evidence") is True
 
 
 def render_markdown(brief: dict[str, Any]) -> str:
@@ -997,6 +1035,61 @@ def render_markdown(brief: dict[str, Any]) -> str:
                     chars=_display(item.get("char_count")),
                 )
             )
+
+    cvrp_opportunity_usage = brief.get("cvrp_opportunity_usage_summary") or {}
+    if (
+        cvrp_opportunity_usage.get("available") is True
+        or cvrp_opportunity_usage.get("problem_family") == "cvrp"
+    ):
+        usage_counts = _mapping_or_empty(cvrp_opportunity_usage.get("counts"))
+        visibility = _mapping_or_empty(
+            cvrp_opportunity_usage.get("opportunity_visibility")
+        )
+        opportunity_visible = _display(
+            cvrp_opportunity_usage.get("opportunity_summary_visible")
+        )
+        hypothesis_visible_traces = _display(
+            visibility.get("hypothesis_generation_section_visible_trace_count")
+        )
+        interpretable_proposals = _display(
+            cvrp_opportunity_usage.get("interpretable_proposal_count")
+        )
+        recommended_families = _list_text(
+            cvrp_opportunity_usage.get("recommended_opportunity_families") or []
+        )
+        lines.extend(
+            [
+                "",
+                "## CVRP Opportunity Usage Summary",
+                "- Source: report-only prompt-manifest visibility and "
+                "proposal trajectory fingerprints.",
+                f"- Available: `{_display(cvrp_opportunity_usage.get('available'))}`",
+                "- Current-run evidence: "
+                f"`{_display(cvrp_opportunity_usage.get('current_run_evidence'))}`",
+                "- Opportunity summary visible: "
+                f"`{opportunity_visible}`",
+                "- Hypothesis-visible opportunity traces: "
+                f"{hypothesis_visible_traces}",
+                "- Usage status: "
+                f"{_display(cvrp_opportunity_usage.get('usage_status'))}",
+                "- Proposal sessions / interpretable: "
+                f"{_display(cvrp_opportunity_usage.get('proposal_session_count'))} / "
+                f"{interpretable_proposals}",
+                "- Used / contrasted / ignored-or-unproven / default-avoid repeat: "
+                f"{_display(usage_counts.get('used_opportunity'))} / "
+                f"{_display(usage_counts.get('contrasted_opportunity'))} / "
+                f"{_display(usage_counts.get('ignored_or_unproven'))} / "
+                f"{_display(usage_counts.get('default_avoid_repeat'))}",
+                "- Recommended opportunity families: "
+                f"{recommended_families}",
+            ]
+        )
+        gaps = cvrp_opportunity_usage.get("evidence_gaps")
+        lines.append("- Opportunity usage evidence gaps:")
+        if isinstance(gaps, list) and gaps:
+            lines.extend(f"  - {_display(item)}" for item in gaps)
+        else:
+            lines.append("  - none")
 
     continuity = brief.get("research_continuity_summary") or {}
     continuity_aggregate = _mapping_or_empty(continuity.get("aggregate"))
@@ -3047,6 +3140,22 @@ def _proposal_trajectory_manifest_paths(
         for path in (run_root / "postrun_acceptance" / "manifests").glob("*.json")
         if path.is_file()
     )
+
+
+def _proposal_trajectory_manifests(
+    run_root: Path,
+    inventory: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    manifests: list[dict[str, Any]] = []
+    for path in _proposal_trajectory_manifest_paths(run_root, inventory):
+        doc = _read_json_object(path)
+        if not doc:
+            continue
+        doc = dict(doc)
+        doc.setdefault("path", str(path))
+        doc.setdefault("report", path.name)
+        manifests.append(doc)
+    return manifests
 
 
 def _proposal_trajectory_context_entry(path: Path) -> dict[str, Any]:

@@ -85,12 +85,13 @@ bounded prompt projection, standalone prompt section, and prompt-manifest
 `research_signal` visibility are focused-tested (`57 passed` local and WSL).
 Postrun proposal-visibility reports now carry problem-opportunity section
 fingerprints and aggregate visibility counts, focused-tested with local/WSL
-postrun suites (`144 passed` each). The remaining Design P review gap is
-problem-owned interpretation of whether later proposals used, contrasted, or
-ignored the rendered opportunity summary.
+postrun suites (`144 passed` each). Design P review interpretation is now
+problem-owned for CVRP: `cvrp_opportunity_usage_summary` classifies proposal
+fingerprints as used, contrasted, ignored/unproven, or default-avoid repeats
+without parsing raw prompts/responses or feeding DecisionFeatures.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
-*Updated: 2026-06-24*
+*Updated: 2026-06-25*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
 experiments. The goal is not to keep tuning campaign knobs blindly. The goal is
@@ -441,9 +442,11 @@ Current checkpoint:
   (`57 passed` each). Postrun proposal-visibility reports now aggregate
   `Problem Opportunity Summary` section presence/visibility from prompt
   manifests without parsing raw prompts or making quality judgments; local/WSL
-  postrun visibility suites pass (`144 passed` each). Remaining Design P work:
-  problem-owned review interpretation of whether later proposals used,
-  contrasted, or ignored the rendered opportunity summary.
+  postrun visibility suites pass (`144 passed` each). CVRP-owned postrun
+  review interpretation now summarizes whether later proposal fingerprints
+  used, contrasted, ignored/unproved, or repeated default-avoid opportunity
+  families. The checker rebuilds the summary as a nonblocking report-only
+  consistency check.
 - Postrun acceptance stored-inventory repair:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
   Historical root rechecks now use the stored inventory artifact declared by the

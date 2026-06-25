@@ -26,6 +26,7 @@ from postrun_analysis_brief import (  # noqa: E402
     _failure_taxonomy_summary,
     _measurement_effect_summary,
     _prompt_context_visibility_summary,
+    _proposal_trajectory_manifests,
     _protocol_accounting_summary,
     _problem_research_continuity_signal,
     _research_continuity_summary,
@@ -42,6 +43,11 @@ from scion.postrun import (  # noqa: E402
 from scion.postrun.opportunity_visibility import (  # noqa: E402
     PROBLEM_OPPORTUNITY_VISIBILITY_SCHEMA,
     problem_opportunity_visibility_signature,
+)
+from scion.problems.cvrp.opportunity_review import (  # noqa: E402
+    SCHEMA_VERSION as CVRP_OPPORTUNITY_USAGE_SCHEMA,
+    build_cvrp_opportunity_usage_summary,
+    cvrp_opportunity_usage_signature,
 )
 
 
@@ -423,6 +429,17 @@ def build_readiness(
         prompt_status,
         prompt_detail,
         required=prompt_status != "skipped",
+    )
+    cvrp_usage_status, cvrp_usage_detail = _cvrp_opportunity_usage_actionability(
+        root,
+        analysis_brief,
+        inventory,
+    )
+    add_check(
+        "cvrp_opportunity_usage_actionability",
+        cvrp_usage_status,
+        cvrp_usage_detail,
+        required=False,
     )
     research_context_status, research_context_detail = (
         _research_context_actionability(
@@ -2537,6 +2554,100 @@ def _prompt_source_visibility_actionability(
                 expected_hypothesis_density.get("interpretation")
             ),
         },
+    )
+
+
+def _cvrp_opportunity_usage_actionability(
+    run_root: Path,
+    brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> tuple[str, Any]:
+    problem_family = _problem_family(brief, inventory)
+    if problem_family != "cvrp":
+        return "skipped", {
+            "reason": "not_cvrp",
+            "problem_family": problem_family,
+        }
+    if not _brief_current_run_evidence(brief):
+        return "skipped", {
+            "reason": "not_current_run_evidence",
+            "problem_family": problem_family,
+        }
+
+    summary = _mapping_or_empty(brief.get("cvrp_opportunity_usage_summary"))
+    prompt_context = _mapping_or_empty(
+        brief.get("prompt_context_visibility_summary")
+    )
+    expected = build_cvrp_opportunity_usage_summary(
+        problem_family=problem_family,
+        current_run_evidence=_brief_current_run_evidence(brief),
+        prompt_context_visibility_summary=_prompt_context_visibility_summary(
+            run_root,
+            inventory,
+        ),
+        proposal_trajectory_manifests=_proposal_trajectory_manifests(
+            run_root,
+            inventory,
+        ),
+    )
+
+    failures: list[str] = []
+    if not summary:
+        failures.append("cvrp_opportunity_usage_summary_missing")
+    if summary.get("schema_version") != CVRP_OPPORTUNITY_USAGE_SCHEMA:
+        failures.append("cvrp_opportunity_usage_schema_stale")
+    failures.extend(
+        _boundary_marker_failures("cvrp_opportunity_usage", summary)
+    )
+    for excluded_field in (
+        "proposal_visibility_only",
+        "raw_prompt_excluded",
+        "raw_response_excluded",
+        "patch_body_excluded",
+    ):
+        if summary.get(excluded_field) is not True:
+            failures.append(f"cvrp_opportunity_usage_{excluded_field}_not_true")
+    if summary.get("problem_family") != problem_family:
+        failures.append("cvrp_opportunity_usage_problem_family_mismatch")
+    if (
+        summary.get("current_run_evidence")
+        is not _brief_current_run_evidence(brief)
+    ):
+        failures.append("cvrp_opportunity_usage_current_run_evidence_mismatch")
+    if (
+        summary.get("opportunity_summary_visible")
+        is not _brief_problem_opportunity_summary_visible(prompt_context)
+    ):
+        failures.append("cvrp_opportunity_usage_visibility_mismatch")
+    summary_signature = cvrp_opportunity_usage_signature(summary)
+    expected_signature = cvrp_opportunity_usage_signature(expected)
+    if summary_signature != expected_signature:
+        failures.append("cvrp_opportunity_usage_signature_mismatch")
+
+    return (
+        "ok" if not failures else "failed",
+        {
+            "problem_family": problem_family,
+            "failures": failures,
+            "schema_version": summary.get("schema_version"),
+            "expected_schema_version": CVRP_OPPORTUNITY_USAGE_SCHEMA,
+            "summary_signature": summary_signature,
+            "expected_signature": expected_signature,
+        },
+    )
+
+
+def _brief_problem_opportunity_summary_visible(
+    brief_prompt_context: Mapping[str, Any],
+) -> bool:
+    aggregate = _mapping_or_empty(brief_prompt_context.get("aggregate"))
+    visibility = _mapping_or_empty(aggregate.get("problem_opportunity_visibility"))
+    return (
+        _int_or_zero(visibility.get("section_visible_trace_count")) > 0
+        or _int_or_zero(
+            visibility.get("hypothesis_generation_section_visible_trace_count")
+        )
+        > 0
     )
 
 

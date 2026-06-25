@@ -95,9 +95,10 @@ chronology belongs in focused experiment reports and git history.
   (`57 passed` each). Postrun proposal-visibility reports now aggregate
   problem-opportunity section presence/visibility from prompt manifests without
   parsing raw prompts, raw responses, or problem semantics; local/WSL postrun
-  visibility suites pass (`144 passed` each). Remaining Design P work is
-  problem-owned review interpretation of whether later proposals used,
-  contrasted, or ignored the rendered opportunity summary.
+  visibility suites pass (`144 passed` each). CVRP-owned postrun review now
+  adds `cvrp_opportunity_usage_summary`, which classifies structured proposal
+  fingerprints as used, contrasted, ignored/unproven, or default-avoid repeats
+  without making the summary a Decision input.
 
 ## Current Decision
 
@@ -249,15 +250,13 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    implemented, and Design O's typed measurement consumer now feeds protocol
    config, proposal-context measurement diagnostics, and prepared measurement
    handoff builders; postrun research-efficiency fallback also uses it for
-   copied calibration artifacts. Migrate individual legacy postrun checks and
-   problem review summaries behind typed ports next, then start the
-   problem-owned CVRP/VRP opportunity provider.
-2. Finish the remaining Design P problem-owned review interpretation after the
-   rendering/visibility slice: generic core should only render/audit
-   `ProblemOpportunitySummary`, while
-   CVRP/VRP residual opportunity, protected cases, mechanism evidence,
-   direct-effect requirements, and MDE comparison stay in problem-owned
-   providers and out of `DecisionFeatures`.
+  copied calibration artifacts. Migrate individual legacy postrun checks and
+  problem review summaries behind typed ports next.
+2. Extend problem-owned opportunity providers/reviews beyond the CVRP initial
+   slice only when a concrete problem package needs it. Generic core should
+   continue to render/audit `ProblemOpportunitySummary`; residual opportunity,
+   protected cases, mechanism evidence, direct-effect requirements, and MDE
+   comparison stay in problem-owned providers and out of `DecisionFeatures`.
 3. Keep warehouse as positive effective-research evidence. Launch one narrow
    warehouse repeat only if an independent solver-level plateau confirmation is
    explicitly needed.
