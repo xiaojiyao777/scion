@@ -3,7 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from scion.postrun import ProblemPostrunReviewContext
+from scion.postrun.problem_summary_provider import (
+    problem_summary_actionability_detail,
+)
 from scion.problems.warehouse_delivery.postrun_review import (
+    WAREHOUSE_FOLLOWUP_ACTIONABILITY_SPEC,
     WAREHOUSE_FOLLOWUP_REQUIREMENT_KEYS,
     WarehouseFollowupReviewPort,
     WarehousePostrunSummaryProvider,
@@ -60,6 +64,29 @@ def test_warehouse_postrun_review_port_fails_required_review_input_gaps() -> Non
 
     assert review.ready is False
     assert review.failed_required_checks == ("missing_runtime_feedback_summary",)
+
+
+def test_warehouse_actionability_spec_keeps_quality_blocked_input_gaps_nonblocking() -> None:
+    summary = {
+        **_build_warehouse_followup_summary(),
+        "interpretation": "quality_blocked_no_protocol_plateau_conclusion",
+        "evidence_gaps": [
+            "quality_blocked_before_protocol_evaluation",
+            "missing_measurement_effect_summary",
+            "missing_runtime_feedback_summary",
+            "missing_research_continuity_summary",
+        ],
+    }
+
+    detail = problem_summary_actionability_detail(
+        WAREHOUSE_FOLLOWUP_ACTIONABILITY_SPEC,
+        summary,
+        expected_family=WAREHOUSE_PROBLEM_FAMILY,
+        expected_current_run_evidence=True,
+    )
+
+    assert detail["blocking_evidence_gaps"] == []
+    assert detail["interpretation_supported"] is True
 
 
 def test_warehouse_postrun_provider_returns_not_applicable_for_other_problem() -> None:

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from scion.postrun import ProblemPostrunReviewContext, ProblemReviewSummary
+from scion.postrun import (
+    ProblemPostrunReviewContext,
+    ProblemReviewSummary,
+    ProblemSummaryActionabilitySpec,
+)
 from scion.problems.warehouse_delivery.research_guidance import (
     WAREHOUSE_PROBLEM_FAMILY,
 )
@@ -36,6 +40,32 @@ _BLOCKING_WAREHOUSE_FOLLOWUP_GAPS = frozenset(
         "missing_runtime_feedback_summary",
         "no_protocol_evaluated_candidates",
     }
+)
+
+WAREHOUSE_FOLLOWUP_ACTIONABILITY_SPEC = ProblemSummaryActionabilitySpec(
+    summary_key="warehouse_followup_summary",
+    problem_family=WAREHOUSE_PROBLEM_FAMILY,
+    schema_version="scion.postrun_warehouse_followup_summary.v1",
+    delegated_interpretations=frozenset(
+        {
+            "quality_blocked_no_protocol_plateau_conclusion",
+            "protocol_evaluated_measurement_effect_inconclusive",
+            "protocol_evaluated_plateau_review_ready",
+            "protocol_evaluated_positive_effect_review_ready",
+            "protocol_evaluated_research_continuity_too_shallow",
+        }
+    ),
+    blocking_evidence_gaps=_BLOCKING_WAREHOUSE_FOLLOWUP_GAPS,
+    launch_required_field="launch_required_before_plateau_conclusion",
+    nonblocking_gaps_by_interpretation={
+        "quality_blocked_no_protocol_plateau_conclusion": frozenset(
+            {
+                "missing_measurement_effect_summary",
+                "missing_research_continuity_summary",
+                "missing_runtime_feedback_summary",
+            }
+        )
+    },
 )
 
 

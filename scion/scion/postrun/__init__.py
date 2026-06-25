@@ -25,6 +25,10 @@ from scion.postrun.ports import (
 from scion.postrun.problem_summary_provider import (
     ProblemPostrunReviewContext,
     ProblemPostrunSummaryProvider,
+    ProblemSummaryActionabilitySpec,
+    problem_summary_actionability_detail,
+    problem_summary_actionability_status,
+    problem_summary_blocking_gaps,
 )
 from scion.postrun.prompt_visibility_acceptance import (
     PostrunPromptVisibilityAcceptancePort,
@@ -62,6 +66,10 @@ __all__ = [
     "ProblemReviewSummary",
     "ProblemPostrunReviewContext",
     "ProblemPostrunSummaryProvider",
+    "ProblemSummaryActionabilitySpec",
+    "problem_summary_actionability_detail",
+    "problem_summary_actionability_status",
+    "problem_summary_blocking_gaps",
     "PostrunPromptVisibilityAcceptancePort",
     "REBUILD_SCHEMA",
     "RunEvidenceLifecycle",

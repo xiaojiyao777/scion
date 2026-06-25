@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from scion.postrun import ProblemPostrunReviewContext, ProblemReviewSummary
+from scion.postrun import (
+    ProblemPostrunReviewContext,
+    ProblemReviewSummary,
+    ProblemSummaryActionabilitySpec,
+)
 from scion.problems.cvrp.large_twoopt_review import (
     CVRP_LARGE_TWOOPT_REVIEW_AXES,
     cvrp_large_twoopt_evidence_gaps,
@@ -26,6 +30,31 @@ _BLOCKING_CVRP_LARGE_TWOOPT_GAPS = frozenset(
         "missing_runtime_feedback_summary",
         "no_protocol_evaluated_candidates",
     }
+)
+
+CVRP_LARGE_TWOOPT_ACTIONABILITY_SPEC = ProblemSummaryActionabilitySpec(
+    summary_key="cvrp_large_twoopt_summary",
+    problem_family=CVRP_PROBLEM_FAMILY,
+    schema_version="scion.postrun_cvrp_large_twoopt_summary.v1",
+    delegated_interpretations=frozenset(
+        {
+            "bounded_twoopt_review_ready",
+            "quality_blocked_no_protocol_twoopt_conclusion",
+            "protocol_evaluated_without_large_twoopt_direct_evidence",
+            "protocol_evaluated_without_large_twoopt_signal",
+        }
+    ),
+    blocking_evidence_gaps=_BLOCKING_CVRP_LARGE_TWOOPT_GAPS,
+    launch_required_field="launch_required_before_twoopt_conclusion",
+    nonblocking_gaps_by_interpretation={
+        "quality_blocked_no_protocol_twoopt_conclusion": frozenset(
+            {
+                "missing_measurement_effect_summary",
+                "missing_research_continuity_summary",
+                "missing_runtime_feedback_summary",
+            }
+        )
+    },
 )
 
 

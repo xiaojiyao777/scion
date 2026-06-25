@@ -3,10 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 from scion.postrun import ProblemPostrunReviewContext
+from scion.postrun.problem_summary_provider import (
+    problem_summary_actionability_detail,
+)
 from scion.problems.cvrp.large_twoopt_review import (
     CVRP_LARGE_TWOOPT_REQUIREMENT_KEYS,
 )
 from scion.problems.cvrp.postrun_review import (
+    CVRP_LARGE_TWOOPT_ACTIONABILITY_SPEC,
     CvrpLargeTwoOptReviewPort,
     CvrpPostrunSummaryProvider,
 )
@@ -59,6 +63,29 @@ def test_cvrp_postrun_review_port_fails_required_review_input_gaps() -> None:
 
     assert review.ready is False
     assert review.failed_required_checks == ("missing_measurement_effect_summary",)
+
+
+def test_cvrp_actionability_spec_keeps_quality_blocked_input_gaps_nonblocking() -> None:
+    summary = {
+        **_build_cvrp_large_twoopt_summary(),
+        "interpretation": "quality_blocked_no_protocol_twoopt_conclusion",
+        "evidence_gaps": [
+            "quality_blocked_before_protocol_evaluation",
+            "missing_measurement_effect_summary",
+            "missing_runtime_feedback_summary",
+            "missing_research_continuity_summary",
+        ],
+    }
+
+    detail = problem_summary_actionability_detail(
+        CVRP_LARGE_TWOOPT_ACTIONABILITY_SPEC,
+        summary,
+        expected_family=CVRP_PROBLEM_FAMILY,
+        expected_current_run_evidence=True,
+    )
+
+    assert detail["blocking_evidence_gaps"] == []
+    assert detail["interpretation_supported"] is True
 
 
 def test_cvrp_postrun_provider_returns_not_applicable_for_other_problem() -> None:

@@ -40,6 +40,8 @@ from scion.postrun import (  # noqa: E402
     PostrunReviewInputAcceptancePort,
     PostrunResearchTelemetryAcceptancePort,
     ProblemReviewRegistry,
+    problem_summary_actionability_detail,
+    problem_summary_actionability_status,
 )
 from scion.problems.cvrp.opportunity_review import (  # noqa: E402
     SCHEMA_VERSION as CVRP_OPPORTUNITY_USAGE_SCHEMA,
@@ -51,10 +53,12 @@ from scion.problems.cvrp.large_twoopt_review import (  # noqa: E402
     problem_research_continuity_signal as _problem_research_continuity_signal,
 )
 from scion.problems.cvrp.postrun_review import (  # noqa: E402
+    CVRP_LARGE_TWOOPT_ACTIONABILITY_SPEC,
     CvrpLargeTwoOptReviewPort,
     cvrp_large_twoopt_summary as _cvrp_large_twoopt_summary,
 )
 from scion.problems.warehouse_delivery.postrun_review import (  # noqa: E402
+    WAREHOUSE_FOLLOWUP_ACTIONABILITY_SPEC,
     WarehouseFollowupReviewPort,
     warehouse_followup_continuity_signal as _warehouse_followup_continuity_signal,
     warehouse_followup_measurement_signal as _warehouse_followup_measurement_signal,
@@ -64,47 +68,13 @@ from scion.problems.warehouse_delivery.postrun_review import (  # noqa: E402
 
 SCHEMA_VERSION = "scion.postrun_acceptance_readiness.v1"
 UNREADY_EXIT = 64
-BLOCKING_PROBLEM_SUMMARY_GAPS = {
-    "cvrp_large_twoopt_handoff_requirements_incomplete",
-    "invalid_infra_only_no_research_conclusion",
-    "launch_required_before_bounded_twoopt_conclusion",
-    "launch_required_before_plateau_conclusion",
-    "missing_measurement_effect_summary",
-    "missing_research_continuity_summary",
-    "missing_runtime_feedback_summary",
-    "no_protocol_evaluated_candidates",
-    "warehouse_handoff_requirements_incomplete",
-}
-NONBLOCKING_PROBLEM_SUMMARY_GAPS_BY_INTERPRETATION = {
-    "quality_blocked_no_protocol_plateau_conclusion": {
-        "missing_measurement_effect_summary",
-        "missing_research_continuity_summary",
-        "missing_runtime_feedback_summary",
-    },
-    "quality_blocked_no_protocol_twoopt_conclusion": {
-        "missing_measurement_effect_summary",
-        "missing_research_continuity_summary",
-        "missing_runtime_feedback_summary",
-    },
+PROBLEM_SUMMARY_ACTIONABILITY_SPECS = {
+    WAREHOUSE_FOLLOWUP_ACTIONABILITY_SPEC.summary_key: WAREHOUSE_FOLLOWUP_ACTIONABILITY_SPEC,
+    CVRP_LARGE_TWOOPT_ACTIONABILITY_SPEC.summary_key: CVRP_LARGE_TWOOPT_ACTIONABILITY_SPEC,
 }
 PROBLEM_SUMMARY_SCHEMAS = {
-    "warehouse_followup_summary": "scion.postrun_warehouse_followup_summary.v1",
-    "cvrp_large_twoopt_summary": "scion.postrun_cvrp_large_twoopt_summary.v1",
-}
-PROBLEM_SUMMARY_DELEGATED_INTERPRETATIONS = {
-    "warehouse_followup_summary": {
-        "quality_blocked_no_protocol_plateau_conclusion",
-        "protocol_evaluated_measurement_effect_inconclusive",
-        "protocol_evaluated_plateau_review_ready",
-        "protocol_evaluated_positive_effect_review_ready",
-        "protocol_evaluated_research_continuity_too_shallow",
-    },
-    "cvrp_large_twoopt_summary": {
-        "bounded_twoopt_review_ready",
-        "quality_blocked_no_protocol_twoopt_conclusion",
-        "protocol_evaluated_without_large_twoopt_direct_evidence",
-        "protocol_evaluated_without_large_twoopt_signal",
-    },
+    key: spec.schema_version
+    for key, spec in PROBLEM_SUMMARY_ACTIONABILITY_SPECS.items()
 }
 
 def build_readiness(
@@ -514,93 +484,17 @@ def _summary_actionability_detail(
     expected_family: str | None = None,
     expected_current_run_evidence: bool | None = None,
 ) -> dict[str, Any]:
-    evidence_gaps = _string_items(summary.get("evidence_gaps"))
-    expected_schema = PROBLEM_SUMMARY_SCHEMAS.get(key)
-    schema_version = summary.get("schema_version")
-    interpretation = summary.get("interpretation")
-    delegated_interpretations = PROBLEM_SUMMARY_DELEGATED_INTERPRETATIONS.get(
-        key,
-        set(),
+    spec = PROBLEM_SUMMARY_ACTIONABILITY_SPECS[key]
+    return problem_summary_actionability_detail(
+        spec,
+        summary,
+        expected_family=expected_family,
+        expected_current_run_evidence=expected_current_run_evidence,
     )
-    summary_failures: list[str] = []
-    if expected_schema and schema_version != expected_schema:
-        summary_failures.append("stale_problem_summary_schema")
-    if summary.get("report_only") is not True:
-        summary_failures.append("problem_summary_not_report_only")
-    if summary.get("quality_judgment") is not False:
-        summary_failures.append("problem_summary_quality_judgment_not_false")
-    if summary.get("decision_features_excluded") is not True:
-        summary_failures.append("problem_summary_decision_features_not_excluded")
-    if delegated_interpretations and interpretation not in delegated_interpretations:
-        summary_failures.append("unsupported_problem_summary_interpretation")
-    problem_family = summary.get("problem_family")
-    if expected_family is not None and problem_family != expected_family:
-        summary_failures.append("problem_summary_family_mismatch")
-    if (
-        expected_current_run_evidence is not None
-        and summary.get("current_run_evidence") is not expected_current_run_evidence
-    ):
-        summary_failures.append("problem_summary_current_run_evidence_mismatch")
-    if (
-        summary.get("current_run_evidence") is True
-        and not _mapping_or_empty(summary.get("evidence"))
-    ):
-        summary_failures.append("problem_summary_evidence_missing")
-    launch_required_field = {
-        "warehouse_followup_summary": "launch_required_before_plateau_conclusion",
-        "cvrp_large_twoopt_summary": "launch_required_before_twoopt_conclusion",
-    }.get(key)
-    if (
-        launch_required_field is not None
-        and summary.get("current_run_evidence") is True
-        and summary.get(launch_required_field) is not False
-    ):
-        summary_failures.append("problem_summary_launch_required_flag_stale")
-    return {
-        "summary": key,
-        "problem_family": problem_family,
-        "expected_problem_family": expected_family,
-        "problem_family_matches_expected": (
-            True if expected_family is None else problem_family == expected_family
-        ),
-        "schema_version": schema_version,
-        "expected_schema_version": expected_schema,
-        "schema_current": schema_version == expected_schema,
-        "current_run_evidence": summary.get("current_run_evidence"),
-        "expected_current_run_evidence": expected_current_run_evidence,
-        "launch_required_field": launch_required_field,
-        "launch_required_before_conclusion": (
-            summary.get(launch_required_field)
-            if launch_required_field is not None
-            else None
-        ),
-        "report_only": summary.get("report_only"),
-        "quality_judgment": summary.get("quality_judgment"),
-        "decision_features_excluded": summary.get("decision_features_excluded"),
-        "interpretation": interpretation,
-        "interpretation_supported": interpretation in delegated_interpretations,
-        "review_axes_actionability": summary.get("review_axes_actionability"),
-        "evidence_gaps": evidence_gaps,
-        "blocking_evidence_gaps": _blocking_problem_summary_gaps(
-            evidence_gaps,
-            interpretation=str(interpretation or ""),
-        ),
-        "summary_failures": summary_failures,
-    }
 
 
 def _summary_actionability_status(summaries: list[dict[str, Any]]) -> str:
-    ok = all(
-        item.get("current_run_evidence") is True
-        and item.get("schema_current") is True
-        and item.get("interpretation_supported") is True
-        and item.get("review_axes_actionability")
-        == "actionable_current_run_evidence_present"
-        and not item.get("summary_failures")
-        and not item.get("blocking_evidence_gaps")
-        for item in summaries
-    )
-    return "ok" if ok else "failed"
+    return problem_summary_actionability_status(summaries)
 
 
 def _review_input_summaries_actionability(
@@ -1528,25 +1422,6 @@ def _brief_problem_opportunity_summary_visible(
         )
         > 0
     )
-
-
-def _blocking_problem_summary_gaps(
-    evidence_gaps: list[str],
-    *,
-    interpretation: str,
-) -> list[str]:
-    nonblocking_for_interpretation = (
-        NONBLOCKING_PROBLEM_SUMMARY_GAPS_BY_INTERPRETATION.get(
-            interpretation,
-            set(),
-        )
-    )
-    return [
-        gap
-        for gap in evidence_gaps
-        if gap in BLOCKING_PROBLEM_SUMMARY_GAPS
-        and gap not in nonblocking_for_interpretation
-    ]
 
 
 def _boundary_marker_failures(
