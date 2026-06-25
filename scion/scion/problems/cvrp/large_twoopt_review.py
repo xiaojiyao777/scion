@@ -140,6 +140,125 @@ def cvrp_large_twoopt_mechanism_signal(
     }
 
 
+def cvrp_large_twoopt_evidence_requirement_statuses(
+    large_twoopt_mechanism: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return CVRP-owned requirement proof status for opportunity usage.
+
+    These statuses answer whether the required evidence checklist was observed.
+    They deliberately do not require a positive at-MDE effect; outcome quality
+    remains owned by the measurement effect and large-twoopt review summaries.
+    """
+
+    mechanism = _mapping_or_empty(large_twoopt_mechanism)
+    direct = _mapping_or_empty(mechanism.get("direct_evidence"))
+    mechanism_family_available = (
+        mechanism.get("mechanism_family_available") is True
+    )
+    objective_runtime_missing: list[str] = []
+    if not mechanism_family_available:
+        objective_runtime_missing.append("missing_large_twoopt_mechanism_family")
+    if _int_or_zero(direct.get("activation_observed_count")) <= 0:
+        objective_runtime_missing.append("missing_activation_observed")
+    if _int_or_zero(direct.get("objective_effect_observed_count")) <= 0:
+        objective_runtime_missing.append("missing_objective_effect_telemetry")
+    if _int_or_zero(direct.get("phase_telemetry_observed_count")) <= 0:
+        objective_runtime_missing.append("missing_phase_telemetry")
+
+    observed_cases = sorted(
+        set(_string_items(direct.get("protected_cases_observed")))
+    )
+    missing_cases = [
+        case
+        for case in CVRP_LARGE_TWOOPT_PROTECTED_CASES
+        if case not in observed_cases
+    ]
+    protected_missing = (
+        ["missing_cmt_case_protection_evidence"] if missing_cases else []
+    )
+
+    statuses = {
+        "large_instance_two_opt_objective_runtime_requirement": (
+            _requirement_status(
+                missing=objective_runtime_missing,
+                observed_fields={
+                    "activation_observed_count": _int_or_zero(
+                        direct.get("activation_observed_count")
+                    ),
+                    "objective_effect_observed_count": _int_or_zero(
+                        direct.get("objective_effect_observed_count")
+                    ),
+                    "phase_telemetry_observed_count": _int_or_zero(
+                        direct.get("phase_telemetry_observed_count")
+                    ),
+                    "protocol_row_count": _int_or_zero(
+                        mechanism.get("protocol_row_count")
+                    ),
+                },
+                outcome_status=_large_twoopt_outcome_status(direct),
+            )
+        ),
+        "cmt2_cmt4_case_protection": _requirement_status(
+            missing=protected_missing,
+            observed_fields={
+                "protected_case_complete_row_count": _int_or_zero(
+                    direct.get("protected_case_complete_row_count")
+                ),
+            },
+            protected_cases_observed=observed_cases,
+            required_protected_cases=list(CVRP_LARGE_TWOOPT_PROTECTED_CASES),
+            outcome_status="not_outcome_requirement",
+        ),
+    }
+    complete = all(
+        _mapping_or_empty(item).get("status") == "observed"
+        for item in statuses.values()
+    )
+    missing = sorted(
+        {
+            reason
+            for item in statuses.values()
+            for reason in _string_items(_mapping_or_empty(item).get("missing_fields"))
+        }
+    )
+    return {
+        "schema_version": "scion.postrun_cvrp_large_twoopt_evidence_requirement_statuses.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "complete": complete,
+        "status": "complete" if complete else "incomplete",
+        "missing": missing,
+        "requirements": statuses,
+    }
+
+
+def _requirement_status(
+    *,
+    missing: list[str],
+    observed_fields: Mapping[str, Any],
+    outcome_status: str,
+    protected_cases_observed: list[str] | None = None,
+    required_protected_cases: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "status": "observed" if not missing else "missing",
+        "observed_fields": dict(observed_fields),
+        "missing_fields": list(missing),
+        "protected_cases_observed": list(protected_cases_observed or []),
+        "required_protected_cases": list(required_protected_cases or []),
+        "outcome_status": outcome_status,
+    }
+
+
+def _large_twoopt_outcome_status(direct_evidence: Mapping[str, Any]) -> str:
+    if _int_or_zero(direct_evidence.get("positive_effect_row_count")) > 0:
+        return "positive_effect_observed"
+    if _int_or_zero(direct_evidence.get("objective_effect_observed_count")) > 0:
+        return "measured_no_positive_at_mde"
+    return "not_measured"
+
+
 def _empty_cvrp_large_twoopt_direct_evidence() -> dict[str, Any]:
     return {
         "ready": False,

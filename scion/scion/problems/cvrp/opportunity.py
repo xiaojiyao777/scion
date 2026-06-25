@@ -152,7 +152,10 @@ def _evidence_requirements(
             OpportunityEvidenceRequirement(
                 requirement_id="large_instance_two_opt_objective_runtime_requirement",
                 mechanism_family=family,
-                status=_large_twoopt_requirement_status(large_twoopt_signal),
+                status=_large_twoopt_requirement_status(
+                    large_twoopt_signal,
+                    "large_instance_two_opt_objective_runtime_requirement",
+                ),
                 summary=(
                     "Bounded large-instance intra-route two-opt needs "
                     "current-run pair-level objective, feasibility, route-count, "
@@ -164,7 +167,8 @@ def _evidence_requirements(
                 ),
                 protected_cases=_string_tuple(recipe.get("protected_cases")),
                 reason_codes=_large_twoopt_requirement_reason_codes(
-                    large_twoopt_signal
+                    large_twoopt_signal,
+                    "large_instance_two_opt_objective_runtime_requirement",
                 ),
             )
         )
@@ -176,14 +180,21 @@ def _evidence_requirements(
                 OpportunityEvidenceRequirement(
                     requirement_id="cmt2_cmt4_case_protection",
                     mechanism_family=family,
-                    status=_large_twoopt_requirement_status(large_twoopt_signal),
+                    status=_large_twoopt_requirement_status(
+                        large_twoopt_signal,
+                        "cmt2_cmt4_case_protection",
+                    ),
                     summary=(
                         "Prepared CVRP follow-up must keep CMT2/CMT4 protection "
                         "visible or record an unresolved protection caveat."
                     ),
                     required_observations=protected_observations,
                     protected_cases=_string_tuple(recipe.get("protected_cases")),
-                    reason_codes=("CVRP_PROTECTED_CASE_REVIEW_REQUIRED",),
+                    reason_codes=_large_twoopt_requirement_reason_codes(
+                        large_twoopt_signal,
+                        "cmt2_cmt4_case_protection",
+                    )
+                    or ("CVRP_PROTECTED_CASE_REVIEW_REQUIRED",),
                 )
             )
     for item in _list_of_mappings(source.get("measurable_opportunity_classes")):
@@ -219,7 +230,10 @@ def _large_twoopt_postrun_signal(
     return {}
 
 
-def _large_twoopt_requirement_status(signal: Mapping[str, Any]) -> str:
+def _large_twoopt_requirement_status(
+    signal: Mapping[str, Any],
+    requirement_id: str,
+) -> str:
     if not signal:
         return "current_run_required"
     if signal.get("current_run_evidence") is not True:
@@ -227,6 +241,11 @@ def _large_twoopt_requirement_status(signal: Mapping[str, Any]) -> str:
     if signal.get("available") is not True:
         return "postrun_summary_unavailable"
     evidence = _mapping_or_empty(signal.get("evidence"))
+    requirement = _large_twoopt_requirement_payload(evidence, requirement_id)
+    if requirement:
+        if requirement.get("status") == "observed":
+            return "current_run_required_evidence_observed"
+        return "current_run_selected_but_required_evidence_missing"
     mechanism = _mapping_or_empty(evidence.get("large_twoopt_mechanism"))
     if mechanism.get("direct_evidence_ready") is True:
         return "current_run_direct_evidence_ready"
@@ -237,14 +256,35 @@ def _large_twoopt_requirement_status(signal: Mapping[str, Any]) -> str:
 
 def _large_twoopt_requirement_reason_codes(
     signal: Mapping[str, Any],
+    requirement_id: str | None = None,
 ) -> tuple[str, ...]:
     if not signal:
         return ("CURRENT_RUN_EVIDENCE_REQUIRED",)
+    if requirement_id:
+        evidence = _mapping_or_empty(signal.get("evidence"))
+        requirement = _large_twoopt_requirement_payload(evidence, requirement_id)
+        if requirement:
+            missing = _string_tuple(requirement.get("missing_fields"))
+            if missing:
+                return missing
+            outcome = str(requirement.get("outcome_status") or "").strip()
+            if outcome and outcome != "not_outcome_requirement":
+                return (outcome,)
+            return ()
     gaps = _string_tuple(signal.get("evidence_gaps"))
     if gaps:
         return gaps
     interpretation = str(signal.get("interpretation") or "").strip()
     return (interpretation,) if interpretation else ()
+
+
+def _large_twoopt_requirement_payload(
+    evidence: Mapping[str, Any],
+    requirement_id: str,
+) -> dict[str, Any]:
+    statuses = _mapping_or_empty(evidence.get("evidence_requirement_statuses"))
+    requirements = _mapping_or_empty(statuses.get("requirements"))
+    return _mapping_or_empty(requirements.get(requirement_id))
 
 
 def _protected_cases() -> tuple[ProtectedCaseSummary, ...]:

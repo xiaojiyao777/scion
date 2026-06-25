@@ -165,6 +165,7 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         current_run_evidence=_inventory_current_run_evidence(inventory),
         prompt_context_visibility_summary=prompt_context_visibility_summary,
         proposal_trajectory_manifests=proposal_trajectory_manifests,
+        cvrp_large_twoopt_summary=cvrp_large_twoopt_summary,
     )
     return {
         "schema_version": SCHEMA_VERSION,

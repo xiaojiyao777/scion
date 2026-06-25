@@ -182,6 +182,14 @@ proposal quality blocks `0`, max branch depth `2`, same-mechanism follow-up
 above MDE `0`, and `cvrp_opportunity_usage_summary.usage_status` is
 `checklist_unproven`. Detailed report:
 `scion/docs/experiments/v0.4/v04-cvrp-designqr-codeprompt-postrun-20260625.md`.
+A narrow CVRP follow-through slice is implemented locally: current-run
+`cvrp_large_twoopt_summary` now emits CVRP-owned
+`evidence_requirement_statuses`, `cvrp_opportunity_usage_summary` consumes
+that as `required_evidence_proof`, and provider prompt status can report
+required-evidence observed separately from positive-at-MDE solver outcome.
+Focused local conda `claw` tests pass for provider/usage/postrun-brief and
+legacy large-twoopt cases (`15 passed`), plus `py_compile` and
+`git diff --check`.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-25*

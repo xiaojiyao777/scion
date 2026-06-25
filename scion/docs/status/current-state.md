@@ -133,6 +133,14 @@ chronology belongs in focused experiment reports and git history.
   selected-with-checklist-unproven for the prepared top opportunity without
   making the summary a Decision input. The current broader local/WSL
   acceptance/visibility set passes (`92 passed` each).
+- A narrow local CVRP follow-through slice now separates required-evidence
+  checklist proof from solver outcome: `cvrp_large_twoopt_summary` emits
+  problem-owned `evidence_requirement_statuses`, opportunity usage consumes
+  them as `required_evidence_proof`, and provider prompt status can report
+  required evidence observed even when direct positive-at-MDE outcome evidence
+  is absent. Focused local conda `claw` validation for provider, usage,
+  postrun brief, and legacy large-twoopt cases passes (`15 passed`), with
+  `py_compile` and `git diff --check` clean.
 - Design Q initial relay is implemented locally as
   `scion.opportunity.commitment`: code context now derives a proposal-only
   `Opportunity Evidence Commitment` from the redacted problem opportunity

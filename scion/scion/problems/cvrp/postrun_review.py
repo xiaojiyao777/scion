@@ -13,6 +13,7 @@ from scion.postrun import (
 from scion.problems.cvrp.large_twoopt_review import (
     CVRP_LARGE_TWOOPT_REVIEW_AXES,
     cvrp_large_twoopt_evidence_gaps,
+    cvrp_large_twoopt_evidence_requirement_statuses,
     cvrp_large_twoopt_handoff_requirements,
     cvrp_large_twoopt_interpretation,
     cvrp_large_twoopt_mechanism_signal,
@@ -246,6 +247,11 @@ def cvrp_large_twoopt_summary(
             ),
         },
         "large_twoopt_mechanism": large_twoopt_mechanism,
+        "evidence_requirement_statuses": (
+            cvrp_large_twoopt_evidence_requirement_statuses(
+                large_twoopt_mechanism
+            )
+        ),
         "quality_blocks": {
             "proposal_quality_blocks": _int_or_zero(
                 proposal_quality.get("proposal_quality_blocks")

@@ -652,6 +652,11 @@ def _cvrp_opportunity_usage_actionability(
             run_root,
             inventory,
         ),
+        cvrp_large_twoopt_summary=(
+            _mapping_or_empty(brief.get("cvrp_large_twoopt_summary"))
+            if summary.get("required_evidence_proof")
+            else None
+        ),
     )
 
     failures: list[str] = []

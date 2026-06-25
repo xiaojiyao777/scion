@@ -71,6 +71,7 @@ def build_cvrp_opportunity_usage_summary(
     current_run_evidence: bool | None = None,
     prompt_context_visibility_summary: Mapping[str, Any] | None = None,
     proposal_trajectory_manifests: Iterable[Mapping[str, Any]] = (),
+    cvrp_large_twoopt_summary: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Summarize whether proposal fingerprints used visible CVRP opportunities."""
 
@@ -114,6 +115,9 @@ def build_cvrp_opportunity_usage_summary(
     if family != CVRP_PROBLEM_FAMILY:
         return base
 
+    required_evidence_proof = _large_twoopt_required_evidence_proof(
+        cvrp_large_twoopt_summary
+    )
     entries: list[dict[str, Any]] = []
     counts = _empty_counts()
     session_count = 0
@@ -124,7 +128,11 @@ def build_cvrp_opportunity_usage_summary(
             report_name = str(manifest.get("report") or "")
         for session in _mapping_items(manifest.get("sessions")):
             session_count += 1
-            entry = _proposal_usage_entry(session, report_name=report_name)
+            entry = _proposal_usage_entry(
+                session,
+                report_name=report_name,
+                required_evidence_proof=required_evidence_proof,
+            )
             if entry["usage_status"] != "uninterpretable":
                 interpretable_count += 1
             _increment_count(counts, entry["usage_status"])
@@ -150,6 +158,7 @@ def build_cvrp_opportunity_usage_summary(
         "interpretable_proposal_count": interpretable_count,
         "usage_status": usage_status,
         "counts": counts,
+        "required_evidence_proof": required_evidence_proof,
         "evidence_gaps": evidence_gaps,
         "entries": entries,
     }
@@ -181,6 +190,9 @@ def cvrp_opportunity_usage_signature(value: Mapping[str, Any]) -> dict[str, Any]
         "default_avoid_families": _string_list(
             payload.get("default_avoid_families")
         ),
+        "required_evidence_proof": _required_evidence_proof_signature(
+            payload.get("required_evidence_proof")
+        ),
         "entries": [
             _entry_signature(item)
             for item in _mapping_items(payload.get("entries"))
@@ -192,6 +204,7 @@ def _proposal_usage_entry(
     session: Mapping[str, Any],
     *,
     report_name: str,
+    required_evidence_proof: Mapping[str, Any],
 ) -> dict[str, Any]:
     proposal = _mapping(session.get("proposal_fingerprint"))
     if not proposal:
@@ -213,6 +226,7 @@ def _proposal_usage_entry(
         checklist_unproven = _required_checklist_unproven(
             opportunity_families,
             session,
+            required_evidence_proof=required_evidence_proof,
         )
         if checklist_unproven:
             usage_status = "opportunity_evidence_checklist_unproven"
@@ -220,6 +234,12 @@ def _proposal_usage_entry(
                 "matched_opportunity_family",
                 "required_evidence_checklist_unproven",
             ]
+            reason_codes.extend(
+                _required_evidence_missing_reason_codes(
+                    opportunity_families,
+                    required_evidence_proof,
+                )
+            )
         else:
             usage_status = (
                 "contrasted_opportunity" if has_contrast else "used_opportunity"
@@ -246,6 +266,10 @@ def _proposal_usage_entry(
             "usage_status": usage_status,
             "opportunity_families": opportunity_families,
             "default_avoid_families": default_avoid_families,
+            "required_evidence_status": _required_evidence_status(
+                opportunity_families,
+                required_evidence_proof,
+            ),
             "reason_codes": reason_codes,
         }
     )
@@ -302,10 +326,111 @@ def _has_structured_contrast(session: Mapping[str, Any]) -> bool:
 def _required_checklist_unproven(
     opportunity_families: list[str],
     session: Mapping[str, Any],
+    *,
+    required_evidence_proof: Mapping[str, Any],
 ) -> bool:
     if REQUIRED_MECHANISM_ID not in opportunity_families:
         return False
+    proof = _mapping(required_evidence_proof)
+    status = str(proof.get("checklist_status") or "").strip()
+    if status == "proven":
+        return False
+    if status in {"unproven", "not_ready", "unavailable"}:
+        return True
     return not _has_structured_contrast(session)
+
+
+def _required_evidence_status(
+    opportunity_families: list[str],
+    required_evidence_proof: Mapping[str, Any],
+) -> str:
+    if REQUIRED_MECHANISM_ID not in opportunity_families:
+        return ""
+    return str(_mapping(required_evidence_proof).get("checklist_status") or "")
+
+
+def _required_evidence_missing_reason_codes(
+    opportunity_families: list[str],
+    required_evidence_proof: Mapping[str, Any],
+) -> list[str]:
+    if REQUIRED_MECHANISM_ID not in opportunity_families:
+        return []
+    proof = _mapping(required_evidence_proof)
+    return [
+        f"required_evidence_{item}"
+        for item in _string_list(proof.get("missing"))
+        if item
+    ][:8]
+
+
+def _large_twoopt_required_evidence_proof(
+    cvrp_large_twoopt_summary: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    summary = _mapping(cvrp_large_twoopt_summary)
+    if not summary:
+        return {}
+    if summary.get("schema_version") != "scion.postrun_cvrp_large_twoopt_summary.v1":
+        return {}
+    evidence = _mapping(summary.get("evidence"))
+    mechanism = _mapping(evidence.get("large_twoopt_mechanism"))
+    if not mechanism:
+        return {}
+    requirement_statuses = _mapping(evidence.get("evidence_requirement_statuses"))
+    direct = _mapping(mechanism.get("direct_evidence"))
+    has_requirement_statuses = bool(requirement_statuses)
+    requirement_missing = _string_list(requirement_statuses.get("missing"))
+    missing = (
+        requirement_missing
+        if has_requirement_statuses
+        else _string_list(direct.get("missing") or mechanism.get("evidence_gaps"))
+    )
+    checklist_complete = (
+        requirement_statuses.get("complete") is True
+        or str(requirement_statuses.get("status") or "") == "complete"
+    )
+    direct_ready = mechanism.get("direct_evidence_ready") is True
+    family_available = mechanism.get("mechanism_family_available") is True
+    if checklist_complete:
+        checklist_status = "proven"
+    elif family_available:
+        checklist_status = "unproven"
+    else:
+        checklist_status = "not_ready"
+    return _drop_empty(
+        {
+            "schema_version": "scion.postrun_cvrp_opportunity_required_evidence_proof.v1",
+            "report_only": True,
+            "quality_judgment": False,
+            "decision_features_excluded": True,
+            "problem_family": CVRP_PROBLEM_FAMILY,
+            "mechanism_family": REQUIRED_MECHANISM_ID,
+            "source_summary_schema_version": str(summary.get("schema_version") or ""),
+            "source_interpretation": str(summary.get("interpretation") or ""),
+            "checklist_status": checklist_status,
+            "checklist_complete": checklist_complete,
+            "outcome_direct_evidence_ready": direct_ready,
+            "mechanism_family_available": family_available,
+            "protocol_row_count": _int(mechanism.get("protocol_row_count")),
+            "complete_direct_evidence_row_count": _int(
+                direct.get("complete_direct_evidence_row_count")
+            ),
+            "positive_effect_row_count": _int(direct.get("positive_effect_row_count")),
+            "activation_observed_count": _int(direct.get("activation_observed_count")),
+            "objective_effect_observed_count": _int(
+                direct.get("objective_effect_observed_count")
+            ),
+            "phase_telemetry_observed_count": _int(
+                direct.get("phase_telemetry_observed_count")
+            ),
+            "protected_case_complete_row_count": _int(
+                direct.get("protected_case_complete_row_count")
+            ),
+            "protected_cases_observed": _string_list(
+                direct.get("protected_cases_observed")
+            ),
+            "missing": missing,
+        }
+    )
 
 
 def _opportunity_visibility(prompt_summary: Mapping[str, Any]) -> dict[str, Any]:
@@ -423,7 +548,46 @@ def _entry_signature(value: Mapping[str, Any]) -> dict[str, Any]:
         "usage_status": str(entry.get("usage_status") or ""),
         "opportunity_families": _string_list(entry.get("opportunity_families")),
         "default_avoid_families": _string_list(entry.get("default_avoid_families")),
+        "required_evidence_status": str(
+            entry.get("required_evidence_status") or ""
+        ),
         "reason_codes": _string_list(entry.get("reason_codes")),
+    }
+
+
+def _required_evidence_proof_signature(value: Any) -> dict[str, Any]:
+    proof = _mapping(value)
+    if not proof:
+        return {}
+    return {
+        "schema_version": str(proof.get("schema_version") or ""),
+        "problem_family": str(proof.get("problem_family") or ""),
+        "mechanism_family": str(proof.get("mechanism_family") or ""),
+        "checklist_status": str(proof.get("checklist_status") or ""),
+        "checklist_complete": proof.get("checklist_complete") is True,
+        "outcome_direct_evidence_ready": (
+            proof.get("outcome_direct_evidence_ready") is True
+        ),
+        "mechanism_family_available": proof.get("mechanism_family_available") is True,
+        "protocol_row_count": _int(proof.get("protocol_row_count")),
+        "complete_direct_evidence_row_count": _int(
+            proof.get("complete_direct_evidence_row_count")
+        ),
+        "positive_effect_row_count": _int(proof.get("positive_effect_row_count")),
+        "activation_observed_count": _int(proof.get("activation_observed_count")),
+        "objective_effect_observed_count": _int(
+            proof.get("objective_effect_observed_count")
+        ),
+        "phase_telemetry_observed_count": _int(
+            proof.get("phase_telemetry_observed_count")
+        ),
+        "protected_case_complete_row_count": _int(
+            proof.get("protected_case_complete_row_count")
+        ),
+        "protected_cases_observed": _string_list(
+            proof.get("protected_cases_observed")
+        ),
+        "missing": _string_list(proof.get("missing")),
     }
 
 
