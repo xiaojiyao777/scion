@@ -177,6 +177,22 @@ chronology belongs in focused experiment reports and git history.
   and both summary-without-section counts `0`. It remains solver-negative and
   checklist-unproven; detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-designqr-codeprompt-postrun-20260625.md`.
+- The WSL proof-status follow-up root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-proofstatus-followup-05ade2e0-2r-gpt55-20260625T155106Z-claw`
+  resumed the Design Q/R campaign from WSL runtime commit `05ade2e0`, finished
+  valid/complete and postrun-ready, and was mirrored locally to
+  `/home/clawd/research/scion-experiments/v04-cvrp-proofstatus-followup-05ade2e0-2r-gpt55-20260625T155106Z-claw`.
+  It validates the live `evidence_requirement_statuses` to
+  `required_evidence_proof` carrier, but remains solver-negative and
+  checklist-unproven: 2 screening rows, champion `v1`, promotions `0`,
+  positive rows `0`, rows at or above MDE `0`, same-mechanism follow-up `2/2`,
+  `required_evidence_proof.checklist_status=not_ready`, and
+  `cvrp_opportunity_usage_summary.usage_status=checklist_unproven`. Current
+  next design issue: CVRP prepared opportunity/proposal rows use
+  `large_instance_intra_route_two_opt_seed`, while large-twoopt review still
+  reports missing large-twoopt mechanism/direct checklist evidence. Detailed
+  report:
+  `scion/docs/experiments/v0.4/v04-cvrp-proofstatus-followup-postrun-20260625.md`.
 
 ## Current Decision
 

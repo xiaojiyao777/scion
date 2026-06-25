@@ -190,6 +190,19 @@ required-evidence observed separately from positive-at-MDE solver outcome.
 Focused local conda `claw` tests pass for provider/usage/postrun-brief and
 legacy large-twoopt cases (`15 passed`), plus `py_compile` and
 `git diff --check`.
+The WSL proof-status follow-up root
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-proofstatus-followup-05ade2e0-2r-gpt55-20260625T155106Z-claw`
+finished valid/complete and postrun-ready from WSL runtime commit `05ade2e0`.
+It validates the live proof-status carrier but remains solver-negative and
+checklist-unproven: 2 screening rows, champion `v1`, promotions `0`, positive
+rows `0`, rows at or above MDE `0`, same-mechanism follow-up `2/2`,
+`required_evidence_proof.checklist_status=not_ready`, and
+`cvrp_opportunity_usage_summary.usage_status=checklist_unproven`. The new
+finding is problem-owned: prepared opportunity rows use
+`large_instance_intra_route_two_opt_seed`, while current large-twoopt review
+still reports missing large-twoopt mechanism/direct checklist evidence.
+Detailed report:
+`scion/docs/experiments/v0.4/v04-cvrp-proofstatus-followup-postrun-20260625.md`.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-25*
