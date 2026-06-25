@@ -155,9 +155,9 @@ chronology belongs in focused experiment reports and git history.
   bodies, and does not alter `DecisionFeatures`, Protocol, scheduler,
   lifecycle, runtime-pressure, or promotion behavior. Focused local
   opportunity/prompt-visibility tests pass (`18 passed`), and broader local
-  postrun brief/acceptance tests pass (`124 passed`). WSL validation is
-  intentionally deferred until the active WSL CVRP opportunity-recipe run
-  completes; do not hot-sync that checkout while the run is active.
+  postrun brief/acceptance tests pass (`124 passed`). The completed WSL CVRP
+  opportunity-recipe root launched before Designs Q/R, so WSL validation of
+  the code-prompt commitment relay requires the next synced launch.
 
 ## Current Decision
 
@@ -230,17 +230,27 @@ chronology belongs in focused experiment reports and git history.
   Accepted conclusion: current-sync CVRP validates the repaired research loop
   for continuation/rejection, while leaving the solver-opportunity problem
   open in the CVRP/VRP problem-owned layer.
-- Active WSL CVRP opportunity-recipe run:
+- The CVRP opportunity-recipe continuation finished valid/complete and was
+  mirrored locally:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-opportunity-recipe-resume-633d1d25-4r-gpt55-20260625T110617Z-claw`.
-  It launched from clean WSL commit `633d1d25` and resumed the current-sync
-  CVRP root. As of the 2026-06-25T11:56Z server-side check it was still
-  running with 1 of 4 effective rounds complete, 1 Protocol row, 0 proposal
-  quality blocks, and champion still `v1`. New live prompt traces prove the
-  hypothesis prompt includes `Problem Opportunity Summary` and the prepared
-  `large_instance_two_opt_objective_runtime_requirement` recipe. The code
-  prompt from that run does not include Design Q's code-phase commitment
-  because the run started before Design Q. Do not hot-sync the WSL checkout
-  while this run is active unless accepting checkout-changed caveats.
+  Local mirror:
+  `/home/clawd/research/scion-experiments/v04-cvrp-opportunity-recipe-resume-633d1d25-4r-gpt55-20260625T110617Z-claw`.
+  It launched from clean WSL commit `633d1d25`, resumed the current-sync CVRP
+  root, and WSL postrun acceptance is authoritative and ready:
+  `current_run_analysis_ready=true`, `delegation_ready=true`, no required
+  readiness failures, optional `postrun_report_status_marker` only. Counters:
+  4 of 4 effective rounds, 4 screening Protocol rows, 4 proposal attempts, 0
+  proposal quality blocks, champion still `v1`, promotions `0`. Measurement
+  remains solver-negative: 0 positive rows, 0 rows at or above MDE, all 4 rows
+  with CI high below MDE, max effect-to-MDE ratio `0.0`, and CVRP review
+  interpretation `protocol_evaluated_without_large_twoopt_signal`. The useful
+  evidence is Design P proposal visibility and opportunity usage: `Problem
+  Opportunity Summary` was visible in hypothesis prompts, CVRP opportunity
+  usage is `mixed`, with `used_opportunity=4`, `contrasted_opportunity=56`,
+  and only `proposal_repeats_default_avoid_family` as evidence gap. This root
+  launched before Designs Q/R, so code prompts are not expected to include
+  `Opportunity Evidence Commitment`. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-opportunity-recipe-postrun-20260625.md`.
 
 ## WSL Runner
 
@@ -300,10 +310,12 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   optional only for independent solver-level plateau confirmation.
 - CVRP: use A/A MDE and case variance while seeking branch depth,
   same-mechanism follow-up, and solver-design improvements. The current-sync
-  root above is now clean acceptance evidence for repaired continuation and
-  MDE-aware rejection, but not for solver improvement. The next CVRP/VRP work
-  should improve problem-owned solver-opportunity evidence and proposal context,
-  not add CVRP-specific core gates.
+  and opportunity-recipe roots are clean acceptance evidence for repaired
+  continuation, MDE-aware rejection, and problem-owned opportunity-summary
+  visibility, but not for solver improvement. The next CVRP/VRP work should
+  validate the Design Q/R code-prompt commitment relay on a synced launch and
+  improve problem-owned solver-opportunity evidence, not add CVRP-specific core
+  gates.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
@@ -336,9 +348,9 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    selected opportunity commitments visible to code prompts and auditable in
    postrun reports as ids/digests only, including report-only counts for
    commitment summaries that were not accompanied by a rendered code prompt
-   section. The next v0.4 work is effective-
-   research validation and problem-owned opportunity/review evidence, not more
-   generic checker growth.
+   section. The next v0.4 work is a synced CVRP/VRP launch that validates
+   code-phase opportunity commitment visibility plus problem-owned
+   opportunity/review evidence, not more generic checker growth.
 2. Extend problem-owned opportunity providers/reviews beyond the CVRP initial
    slice only when a concrete problem package needs it. Generic core should
    continue to render/audit `ProblemOpportunitySummary`; residual opportunity,

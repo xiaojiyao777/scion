@@ -147,11 +147,20 @@ and prompt manifests as proposal-only `research_signal`. The relay is generic,
 redacted, excluded from `DecisionFeatures`, and does not change Protocol,
 scheduler, lifecycle, runtime-pressure, or promotion behavior. Local focused
 opportunity tests pass (`15 passed`) and the broader postrun
-visibility/agentic-prompt set passes (`117 passed`). The active WSL CVRP
-opportunity-recipe root launched before Design Q, so its hypothesis prompts
-already show the problem-owned opportunity summary and selected
-`large_instance_intra_route_two_opt_seed`, while its current code prompts are
-not expected to include Design Q until the next synced launch.
+visibility/agentic-prompt set passes (`117 passed`). The WSL CVRP
+opportunity-recipe root launched before Design Q and has now finished
+valid/complete and postrun-ready. It validates Design P proposal visibility,
+not the Design Q code-prompt relay: hypothesis prompts showed the problem-owned
+opportunity summary and selected `large_instance_intra_route_two_opt_seed`,
+while code prompts are not expected to include Design Q until the next synced
+launch. The run remains solver-negative: 4 of 4 effective rounds, 0 proposal
+quality blocks, champion still `v1`, 0 promotions, 0 positive rows, 0 rows at
+or above MDE, and CVRP review interpretation
+`protocol_evaluated_without_large_twoopt_signal`. Useful opportunity evidence:
+`cvrp_opportunity_usage_summary` is `mixed`, with `used_opportunity=4`,
+`contrasted_opportunity=56`, and only
+`proposal_repeats_default_avoid_family` as evidence gap. Detailed report:
+`scion/docs/experiments/v0.4/v04-cvrp-opportunity-recipe-postrun-20260625.md`.
 Design R initial postrun visibility is implemented locally: prompt manifests
 carry bounded commitment ids/digests, proposal trajectory fingerprints expose
 `opportunity_commitment_visibility`, postrun prompt-context summaries aggregate
@@ -164,9 +173,9 @@ parsing or problem semantics. This remains report-only and does not change
 `DecisionFeatures`, Protocol, scheduler, lifecycle, runtime-pressure, or
 promotion behavior. Focused local opportunity/prompt-visibility validation
 passes (`18 passed`), and broader local postrun brief/acceptance validation
-passes (`124 passed`). WSL validation for this slice is deferred until the
-active WSL CVRP opportunity-recipe run completes; do not hot-sync the WSL
-checkout while it is active.
+passes (`124 passed`). WSL validation for the code-prompt commitment relay
+requires the next synced launch because the completed opportunity-recipe root
+started before Design Q/R.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-25*
@@ -630,8 +639,8 @@ Current checkpoint:
   runtime-pressure, and promotion paths; problem-specific requirement semantics
   remain in the problem provider. Local focused opportunity validation passes
   (`15 passed`) and the broader postrun visibility/agentic prompt suite passes
-  (`117 passed`). The current WSL CVRP opportunity-recipe run started before
-  this local Design Q slice, so its live trace is evidence for Design P
+  (`117 passed`). The completed WSL CVRP opportunity-recipe root started before
+  this local Design Q slice, so its postrun trace is evidence for Design P
   opportunity-summary visibility, not for the new code-prompt commitment relay.
 - Design R initial postrun visibility is present for Design Q commitments:
   prompt manifests carry a manifest-safe
