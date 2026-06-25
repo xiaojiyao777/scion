@@ -26,13 +26,9 @@ from postrun_analysis_brief import (  # noqa: E402
     _prompt_context_visibility_summary,
     _proposal_trajectory_manifests,
     _protocol_accounting_summary,
-    _problem_research_continuity_signal,
     _research_continuity_summary,
     _research_context_actionability_summary,
     _runtime_feedback_summary,
-    _warehouse_followup_summary,
-    _warehouse_followup_continuity_signal,
-    _warehouse_followup_measurement_signal,
 )
 from scion.postrun import (  # noqa: E402
     MappingPostrunInventoryPort,
@@ -50,10 +46,17 @@ from scion.problems.cvrp.opportunity_review import (  # noqa: E402
 )
 from scion.problems.cvrp.large_twoopt_review import (  # noqa: E402
     cvrp_large_twoopt_mechanism_signal as _cvrp_large_twoopt_mechanism_signal,
+    problem_research_continuity_signal as _problem_research_continuity_signal,
 )
 from scion.problems.cvrp.postrun_review import (  # noqa: E402
     CvrpLargeTwoOptReviewPort,
     cvrp_large_twoopt_summary as _cvrp_large_twoopt_summary,
+)
+from scion.problems.warehouse_delivery.postrun_review import (  # noqa: E402
+    WarehouseFollowupReviewPort,
+    warehouse_followup_continuity_signal as _warehouse_followup_continuity_signal,
+    warehouse_followup_measurement_signal as _warehouse_followup_measurement_signal,
+    warehouse_followup_summary as _warehouse_followup_summary,
 )
 
 
@@ -553,7 +556,10 @@ def _typed_postrun_readiness_payload(
         PostrunReadinessOrchestrator(
             MappingPostrunInventoryPort(typed_inventory),
             problem_reviews=ProblemReviewRegistry(
-                {"cvrp": CvrpLargeTwoOptReviewPort()}
+                {
+                    "cvrp": CvrpLargeTwoOptReviewPort(),
+                    "warehouse_delivery": WarehouseFollowupReviewPort(),
+                }
             ),
         )
         .build(root)

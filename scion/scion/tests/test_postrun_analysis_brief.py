@@ -8,6 +8,9 @@ import sys
 from pathlib import Path
 
 from scion.problems.cvrp.large_twoopt_review import CVRP_LARGE_TWOOPT_REVIEW_AXES
+from scion.problems.warehouse_delivery.postrun_review import (
+    WAREHOUSE_FOLLOWUP_REVIEW_AXES,
+)
 
 
 TOOL_PATH = Path(__file__).parents[2] / "tools" / "postrun_analysis_brief.py"
@@ -1378,7 +1381,7 @@ def test_warehouse_followup_summary_prepared_only_requires_launch(
         "launch_required_before_plateau_conclusion"
     ]
     assert summary["deferred_review_axes"] == list(
-        brief_tool.WAREHOUSE_FOLLOWUP_REVIEW_AXES
+        WAREHOUSE_FOLLOWUP_REVIEW_AXES
     )
     assert summary["review_axes_actionability"] == (
         "not_actionable_before_launch_current_run_evidence_required"
