@@ -633,6 +633,34 @@ def test_rebuild_prepared_handoff_adds_warehouse_code_constraint_bridge(
     assert code_summary["warehouse_lexicographic_guard_present"] is True
 
 
+def test_rebuild_prompt_context_readiness_accepts_no_resume_without_copied_campaign(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_rebuild_fixture_root(
+        tmp_path,
+        problem_family="cvrp",
+        report_stem="cvrp_on_full",
+        research_focus=_cvrp_research_focus(),
+        control_pair_key="cvrp.prepared:rep01",
+        resume_from_campaign="",
+    )
+    (run_root / "campaign" / "campaign_summary.json").unlink()
+    (run_root / "campaign" / "status.json").unlink()
+
+    prompt_context = rebuild_tool.build_prepared_prompt_context_readiness(run_root)
+
+    assert prompt_context["readiness"]["ready_for_launch_prompt_audit"] is True
+    assert prompt_context["readiness"]["missing_required"] == []
+    copied_summary = prompt_context["signals"]["copied_campaign_summary"]
+    copied_status = prompt_context["signals"]["copied_campaign_status"]
+    assert copied_summary["available"] is False
+    assert copied_summary["required"] is False
+    assert copied_summary["detail"]["resume_from_campaign"] == ""
+    assert copied_status["available"] is False
+    assert copied_status["required"] is False
+    assert copied_status["detail"]["resume_from_campaign"] == ""
+
+
 def test_rebuild_prepared_handoff_cli_uses_current_checkout_without_pythonpath(
     tmp_path: Path,
 ) -> None:
@@ -697,6 +725,7 @@ def _write_rebuild_fixture_root(
     report_stem: str,
     research_focus: dict[str, object],
     control_pair_key: str,
+    resume_from_campaign: str = "/tmp/source-campaign",
 ) -> Path:
     run_root = tmp_path / f"{report_stem}-prepared-root"
     campaign_dir = run_root / "campaign"
@@ -746,7 +775,7 @@ def _write_rebuild_fixture_root(
                     problem_family=problem_family,
                 )
             ),
-            "resume_from_campaign": "/tmp/source-campaign",
+            "resume_from_campaign": resume_from_campaign,
             "command": command,
             "execution": {
                 "measurement_governance": "on",

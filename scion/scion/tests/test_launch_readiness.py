@@ -206,6 +206,22 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert "Launch only after rerunning this tool" in markdown
 
 
+def test_launch_readiness_accepts_no_resume_prepared_root(tmp_path: Path) -> None:
+    run_root = _write_prepared_root(tmp_path, resume_from_campaign="")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is True
+    assert report["static_ready"] is True
+    assert report["failed_required_checks"] == []
+    assert report["checks"]["prepared_analysis_brief_current"]["status"] == "ok"
+    assert (
+        report["checks"]["analysis_brief_prepared_contract_consistency"]["status"]
+        == "ok"
+    )
+    assert report["checks"]["prompt_context_readiness_complete"]["status"] == "ok"
+
+
 def test_launch_readiness_rejects_already_started_root(tmp_path: Path) -> None:
     run_root = _write_prepared_root(tmp_path)
     (run_root / "exit.txt").write_text("WRAPPER_EXIT_STATUS:64\n", encoding="utf-8")
@@ -3854,6 +3870,7 @@ def _write_prepared_root(
     problem_family: str = "cvrp",
     research_focus: dict[str, object] | None = None,
     include_code_constraint_bridge: bool = True,
+    resume_from_campaign: str = "/tmp/source-campaign",
 ) -> Path:
     if runtime_guard_paths is None:
         runtime_guard_paths = _default_runtime_guard_paths(problem_family)
@@ -3907,8 +3924,8 @@ def _write_prepared_root(
             "prepared_only": True,
             "run_root": str(run_root),
             "campaign_dir": str(campaign_dir),
-            "copied_campaign_status_present": True,
-            "copied_campaign_summary_present": True,
+            "copied_campaign_status_present": bool(resume_from_campaign),
+            "copied_campaign_summary_present": bool(resume_from_campaign),
         },
     )
     manifest = {
@@ -3924,7 +3941,7 @@ def _write_prepared_root(
         "problem_family": problem_family,
         "analysis_intent": "Prepared launch readiness fixture.",
         "acceptance_focus": ["Stay report-only."],
-        "resume_from_campaign": "/tmp/source-campaign",
+        "resume_from_campaign": resume_from_campaign,
         "command": command,
         "model": {
             "name": "gpt-5.5",

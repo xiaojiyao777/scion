@@ -453,6 +453,8 @@ def build_prepared_prompt_context_readiness(run_root: Path | str) -> dict[str, A
     research_focus = _mapping_or_empty(manifest_dict.get("research_focus"))
     model = _mapping_or_empty(manifest_dict.get("model"))
     execution = _mapping_or_empty(manifest_dict.get("execution"))
+    resume_from_campaign = str(manifest_dict.get("resume_from_campaign") or "").strip()
+    copied_campaign_required = bool(resume_from_campaign)
 
     signals: dict[str, dict[str, Any]] = {}
     _add_signal(
@@ -478,17 +480,23 @@ def build_prepared_prompt_context_readiness(run_root: Path | str) -> dict[str, A
         signals,
         "copied_campaign_summary",
         available=bool(summary_dict),
-        required=True,
+        required=copied_campaign_required,
         source=str(summary_path),
-        detail={"keys": sorted(summary_dict)[:12]},
+        detail={
+            "keys": sorted(summary_dict)[:12],
+            "resume_from_campaign": resume_from_campaign,
+        },
     )
     _add_signal(
         signals,
         "copied_campaign_status",
         available=bool(status_dict),
-        required=True,
+        required=copied_campaign_required,
         source=str(status_path),
-        detail={"keys": sorted(status_dict)[:12]},
+        detail={
+            "keys": sorted(status_dict)[:12],
+            "resume_from_campaign": resume_from_campaign,
+        },
     )
     _add_signal(
         signals,

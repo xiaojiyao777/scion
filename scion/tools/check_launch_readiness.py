@@ -4748,16 +4748,20 @@ def _prepared_analysis_contract_failures(
         "problem_family": manifest_dict.get("problem_family"),
         "model": _manifest_model_name(manifest_dict),
         "control_pair_key": report_metadata_dict.get("control_pair_key"),
-        "resume_from_campaign": manifest_dict.get("resume_from_campaign"),
+        "resume_from_campaign": _normalized_prepared_contract_value(
+            "resume_from_campaign",
+            manifest_dict.get("resume_from_campaign"),
+        ),
     }
     for field, expected in expected_identity.items():
-        if contract.get(field) != expected:
+        actual = _normalized_prepared_contract_value(field, contract.get(field))
+        if actual != expected:
             failures.append(
                 {
                     "reason": "prepared_run_contract_identity_mismatch",
                     "field": field,
                     "expected": expected,
-                    "actual": contract.get(field),
+                    "actual": actual,
                 }
             )
 
@@ -4813,6 +4817,12 @@ def _prepared_analysis_brief_contract_consistency_check(
     return ("ok" if not failures else "failed"), detail
 
 
+def _normalized_prepared_contract_value(field: str, value: Any) -> Any:
+    if field == "resume_from_campaign" and value in (None, ""):
+        return ""
+    return value
+
+
 def _prepared_contract_consistency_failures(
     brief_contract: Any,
     inventory_contract: Any,
@@ -4841,13 +4851,21 @@ def _prepared_contract_consistency_failures(
         "completion_preflight",
         "postrun_reports",
     ):
-        if brief_contract.get(field) != inventory_contract.get(field):
+        brief_value = _normalized_prepared_contract_value(
+            field,
+            brief_contract.get(field),
+        )
+        inventory_value = _normalized_prepared_contract_value(
+            field,
+            inventory_contract.get(field),
+        )
+        if brief_value != inventory_value:
             failures.append(
                 {
                     "reason": f"prepared_contract_{field}_mismatch",
                     "field": field,
-                    "brief": brief_contract.get(field),
-                    "inventory": inventory_contract.get(field),
+                    "brief": brief_value,
+                    "inventory": inventory_value,
                 }
             )
     for field in ("execution", "git", "checks"):
