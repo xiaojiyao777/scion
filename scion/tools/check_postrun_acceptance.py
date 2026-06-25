@@ -36,6 +36,7 @@ from scion.postrun import (  # noqa: E402
     PostrunArtifactAcceptancePort,
     PostrunEvidenceConsistencyAcceptancePort,
     PostrunLifecycleAcceptancePort,
+    PostrunReviewInputAcceptancePort,
     ProblemReviewRegistry,
 )
 from scion.postrun.opportunity_visibility import (  # noqa: E402
@@ -117,24 +118,6 @@ PROBLEM_SUMMARY_DELEGATED_INTERPRETATIONS = {
         "protocol_evaluated_without_large_twoopt_direct_evidence",
         "protocol_evaluated_without_large_twoopt_signal",
     },
-}
-REVIEW_INPUT_SUMMARIES = {
-    "protocol_accounting_summary": (
-        "scion.postrun_protocol_accounting_summary.v1",
-        "accounting_report_count",
-    ),
-    "measurement_effect_summary": (
-        "scion.postrun_measurement_effect_summary.v1",
-        "effect_report_count",
-    ),
-    "runtime_feedback_summary": (
-        "scion.postrun_runtime_feedback_summary.v1",
-        "runtime_report_count",
-    ),
-    "research_continuity_summary": (
-        "scion.postrun_research_continuity_summary.v1",
-        "continuity_report_count",
-    ),
 }
 
 def build_readiness(
@@ -666,150 +649,17 @@ def _review_input_summaries_actionability(
             inventory,
         ),
     }
-    details = []
-    for key, (schema, count_field) in REVIEW_INPUT_SUMMARIES.items():
-        required_for_interpretation = key in required_summaries
-        summary = _mapping_or_empty(brief.get(key))
-        expected = _mapping_or_empty(expected_summaries.get(key))
-        count_value = _int_or_zero(summary.get(count_field))
-        expected_count_value = _int_or_zero(expected.get(count_field))
-        summary_present = (
-            summary.get("available") is True
-            or _int_or_zero(summary.get("report_count")) > 0
-            or summary.get("schema_version") is not None
-        )
-        expected_present = (
-            expected.get("available") is True
-            or _int_or_zero(expected.get("report_count")) > 0
-            or _int_or_zero(expected.get(count_field)) > 0
-        )
-        consistency_required = (
-            required_for_interpretation or summary_present or expected_present
-        )
-        failures: list[str] = []
-        if (required_for_interpretation or summary_present) and (
-            summary.get("schema_version") != schema
-        ):
-            failures.append(f"{key}_schema_stale")
-        if (required_for_interpretation or summary_present) and (
-            summary.get("report_only") is not True
-        ):
-            failures.append(f"{key}_not_report_only")
-        if (required_for_interpretation or summary_present) and (
-            summary.get("quality_judgment") is not False
-        ):
-            failures.append(f"{key}_quality_judgment_not_false")
-        if (required_for_interpretation or summary_present) and (
-            summary.get("decision_features_excluded") is not True
-        ):
-            failures.append(f"{key}_decision_features_not_excluded")
-        if (required_for_interpretation or summary_present) and (
-            summary.get("current_run_evidence") is not True
-        ):
-            failures.append(f"{key}_not_current_run_evidence")
-        if required_for_interpretation and summary.get("available") is not True:
-            failures.append(f"{key}_unavailable")
-        if (
-            required_for_interpretation
-            and _int_or_zero(summary.get("report_count")) <= 0
-        ):
-            failures.append(f"{key}_report_count_missing")
-        if required_for_interpretation and count_value <= 0:
-            failures.append(f"{key}_{count_field}_missing")
-        if key == "runtime_feedback_summary" and required_for_interpretation:
-            if summary.get("drain_status_complete") is not True:
-                failures.append("runtime_feedback_summary_drain_status_incomplete")
-            if summary.get("review_ready") is not True:
-                failures.append("runtime_feedback_summary_not_review_ready")
-        consistency_failures: list[str] = []
-        if consistency_required:
-            consistency_failures = _review_input_summary_consistency_failures(
-                key=key,
-                summary=summary,
-                expected=expected,
-                count_field=count_field,
-            )
-            failures.extend(consistency_failures)
-        details.append(
-            {
-                "summary": key,
-                "required_for_interpretation": required_for_interpretation,
-                "failures": failures,
-                "consistency_failures": consistency_failures,
-                "schema_version": summary.get("schema_version"),
-                "expected_schema_version": schema,
-                "report_only": summary.get("report_only"),
-                "quality_judgment": summary.get("quality_judgment"),
-                "decision_features_excluded": summary.get(
-                    "decision_features_excluded"
-                ),
-                "current_run_evidence": summary.get("current_run_evidence"),
-                "expected_current_run_evidence": expected.get(
-                    "current_run_evidence"
-                ),
-                "available": summary.get("available"),
-                "expected_available": expected.get("available"),
-                "report_count": summary.get("report_count"),
-                "expected_report_count": expected.get("report_count"),
-                count_field: summary.get(count_field),
-                f"expected_{count_field}": expected_count_value,
-                "drain_status_complete": summary.get("drain_status_complete"),
-                "expected_drain_status_complete": expected.get(
-                    "drain_status_complete"
-                ),
-                "review_ready": summary.get("review_ready"),
-                "expected_review_ready": expected.get("review_ready"),
-            }
-        )
+    check = PostrunReviewInputAcceptancePort().summarize(
+        problem_family=problem_family,
+        interpretation=interpretation,
+        analysis_brief=brief,
+        expected_summaries=expected_summaries,
+        required_summary_keys=required_summaries,
+    ).checks[0]
     return (
-        "ok"
-        if all(not item["failures"] for item in details)
-        else "failed",
-        {
-            "problem_family": problem_family,
-            "interpretation": interpretation,
-            "summaries": details,
-        },
+        check.status,
+        check.detail,
     )
-
-
-def _review_input_summary_consistency_failures(
-    *,
-    key: str,
-    summary: Mapping[str, Any],
-    expected: Mapping[str, Any],
-    count_field: str,
-) -> list[str]:
-    failures: list[str] = []
-    for field in (
-        "current_run_evidence",
-        "available",
-        "report_count",
-        count_field,
-    ):
-        if summary.get(field) != expected.get(field):
-            failures.append(f"{key}_{field}_mismatch")
-    if key == "runtime_feedback_summary":
-        for field in (
-            "drain_status_complete",
-            "review_ready",
-            "budget_diagnostic_source_count",
-        ):
-            if summary.get(field) != expected.get(field):
-                failures.append(f"{key}_{field}_mismatch")
-    if _summary_without_paths(summary.get("aggregate")) != _summary_without_paths(
-        expected.get("aggregate")
-    ):
-        failures.append(f"{key}_aggregate_mismatch")
-    if _summary_without_paths(summary.get("entries")) != _summary_without_paths(
-        expected.get("entries")
-    ):
-        failures.append(f"{key}_entries_mismatch")
-    if key == "runtime_feedback_summary" and _summary_without_paths(
-        summary.get("runtime_budget_diagnostics")
-    ) != _summary_without_paths(expected.get("runtime_budget_diagnostics")):
-        failures.append("runtime_feedback_summary_budget_diagnostics_mismatch")
-    return failures
 
 
 def _problem_summary_input_consistency(
@@ -1572,7 +1422,7 @@ def _required_review_input_summaries_for_interpretation(
 ) -> set[str]:
     if _is_quality_blocked_interpretation(interpretation):
         return {"protocol_accounting_summary"}
-    return set(REVIEW_INPUT_SUMMARIES)
+    return PostrunReviewInputAcceptancePort.summary_keys()
 
 
 def _prompt_source_visibility_actionability(

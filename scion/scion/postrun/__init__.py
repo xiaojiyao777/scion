@@ -30,6 +30,9 @@ from scion.postrun.readiness import (
     MappingPostrunInventoryPort,
     PostrunReadinessOrchestrator,
 )
+from scion.postrun.review_input_acceptance import (
+    PostrunReviewInputAcceptancePort,
+)
 
 __all__ = [
     "ANALYSIS_BRIEF_SCHEMA",
@@ -46,6 +49,7 @@ __all__ = [
     "PostrunLifecycleAcceptancePort",
     "PostrunReadinessOrchestrator",
     "PostrunReadinessSummary",
+    "PostrunReviewInputAcceptancePort",
     "ProblemReviewPort",
     "ProblemReviewRegistry",
     "ProblemReviewSummary",

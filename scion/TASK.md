@@ -82,9 +82,14 @@ port tests (`11 passed` each). Evidence/brief consistency checks for Phase 4
 coverage, prepared contract consistency, and current-run report families now
 run through `PostrunEvidenceConsistencyAcceptancePort`; local and WSL focused
 port tests pass (`13 passed` each), and full postrun acceptance still passes
-(`85 passed` each). Remaining prompt/source visibility, review-input,
-research-telemetry, and problem-owned summary consistency/actionability checks
-still need migration behind typed ports. Design O initial slice is implemented locally as
+(`85 passed` each). Review-input summary schema/count/consistency validation
+now runs through `PostrunReviewInputAcceptancePort`; the checker still supplies
+the problem/policy required-summary set, so generic core does not interpret
+CVRP/warehouse/VRP review semantics. Local and WSL focused port tests pass
+(`16 passed` each), and full postrun acceptance still passes (`85 passed`
+each). Remaining prompt/source visibility, research-telemetry, and
+problem-owned summary consistency/actionability checks still need migration
+behind typed ports. Design O initial slice is implemented locally as
 `scion.measurement.MeasurementConsumerView`; `ProtocolConfig` now consumes the
 typed view while preserving its legacy readiness payload shape. Proposal
 context measurement diagnostics now consume the same typed view while keeping
@@ -471,6 +476,15 @@ Current checkpoint:
   conda `claw` and WSL conda `scion` validation passes for the focused
   artifact/lifecycle/evidence/readiness port tests (`13 passed` each) and
   full postrun acceptance tests (`85 passed` each).
+- Design N generic review-input migration is present:
+  `scion.postrun.PostrunReviewInputAcceptancePort` now owns legacy-compatible
+  schema, boundary, count, and rebuilt-consistency checks for
+  protocol-accounting, measurement-effect, runtime-feedback, and
+  research-continuity summaries. The checker/problem policy still supplies the
+  required-summary set for each interpretation; the generic port does not own
+  CVRP/warehouse/VRP review semantics. Local conda `claw` and WSL conda
+  `scion` validation passes for the focused port/readiness tests (`16 passed`
+  each) and full postrun acceptance tests (`85 passed` each).
 - Design O initial implementation is present in
   `scion.measurement.MeasurementConsumerView`: generic consumers receive
   normalized readiness, runtime model, pairing validity, effect scale,
