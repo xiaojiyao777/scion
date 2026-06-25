@@ -21,8 +21,6 @@ from postrun_artifact_inventory import build_inventory  # noqa: E402
 from postrun_analysis_brief import (  # noqa: E402
     _branch_research_state_summary,
     _champion_progress_summary,
-    _cvrp_large_twoopt_summary,
-    _cvrp_large_twoopt_mechanism_signal,
     _failure_taxonomy_summary,
     _measurement_effect_summary,
     _prompt_context_visibility_summary,
@@ -39,6 +37,7 @@ from postrun_analysis_brief import (  # noqa: E402
 from scion.postrun import (  # noqa: E402
     MappingPostrunInventoryPort,
     PostrunReadinessOrchestrator,
+    ProblemReviewRegistry,
 )
 from scion.postrun.opportunity_visibility import (  # noqa: E402
     PROBLEM_OPPORTUNITY_VISIBILITY_SCHEMA,
@@ -48,6 +47,13 @@ from scion.problems.cvrp.opportunity_review import (  # noqa: E402
     SCHEMA_VERSION as CVRP_OPPORTUNITY_USAGE_SCHEMA,
     build_cvrp_opportunity_usage_summary,
     cvrp_opportunity_usage_signature,
+)
+from scion.problems.cvrp.large_twoopt_review import (  # noqa: E402
+    cvrp_large_twoopt_mechanism_signal as _cvrp_large_twoopt_mechanism_signal,
+)
+from scion.problems.cvrp.postrun_review import (  # noqa: E402
+    CvrpLargeTwoOptReviewPort,
+    cvrp_large_twoopt_summary as _cvrp_large_twoopt_summary,
 )
 
 
@@ -506,7 +512,11 @@ def build_readiness(
         checks["analysis_brief_present"]["status"] == "ok"
         and checks["inventory_artifact_present"]["status"] == "ok"
     )
-    typed_readiness = _typed_postrun_readiness_payload(root, inventory)
+    typed_readiness = _typed_postrun_readiness_payload(
+        root,
+        inventory,
+        analysis_brief=analysis_brief,
+    )
     payload = {
         "schema_version": SCHEMA_VERSION,
         "report_only": True,
@@ -531,12 +541,20 @@ def build_readiness(
 def _typed_postrun_readiness_payload(
     root: Path,
     inventory: Mapping[str, Any],
+    *,
+    analysis_brief: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return the Design N typed-port summary without changing legacy output."""
 
+    typed_inventory = dict(inventory)
+    if analysis_brief:
+        typed_inventory["analysis_brief"] = analysis_brief
     return (
         PostrunReadinessOrchestrator(
-            MappingPostrunInventoryPort(inventory),
+            MappingPostrunInventoryPort(typed_inventory),
+            problem_reviews=ProblemReviewRegistry(
+                {"cvrp": CvrpLargeTwoOptReviewPort()}
+            ),
         )
         .build(root)
         .to_payload()

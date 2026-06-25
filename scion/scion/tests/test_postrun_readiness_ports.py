@@ -85,6 +85,39 @@ def test_postrun_readiness_ports_keep_problem_review_problem_owned() -> None:
     assert payload["problem_review"]["decision_features_excluded"] is True
 
 
+def test_postrun_readiness_ports_read_nested_prepared_contract_family() -> None:
+    inventory = {
+        "launcher": {
+            "prepared_run_contract": {"problem_family": "fixture_problem"},
+        },
+        "lifecycle": {
+            "wrapper_exit_status": 0,
+            "postrun_acceptance_status": "ready",
+        },
+        "phase4_evidence_coverage": {
+            "current_run_evidence": True,
+            "invalid_infra_only": False,
+        },
+    }
+    registry = ProblemReviewRegistry(
+        {
+            "fixture_problem": _FixtureProblemReviewPort(
+                ready=True,
+            )
+        }
+    )
+
+    summary = PostrunReadinessOrchestrator(
+        MappingPostrunInventoryPort(inventory),
+        problem_reviews=registry,
+    ).build("/tmp/run-root")
+    payload = summary.to_payload()
+
+    assert payload["current_run_analysis_ready"] is True
+    assert payload["problem_review"]["problem_family"] == "fixture_problem"
+    assert payload["problem_review"]["ready"] is True
+
+
 def test_postrun_readiness_ports_fail_closed_on_generic_lifecycle() -> None:
     inventory = {
         "lifecycle": {

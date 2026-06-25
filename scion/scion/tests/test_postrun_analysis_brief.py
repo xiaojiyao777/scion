@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from scion.problems.cvrp.large_twoopt_review import CVRP_LARGE_TWOOPT_REVIEW_AXES
+
 
 TOOL_PATH = Path(__file__).parents[2] / "tools" / "postrun_analysis_brief.py"
 SPEC = importlib.util.spec_from_file_location("postrun_analysis_brief", TOOL_PATH)
@@ -1453,9 +1455,7 @@ def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
     assert summary["evidence_gaps"] == [
         "launch_required_before_bounded_twoopt_conclusion"
     ]
-    assert summary["deferred_review_axes"] == list(
-        brief_tool.CVRP_LARGE_TWOOPT_REVIEW_AXES
-    )
+    assert summary["deferred_review_axes"] == list(CVRP_LARGE_TWOOPT_REVIEW_AXES)
     assert summary["review_axes_actionability"] == (
         "not_actionable_before_launch_current_run_evidence_required"
     )

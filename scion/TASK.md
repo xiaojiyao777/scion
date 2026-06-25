@@ -65,9 +65,13 @@ Design basis:
 Design N skeleton is implemented locally as `scion.postrun`, with
 problem-neutral typed ports and generic tests. `check_postrun_acceptance.py`
 now has an explicit compatibility adapter that can include the typed readiness
-summary without changing default output. Individual legacy checks and
-CVRP/warehouse review summaries still need to move behind problem-owned
-providers. Design O initial slice is implemented locally as
+summary without changing default output. The first Design N migration slice is
+implemented for CVRP: `CvrpPostrunSummaryProvider` now builds the legacy
+`cvrp_large_twoopt_summary` field from the CVRP problem package,
+`CvrpLargeTwoOptReviewPort` is registered in the typed adapter, and checker
+recomputation imports CVRP large-twoopt logic from problem-owned modules.
+Warehouse follow-up and remaining legacy checks still need migration behind
+typed ports. Design O initial slice is implemented locally as
 `scion.measurement.MeasurementConsumerView`; `ProtocolConfig` now consumes the
 typed view while preserving its legacy readiness payload shape. Proposal
 context measurement diagnostics now consume the same typed view while keeping
@@ -415,6 +419,16 @@ Current checkpoint:
   can compute the typed summary via `include_typed_summary=True` while default
   CLI output remains unchanged. Focused generic/adapter tests:
   `scion/scion/tests/test_postrun_readiness_ports.py`.
+- Design N CVRP provider migration is present: CVRP large-twoopt review
+  constants, mechanism signal, interpretation, evidence gaps, legacy
+  `cvrp_large_twoopt_summary` generation, and typed `CvrpLargeTwoOptReviewPort`
+  live in `scion.problems.cvrp`. `postrun_analysis_brief.py` now calls the
+  problem-owned provider and preserves the legacy JSON key/schema; the
+  acceptance checker imports CVRP recomputation from the problem package.
+  Local conda `claw` and WSL conda `scion` focused validation passes for the
+  provider/readiness/boundary tests, postrun brief tests, acceptance tests, and
+  opportunity visibility tests. Warehouse follow-up remains the next Design N
+  provider migration.
 - Design O initial implementation is present in
   `scion.measurement.MeasurementConsumerView`: generic consumers receive
   normalized readiness, runtime model, pairing validity, effect scale,

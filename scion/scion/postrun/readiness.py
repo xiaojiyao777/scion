@@ -197,6 +197,11 @@ def _problem_family(inventory: PostrunInventory) -> str:
     value = prepared.get("problem_family")
     if value:
         return str(value).strip().lower()
+    launcher = _mapping(inventory.get("launcher"))
+    contract = _mapping(launcher.get("prepared_run_contract"))
+    value = contract.get("problem_family")
+    if value:
+        return str(value).strip().lower()
     manifest = _mapping(inventory.get("prepared_manifest"))
     return str(manifest.get("problem_family") or "").strip().lower()
 

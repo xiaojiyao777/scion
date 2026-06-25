@@ -66,9 +66,15 @@ chronology belongs in focused experiment reports and git history.
   typed postrun inventory, lifecycle, exposure, problem-review, registry, and
   readiness-orchestrator ports with dummy generic tests. `check_postrun_acceptance.py`
   now computes a typed readiness summary through an explicit compatibility
-  adapter path while preserving default JSON/Markdown output. Individual legacy
-  checks and CVRP/warehouse review summaries still need migration behind the
-  typed ports.
+  adapter path while preserving default JSON/Markdown output. The CVRP
+  large-twoopt summary has moved behind problem-owned providers:
+  `scion.problems.cvrp.postrun_review.CvrpPostrunSummaryProvider` builds the
+  legacy `cvrp_large_twoopt_summary` field, the typed adapter registers
+  `CvrpLargeTwoOptReviewPort`, and checker recomputation imports CVRP
+  large-twoopt logic from the CVRP problem package. Warehouse follow-up and
+  remaining legacy checks still need migration behind typed ports. Local and
+  WSL focused validation passes for provider/readiness/boundary, postrun brief,
+  acceptance, and opportunity visibility suites.
 - Design O initial slice is implemented locally as
   `scion.measurement.MeasurementConsumerView`. It reduces problem-owned
   measurement declarations to generic status/runtime/pairing/effect/MDE fields
@@ -247,11 +253,12 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    validators/providers. Design basis:
    `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`. Design N
    skeleton and the `check_postrun_acceptance.py` compatibility adapter are
-   implemented, and Design O's typed measurement consumer now feeds protocol
-   config, proposal-context measurement diagnostics, and prepared measurement
-   handoff builders; postrun research-efficiency fallback also uses it for
-  copied calibration artifacts. Migrate individual legacy postrun checks and
-  problem review summaries behind typed ports next.
+   implemented, and CVRP large-twoopt review is now problem-owned while
+   preserving the legacy analysis-brief field. Design O's typed measurement
+   consumer feeds protocol config, proposal-context measurement diagnostics,
+   prepared measurement handoff builders, and postrun research-efficiency
+   fallback. Migrate warehouse follow-up and individual legacy postrun checks
+   behind typed ports next.
 2. Extend problem-owned opportunity providers/reviews beyond the CVRP initial
    slice only when a concrete problem package needs it. Generic core should
    continue to render/audit `ProblemOpportunitySummary`; residual opportunity,
