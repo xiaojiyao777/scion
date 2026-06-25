@@ -29,6 +29,7 @@ from scion.problem.providers import (
     active_subject_taxonomy_payload,
     resolve_solver_design_prompt_provider,
 )
+from scion.opportunity import opportunity_evidence_commitment_from_summary
 from scion.proposal.context_ablation import normalize_proposal_context_ablation
 from scion.proposal.context.feedback import (
     _build_agent_quality_feedback,
@@ -1186,6 +1187,17 @@ class ContextManager:
         )
         if active_subject_code_constraints:
             ctx["active_subject_code_constraints"] = active_subject_code_constraints
+        problem_opportunity_summary = problem_opportunity_summary_from_adapter(
+            self._adapter
+        )
+        opportunity_evidence_commitment = (
+            opportunity_evidence_commitment_from_summary(
+                problem_opportunity_summary,
+                hypothesis,
+            )
+        )
+        if opportunity_evidence_commitment:
+            ctx["opportunity_evidence_commitment"] = opportunity_evidence_commitment
         if _is_solver_design_context_surface(hypothesis.change_locus, surface):
             solver_design_prompt_provider = resolve_solver_design_prompt_provider(
                 problem_spec=problem_spec,

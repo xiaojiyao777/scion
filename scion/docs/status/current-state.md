@@ -133,6 +133,15 @@ chronology belongs in focused experiment reports and git history.
   selected-with-checklist-unproven for the prepared top opportunity without
   making the summary a Decision input. The current broader local/WSL
   acceptance/visibility set passes (`92 passed` each).
+- Design Q initial relay is implemented locally as
+  `scion.opportunity.commitment`: code context now derives a proposal-only
+  `Opportunity Evidence Commitment` from the redacted problem opportunity
+  summary plus approved-hypothesis mechanism ids, and code prompts render it as
+  a bounded standalone section. Prompt manifests classify the section as
+  `research_signal`. The relay is excluded from `DecisionFeatures` and does
+  not change Protocol, scheduler, lifecycle, runtime-pressure, or promotion
+  behavior. Local focused opportunity/code-prompt tests pass (`15 passed`), and
+  the broader postrun visibility/agentic prompt set passes (`117 passed`).
 
 ## Current Decision
 
@@ -205,6 +214,17 @@ chronology belongs in focused experiment reports and git history.
   Accepted conclusion: current-sync CVRP validates the repaired research loop
   for continuation/rejection, while leaving the solver-opportunity problem
   open in the CVRP/VRP problem-owned layer.
+- Active WSL CVRP opportunity-recipe run:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-opportunity-recipe-resume-633d1d25-4r-gpt55-20260625T110617Z-claw`.
+  It launched from clean WSL commit `633d1d25` and resumed the current-sync
+  CVRP root. As of the 2026-06-25T11:56Z server-side check it was still
+  running with 1 of 4 effective rounds complete, 1 Protocol row, 0 proposal
+  quality blocks, and champion still `v1`. New live prompt traces prove the
+  hypothesis prompt includes `Problem Opportunity Summary` and the prepared
+  `large_instance_two_opt_objective_runtime_requirement` recipe. The code
+  prompt from that run does not include Design Q's code-phase commitment
+  because the run started before Design Q. Do not hot-sync the WSL checkout
+  while this run is active unless accepting checkout-changed caveats.
 
 ## WSL Runner
 

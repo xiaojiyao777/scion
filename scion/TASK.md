@@ -140,6 +140,18 @@ selected-with-checklist-unproven for the prepared top family without parsing
 raw prompts/responses or feeding DecisionFeatures. The opportunity-quality
 focused slice passes locally and on WSL (`15 passed` each), and the broader
 postrun acceptance/visibility set passes locally and on WSL (`92 passed` each).
+Design Q initial relay is implemented locally: approved hypothesis mechanism
+ids now select the matching problem-owned opportunity evidence requirements and
+render a compact `Opportunity Evidence Commitment` into code-generation prompts
+and prompt manifests as proposal-only `research_signal`. The relay is generic,
+redacted, excluded from `DecisionFeatures`, and does not change Protocol,
+scheduler, lifecycle, runtime-pressure, or promotion behavior. Local focused
+opportunity tests pass (`15 passed`) and the broader postrun
+visibility/agentic-prompt set passes (`117 passed`). The active WSL CVRP
+opportunity-recipe root launched before Design Q, so its hypothesis prompts
+already show the problem-owned opportunity summary and selected
+`large_instance_intra_route_two_opt_seed`, while its current code prompts are
+not expected to include Design Q until the next synced launch.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-25*
@@ -593,6 +605,19 @@ Current checkpoint:
   evidence checklist. The checker rebuilds the summary as a nonblocking
   report-only consistency check; the current broader local/WSL
   acceptance/visibility set passes (`92 passed` each).
+- Design Q initial implementation is present in
+  `scion.opportunity.commitment`: generic core derives a redacted
+  proposal-only evidence commitment by intersecting approved hypothesis
+  `mechanism_changes` ids with problem-owned opportunity evidence requirements.
+  Code-generation prompts render the compact `Opportunity Evidence Commitment`
+  section, and prompt manifests classify it as `research_signal`. This relay is
+  excluded from `DecisionFeatures`, Protocol, scheduler, lifecycle,
+  runtime-pressure, and promotion paths; problem-specific requirement semantics
+  remain in the problem provider. Local focused opportunity validation passes
+  (`15 passed`) and the broader postrun visibility/agentic prompt suite passes
+  (`117 passed`). The current WSL CVRP opportunity-recipe run started before
+  this local Design Q slice, so its live trace is evidence for Design P
+  opportunity-summary visibility, not for the new code-prompt commitment relay.
 - Postrun acceptance stored-inventory repair:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
   Historical root rechecks now use the stored inventory artifact declared by the

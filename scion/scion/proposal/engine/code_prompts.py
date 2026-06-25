@@ -7,6 +7,7 @@ import json
 import re
 from typing import Any, Dict
 
+from scion.opportunity import compact_opportunity_evidence_commitment
 from scion.proposal.edit_protocol import build_patch_edit_source_manifest
 
 from .prompt_common import (
@@ -113,6 +114,11 @@ def _split_code_context(
     active_subject_code_constraints_section = (
         _active_subject_code_constraints_section(
             D["active_subject_code_constraints"]
+        )
+    )
+    opportunity_evidence_commitment_section = (
+        _opportunity_evidence_commitment_section(
+            D["opportunity_evidence_commitment"]
         )
     )
     solver_design_api_manifest_section = (
@@ -301,6 +307,7 @@ def _split_code_context(
         f"{telemetry_identity_retry_section}"
         f"## Hypothesis to Implement\n{_code_implementation_brief(D)}\n\n"
         f"## Hypothesis Detail Audit\n{_code_hypothesis_detail(D, is_solver_design_surface)}\n\n"
+        f"{opportunity_evidence_commitment_section}"
         f"{required_full_integration_section}"
         f"{dynamic_solver_design_api_manifest_section}"
         f"{dynamic_target_file_section}"
@@ -388,6 +395,13 @@ def _split_code_context(
     )
 
     return system_blocks, user_prompt
+
+
+def _opportunity_evidence_commitment_section(value: Any) -> str:
+    rendered = compact_opportunity_evidence_commitment(value)
+    if not rendered:
+        return ""
+    return f"## Opportunity Evidence Commitment\n{rendered}\n\n"
 
 
 def _code_prior_quality_feedback_section(context: Dict[str, Any]) -> str:
