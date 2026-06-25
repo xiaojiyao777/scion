@@ -142,6 +142,8 @@ def empty_opportunity_commitment_visibility_aggregate() -> dict[str, Any]:
         "truncated_section_trace_count": 0,
         "omitted_or_absent_trace_count": 0,
         "commitment_summary_trace_count": 0,
+        "commitment_summary_without_section_count": 0,
+        "code_commitment_summary_without_section_count": 0,
         "section_status_counts": {},
         "visibility_status_counts": {},
         "block_family_counts": {},
@@ -240,6 +242,10 @@ def add_opportunity_commitment_visibility(
     if not commitment:
         return
     target["commitment_summary_trace_count"] += 1
+    if not present:
+        target["commitment_summary_without_section_count"] += 1
+        if is_code_generation:
+            target["code_commitment_summary_without_section_count"] += 1
     for mechanism_id in _string_items(commitment.get("selected_mechanism_ids")):
         _increment_count(target["selected_mechanism_id_counts"], mechanism_id)
     for requirement_id in _string_items(commitment.get("requirement_ids")):
@@ -300,6 +306,8 @@ def merge_opportunity_commitment_visibility(
         "truncated_section_trace_count",
         "omitted_or_absent_trace_count",
         "commitment_summary_trace_count",
+        "commitment_summary_without_section_count",
+        "code_commitment_summary_without_section_count",
     ):
         target[key] += _int(source.get(key))
     for key in (
@@ -391,6 +399,12 @@ def opportunity_commitment_visibility_signature(value: Any) -> dict[str, Any]:
         ),
         "commitment_summary_trace_count": _int(
             summary.get("commitment_summary_trace_count")
+        ),
+        "commitment_summary_without_section_count": _int(
+            summary.get("commitment_summary_without_section_count")
+        ),
+        "code_commitment_summary_without_section_count": _int(
+            summary.get("code_commitment_summary_without_section_count")
         ),
         "section_status_counts": _int_counts(summary.get("section_status_counts")),
         "visibility_status_counts": _int_counts(

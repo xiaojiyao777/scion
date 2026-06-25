@@ -988,6 +988,9 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 f"{_display(commitment_visibility.get('commitment_summary_trace_count'))} / "
                 f"{_mapping_text(commitment_visibility.get('selected_mechanism_id_counts'))} / "
                 f"{_mapping_text(commitment_visibility.get('requirement_id_counts'))}",
+                "- Opportunity commitment summaries without section / code summaries without section: "
+                f"{_display(commitment_visibility.get('commitment_summary_without_section_count'))} / "
+                f"{_display(commitment_visibility.get('code_commitment_summary_without_section_count'))}",
             ]
         )
     density = _mapping_or_empty(aggregate.get("signal_density"))

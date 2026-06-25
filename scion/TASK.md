@@ -157,9 +157,16 @@ carry bounded commitment ids/digests, proposal trajectory fingerprints expose
 `opportunity_commitment_visibility`, postrun prompt-context summaries aggregate
 code-phase commitment section visibility, and consistency checks compare
 stored vs recomputed commitment visibility only when a commitment section or
-summary is present. This remains report-only and does not change
+summary is present. A narrow R2 audit now reports manifest-safe commitment
+summaries that lack the rendered `Opportunity Evidence Commitment` section,
+including code-phase counts, so relay drops are visible without raw prompt
+parsing or problem semantics. This remains report-only and does not change
 `DecisionFeatures`, Protocol, scheduler, lifecycle, runtime-pressure, or
-promotion behavior. Focused local validation passes (`17 passed`).
+promotion behavior. Focused local opportunity/prompt-visibility validation
+passes (`18 passed`), and broader local postrun brief/acceptance validation
+passes (`124 passed`). WSL validation for this slice is deferred until the
+active WSL CVRP opportunity-recipe run completes; do not hot-sync the WSL
+checkout while it is active.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-25*
@@ -634,9 +641,13 @@ Current checkpoint:
   prompt-context summaries aggregate code-phase section visibility and
   id/digest counts; and prompt-visibility consistency checks compare stored vs
   recomputed commitment visibility only when the section or summary is present.
-  This is report-only, excludes raw prompt/response/patch bodies, and does not
-  interpret problem-owned requirement semantics. Focused local validation
-  passes (`17 passed`).
+  R2 adds summary-without-section counts, including the code-phase count, so a
+  manifest-safe commitment summary without a rendered code prompt section is
+  visible in postrun reports. This is report-only, excludes raw
+  prompt/response/patch bodies, and does not interpret problem-owned
+  requirement semantics. Focused local opportunity/prompt-visibility
+  validation passes (`18 passed`), and broader local postrun brief/acceptance
+  validation passes (`124 passed`).
 - Postrun acceptance stored-inventory repair:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`.
   Historical root rechecks now use the stored inventory artifact declared by the

@@ -46,6 +46,29 @@ def test_opportunity_commitment_visibility_fingerprint_is_manifest_based() -> No
     assert aggregate["code_trace_count"] == 1
     assert aggregate["code_section_visible_trace_count"] == 1
     assert aggregate["commitment_summary_trace_count"] == 1
+    assert aggregate["commitment_summary_without_section_count"] == 0
+    assert aggregate["code_commitment_summary_without_section_count"] == 0
+    assert aggregate["selected_mechanism_id_counts"] == {"bounded_operator": 1}
+    assert aggregate["requirement_id_counts"] == {"bounded_required_evidence": 1}
+
+
+def test_opportunity_commitment_visibility_reports_summary_without_section() -> None:
+    fingerprint = opportunity_commitment_visibility_fingerprint(
+        _prompt_manifest_without_commitment_section()
+    )
+    aggregate = empty_opportunity_commitment_visibility_aggregate()
+    add_opportunity_commitment_visibility(
+        aggregate,
+        fingerprint,
+        is_code_generation=True,
+    )
+
+    assert fingerprint["section_present"] is False
+    assert fingerprint["commitment_summary_available"] is True
+    assert aggregate["commitment_summary_trace_count"] == 1
+    assert aggregate["commitment_summary_without_section_count"] == 1
+    assert aggregate["code_commitment_summary_without_section_count"] == 1
+    assert aggregate["omitted_or_absent_trace_count"] == 1
     assert aggregate["selected_mechanism_id_counts"] == {"bounded_operator": 1}
     assert aggregate["requirement_id_counts"] == {"bounded_required_evidence": 1}
 
@@ -157,6 +180,16 @@ def test_postrun_brief_and_checker_compare_commitment_visibility(
             expected=expected,
         )
     )
+    tampered = json.loads(json.dumps(summary))
+    tampered["aggregate"]["opportunity_commitment_visibility"][
+        "commitment_summary_without_section_count"
+    ] = 1
+    assert "prompt_context_visibility_opportunity_commitment_mismatch" in (
+        prompt_context_visibility_consistency_failures(
+            summary=tampered,
+            expected=expected,
+        )
+    )
 
 
 def _prompt_manifest() -> dict[str, object]:
@@ -203,6 +236,13 @@ def _prompt_manifest() -> dict[str, object]:
             "report_only": True,
         },
     }
+
+
+def _prompt_manifest_without_commitment_section() -> dict[str, object]:
+    manifest = _prompt_manifest()
+    manifest["section_statuses"] = {}
+    manifest["visibility_ledger"] = {"entries": []}
+    return manifest
 
 
 def _load_tool(name: str):

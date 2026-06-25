@@ -94,6 +94,9 @@ def _prompt_source_visibility_actionability(
     expected_source_visibility = _mapping_or_empty(
         expected_aggregate.get("source_visibility")
     )
+    expected_commitment_visibility = _mapping_or_empty(
+        expected_aggregate.get("opportunity_commitment_visibility")
+    )
     expected_density = _mapping_or_empty(expected_aggregate.get("signal_density"))
     expected_hypothesis_density = _mapping_or_empty(
         expected_aggregate.get("hypothesis_generation_signal_density")
@@ -367,6 +370,30 @@ def _prompt_source_visibility_actionability(
             ),
             "expected_hypothesis_generation_signal_density_interpretation": (
                 expected_hypothesis_density.get("interpretation")
+            ),
+            "opportunity_commitment_summary_trace_count": commitment_visibility.get(
+                "commitment_summary_trace_count"
+            ),
+            "expected_opportunity_commitment_summary_trace_count": (
+                expected_commitment_visibility.get("commitment_summary_trace_count")
+            ),
+            "opportunity_commitment_summary_without_section_count": (
+                commitment_visibility.get("commitment_summary_without_section_count")
+            ),
+            "expected_opportunity_commitment_summary_without_section_count": (
+                expected_commitment_visibility.get(
+                    "commitment_summary_without_section_count"
+                )
+            ),
+            "code_opportunity_commitment_summary_without_section_count": (
+                commitment_visibility.get(
+                    "code_commitment_summary_without_section_count"
+                )
+            ),
+            "expected_code_opportunity_commitment_summary_without_section_count": (
+                expected_commitment_visibility.get(
+                    "code_commitment_summary_without_section_count"
+                )
             ),
         },
     )

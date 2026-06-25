@@ -148,9 +148,16 @@ chronology belongs in focused experiment reports and git history.
   context summaries aggregate code-phase commitment section visibility, and
   prompt-visibility consistency checks compare stored vs recomputed commitment
   visibility only when a commitment section or summary is actually present.
-  This is report-only, excludes raw prompt/response/patch bodies, and does not
-  alter `DecisionFeatures`, Protocol, scheduler, lifecycle, runtime-pressure,
-  or promotion behavior. Focused local tests pass (`17 passed`).
+  A narrow R2 audit field now reports manifest-safe commitment summaries that
+  lack the rendered `Opportunity Evidence Commitment` section, including the
+  code-phase count, so relay drops are visible without parsing raw prompts or
+  problem semantics. This is report-only, excludes raw prompt/response/patch
+  bodies, and does not alter `DecisionFeatures`, Protocol, scheduler,
+  lifecycle, runtime-pressure, or promotion behavior. Focused local
+  opportunity/prompt-visibility tests pass (`18 passed`), and broader local
+  postrun brief/acceptance tests pass (`124 passed`). WSL validation is
+  intentionally deferred until the active WSL CVRP opportunity-recipe run
+  completes; do not hot-sync that checkout while the run is active.
 
 ## Current Decision
 
@@ -327,7 +334,9 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    proposal-context measurement diagnostics, prepared measurement handoff
    builders, and postrun research-efficiency fallback. Designs Q/R now make
    selected opportunity commitments visible to code prompts and auditable in
-   postrun reports as ids/digests only. The next v0.4 work is effective-
+   postrun reports as ids/digests only, including report-only counts for
+   commitment summaries that were not accompanied by a rendered code prompt
+   section. The next v0.4 work is effective-
    research validation and problem-owned opportunity/review evidence, not more
    generic checker growth.
 2. Extend problem-owned opportunity providers/reviews beyond the CVRP initial
