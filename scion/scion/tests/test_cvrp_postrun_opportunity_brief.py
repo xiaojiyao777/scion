@@ -21,7 +21,7 @@ def test_cvrp_opportunity_usage_accepts_complete_requirement_evidence_below_mde(
     _write_cvrp_protocol_run(
         run_root,
         campaign_dir,
-        mechanism_family="bounded_large_twoopt",
+        mechanism_family="large_instance_intra_route_two_opt_seed",
     )
     _make_top_row_below_mde(run_root)
     _write_large_twoopt_proposal_manifest(run_root)
@@ -37,7 +37,12 @@ def test_cvrp_opportunity_usage_accepts_complete_requirement_evidence_below_mde(
         "protocol_evaluated_without_large_twoopt_direct_evidence"
     )
     assert mechanism["direct_evidence_ready"] is False
+    assert mechanism["mechanism_family_available"] is True
+    assert mechanism["protocol_families"] == [
+        "large_instance_intra_route_two_opt_seed"
+    ]
     assert mechanism["direct_evidence"]["positive_effect_row_count"] == 0
+    assert mechanism["direct_evidence"]["objective_effect_observed_count"] == 1
     assert requirements["complete"] is True
     assert requirements["requirements"][
         "large_instance_two_opt_objective_runtime_requirement"
@@ -66,8 +71,10 @@ def _make_top_row_below_mde(run_root: Path) -> None:
     effects["positive_rows"] = 0
     effects["nonpositive_rows"] = 2
     effects["max_effect_to_mde_ratio"] = 0.2
+    top_row = effects["top_rows_by_effect_to_mde"][0]
+    mechanism_family = top_row["mechanism_family"]
     family = effects["mechanism_family_effect_summary"]["by_family"][
-        "bounded_large_twoopt"
+        mechanism_family
     ]
     family["positive_rows"] = 0
     family["nonpositive_rows"] = 2
@@ -75,10 +82,13 @@ def _make_top_row_below_mde(run_root: Path) -> None:
     family["rows_below_mde"] = 2
     family["max_median_delta"] = 2.0
     family["max_effect_to_mde_ratio"] = 0.2
-    top_row = effects["top_rows_by_effect_to_mde"][0]
     top_row["median_delta"] = 2.0
     top_row["effect_to_mde_ratio"] = 0.2
     top_row["positive_effect_at_or_above_mde"] = False
+    top_row["mechanism_evidence"]["primary_effect_status"] = "zero_objective_effect"
+    top_row["mechanism_evidence"][
+        "objective_effect_status"
+    ] = "zero_objective_effect"
     report_path.write_text(json.dumps(report), encoding="utf-8")
 
 

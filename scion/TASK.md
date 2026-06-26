@@ -12,9 +12,10 @@ clean-fork pressure or stale branch-card fresh-runtime follow-up. These repairs
 are generic runtime semantics, not CVRP or warehouse exceptions, and stay out
 of `DecisionFeatures`, Protocol gates, and raw artifacts. Local conda `claw`
 focused validation passes (`108 passed`) plus
-`git diff --check`. The WSL reverse SSH tunnel is restored, the current local
-repair files were synced to the WSL runner worktree, and WSL conda `scion`
-focused validation also passes (`108 passed`). The warehouse postrun audit
+`git diff --check`. Earlier WSL conda `scion` validation also passed
+(`108 passed`) after sync, but current continuation should use the server
+conda `claw` environment until the WSL reverse SSH channel is rechecked. The
+warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with
 stored postrun analysis artifacts. The checker now prefers the stored inventory
@@ -196,16 +197,20 @@ finished valid/complete and postrun-ready from WSL runtime commit `05ade2e0`.
 It validates the live proof-status carrier but remains solver-negative and
 checklist-unproven: 2 screening rows, champion `v1`, promotions `0`, positive
 rows `0`, rows at or above MDE `0`, same-mechanism follow-up `2/2`,
-`required_evidence_proof.checklist_status=not_ready`, and
-`cvrp_opportunity_usage_summary.usage_status=checklist_unproven`. The new
-finding is problem-owned: prepared opportunity rows use
-`large_instance_intra_route_two_opt_seed`, while current large-twoopt review
-still reports missing large-twoopt mechanism/direct checklist evidence.
-Detailed report:
+and `cvrp_opportunity_usage_summary.usage_status=checklist_unproven`. The
+problem-owned seed-family review alignment repair now recognizes
+`large_instance_intra_route_two_opt_seed` as observed large-twoopt requirement
+evidence and treats `zero_objective_effect` as measured objective telemetry
+without treating it as solver success. Recomputing the local mirror changes
+`required_evidence_proof.checklist_status` from `not_ready` to `unproven`;
+activation/objective/phase evidence is observed, positive-at-MDE remains
+absent, and CMT case protection remains missing. Detailed reports:
+`scion/docs/experiments/v0.4/v04-cvrp-seed-family-review-alignment-20260626.md`
+and
 `scion/docs/experiments/v0.4/v04-cvrp-proofstatus-followup-postrun-20260625.md`.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
-*Updated: 2026-06-25*
+*Updated: 2026-06-26*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
 experiments. The goal is not to keep tuning campaign knobs blindly. The goal is

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Callable, Mapping
 
-from scion.problems.cvrp.research_guidance import PROTECTED_CASES
+from scion.problems.cvrp.research_guidance import (
+    PROTECTED_CASES,
+    REQUIRED_MECHANISM_ID,
+)
 
 
 CVRP_LARGE_TWOOPT_REQUIREMENT_KEYS = (
@@ -431,6 +434,7 @@ def _mechanism_objective_effect_observed(
                 "mixed_objective_effect",
                 "mixed_positive",
                 "positive",
+                "zero_objective_effect",
             ),
         )
         for status in statuses
@@ -712,13 +716,13 @@ def _cvrp_large_twoopt_family_match(value: str) -> dict[str, Any]:
         }
 
     seed_guidance = {
-        "large_instance_intra_route_two_opt_seed",
+        REQUIRED_MECHANISM_ID,
     }
     if normalized in seed_guidance:
         return {
-            "matches": False,
+            "matches": True,
             "twoopt_candidate": True,
-            "reason": "seed_guidance_requires_bounded_implementation",
+            "reason": "matched_prepared_large_twoopt_seed_family",
         }
 
     canonical = {

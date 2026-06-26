@@ -4724,7 +4724,7 @@ def test_postrun_acceptance_rejects_cvrp_ready_summary_with_split_direct_evidenc
     assert "review_input_large_twoopt_direct_evidence_missing" in failures
 
 
-def test_postrun_acceptance_rejects_cvrp_ready_summary_with_seed_family_input(
+def test_postrun_acceptance_rejects_cvrp_ready_summary_without_direct_seed_evidence(
     tmp_path: Path,
 ) -> None:
     run_root = tmp_path / "cvrp-run-seed-family-twoopt-ready"
@@ -4830,15 +4830,11 @@ def test_postrun_acceptance_rejects_cvrp_ready_summary_with_seed_family_input(
     assert consistency["status"] == "failed"
     failures = consistency["detail"]["failures"]
     assert "problem_summary_large_twoopt_available_mismatch" in failures
-    assert "problem_summary_large_twoopt_mechanism_family_available_mismatch" in (
-        failures
-    )
     assert "problem_summary_large_twoopt_direct_evidence_ready_mismatch" in failures
-    assert "problem_summary_large_twoopt_protocol_rows_mismatch" in failures
     assert "review_input_large_twoopt_direct_evidence_missing" in failures
     assert (
         consistency["detail"]["input_large_twoopt_mechanism_family_available"]
-        is False
+        is True
     )
 
 

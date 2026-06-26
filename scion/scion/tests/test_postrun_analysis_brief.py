@@ -1710,14 +1710,10 @@ def test_cvrp_large_twoopt_summary_rejects_default_avoid_twoopt_protocol_signal(
         assert "- Rejected two-opt-like protocol/continuity families:" in markdown
 
 
-def test_cvrp_large_twoopt_summary_rejects_seed_or_intra_only_family_without_deadline(
+def test_cvrp_large_twoopt_summary_rejects_intra_only_family_without_deadline(
     tmp_path: Path,
 ) -> None:
     cases = (
-        (
-            "large_instance_intra_route_two_opt_seed",
-            "seed_guidance_requires_bounded_implementation",
-        ),
         (
             "large_instance_intra_route_two_opt",
             "missing_bounded_deadline_twoopt_scope",

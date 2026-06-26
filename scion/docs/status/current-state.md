@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-06-25
+Last updated: 2026-06-26
 
 This file is the operational resume point, not a run log. Historical root
 chronology belongs in focused experiment reports and git history.
@@ -57,9 +57,9 @@ chronology belongs in focused experiment reports and git history.
   freeze new semantics in the oversized postrun/helper scripts; future work in
   that area needs a design split into named ports or problem-owned validators
   rather than more helper/projection growth.
-- The current WSL reverse SSH channel is available. A server-side probe on
-  2026-06-24 returned `SSH_OK`, host `xjy-workspace`, user `xjy-ubuntu`, and
-  WSL conda `scion` Python `3.10.20`.
+- Current short diagnostics and tests should use this server's local conda
+  `claw` environment. Do not assume the WSL reverse SSH channel is available
+  until it has been rechecked after the local WSL runner is brought back up.
 - Design N skeleton from
   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md` is
   implemented locally as the problem-neutral `scion.postrun` package:
@@ -187,11 +187,17 @@ chronology belongs in focused experiment reports and git history.
   checklist-unproven: 2 screening rows, champion `v1`, promotions `0`,
   positive rows `0`, rows at or above MDE `0`, same-mechanism follow-up `2/2`,
   `required_evidence_proof.checklist_status=not_ready`, and
-  `cvrp_opportunity_usage_summary.usage_status=checklist_unproven`. Current
-  next design issue: CVRP prepared opportunity/proposal rows use
-  `large_instance_intra_route_two_opt_seed`, while large-twoopt review still
-  reports missing large-twoopt mechanism/direct checklist evidence. Detailed
-  report:
+  `cvrp_opportunity_usage_summary.usage_status=checklist_unproven`. The
+  problem-owned review alignment repair now recognizes
+  `large_instance_intra_route_two_opt_seed` as the prepared large-twoopt
+  evidence family and counts `zero_objective_effect` as measured
+  objective-effect telemetry, while keeping positive-at-MDE and CMT evidence
+  separate from solver success. Recomputing the local mirror now reports
+  `mechanism_family_available=true`, activation/objective/phase counts `2/2/2`,
+  `required_evidence_proof.checklist_status=unproven`, and only CMT case
+  protection missing from the requirement checklist. Detailed reports:
+  `scion/docs/experiments/v0.4/v04-cvrp-seed-family-review-alignment-20260626.md`
+  and
   `scion/docs/experiments/v0.4/v04-cvrp-proofstatus-followup-postrun-20260625.md`.
 
 ## Current Decision
@@ -201,8 +207,9 @@ chronology belongs in focused experiment reports and git history.
 - CVRP has accepted framework evidence for active-slot scheduling,
   weak-positive follow-up, target-intent authority, mechanism-evidence
   follow-up, MDE-aware rejection, prompt/source visibility, and
-  budget-exhausting runtime semantics. It still lacks solver improvement or
-  promotion.
+  budget-exhausting runtime semantics. The prepared seed-family review repair
+  also separates observed large-twoopt requirement evidence from positive
+  solver outcome. CVRP still lacks solver improvement or promotion.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
   finished valid/complete and postrun-ready:
