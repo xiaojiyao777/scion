@@ -49,9 +49,7 @@ def test_cvrp_postrun_provider_builds_successor_summary_problem_owned() -> None:
     assert summary["decision_features_excluded"] is True
     assert summary["available"] is True
     assert summary["problem_family"] == CVRP_PROBLEM_FAMILY
-    assert summary["observed_successor_families"] == [
-        "bounded_local_search_variant"
-    ]
+    assert summary["observed_successor_families"] == ["bounded_local_search_variant"]
     assert bounded["checklist_status"] == "proven"
     assert bounded["outcome_status"] == "measured_no_positive_at_mde"
     assert bounded["activation_observed_count"] == 1
@@ -71,9 +69,26 @@ def test_cvrp_successor_summary_maps_or_opt_reinsert_to_bounded_family() -> None
     summary = summaries["cvrp_successor_summary"]
     bounded = summary["by_family"]["bounded_local_search_variant"]
 
-    assert summary["observed_successor_families"] == [
-        "bounded_local_search_variant"
-    ]
+    assert summary["observed_successor_families"] == ["bounded_local_search_variant"]
+    assert bounded["checklist_status"] == "proven"
+    assert bounded["outcome_status"] == "measured_no_positive_at_mde"
+    assert bounded["activation_observed_count"] == 1
+    assert bounded["objective_effect_observed_count"] == 1
+    assert bounded["phase_telemetry_observed_count"] == 1
+
+
+def test_cvrp_successor_summary_maps_intra_route_3opt_to_bounded_family() -> None:
+    summaries = CvrpPostrunSummaryProvider().build_summaries(
+        _context(
+            measurement_effect_summary=_bounded_successor_measurement_summary(
+                mechanism_id="bounded_intra_route_3opt"
+            )
+        )
+    )
+    summary = summaries["cvrp_successor_summary"]
+    bounded = summary["by_family"]["bounded_local_search_variant"]
+
+    assert summary["observed_successor_families"] == ["bounded_local_search_variant"]
     assert bounded["checklist_status"] == "proven"
     assert bounded["outcome_status"] == "measured_no_positive_at_mde"
     assert bounded["activation_observed_count"] == 1
@@ -90,9 +105,7 @@ def test_cvrp_successor_summary_maps_rotated_sweep_to_construction_family() -> N
     summary = summaries["cvrp_successor_summary"]
     construction = summary["by_family"]["construction_seed_portfolio"]
 
-    assert summary["observed_successor_families"] == [
-        "construction_seed_portfolio"
-    ]
+    assert summary["observed_successor_families"] == ["construction_seed_portfolio"]
     assert construction["mechanism_family_available"] is True
     assert construction["checklist_status"] == "unproven"
     assert construction["outcome_status"] == "measured_no_positive_at_mde"
@@ -103,7 +116,9 @@ def test_cvrp_successor_summary_maps_rotated_sweep_to_construction_family() -> N
     assert construction["missing"] == ["missing_activation_observed"]
 
 
-def test_cvrp_postrun_review_port_uses_existing_summary_without_raw_prompt_parse() -> None:
+def test_cvrp_postrun_review_port_uses_existing_summary_without_raw_prompt_parse() -> (
+    None
+):
     summary = _build_cvrp_large_twoopt_summary()
     review = CvrpLargeTwoOptReviewPort().review(
         {"analysis_brief": {"cvrp_large_twoopt_summary": summary}}
@@ -197,7 +212,8 @@ def _context(
                 "stage_rows": {"screening": 1},
             }
         },
-        measurement_effect_summary=measurement_effect_summary or {
+        measurement_effect_summary=measurement_effect_summary
+        or {
             "available": True,
             "aggregate": {
                 "protocol_row_count": 1,
@@ -356,9 +372,7 @@ def _construction_successor_measurement_summary() -> dict[str, Any]:
                             "median_delta": 0.0,
                             "positive_effect_at_or_above_mde": False,
                             "mechanism_evidence": {
-                                "primary_mechanism": (
-                                    "rotated_sweep_seed_tournament"
-                                ),
+                                "primary_mechanism": ("rotated_sweep_seed_tournament"),
                                 "primary_activation_status": "missing",
                                 "primary_effect_status": "missing",
                                 "activation_evidence_status": "missing_activation",

@@ -773,6 +773,20 @@ Current checkpoint:
   reviewed/default-avoid mechanism in prepared research focus and typed
   guidance, while keeping `destroy_repair_selection` available for materially
   different destroy/repair causal paths.
+- The clean local successor5 verification
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor5-7c6e3ea5-local-2r-gpt55-20260628T155743Z-claw-2r-gpt55-20260628T155743Z-claw`
+  finished valid/complete and postrun-ready from commit `7c6e3ea5`, with 2/2
+  effective rounds, 2 formal rows, 0 proposal quality blocks, and 0 active-slot
+  blocks. It did not repeat unchanged `angular_sector_removal`: round 1 tested
+  `radial_string_removal` and was solver-negative/abandoned; round 2 tested
+  `bounded_intra_route_3opt`, produced weak-positive low-SNR evidence
+  (`median_delta=1.25`, CI high `4.0`, below CVRP MDE), and stayed active for
+  follow-up. Champion stayed `v1` and promotions remained `0`. A CVRP-owned
+  postrun alias repair now maps `bounded_intra_route_3opt` to
+  `bounded_local_search_variant`, so the rebuilt successor summary marks both
+  `destroy_repair_selection` and `bounded_local_search_variant` checklist
+  `proven` with outcome `measured_no_positive_at_mde`. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor5-3opt-followup-review-20260628.md`.
 - Design N skeleton implementation is present in `scion.postrun`: typed ports
   for postrun inventory, run-evidence lifecycle, exposure policy,
   problem-owned review, registry, and readiness orchestration. The current

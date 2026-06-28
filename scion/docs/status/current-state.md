@@ -652,11 +652,13 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    positive-at-MDE effect. The next prepared attempt should avoid unchanged
    `angular_sector_removal`; prepared CVRP guidance now marks that exact
    mechanism as reviewed/default-avoid while leaving materially different
-   `destroy_repair_selection` paths available. Use a distinct destroy/repair
-   causal path with direct effect evidence, or a construction seed mechanism
-   that records a same-run seed-baseline/accepted-delta effect under its
-   declared mechanism id. Bounded-local-search revisits need a causal path
-   explicitly distinct from both reviewed bounded successors.
+   `destroy_repair_selection` paths available. Successor5 verified that the
+   guidance can route to new mechanisms: `radial_string_removal` was abandoned
+   as solver-negative, while `bounded_intra_route_3opt` produced weak-positive
+   low-SNR evidence and remains the active follow-up branch. The next CVRP
+   attempt should resume that 3-opt branch only with CMT2 protection and a
+   material refinement; do not repeat unchanged radial-string removal or
+   angular-sector removal.
 2. Continue design-first postrun/readiness cleanup only where it removes active
    risk. `scion.postrun` should own generic artifact, lifecycle, schema,
    readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit

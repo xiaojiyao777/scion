@@ -8,7 +8,6 @@ from scion.problems.cvrp.opportunity_review import (
     build_cvrp_opportunity_usage_summary,
 )
 
-
 TOOLS_DIR = Path(__file__).parents[3] / "tools"
 
 
@@ -117,10 +116,7 @@ def test_cvrp_opportunity_usage_accepts_structured_requirement_proof() -> None:
     assert summary["required_evidence_proof"]["checklist_status"] == "proven"
     assert summary["required_evidence_proof"]["checklist_complete"] is True
     assert summary["required_evidence_proof"].get("missing", []) == []
-    assert (
-        summary["required_evidence_proof"]["outcome_direct_evidence_ready"]
-        is False
-    )
+    assert summary["required_evidence_proof"]["outcome_direct_evidence_ready"] is False
     assert summary["entries"][0]["required_evidence_status"] == "proven"
     assert (
         "proposal_selected_opportunity_without_required_evidence_checklist"
@@ -200,6 +196,40 @@ def test_cvrp_opportunity_usage_applies_successor_family_proof() -> None:
     assert "required_evidence_missing_phase_telemetry" in (
         summary["entries"][0]["reason_codes"]
     )
+
+
+def test_cvrp_opportunity_usage_maps_intra_route_3opt_to_bounded_successor() -> None:
+    summary = build_cvrp_opportunity_usage_summary(
+        problem_family="cvrp",
+        current_run_evidence=True,
+        prompt_context_visibility_summary=_visible_prompt_summary(),
+        proposal_trajectory_manifests=[
+            {
+                "sessions": [
+                    _session(
+                        "s-bounded-3opt",
+                        mechanism_ids=["bounded_intra_route_3opt"],
+                        target_file="policies/baseline_modules/local_search.py",
+                    )
+                ],
+            }
+        ],
+        cvrp_successor_summary=_successor_summary(
+            "bounded_local_search_variant",
+            checklist_status="proven",
+            missing=[],
+        ),
+    )
+
+    assert summary["usage_status"] == "used"
+    assert summary["counts"]["used_opportunity"] == 1
+    assert summary["entries"][0]["opportunity_families"] == [
+        "bounded_local_search_variant"
+    ]
+    assert summary["entries"][0]["required_evidence_family"] == (
+        "bounded_local_search_variant"
+    )
+    assert summary["entries"][0]["required_evidence_status"] == "proven"
 
 
 def test_cvrp_opportunity_usage_maps_rotated_sweep_to_construction_successor() -> None:
@@ -286,9 +316,7 @@ def test_postrun_brief_and_checker_rebuild_cvrp_opportunity_usage(
                     {
                         **_session(
                             "s-large-twoopt",
-                            mechanism_ids=[
-                                "large_instance_intra_route_two_opt_seed"
-                            ],
+                            mechanism_ids=["large_instance_intra_route_two_opt_seed"],
                             target_file="vrp/src/solver.py",
                         ),
                         "trace_fingerprints": [
@@ -340,9 +368,7 @@ def test_postrun_brief_and_checker_rebuild_cvrp_opportunity_usage(
     assert status == "ok", detail
 
     tampered = json.loads(json.dumps(brief))
-    tampered["cvrp_opportunity_usage_summary"]["usage_status"] = (
-        "ignored_or_unproven"
-    )
+    tampered["cvrp_opportunity_usage_summary"]["usage_status"] = "ignored_or_unproven"
     status, detail = check_tool._cvrp_opportunity_usage_actionability(
         tmp_path,
         tampered,
@@ -438,9 +464,11 @@ def _large_twoopt_summary_with_requirement_status(
     protected_status = "observed" if complete else "missing"
     return {
         "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
-        "interpretation": "bounded_twoopt_review_ready"
-        if positive_effect
-        else "protocol_evaluated_without_large_twoopt_direct_evidence",
+        "interpretation": (
+            "bounded_twoopt_review_ready"
+            if positive_effect
+            else "protocol_evaluated_without_large_twoopt_direct_evidence"
+        ),
         "evidence": {
             "evidence_requirement_statuses": {
                 "schema_version": (
@@ -459,21 +487,21 @@ def _large_twoopt_summary_with_requirement_status(
                             "protocol_row_count": 1,
                         },
                         "missing_fields": [],
-                        "outcome_status": "positive_effect_observed"
-                        if positive_effect
-                        else "measured_no_positive_at_mde",
+                        "outcome_status": (
+                            "positive_effect_observed"
+                            if positive_effect
+                            else "measured_no_positive_at_mde"
+                        ),
                     },
                     "cmt2_cmt4_case_protection": {
                         "status": protected_status,
                         "observed_fields": {
-                            "protected_case_complete_row_count": 1
-                            if complete
-                            else 0,
+                            "protected_case_complete_row_count": 1 if complete else 0,
                         },
                         "missing_fields": missing or [],
-                        "protected_cases_observed": ["CMT2", "CMT4"]
-                        if complete
-                        else [],
+                        "protected_cases_observed": (
+                            ["CMT2", "CMT4"] if complete else []
+                        ),
                         "required_protected_cases": ["CMT2", "CMT4"],
                         "outcome_status": "not_outcome_requirement",
                     },
@@ -484,20 +512,16 @@ def _large_twoopt_summary_with_requirement_status(
                 "direct_evidence_ready": positive_effect,
                 "protocol_row_count": 1,
                 "direct_evidence": {
-                    "complete_direct_evidence_row_count": 1
-                    if positive_effect
-                    else 0,
+                    "complete_direct_evidence_row_count": 1 if positive_effect else 0,
                     "positive_effect_row_count": 1 if positive_effect else 0,
                     "activation_observed_count": 1,
                     "objective_effect_observed_count": 1,
                     "phase_telemetry_observed_count": 1,
                     "protected_case_complete_row_count": 1 if complete else 0,
-                    "protected_cases_observed": ["CMT2", "CMT4"]
-                    if complete
-                    else [],
+                    "protected_cases_observed": ["CMT2", "CMT4"] if complete else [],
                     "missing": [],
                 },
-            }
+            },
         },
     }
 
