@@ -97,6 +97,16 @@ chronology belongs in focused experiment reports and git history.
   Local focused validation passes for launcher resume preparation, CVRP and
   warehouse resume launchers, prepared-handoff rebuilds, running-status
   reporting, and postrun snapshot/in-flight summaries.
+- Prepared handoff resume visibility is repaired locally. Analysis brief and
+  artifact inventory generation now load quarantined resume
+  `campaign_summary.json` through `scion.postrun.handoff.resume_snapshot` and
+  render bounded `resume_snapshot.top_branches` as report-only launch input,
+  not current-run evidence. Rebuilding the prepared successor6 root shows the
+  active weak-positive `bounded_intra_route_3opt` branch first, including
+  `followup_recommended=true`, `followup_required=false`,
+  `weak_positive_followup`, CMT2 loss caveat in the branch card text, and
+  allowed follow-up actions. This is a generic resume-snapshot handoff repair,
+  not a CVRP-specific core gate.
 - Design N skeleton from
   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md` is
   implemented locally as the problem-neutral `scion.postrun` package:

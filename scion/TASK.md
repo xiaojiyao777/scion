@@ -97,7 +97,13 @@ resume context. Running and preflight-failure launcher status preserve the
 same snapshot reference after launch. It also reports in-flight Protocol state
 with running/complete semantics, pair counters, child subprocess details, and
 redacted case/seed aliases without inflating completed-only counters. Focused local
-launcher/status/postrun validation passes. The warehouse postrun audit
+launcher/status/postrun validation passes. Prepared analysis brief and
+inventory generation now also read quarantined resume `campaign_summary.json`
+branch cards through a generic `scion.postrun.handoff.resume_snapshot` helper
+and render bounded `resume_snapshot.top_branches` as report-only launch input,
+not current-run evidence. A rebuilt successor6 prepared handoff verifies the
+active weak-positive `bounded_intra_route_3opt` branch, CMT2 loss caveat, and
+allowed follow-up actions are visible before launch. The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with
 stored postrun analysis artifacts. The checker now prefers the stored inventory

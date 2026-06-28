@@ -8,7 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 TOOL_PATH = Path(__file__).parents[2] / "tools" / "postrun_artifact_inventory.py"
 SPEC = importlib.util.spec_from_file_location("postrun_artifact_inventory", TOOL_PATH)
 assert SPEC is not None
@@ -158,9 +157,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
                                     "schema_version": (
                                         "code-file-visibility-ledger.v1"
                                     ),
-                                    "target_source_status": (
-                                        "current_branch_source"
-                                    ),
+                                    "target_source_status": ("current_branch_source"),
                                     "target_prompt_visibility_status": (
                                         "full_current_source_visible"
                                     ),
@@ -699,16 +696,15 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         "Keep manifest evidence out of DecisionFeatures.",
     ]
     assert contract["resume_from_campaign"] == f"{remote_root}/previous/campaign"
-    assert contract["research_focus"]["measurement_opportunity_diagnostics"][
-        "screening_mde_at_power_80"
-    ] == 9.9
+    assert (
+        contract["research_focus"]["measurement_opportunity_diagnostics"][
+            "screening_mde_at_power_80"
+        ]
+        == 9.9
+    )
     assert contract["checks"]["cvrp_measurement_handoff_present"]["passed"] is True
-    assert (
-        contract["checks"]["cvrp_measurement_handoff_reason_codes"]["passed"] is True
-    )
-    assert (
-        contract["checks"]["cvrp_default_avoid_directions_present"]["passed"] is True
-    )
+    assert contract["checks"]["cvrp_measurement_handoff_reason_codes"]["passed"] is True
+    assert contract["checks"]["cvrp_default_avoid_directions_present"]["passed"] is True
     assert (
         contract["checks"]["cvrp_measurable_opportunity_classes_present"]["passed"]
         is True
@@ -733,9 +729,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     )
     assert contract["checks"]["execution_disable_early_stop"]["passed"] is True
     assert contract["checks"]["command_disable_early_stop"]["passed"] is True
-    problem_specific = data["phase4_evidence_coverage"][
-        "problem_specific_requirements"
-    ]
+    problem_specific = data["phase4_evidence_coverage"]["problem_specific_requirements"]
     for key in (
         "cvrp_measurement_mde_handoff",
         "cvrp_low_snr_reason_handoff",
@@ -896,9 +890,7 @@ def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
         contract["checks"]["cvrp_large_twoopt_bounded_constraints_present"]["passed"]
         is False
     )
-    problem_specific = data["phase4_evidence_coverage"][
-        "problem_specific_requirements"
-    ]
+    problem_specific = data["phase4_evidence_coverage"]["problem_specific_requirements"]
     assert problem_specific["cvrp_measurement_mde_handoff"]["available"] is False
     assert problem_specific["cvrp_default_avoid_handoff"]["available"] is False
     assert problem_specific["cvrp_large_twoopt_seed_handoff"]["available"] is False
@@ -909,9 +901,7 @@ def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
         is False
     )
     assert (
-        problem_specific["cvrp_large_twoopt_bounded_constraints_handoff"][
-            "available"
-        ]
+        problem_specific["cvrp_large_twoopt_bounded_constraints_handoff"]["available"]
         is False
     )
 
@@ -1014,17 +1004,11 @@ def test_prepared_manifest_contract_requires_warehouse_followup_handoff(
     assert contract["contract_complete"] is False
     assert checks["warehouse_followup_handoff_present"]["passed"] is True
     assert checks["warehouse_followup_v2_checkpoint_present"]["passed"] is False
-    assert (
-        checks["warehouse_followup_required_evidence_complete"]["passed"] is False
-    )
+    assert checks["warehouse_followup_required_evidence_complete"]["passed"] is False
     assert checks["warehouse_followup_default_avoid_complete"]["passed"] is False
-    problem_specific = data["phase4_evidence_coverage"][
-        "problem_specific_requirements"
-    ]
+    problem_specific = data["phase4_evidence_coverage"]["problem_specific_requirements"]
     assert problem_specific["warehouse_v2_checkpoint_handoff"]["available"] is False
-    assert (
-        problem_specific["warehouse_required_evidence_handoff"]["available"] is False
-    )
+    assert problem_specific["warehouse_required_evidence_handoff"]["available"] is False
     assert "### Problem-Specific Phase 4 Evidence Coverage" in markdown
     assert "warehouse_required_evidence_handoff" in markdown
 
@@ -1167,12 +1151,11 @@ def test_inventory_marks_missing_or_invalid_root_status_not_current_run(
         assert data["resume_snapshot"]["present"] is True
         assert data["resume_snapshot"]["current_run_evidence"] is False
         assert data["phase4_evidence_coverage"]["current_run_evidence"] is False
-        assert data["phase4_evidence_coverage"][
-            "launcher_status_unavailable"
-        ] is True
-        assert data["phase4_evidence_coverage"][
-            "launcher_status_failure_key"
-        ] == expected_failure_key
+        assert data["phase4_evidence_coverage"]["launcher_status_unavailable"] is True
+        assert (
+            data["phase4_evidence_coverage"]["launcher_status_failure_key"]
+            == expected_failure_key
+        )
         assert "LAUNCHER STATUS UNAVAILABLE" in markdown
         assert "not current-run postrun evidence" in markdown
 
@@ -1247,12 +1230,14 @@ def test_inventory_marks_missing_or_unreadable_campaign_execution_artifacts_not_
         assert data["resume_snapshot"]["current_run_evidence"] is False
         assert data["resume_snapshot"]["branch_count"] == 1
         assert data["phase4_evidence_coverage"]["current_run_evidence"] is False
-        assert data["phase4_evidence_coverage"][
-            "campaign_execution_artifacts_unavailable"
-        ] is True
-        assert data["phase4_evidence_coverage"][
-            "campaign_execution_failure_key"
-        ] == expected_failure_key
+        assert (
+            data["phase4_evidence_coverage"]["campaign_execution_artifacts_unavailable"]
+            is True
+        )
+        assert (
+            data["phase4_evidence_coverage"]["campaign_execution_failure_key"]
+            == expected_failure_key
+        )
         assert "CAMPAIGN EXECUTION ARTIFACTS UNAVAILABLE" in markdown
         assert "resume snapshots" in markdown
 
@@ -1374,9 +1359,7 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
             "status": "finished",
             "wrapper_exit_status": 64,
             "pre_campaign_completion_preflight": "failed",
-            "pre_campaign_completion_preflight_classification": (
-                "not_authenticated"
-            ),
+            "pre_campaign_completion_preflight_classification": ("not_authenticated"),
             "pre_campaign_completion_preflight_detail_file": (
                 "pre_campaign_completion_preflight.v1.json"
             ),
@@ -1401,6 +1384,7 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
             "schema_version": "scion.launcher_prepared_run_manifest.v1",
             "execution": {"rounds": 5},
             "resume_from_campaign": "/tmp/source-campaign",
+            "resume_snapshot_ref": "resume_snapshot/resume_source_manifest.v1.json",
         },
     )
     _write_json(
@@ -1412,10 +1396,40 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
         },
     )
     _write_json(
-        campaign_dir / "campaign_summary.json",
+        run_root / "resume_snapshot" / "resume_source_manifest.v1.json",
+        {
+            "schema_version": "scion.resume_source_manifest.v1",
+            "terminal_artifacts": [
+                {
+                    "original_ref": "campaign_summary.json",
+                    "snapshot_ref": "resume_snapshot/campaign/campaign_summary.json",
+                }
+            ],
+        },
+    )
+    _write_json(
+        run_root / "resume_snapshot" / "campaign" / "campaign_summary.json",
         {
             "formal_screened_candidates": 7,
             "measurement_readiness": {"status": "ready"},
+            "branch_cards": [
+                {
+                    "branch_id": "branch-1",
+                    "branch_state": "explore_expand",
+                    "lineage_id": "lineage-1",
+                    "branch_mechanism_ids": ["bounded_resume_probe"],
+                    "branch_next_action": "refine_checkpoint",
+                    "branch_scheduling_lane": "weak_positive_followup",
+                    "followup_recommended": True,
+                    "followup_required": False,
+                    "branch_card_text": (
+                        "branch_id=branch-1 status=explore_expand "
+                        "mechanism_ids=bounded_resume_probe "
+                        "followup_recommended=true "
+                        "allowed_next_actions=refine_checkpoint"
+                    ),
+                }
+            ],
         },
     )
     formal_index = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
@@ -1465,18 +1479,37 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
         "decision": 1,
         "experiment": 2,
     }
-    assert data["launcher"]["artifacts"][
-        "pre_campaign_completion_preflight.v1.json"
-    ] is True
-    assert data["launcher"]["status_fields"][
-        "pre_campaign_completion_preflight_classification"
-    ] == "not_authenticated"
-    assert data["launcher"]["status_fields"][
-        "pre_campaign_completion_preflight_login_url_present"
-    ] is True
-    assert "Refresh the local proxy login" in data["launcher"]["status_fields"][
-        "pre_campaign_completion_preflight_operator_action"
+    assert data["resume_snapshot"]["top_branches"][0]["branch_id"] == "branch-1"
+    assert data["resume_snapshot"]["top_branches"][0]["state"] == "explore_expand"
+    assert data["resume_snapshot"]["top_branches"][0]["mechanism_ids"] == [
+        "bounded_resume_probe"
     ]
+    assert data["resume_snapshot"]["top_branches"][0]["next_action"] == (
+        "refine_checkpoint"
+    )
+    assert data["resume_snapshot"]["top_branches"][0]["followup_recommended"] is True
+    assert (
+        data["launcher"]["artifacts"]["pre_campaign_completion_preflight.v1.json"]
+        is True
+    )
+    assert (
+        data["launcher"]["status_fields"][
+            "pre_campaign_completion_preflight_classification"
+        ]
+        == "not_authenticated"
+    )
+    assert (
+        data["launcher"]["status_fields"][
+            "pre_campaign_completion_preflight_login_url_present"
+        ]
+        is True
+    )
+    assert (
+        "Refresh the local proxy login"
+        in data["launcher"]["status_fields"][
+            "pre_campaign_completion_preflight_operator_action"
+        ]
+    )
     assert data["validity"] == {
         "run_validity_status": "invalid_infra_only",
         "run_completeness_status": "incomplete",
@@ -1499,6 +1532,8 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
     assert phase4["requirements"]["research_continuity"]["available"] is False
     assert "PRE-CAMPAIGN PREFLIGHT FAILED" in markdown
     assert "## Resume Snapshot" in markdown
+    assert "### Resume Snapshot Branches" in markdown
+    assert "bounded_resume_probe" in markdown
     assert "not current-run evidence" in markdown
 
 
@@ -1583,9 +1618,7 @@ def test_inventory_marks_runtime_guard_failure_resume_snapshot_not_current_run(
     phase4 = data["phase4_evidence_coverage"]
     assert phase4["current_run_evidence"] is False
     assert phase4["pre_campaign_infra_failed"] is True
-    assert phase4["pre_campaign_infra_failure_keys"] == [
-        "git_runtime_commit_mismatch"
-    ]
+    assert phase4["pre_campaign_infra_failure_keys"] == ["git_runtime_commit_mismatch"]
     assert "PRE-CAMPAIGN INFRA FAILURE" in markdown
     assert "not current-run evidence" in markdown
 
@@ -1627,9 +1660,7 @@ def test_inventory_marks_scion_dir_failure_resume_snapshot_not_current_run(
     markdown = inventory_tool.render_markdown(data)
 
     assert data["lifecycle"]["pre_campaign_infra_failed"] is True
-    assert data["lifecycle"]["pre_campaign_infra_failure_keys"] == [
-        "scion_dir_missing"
-    ]
+    assert data["lifecycle"]["pre_campaign_infra_failure_keys"] == ["scion_dir_missing"]
     assert data["lifecycle"]["current_run_evidence"] is False
     assert data["validity"] == {
         "run_validity_status": "invalid_infra_only",
@@ -1984,8 +2015,7 @@ def _git_head_short() -> str:
 
 def _write_db(path: Path) -> None:
     with sqlite3.connect(path) as conn:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE branches (
                 branch_id TEXT PRIMARY KEY,
                 state TEXT,
@@ -1997,10 +2027,8 @@ def _write_db(path: Path) -> None:
                 rollback_count INTEGER,
                 failure_codes TEXT
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TABLE hypotheses (
                 hypothesis_id TEXT PRIMARY KEY,
                 branch_id TEXT,
@@ -2008,10 +2036,8 @@ def _write_db(path: Path) -> None:
                 action TEXT,
                 status TEXT
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TABLE experiment_events (
                 event_id TEXT PRIMARY KEY,
                 branch_id TEXT,
@@ -2019,10 +2045,8 @@ def _write_db(path: Path) -> None:
                 decision TEXT,
                 stage TEXT
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TABLE champions (
                 version INTEGER NOT NULL,
                 weight_revision INTEGER NOT NULL DEFAULT 0,
@@ -2035,17 +2059,14 @@ def _write_db(path: Path) -> None:
                 promoted_at TEXT,
                 PRIMARY KEY (version, weight_revision)
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             INSERT INTO branches VALUES (
                 'branch-1', 'ready_validate', 'lineage-1', 'basehash',
                 'codehash', 'checkpoint-best', 'checkpoint-last', 1,
                 '["CONTRACT"]'
             )
-            """
-        )
+            """)
         conn.executemany(
             "INSERT INTO hypotheses VALUES (?, ?, ?, ?, ?)",
             [

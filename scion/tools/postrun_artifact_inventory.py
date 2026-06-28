@@ -17,13 +17,16 @@ from scion.postrun.inventory.prepared_contract import (
     build_prepared_run_contract as _build_prepared_run_contract,
     command_has_shell_flag,
 )
+from scion.postrun.handoff.resume_snapshot import (
+    build_resume_top_branch_summaries,
+    load_resume_campaign_summary,
+)
 from scion.problems.cvrp.postrun_handoff import (
     CvrpPreparedHandoffReviewPort,
 )
 from scion.problems.warehouse_delivery.postrun_handoff import (
     WarehousePreparedHandoffReviewPort,
 )
-
 
 HANDOFF_DOC = "scion/docs/operations/postrun-analysis-handoff.md"
 LAUNCHER_ARTIFACTS = (
@@ -163,7 +166,9 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
     )
 
     db_path = campaign_dir / "scion.db"
-    db_inventory = _read_db_inventory(db_path) if db_path.exists() else _empty_db_inventory()
+    db_inventory = (
+        _read_db_inventory(db_path) if db_path.exists() else _empty_db_inventory()
+    )
     llm_traces = _read_llm_traces(
         campaign_dir / "llm_traces",
         trace_index=trace_index,
@@ -187,11 +192,18 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         session_counts=llm_traces["sessions_by_branch"],
         trace_counts=llm_traces["traces_by_branch"],
     )
+    resume_summary = load_resume_campaign_summary(
+        root=run_root,
+        manifest=_mapping_or_empty(prepared_manifest),
+        run_status=_mapping_or_empty(run_status),
+        current_summary=summary,
+    )
     resume_snapshot = _resume_snapshot_inventory(
         lifecycle=lifecycle,
         db_inventory=db_inventory,
         llm_traces=llm_traces,
         branches=branches,
+        summary=resume_summary,
     )
     if _launch_root_without_current_run(lifecycle):
         current_branches: list[dict[str, Any]] = []
@@ -218,19 +230,27 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         )
         or run_root.name,
         "lifecycle": lifecycle,
-        "validity": _prepared_only_validity(lifecycle)
-        if lifecycle["prepared_only"]
-        else _pre_campaign_failure_validity(lifecycle)
-        if (
-            lifecycle.get("launcher_status_unavailable") is True
-            or lifecycle["pre_campaign_completion_preflight_failed"]
-            or lifecycle.get("pre_campaign_infra_failed") is True
-            or lifecycle.get("campaign_execution_artifacts_unavailable") is True
-        )
-        else _validity(run_status, campaign_run_status, campaign_status, summary),
-        "counters": _prepared_only_counters(prepared_manifest)
-        if _launch_root_without_current_run(lifecycle)
-        else _counters(run_status, campaign_run_status, campaign_status, summary),
+        "validity": (
+            _prepared_only_validity(lifecycle)
+            if lifecycle["prepared_only"]
+            else (
+                _pre_campaign_failure_validity(lifecycle)
+                if (
+                    lifecycle.get("launcher_status_unavailable") is True
+                    or lifecycle["pre_campaign_completion_preflight_failed"]
+                    or lifecycle.get("pre_campaign_infra_failed") is True
+                    or lifecycle.get("campaign_execution_artifacts_unavailable") is True
+                )
+                else _validity(
+                    run_status, campaign_run_status, campaign_status, summary
+                )
+            )
+        ),
+        "counters": (
+            _prepared_only_counters(prepared_manifest)
+            if _launch_root_without_current_run(lifecycle)
+            else _counters(run_status, campaign_run_status, campaign_status, summary)
+        ),
         "llm_traces": current_llm_traces,
         "launcher": _launcher_inventory(run_root, run_status),
         "database": {
@@ -343,6 +363,37 @@ def render_markdown(inventory: dict[str, Any]) -> str:
                 f"- Hypotheses: {_display(resume_snapshot.get('hypothesis_count'))}",
             ]
         )
+        top_branches = resume_snapshot.get("top_branches")
+        if isinstance(top_branches, list) and top_branches:
+            lines.extend(
+                [
+                    "",
+                    "### Resume Snapshot Branches",
+                    "| Branch | State | Lineage | Mechanisms | Next action | Follow-up | Failures |",
+                    "|---|---|---|---|---|---|---|",
+                ]
+            )
+            for branch in top_branches:
+                if not isinstance(branch, Mapping):
+                    continue
+                followup = _resume_branch_followup_text(branch)
+                lines.append(
+                    "| {branch_id} | {state} | {lineage_id} | {mechanisms} | "
+                    "{next_action} | {followup} | {failures} |".format(
+                        branch_id=_display(branch.get("branch_id")),
+                        state=_display(branch.get("state")),
+                        lineage_id=_display(branch.get("lineage_id")),
+                        mechanisms=_display(branch.get("mechanism_ids")),
+                        next_action=_display(branch.get("next_action")),
+                        followup=followup,
+                        failures=_display(branch.get("failure_codes")),
+                    )
+                )
+                card_text = branch.get("branch_card_text")
+                if card_text:
+                    lines.append(
+                        f"- `{_display(branch.get('branch_id'))}`: {card_text}"
+                    )
 
     lines.extend(
         [
@@ -665,10 +716,7 @@ def _counters(*docs: Any) -> dict[str, int | None]:
             "attempts",
         ),
     }
-    return {
-        name: _first_int(*docs, keys=keys)
-        for name, keys in fields.items()
-    }
+    return {name: _first_int(*docs, keys=keys) for name, keys in fields.items()}
 
 
 def _lifecycle_inventory(
@@ -686,21 +734,18 @@ def _lifecycle_inventory(
         if isinstance(campaign_execution_artifacts, Mapping)
         else _empty_campaign_execution_artifact_state()
     )
-    manifest_is_prepared = manifest.get("schema_version") == PREPARED_RUN_MANIFEST_SCHEMA
+    manifest_is_prepared = (
+        manifest.get("schema_version") == PREPARED_RUN_MANIFEST_SCHEMA
+    )
     launcher_status_unavailable = not run_status_present or not run_status_valid
     launcher_status_failure_key = (
         "root_run_status_missing"
         if not run_status_present
-        else "root_run_status_invalid"
-        if not run_status_valid
-        else None
+        else "root_run_status_invalid" if not run_status_valid else None
     )
-    prepared_only = (
-        status_doc.get("prepared_only") is True
-        or (
-            status_doc.get("schema") == "scion.launcher_prepare.v1"
-            and status_doc.get("status") == "prepared"
-        )
+    prepared_only = status_doc.get("prepared_only") is True or (
+        status_doc.get("schema") == "scion.launcher_prepare.v1"
+        and status_doc.get("status") == "prepared"
     )
     preflight_failed = (
         status_doc.get("pre_campaign_completion_preflight") == "failed"
@@ -710,12 +755,11 @@ def _lifecycle_inventory(
         _pre_campaign_infra_failure_keys(status_doc) if manifest_is_prepared else []
     )
     pre_campaign_infra_failed = bool(pre_campaign_infra_failure_keys)
-    invalid_infra_only_from_docs = any(
-        _doc_says_invalid_infra_only(doc) for doc in (status_doc, *campaign_docs)
-    ) or launcher_status_unavailable
-    campaign_execution_artifacts_available = (
-        artifact_state.get("available") is True
+    invalid_infra_only_from_docs = (
+        any(_doc_says_invalid_infra_only(doc) for doc in (status_doc, *campaign_docs))
+        or launcher_status_unavailable
     )
+    campaign_execution_artifacts_available = artifact_state.get("available") is True
     campaign_execution_artifacts_unavailable = (
         not prepared_only
         and not launcher_status_unavailable
@@ -925,8 +969,7 @@ def _campaign_execution_marker_state(path: Path, marker: Any) -> dict[str, Any]:
     started_at = _parse_iso_timestamp(marker_doc.get("started_at"))
     valid = (
         path.exists()
-        and marker_doc.get("schema")
-        == "scion.launcher_campaign_execution_marker.v1"
+        and marker_doc.get("schema") == "scion.launcher_campaign_execution_marker.v1"
         and started_at is not None
     )
     return {
@@ -994,10 +1037,7 @@ def _float_or_none(value: Any) -> float | None:
 
 def _launcher_inventory(run_root: Path, run_status: Any) -> dict[str, Any]:
     return {
-        "artifacts": {
-            name: (run_root / name).exists()
-            for name in LAUNCHER_ARTIFACTS
-        },
+        "artifacts": {name: (run_root / name).exists() for name in LAUNCHER_ARTIFACTS},
         "prepared_run_contract": _prepared_run_contract(run_root),
         "status_fields": _status_fields(run_status),
         "run_log_markers": _marker_counts(
@@ -1017,11 +1057,15 @@ def _postrun_report_inventory(run_root: Path) -> dict[str, Any]:
     files: dict[str, list[str]] = {}
     for name in POSTRUN_REPORT_DIRS:
         subdir = report_dir / name
-        found = sorted(
-            str(path.relative_to(report_dir))
-            for path in subdir.glob("*.json")
-            if path.is_file()
-        ) if subdir.exists() else []
+        found = (
+            sorted(
+                str(path.relative_to(report_dir))
+                for path in subdir.glob("*.json")
+                if path.is_file()
+            )
+            if subdir.exists()
+            else []
+        )
         counts[name] = len(found)
         files[name] = found
     return {
@@ -1146,9 +1190,7 @@ def _prepared_contract_checks_for_markdown(value: Any) -> dict[str, dict[str, An
     if not isinstance(checks, dict):
         return {}
     return {
-        str(key): item
-        for key, item in sorted(checks.items())
-        if isinstance(item, dict)
+        str(key): item for key, item in sorted(checks.items()) if isinstance(item, dict)
     }
 
 
@@ -1189,9 +1231,7 @@ def _phase4_evidence_coverage(
             "launcher_status_unavailable": (
                 lifecycle.get("launcher_status_unavailable") is True
             ),
-            "launcher_status_failure_key": lifecycle.get(
-                "launcher_status_failure_key"
-            ),
+            "launcher_status_failure_key": lifecycle.get("launcher_status_failure_key"),
             "campaign_execution_artifacts_unavailable": (
                 lifecycle.get("campaign_execution_artifacts_unavailable") is True
             ),
@@ -1204,9 +1244,7 @@ def _phase4_evidence_coverage(
             or {},
             "invalid_infra_only": lifecycle.get("invalid_infra_only") is True,
             "current_run_evidence": False,
-            "requirements": _empty_phase4_requirements(
-                "not current-run evidence"
-            ),
+            "requirements": _empty_phase4_requirements("not current-run evidence"),
             "problem_specific_requirements": problem_specific_requirements,
             "analysis_handoff": HANDOFF_DOC,
         }
@@ -1429,9 +1467,7 @@ def _empty_phase4_requirements(reason: str) -> dict[str, dict[str, Any]]:
         "prompt_manifest_loaded": (
             "proposal_trajectory_manifest or trace_index prompt_manifest refs"
         ),
-        "prompt_signal_density": (
-            "proposal trajectory prompt block-family accounting"
-        ),
+        "prompt_signal_density": ("proposal trajectory prompt block-family accounting"),
         "research_efficiency_report": "postrun_acceptance/research_efficiency",
         "measurement_readiness": (
             "campaign summary/status or research-efficiency report"
@@ -1466,8 +1502,7 @@ def _empty_phase4_requirements(reason: str) -> dict[str, dict[str, Any]]:
         ),
     }
     return {
-        key: _coverage_item(0, f"{source}; {reason}")
-        for key, source in sources.items()
+        key: _coverage_item(0, f"{source}; {reason}") for key, source in sources.items()
     }
 
 
@@ -1531,8 +1566,7 @@ def _prompt_signal_density_summary_count_in_doc(value: Any) -> int:
     if isinstance(value, dict):
         count = 1 if _has_prompt_signal_density_summary(value) else 0
         return count + sum(
-            _prompt_signal_density_summary_count_in_doc(item)
-            for item in value.values()
+            _prompt_signal_density_summary_count_in_doc(item) for item in value.values()
         )
     if isinstance(value, list):
         return sum(_prompt_signal_density_summary_count_in_doc(item) for item in value)
@@ -1673,11 +1707,7 @@ def _contains_key_fragment(value: Any, fragments: tuple[str, ...]) -> bool:
 def _status_fields(run_status: Any) -> dict[str, Any]:
     if not isinstance(run_status, dict):
         return {}
-    return {
-        key: run_status[key]
-        for key in LAUNCHER_STATUS_KEYS
-        if key in run_status
-    }
+    return {key: run_status[key] for key in LAUNCHER_STATUS_KEYS if key in run_status}
 
 
 def _read_text(path: Path) -> str:
@@ -1771,6 +1801,7 @@ def _resume_snapshot_inventory(
     db_inventory: dict[str, Any],
     llm_traces: dict[str, Any],
     branches: list[dict[str, Any]],
+    summary: Mapping[str, Any],
 ) -> dict[str, Any]:
     if not _launch_root_without_current_run(lifecycle):
         return {
@@ -1802,8 +1833,20 @@ def _resume_snapshot_inventory(
         "hypotheses_by_status": db_inventory["hypotheses"].get("by_status", {}),
         "champion_count": db_inventory["champions"].get("count", 0),
         "max_champion_version": db_inventory["champions"].get("max_version"),
+        "top_branches": build_resume_top_branch_summaries(
+            branches=branches,
+            summary=summary,
+        ),
         "source": "copied campaign snapshot; not current-run evidence",
     }
+
+
+def _resume_branch_followup_text(branch: Mapping[str, Any]) -> str:
+    recommended = branch.get("followup_recommended")
+    required = branch.get("followup_required")
+    if recommended is None and required is None:
+        return ""
+    return f"recommended={_display(recommended)}, required={_display(required)}"
 
 
 def _trace_kind(doc: Any, path: Path) -> str:
@@ -1927,9 +1970,7 @@ def _read_db_inventory(db_path: Path) -> dict[str, Any]:
             conn.row_factory = sqlite3.Row
             tables = _tables(conn)
             branches = _branches(conn) if "branches" in tables else []
-            events = (
-                _events(conn) if "experiment_events" in tables else _empty_events()
-            )
+            events = _events(conn) if "experiment_events" in tables else _empty_events()
             hypotheses = (
                 _hypotheses(conn) if "hypotheses" in tables else _empty_hypotheses()
             )
@@ -2027,7 +2068,9 @@ def _branches(conn: sqlite3.Connection) -> list[dict[str, Any]]:
                 "last_valid_checkpoint_id": data.get("last_valid_checkpoint_id"),
                 "rollback_count": int(data.get("rollback_count") or 0),
                 "failure_codes": _string_list(data.get("failure_codes")),
-                "hypothesis_count": _count_where(conn, "hypotheses", "branch_id", branch_id),
+                "hypothesis_count": _count_where(
+                    conn, "hypotheses", "branch_id", branch_id
+                ),
                 "event_count": _count_where(
                     conn, "experiment_events", "branch_id", branch_id
                 ),
@@ -2134,9 +2177,7 @@ def _champions(conn: sqlite3.Connection) -> dict[str, Any]:
         "latest_promotion_experiment_id": _string_or_none(
             latest_promotion_experiment_id
         ),
-        "latest_promotion_dossier_ref": _string_or_none(
-            latest_promotion_dossier_ref
-        ),
+        "latest_promotion_dossier_ref": _string_or_none(latest_promotion_dossier_ref),
     }
 
 

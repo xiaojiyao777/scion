@@ -12,7 +12,6 @@ from scion.problems.warehouse_delivery.postrun_review import (
     WAREHOUSE_FOLLOWUP_REVIEW_AXES,
 )
 
-
 TOOL_PATH = Path(__file__).parents[2] / "tools" / "postrun_analysis_brief.py"
 SPEC = importlib.util.spec_from_file_location("postrun_analysis_brief", TOOL_PATH)
 assert SPEC is not None
@@ -183,12 +182,8 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                 "formal_candidate_count_reconciliation": {
                     "formal_candidates_index_status": "available"
                 },
-                "candidate_count_reconciliation": {
-                    "candidate_count_status": "matched"
-                },
-                "accounting_reconciliation": {
-                    "accounting_status": "consistent"
-                },
+                "candidate_count_reconciliation": {"candidate_count_status": "matched"},
+                "accounting_reconciliation": {"accounting_status": "consistent"},
             },
             "measurement_readiness": {
                 "status": "ready",
@@ -402,9 +397,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         / "normal.proposal_trajectory_manifest.v1.json",
         {
             "counts": {"prompt_manifest_loaded_count": 1},
-            "branch_lesson_usage_accounting": {
-                "field_counts": {"avoided_lessons": 1}
-            },
+            "branch_lesson_usage_accounting": {"field_counts": {"avoided_lessons": 1}},
             "sessions": [
                 {
                     "trace_fingerprints": [
@@ -537,9 +530,12 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert brief["promotion_state_mutated"] is False
     assert brief["lifecycle"]["prepared_only"] is False
     assert brief["branches"]["ids"] == ["branch-1"]
-    assert brief["phase4_evidence_coverage"]["requirements"]["target_intent_trace"][
-        "available"
-    ] is True
+    assert (
+        brief["phase4_evidence_coverage"]["requirements"]["target_intent_trace"][
+            "available"
+        ]
+        is True
+    )
     branch_state = brief["branch_research_state_summary"]
     assert branch_state["schema_version"] == (
         "scion.postrun_branch_research_state_summary.v1"
@@ -648,9 +644,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert effect_summary["current_run_evidence"] is True
     assert effect_summary["aggregate"] == {
         "measurement_readiness_status_counts": {"ready": 1},
-        "interpretation_counts": {
-            "has_positive_protocol_effect_at_or_above_mde": 1
-        },
+        "interpretation_counts": {"has_positive_protocol_effect_at_or_above_mde": 1},
         "protocol_row_count": 2,
         "rows_at_or_above_mde": 1,
         "rows_with_ci_high_below_mde": 1,
@@ -875,9 +869,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "code_missing_required_source_trace_count": 0,
         "code_missing_required_source_path_counts": {},
         "code_target_source_status_counts": {"current_branch_source": 1},
-        "code_target_visibility_status_counts": {
-            "full_current_source_visible": 1
-        },
+        "code_target_visibility_status_counts": {"full_current_source_visible": 1},
         "hypothesis_target_source_trace_count": 1,
         "hypothesis_target_source_required_count": 1,
         "hypothesis_target_source_visible_count": 1,
@@ -966,9 +958,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     }
     actionability = brief["research_context_actionability_summary"]
     assert actionability == {
-        "schema_version": (
-            "scion.postrun_research_context_actionability_summary.v1"
-        ),
+        "schema_version": ("scion.postrun_research_context_actionability_summary.v1"),
         "report_only": True,
         "quality_judgment": False,
         "decision_features_excluded": True,
@@ -1051,8 +1041,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "- Requested/effective rounds: 1 / 1" in markdown
     assert (
         "| normal.research_efficiency.v1.json | 1 | 1 | 2 | "
-        "1 | 2/0/0/0 | requested_rounds_complete |"
-        in markdown
+        "1 | 2/0/0/0 | requested_rounds_complete |" in markdown
     )
     assert "## Measurement Effect Summary" in markdown
     assert "- Mechanism-family mapped/unmapped rows: 2 / 0" in markdown
@@ -1065,13 +1054,14 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "## Research Continuity Summary" in markdown
     assert "- Branch depth distribution: 1=1, 3=1" in markdown
     assert "- Active shapes: deep_focused=1" in markdown
-    assert "- Mechanism family observations: regret_insertion=3, route_merge=1" in markdown
+    assert (
+        "- Mechanism family observations: regret_insertion=3, route_merge=1" in markdown
+    )
     assert "## Runtime Feedback Summary" in markdown
     assert "- Runtime budget diagnostics: 1" in markdown
     assert (
         "| normal.research_efficiency.v1.json | not_selected_no_pending | "
-        "1 | 0 | 1 | 0 | 0 | not_started |"
-        in markdown
+        "1 | 0 | 1 | 0 | 0 | not_started |" in markdown
     )
     assert "## Failure Taxonomy Summary" in markdown
     assert "- Quality block reasons: schema_missing_effect_path=1" in markdown
@@ -1085,24 +1075,20 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "- Code source visibility traces: 1" in markdown
     assert (
         "- Hypothesis target source traces/required/visible/not-visible: "
-        "1 / 1 / 1 / 0"
-        in markdown
+        "1 / 1 / 1 / 0" in markdown
     )
     assert (
         "- Active subject code constraints traces/required/full-visible/not-full-visible: "
-        "1 / 1 / 1 / 0"
-        in markdown
+        "1 / 1 / 1 / 0" in markdown
     )
     assert (
-        "- Signal density shares: 0.363636 / 0.272727 / 0.090909 / 0.272727"
-        in markdown
+        "- Signal density shares: 0.363636 / 0.272727 / 0.090909 / 0.272727" in markdown
     )
     assert "- Research+source/governance ratio: 2.333333" in markdown
     assert "| source_code | 1 | 15 | 60 |" in markdown
     assert (
         "| normal.research_efficiency.v1.json | 1/1/0 | 2/3 | 1 | 1/1 | "
-        "3 | 1=1, 3=1 | deep_focused | 2 |"
-        in markdown
+        "3 | 1=1, 3=1 | deep_focused | 2 |" in markdown
     )
     assert "- Branch lesson semantic failures: semantic_mismatch=1" in markdown
     assert "- Branch lesson semantic blocks: semantic_mismatch=1" in markdown
@@ -1118,13 +1104,9 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "- Prompt research/source/cross-branch/governance tokens: 20 / 15 / 5 / 15"
         in markdown
     )
-    assert (
-        "branch_lesson_semantic_gap_despite_cross_branch_prompt_signal"
-        in markdown
-    )
+    assert "branch_lesson_semantic_gap_despite_cross_branch_prompt_signal" in markdown
     assert any(
-        "research_continuity" in question
-        for question in brief["required_questions"]
+        "research_continuity" in question for question in brief["required_questions"]
     )
     assert any(
         "research_context_actionability_summary" in question
@@ -1202,7 +1184,9 @@ def test_research_context_actionability_projects_branch_lesson_reason_mix() -> N
     )
 
 
-def test_research_context_actionability_flags_unselected_same_mechanism_opportunity() -> None:
+def test_research_context_actionability_flags_unselected_same_mechanism_opportunity() -> (
+    None
+):
     summary = brief_tool._research_context_actionability_summary(
         prompt_context_visibility_summary={
             "current_run_evidence": True,
@@ -1325,8 +1309,9 @@ def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
         for question in brief["required_questions"]
     )
     assert markdown.startswith("# Prepared Analysis Brief:")
-    assert "do not analyze copied campaign artifacts as current-run research evidence" in (
-        markdown
+    assert (
+        "do not analyze copied campaign artifacts as current-run research evidence"
+        in (markdown)
     )
     assert "Inspect prepared_run_contract, launch_readiness" in markdown
     assert "If completion preflight failed, verify operator_action/login status" in (
@@ -1362,9 +1347,7 @@ def test_warehouse_followup_summary_prepared_only_requires_launch(
     assert contract["checks"]["command_disable_early_stop"]["passed"] is True
 
     summary = brief["warehouse_followup_summary"]
-    assert summary["schema_version"] == (
-        "scion.postrun_warehouse_followup_summary.v1"
-    )
+    assert summary["schema_version"] == ("scion.postrun_warehouse_followup_summary.v1")
     assert summary["report_only"] is True
     assert summary["quality_judgment"] is False
     assert summary["decision_features_excluded"] is True
@@ -1374,23 +1357,16 @@ def test_warehouse_followup_summary_prepared_only_requires_launch(
     assert summary["interpretation"] == "prepared_only_launch_required"
     assert summary["handoff_complete"] is True
     assert all(
-        item["available"] is True
-        for item in summary["handoff_requirements"].values()
+        item["available"] is True for item in summary["handoff_requirements"].values()
     )
-    assert summary["evidence_gaps"] == [
-        "launch_required_before_plateau_conclusion"
-    ]
-    assert summary["deferred_review_axes"] == list(
-        WAREHOUSE_FOLLOWUP_REVIEW_AXES
-    )
+    assert summary["evidence_gaps"] == ["launch_required_before_plateau_conclusion"]
+    assert summary["deferred_review_axes"] == list(WAREHOUSE_FOLLOWUP_REVIEW_AXES)
     assert summary["review_axes_actionability"] == (
         "not_actionable_before_launch_current_run_evidence_required"
     )
     assert "## Warehouse Follow-up Summary" in markdown
     assert "- Interpretation: prepared_only_launch_required" in markdown
-    assert (
-        "prepared warehouse research_focus handoff; current-run protocol" in markdown
-    )
+    assert "prepared warehouse research_focus handoff; current-run protocol" in markdown
     assert "- Deferred post-launch warehouse review axes:" in markdown
     assert "- Required warehouse review axes:" not in markdown
     assert "not_actionable_before_launch_current_run_evidence_required" in markdown
@@ -1398,17 +1374,14 @@ def test_warehouse_followup_summary_prepared_only_requires_launch(
     assert "| command_disable_early_stop | True |" in markdown
     assert (
         "| warehouse_required_evidence_handoff | True | 1 | "
-        "prepared_run_manifest warehouse research_focus required_evidence |"
-        in markdown
+        "prepared_run_manifest warehouse research_focus required_evidence |" in markdown
     )
     assert any(
-        "warehouse_followup_summary" in question
-        and "incomplete-handoff" in question
+        "warehouse_followup_summary" in question and "incomplete-handoff" in question
         for question in brief["required_questions"]
     )
     assert any(
-        "not a research-quality" in question
-        for question in brief["required_questions"]
+        "not a research-quality" in question for question in brief["required_questions"]
     )
     assert not any(
         "cvrp_large_twoopt_summary" in question
@@ -1452,8 +1425,7 @@ def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
     assert summary["interpretation"] == "prepared_only_launch_required"
     assert summary["handoff_complete"] is True
     assert all(
-        item["available"] is True
-        for item in summary["handoff_requirements"].values()
+        item["available"] is True for item in summary["handoff_requirements"].values()
     )
     assert summary["evidence_gaps"] == [
         "launch_required_before_bounded_twoopt_conclusion"
@@ -1477,15 +1449,16 @@ def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
     assert "cvrp_cmt_case_protection_handoff" in markdown
     assert "Case-protection requirements" in markdown
     assert "protected_cases: CMT2, CMT4" in markdown
-    assert "live target-intent or hypothesis trace mentions CMT2/CMT4 protection" in markdown
+    assert (
+        "live target-intent or hypothesis trace mentions CMT2/CMT4 protection"
+        in markdown
+    )
     assert any(
-        "cvrp_large_twoopt_summary" in question
-        and "incomplete handoff" in question
+        "cvrp_large_twoopt_summary" in question and "incomplete handoff" in question
         for question in brief["required_questions"]
     )
     assert any(
-        "not a research-quality" in question
-        for question in brief["required_questions"]
+        "not a research-quality" in question for question in brief["required_questions"]
     )
     assert not any(
         "warehouse_followup_summary" in question
@@ -1667,7 +1640,9 @@ def test_cvrp_large_twoopt_summary_rejects_protocol_eval_without_twoopt_signal(
     assert summary["interpretation"] == "protocol_evaluated_without_large_twoopt_signal"
     assert "missing_large_twoopt_mechanism_signal" in summary["evidence_gaps"]
     assert summary["evidence"]["large_twoopt_mechanism"]["available"] is False
-    assert "- Interpretation: protocol_evaluated_without_large_twoopt_signal" in markdown
+    assert (
+        "- Interpretation: protocol_evaluated_without_large_twoopt_signal" in markdown
+    )
 
 
 def test_cvrp_large_twoopt_summary_rejects_default_avoid_twoopt_protocol_signal(
@@ -1874,8 +1849,9 @@ def test_cvrp_large_twoopt_summary_requires_direct_evidence_for_review_ready(
         "missing_cmt_case_protection_evidence",
     ]
     assert "- Large two-opt direct evidence ready / missing: `False`" in markdown
-    assert "- Interpretation: protocol_evaluated_without_large_twoopt_direct_evidence" in (
-        markdown
+    assert (
+        "- Interpretation: protocol_evaluated_without_large_twoopt_direct_evidence"
+        in (markdown)
     )
 
 
@@ -2208,9 +2184,7 @@ def test_cvrp_large_twoopt_summary_requires_cmt_case_protection_evidence(
     assert direct_evidence["protected_case_complete_row_count"] == 0
     assert direct_evidence["protected_cases_observed"] == []
     assert direct_evidence["complete_direct_evidence_row_count"] == 0
-    assert direct_evidence["missing"] == [
-        "missing_cmt_case_protection_evidence"
-    ]
+    assert direct_evidence["missing"] == ["missing_cmt_case_protection_evidence"]
 
 
 def test_cvrp_large_twoopt_summary_rejects_cmt_route_or_feasibility_only_evidence(
@@ -2264,9 +2238,7 @@ def test_cvrp_large_twoopt_summary_rejects_cmt_route_or_feasibility_only_evidenc
     assert direct_evidence["protected_case_complete_row_count"] == 0
     assert direct_evidence["protected_cases_observed"] == []
     assert direct_evidence["complete_direct_evidence_row_count"] == 0
-    assert direct_evidence["missing"] == [
-        "missing_cmt_case_protection_evidence"
-    ]
+    assert direct_evidence["missing"] == ["missing_cmt_case_protection_evidence"]
 
 
 def test_cvrp_large_twoopt_summary_marks_bounded_twoopt_review_ready(
@@ -2355,9 +2327,9 @@ def test_cvrp_large_twoopt_summary_requires_handoff_before_review_ready(
     assert summary["current_run_evidence"] is True
     assert summary["handoff_complete"] is False
     assert summary["interpretation"] == "protocol_evaluated_handoff_incomplete"
-    assert "cvrp_large_twoopt_handoff_requirements_incomplete" in summary[
-        "evidence_gaps"
-    ]
+    assert (
+        "cvrp_large_twoopt_handoff_requirements_incomplete" in summary["evidence_gaps"]
+    )
     assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
     assert summary["evidence"]["large_twoopt_mechanism"]["available"] is True
     assert "- Interpretation: protocol_evaluated_handoff_incomplete" in markdown
@@ -2524,9 +2496,7 @@ def test_warehouse_followup_summary_marks_protocol_evaluated_plateau_review_read
     assert summary["handoff_complete"] is True
     assert summary["launch_required_before_plateau_conclusion"] is False
     assert summary["interpretation"] == "protocol_evaluated_plateau_review_ready"
-    assert "quality_blocked_before_protocol_evaluation" not in summary[
-        "evidence_gaps"
-    ]
+    assert "quality_blocked_before_protocol_evaluation" not in summary["evidence_gaps"]
     assert "no_protocol_evaluated_candidates" not in summary["evidence_gaps"]
     assert summary["evidence"]["protocol"]["formal_screened_candidates"] == 1
     assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
@@ -2540,14 +2510,10 @@ def test_warehouse_followup_summary_marks_protocol_evaluated_plateau_review_read
     assert continuity["max_branch_depth"] == 2
     assert continuity["same_mechanism_observed"] == 1
     assert "- Research continuity substantive/depth: `True` / 2" in markdown
-    assert "- Research continuity same-mechanism selected/observed: 1 / 1" in (
-        markdown
-    )
+    assert "- Research continuity same-mechanism selected/observed: 1 / 1" in (markdown)
     assert "- Research continuity same-mechanism missed: 0" in markdown
     progress = brief["champion_progress_summary"]
-    assert progress["schema_version"] == (
-        "scion.postrun_champion_progress_summary.v1"
-    )
+    assert progress["schema_version"] == ("scion.postrun_champion_progress_summary.v1")
     assert progress["report_only"] is True
     assert progress["quality_judgment"] is False
     assert progress["decision_features_excluded"] is True
@@ -2569,8 +2535,7 @@ def test_warehouse_followup_summary_marks_protocol_evaluated_plateau_review_read
     assert "- Interpretation: protocol_evaluated_plateau_review_ready" in markdown
     assert (
         "- Measurement signal / plateau-consistent / positive-at-MDE: "
-        "ci_high_below_mde_plateau_consistent / True / False"
-        in markdown
+        "ci_high_below_mde_plateau_consistent / True / False" in markdown
     )
 
 
@@ -2671,9 +2636,10 @@ def test_warehouse_followup_summary_routes_positive_mde_effect_out_of_plateau_re
     assert summary["interpretation"] == (
         "protocol_evaluated_positive_effect_review_ready"
     )
-    assert "warehouse_research_continuity_evidence_too_shallow" not in summary[
-        "evidence_gaps"
-    ]
+    assert (
+        "warehouse_research_continuity_evidence_too_shallow"
+        not in summary["evidence_gaps"]
+    )
     measurement = summary["evidence"]["measurement_effect"]
     assert measurement["effect_signal"] == "positive_effect_at_or_above_mde"
     assert measurement["plateau_consistent"] is False
@@ -2683,8 +2649,7 @@ def test_warehouse_followup_summary_routes_positive_mde_effect_out_of_plateau_re
     )
     assert (
         "- Measurement signal / plateau-consistent / positive-at-MDE: "
-        "positive_effect_at_or_above_mde / False / True"
-        in markdown
+        "positive_effect_at_or_above_mde / False / True" in markdown
     )
 
 
@@ -2994,9 +2959,9 @@ def test_warehouse_followup_summary_rejects_shallow_continuity_for_plateau_ready
     assert summary["interpretation"] == (
         "protocol_evaluated_research_continuity_too_shallow"
     )
-    assert "warehouse_research_continuity_evidence_too_shallow" in summary[
-        "evidence_gaps"
-    ]
+    assert (
+        "warehouse_research_continuity_evidence_too_shallow" in summary["evidence_gaps"]
+    )
     continuity = summary["evidence"]["research_continuity"]
     assert continuity["available"] is True
     assert continuity["substantive"] is False
@@ -3004,9 +2969,7 @@ def test_warehouse_followup_summary_rejects_shallow_continuity_for_plateau_ready
     assert continuity["same_mechanism_observed"] == 0
     assert continuity["branch_lessons_required"] == 0
     assert "- Research continuity substantive/depth: `False` / 1" in markdown
-    assert "- Research continuity same-mechanism selected/observed: 0 / 0" in (
-        markdown
-    )
+    assert "- Research continuity same-mechanism selected/observed: 0 / 0" in (markdown)
     assert "- Research continuity same-mechanism missed: 0" in markdown
     assert "- Interpretation: protocol_evaluated_research_continuity_too_shallow" in (
         markdown
@@ -3106,9 +3069,9 @@ def test_warehouse_followup_summary_rejects_unrealized_continuity_for_plateau_re
     assert summary["interpretation"] == (
         "protocol_evaluated_research_continuity_too_shallow"
     )
-    assert "warehouse_research_continuity_evidence_too_shallow" in summary[
-        "evidence_gaps"
-    ]
+    assert (
+        "warehouse_research_continuity_evidence_too_shallow" in summary["evidence_gaps"]
+    )
     continuity = summary["evidence"]["research_continuity"]
     assert continuity["substantive"] is False
     assert continuity["same_mechanism_observed"] == 1
@@ -3214,9 +3177,9 @@ def test_warehouse_followup_summary_rejects_depth_only_unselected_same_mechanism
     assert summary["interpretation"] == (
         "protocol_evaluated_research_continuity_too_shallow"
     )
-    assert "warehouse_research_continuity_evidence_too_shallow" in summary[
-        "evidence_gaps"
-    ]
+    assert (
+        "warehouse_research_continuity_evidence_too_shallow" in summary["evidence_gaps"]
+    )
     continuity = summary["evidence"]["research_continuity"]
     assert continuity["substantive"] is False
     assert continuity["max_branch_depth"] == 2
@@ -3539,9 +3502,7 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
             "status": "finished",
             "wrapper_exit_status": 64,
             "pre_campaign_completion_preflight": "failed",
-            "pre_campaign_completion_preflight_classification": (
-                "not_authenticated"
-            ),
+            "pre_campaign_completion_preflight_classification": ("not_authenticated"),
             "pre_campaign_completion_preflight_login_url_present": True,
         },
     )
@@ -3551,6 +3512,7 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
             "schema_version": "scion.launcher_prepared_run_manifest.v1",
             "execution": {"rounds": 5},
             "resume_from_campaign": "/tmp/source-campaign",
+            "resume_snapshot_ref": "resume_snapshot/resume_source_manifest.v1.json",
         },
     )
     _write_json(
@@ -3562,10 +3524,40 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
         },
     )
     _write_json(
-        campaign_dir / "campaign_summary.json",
+        run_root / "resume_snapshot" / "resume_source_manifest.v1.json",
+        {
+            "schema_version": "scion.resume_source_manifest.v1",
+            "terminal_artifacts": [
+                {
+                    "original_ref": "campaign_summary.json",
+                    "snapshot_ref": "resume_snapshot/campaign/campaign_summary.json",
+                }
+            ],
+        },
+    )
+    _write_json(
+        run_root / "resume_snapshot" / "campaign" / "campaign_summary.json",
         {
             "formal_screened_candidates": 7,
             "measurement_readiness": {"status": "ready"},
+            "branch_cards": [
+                {
+                    "branch_id": "branch-1",
+                    "branch_state": "explore_expand",
+                    "lineage_id": "lineage-1",
+                    "branch_mechanism_ids": ["bounded_resume_probe"],
+                    "branch_next_action": "refine_checkpoint",
+                    "branch_scheduling_lane": "weak_positive_followup",
+                    "followup_recommended": True,
+                    "followup_required": False,
+                    "branch_card_text": (
+                        "branch_id=branch-1 status=explore_expand "
+                        "mechanism_ids=bounded_resume_probe "
+                        "followup_recommended=true "
+                        "allowed_next_actions=refine_checkpoint"
+                    ),
+                }
+            ],
         },
     )
     traces_dir = campaign_dir / "llm_traces"
@@ -3622,10 +3614,21 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
         "decision": 1,
         "experiment": 2,
     }
+    assert brief["resume_snapshot"]["top_branches"][0]["branch_id"] == "branch-1"
+    assert brief["resume_snapshot"]["top_branches"][0]["state"] == "explore_expand"
+    assert brief["resume_snapshot"]["top_branches"][0]["mechanism_ids"] == [
+        "bounded_resume_probe"
+    ]
+    assert brief["resume_snapshot"]["top_branches"][0]["next_action"] == (
+        "refine_checkpoint"
+    )
+    assert brief["resume_snapshot"]["top_branches"][0]["followup_recommended"] is True
     assert "## Resume Snapshot" in markdown
     assert "Copied campaign artifacts are launch input, not current-run evidence" in (
         markdown
     )
+    assert "### Resume Snapshot Branches" in markdown
+    assert "bounded_resume_probe" in markdown
     assert "- Current-run evidence: `False`" in markdown
     assert "- Branch count: 0" in markdown
     assert "- LLM trace files: 0" in markdown
@@ -3812,12 +3815,8 @@ def _write_cvrp_large_twoopt_manifest(
         research_focus["large_instance_two_opt_constraints"] = (
             _large_twoopt_constraints()
         )
-    research_focus["case_protection_requirements"] = (
-        _cmt_case_protection_requirements()
-    )
-    research_focus["resume_continuity_requirements"] = (
-        _resume_continuity_requirements()
-    )
+    research_focus["case_protection_requirements"] = _cmt_case_protection_requirements()
+    research_focus["resume_continuity_requirements"] = _resume_continuity_requirements()
     command = (
         "python -m scion.cli.main run "
         f"--campaign-dir {campaign_dir} "
@@ -3979,8 +3978,7 @@ def _resume_continuity_requirements() -> dict[str, object]:
 def _write_champions_db(path: Path, *, versions: tuple[int, ...]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path) as conn:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE champions (
                 version INTEGER NOT NULL,
                 weight_revision INTEGER NOT NULL DEFAULT 0,
@@ -3993,8 +3991,7 @@ def _write_champions_db(path: Path, *, versions: tuple[int, ...]) -> None:
                 promoted_at TEXT,
                 PRIMARY KEY (version, weight_revision)
             )
-            """
-        )
+            """)
         conn.executemany(
             """
             INSERT INTO champions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -4194,8 +4191,7 @@ def _write_cvrp_protocol_run(
 
 def _write_db(path: Path) -> None:
     with sqlite3.connect(path) as conn:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE branches (
                 branch_id TEXT PRIMARY KEY,
                 state TEXT,
@@ -4207,10 +4203,8 @@ def _write_db(path: Path) -> None:
                 rollback_count INTEGER,
                 failure_codes TEXT
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TABLE hypotheses (
                 hypothesis_id TEXT PRIMARY KEY,
                 branch_id TEXT,
@@ -4218,10 +4212,8 @@ def _write_db(path: Path) -> None:
                 action TEXT,
                 status TEXT
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TABLE experiment_events (
                 event_id TEXT PRIMARY KEY,
                 branch_id TEXT,
@@ -4229,17 +4221,14 @@ def _write_db(path: Path) -> None:
                 decision TEXT,
                 stage TEXT
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             INSERT INTO branches VALUES (
                 'branch-1', 'ready_validate', 'lineage-1', 'basehash',
                 'codehash', 'checkpoint-best', 'checkpoint-last', 1,
                 '["CONTRACT"]'
             )
-            """
-        )
+            """)
         conn.executemany(
             "INSERT INTO hypotheses VALUES (?, ?, ?, ?, ?)",
             [

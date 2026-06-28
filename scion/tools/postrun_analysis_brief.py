@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping
 
-
 TOOLS_DIR = Path(__file__).resolve().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
@@ -37,7 +36,6 @@ from scion.problems.cvrp.opportunity_review import (  # noqa: E402
 from scion.problems.warehouse_delivery.postrun_review import (  # noqa: E402
     WarehousePostrunSummaryProvider,
 )
-
 
 SCHEMA_VERSION = "scion.postrun_analysis_brief.v1"
 ARCHITECTURE_DOC = "scion/design/scion-architecture-v3.md"
@@ -98,6 +96,7 @@ CVRP_OPPORTUNITY_USAGE_REQUIRED_QUESTION = (
     "by later proposal fingerprints?"
 )
 
+
 def build_brief(run_root: Path | str) -> dict[str, Any]:
     inventory = build_inventory(run_root)
     run_root_path = Path(inventory["run_root"])
@@ -131,11 +130,9 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         run_root_path,
         inventory,
     )
-    research_context_actionability_summary = (
-        _research_context_actionability_summary(
-            prompt_context_visibility_summary=prompt_context_visibility_summary,
-            research_continuity_summary=research_continuity_summary,
-        )
+    research_context_actionability_summary = _research_context_actionability_summary(
+        prompt_context_visibility_summary=prompt_context_visibility_summary,
+        research_continuity_summary=research_continuity_summary,
     )
     champion_progress_summary = _champion_progress_summary(inventory)
     problem_review_context = ProblemPostrunReviewContext(
@@ -289,7 +286,9 @@ def render_markdown(brief: dict[str, Any]) -> str:
     if stop_conditions:
         lines.extend(f"- {condition}" for condition in stop_conditions)
     else:
-        lines.append("- None from the inventory. Continue with branch-centric analysis.")
+        lines.append(
+            "- None from the inventory. Continue with branch-centric analysis."
+        )
 
     resume_snapshot = brief.get("resume_snapshot")
     if isinstance(resume_snapshot, dict) and resume_snapshot.get("present") is True:
@@ -320,6 +319,37 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 f"{_mapping_text(resume_snapshot.get('hypotheses_by_status'))}",
             ]
         )
+        top_branches = resume_snapshot.get("top_branches")
+        if isinstance(top_branches, list) and top_branches:
+            lines.extend(
+                [
+                    "",
+                    "### Resume Snapshot Branches",
+                    "| Branch | State | Lineage | Mechanisms | Next action | Follow-up | Failures |",
+                    "|---|---|---|---|---|---|---|",
+                ]
+            )
+            for branch in top_branches:
+                if not isinstance(branch, dict):
+                    continue
+                followup = _resume_branch_followup_text(branch)
+                lines.append(
+                    "| {branch_id} | {state} | {lineage_id} | {mechanisms} | "
+                    "{next_action} | {followup} | {failures} |".format(
+                        branch_id=_display(branch.get("branch_id")),
+                        state=_display(branch.get("state")),
+                        lineage_id=_display(branch.get("lineage_id")),
+                        mechanisms=_list_text(branch.get("mechanism_ids") or []),
+                        next_action=_display(branch.get("next_action")),
+                        followup=followup,
+                        failures=_list_text(branch.get("failure_codes") or []),
+                    )
+                )
+                card_text = branch.get("branch_card_text")
+                if card_text:
+                    lines.append(
+                        f"- `{_display(branch.get('branch_id'))}`: {card_text}"
+                    )
 
     lines.extend(
         [
@@ -625,9 +655,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
 
     accounting = brief.get("protocol_accounting_summary") or {}
     accounting_aggregate = _mapping_or_empty(accounting.get("aggregate"))
-    effective_budget = _mapping_or_empty(
-        accounting_aggregate.get("effective_budget")
-    )
+    effective_budget = _mapping_or_empty(accounting_aggregate.get("effective_budget"))
     protocol_rows = _mapping_or_empty(accounting_aggregate.get("protocol_rows"))
     formal_artifacts = _mapping_or_empty(
         accounting_aggregate.get("formal_candidate_artifacts")
@@ -683,18 +711,14 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 continue
             budget_entry = _mapping_or_empty(entry.get("effective_budget"))
             rows_entry = _mapping_or_empty(entry.get("protocol_rows"))
-            artifact_entry = _mapping_or_empty(
-                entry.get("formal_candidate_artifacts")
-            )
+            artifact_entry = _mapping_or_empty(entry.get("formal_candidate_artifacts"))
             stage_entry = _mapping_or_empty(entry.get("stage_rows"))
             lines.append(
                 "| {report} | {requested} | {effective} | {protocol_rows} | "
                 "{formal_artifacts} | {stages} | {stop_reason} |".format(
                     report=_display(entry.get("report")),
                     requested=_display(budget_entry.get("requested_rounds")),
-                    effective=_display(
-                        budget_entry.get("effective_rounds_completed")
-                    ),
+                    effective=_display(budget_entry.get("effective_rounds_completed")),
                     protocol_rows=_display(rows_entry.get("protocol_metric_results")),
                     formal_artifacts=_display(artifact_entry.get("row_count")),
                     stages=(
@@ -1069,8 +1093,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 f"- Available: `{_display(cvrp_opportunity_usage.get('available'))}`",
                 "- Current-run evidence: "
                 f"`{_display(cvrp_opportunity_usage.get('current_run_evidence'))}`",
-                "- Opportunity summary visible: "
-                f"`{opportunity_visible}`",
+                "- Opportunity summary visible: " f"`{opportunity_visible}`",
                 "- Hypothesis-visible opportunity traces: "
                 f"{hypothesis_visible_traces}",
                 "- Usage status: "
@@ -1083,8 +1106,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 f"{_display(usage_counts.get('contrasted_opportunity'))} / "
                 f"{_display(usage_counts.get('ignored_or_unproven'))} / "
                 f"{_display(usage_counts.get('default_avoid_repeat'))}",
-                "- Recommended opportunity families: "
-                f"{recommended_families}",
+                "- Recommended opportunity families: " f"{recommended_families}",
             ]
         )
         gaps = cvrp_opportunity_usage.get("evidence_gaps")
@@ -1146,9 +1168,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
-            same_mechanism = _mapping_or_empty(
-                entry.get("same_mechanism_followup")
-            )
+            same_mechanism = _mapping_or_empty(entry.get("same_mechanism_followup"))
             lessons = _mapping_or_empty(entry.get("branch_lesson_usage"))
             transfer = _mapping_or_empty(entry.get("weak_positive_transfer"))
             shape = _mapping_or_empty(entry.get("research_shape_summary"))
@@ -1166,9 +1186,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 "{depth_distribution} | {active_shape} | {families} |".format(
                     report=_display(entry.get("report")),
                     same_selected=_display(
-                        same_mechanism.get(
-                            "selected_same_branch_refinement_count"
-                        )
+                        same_mechanism.get("selected_same_branch_refinement_count")
                     ),
                     same_observed=_display(
                         same_mechanism.get("observed_opportunity_count")
@@ -1231,10 +1249,8 @@ def render_markdown(brief: dict[str, Any]) -> str:
             f"{_display(actionability_indicators.get('branch_lessons_satisfied'))} / "
             f"{_display(actionability_indicators.get('branch_lessons_required'))} / "
             f"{_display(actionability_indicators.get('branch_lesson_semantic_gap_count'))}",
-            "- Branch lesson semantic failure mix: "
-            f"{branch_lesson_failure_mix}",
-            "- Branch lesson semantic block mix: "
-            f"{branch_lesson_block_mix}",
+            "- Branch lesson semantic failure mix: " f"{branch_lesson_failure_mix}",
+            "- Branch lesson semantic block mix: " f"{branch_lesson_block_mix}",
             "- Prompt research/source/cross-branch/governance tokens: "
             f"{_display(actionability_indicators.get('research_signal_tokens'))} / "
             f"{_display(actionability_indicators.get('source_code_tokens'))} / "
@@ -1255,9 +1271,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
         cvrp_current_run_evidence = (
             cvrp_large_twoopt.get("current_run_evidence") is True
         )
-        cvrp_invalid_infra_only = (
-            cvrp_large_twoopt.get("invalid_infra_only") is True
-        )
+        cvrp_invalid_infra_only = cvrp_large_twoopt.get("invalid_infra_only") is True
         evidence = _mapping_or_empty(cvrp_large_twoopt.get("evidence"))
         protocol = _mapping_or_empty(evidence.get("protocol"))
         measurement = _mapping_or_empty(evidence.get("measurement_effect"))
@@ -1361,8 +1375,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
         else:
             lines.append("- Deferred post-launch CVRP bounded two-opt review axes:")
             lines.append(
-                "  - "
-                f"{_display(cvrp_large_twoopt.get('review_axes_actionability'))}"
+                "  - " f"{_display(cvrp_large_twoopt.get('review_axes_actionability'))}"
             )
         if isinstance(axes, list) and axes:
             lines.extend(f"  - {_display(item)}" for item in axes)
@@ -1477,8 +1490,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
         else:
             lines.append("- Deferred post-launch warehouse review axes:")
             lines.append(
-                "  - "
-                f"{_display(warehouse.get('review_axes_actionability'))}"
+                "  - " f"{_display(warehouse.get('review_axes_actionability'))}"
             )
         if isinstance(axes, list) and axes:
             lines.extend(f"  - {_display(item)}" for item in axes)
@@ -1738,12 +1750,8 @@ def _branch_research_state_aggregate(
             _increment_count(aggregate["failure_code_counts"], code)
 
     aggregate["hypothesis_count"] = _int_or_zero(hypotheses.get("count"))
-    aggregate["hypotheses_by_status"] = _int_mapping(
-        hypotheses.get("by_status")
-    )
-    aggregate["hypotheses_by_action"] = _int_mapping(
-        hypotheses.get("by_action")
-    )
+    aggregate["hypotheses_by_status"] = _int_mapping(hypotheses.get("by_status"))
+    aggregate["hypotheses_by_action"] = _int_mapping(hypotheses.get("by_action"))
     aggregate["hypotheses_by_change_locus"] = _int_mapping(
         hypotheses.get("by_change_locus")
     )
@@ -1790,6 +1798,14 @@ def _compact_branch_summary(branch: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
+def _resume_branch_followup_text(branch: Mapping[str, Any]) -> str:
+    recommended = branch.get("followup_recommended")
+    required = branch.get("followup_required")
+    if recommended is None and required is None:
+        return ""
+    return f"recommended={_display(recommended)}, required={_display(required)}"
+
+
 def _champion_progress_summary(inventory: Mapping[str, Any]) -> dict[str, Any]:
     lifecycle = _mapping_or_empty(inventory.get("lifecycle"))
     current_run_evidence = lifecycle.get("current_run_evidence") is True
@@ -1819,12 +1835,7 @@ def _champion_progress_summary(inventory: Mapping[str, Any]) -> dict[str, Any]:
     table_present = champions.get("table_present") is True
     available = bool(
         current_run_evidence
-        and (
-            table_present
-            or by_status
-            or by_decision
-            or current_version is not None
-        )
+        and (table_present or by_status or by_decision or current_version is not None)
     )
     if not current_run_evidence:
         interpretation = "not_current_run_evidence"
@@ -1868,9 +1879,7 @@ def _champion_progress_summary(inventory: Mapping[str, Any]) -> dict[str, Any]:
         "latest_promotion_experiment_id": champions.get(
             "latest_promotion_experiment_id"
         ),
-        "latest_promotion_dossier_ref": champions.get(
-            "latest_promotion_dossier_ref"
-        ),
+        "latest_promotion_dossier_ref": champions.get("latest_promotion_dossier_ref"),
         "promoted_hypothesis_count": promoted_hypotheses,
         "promotion_decision_count": promotion_decisions,
         "source": (
@@ -2026,9 +2035,7 @@ def _protocol_accounting_entry(path: Path) -> dict[str, Any]:
         _mapping_or_empty(doc.get("effective_budget"))
     )
     attempts = _compact_attempts(_mapping_or_empty(doc.get("attempts")))
-    protocol_rows = _compact_protocol_rows(
-        _mapping_or_empty(doc.get("protocol_rows"))
-    )
+    protocol_rows = _compact_protocol_rows(_mapping_or_empty(doc.get("protocol_rows")))
     formal_candidates = _compact_formal_candidates(
         _mapping_or_empty(doc.get("formal_candidates"))
     )
@@ -2097,9 +2104,7 @@ def _compact_protocol_rows(raw: Mapping[str, Any]) -> dict[str, Any]:
         {
             "effective_protocol_rounds": raw.get("effective_protocol_rounds"),
             "protocol_metric_results": raw.get("protocol_metric_results"),
-            "protocol_evaluated_candidates": raw.get(
-                "protocol_evaluated_candidates"
-            ),
+            "protocol_evaluated_candidates": raw.get("protocol_evaluated_candidates"),
             "stage_counts": _mapping_or_empty(raw.get("stage_counts")),
             "semantics": raw.get("semantics"),
         }
@@ -2110,9 +2115,7 @@ def _compact_formal_candidates(raw: Mapping[str, Any]) -> dict[str, Any]:
     return _drop_empty(
         {
             "formal_screened_candidates": raw.get("formal_screened_candidates"),
-            "protocol_evaluated_candidates": raw.get(
-                "protocol_evaluated_candidates"
-            ),
+            "protocol_evaluated_candidates": raw.get("protocol_evaluated_candidates"),
             "semantics": raw.get("semantics"),
         }
     )
@@ -2325,12 +2328,8 @@ def _compact_protocol_effect(effect: Mapping[str, Any]) -> dict[str, Any]:
         {
             "schema_version": effect.get("schema_version"),
             "report_only": effect.get("report_only"),
-            "decision_features_excluded": effect.get(
-                "decision_features_excluded"
-            ),
-            "measurement_readiness_status": effect.get(
-                "measurement_readiness_status"
-            ),
+            "decision_features_excluded": effect.get("decision_features_excluded"),
+            "measurement_readiness_status": effect.get("measurement_readiness_status"),
             "measurement_readiness_reason_code": effect.get(
                 "measurement_readiness_reason_code"
             ),
@@ -2339,9 +2338,7 @@ def _compact_protocol_effect(effect: Mapping[str, Any]) -> dict[str, Any]:
             "interpretation": effect.get("interpretation"),
             "protocol_row_count": effect.get("protocol_row_count"),
             "rows_at_or_above_mde": effect.get("rows_at_or_above_mde"),
-            "rows_with_ci_high_below_mde": effect.get(
-                "rows_with_ci_high_below_mde"
-            ),
+            "rows_with_ci_high_below_mde": effect.get("rows_with_ci_high_below_mde"),
             "positive_rows": effect.get("positive_rows"),
             "nonpositive_rows": effect.get("nonpositive_rows"),
             "max_effect_to_mde_ratio": effect.get("max_effect_to_mde_ratio"),
@@ -2411,9 +2408,7 @@ def _compact_mechanism_family_effect_summary(
         {
             "schema_version": summary.get("schema_version"),
             "report_only": summary.get("report_only"),
-            "decision_features_excluded": summary.get(
-                "decision_features_excluded"
-            ),
+            "decision_features_excluded": summary.get("decision_features_excluded"),
             "mapping_status": summary.get("mapping_status"),
             "mapped_row_count": summary.get("mapped_row_count"),
             "unmapped_row_count": summary.get("unmapped_row_count"),
@@ -2432,9 +2427,7 @@ def _compact_effect_count_summary(summary: Mapping[str, Any]) -> dict[str, Any]:
             "nonpositive_rows": summary.get("nonpositive_rows"),
             "rows_at_or_above_mde": summary.get("rows_at_or_above_mde"),
             "rows_below_mde": summary.get("rows_below_mde"),
-            "rows_with_ci_high_below_mde": summary.get(
-                "rows_with_ci_high_below_mde"
-            ),
+            "rows_with_ci_high_below_mde": summary.get("rows_with_ci_high_below_mde"),
             "max_median_delta": summary.get("max_median_delta"),
             "max_effect_to_mde_ratio": summary.get("max_effect_to_mde_ratio"),
         }
@@ -2571,9 +2564,9 @@ def _runtime_feedback_summary(
     )
     aggregate["runtime_budget_diagnostics"] = budget_diagnostics
     drain_status_complete = _runtime_feedback_drain_status_complete(aggregate)
-    available = bool(entries) or _int_or_zero(
-        budget_diagnostics.get("diagnostic_count")
-    ) > 0
+    available = (
+        bool(entries) or _int_or_zero(budget_diagnostics.get("diagnostic_count")) > 0
+    )
     return {
         **base,
         "available": available,
@@ -2776,9 +2769,7 @@ def _runtime_budget_diagnostics_summary(
             repairable_key = (
                 "true"
                 if raw.get("repairable") is True
-                else "false"
-                if raw.get("repairable") is False
-                else "unknown"
+                else "false" if raw.get("repairable") is False else "unknown"
             )
             _increment_count(summary["repairable_counts"], repairable_key)
             runtime_model = raw.get("runtime_model")
@@ -2874,15 +2865,9 @@ def _empty_failure_taxonomy_aggregate() -> dict[str, Any]:
 
 def _failure_taxonomy_entry(path: Path) -> dict[str, Any]:
     doc = _read_json_object(path)
-    proposal = _compact_proposal_quality(
-        _mapping_or_empty(doc.get("proposal_quality"))
-    )
-    taxonomy = _compact_failure_taxonomy(
-        _mapping_or_empty(doc.get("failure_taxonomy"))
-    )
-    run_status = _compact_failure_run_status(
-        _mapping_or_empty(doc.get("run_status"))
-    )
+    proposal = _compact_proposal_quality(_mapping_or_empty(doc.get("proposal_quality")))
+    taxonomy = _compact_failure_taxonomy(_mapping_or_empty(doc.get("failure_taxonomy")))
+    run_status = _compact_failure_run_status(_mapping_or_empty(doc.get("run_status")))
     failures = _compact_failure_taxonomy(_mapping_or_empty(doc.get("failures")))
     if not proposal and not taxonomy and not failures and not run_status:
         return {}
@@ -3272,10 +3257,12 @@ def _merge_prompt_context_aggregate(
         "omitted_section_trace_count",
         "truncated_section_trace_count",
     ):
-        aggregate[key] = _int_or_zero(aggregate.get(key)) + _int_or_zero(
-            entry.get(key)
-        )
-    for key in ("call_kind_counts", "omitted_section_counts", "truncated_section_counts"):
+        aggregate[key] = _int_or_zero(aggregate.get(key)) + _int_or_zero(entry.get(key))
+    for key in (
+        "call_kind_counts",
+        "omitted_section_counts",
+        "truncated_section_counts",
+    ):
         target = aggregate[key]
         source = entry.get(key)
         if not isinstance(source, Mapping):
@@ -3457,12 +3444,12 @@ def _add_prompt_source_visibility(
             and active_constraints.get("full_section_visible") is not True
         ):
             target["active_subject_code_constraints_partial_visible_count"] += 1
-        target["active_subject_code_constraints_constraint_count_total"] += (
-            _int_or_zero(active_constraints.get("constraint_count"))
-        )
-        target["active_subject_code_constraints_forbidden_pattern_count_total"] += (
-            _int_or_zero(active_constraints.get("forbidden_pattern_count"))
-        )
+        target[
+            "active_subject_code_constraints_constraint_count_total"
+        ] += _int_or_zero(active_constraints.get("constraint_count"))
+        target[
+            "active_subject_code_constraints_forbidden_pattern_count_total"
+        ] += _int_or_zero(active_constraints.get("forbidden_pattern_count"))
         _increment_count(
             target["active_subject_code_constraints_status_counts"],
             str(active_constraints.get("section_status") or "unknown"),
@@ -3620,9 +3607,7 @@ def _increment_count(
 
 def _drop_empty(value: Mapping[str, Any]) -> dict[str, Any]:
     return {
-        str(key): item
-        for key, item in value.items()
-        if item not in (None, "", [], {})
+        str(key): item for key, item in value.items() if item not in (None, "", [], {})
     }
 
 
@@ -3724,10 +3709,9 @@ def _merge_research_continuity_aggregate(
     if mean_depth is not None and (current_mean is None or mean_depth > current_mean):
         aggregate["mean_branch_depth_max"] = mean_depth
 
-    depth_distribution = (
-        _mapping_or_empty(shape.get("branch_depth_distribution"))
-        or _mapping_or_empty(full_shape.get("branch_depth_distribution"))
-    )
+    depth_distribution = _mapping_or_empty(
+        shape.get("branch_depth_distribution")
+    ) or _mapping_or_empty(full_shape.get("branch_depth_distribution"))
     for depth, count in sorted(depth_distribution.items()):
         _increment_count(
             aggregate["branch_depth_distribution"],
@@ -3802,7 +3786,9 @@ def _research_context_actionability_summary(
     prompt_context_visibility_summary: Mapping[str, Any],
     research_continuity_summary: Mapping[str, Any],
 ) -> dict[str, Any]:
-    prompt_current = prompt_context_visibility_summary.get("current_run_evidence") is True
+    prompt_current = (
+        prompt_context_visibility_summary.get("current_run_evidence") is True
+    )
     continuity_current = research_continuity_summary.get("current_run_evidence") is True
     prompt_available = prompt_context_visibility_summary.get("available") is True
     continuity_available = research_continuity_summary.get("available") is True
@@ -3843,9 +3829,7 @@ def _research_context_actionability_summary(
         "branch_lesson_semantic_gap_count": continuity_counts[
             "branch_lesson_semantic_gap_count"
         ],
-        "branch_lesson_semantic_failure_count": _sum_counts(
-            semantic_failure_counts
-        ),
+        "branch_lesson_semantic_failure_count": _sum_counts(semantic_failure_counts),
         "branch_lesson_semantic_failure_counts": semantic_failure_counts,
         "branch_lesson_semantic_block_count": _sum_counts(semantic_block_counts),
         "branch_lesson_semantic_block_counts": semantic_block_counts,
@@ -3856,9 +3840,7 @@ def _research_context_actionability_summary(
             continuity_counts["weak_positive_observed"]
             - continuity_counts["weak_positive_accepted"],
         ),
-        "research_signal_tokens": _int_or_zero(
-            density.get("research_signal_tokens")
-        ),
+        "research_signal_tokens": _int_or_zero(density.get("research_signal_tokens")),
         "source_code_tokens": _int_or_zero(density.get("source_code_tokens")),
         "cross_branch_tokens": _int_or_zero(density.get("cross_branch_tokens")),
         "governance_tokens": _int_or_zero(density.get("governance_tokens")),
@@ -3957,9 +3939,7 @@ def _research_continuity_action_counts(entries: Any) -> dict[str, int]:
         counts["branch_lesson_semantic_gap_count"] += _int_or_zero(
             lessons.get("semantic_gap_count")
         )
-        counts["weak_positive_accepted"] += _int_or_zero(
-            transfer.get("accepted_count")
-        )
+        counts["weak_positive_accepted"] += _int_or_zero(transfer.get("accepted_count"))
         counts["weak_positive_observed"] += _int_or_zero(
             transfer.get("observed_opportunity_count")
         )
@@ -3986,9 +3966,7 @@ def _research_context_actionability_gaps(
     semantic_failures = _int_or_zero(
         indicators.get("branch_lesson_semantic_failure_count")
     )
-    semantic_blocks = _int_or_zero(
-        indicators.get("branch_lesson_semantic_block_count")
-    )
+    semantic_blocks = _int_or_zero(indicators.get("branch_lesson_semantic_block_count"))
     cross_branch_tokens = _int_or_zero(indicators.get("cross_branch_tokens"))
     research_tokens = _int_or_zero(indicators.get("research_signal_tokens"))
     source_tokens = _int_or_zero(indicators.get("source_code_tokens"))
@@ -4036,12 +4014,9 @@ def _research_context_actionability_gaps(
         and research_tokens + cross_branch_tokens <= 0
     ):
         gaps.append("weak_positive_transfer_without_research_or_lesson_signal")
-    if (
-        semantic_gap > 0
-        and (
-            _int_or_zero(indicators.get("omitted_section_trace_count")) > 0
-            or _int_or_zero(indicators.get("truncated_section_trace_count")) > 0
-        )
+    if semantic_gap > 0 and (
+        _int_or_zero(indicators.get("omitted_section_trace_count")) > 0
+        or _int_or_zero(indicators.get("truncated_section_trace_count")) > 0
     ):
         gaps.append("research_signal_sections_omitted_or_truncated_during_semantic_gap")
     if governance_tokens > research_plus_source and (
@@ -4144,31 +4119,6 @@ def _research_context_actionability_recommendations(
             "inspect lesson ids, changed dimensions, and borrow/contrast/reject semantics"
         )
     return list(dict.fromkeys(recommendations))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def _research_efficiency_report_paths(
