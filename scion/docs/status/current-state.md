@@ -120,8 +120,11 @@ chronology belongs in focused experiment reports and git history.
   follow-up/measurement handoff checks live in
   `scion.problems.warehouse_delivery.postrun_handoff`. The legacy
   `postrun_artifact_inventory.py` keeps output compatibility by dispatching to
-  those ports, not by owning problem semantics. The generic module is source
-  guarded against CVRP/warehouse/VRP vocabulary.
+  those ports, not by owning problem semantics. Prepared prompt-context focus
+  signals for CVRP and warehouse now come from the same problem-owned ports;
+  `rebuild_prepared_handoff.py` merges those signals and retains common
+  artifact orchestration plus common decision-boundary readiness. The generic
+  module is source guarded against CVRP/warehouse/VRP vocabulary.
 - Design O initial slice is implemented locally as
   `scion.measurement.MeasurementConsumerView`. It reduces problem-owned
   measurement declarations to generic status/runtime/pairing/effect/MDE fields

@@ -75,6 +75,16 @@ class WarehousePreparedHandoffReviewPort:
             coverage_item,
         )
 
+    def prepared_prompt_context_signals(
+        self,
+        manifest: Mapping[str, Any],
+        research_focus: Mapping[str, Any],
+    ) -> dict[str, dict[str, Any]]:
+        return warehouse_prepared_prompt_context_signals(
+            manifest,
+            research_focus,
+        )
+
 
 def add_warehouse_prepared_handoff_checks(
     manifest: Mapping[str, Any],
@@ -292,6 +302,102 @@ def warehouse_prepared_handoff_phase4_requirements(
     }
 
 
+def warehouse_prepared_prompt_context_signals(
+    manifest: Mapping[str, Any],
+    research_focus: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Build warehouse-owned prepared prompt/context readiness signals."""
+
+    if manifest.get("problem_family") != "warehouse_delivery":
+        return {}
+
+    signals: dict[str, dict[str, Any]] = {}
+    measurement = _mapping_or_empty(
+        research_focus.get("measurement_opportunity_diagnostics")
+    )
+    readiness = _mapping_or_empty(measurement.get("measurement_readiness"))
+    calibration = _mapping_or_empty(measurement.get("calibration"))
+    transfer_risk = _mapping_or_empty(measurement.get("transfer_risk"))
+    required_diagnostics = _mapping_or_empty(
+        measurement.get("required_diagnostics")
+    )
+    opportunity_diagnostic_count = _sequence_count(
+        measurement.get("opportunity_diagnostics")
+    )
+    measurable_opportunity_count = _sequence_count(
+        measurement.get("measurable_opportunity_classes")
+    )
+    signals["warehouse_measurement_runtime_handoff"] = _signal(
+        available=(
+            bool(measurement)
+            and measurement.get("source")
+            == "problem_v1.measurement.calibration_ref"
+            and measurement.get("proposal_visibility_only") is True
+            and measurement.get("decision_features_excluded") is True
+            and readiness.get("status") == "ready"
+            and calibration.get("schema") == "scion.aa_noise_floor.v1"
+            and bool(transfer_risk)
+            and bool(required_diagnostics)
+            and measurable_opportunity_count > 0
+            and opportunity_diagnostic_count > 0
+        ),
+        required=True,
+        source="prepared_run_manifest.research_focus.measurement_opportunity_diagnostics",
+        detail={
+            "schema_version": measurement.get("schema_version"),
+            "opportunity_projection_source": measurement.get(
+                "opportunity_projection_source"
+            ),
+            "metric": measurement.get("metric"),
+            "runtime_model": measurement.get("runtime_model"),
+            "pairing_validity": measurement.get("pairing_validity"),
+            "screening_mde_at_power_80": measurement.get(
+                "screening_mde_at_power_80"
+            ),
+            "measurement_readiness_status": readiness.get("status"),
+            "calibration_schema": calibration.get("schema"),
+            "transfer_risk_present": bool(transfer_risk),
+            "required_diagnostics_present": bool(required_diagnostics),
+            "measurable_opportunity_count": measurable_opportunity_count,
+            "opportunity_diagnostic_count": opportunity_diagnostic_count,
+        },
+    )
+    required_evidence = _string_items(research_focus.get("required_evidence"))
+    avoid_items = _string_items(research_focus.get("default_avoid_directions"))
+    signals["warehouse_v2_followup_question"] = _signal(
+        available=bool(
+            research_focus.get("accepted_checkpoint")
+            and research_focus.get("current_question")
+        ),
+        required=True,
+        source=(
+            "prepared_run_manifest.research_focus.accepted_checkpoint "
+            "and current_question"
+        ),
+        detail={
+            "accepted_checkpoint_present": bool(
+                research_focus.get("accepted_checkpoint")
+            ),
+            "current_question_present": bool(
+                research_focus.get("current_question")
+            ),
+        },
+    )
+    signals["warehouse_required_evidence"] = _signal(
+        available=bool(required_evidence),
+        required=True,
+        source="prepared_run_manifest.research_focus.required_evidence",
+        detail={"count": len(required_evidence)},
+    )
+    signals["warehouse_default_avoid_directions"] = _signal(
+        available=bool(avoid_items),
+        required=True,
+        source="prepared_run_manifest.research_focus.default_avoid_directions",
+        detail={"count": len(avoid_items)},
+    )
+    return signals
+
+
 def expected_warehouse_required_evidence() -> tuple[str, ...]:
     return tuple(WAREHOUSE_REQUIRED_EVIDENCE)
 
@@ -314,3 +420,27 @@ def _string_items(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value if str(item).strip()]
     return []
+
+
+def _sequence_count(value: Any) -> int:
+    if isinstance(value, (list, tuple)):
+        return len(value)
+    if isinstance(value, dict):
+        return len(value)
+    return 0
+
+
+def _signal(
+    *,
+    available: bool,
+    required: bool,
+    source: Any,
+    detail: Any,
+) -> dict[str, Any]:
+    return {
+        "available": bool(available),
+        "required": bool(required),
+        "source": source,
+        "detail": detail,
+        "runtime_generated_after_launch": False,
+    }

@@ -144,6 +144,13 @@ class CvrpPreparedHandoffReviewPort:
             coverage_item,
         )
 
+    def prepared_prompt_context_signals(
+        self,
+        manifest: Mapping[str, Any],
+        research_focus: Mapping[str, Any],
+    ) -> dict[str, dict[str, Any]]:
+        return cvrp_prepared_prompt_context_signals(manifest, research_focus)
+
 
 def add_cvrp_prepared_handoff_checks(
     manifest: Mapping[str, Any],
@@ -467,6 +474,186 @@ def cvrp_prepared_handoff_phase4_requirements(
     }
 
 
+def cvrp_prepared_prompt_context_signals(
+    manifest: Mapping[str, Any],
+    research_focus: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Build CVRP-owned prepared prompt/context readiness signals."""
+
+    if manifest.get("problem_family") != "cvrp":
+        return {}
+
+    signals: dict[str, dict[str, Any]] = {}
+    measurement = _mapping_or_empty(
+        research_focus.get("measurement_opportunity_diagnostics")
+    )
+    screening_headroom = _mapping_or_empty(measurement.get("screening_headroom"))
+    mechanism_rank_count = _sequence_count(
+        measurement.get("mechanism_effect_ranking")
+    )
+    opportunity_diagnostic_count = _sequence_count(
+        measurement.get("opportunity_diagnostics")
+    )
+    measurable_opportunity_count = _sequence_count(
+        measurement.get("measurable_opportunity_classes")
+    )
+    signals["cvrp_measurement_opportunity_handoff"] = _signal(
+        available=(
+            bool(measurement)
+            and measurement.get("proposal_visibility_only") is True
+            and measurement.get("decision_features_excluded") is True
+            and bool(screening_headroom)
+            and measurable_opportunity_count > 0
+            and mechanism_rank_count > 0
+            and opportunity_diagnostic_count > 0
+        ),
+        required=True,
+        source="prepared_run_manifest.research_focus.measurement_opportunity_diagnostics",
+        detail={
+            "schema_version": measurement.get("schema_version"),
+            "opportunity_projection_source": measurement.get(
+                "opportunity_projection_source"
+            ),
+            "screening_headroom_present": bool(screening_headroom),
+            "measurable_opportunity_count": measurable_opportunity_count,
+            "mechanism_rank_count": mechanism_rank_count,
+            "opportunity_diagnostic_count": opportunity_diagnostic_count,
+            "reason_code_count": len(_string_items(measurement.get("reason_codes"))),
+        },
+    )
+    opportunity_items = _string_items(
+        research_focus.get("measurable_opportunity_classes")
+    )
+    avoid_items = _string_items(research_focus.get("default_avoid_directions"))
+    signals["cvrp_measurable_opportunity_classes"] = _signal(
+        available=bool(opportunity_items),
+        required=True,
+        source="prepared_run_manifest.research_focus.measurable_opportunity_classes",
+        detail={"count": len(opportunity_items)},
+    )
+    signals["cvrp_default_avoid_directions"] = _signal(
+        available=bool(avoid_items),
+        required=True,
+        source="prepared_run_manifest.research_focus.default_avoid_directions",
+        detail={"count": len(avoid_items)},
+    )
+    direct_rules_present = bool(
+        research_focus.get("route_merge_exception_rule")
+        and research_focus.get("construction_seed_rule")
+    )
+    signals["cvrp_direct_effect_rules"] = _signal(
+        available=direct_rules_present,
+        required=True,
+        source=(
+            "prepared_run_manifest.research_focus.route_merge_exception_rule "
+            "and construction_seed_rule"
+        ),
+        detail={
+            "route_merge_exception_rule_present": bool(
+                research_focus.get("route_merge_exception_rule")
+            ),
+            "construction_seed_rule_present": bool(
+                research_focus.get("construction_seed_rule")
+            ),
+        },
+    )
+    missing_primary_rule = str(
+        research_focus.get("missing_primary_telemetry_rule") or ""
+    ).lower()
+    signals["cvrp_missing_primary_telemetry_rule"] = _signal(
+        available=(
+            "missing" in missing_primary_rule
+            and "primary mechanism" in missing_primary_rule
+            and "not_evaluated/not_triggered" in missing_primary_rule
+            and "weak_positive" in missing_primary_rule
+            and REQUIRED_MECHANISM_ID in missing_primary_rule
+        ),
+        required=True,
+        source="prepared_run_manifest.research_focus.missing_primary_telemetry_rule",
+        detail={
+            "missing_primary_telemetry_rule_present": bool(
+                research_focus.get("missing_primary_telemetry_rule")
+            ),
+        },
+    )
+    large_twoopt = _mapping_or_empty(
+        research_focus.get("large_instance_two_opt_constraints")
+    )
+    implementation_items = _string_items(
+        large_twoopt.get("implementation_constraints")
+    )
+    evidence_items = _string_items(large_twoopt.get("required_pair_evidence"))
+    reject_items = _string_items(large_twoopt.get("default_reject_directions"))
+    signals["cvrp_large_twoopt_bounded_constraints"] = _signal(
+        available=(
+            bool(large_twoopt)
+            and bool(implementation_items)
+            and bool(evidence_items)
+            and bool(reject_items)
+            and large_twoopt.get("proposal_visibility_only") is True
+            and large_twoopt.get("decision_features_excluded") is True
+        ),
+        required=True,
+        source="prepared_run_manifest.research_focus.large_instance_two_opt_constraints",
+        detail={
+            "schema_version": large_twoopt.get("schema_version"),
+            "seed_report": large_twoopt.get("seed_report"),
+            "implementation_constraint_count": len(implementation_items),
+            "required_pair_evidence_count": len(evidence_items),
+            "default_reject_direction_count": len(reject_items),
+        },
+    )
+    case_protection = _mapping_or_empty(
+        research_focus.get("case_protection_requirements")
+    )
+    protected_cases = _string_items(case_protection.get("protected_cases"))
+    case_rules = _string_items(case_protection.get("rules"))
+    case_evidence = _string_items(case_protection.get("required_evidence"))
+    signals["cvrp_case_protection_requirements"] = _signal(
+        available=(
+            bool(case_protection)
+            and bool(protected_cases)
+            and bool(case_rules)
+            and bool(case_evidence)
+            and case_protection.get("proposal_visibility_only") is True
+            and case_protection.get("decision_features_excluded") is True
+        ),
+        required=True,
+        source="prepared_run_manifest.research_focus.case_protection_requirements",
+        detail={
+            "schema_version": case_protection.get("schema_version"),
+            "protected_cases": protected_cases,
+            "rule_count": len(case_rules),
+            "required_evidence_count": len(case_evidence),
+        },
+    )
+    resume_continuity = _mapping_or_empty(
+        research_focus.get("resume_continuity_requirements")
+    )
+    fallback_sources = _string_items(resume_continuity.get("fallback_sources"))
+    continuity_rules = _string_items(resume_continuity.get("rules"))
+    continuity_evidence = _string_items(resume_continuity.get("required_evidence"))
+    signals["cvrp_resume_continuity_requirements"] = _signal(
+        available=(
+            bool(resume_continuity)
+            and bool(fallback_sources)
+            and bool(continuity_rules)
+            and bool(continuity_evidence)
+            and resume_continuity.get("proposal_visibility_only") is True
+            and resume_continuity.get("decision_features_excluded") is True
+        ),
+        required=True,
+        source="prepared_run_manifest.research_focus.resume_continuity_requirements",
+        detail={
+            "schema_version": resume_continuity.get("schema_version"),
+            "fallback_source_count": len(fallback_sources),
+            "rule_count": len(continuity_rules),
+            "required_evidence_count": len(continuity_evidence),
+        },
+    )
+    return signals
+
+
 def cvrp_case_protection_status(
     requirements: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -748,3 +935,27 @@ def _string_items(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value if str(item).strip()]
     return []
+
+
+def _sequence_count(value: Any) -> int:
+    if isinstance(value, (list, tuple)):
+        return len(value)
+    if isinstance(value, dict):
+        return len(value)
+    return 0
+
+
+def _signal(
+    *,
+    available: bool,
+    required: bool,
+    source: Any,
+    detail: Any,
+) -> dict[str, Any]:
+    return {
+        "available": bool(available),
+        "required": bool(required),
+        "source": source,
+        "detail": detail,
+        "runtime_generated_after_launch": False,
+    }

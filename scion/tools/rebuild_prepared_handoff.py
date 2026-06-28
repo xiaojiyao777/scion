@@ -39,6 +39,12 @@ from prepared_prompt_context import (  # noqa: E402
     research_focus_prompt_summary,
     research_focus_projection_summary,
 )
+from scion.problems.cvrp.postrun_handoff import (  # noqa: E402
+    CvrpPreparedHandoffReviewPort,
+)
+from scion.problems.warehouse_delivery.postrun_handoff import (  # noqa: E402
+    WarehousePreparedHandoffReviewPort,
+)
 
 
 SCHEMA_VERSION = "scion.prepared_handoff_rebuild.v1"
@@ -188,6 +194,10 @@ PROBLEM_V1_CANDIDATES_BY_FAMILY = {
         "scion/problems/warehouse_delivery/problem-v1.yaml",
         "scion/scion/problems/warehouse_delivery/problem-v1.yaml",
     ),
+}
+PREPARED_HANDOFF_PORTS_BY_FAMILY = {
+    "cvrp": CvrpPreparedHandoffReviewPort(),
+    "warehouse_delivery": WarehousePreparedHandoffReviewPort(),
 }
 
 
@@ -725,285 +735,14 @@ def _add_focus_signals(
     manifest: dict[str, Any],
     research_focus: dict[str, Any],
 ) -> None:
-    family = manifest.get("problem_family")
-    if family == "cvrp":
-        measurement = _mapping_or_empty(
-            research_focus.get("measurement_opportunity_diagnostics")
-        )
-        screening_headroom = _mapping_or_empty(measurement.get("screening_headroom"))
-        mechanism_rank_count = _sequence_count(
-            measurement.get("mechanism_effect_ranking")
-        )
-        opportunity_diagnostic_count = _sequence_count(
-            measurement.get("opportunity_diagnostics")
-        )
-        measurable_opportunity_count = _sequence_count(
-            measurement.get("measurable_opportunity_classes")
-        )
-        _add_signal(
-            signals,
-            "cvrp_measurement_opportunity_handoff",
-            available=(
-                bool(measurement)
-                and measurement.get("proposal_visibility_only") is True
-                and measurement.get("decision_features_excluded") is True
-                and bool(screening_headroom)
-                and measurable_opportunity_count > 0
-                and mechanism_rank_count > 0
-                and opportunity_diagnostic_count > 0
-            ),
-            required=True,
-            source="prepared_run_manifest.research_focus.measurement_opportunity_diagnostics",
-            detail={
-                "schema_version": measurement.get("schema_version"),
-                "opportunity_projection_source": measurement.get(
-                    "opportunity_projection_source"
-                ),
-                "screening_headroom_present": bool(screening_headroom),
-                "measurable_opportunity_count": measurable_opportunity_count,
-                "mechanism_rank_count": mechanism_rank_count,
-                "opportunity_diagnostic_count": opportunity_diagnostic_count,
-                "reason_code_count": len(_string_items(measurement.get("reason_codes"))),
-            },
-        )
-        opportunity_items = _string_items(
-            research_focus.get("measurable_opportunity_classes")
-        )
-        avoid_items = _string_items(research_focus.get("default_avoid_directions"))
-        _add_signal(
-            signals,
-            "cvrp_measurable_opportunity_classes",
-            available=bool(opportunity_items),
-            required=True,
-            source="prepared_run_manifest.research_focus.measurable_opportunity_classes",
-            detail={"count": len(opportunity_items)},
-        )
-        _add_signal(
-            signals,
-            "cvrp_default_avoid_directions",
-            available=bool(avoid_items),
-            required=True,
-            source="prepared_run_manifest.research_focus.default_avoid_directions",
-            detail={"count": len(avoid_items)},
-        )
-        direct_rules_present = bool(
-            research_focus.get("route_merge_exception_rule")
-            and research_focus.get("construction_seed_rule")
-        )
-        _add_signal(
-            signals,
-            "cvrp_direct_effect_rules",
-            available=direct_rules_present,
-            required=True,
-            source=(
-                "prepared_run_manifest.research_focus.route_merge_exception_rule "
-                "and construction_seed_rule"
-            ),
-            detail={
-                "route_merge_exception_rule_present": bool(
-                    research_focus.get("route_merge_exception_rule")
-                ),
-                "construction_seed_rule_present": bool(
-                    research_focus.get("construction_seed_rule")
-                ),
-            },
-        )
-        missing_primary_rule = str(
-            research_focus.get("missing_primary_telemetry_rule") or ""
-        ).lower()
-        _add_signal(
-            signals,
-            "cvrp_missing_primary_telemetry_rule",
-            available=(
-                "missing" in missing_primary_rule
-                and "primary mechanism" in missing_primary_rule
-                and "not_evaluated/not_triggered" in missing_primary_rule
-                and "weak_positive" in missing_primary_rule
-                and "large_instance_intra_route_two_opt_seed"
-                in missing_primary_rule
-            ),
-            required=True,
-            source="prepared_run_manifest.research_focus.missing_primary_telemetry_rule",
-            detail={
-                "missing_primary_telemetry_rule_present": bool(
-                    research_focus.get("missing_primary_telemetry_rule")
-                ),
-            },
-        )
-        large_twoopt = _mapping_or_empty(
-            research_focus.get("large_instance_two_opt_constraints")
-        )
-        implementation_items = _string_items(
-            large_twoopt.get("implementation_constraints")
-        )
-        evidence_items = _string_items(large_twoopt.get("required_pair_evidence"))
-        reject_items = _string_items(large_twoopt.get("default_reject_directions"))
-        _add_signal(
-            signals,
-            "cvrp_large_twoopt_bounded_constraints",
-            available=(
-                bool(large_twoopt)
-                and bool(implementation_items)
-                and bool(evidence_items)
-                and bool(reject_items)
-                and large_twoopt.get("proposal_visibility_only") is True
-                and large_twoopt.get("decision_features_excluded") is True
-            ),
-            required=True,
-            source="prepared_run_manifest.research_focus.large_instance_two_opt_constraints",
-            detail={
-                "schema_version": large_twoopt.get("schema_version"),
-                "seed_report": large_twoopt.get("seed_report"),
-                "implementation_constraint_count": len(implementation_items),
-                "required_pair_evidence_count": len(evidence_items),
-                "default_reject_direction_count": len(reject_items),
-            },
-        )
-        case_protection = _mapping_or_empty(
-            research_focus.get("case_protection_requirements")
-        )
-        protected_cases = _string_items(case_protection.get("protected_cases"))
-        case_rules = _string_items(case_protection.get("rules"))
-        case_evidence = _string_items(case_protection.get("required_evidence"))
-        _add_signal(
-            signals,
-            "cvrp_case_protection_requirements",
-            available=(
-                bool(case_protection)
-                and bool(protected_cases)
-                and bool(case_rules)
-                and bool(case_evidence)
-                and case_protection.get("proposal_visibility_only") is True
-                and case_protection.get("decision_features_excluded") is True
-            ),
-            required=True,
-            source="prepared_run_manifest.research_focus.case_protection_requirements",
-            detail={
-                "schema_version": case_protection.get("schema_version"),
-                "protected_cases": protected_cases,
-                "rule_count": len(case_rules),
-                "required_evidence_count": len(case_evidence),
-            },
-        )
-        resume_continuity = _mapping_or_empty(
-            research_focus.get("resume_continuity_requirements")
-        )
-        fallback_sources = _string_items(resume_continuity.get("fallback_sources"))
-        continuity_rules = _string_items(resume_continuity.get("rules"))
-        continuity_evidence = _string_items(
-            resume_continuity.get("required_evidence")
-        )
-        _add_signal(
-            signals,
-            "cvrp_resume_continuity_requirements",
-            available=(
-                bool(resume_continuity)
-                and bool(fallback_sources)
-                and bool(continuity_rules)
-                and bool(continuity_evidence)
-                and resume_continuity.get("proposal_visibility_only") is True
-                and resume_continuity.get("decision_features_excluded") is True
-            ),
-            required=True,
-            source="prepared_run_manifest.research_focus.resume_continuity_requirements",
-            detail={
-                "schema_version": resume_continuity.get("schema_version"),
-                "fallback_source_count": len(fallback_sources),
-                "rule_count": len(continuity_rules),
-                "required_evidence_count": len(continuity_evidence),
-            },
-        )
-    elif family == "warehouse_delivery":
-        measurement = _mapping_or_empty(
-            research_focus.get("measurement_opportunity_diagnostics")
-        )
-        readiness = _mapping_or_empty(measurement.get("measurement_readiness"))
-        calibration = _mapping_or_empty(measurement.get("calibration"))
-        transfer_risk = _mapping_or_empty(measurement.get("transfer_risk"))
-        required_diagnostics = _mapping_or_empty(
-            measurement.get("required_diagnostics")
-        )
-        opportunity_diagnostic_count = _sequence_count(
-            measurement.get("opportunity_diagnostics")
-        )
-        measurable_opportunity_count = _sequence_count(
-            measurement.get("measurable_opportunity_classes")
-        )
-        _add_signal(
-            signals,
-            "warehouse_measurement_runtime_handoff",
-            available=(
-                bool(measurement)
-                and measurement.get("source")
-                == "problem_v1.measurement.calibration_ref"
-                and measurement.get("proposal_visibility_only") is True
-                and measurement.get("decision_features_excluded") is True
-                and readiness.get("status") == "ready"
-                and calibration.get("schema") == "scion.aa_noise_floor.v1"
-                and bool(transfer_risk)
-                and bool(required_diagnostics)
-                and measurable_opportunity_count > 0
-                and opportunity_diagnostic_count > 0
-            ),
-            required=True,
-            source="prepared_run_manifest.research_focus.measurement_opportunity_diagnostics",
-            detail={
-                "schema_version": measurement.get("schema_version"),
-                "opportunity_projection_source": measurement.get(
-                    "opportunity_projection_source"
-                ),
-                "metric": measurement.get("metric"),
-                "runtime_model": measurement.get("runtime_model"),
-                "pairing_validity": measurement.get("pairing_validity"),
-                "screening_mde_at_power_80": measurement.get(
-                    "screening_mde_at_power_80"
-                ),
-                "measurement_readiness_status": readiness.get("status"),
-                "calibration_schema": calibration.get("schema"),
-                "transfer_risk_present": bool(transfer_risk),
-                "required_diagnostics_present": bool(required_diagnostics),
-                "measurable_opportunity_count": measurable_opportunity_count,
-                "opportunity_diagnostic_count": opportunity_diagnostic_count,
-            },
-        )
-        required_evidence = _string_items(research_focus.get("required_evidence"))
-        avoid_items = _string_items(research_focus.get("default_avoid_directions"))
-        _add_signal(
-            signals,
-            "warehouse_v2_followup_question",
-            available=bool(
-                research_focus.get("accepted_checkpoint")
-                and research_focus.get("current_question")
-            ),
-            required=True,
-            source=(
-                "prepared_run_manifest.research_focus.accepted_checkpoint "
-                "and current_question"
-            ),
-            detail={
-                "accepted_checkpoint_present": bool(
-                    research_focus.get("accepted_checkpoint")
-                ),
-                "current_question_present": bool(
-                    research_focus.get("current_question")
-                ),
-            },
-        )
-        _add_signal(
-            signals,
-            "warehouse_required_evidence",
-            available=bool(required_evidence),
-            required=True,
-            source="prepared_run_manifest.research_focus.required_evidence",
-            detail={"count": len(required_evidence)},
-        )
-        _add_signal(
-            signals,
-            "warehouse_default_avoid_directions",
-            available=bool(avoid_items),
-            required=True,
-            source="prepared_run_manifest.research_focus.default_avoid_directions",
-            detail={"count": len(avoid_items)},
+    family = str(manifest.get("problem_family") or "")
+    port = PREPARED_HANDOFF_PORTS_BY_FAMILY.get(family)
+    if port is not None:
+        signals.update(
+            port.prepared_prompt_context_signals(
+                manifest,
+                research_focus,
+            )
         )
 
     boundary = str(research_focus.get("decision_boundary") or "").lower()
@@ -1420,12 +1159,6 @@ def _mapping_or_empty(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
     return {}
-
-
-def _string_items(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [str(item) for item in value if str(item).strip()]
 
 
 def _sequence_count(value: Any) -> int:

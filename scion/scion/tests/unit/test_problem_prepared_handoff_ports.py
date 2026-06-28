@@ -39,12 +39,18 @@ def test_cvrp_prepared_handoff_port_builds_legacy_checks_and_phase4(
         scion_project_dir=Path(__file__).resolve().parents[4] / "scion",
     )
     phase4 = port.phase4_requirements(manifest, _coverage_item)
+    signals = port.prepared_prompt_context_signals(
+        manifest,
+        manifest["research_focus"],
+    )
 
     assert checks["cvrp_measurement_handoff_present"]["passed"] is True
     assert checks["cvrp_protected_cases_in_split"]["passed"] is True
     assert checks["cvrp_large_twoopt_bounded_constraints_present"]["passed"] is True
     assert phase4["cvrp_large_twoopt_seed_handoff"]["available"] is True
     assert phase4["cvrp_cmt_case_protection_handoff"]["available"] is True
+    assert signals["cvrp_measurement_opportunity_handoff"]["available"] is True
+    assert signals["cvrp_resume_continuity_requirements"]["available"] is True
 
 
 def test_warehouse_prepared_handoff_port_builds_legacy_checks_and_phase4() -> None:
@@ -67,12 +73,18 @@ def test_warehouse_prepared_handoff_port_builds_legacy_checks_and_phase4() -> No
 
     checks = port.prepared_contract_checks(manifest)
     phase4 = port.phase4_requirements(manifest, _coverage_item)
+    signals = port.prepared_prompt_context_signals(
+        manifest,
+        manifest["research_focus"],
+    )
 
     assert checks["warehouse_followup_handoff_present"]["passed"] is True
     assert checks["warehouse_followup_required_evidence_complete"]["passed"] is True
     assert checks["warehouse_measurement_handoff_reason_codes"]["passed"] is True
     assert phase4["warehouse_v2_checkpoint_handoff"]["available"] is True
     assert phase4["warehouse_required_evidence_handoff"]["available"] is True
+    assert signals["warehouse_measurement_runtime_handoff"]["available"] is True
+    assert signals["warehouse_required_evidence"]["available"] is True
 
 
 def _measurement(
@@ -88,6 +100,15 @@ def _measurement(
         "screening_mde_at_power_80": 9.9,
         "practical_screen_delta": 5.0,
         "reason_codes": reason_codes,
+        "screening_headroom": {"status": "available"},
+        "mechanism_effect_ranking": [{"mechanism": "example"}],
+        "opportunity_diagnostics": [{"kind": "example"}],
+        "measurable_opportunity_classes": [{"id": "example"}],
+        "transfer_risk": {"status": "bounded"},
+        "required_diagnostics": {"items": ["example"]},
+        "metric": "objective",
+        "runtime_model": "bounded",
+        "pairing_validity": "valid",
         "measurement_readiness": {
             "status": "ready",
             "reason_code": "ok",
