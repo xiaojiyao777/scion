@@ -23,7 +23,9 @@ from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.proposal.prompt_manifest_visibility import VISIBILITY_LEDGER_SCHEMA_VERSION
 from scion.proposal.target_intent_binding import (
     canonical_formal_mechanism_id,
+    selected_target_intent_payload,
     target_intent_binding_retry_feedback,
+    target_intent_rejected,
 )
 from scion.tests.unit.agentic_session_test_support import *
 
@@ -480,6 +482,83 @@ def test_target_intent_binding_allows_raw_dotted_id_with_refinement_formal_id() 
     )
 
     assert feedback is None
+
+
+def test_rejected_target_intent_is_not_binding_for_formal_hypothesis() -> None:
+    target_intent = {
+        "intent": {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/destroy_repair.py",
+            "mechanism_id": "route_entropy_removal",
+            "mechanism_id_status": (
+                "prepared_launch_focus_default_avoid_rejects_target_intent"
+            ),
+            "mechanism_family": "destroy_repair_selection",
+        },
+        "diagnostics": {
+            "target_intent_authority": {
+                "authority_status": (
+                    "prepared_launch_focus_default_avoid_rejects_target_intent"
+                ),
+                "target_intent_rejected": True,
+                "rejected_mechanism_id": "route_entropy_removal",
+            },
+        },
+    }
+    hypothesis = _solver_design_file_hypothesis(
+        target_file="policies/baseline_modules/local_search.py",
+        mechanism_id="intra_route_string_reinsert",
+        text="Test a different formal hypothesis after rejected target intent.",
+    )
+
+    assert target_intent_rejected(target_intent) is True
+    assert selected_target_intent_payload(target_intent) == {}
+    assert (
+        target_intent_binding_retry_feedback(
+            target_intent,
+            hypothesis,
+            attempt=1,
+            manifest=None,
+        )
+        is None
+    )
+
+
+def test_reviewed_mechanism_rejected_target_intent_is_not_binding() -> None:
+    target_intent = {
+        "intent": {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/local_search.py",
+            "mechanism_id": "reviewed_mechanism",
+        },
+        "host_adjustments": {
+            "target_intent_authority": {
+                "authority_status": (
+                    "prepared_successor_focus_rejects_reviewed_mechanism"
+                ),
+                "target_intent_rejected": True,
+            },
+        },
+    }
+    hypothesis = _solver_design_file_hypothesis(
+        target_file="policies/baseline_modules/destroy_repair.py",
+        mechanism_id="fresh_successor",
+        text="Use a fresh successor after a reviewed mechanism was rejected.",
+    )
+
+    assert target_intent_rejected(target_intent) is True
+    assert selected_target_intent_payload(target_intent) == {}
+    assert (
+        target_intent_binding_retry_feedback(
+            target_intent,
+            hypothesis,
+            attempt=1,
+            manifest=None,
+        )
+        is None
+    )
 
 
 def test_solver_design_existing_target_file_is_visible_before_first_hypothesis(

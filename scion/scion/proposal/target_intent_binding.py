@@ -24,6 +24,12 @@ _REFINEMENT_SUFFIXES = frozenset(
         "tuning",
     }
 )
+_REJECTED_TARGET_INTENT_STATUSES = frozenset(
+    {
+        "prepared_launch_focus_default_avoid_rejects_target_intent",
+        "prepared_successor_focus_rejects_reviewed_mechanism",
+    }
+)
 
 
 def target_intent_binding_retry_pending(
@@ -207,6 +213,8 @@ def selected_target_intent_payload(
 ) -> dict[str, Any]:
     if not isinstance(target_intent, Mapping):
         return {}
+    if target_intent_rejected(target_intent):
+        return {}
     raw_intent = target_intent.get("intent")
     intent = raw_intent if isinstance(raw_intent, Mapping) else target_intent
     action = _normalize_action(intent.get("action"))
@@ -232,6 +240,50 @@ def selected_target_intent_payload(
             "confidence": intent.get("confidence"),
         }
     )
+
+
+def target_intent_rejected(target_intent: Mapping[str, Any] | None) -> bool:
+    """Return whether a proposal-only target intent was rejected by authority."""
+
+    if not isinstance(target_intent, Mapping):
+        return False
+    payloads: list[Mapping[str, Any]] = [target_intent]
+    raw_intent = target_intent.get("intent")
+    if isinstance(raw_intent, Mapping):
+        payloads.append(raw_intent)
+    diagnostics = target_intent.get("diagnostics")
+    if isinstance(diagnostics, Mapping):
+        payloads.extend(_authority_payloads(diagnostics))
+    host_adjustments = target_intent.get("host_adjustments")
+    if isinstance(host_adjustments, Mapping):
+        payloads.extend(_authority_payloads(host_adjustments))
+
+    for payload in payloads:
+        if payload.get("target_intent_rejected") is True:
+            return True
+        status = str(
+            payload.get("authority_status")
+            or payload.get("status")
+            or payload.get("mechanism_id_status")
+            or ""
+        ).strip()
+        if status in _REJECTED_TARGET_INTENT_STATUSES:
+            return True
+    return False
+
+
+def _authority_payloads(source: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    payloads: list[Mapping[str, Any]] = []
+    for key in (
+        "target_intent_authority",
+        "launch_focus_default_avoid",
+        "launch_focus_prepared_successor",
+        "launch_focus_required_mechanism",
+    ):
+        value = source.get(key)
+        if isinstance(value, Mapping):
+            payloads.append(value)
+    return payloads
 
 
 def formal_hypothesis_target_payload(
@@ -550,6 +602,7 @@ __all__ = [
     "selected_target_intent_payload",
     "target_intent_binding_retry_feedback",
     "target_intent_binding_retry_pending",
+    "target_intent_rejected",
     "target_intent_mechanism_identity",
     "target_intent_mechanism_family",
 ]

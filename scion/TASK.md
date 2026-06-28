@@ -26,11 +26,13 @@ excluded from `DecisionFeatures` without adding CVRP-specific core logic.
 Default-avoid target-intent rejection is inherited by formal hypothesis prompts
 through the generic `target_intent_rejected` authority field, and broad
 default-avoid matching no longer uses `target_file` path tokens as mechanism
-identity. Current local head `0c0afd9b` passes the focused
-prepared-successor/proposal-pipeline suite (`58 passed`), the broader
-target-intent/schema/opportunity prompt suite (`91 passed`), the narrow
-rejected-binding/authority suite (`21 passed`), `py_compile`, and
-`git diff --check`. The current local worktree also adds CVRP-owned successor
+identity. The latest local proposal repair also keeps already rejected target
+intents from becoming strong formal-hypothesis binding sources, and narrows
+single-token broad `variants` default-avoid matches to sufficiently specific
+tokens. Focused local validation passes for prepared-successor/proposal,
+target-intent binding, schema retry, CVRP launch guidance, and v3
+problem-boundary suites, plus `py_compile` and `git diff --check`. The current
+local worktree also adds CVRP-owned successor
 review evidence: `cvrp_successor_summary` summarizes non-two-opt successor
 families from measurement-effect top rows and research-continuity signals,
 and `cvrp_opportunity_usage_summary.v2` carries per-family
@@ -45,7 +47,11 @@ successor id and exact default-avoid item, while leaving
 `bounded_local_search_variant` available only for materially new bounded
 causal paths; the next prepared CVRP attempt should prefer
 `destroy_repair_selection`/construction or another non-cross-exchange
-problem-owned mechanism. Focused local
+problem-owned mechanism. The local successor2 probe prepared and launched from
+commit `eaa11f98` with readiness/preflight clean, but failed before Protocol
+rows after three rejected-target binding mismatches; that root is
+proposal-loop failure evidence, not solver evidence, and motivated the
+rejected-target/default-avoid repair above. Focused local
 validation passes for CVRP successor provider/usage/brief slices, full
 postrun brief (`39 passed`), full postrun acceptance (`85 passed`), plus
 `py_compile` and `git diff --check`.
@@ -671,7 +677,16 @@ Current checkpoint:
   should therefore prefer `destroy_repair_selection`/construction or another
   non-cross-exchange problem-owned mechanism unless a bounded-local-search
   revisit names a distinct causal path with direct per-case objective-effect
-  telemetry.
+  telemetry. The follow-up local successor2 probe
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor2-eaa11f98-local-1r-gpt55-20260628T122607Z-claw`
+  verified the prepared manifest/readiness path but failed pre-Protocol with
+  `stopped_reason=circuit_breaker` and three target-intent binding mismatches.
+  The diagnosis is proposal-loop false blocking: route-named destroy/repair
+  targets were rejected by over-broad one-token default-avoid matching, and
+  the binding gate still treated rejected target intents as binding. The local
+  repair now prevents rejected target intents from binding formal hypotheses
+  and requires single-token `variants` default-avoid matches to use specific
+  tokens.
 - Design N skeleton implementation is present in `scion.postrun`: typed ports
   for postrun inventory, run-evidence lifecycle, exposure policy,
   problem-owned review, registry, and readiness orchestration. The current

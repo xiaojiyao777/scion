@@ -572,7 +572,10 @@ def _launch_focus_default_avoid_target_intent_match(
             continue
         avoid_tokens = _default_avoid_tokens(avoid_direction)
         overlap = [token for token in avoid_tokens if token in candidate_set]
-        if len(overlap) >= 2 or ("variants" in avoid_tokens and overlap):
+        if len(overlap) >= 2 or (
+            "variants" in avoid_tokens
+            and any(_single_token_variant_match_allowed(token) for token in overlap)
+        ):
             return {
                 "matched_default_avoid_direction": avoid_direction,
                 "matched_default_avoid_tokens": overlap,
@@ -580,6 +583,12 @@ def _launch_focus_default_avoid_target_intent_match(
                 "candidate_identity_tokens": candidate_tokens,
             }
     return {}
+
+
+def _single_token_variant_match_allowed(token: str) -> bool:
+    """Allow one-token variant matches only when the token is specific."""
+
+    return len(token) >= 8
 
 
 def _target_intent_identity_tokens(intent: Mapping[str, Any]) -> list[str]:

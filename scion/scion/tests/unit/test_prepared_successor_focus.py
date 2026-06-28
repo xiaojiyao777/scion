@@ -369,6 +369,20 @@ def test_successor_focus_rejects_default_avoid_target_intent() -> None:
     assert "mechanism_id_status" not in unrelated_file_resolution.intent
     assert unrelated_file_resolution.diagnostics == {}
 
+    generic_route_resolution = resolve_target_intent_authority(
+        {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/destroy_repair.py",
+            "mechanism_id": "route_entropy_removal",
+            "mechanism_family": "destroy_repair_selection",
+        },
+        context,
+    )
+
+    assert "mechanism_id_status" not in generic_route_resolution.intent
+    assert generic_route_resolution.diagnostics == {}
+
 
 def test_successor_default_avoid_explicit_identity_does_not_block_sibling() -> None:
     focus = _successor_launch_focus()

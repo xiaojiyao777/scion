@@ -70,13 +70,15 @@ chronology belongs in focused experiment reports and git history.
   proposal-only launch-focus guard. Default-avoid target-intent rejection is
   now inherited by formal hypothesis prompts through the generic
   `target_intent_rejected` authority field, and broad default-avoid matching
-  no longer uses `target_file` path tokens as mechanism identity. This is
-  generic field-driven proposal behavior, not CVRP-specific core logic, and
-  remains excluded from `DecisionFeatures`. Current local head `0c0afd9b`
-  passes the focused prepared-successor/proposal-pipeline suite (`58 passed`),
-  the broader target-intent/schema/opportunity prompt suite (`91 passed`), and
-  the narrow rejected-binding/authority suite (`21 passed`) plus
-  `py_compile` and `git diff --check`.
+  no longer uses `target_file` path tokens as mechanism identity. The latest
+  local repair also prevents an already rejected target intent from becoming a
+  strong formal-hypothesis binding source, and requires a single-token
+  `variants` match to use a sufficiently specific token before rejecting a
+  target. This is generic field-driven proposal behavior, not CVRP-specific
+  core logic, and remains excluded from `DecisionFeatures`. Focused local
+  validation passes for prepared-successor/proposal-pipeline, target-intent
+  binding, schema retry, CVRP launch guidance, and v3 problem-boundary suites,
+  plus `py_compile` and `git diff --check`.
 - Generic launcher resume handling is repaired locally for CVRP and warehouse:
   resumed campaign runtime state is copied forward, while stale terminal
   artifacts from the copied source campaign are quarantined under
@@ -381,6 +383,21 @@ chronology belongs in focused experiment reports and git history.
   `destroy_repair_selection` or another non-cross-exchange problem-owned
   mechanism unless a bounded-local-search revisit names a distinct causal path
   with direct per-case objective-effect telemetry.
+- Local successor2 proposal-loop probe:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor2-eaa11f98-local-1r-gpt55-20260628T122607Z-claw`.
+  Prepared launch readiness passed with completion preflight on commit
+  `eaa11f98`; the manifest carried
+  `reviewed_mechanism_ids=[large_instance_intra_route_two_opt_seed,
+  bounded_2node_cross_exchange]`, `destroy_repair_selection` as a successor
+  family, and an exact `bounded_2node_cross_exchange` default-avoid item. The
+  run failed before Protocol rows (`wrapper_exit_status=64`,
+  `stopped_reason=circuit_breaker`, `proposal_quality_blocks=3`) after three
+  target-intent binding mismatches. The useful diagnosis is proposal-layer:
+  default-avoid broad matching rejected route-named destroy/repair targets on
+  generic one-token overlap, and the binding gate then treated those rejected
+  target intents as still binding for formal hypotheses. The local repair now
+  keeps rejected target intents from acting as binding sources and narrows
+  single-token `variants` matches to specific tokens.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
   finished valid/complete and postrun-ready:
@@ -573,7 +590,10 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    large-twoopt summary. The next prepared attempt should test a materially
    different `destroy_repair_selection`/construction successor or a stronger
    bounded-local-search causal path that is explicitly distinct from
-   `bounded_2node_cross_exchange`.
+   `bounded_2node_cross_exchange`. First rerun the local successor2 probe after
+   the rejected-target/default-avoid repairs to verify the proposal loop reaches
+   a formal hypothesis and Protocol screening instead of circuit-breaking
+   before evidence generation.
 2. Continue design-first postrun/readiness cleanup only where it removes active
    risk. `scion.postrun` should own generic artifact, lifecycle, schema,
    readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit
