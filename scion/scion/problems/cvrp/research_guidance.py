@@ -27,6 +27,13 @@ SUCCESSOR_OPPORTUNITY_FAMILIES = (
     "bounded_local_search_variant",
     "destroy_repair_selection",
 )
+REVIEWED_SUCCESSOR_MECHANISM_ID = "bounded_2node_cross_exchange"
+REVIEWED_SUCCESSOR_FAMILY = "bounded_local_search_variant"
+REVIEWED_SUCCESSOR_OUTCOME_STATUS = "measured_no_positive_at_mde"
+REVIEWED_MECHANISM_IDS = (
+    REQUIRED_MECHANISM_ID,
+    REVIEWED_SUCCESSOR_MECHANISM_ID,
+)
 PROTECTED_CASES = ("CMT2", "CMT4")
 
 DEFAULT_AVOID_DIRECTIONS = (
@@ -51,6 +58,10 @@ DEFAULT_AVOID_DIRECTIONS = (
     "unchanged bounded_interroute_2opt_bridge local-search bridge",
     "high-asymmetric-promise bounded_interroute_2opt_bridge refinement",
     "unchanged cmt_slack_aware_segment_swap local-search segment swap",
+    (
+        "unchanged bounded_2node_cross_exchange bounded-local-search successor "
+        "after cvrp_successor_summary measured_no_positive_at_mde review"
+    ),
     (
         "ec052599-style weak_positive continuation when declared primary "
         "mechanism telemetry is missing or not_evaluated/not_triggered"
@@ -185,23 +196,53 @@ RESUME_CONTINUITY_REQUIREMENTS = {
         "branch-continuity caveat is recorded if copied branch cards remain absent",
     ],
 }
+REVIEWED_SUCCESSOR_EVIDENCE = {
+    "schema_version": "scion.cvrp_reviewed_successor_evidence.v1",
+    "scope": "proposal_only_prepared_handoff",
+    "proposal_visibility_only": True,
+    "decision_features_excluded": True,
+    "source_summary": "cvrp_successor_summary",
+    "mechanisms": [
+        {
+            "mechanism_id": REVIEWED_SUCCESSOR_MECHANISM_ID,
+            "mechanism_family": REVIEWED_SUCCESSOR_FAMILY,
+            "checklist_status": "proven",
+            "outcome_status": REVIEWED_SUCCESSOR_OUTCOME_STATUS,
+            "next_use_rule": (
+                "Do not spend the next CVRP branch on the same cross-exchange "
+                "successor path unless the hypothesis names a materially new "
+                "bounded-local-search causal path and direct per-case "
+                "objective-effect evidence."
+            ),
+        }
+    ],
+}
+REVIEWED_SUCCESSOR_GUIDANCE_LINE = (
+    f"Reviewed successor evidence: `{REVIEWED_SUCCESSOR_MECHANISM_ID}` "
+    f"belongs to `{REVIEWED_SUCCESSOR_FAMILY}` and has "
+    f"`{REVIEWED_SUCCESSOR_OUTCOME_STATUS}` in `cvrp_successor_summary`; "
+    "prefer destroy/repair or another non-cross-exchange causal path next."
+)
 
 NEXT_REQUIRED_DIRECTION = (
     "The `large_instance_intra_route_two_opt_seed` checklist is now "
     "reviewed evidence, not the next hard-required mechanism: current-run "
     "postrun evidence completed the activation/objective/phase and CMT2/CMT4 "
-    "checklist but measured no positive effect at or above MDE. Rotate the "
-    "next CVRP solver-design attempt to a materially different problem-owned "
-    "causal path, preferably `bounded_local_search_variant` outside the "
-    "reviewed seed path or `destroy_repair_selection`, with direct per-case "
-    "objective-effect evidence."
+    "checklist but measured no positive effect at or above MDE. The first "
+    "bounded successor, `bounded_2node_cross_exchange`, is also reviewed by "
+    "`cvrp_successor_summary` with checklist proven and "
+    "measured_no_positive_at_mde. Rotate the next CVRP solver-design attempt "
+    "preferably to `destroy_repair_selection` or another materially different "
+    "problem-owned causal path; revisit bounded local search only when the "
+    "hypothesis names a causal path distinct from cross-exchange and carries "
+    "direct per-case objective-effect evidence."
 )
 CURRENT_QUESTION = (
-    "After the large-instance intra-route two-opt checklist was proven but "
-    "measured no positive-at-MDE solver effect, can a materially different "
-    "CVRP-owned solver mechanism improve total_distance with direct "
-    "per-case objective-effect evidence and without repeating prior "
-    "default-avoid families?"
+    "After both the large-instance intra-route two-opt checklist and the "
+    "first bounded cross-exchange successor were reviewed without "
+    "positive-at-MDE solver effect, can a materially different CVRP-owned "
+    "mechanism improve total_distance with direct per-case objective-effect "
+    "evidence and without repeating prior default-avoid families?"
 )
 REQUIRED_EVIDENCE = (
     (
@@ -249,8 +290,14 @@ REQUIRED_EVIDENCE = (
     (
         "for successor bounded-local-search or destroy/repair attempts, "
         "declare the causal path difference from the reviewed intra-route "
-        "two-opt seed and from prior default-avoid families before spending "
-        "another branch slot"
+        "two-opt seed, reviewed bounded_2node_cross_exchange successor, "
+        "and prior default-avoid families before spending another branch slot"
+    ),
+    (
+        "prefer destroy_repair_selection or another non-cross-exchange "
+        "CVRP-owned causal path after bounded_2node_cross_exchange was "
+        "reviewed no-positive-at-MDE; bounded-local-search revisits must "
+        "name a new causal path and direct objective-effect telemetry"
     ),
 )
 MEASURABLE_OPPORTUNITY_CLASSES = (
@@ -264,7 +311,9 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
     ),
     (
         "bounded_local_search_variant: require feasible route-level "
-        "objective deltas with bounded search effort"
+        "objective deltas with bounded search effort; after the reviewed "
+        "bounded_2node_cross_exchange no-positive-at-MDE result, require a "
+        "bounded-local-search causal path distinct from cross-exchange"
     ),
     (
         "large_instance_intra_route_two_opt_seed: direct WSL external-control "
@@ -284,9 +333,11 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
 )
 SUCCESSOR_PORTFOLIO_RULE = (
     "Because large_instance_intra_route_two_opt_seed has complete checklist "
-    "evidence but no positive-at-MDE outcome, the next CVRP slot should be a "
-    "successor portfolio attempt rather than another same-seed refinement. "
-    "Use problem-owned evidence requirements and keep this guidance out of "
+    "evidence but no positive-at-MDE outcome, and "
+    "bounded_2node_cross_exchange has now repeated that no-positive outcome "
+    "as the first bounded successor, the next CVRP slot should prefer a "
+    "destroy/repair or otherwise non-cross-exchange portfolio attempt. Use "
+    "problem-owned evidence requirements and keep this guidance out of "
     "DecisionFeatures."
 )
 ROUTE_MERGE_EXCEPTION_RULE = (
@@ -380,8 +431,9 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "reviewed_mechanism_ids": [REQUIRED_MECHANISM_ID],
+        "reviewed_mechanism_ids": list(REVIEWED_MECHANISM_IDS),
         "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
+        "reviewed_successor_evidence": deepcopy(REVIEWED_SUCCESSOR_EVIDENCE),
         "current_question": CURRENT_QUESTION,
         "required_evidence": list(REQUIRED_EVIDENCE),
         "measurement_opportunity_diagnostics": _legacy_mapping(
@@ -416,16 +468,38 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
             description=(
                 "Require a materially different bounded-local-search or "
                 "destroy/repair causal path after the reviewed large-twoopt "
-                "no-positive-at-MDE result."
+                "and bounded cross-exchange no-positive-at-MDE results."
             ),
             mechanism_ids=SUCCESSOR_OPPORTUNITY_FAMILIES,
             protected_items=PROTECTED_CASES,
             required_fields=(
                 "successor mechanism family",
                 "material causal-path difference from reviewed large-twoopt",
+                "material causal-path difference from reviewed cross-exchange",
                 "per-case total_distance delta tied to the changed mechanism",
                 "feasibility and route-count preservation or explicit caveat",
                 "runtime budget evidence under the formal policy",
+            ),
+        ),
+        EvidenceRequirement(
+            requirement_id="bounded_cross_exchange_reviewed_no_positive",
+            category="reviewed_successor_evidence",
+            description=(
+                "The first bounded-local-search successor, "
+                f"{REVIEWED_SUCCESSOR_MECHANISM_ID}, is reviewed evidence "
+                f"with outcome {REVIEWED_SUCCESSOR_OUTCOME_STATUS}; do not "
+                "repeat it as the next CVRP attempt without a materially new "
+                "bounded-local-search causal path."
+            ),
+            mechanism_ids=(REVIEWED_SUCCESSOR_MECHANISM_ID, REVIEWED_SUCCESSOR_FAMILY),
+            required_fields=(
+                "cvrp_successor_summary checklist_status=proven",
+                (
+                    "cvrp_successor_summary "
+                    f"outcome_status={REVIEWED_SUCCESSOR_OUTCOME_STATUS}"
+                ),
+                "new bounded-local-search causal path if revisited",
+                "direct per-case total_distance objective-effect telemetry",
             ),
         ),
         EvidenceRequirement(
@@ -472,12 +546,19 @@ def _avoid_rules() -> tuple[AvoidRule, ...]:
             rule_id=f"default_avoid_{index:02d}_{_slug(text)}",
             category="default_avoid_direction",
             description=text,
-            applies_to=(REQUIRED_MECHANISM_ID,)
-            if "two-opt" in text or "2-opt" in text
-            else (),
+            applies_to=_avoid_applies_to(text),
         )
         for index, text in enumerate(DEFAULT_AVOID_DIRECTIONS, start=1)
     )
+
+
+def _avoid_applies_to(text: str) -> tuple[str, ...]:
+    applies_to: list[str] = []
+    if "two-opt" in text or "2-opt" in text:
+        applies_to.append(REQUIRED_MECHANISM_ID)
+    if REVIEWED_SUCCESSOR_MECHANISM_ID in text:
+        applies_to.append(REVIEWED_SUCCESSOR_MECHANISM_ID)
+    return tuple(applies_to)
 
 
 def _continuity_requirements() -> tuple[ContinuityRequirement, ...]:
@@ -485,6 +566,8 @@ def _continuity_requirements() -> tuple[ContinuityRequirement, ...]:
     related_ids = (
         *SUCCESSOR_OPPORTUNITY_FAMILIES,
         REQUIRED_MECHANISM_ID,
+        REVIEWED_SUCCESSOR_MECHANISM_ID,
+        REVIEWED_SUCCESSOR_FAMILY,
         *PROTECTED_CASES,
     )
     return (
@@ -514,6 +597,7 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
                 NEXT_REQUIRED_DIRECTION,
                 CURRENT_QUESTION,
                 SUCCESSOR_PORTFOLIO_RULE,
+                REVIEWED_SUCCESSOR_GUIDANCE_LINE,
             ),
         ),
         GuidanceBlock(

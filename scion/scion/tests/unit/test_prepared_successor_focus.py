@@ -19,6 +19,7 @@ from scion.tests.unit.agentic_schema_test_support import (
 )
 
 REVIEWED_ID = "large_instance_intra_route_two_opt_seed"
+REVIEWED_ID_2 = "bounded_2node_cross_exchange"
 SUCCESSOR_ID = "bounded_local_search_variant_probe"
 SUCCESSOR_FAMILY = "bounded_local_search_variant"
 DEFAULT_AVOID = "route-pressure acceptance variants"
@@ -57,7 +58,7 @@ def _branch_hygiene_guidance() -> str:
 
 def _successor_launch_focus(*, flat: bool = False) -> dict:
     focus = {
-        "reviewed_mechanism_ids": [REVIEWED_ID],
+        "reviewed_mechanism_ids": [REVIEWED_ID, REVIEWED_ID_2],
         "successor_opportunity_families": [SUCCESSOR_FAMILY],
         "default_avoid_directions": [DEFAULT_AVOID],
         "next_required_direction": "Test a materially different successor.",
@@ -159,6 +160,45 @@ def test_successor_focus_rejects_reviewed_protected_target_intent() -> None:
     assert resolution.tool_context_overrides == {}
 
 
+def test_successor_focus_rejects_second_reviewed_target_intent() -> None:
+    context = _tool_context()
+
+    resolution = resolve_target_intent_authority(
+        {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/local_search.py",
+            "mechanism_id": REVIEWED_ID_2,
+            "mechanism_family": SUCCESSOR_FAMILY,
+        },
+        context,
+    )
+
+    assert resolution.intent["mechanism_id_status"] == (
+        "prepared_successor_focus_rejects_reviewed_mechanism"
+    )
+    assert resolution.diagnostics["target_intent_rejected"] is True
+    assert resolution.diagnostics["rejected_mechanism_id"] == REVIEWED_ID_2
+
+
+def test_successor_focus_allows_new_bounded_sibling_target_intent() -> None:
+    context = _tool_context()
+
+    resolution = resolve_target_intent_authority(
+        {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/local_search.py",
+            "mechanism_id": "bounded_3node_ejection_chain_probe",
+            "mechanism_family": SUCCESSOR_FAMILY,
+        },
+        context,
+    )
+
+    assert "mechanism_id_status" not in resolution.intent
+    assert resolution.diagnostics == {}
+
+
 def test_successor_focus_detects_allowed_only_reviewed_branch_id() -> None:
     context = _tool_context(branch_hygiene=_branch_hygiene(protected=False, allowed=True))
 
@@ -175,7 +215,7 @@ def test_successor_focus_accepts_flat_launch_focus_payload() -> None:
     conflict = launch_focus_prepared_successor_conflict(context)
 
     assert conflict["active"] is True
-    assert conflict["reviewed_mechanism_ids"] == [REVIEWED_ID]
+    assert conflict["reviewed_mechanism_ids"] == [REVIEWED_ID, REVIEWED_ID_2]
     assert conflict["successor_opportunity_families"] == [SUCCESSOR_FAMILY]
 
 
@@ -488,6 +528,18 @@ def test_schema_preview_rejects_reviewed_mechanism_repeat(
     )
     assert reviewed_guard["matched_reviewed_mechanism_ids"] == [REVIEWED_ID]
     assert SUCCESSOR_FAMILY in reviewed_guard["retry_constraint"]
+
+    second_preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": _hypothesis_payload([REVIEWED_ID_2])},
+        _schema_context(tmp_path),
+    )
+
+    second_section = second_preview.structured_payload["hypothesis"]
+    second_guard = second_section["launch_research_focus_reviewed_mechanism_guard"]
+    assert second_section["passed"] is False
+    assert second_guard["passed"] is False
+    assert second_guard["matched_reviewed_mechanism_ids"] == [REVIEWED_ID_2]
 
 
 def test_schema_preview_rejects_mixed_reviewed_and_successor_mechanisms(

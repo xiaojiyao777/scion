@@ -139,6 +139,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for requirement in typed_contract["evidence_requirements"]
     )
     assert any(
+        requirement["requirement_id"]
+        == "bounded_cross_exchange_reviewed_no_positive"
+        for requirement in typed_contract["evidence_requirements"]
+    )
+    assert any(
         block["block_id"] == "successor_portfolio_direction"
         for block in typed_contract["guidance_blocks"]
     )
@@ -151,6 +156,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         manifest=prepared_manifest,
     )
     assert launch_payload["required_mechanism_ids"] == []
+    assert launch_payload["reviewed_mechanism_ids"] == [
+        "large_instance_intra_route_two_opt_seed",
+        "bounded_2node_cross_exchange",
+    ]
     assert prepared_manifest["research_focus"]["scope"] == (
         "report_only_prepared_handoff"
     )
@@ -171,6 +180,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert any(
         "cmt_slack_aware_segment_swap" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "bounded_2node_cross_exchange" in item
+        and "measured_no_positive_at_mde" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
@@ -243,19 +257,31 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
             "measurable_opportunity_classes"
         ]
     )
-    assert "materially different CVRP-owned solver mechanism" in prepared_manifest[
-        "research_focus"
-    ]["current_question"]
+    assert "materially different CVRP-owned" in prepared_manifest["research_focus"][
+        "current_question"
+    ]
+    assert "bounded cross-exchange successor" in prepared_manifest["research_focus"][
+        "current_question"
+    ]
     assert (
         "reviewed evidence"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
+    assert "preferably to `destroy_repair_selection`" in prepared_manifest[
+        "research_focus"
+    ]["next_required_direction"]
+    assert "causal path distinct from cross-exchange" in prepared_manifest[
+        "research_focus"
+    ]["next_required_direction"]
+    assert "measured_no_positive_at_mde" in prepared_manifest_md
+    assert "bounded_2node_cross_exchange" in prepared_manifest_md
     assert "Rotate" in prepared_manifest["research_focus"][
         "next_required_direction"
     ]
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
-        "large_instance_intra_route_two_opt_seed"
+        "large_instance_intra_route_two_opt_seed",
+        "bounded_2node_cross_exchange",
     ]
     assert prepared_manifest["research_focus"]["successor_opportunity_families"] == [
         "bounded_local_search_variant",

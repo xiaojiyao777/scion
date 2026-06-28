@@ -59,6 +59,26 @@ def test_prepared_successor_focus_creates_clean_fork_for_reviewed_followup():
     assert focus_audit["reviewed_mechanism_ids"] == ["reviewed_mechanism"]
 
 
+def test_prepared_successor_focus_handles_multiple_reviewed_ids():
+    branch = _branch("second-reviewed-branch")
+    branch.branch_code_status = "active_no_effect"
+    branch.branch_mechanism_ids = ("reviewed_b",)
+
+    action = Scheduler(max_active_branches=3).select_next(
+        [branch],
+        launch_research_focus=_successor_focus(
+            reviewed=("reviewed_a", "reviewed_b"),
+        ),
+    )
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.reason == PREPARED_SUCCESSOR_FOCUS_CLEAN_FORK_REASON
+    focus_audit = action.audit_metadata["prepared_successor_focus"]
+    assert focus_audit["excluded_branch_ids"] == ["second-reviewed-branch"]
+    assert focus_audit["reviewed_mechanism_ids"] == ["reviewed_a", "reviewed_b"]
+
+
 def test_prepared_successor_focus_does_not_override_required_mechanism_focus():
     branch = _branch("required-branch")
     branch.branch_code_status = "active_no_effect"

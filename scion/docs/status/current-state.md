@@ -373,7 +373,14 @@ chronology belongs in focused experiment reports and git history.
   new checker; `--require-current-run-ready` still has no failed required
   checks. Current interpretation: the remaining work is now to use this
   problem-owned successor evidence in the next CVRP/VRP design attempt, not to
-  add another generic gate.
+  add another generic gate. The current CVRP-owned guidance now carries
+  `bounded_2node_cross_exchange` as reviewed successor evidence and an exact
+  default-avoid item, while leaving the broader
+  `bounded_local_search_variant` successor family available for materially new
+  causal paths. The next prepared CVRP attempt should therefore prefer
+  `destroy_repair_selection` or another non-cross-exchange problem-owned
+  mechanism unless a bounded-local-search revisit names a distinct causal path
+  with direct per-case objective-effect telemetry.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
   finished valid/complete and postrun-ready:
@@ -562,10 +569,11 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    layer. The reviewed `large_instance_intra_route_two_opt_seed` path and the
    first bounded local-search successor are both solver-negative under current
    evidence, and the bounded successor is now explicitly reviewed through
-   `cvrp_successor_summary` rather than the old large-twoopt summary. The next
-   prepared attempt should test a materially different
-   `destroy_repair_selection`/construction successor or use the new successor
-   proof to design a stronger bounded-local-search causal path.
+   `cvrp_successor_summary` and CVRP prepared guidance rather than the old
+   large-twoopt summary. The next prepared attempt should test a materially
+   different `destroy_repair_selection`/construction successor or a stronger
+   bounded-local-search causal path that is explicitly distinct from
+   `bounded_2node_cross_exchange`.
 2. Continue design-first postrun/readiness cleanup only where it removes active
    risk. `scion.postrun` should own generic artifact, lifecycle, schema,
    readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit

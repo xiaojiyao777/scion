@@ -39,7 +39,13 @@ mechanism identity. Live brief recomputation on the latest bounded successor
 root marks `bounded_local_search_variant` evidence as checklist `proven` with
 outcome `measured_no_positive_at_mde`; the stored brief in that historical
 root predates the v2 schema and may show an optional stale usage-signature
-warning, while required current-run readiness remains clean. Focused local
+warning, while required current-run readiness remains clean. CVRP-owned
+prepared guidance now carries `bounded_2node_cross_exchange` as a reviewed
+successor id and exact default-avoid item, while leaving
+`bounded_local_search_variant` available only for materially new bounded
+causal paths; the next prepared CVRP attempt should prefer
+`destroy_repair_selection`/construction or another non-cross-exchange
+problem-owned mechanism. Focused local
 validation passes for CVRP successor provider/usage/brief slices, full
 postrun brief (`39 passed`), full postrun acceptance (`85 passed`), plus
 `py_compile` and `git diff --check`.
@@ -657,7 +663,15 @@ Current checkpoint:
   `bounded_local_search_variant` checklist `proven`, outcome
   `measured_no_positive_at_mde`, and activation/objective/phase plus CMT2/CMT4
   evidence observed. The remaining work is to use that problem-owned evidence
-  to design the next successor attempt, not another generic gate.
+  to design the next successor attempt, not another generic gate. Current
+  CVRP-owned prepared guidance now carries `bounded_2node_cross_exchange` as
+  reviewed successor evidence and an exact default-avoid item, while keeping
+  the broader `bounded_local_search_variant` family available for genuinely
+  different bounded-local-search causal paths. The next prepared CVRP attempt
+  should therefore prefer `destroy_repair_selection`/construction or another
+  non-cross-exchange problem-owned mechanism unless a bounded-local-search
+  revisit names a distinct causal path with direct per-case objective-effect
+  telemetry.
 - Design N skeleton implementation is present in `scion.postrun`: typed ports
   for postrun inventory, run-evidence lifecycle, exposure policy,
   problem-owned review, registry, and readiness orchestration. The current

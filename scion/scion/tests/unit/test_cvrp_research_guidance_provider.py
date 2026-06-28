@@ -64,6 +64,10 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert "screening MDE 9.9" in contract.measurement_summary.summary
     assert "successor_causal_path_direct_effect" in rendered.text
     assert "large_instance_intra_route_two_opt_seed" in rendered.text
+    assert "bounded_2node_cross_exchange" in rendered.text
+    assert "bounded_local_search_variant" in rendered.text
+    assert "measured_no_positive_at_mde" in rendered.text
+    assert "destroy_repair_selection" in rendered.text
     assert "no-positive-at-MDE" in rendered.text
     assert "CMT2/CMT4 case protection" in rendered.text
     assert "excluded from DecisionFeatures" in rendered.text
@@ -94,14 +98,21 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
     assert focus["reviewed_mechanism_ids"] == [
-        "large_instance_intra_route_two_opt_seed"
+        "large_instance_intra_route_two_opt_seed",
+        "bounded_2node_cross_exchange",
     ]
     assert focus["successor_opportunity_families"] == [
         "bounded_local_search_variant",
         "destroy_repair_selection",
     ]
-    assert "no positive-at-MDE" in focus["current_question"]
-    assert "Rotate" in focus["next_required_direction"]
+    assert "positive-at-MDE" in focus["current_question"]
+    assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
+    assert "preferably to `destroy_repair_selection`" in focus[
+        "next_required_direction"
+    ]
+    assert "causal path distinct from cross-exchange" in focus[
+        "next_required_direction"
+    ]
     assert focus["measurement_opportunity_diagnostics"] == measurement
     assert focus["measurement_opportunity_diagnostics"] is not measurement
     assert any(
@@ -116,6 +127,33 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "ec052599-style" in item
         for item in focus["default_avoid_directions"]
     )
+    assert any(
+        "bounded_2node_cross_exchange" in item
+        and "measured_no_positive_at_mde" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert not any(
+        item.strip().lower() == "avoid bounded_local_search_variant"
+        for item in focus["default_avoid_directions"]
+    )
+
+    successor_evidence = focus["reviewed_successor_evidence"]
+    assert successor_evidence["source_summary"] == "cvrp_successor_summary"
+    assert successor_evidence["decision_features_excluded"] is True
+    assert successor_evidence["mechanisms"] == [
+        {
+            "mechanism_id": "bounded_2node_cross_exchange",
+            "mechanism_family": "bounded_local_search_variant",
+            "checklist_status": "proven",
+            "outcome_status": "measured_no_positive_at_mde",
+            "next_use_rule": (
+                "Do not spend the next CVRP branch on the same cross-exchange "
+                "successor path unless the hypothesis names a materially new "
+                "bounded-local-search causal path and direct per-case "
+                "objective-effect evidence."
+            ),
+        }
+    ]
 
     large_twoopt = focus["large_instance_two_opt_constraints"]
     assert large_twoopt["schema_version"] == (
@@ -153,7 +191,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         },
     )
     assert launch_payload["reviewed_mechanism_ids"] == [
-        "large_instance_intra_route_two_opt_seed"
+        "large_instance_intra_route_two_opt_seed",
+        "bounded_2node_cross_exchange",
     ]
     assert launch_payload["successor_opportunity_families"] == [
         "bounded_local_search_variant",
