@@ -1,7 +1,6 @@
 """ContextManager orchestration for proposal prompt contexts."""
 from __future__ import annotations
 
-import json
 import os
 from typing import Any, Dict, List, Mapping, Optional
 
@@ -74,7 +73,7 @@ from scion.proposal.context.surfaces import (
     _solver_design_surface_names,
     _surface_target_files_for_names,
 )
-from scion.research_guidance import launch_research_guidance_payload
+from scion.research_guidance import launch_research_guidance_payload_from_env
 
 from .code_context import (
     _build_solver_design_api_manifest,
@@ -170,27 +169,7 @@ def _render_new_file_target_placeholder(target_file: str) -> str:
 def _build_launch_research_focus() -> dict[str, Any]:
     """Project prepared launch research guidance into proposal-only context."""
 
-    manifest_path = (
-        os.environ.get("PREPARED_RUN_MANIFEST")
-        or os.environ.get("SCION_PREPARED_RUN_MANIFEST")
-        or ""
-    ).strip()
-    if not manifest_path:
-        return {}
-    try:
-        with open(manifest_path, encoding="utf-8") as handle:
-            manifest = json.load(handle)
-    except (OSError, json.JSONDecodeError):
-        return {}
-    if not isinstance(manifest, Mapping):
-        return {}
-    try:
-        return launch_research_guidance_payload(
-            manifest_path=manifest_path,
-            manifest=manifest,
-        )
-    except Exception:
-        return {}
+    return launch_research_guidance_payload_from_env()
 
 
 def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:

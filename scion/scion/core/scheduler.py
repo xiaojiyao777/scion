@@ -7,6 +7,7 @@ from scion.core.branch_hygiene import (
     MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON,
     branch_is_parked_lineage,
     branch_lifecycle_new_mechanism_ineligible,
+    branch_mechanism_ids,
     branch_requires_same_mechanism_followup,
 )
 from scion.core.models import Branch, BranchState
@@ -103,6 +104,9 @@ _TERMINAL_STATES = frozenset({
 })
 
 _DEFAULT_MAX_ACTIVE_BRANCHES = 3
+PREPARED_SUCCESSOR_FOCUS_CLEAN_FORK_REASON = (
+    "prepared_successor_focus_clean_fork"
+)
 
 
 @dataclass(frozen=True)
@@ -110,6 +114,15 @@ class _SchedulerActiveSlotPolicy:
     scheduler_owned_release_reason: Callable[[Branch | None], str]
     eligible_new_branch_reclaim: Callable[[Branch], bool]
     reclaim_sort_key: Callable[[Branch], tuple[Any, ...]]
+
+
+@dataclass(frozen=True)
+class _PreparedSuccessorSchedulingFocus:
+    active: bool = False
+    configured: bool = False
+    reviewed_mechanism_ids: tuple[str, ...] = ()
+    successor_opportunity_families: tuple[str, ...] = ()
+    required_mechanism_ids: tuple[str, ...] = ()
 
 
 def _active_slot_policy() -> _SchedulerActiveSlotPolicy:
@@ -128,7 +141,12 @@ class Scheduler:
     def max_active_branches(self) -> int:
         return self._max_active_branches
 
-    def select_next(self, branches: List[Branch]) -> SchedulerAction:
+    def select_next(
+        self,
+        branches: List[Branch],
+        *,
+        launch_research_focus: Mapping[str, Any] | None = None,
+    ) -> SchedulerAction:
         """
         Select the next branch to process using lexicographic priority plus a
         small portfolio rule for low-priority research branches.
@@ -147,6 +165,9 @@ class Scheduler:
         Within the same tier, pending_retry=True branches precede others; ties
         are broken by oldest updated_at as a last-run approximation.
         """
+        successor_focus = _prepared_successor_scheduling_focus(
+            launch_research_focus
+        )
         active = [b for b in branches if b.state not in _TERMINAL_STATES]
         scheduling_statuses = {
             b.branch_id: branch_scheduling_status(b)
@@ -181,7 +202,15 @@ class Scheduler:
 
         research = [b for b in schedulable if b.state in _RESEARCH_STATES]
         if research:
-            pending_retry = [b for b in research if b.pending_retry]
+            pending_retry = [
+                b
+                for b in research
+                if b.pending_retry
+                and not _prepared_successor_focus_excludes_branch(
+                    b,
+                    successor_focus,
+                )
+            ]
             if pending_retry:
                 selected = _select_fair(pending_retry)
                 return SchedulerAction(
@@ -204,8 +233,45 @@ class Scheduler:
                     )
                 )
             ]
+            successor_excluded_research = [
+                branch
+                for branch in eligible_research
+                if _prepared_successor_focus_excludes_branch(
+                    branch,
+                    successor_focus,
+                )
+            ]
+            successor_focus_audit = _prepared_successor_focus_audit_metadata(
+                successor_focus,
+                excluded_branches=successor_excluded_research,
+            )
+            if successor_excluded_research:
+                successor_excluded_ids = {
+                    branch.branch_id for branch in successor_excluded_research
+                }
+                eligible_research = [
+                    branch
+                    for branch in eligible_research
+                    if branch.branch_id not in successor_excluded_ids
+                ]
             if not eligible_research:
                 if len(active_for_slots) < self._max_active_branches:
+                    if successor_excluded_research:
+                        return SchedulerAction(
+                            action="create_new",
+                            branch=None,
+                            reason=PREPARED_SUCCESSOR_FOCUS_CLEAN_FORK_REASON,
+                            slot="explore_new",
+                            audit_metadata=_merge_audit_metadata(
+                                _clean_fork_selection_audit(
+                                    successor_excluded_research,
+                                    reason=(
+                                        PREPARED_SUCCESSOR_FOCUS_CLEAN_FORK_REASON
+                                    ),
+                                ),
+                                successor_focus_audit,
+                            ),
+                        )
                     return SchedulerAction(
                         action="create_new",
                         branch=None,
@@ -217,6 +283,7 @@ class Scheduler:
                     branch=None,
                     reason="active_branch_limit_reached",
                     slot="capacity_blocked",
+                    audit_metadata=successor_focus_audit,
                 )
             weak_positive_priority_candidates = [
                 branch
@@ -517,6 +584,124 @@ def _same_mechanism_low_signal_followup_candidate(branch: Branch) -> bool:
         "no_effect",
         "runtime_regression",
     }
+
+
+def _prepared_successor_scheduling_focus(
+    launch_research_focus: Mapping[str, Any] | None,
+) -> _PreparedSuccessorSchedulingFocus:
+    payload = _launch_focus_research_payload(launch_research_focus)
+    if not payload:
+        return _PreparedSuccessorSchedulingFocus()
+    required_ids = _unique_strings(payload.get("required_mechanism_ids"))
+    reviewed_ids = _unique_strings(payload.get("reviewed_mechanism_ids"))
+    successor_families = _unique_strings(
+        payload.get("successor_opportunity_families")
+    )
+    configured = bool(reviewed_ids or successor_families or required_ids)
+    return _PreparedSuccessorSchedulingFocus(
+        active=bool(not required_ids and reviewed_ids and successor_families),
+        configured=configured,
+        reviewed_mechanism_ids=tuple(reviewed_ids),
+        successor_opportunity_families=tuple(successor_families),
+        required_mechanism_ids=tuple(required_ids),
+    )
+
+
+def _launch_focus_research_payload(
+    value: Mapping[str, Any] | None,
+) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    nested = value.get("launch_research_focus")
+    if isinstance(nested, Mapping):
+        return _launch_focus_research_payload(nested)
+    research_focus = value.get("research_focus")
+    if isinstance(research_focus, Mapping):
+        return research_focus
+    return value
+
+
+def _prepared_successor_focus_excludes_branch(
+    branch: Branch,
+    focus: _PreparedSuccessorSchedulingFocus,
+) -> bool:
+    if not focus.active:
+        return False
+    if not branch_requires_same_mechanism_followup(branch):
+        return False
+    reviewed_ids = set(focus.reviewed_mechanism_ids)
+    return bool(
+        reviewed_ids
+        and set(_prepared_successor_branch_mechanism_ids(branch)) & reviewed_ids
+    )
+
+
+def _prepared_successor_branch_mechanism_ids(branch: Branch | None) -> tuple[str, ...]:
+    if branch is None:
+        return ()
+    return tuple(
+        _unique_strings(
+            branch_mechanism_ids(branch),
+            getattr(branch, "allowed_mechanism_ids", ()),
+        )
+    )
+
+
+def _prepared_successor_focus_audit_metadata(
+    focus: _PreparedSuccessorSchedulingFocus,
+    *,
+    excluded_branches: Iterable[Branch],
+) -> dict[str, Any]:
+    if not focus.active:
+        return {}
+    excluded = list(excluded_branches)
+    if not excluded:
+        return {}
+    return {
+        "prepared_successor_focus": {
+            "schema_version": "scion.prepared_successor_scheduler_focus.v1",
+            "active": True,
+            "decision_features_excluded": True,
+            "proposal_visibility_only": True,
+            "required_mechanism_ids": list(focus.required_mechanism_ids),
+            "reviewed_mechanism_ids": list(focus.reviewed_mechanism_ids),
+            "successor_opportunity_families": list(
+                focus.successor_opportunity_families
+            ),
+            "excluded_branch_ids": [
+                branch.branch_id for branch in excluded if branch.branch_id
+            ],
+            "excluded_branch_mechanism_ids": {
+                branch.branch_id: list(
+                    _prepared_successor_branch_mechanism_ids(branch)
+                )
+                for branch in excluded
+                if branch.branch_id
+            },
+            "selection_policy": (
+                "reviewed_same_mechanism_followup_requires_clean_fork"
+            ),
+            "clean_fork_reason": PREPARED_SUCCESSOR_FOCUS_CLEAN_FORK_REASON,
+        }
+    }
+
+
+def _unique_strings(*values: Any) -> tuple[str, ...]:
+    items: list[str] = []
+    for value in values:
+        if isinstance(value, str):
+            candidates = (value,)
+        elif isinstance(value, Mapping):
+            candidates = value.values()
+        elif isinstance(value, Iterable):
+            candidates = value
+        else:
+            candidates = ()
+        for item in candidates:
+            text = str(item or "").strip()
+            if text and text not in items:
+                items.append(text)
+    return tuple(items)
 
 
 def branch_counts_toward_active_slots(branch: Branch) -> bool:

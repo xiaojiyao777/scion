@@ -1,0 +1,91 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+
+from scion.core.models import Branch, BranchState
+from scion.core.scheduler import (
+    PREPARED_SUCCESSOR_FOCUS_CLEAN_FORK_REASON,
+    Scheduler,
+)
+
+
+def _branch(
+    branch_id: str,
+    *,
+    state: BranchState = BranchState.EXPLORE,
+    created_offset_s: int = 0,
+) -> Branch:
+    created_at = datetime(2026, 1, 1) + timedelta(seconds=created_offset_s)
+    return Branch(
+        branch_id=branch_id,
+        state=state,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+
+def _successor_focus(
+    *,
+    required: tuple[str, ...] = (),
+    reviewed: tuple[str, ...] = ("reviewed_mechanism",),
+    successors: tuple[str, ...] = ("successor_family",),
+) -> dict[str, object]:
+    return {
+        "required_mechanism_ids": list(required),
+        "reviewed_mechanism_ids": list(reviewed),
+        "successor_opportunity_families": list(successors),
+    }
+
+
+def test_prepared_successor_focus_creates_clean_fork_for_reviewed_followup():
+    branch = _branch("reviewed-branch")
+    branch.branch_code_status = "active_no_effect"
+    branch.branch_mechanism_ids = ("reviewed_mechanism",)
+
+    action = Scheduler(max_active_branches=3).select_next(
+        [branch],
+        launch_research_focus=_successor_focus(),
+    )
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason == PREPARED_SUCCESSOR_FOCUS_CLEAN_FORK_REASON
+    focus_audit = action.audit_metadata["prepared_successor_focus"]
+    assert focus_audit["decision_features_excluded"] is True
+    assert focus_audit["excluded_branch_ids"] == ["reviewed-branch"]
+    assert focus_audit["reviewed_mechanism_ids"] == ["reviewed_mechanism"]
+
+
+def test_prepared_successor_focus_does_not_override_required_mechanism_focus():
+    branch = _branch("required-branch")
+    branch.branch_code_status = "active_no_effect"
+    branch.branch_mechanism_ids = ("reviewed_mechanism",)
+
+    action = Scheduler(max_active_branches=3).select_next(
+        [branch],
+        launch_research_focus=_successor_focus(
+            required=("required_mechanism",),
+        ),
+    )
+
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.reason == "no_effect_same_mechanism_followup"
+
+
+def test_prepared_successor_focus_runs_clean_existing_branch_when_available():
+    reviewed = _branch("reviewed-branch", created_offset_s=0)
+    reviewed.branch_code_status = "active_no_effect"
+    reviewed.branch_mechanism_ids = ("reviewed_mechanism",)
+    clean = _branch("clean-branch", created_offset_s=10)
+
+    action = Scheduler(max_active_branches=3).select_next(
+        [reviewed, clean],
+        launch_research_focus=_successor_focus(),
+    )
+
+    assert action.action == "run_existing"
+    assert action.branch is clean

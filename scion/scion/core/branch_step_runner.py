@@ -93,6 +93,21 @@ class BranchStepRunner:
     hypothesis_store: Any
     record_scheduler_result: Optional[Callable[[StepResult], None]] = None
     decision_provenance_for: Callable[[str], dict[str, Any]] = lambda _branch_id: {}
+    launch_research_focus_provider: Callable[[], Mapping[str, Any]] = lambda: {}
+
+    def _select_next(self, active: list[Branch]) -> SchedulerAction:
+        return self.scheduler.select_next(
+            active,
+            launch_research_focus=self._launch_research_focus(),
+        )
+
+    def _launch_research_focus(self) -> Mapping[str, Any]:
+        try:
+            focus = self.launch_research_focus_provider()
+        except Exception as exc:  # pragma: no cover - defensive runtime guard
+            logger.debug("launch_research_focus_provider failed: %s", exc)
+            return {}
+        return focus if isinstance(focus, Mapping) else {}
 
     def run_one_step(self) -> StepResult:
         """Execute one campaign step and return a StepResult."""
@@ -122,7 +137,7 @@ class BranchStepRunner:
                 if reconciliation.changed:
                     active = self.branch_controller.get_active_branches()
 
-        sched = self.scheduler.select_next(active)
+        sched = self._select_next(active)
         if sched.action == "at_capacity" and max_active_branches is not None:
             reconciliation = reclaim_active_slot_for_new_branch(
                 active,
@@ -135,7 +150,7 @@ class BranchStepRunner:
                 )
                 if reconciliation.changed:
                     active = self.branch_controller.get_active_branches()
-                    sched = self.scheduler.select_next(active)
+                    sched = self._select_next(active)
 
         def finalize(
             result: StepResult,
@@ -272,7 +287,7 @@ class BranchStepRunner:
             branch_id = str(entry.get("branch_id") or "")
             if branch_id:
                 self.persist_branch_state(branch_id)
-        sched = self.scheduler.select_next(active)
+        sched = self._select_next(active)
         branch = getattr(sched, "branch", None)
         if pending_materialized:
             scheduler_audit = dict(getattr(sched, "audit_metadata", None) or {})
@@ -435,7 +450,7 @@ class BranchStepRunner:
             )
 
         active = self.branch_controller.get_active_branches()
-        sched = self.scheduler.select_next(active)
+        sched = self._select_next(active)
         branch = getattr(sched, "branch", None)
 
         def skip(reason: str) -> StepResult:

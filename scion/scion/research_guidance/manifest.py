@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import fields, is_dataclass
 from pathlib import Path
@@ -247,6 +248,46 @@ def launch_research_guidance_payload(
             rendered.text.encode("utf-8")
         ).hexdigest(),
     }
+
+
+def launch_research_guidance_payload_from_path(
+    manifest_path: str | Path,
+) -> dict[str, Any]:
+    """Build launch guidance from a prepared manifest path, returning empty on miss."""
+
+    path = str(manifest_path or "").strip()
+    if not path:
+        return {}
+    try:
+        with open(path, encoding="utf-8") as handle:
+            manifest = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(manifest, Mapping):
+        return {}
+    try:
+        return launch_research_guidance_payload(
+            manifest_path=path,
+            manifest=manifest,
+        )
+    except Exception:
+        return {}
+
+
+def launch_research_guidance_payload_from_env(
+    env: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Return prepared launch guidance declared by the runtime environment."""
+
+    source = os.environ if env is None else env
+    manifest_path = str(
+        source.get("PREPARED_RUN_MANIFEST")
+        or source.get("SCION_PREPARED_RUN_MANIFEST")
+        or ""
+    ).strip()
+    if not manifest_path:
+        return {}
+    return launch_research_guidance_payload_from_path(manifest_path)
 
 
 def research_guidance_projection_summary(

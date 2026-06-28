@@ -138,7 +138,9 @@ def _runner(
         schedule_branch=lambda branch_id: None,
         apply_decision=lambda branch_id, decision: None,
     )
-    scheduler = SimpleNamespace(select_next=lambda active: scheduler_action)
+    scheduler = SimpleNamespace(
+        select_next=lambda active, **kwargs: scheduler_action
+    )
     branch_store = SimpleNamespace(save=lambda branch: None)
     selected_explore_result = explore_result or StepResult(
         action="explore",

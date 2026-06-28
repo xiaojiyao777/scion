@@ -76,6 +76,7 @@ from scion.proposal.engine import CreativeLayer
 from scion.proposal.journal import CampaignJournal
 from scion.proposal.research_log import CampaignResearchLog
 from scion.proposal.search_memory import CampaignSearchMemory
+from scion.research_guidance import launch_research_guidance_payload_from_env
 from scion.runtime.workspace import WorkspaceMaterializer
 
 
@@ -175,6 +176,7 @@ def compose_campaign_services(
     owner._campaign_dir = campaign_dir
     owner._campaign_id = str(uuid.uuid4())
     owner._status_reporter = StatusReporter(campaign_dir)
+    owner._launch_research_focus = launch_research_guidance_payload_from_env()
     owner._last_status_result = None
     owner._current_status_progress = None
     owner._last_stop_reason = None
@@ -603,6 +605,11 @@ def compose_campaign_services(
         increment_round=owner._increment_round,
         increment_rounds_since_last_promote=owner._increment_rounds_since_last_promote,
         hypothesis_store=owner._hyp_store,
+        launch_research_focus_provider=lambda: getattr(
+            owner,
+            "_launch_research_focus",
+            {},
+        ),
     )
     owner._proposal_pipeline = ProposalPipeline(
         creative=owner._creative,

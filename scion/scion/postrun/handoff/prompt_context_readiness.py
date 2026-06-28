@@ -45,7 +45,7 @@ RESEARCH_SHAPE_PROMPT_MARKERS = {
 }
 LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS = {
     "manifest_env_reader": (
-        "scion/scion/proposal/context_manager/manager.py",
+        "scion/scion/research_guidance/manifest.py",
         "PREPARED_RUN_MANIFEST",
     ),
     "context_payload": (
