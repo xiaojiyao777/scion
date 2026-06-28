@@ -159,6 +159,49 @@ def test_cvrp_opportunity_usage_keeps_missing_requirement_unproven() -> None:
     )
 
 
+def test_cvrp_opportunity_usage_applies_successor_family_proof() -> None:
+    summary = build_cvrp_opportunity_usage_summary(
+        problem_family="cvrp",
+        current_run_evidence=True,
+        prompt_context_visibility_summary=_visible_prompt_summary(),
+        proposal_trajectory_manifests=[
+            {
+                "sessions": [
+                    _session(
+                        "s-bounded-successor",
+                        mechanism_ids=["bounded_2node_cross_exchange"],
+                        target_file="policies/baseline_modules/local_search.py",
+                    )
+                ],
+            }
+        ],
+        cvrp_successor_summary=_successor_summary(
+            "bounded_local_search_variant",
+            checklist_status="unproven",
+            missing=["missing_phase_telemetry"],
+        ),
+    )
+
+    assert summary["usage_status"] == "checklist_unproven"
+    assert summary["counts"]["opportunity_evidence_checklist_unproven"] == 1
+    assert (
+        summary["required_evidence_proofs"]["bounded_local_search_variant"][
+            "checklist_status"
+        ]
+        == "unproven"
+    )
+    assert summary["entries"][0]["opportunity_families"] == [
+        "bounded_local_search_variant"
+    ]
+    assert summary["entries"][0]["required_evidence_family"] == (
+        "bounded_local_search_variant"
+    )
+    assert summary["entries"][0]["required_evidence_status"] == "unproven"
+    assert "required_evidence_missing_phase_telemetry" in (
+        summary["entries"][0]["reason_codes"]
+    )
+
+
 def test_cvrp_opportunity_usage_requires_visible_summary() -> None:
     summary = build_cvrp_opportunity_usage_summary(
         problem_family="cvrp",
@@ -412,6 +455,44 @@ def _large_twoopt_summary_with_requirement_status(
                     else [],
                     "missing": [],
                 },
+            }
+        },
+    }
+
+
+def _successor_summary(
+    family: str,
+    *,
+    checklist_status: str,
+    missing: list[str] | None = None,
+) -> dict[str, object]:
+    complete = checklist_status == "proven"
+    return {
+        "schema_version": "scion.postrun_cvrp_successor_summary.v1",
+        "problem_family": "cvrp",
+        "current_run_evidence": True,
+        "available": True,
+        "by_family": {
+            family: {
+                "schema_version": (
+                    "scion.postrun_cvrp_successor_required_evidence_proof.v1"
+                ),
+                "problem_family": "cvrp",
+                "mechanism_family": family,
+                "checklist_status": checklist_status,
+                "checklist_complete": complete,
+                "outcome_status": "measured_no_positive_at_mde",
+                "outcome_direct_evidence_ready": complete,
+                "mechanism_family_available": True,
+                "protocol_row_count": 1,
+                "complete_direct_evidence_row_count": 1 if complete else 0,
+                "positive_effect_row_count": 0,
+                "activation_observed_count": 1,
+                "objective_effect_observed_count": 1,
+                "phase_telemetry_observed_count": 1 if complete else 0,
+                "protected_case_complete_row_count": 1,
+                "protected_cases_observed": ["CMT2", "CMT4"],
+                "missing": missing or [],
             }
         },
     }

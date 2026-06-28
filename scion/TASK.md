@@ -30,7 +30,19 @@ identity. Current local head `0c0afd9b` passes the focused
 prepared-successor/proposal-pipeline suite (`58 passed`), the broader
 target-intent/schema/opportunity prompt suite (`91 passed`), the narrow
 rejected-binding/authority suite (`21 passed`), `py_compile`, and
-`git diff --check`.
+`git diff --check`. The current local worktree also adds CVRP-owned successor
+review evidence: `cvrp_successor_summary` summarizes non-two-opt successor
+families from measurement-effect top rows and research-continuity signals,
+and `cvrp_opportunity_usage_summary.v2` carries per-family
+`required_evidence_proofs` without using `target_file` path tokens as
+mechanism identity. Live brief recomputation on the latest bounded successor
+root marks `bounded_local_search_variant` evidence as checklist `proven` with
+outcome `measured_no_positive_at_mde`; the stored brief in that historical
+root predates the v2 schema and may show an optional stale usage-signature
+warning, while required current-run readiness remains clean. Focused local
+validation passes for CVRP successor provider/usage/brief slices, full
+postrun brief (`39 passed`), full postrun acceptance (`85 passed`), plus
+`py_compile` and `git diff --check`.
 A generic launcher resume/status repair is also
 implemented locally: CVRP and warehouse resume launches now quarantine copied
 terminal artifacts under `run_root/resume_snapshot/` instead of canonical
@@ -639,9 +651,13 @@ Current checkpoint:
   effect/MDE `-0.10101`. Case-level signal was mixed: CMT4 was positive/tie,
   CMT2 was 0/4 losses. Current interpretation: Scion can now route a
   materially different successor into code and formal screening, but this
-  bounded local-search successor did not improve the solver; the remaining
-  work is problem-owned successor review/provider design, not another generic
-  gate.
+  bounded local-search successor did not improve the solver. The current local
+  successor-review repair now makes this explicit through
+  `cvrp_successor_summary`: live brief recomputation marks
+  `bounded_local_search_variant` checklist `proven`, outcome
+  `measured_no_positive_at_mde`, and activation/objective/phase plus CMT2/CMT4
+  evidence observed. The remaining work is to use that problem-owned evidence
+  to design the next successor attempt, not another generic gate.
 - Design N skeleton implementation is present in `scion.postrun`: typed ports
   for postrun inventory, run-evidence lifecycle, exposure policy,
   problem-owned review, registry, and readiness orchestration. The current

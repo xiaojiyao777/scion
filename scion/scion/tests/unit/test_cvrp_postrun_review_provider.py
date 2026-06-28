@@ -36,6 +36,30 @@ def test_cvrp_postrun_provider_keeps_legacy_summary_shape_problem_owned() -> Non
     assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
 
 
+def test_cvrp_postrun_provider_builds_successor_summary_problem_owned() -> None:
+    summaries = CvrpPostrunSummaryProvider().build_summaries(
+        _context(measurement_effect_summary=_bounded_successor_measurement_summary())
+    )
+    summary = summaries["cvrp_successor_summary"]
+    bounded = summary["by_family"]["bounded_local_search_variant"]
+
+    assert summary["schema_version"] == "scion.postrun_cvrp_successor_summary.v1"
+    assert summary["report_only"] is True
+    assert summary["quality_judgment"] is False
+    assert summary["decision_features_excluded"] is True
+    assert summary["available"] is True
+    assert summary["problem_family"] == CVRP_PROBLEM_FAMILY
+    assert summary["observed_successor_families"] == [
+        "bounded_local_search_variant"
+    ]
+    assert bounded["checklist_status"] == "proven"
+    assert bounded["outcome_status"] == "measured_no_positive_at_mde"
+    assert bounded["activation_observed_count"] == 1
+    assert bounded["objective_effect_observed_count"] == 1
+    assert bounded["phase_telemetry_observed_count"] == 1
+    assert bounded["protected_cases_observed"] == ["CMT2", "CMT4"]
+
+
 def test_cvrp_postrun_review_port_uses_existing_summary_without_raw_prompt_parse() -> None:
     summary = _build_cvrp_large_twoopt_summary()
     review = CvrpLargeTwoOptReviewPort().review(
@@ -115,6 +139,7 @@ def _build_cvrp_large_twoopt_summary() -> dict[str, Any]:
 def _context(
     *,
     inventory: dict[str, Any] | None = None,
+    measurement_effect_summary: dict[str, Any] | None = None,
 ) -> ProblemPostrunReviewContext:
     return ProblemPostrunReviewContext(
         inventory=inventory or _inventory(),
@@ -129,7 +154,7 @@ def _context(
                 "stage_rows": {"screening": 1},
             }
         },
-        measurement_effect_summary={
+        measurement_effect_summary=measurement_effect_summary or {
             "available": True,
             "aggregate": {
                 "protocol_row_count": 1,
@@ -189,4 +214,64 @@ def _inventory() -> dict[str, Any]:
             "formal_screened_candidates": 1,
             "protocol_evaluated_candidates": 1,
         },
+    }
+
+
+def _bounded_successor_measurement_summary() -> dict[str, Any]:
+    return {
+        "available": True,
+        "aggregate": {
+            "protocol_row_count": 1,
+            "rows_at_or_above_mde": 0,
+            "rows_with_ci_high_below_mde": 1,
+            "max_effect_to_mde_ratio": 0.0,
+            "interpretation_counts": {"below_mde": 1},
+            "mechanism_family_mapped_row_count": 1,
+            "mechanism_family_unmapped_row_count": 0,
+            "mechanism_family_effects": {
+                "bounded_2node_cross_exchange": {
+                    "protocol_row_count": 1,
+                    "positive_rows": 0,
+                    "nonpositive_rows": 1,
+                    "rows_at_or_above_mde": 0,
+                    "rows_with_ci_high_below_mde": 1,
+                    "max_effect_to_mde_ratio": 0.0,
+                }
+            },
+        },
+        "entries": [
+            {
+                "protocol_effects_vs_mde": {
+                    "top_rows_by_effect_to_mde": [
+                        {
+                            "round": 1,
+                            "branch_id": "branch-1",
+                            "mechanism_family": "bounded_2node_cross_exchange",
+                            "stage": "screening",
+                            "median_delta": 0.0,
+                            "positive_effect_at_or_above_mde": False,
+                            "mechanism_evidence": {
+                                "primary_mechanism": "bounded_2node_cross_exchange",
+                                "primary_activation_status": "observed",
+                                "primary_effect_status": "zero_objective_effect",
+                                "activation_evidence_status": "activation_observed",
+                                "objective_effect_status": "zero_objective_effect",
+                            },
+                            "case_level_total_distance_deltas": {
+                                "CMT2": {"candidate_minus_champion": 1.0},
+                                "CMT4": {"candidate_minus_champion": -1.0},
+                            },
+                            "candidate_phase_telemetry_summary": {
+                                "buckets": {
+                                    "bounded_2node_cross_exchange": {
+                                        "weighted_sum_ms": 20.0,
+                                        "max_ms": 10.0,
+                                    }
+                                }
+                            },
+                        }
+                    ]
+                }
+            }
+        ],
     }

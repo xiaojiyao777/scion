@@ -160,12 +160,16 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
     cvrp_large_twoopt_summary = dict(
         cvrp_problem_summaries.get("cvrp_large_twoopt_summary") or {}
     )
+    cvrp_successor_summary = dict(
+        cvrp_problem_summaries.get("cvrp_successor_summary") or {}
+    )
     cvrp_opportunity_usage_summary = build_cvrp_opportunity_usage_summary(
         problem_family=_inventory_problem_family(inventory),
         current_run_evidence=_inventory_current_run_evidence(inventory),
         prompt_context_visibility_summary=prompt_context_visibility_summary,
         proposal_trajectory_manifests=proposal_trajectory_manifests,
         cvrp_large_twoopt_summary=cvrp_large_twoopt_summary,
+        cvrp_successor_summary=cvrp_successor_summary,
     )
     return {
         "schema_version": SCHEMA_VERSION,
@@ -206,6 +210,7 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "champion_progress_summary": champion_progress_summary,
         "warehouse_followup_summary": warehouse_followup_summary,
         "cvrp_large_twoopt_summary": cvrp_large_twoopt_summary,
+        "cvrp_successor_summary": cvrp_successor_summary,
         "cvrp_opportunity_usage_summary": cvrp_opportunity_usage_summary,
         "stop_conditions": _stop_conditions(inventory),
         "required_questions": _required_questions(

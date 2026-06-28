@@ -20,6 +20,7 @@ from scion.problems.cvrp.large_twoopt_review import (
     problem_research_continuity_signal,
 )
 from scion.problems.cvrp.research_guidance import CVRP_PROBLEM_FAMILY
+from scion.problems.cvrp.successor_review import cvrp_successor_summary
 
 
 _BLOCKING_CVRP_LARGE_TWOOPT_GAPS = frozenset(
@@ -77,7 +78,12 @@ class CvrpPostrunSummaryProvider:
                 runtime_feedback_summary=context.runtime_feedback_summary,
                 failure_taxonomy_summary=context.failure_taxonomy_summary,
                 research_continuity_summary=context.research_continuity_summary,
-            )
+            ),
+            "cvrp_successor_summary": cvrp_successor_summary(
+                context.inventory,
+                measurement_effect_summary=context.measurement_effect_summary,
+                research_continuity_summary=context.research_continuity_summary,
+            ),
         }
 
 

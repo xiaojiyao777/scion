@@ -461,7 +461,11 @@ def _problem_family(
     brief_contract = _mapping_or_empty(brief.get("prepared_run_contract"))
     if isinstance(brief_contract.get("problem_family"), str):
         return str(brief_contract["problem_family"])
-    for key in ("warehouse_followup_summary", "cvrp_large_twoopt_summary"):
+    for key in (
+        "warehouse_followup_summary",
+        "cvrp_large_twoopt_summary",
+        "cvrp_successor_summary",
+    ):
         summary = _mapping_or_empty(brief.get(key))
         if summary.get("available") is True and isinstance(
             summary.get("problem_family"),
@@ -656,6 +660,9 @@ def _cvrp_opportunity_usage_actionability(
             _mapping_or_empty(brief.get("cvrp_large_twoopt_summary"))
             if summary.get("required_evidence_proof")
             else None
+        ),
+        cvrp_successor_summary=_mapping_or_empty(
+            brief.get("cvrp_successor_summary")
         ),
     )
 

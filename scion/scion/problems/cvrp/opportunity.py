@@ -147,6 +147,7 @@ def _evidence_requirements(
     requirements: list[OpportunityEvidenceRequirement] = []
     recipe = _mapping_or_empty(source.get("top_opportunity_recipe"))
     large_twoopt_signal = _large_twoopt_postrun_signal(postrun_reports)
+    successor_signal = _successor_postrun_signal(postrun_reports)
     large_twoopt_reviewed = _large_twoopt_reviewed_no_positive_at_mde(
         large_twoopt_signal
     )
@@ -155,7 +156,7 @@ def _evidence_requirements(
             recipe
         )
     if large_twoopt_reviewed:
-        requirements.extend(_successor_evidence_requirements())
+        requirements.extend(_successor_evidence_requirements(successor_signal))
     if recipe:
         family = str(recipe.get("mechanism_family") or REQUIRED_MECHANISM_ID)
         requirements.append(
@@ -230,7 +231,9 @@ def _evidence_requirements(
     return tuple(requirements)
 
 
-def _successor_evidence_requirements() -> tuple[OpportunityEvidenceRequirement, ...]:
+def _successor_evidence_requirements(
+    successor_signal: Mapping[str, Any] | None = None,
+) -> tuple[OpportunityEvidenceRequirement, ...]:
     common_observations = (
         "material causal-path difference from reviewed large_instance_intra_route_two_opt_seed",
         "per-case total_distance delta tied to the changed mechanism",
@@ -243,7 +246,10 @@ def _successor_evidence_requirements() -> tuple[OpportunityEvidenceRequirement, 
         OpportunityEvidenceRequirement(
             requirement_id="successor_bounded_local_search_direct_effect",
             mechanism_family=bounded_family,
-            status="successor_required_after_large_twoopt_no_positive_at_mde",
+            status=_successor_requirement_status(
+                successor_signal,
+                bounded_family,
+            ),
             summary=(
                 "The large-instance intra-route two-opt checklist is proven "
                 "but measured no positive-at-MDE effect; a bounded local-search "
@@ -257,7 +263,11 @@ def _successor_evidence_requirements() -> tuple[OpportunityEvidenceRequirement, 
             ),
             required_observations=common_observations,
             protected_cases=PROTECTED_CASES,
-            reason_codes=(
+            reason_codes=_successor_requirement_reason_codes(
+                successor_signal,
+                bounded_family,
+            )
+            or (
                 "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE",
                 "SUCCESSOR_CAUSAL_PATH_REQUIRED",
             ),
@@ -265,7 +275,10 @@ def _successor_evidence_requirements() -> tuple[OpportunityEvidenceRequirement, 
         OpportunityEvidenceRequirement(
             requirement_id="successor_destroy_repair_direct_effect",
             mechanism_family=destroy_repair_family,
-            status="successor_required_after_large_twoopt_no_positive_at_mde",
+            status=_successor_requirement_status(
+                successor_signal,
+                destroy_repair_family,
+            ),
             summary=(
                 "A destroy/repair successor is eligible only if it materially "
                 "changes removal or repair selection and reports direct "
@@ -278,7 +291,11 @@ def _successor_evidence_requirements() -> tuple[OpportunityEvidenceRequirement, 
             ),
             required_observations=common_observations,
             protected_cases=PROTECTED_CASES,
-            reason_codes=(
+            reason_codes=_successor_requirement_reason_codes(
+                successor_signal,
+                destroy_repair_family,
+            )
+            or (
                 "MATERIAL_DIFFERENCE_REQUIRED",
                 "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
             ),
@@ -300,6 +317,68 @@ def _large_twoopt_postrun_signal(
         ):
             return payload
     return {}
+
+
+def _successor_postrun_signal(
+    postrun_reports: tuple[Mapping[str, Any], ...],
+) -> dict[str, Any]:
+    for report in postrun_reports:
+        payload = _mapping_or_empty(report)
+        nested = _mapping_or_empty(payload.get("cvrp_successor_summary"))
+        if nested:
+            payload = nested
+        if payload.get("schema_version") == "scion.postrun_cvrp_successor_summary.v1":
+            return payload
+    return {}
+
+
+def _successor_requirement_status(
+    signal: Mapping[str, Any] | None,
+    family: str,
+) -> str:
+    signal = _mapping_or_empty(signal)
+    if not signal:
+        return "successor_required_after_large_twoopt_no_positive_at_mde"
+    if signal.get("current_run_evidence") is not True:
+        return "current_run_required"
+    proof = _successor_family_proof(signal, family)
+    if not proof:
+        return "current_run_no_matching_successor_evidence"
+    if proof.get("checklist_status") == "proven":
+        outcome = str(proof.get("outcome_status") or "").strip()
+        if outcome == "positive_effect_observed":
+            return "current_run_direct_evidence_positive"
+        if outcome == "measured_no_positive_at_mde":
+            return "reviewed_no_positive_at_mde"
+        return "current_run_required_evidence_observed"
+    if proof.get("mechanism_family_available") is True:
+        return "current_run_selected_but_required_evidence_missing"
+    return "current_run_checklist_not_ready"
+
+
+def _successor_requirement_reason_codes(
+    signal: Mapping[str, Any] | None,
+    family: str,
+) -> tuple[str, ...]:
+    signal = _mapping_or_empty(signal)
+    if not signal:
+        return ()
+    proof = _successor_family_proof(signal, family)
+    if not proof:
+        return ("NO_MATCHING_SUCCESSOR_EVIDENCE",)
+    missing = _string_tuple(proof.get("missing"))
+    if missing:
+        return missing
+    outcome = str(proof.get("outcome_status") or "").strip()
+    return (outcome,) if outcome else ()
+
+
+def _successor_family_proof(
+    signal: Mapping[str, Any],
+    family: str,
+) -> dict[str, Any]:
+    by_family = _mapping_or_empty(signal.get("by_family"))
+    return _mapping_or_empty(by_family.get(family))
 
 
 def _large_twoopt_requirement_status(

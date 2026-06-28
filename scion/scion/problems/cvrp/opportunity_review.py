@@ -12,9 +12,10 @@ from scion.problems.cvrp.research_guidance import (
     MEASURABLE_OPPORTUNITY_CLASSES,
     REQUIRED_MECHANISM_ID,
 )
+from scion.problems.cvrp.successor_review import cvrp_successor_proofs_by_family
 
 
-SCHEMA_VERSION = "scion.postrun_cvrp_opportunity_usage_summary.v1"
+SCHEMA_VERSION = "scion.postrun_cvrp_opportunity_usage_summary.v2"
 
 _CONTRAST_FIELD_NAMES = frozenset(
     {
@@ -38,6 +39,11 @@ _OPPORTUNITY_FAMILY_ALIASES = {
         "bounded_local_search",
         "deadline_aware_local_search",
         "local_search",
+        "bounded_2node_cross_exchange",
+        "two_node_cross_exchange",
+        "2node_cross_exchange",
+        "cross_exchange",
+        "segment_swap",
         "two_opt_intra_bounded",
     ),
     "destroy_repair_selection": (
@@ -72,6 +78,7 @@ def build_cvrp_opportunity_usage_summary(
     prompt_context_visibility_summary: Mapping[str, Any] | None = None,
     proposal_trajectory_manifests: Iterable[Mapping[str, Any]] = (),
     cvrp_large_twoopt_summary: Mapping[str, Any] | None = None,
+    cvrp_successor_summary: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Summarize whether proposal fingerprints used visible CVRP opportunities."""
 
@@ -109,15 +116,18 @@ def build_cvrp_opportunity_usage_summary(
         "counts": _empty_counts(),
         "recommended_opportunity_families": _recommended_opportunity_families(),
         "default_avoid_families": _default_avoid_family_ids(),
+        "required_evidence_proofs": {},
         "evidence_gaps": [],
         "entries": [],
     }
     if family != CVRP_PROBLEM_FAMILY:
         return base
 
-    required_evidence_proof = _large_twoopt_required_evidence_proof(
-        cvrp_large_twoopt_summary
+    required_evidence_proofs = _required_evidence_proofs(
+        cvrp_large_twoopt_summary=cvrp_large_twoopt_summary,
+        cvrp_successor_summary=cvrp_successor_summary,
     )
+    required_evidence_proof = required_evidence_proofs.get(REQUIRED_MECHANISM_ID, {})
     entries: list[dict[str, Any]] = []
     counts = _empty_counts()
     session_count = 0
@@ -131,7 +141,7 @@ def build_cvrp_opportunity_usage_summary(
             entry = _proposal_usage_entry(
                 session,
                 report_name=report_name,
-                required_evidence_proof=required_evidence_proof,
+                required_evidence_proofs=required_evidence_proofs,
             )
             if entry["usage_status"] != "uninterpretable":
                 interpretable_count += 1
@@ -159,6 +169,7 @@ def build_cvrp_opportunity_usage_summary(
         "usage_status": usage_status,
         "counts": counts,
         "required_evidence_proof": required_evidence_proof,
+        "required_evidence_proofs": required_evidence_proofs,
         "evidence_gaps": evidence_gaps,
         "entries": entries,
     }
@@ -193,6 +204,9 @@ def cvrp_opportunity_usage_signature(value: Mapping[str, Any]) -> dict[str, Any]
         "required_evidence_proof": _required_evidence_proof_signature(
             payload.get("required_evidence_proof")
         ),
+        "required_evidence_proofs": _required_evidence_proofs_signature(
+            payload.get("required_evidence_proofs")
+        ),
         "entries": [
             _entry_signature(item)
             for item in _mapping_items(payload.get("entries"))
@@ -204,7 +218,7 @@ def _proposal_usage_entry(
     session: Mapping[str, Any],
     *,
     report_name: str,
-    required_evidence_proof: Mapping[str, Any],
+    required_evidence_proofs: Mapping[str, Any],
 ) -> dict[str, Any]:
     proposal = _mapping(session.get("proposal_fingerprint"))
     if not proposal:
@@ -226,7 +240,7 @@ def _proposal_usage_entry(
         checklist_unproven = _required_checklist_unproven(
             opportunity_families,
             session,
-            required_evidence_proof=required_evidence_proof,
+            required_evidence_proofs=required_evidence_proofs,
         )
         if checklist_unproven:
             usage_status = "opportunity_evidence_checklist_unproven"
@@ -237,7 +251,7 @@ def _proposal_usage_entry(
             reason_codes.extend(
                 _required_evidence_missing_reason_codes(
                     opportunity_families,
-                    required_evidence_proof,
+                    required_evidence_proofs,
                 )
             )
         else:
@@ -268,7 +282,11 @@ def _proposal_usage_entry(
             "default_avoid_families": default_avoid_families,
             "required_evidence_status": _required_evidence_status(
                 opportunity_families,
-                required_evidence_proof,
+                required_evidence_proofs,
+            ),
+            "required_evidence_family": _required_evidence_family(
+                opportunity_families,
+                required_evidence_proofs,
             ),
             "reason_codes": reason_codes,
         }
@@ -277,7 +295,7 @@ def _proposal_usage_entry(
 
 def _proposal_terms(proposal: Mapping[str, Any]) -> tuple[str, ...]:
     values: list[str] = []
-    for key in ("selected_surface", "action", "target_file"):
+    for key in ("selected_surface", "action"):
         value = str(proposal.get(key) or "").strip()
         if value:
             values.append(value)
@@ -327,40 +345,84 @@ def _required_checklist_unproven(
     opportunity_families: list[str],
     session: Mapping[str, Any],
     *,
-    required_evidence_proof: Mapping[str, Any],
+    required_evidence_proofs: Mapping[str, Any],
 ) -> bool:
-    if REQUIRED_MECHANISM_ID not in opportunity_families:
-        return False
-    proof = _mapping(required_evidence_proof)
-    status = str(proof.get("checklist_status") or "").strip()
-    if status == "proven":
-        return False
-    if status in {"unproven", "not_ready", "unavailable"}:
-        return True
-    return not _has_structured_contrast(session)
+    for family in opportunity_families:
+        proof = _proof_for_family(required_evidence_proofs, family)
+        if not proof and family != REQUIRED_MECHANISM_ID:
+            continue
+        status = str(proof.get("checklist_status") or "").strip()
+        if status == "proven":
+            continue
+        if status in {"unproven", "not_ready", "unavailable"}:
+            return True
+        if family == REQUIRED_MECHANISM_ID and not _has_structured_contrast(session):
+            return True
+    return False
 
 
 def _required_evidence_status(
     opportunity_families: list[str],
-    required_evidence_proof: Mapping[str, Any],
+    required_evidence_proofs: Mapping[str, Any],
 ) -> str:
-    if REQUIRED_MECHANISM_ID not in opportunity_families:
+    statuses = [
+        str(proof.get("checklist_status") or "")
+        for family in opportunity_families
+        if (proof := _proof_for_family(required_evidence_proofs, family))
+    ]
+    statuses = [item for item in statuses if item]
+    if not statuses:
         return ""
-    return str(_mapping(required_evidence_proof).get("checklist_status") or "")
+    if len(set(statuses)) == 1:
+        return statuses[0]
+    return "mixed"
+
+
+def _required_evidence_family(
+    opportunity_families: list[str],
+    required_evidence_proofs: Mapping[str, Any],
+) -> str:
+    for family in opportunity_families:
+        if _proof_for_family(required_evidence_proofs, family):
+            return family
+    return ""
 
 
 def _required_evidence_missing_reason_codes(
     opportunity_families: list[str],
-    required_evidence_proof: Mapping[str, Any],
+    required_evidence_proofs: Mapping[str, Any],
 ) -> list[str]:
-    if REQUIRED_MECHANISM_ID not in opportunity_families:
-        return []
-    proof = _mapping(required_evidence_proof)
-    return [
-        f"required_evidence_{item}"
-        for item in _string_list(proof.get("missing"))
-        if item
-    ][:8]
+    reasons: list[str] = []
+    for family in opportunity_families:
+        proof = _proof_for_family(required_evidence_proofs, family)
+        reasons.extend(
+            f"required_evidence_{item}"
+            for item in _string_list(proof.get("missing"))
+            if item
+        )
+    return reasons[:8]
+
+
+def _required_evidence_proofs(
+    *,
+    cvrp_large_twoopt_summary: Mapping[str, Any] | None,
+    cvrp_successor_summary: Mapping[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    proofs: dict[str, dict[str, Any]] = {}
+    large_twoopt_proof = _large_twoopt_required_evidence_proof(
+        cvrp_large_twoopt_summary
+    )
+    if large_twoopt_proof:
+        proofs[REQUIRED_MECHANISM_ID] = large_twoopt_proof
+    proofs.update(cvrp_successor_proofs_by_family(cvrp_successor_summary))
+    return proofs
+
+
+def _proof_for_family(
+    required_evidence_proofs: Mapping[str, Any],
+    family: str,
+) -> dict[str, Any]:
+    return _mapping(_mapping(required_evidence_proofs).get(family))
 
 
 def _large_twoopt_required_evidence_proof(
@@ -551,6 +613,7 @@ def _entry_signature(value: Mapping[str, Any]) -> dict[str, Any]:
         "required_evidence_status": str(
             entry.get("required_evidence_status") or ""
         ),
+        "required_evidence_family": str(entry.get("required_evidence_family") or ""),
         "reason_codes": _string_list(entry.get("reason_codes")),
     }
 
@@ -588,6 +651,15 @@ def _required_evidence_proof_signature(value: Any) -> dict[str, Any]:
             proof.get("protected_cases_observed")
         ),
         "missing": _string_list(proof.get("missing")),
+    }
+
+
+def _required_evidence_proofs_signature(value: Any) -> dict[str, Any]:
+    proofs = _mapping(value)
+    return {
+        str(family): _required_evidence_proof_signature(proof)
+        for family, proof in sorted(proofs.items())
+        if isinstance(proof, Mapping)
     }
 
 

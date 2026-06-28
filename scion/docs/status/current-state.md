@@ -363,8 +363,17 @@ chronology belongs in focused experiment reports and git history.
   `-0.10101`. Case-level signal was mixed: CMT4 was positive/tie, CMT2 was
   0/4 losses. Current interpretation: the framework now supports a materially
   different successor attempt, but this bounded local-search successor did not
-  produce solver improvement; the remaining work is problem-owned successor
-  review/provider design, not another generic gate.
+  produce solver improvement. The current local repair adds a CVRP-owned
+  `cvrp_successor_summary` and `cvrp_opportunity_usage_summary.v2`: live brief
+  recomputation on this root recognizes `bounded_local_search_variant` direct
+  successor evidence as checklist `proven`, outcome
+  `measured_no_positive_at_mde`, with activation/objective/phase and CMT2/CMT4
+  evidence observed. The root's stored opportunity-usage brief predates this
+  schema and is expected to show an optional stale-signature warning under the
+  new checker; `--require-current-run-ready` still has no failed required
+  checks. Current interpretation: the remaining work is now to use this
+  problem-owned successor evidence in the next CVRP/VRP design attempt, not to
+  add another generic gate.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
   finished valid/complete and postrun-ready:
@@ -549,14 +558,14 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 
 ## Next Actions
 
-1. Continue CVRP/VRP successor work in the problem-owned opportunity/review
+1. Continue CVRP/VRP successor work using the problem-owned successor review
    layer. The reviewed `large_instance_intra_route_two_opt_seed` path and the
    first bounded local-search successor are both solver-negative under current
-   evidence. The next prepared attempt should either test a materially
-   different `destroy_repair_selection`/construction successor or improve the
-   CVRP successor-review provider so non-two-opt families get direct
-   activation/objective/phase and CMT2/CMT4 evidence interpretation instead of
-   being judged primarily through the old large-twoopt summary.
+   evidence, and the bounded successor is now explicitly reviewed through
+   `cvrp_successor_summary` rather than the old large-twoopt summary. The next
+   prepared attempt should test a materially different
+   `destroy_repair_selection`/construction successor or use the new successor
+   proof to design a stronger bounded-local-search causal path.
 2. Continue design-first postrun/readiness cleanup only where it removes active
    risk. `scion.postrun` should own generic artifact, lifecycle, schema,
    readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit
