@@ -112,11 +112,15 @@ chronology belongs in focused experiment reports and git history.
   brief, acceptance, and opportunity visibility suites; the
   artifact/lifecycle/evidence/review-input/prompt-visibility/research-telemetry
   port tests pass (`19 passed` each), and full postrun acceptance passes
-  (`85 passed` each) in both environments. The first postrun CLI migration
-  slice now moves generic prepared-run contract inventory checks into
-  `scion.postrun.inventory.prepared_contract`; `postrun_artifact_inventory.py`
-  keeps legacy output shape and only appends the still-unmigrated
-  CVRP/warehouse prepared-handoff checks. The new generic module is source
+  (`85 passed` each) in both environments. Prepared-run inventory now follows
+  the same authority split: generic prepared-manifest/launcher/report-family
+  checks live in `scion.postrun.inventory.prepared_contract`, while
+  CVRP-specific prepared large-twoopt measurement/protected-case/resume/split
+  coverage checks live in `scion.problems.cvrp.postrun_handoff`, and warehouse
+  follow-up/measurement handoff checks live in
+  `scion.problems.warehouse_delivery.postrun_handoff`. The legacy
+  `postrun_artifact_inventory.py` keeps output compatibility by dispatching to
+  those ports, not by owning problem semantics. The generic module is source
   guarded against CVRP/warehouse/VRP vocabulary.
 - Design O initial slice is implemented locally as
   `scion.measurement.MeasurementConsumerView`. It reduces problem-owned

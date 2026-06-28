@@ -4,22 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Callable, Mapping
 
+from scion.problems.cvrp.postrun_handoff import CVRP_LARGE_TWOOPT_REQUIREMENT_KEYS
 from scion.problems.cvrp.research_guidance import (
     PROTECTED_CASES,
     REQUIRED_MECHANISM_ID,
 )
 
-
-CVRP_LARGE_TWOOPT_REQUIREMENT_KEYS = (
-    "cvrp_large_twoopt_seed_handoff",
-    "cvrp_large_twoopt_unbounded_default_avoid_handoff",
-    "cvrp_large_twoopt_bounded_constraints_handoff",
-    "cvrp_cmt_case_protection_handoff",
-    "cvrp_resume_continuity_handoff",
-    "cvrp_measurement_mde_handoff",
-    "cvrp_low_snr_reason_handoff",
-    "cvrp_decision_boundary_handoff",
-)
 
 CVRP_LARGE_TWOOPT_REVIEW_AXES = (
     "confirm_deadline_or_remaining_time_guard_in_solver_code",

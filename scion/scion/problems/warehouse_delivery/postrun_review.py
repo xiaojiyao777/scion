@@ -10,18 +10,13 @@ from scion.postrun import (
     ProblemSummaryActionabilitySpec,
     problem_summary_common_input_consistency_detail,
 )
+from scion.problems.warehouse_delivery.postrun_handoff import (
+    WAREHOUSE_FOLLOWUP_REQUIREMENT_KEYS,
+)
 from scion.problems.warehouse_delivery.research_guidance import (
     WAREHOUSE_PROBLEM_FAMILY,
 )
 
-
-WAREHOUSE_FOLLOWUP_REQUIREMENT_KEYS = (
-    "warehouse_v2_checkpoint_handoff",
-    "warehouse_continuous_plateau_question",
-    "warehouse_required_evidence_handoff",
-    "warehouse_default_avoid_handoff",
-    "warehouse_decision_boundary_handoff",
-)
 
 WAREHOUSE_FOLLOWUP_REVIEW_AXES = (
     "preserve_or_improve_champion_v2_promotion_behavior",

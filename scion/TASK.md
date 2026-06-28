@@ -121,13 +121,15 @@ semantics, while `scion.postrun.problem_summary_common_input_consistency_detail`
 owns only common protocol/measurement/runtime/continuity/quality-block input
 projection. `check_postrun_acceptance.py` is now back under the 1000-line
 warning threshold. Local and WSL full postrun acceptance still passes
-(`85 passed` each). The first postrun CLI migration slice is implemented:
-generic prepared-run contract inventory checks now live in
-`scion.postrun.inventory.prepared_contract`, while
-`postrun_artifact_inventory.py` preserves legacy payloads and only appends the
-still-unmigrated CVRP/warehouse prepared-handoff checks. The generic module is
-source-guarded against problem-family vocabulary and keeps CVRP/warehouse/VRP
-semantics out of `scion.postrun.inventory`.
+(`85 passed` each). The prepared-run inventory migration is split by
+authority: generic prepared-manifest/launcher/report-family checks live in
+`scion.postrun.inventory.prepared_contract`, while CVRP and warehouse
+prepared-handoff checks live in `scion.problems.cvrp.postrun_handoff` and
+`scion.problems.warehouse_delivery.postrun_handoff`. The legacy
+`postrun_artifact_inventory.py` preserves JSON keys, Markdown rendering, and
+launch-readiness behavior through compatibility dispatch only. The generic
+module is source-guarded against problem-family vocabulary and keeps
+CVRP/warehouse/VRP semantics out of `scion.postrun.inventory`.
 Design O initial slice is implemented locally as
 `scion.measurement.MeasurementConsumerView`; `ProtocolConfig` now consumes the
 typed view while preserving its legacy readiness payload shape. Proposal
@@ -660,12 +662,17 @@ Current checkpoint:
   `scion.postrun.inventory.prepared_contract` now owns generic
   prepared-manifest schema, launcher field, path, git identity, secret-free,
   report-only, `decision_features_excluded`, command pointer, model preflight,
-  and report-family checks. `postrun_artifact_inventory.py` calls the package
-  port and then appends the still-legacy CVRP/warehouse handoff checks so JSON
-  keys, Markdown rendering, and launch-readiness behavior remain compatible.
-  The new generic source is guarded against CVRP/warehouse/VRP vocabulary;
-  focused local tests pass for the new port and legacy artifact inventory
-  behavior.
+  and report-family checks. CVRP owns the prepared large-twoopt measurement,
+  protected-case, resume-continuity, split-coverage, and Phase 4 requirement
+  checks in `scion.problems.cvrp.postrun_handoff`; warehouse owns follow-up
+  evidence/default-avoid/measurement handoff checks in
+  `scion.problems.warehouse_delivery.postrun_handoff`.
+  `postrun_artifact_inventory.py` now delegates to those ports so JSON keys,
+  Markdown rendering, and launch-readiness behavior remain compatible without
+  storing problem semantics in the generic inventory tool. The generic source
+  is guarded against CVRP/warehouse/VRP vocabulary; focused local tests pass
+  for the new ports, legacy artifact inventory behavior, launchers, postrun
+  brief, and problem review providers.
 - Design O initial implementation is present in
   `scion.measurement.MeasurementConsumerView`: generic consumers receive
   normalized readiness, runtime model, pairing validity, effect scale,
