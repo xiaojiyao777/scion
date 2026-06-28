@@ -9,7 +9,6 @@ import sys
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
-
 TOOLS_DIR = Path(__file__).resolve().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
@@ -17,7 +16,6 @@ SCION_ROOT = TOOLS_DIR.parent
 if str(SCION_ROOT) not in sys.path:
     sys.path.insert(0, str(SCION_ROOT))
 
-from postrun_artifact_inventory import build_inventory  # noqa: E402
 from postrun_analysis_brief import (  # noqa: E402
     _branch_research_state_summary,
     _champion_progress_summary,
@@ -53,12 +51,14 @@ from scion.problems.cvrp.postrun_review import (  # noqa: E402
     CvrpLargeTwoOptReviewPort,
     cvrp_large_twoopt_input_consistency,
 )
+from scion.problems.postrun_inventory import (
+    build_problem_inventory as build_inventory,
+)  # noqa: E402
 from scion.problems.warehouse_delivery.postrun_review import (  # noqa: E402
     WAREHOUSE_FOLLOWUP_ACTIONABILITY_SPEC,
     WarehouseFollowupReviewPort,
     warehouse_followup_input_consistency,
 )
-
 
 SCHEMA_VERSION = "scion.postrun_acceptance_readiness.v1"
 UNREADY_EXIT = 64
@@ -70,6 +70,7 @@ PROBLEM_SUMMARY_SCHEMAS = {
     key: spec.schema_version
     for key, spec in PROBLEM_SUMMARY_ACTIONABILITY_SPECS.items()
 }
+
 
 def build_readiness(
     run_root: Path | str,
@@ -158,12 +159,10 @@ def build_readiness(
         problem_detail,
         required=problem_status != "skipped",
     )
-    review_input_status, review_input_detail = (
-        _review_input_summaries_actionability(
-            root,
-            analysis_brief,
-            inventory,
-        )
+    review_input_status, review_input_detail = _review_input_summaries_actionability(
+        root,
+        analysis_brief,
+        inventory,
     )
     add_check(
         "review_input_summaries_actionability",
@@ -530,13 +529,17 @@ def _review_input_summaries_actionability(
             inventory,
         ),
     }
-    check = PostrunReviewInputAcceptancePort().summarize(
-        problem_family=problem_family,
-        interpretation=interpretation,
-        analysis_brief=brief,
-        expected_summaries=expected_summaries,
-        required_summary_keys=required_summaries,
-    ).checks[0]
+    check = (
+        PostrunReviewInputAcceptancePort()
+        .summarize(
+            problem_family=problem_family,
+            interpretation=interpretation,
+            analysis_brief=brief,
+            expected_summaries=expected_summaries,
+            required_summary_keys=required_summaries,
+        )
+        .checks[0]
+    )
     return (
         check.status,
         check.detail,
@@ -616,13 +619,18 @@ def _prompt_source_visibility_actionability(
 
     expected = _prompt_context_visibility_summary(run_root, inventory)
     failure_prefix = "cvrp" if problem_family == "cvrp" else "warehouse"
-    check = PostrunPromptVisibilityAcceptancePort().summarize(
-        problem_family=problem_family,
-        summary=_mapping_or_empty(brief.get("prompt_context_visibility_summary")),
-        expected=expected,
-        active_subject_failure_prefix=failure_prefix,
-    ).checks[0]
+    check = (
+        PostrunPromptVisibilityAcceptancePort()
+        .summarize(
+            problem_family=problem_family,
+            summary=_mapping_or_empty(brief.get("prompt_context_visibility_summary")),
+            expected=expected,
+            active_subject_failure_prefix=failure_prefix,
+        )
+        .checks[0]
+    )
     return check.status, check.detail
+
 
 def _cvrp_opportunity_usage_actionability(
     run_root: Path,
@@ -642,9 +650,7 @@ def _cvrp_opportunity_usage_actionability(
         }
 
     summary = _mapping_or_empty(brief.get("cvrp_opportunity_usage_summary"))
-    prompt_context = _mapping_or_empty(
-        brief.get("prompt_context_visibility_summary")
-    )
+    prompt_context = _mapping_or_empty(brief.get("prompt_context_visibility_summary"))
     expected = build_cvrp_opportunity_usage_summary(
         problem_family=problem_family,
         current_run_evidence=_brief_current_run_evidence(brief),
@@ -661,9 +667,7 @@ def _cvrp_opportunity_usage_actionability(
             if summary.get("required_evidence_proof")
             else None
         ),
-        cvrp_successor_summary=_mapping_or_empty(
-            brief.get("cvrp_successor_summary")
-        ),
+        cvrp_successor_summary=_mapping_or_empty(brief.get("cvrp_successor_summary")),
     )
 
     failures: list[str] = []
@@ -671,9 +675,7 @@ def _cvrp_opportunity_usage_actionability(
         failures.append("cvrp_opportunity_usage_summary_missing")
     if summary.get("schema_version") != CVRP_OPPORTUNITY_USAGE_SCHEMA:
         failures.append("cvrp_opportunity_usage_schema_stale")
-    failures.extend(
-        _boundary_marker_failures("cvrp_opportunity_usage", summary)
-    )
+    failures.extend(_boundary_marker_failures("cvrp_opportunity_usage", summary))
     for excluded_field in (
         "proposal_visibility_only",
         "raw_prompt_excluded",
@@ -684,15 +686,11 @@ def _cvrp_opportunity_usage_actionability(
             failures.append(f"cvrp_opportunity_usage_{excluded_field}_not_true")
     if summary.get("problem_family") != problem_family:
         failures.append("cvrp_opportunity_usage_problem_family_mismatch")
-    if (
-        summary.get("current_run_evidence")
-        is not _brief_current_run_evidence(brief)
-    ):
+    if summary.get("current_run_evidence") is not _brief_current_run_evidence(brief):
         failures.append("cvrp_opportunity_usage_current_run_evidence_mismatch")
-    if (
-        summary.get("opportunity_summary_visible")
-        is not _brief_problem_opportunity_summary_visible(prompt_context)
-    ):
+    if summary.get(
+        "opportunity_summary_visible"
+    ) is not _brief_problem_opportunity_summary_visible(prompt_context):
         failures.append("cvrp_opportunity_usage_visibility_mismatch")
     summary_signature = cvrp_opportunity_usage_signature(summary)
     expected_signature = cvrp_opportunity_usage_signature(expected)

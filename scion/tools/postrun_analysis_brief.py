@@ -17,7 +17,7 @@ SCION_ROOT = TOOLS_DIR.parent
 if str(SCION_ROOT) not in sys.path:
     sys.path.insert(0, str(SCION_ROOT))
 
-from postrun_artifact_inventory import HANDOFF_DOC, build_inventory  # noqa: E402
+from scion.postrun.inventory.loader import HANDOFF_DOC  # noqa: E402
 from scion.postrun import ProblemPostrunReviewContext  # noqa: E402
 from scion.postrun.opportunity_visibility import (  # noqa: E402
     add_opportunity_commitment_visibility,
@@ -36,6 +36,9 @@ from scion.problems.cvrp.opportunity_review import (  # noqa: E402
 from scion.problems.warehouse_delivery.postrun_review import (  # noqa: E402
     WarehousePostrunSummaryProvider,
 )
+from scion.problems.postrun_inventory import (
+    build_problem_inventory as build_inventory,
+)  # noqa: E402
 
 SCHEMA_VERSION = "scion.postrun_analysis_brief.v1"
 ARCHITECTURE_DOC = "scion/design/scion-architecture-v3.md"

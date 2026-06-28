@@ -5,8 +5,8 @@ import subprocess
 from pathlib import Path
 
 from scion.postrun.inventory import PreparedRunContractInventoryPort
+from scion.postrun.inventory import loader
 from scion.postrun.inventory import prepared_contract
-
 
 POSTRUN_REPORT_DIRS = (
     "summaries",
@@ -22,6 +22,23 @@ POSTRUN_REPORT_DIRS = (
 
 def test_prepared_contract_port_source_is_problem_neutral() -> None:
     source = Path(prepared_contract.__file__).read_text(encoding="utf-8").lower()
+
+    forbidden_tokens = (
+        "cvrp",
+        "vrp",
+        "cmt",
+        "large_twoopt",
+        "large-twoopt",
+        "alns",
+        "vns",
+        "warehouse",
+        "plateau",
+    )
+    assert not [token for token in forbidden_tokens if token in source]
+
+
+def test_postrun_inventory_loader_source_is_problem_neutral() -> None:
+    source = Path(loader.__file__).read_text(encoding="utf-8").lower()
 
     forbidden_tokens = (
         "cvrp",

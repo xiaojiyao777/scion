@@ -149,8 +149,22 @@ chronology belongs in focused experiment reports and git history.
   coverage checks live in `scion.problems.cvrp.postrun_handoff`, and warehouse
   follow-up/measurement handoff checks live in
   `scion.problems.warehouse_delivery.postrun_handoff`. The legacy
-  `postrun_artifact_inventory.py` keeps output compatibility by dispatching to
-  those ports, not by owning problem semantics. Prepared prompt-context focus
+  `postrun_artifact_inventory.py` is now a 443-line CLI/Markdown wrapper;
+  inventory loading lives in cohesive `scion.postrun.inventory` package
+  modules for constants, lifecycle, evidence coverage, traces, database
+  readers, prepared ports, and the public loader. Problem-owned default ports
+  plus legacy problem launcher status extensions live in
+  `scion.problems.postrun_inventory`. Output JSON keys, Markdown rendering,
+  launch-readiness behavior, and postrun acceptance compatibility are
+  preserved through that adapter boundary, not by owning problem semantics in
+  the generic inventory package. The package is source guarded against
+  CVRP/warehouse/VRP vocabulary, and all new inventory modules remain below
+  the 1000-line warning threshold. Local focused validation passes for postrun
+  inventory/brief/acceptance/rebuild and v3 boundary suites (`163 passed`);
+  strict readiness passes on the successor6 root with no required failures.
+  Launch-readiness focused tests fail before commit only because the current
+  worktree is intentionally dirty and trips `git_runtime_worktree_clean`.
+  Prepared prompt-context focus
   signals for CVRP and warehouse now come from the same problem-owned ports;
   `rebuild_prepared_handoff.py` merges those signals and retains common
   artifact orchestration plus common decision-boundary readiness. Prepared
@@ -165,8 +179,7 @@ chronology belongs in focused experiment reports and git history.
   live in `scion.postrun.handoff.prepared_prompt_context`; the legacy
   `scion/tools/prepared_prompt_context.py` path is only a compatibility
   wrapper. `rebuild_prepared_handoff.py` is back to CLI/file-output
-  orchestration rather than owning readiness semantics. The generic module is
-  source guarded against CVRP/warehouse/VRP vocabulary. Local validation
+  orchestration rather than owning readiness semantics. Local validation
   passes for rebuild delegation/problem prepared-handoff ports (`8 passed`),
   CVRP/warehouse prepare launchers (`2 passed`), py_compile, and the
   dirty-sensitive postrun artifact inventory plus launch-readiness suite

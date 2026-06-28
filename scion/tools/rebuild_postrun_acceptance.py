@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-
 TOOLS_DIR = Path(__file__).resolve().parent
 SCION_PROJECT_DIR = Path(__file__).resolve().parents[1]
 if str(SCION_PROJECT_DIR) not in sys.path:
@@ -22,10 +21,18 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from postrun_analysis_brief import build_brief, render_markdown  # noqa: E402
-from postrun_artifact_inventory import build_inventory, render_markdown as render_inventory_markdown  # noqa: E402
-from scion.core.proposal_trajectory_artifacts import write_proposal_trajectory_manifest  # noqa: E402
-from scion.core.research_efficiency_report import write_research_efficiency_report  # noqa: E402
-
+from postrun_artifact_inventory import (
+    render_markdown as render_inventory_markdown,
+)  # noqa: E402
+from scion.core.proposal_trajectory_artifacts import (
+    write_proposal_trajectory_manifest,
+)  # noqa: E402
+from scion.core.research_efficiency_report import (
+    write_research_efficiency_report,
+)  # noqa: E402
+from scion.problems.postrun_inventory import (
+    build_problem_inventory as build_inventory,
+)  # noqa: E402
 
 SCHEMA_VERSION = "scion.postrun_acceptance_rebuild.v1"
 DEFAULT_FAMILIES = (
@@ -37,6 +44,8 @@ DEFAULT_FAMILIES = (
     "inventory",
 )
 OBSERVED_CONTROL_ARMS = {"on", "record_only"}
+
+
 def rebuild_postrun_acceptance(
     run_root: Path | str,
     *,
@@ -60,17 +69,11 @@ def rebuild_postrun_acceptance(
     if not isinstance(lifecycle, dict):
         lifecycle = {}
     prepared_only = lifecycle.get("prepared_only") is True
-    preflight_failed = (
-        lifecycle.get("pre_campaign_completion_preflight_failed") is True
-    )
-    pre_campaign_infra_failure_keys = lifecycle.get(
-        "pre_campaign_infra_failure_keys"
-    )
+    preflight_failed = lifecycle.get("pre_campaign_completion_preflight_failed") is True
+    pre_campaign_infra_failure_keys = lifecycle.get("pre_campaign_infra_failure_keys")
     if not isinstance(pre_campaign_infra_failure_keys, list):
         pre_campaign_infra_failure_keys = []
-    launcher_status_unavailable = (
-        lifecycle.get("launcher_status_unavailable") is True
-    )
+    launcher_status_unavailable = lifecycle.get("launcher_status_unavailable") is True
     launcher_status_failure_key = lifecycle.get("launcher_status_failure_key")
     campaign_execution_artifacts_unavailable = (
         lifecycle.get("campaign_execution_artifacts_unavailable") is True
@@ -159,11 +162,7 @@ def rebuild_postrun_acceptance(
         )
         family_results["manifests"] = _write_family(
             "manifests",
-            [
-                report_dir
-                / "manifests"
-                / f"{stem}.proposal_trajectory_manifest.v1.json"
-            ],
+            [report_dir / "manifests" / f"{stem}.proposal_trajectory_manifest.v1.json"],
             lambda: write_proposal_trajectory_manifest(
                 campaign_dir,
                 observed_control_arm=arm,
@@ -190,9 +189,7 @@ def rebuild_postrun_acceptance(
         lambda: _write_inventory(root, report_dir, stem),
     )
 
-    complete = all(
-        result.get("status") == "ok" for result in family_results.values()
-    )
+    complete = all(result.get("status") == "ok" for result in family_results.values())
     manifest = {
         "schema_version": SCHEMA_VERSION,
         "artifact_kind": "postrun_acceptance_rebuild",
@@ -246,9 +243,7 @@ def rebuild_postrun_acceptance(
         family_results["inventory"] = _write_family(
             "inventory",
             [
-                report_dir
-                / "inventory"
-                / f"{stem}.postrun_artifact_inventory.v1.json",
+                report_dir / "inventory" / f"{stem}.postrun_artifact_inventory.v1.json",
                 report_dir / "inventory" / f"{stem}.postrun_artifact_inventory.md",
             ],
             lambda: _write_inventory(root, report_dir, stem),
@@ -379,8 +374,7 @@ def _current_run_skip_reason(
         )
     if campaign_execution_artifacts_unavailable:
         key = str(
-            campaign_execution_failure_key
-            or "campaign_execution_artifacts_unavailable"
+            campaign_execution_failure_key or "campaign_execution_artifacts_unavailable"
         )
         return (
             f"campaign_execution_artifacts_unavailable({key}): copied or partial "
@@ -413,9 +407,9 @@ def _resolve_report_stem(
             "-",
             "_",
         )
-        ablation = str(
-            execution.get("proposal_context_ablation") or "full"
-        ).replace("-", "_")
+        ablation = str(execution.get("proposal_context_ablation") or "full").replace(
+            "-", "_"
+        )
         return _safe_stem(f"{problem}_{governance}_{ablation}")
     return _safe_stem(run_root.name)
 
@@ -476,7 +470,9 @@ def _run_cli_report(
     env = os.environ.copy()
     old_path = env.get("PYTHONPATH")
     env["PYTHONPATH"] = (
-        f"{SCION_PROJECT_DIR}{os.pathsep}{old_path}" if old_path else str(SCION_PROJECT_DIR)
+        f"{SCION_PROJECT_DIR}{os.pathsep}{old_path}"
+        if old_path
+        else str(SCION_PROJECT_DIR)
     )
     result = subprocess.run(
         [sys.executable, "-m", "scion.cli.main", *args],
@@ -487,7 +483,11 @@ def _run_cli_report(
     )
     return _family_result(
         label,
-        status="ok" if result.returncode == 0 and all(path.exists() for path in outputs) else "failed",
+        status=(
+            "ok"
+            if result.returncode == 0 and all(path.exists() for path in outputs)
+            else "failed"
+        ),
         outputs=outputs,
         command=[sys.executable, "-m", "scion.cli.main", *args],
         returncode=result.returncode,
@@ -536,9 +536,7 @@ def _write_analysis_brief(run_root: Path, report_dir: Path, stem: str) -> None:
 
 def _write_inventory(run_root: Path, report_dir: Path, stem: str) -> None:
     inventory = build_inventory(run_root)
-    json_path = (
-        report_dir / "inventory" / f"{stem}.postrun_artifact_inventory.v1.json"
-    )
+    json_path = report_dir / "inventory" / f"{stem}.postrun_artifact_inventory.v1.json"
     md_path = report_dir / "inventory" / f"{stem}.postrun_artifact_inventory.md"
     json_path.write_text(_stable_json(inventory), encoding="utf-8")
     md_path.write_text(render_inventory_markdown(inventory), encoding="utf-8")

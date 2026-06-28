@@ -13,7 +13,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 TOOLS_DIR = Path(__file__).resolve().parent
 SCION_PROJECT_DIR = Path(__file__).resolve().parents[1]
 if str(SCION_PROJECT_DIR) not in sys.path:
@@ -21,11 +20,15 @@ if str(SCION_PROJECT_DIR) not in sys.path:
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from postrun_artifact_inventory import build_inventory, command_has_shell_flag  # noqa: E402
+from scion.postrun.inventory.prepared_contract import (
+    command_has_shell_flag,
+)  # noqa: E402
 from scion.postrun.handoff.prompt_context_readiness_validation import (  # noqa: E402
     check_prepared_prompt_context_readiness,
 )
-
+from scion.problems.postrun_inventory import (
+    build_problem_inventory as build_inventory,
+)  # noqa: E402
 
 SCHEMA_VERSION = "scion.launch_readiness.v1"
 PREPARED_HANDOFF_REBUILD_SCHEMA = "scion.prepared_handoff_rebuild.v1"
@@ -175,12 +178,14 @@ def build_readiness(
     add_check("inventory_loaded", "ok", str(root))
     add_check(
         "prepared_only_not_started",
-        "ok"
-        if lifecycle.get("prepared_only") is True
-        and lifecycle.get("pre_campaign_completion_preflight_failed") is not True
-        and validity.get("run_validity_status") == "prepared_only"
-        and validity.get("run_completeness_status") == "not_started"
-        else "failed",
+        (
+            "ok"
+            if lifecycle.get("prepared_only") is True
+            and lifecycle.get("pre_campaign_completion_preflight_failed") is not True
+            and validity.get("run_validity_status") == "prepared_only"
+            and validity.get("run_completeness_status") == "not_started"
+            else "failed"
+        ),
         {
             "lifecycle": lifecycle,
             "validity": validity,
@@ -188,25 +193,25 @@ def build_readiness(
     )
     add_check(
         "zero_current_run_counters",
-        "ok"
-        if all(
-            _int_or_zero(counters.get(key)) == 0
-            for key in (
-                "effective_rounds_completed",
-                "formal_screened_candidates",
-                "protocol_evaluated_candidates",
-                "screened_experiments",
-                "proposal_attempts_total",
+        (
+            "ok"
+            if all(
+                _int_or_zero(counters.get(key)) == 0
+                for key in (
+                    "effective_rounds_completed",
+                    "formal_screened_candidates",
+                    "protocol_evaluated_candidates",
+                    "screened_experiments",
+                    "proposal_attempts_total",
+                )
             )
-        )
-        else "failed",
+            else "failed"
+        ),
         counters,
     )
     add_check(
         "prepared_contract_complete",
-        "ok"
-        if prepared_contract.get("contract_complete") is True
-        else "failed",
+        "ok" if prepared_contract.get("contract_complete") is True else "failed",
         prepared_contract.get("manifest_path"),
     )
     add_check(
@@ -387,8 +392,7 @@ def build_readiness(
     static_ready = all(
         item["status"] == "ok"
         for name, item in checks.items()
-        if item.get("required") is True
-        and name != "completion_preflight"
+        if item.get("required") is True and name != "completion_preflight"
     )
     completion_ready = (
         checks["completion_preflight"]["status"] == "ok"
@@ -1415,9 +1419,7 @@ def _run_script_preflight_failure_reports(run_sh: Path) -> tuple[str, Any]:
         if pos >= 0
     ]
     writer_pos, writer_kind = (
-        min(status_writers, key=lambda item: item[0])
-        if status_writers
-        else (-1, None)
+        min(status_writers, key=lambda item: item[0]) if status_writers else (-1, None)
     )
     failure_guard_pos = text.find('if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then')
     call_search_start = failure_guard_pos if failure_guard_pos >= 0 else writer_pos
@@ -1443,20 +1445,20 @@ def _run_script_preflight_failure_reports(run_sh: Path) -> tuple[str, Any]:
         failures.append({"reason": "preflight_failure_guard_missing"})
     if writer_pos < 0:
         failures.append({"reason": "preflight_failure_status_writer_missing"})
-    if (
-        writer_pos >= 0
-        and failure_guard_pos >= 0
-        and writer_pos < failure_guard_pos
-    ):
+    if writer_pos >= 0 and failure_guard_pos >= 0 and writer_pos < failure_guard_pos:
         failures.append({"reason": "preflight_status_writer_before_failure_guard"})
     if call_pos < 0:
-        failures.append({"reason": "missing_postrun_report_call_after_preflight_failure"})
+        failures.append(
+            {"reason": "missing_postrun_report_call_after_preflight_failure"}
+        )
     if exit_pos < 0:
         failures.append({"reason": "missing_preflight_failure_exit"})
     if writer_pos >= 0 and exit_pos >= 0 and writer_pos > exit_pos:
         failures.append({"reason": "preflight_status_writer_after_exit"})
     if call_pos >= 0 and writer_pos >= 0 and call_pos < writer_pos:
-        failures.append({"reason": "postrun_report_call_before_preflight_status_writer"})
+        failures.append(
+            {"reason": "postrun_report_call_before_preflight_status_writer"}
+        )
     if call_pos >= 0 and exit_pos >= 0 and call_pos > exit_pos:
         failures.append({"reason": "postrun_report_call_after_preflight_exit"})
 
@@ -1724,9 +1726,7 @@ def _run_script_campaign_execution_marker_enforced(run_sh: Path) -> tuple[str, A
         failures.append({"reason": "campaign_execution_marker_log_marker_missing"})
 
     marker_positions = [
-        pos
-        for pos in (marker_file_pos, marker_schema_pos, marker_log_pos)
-        if pos >= 0
+        pos for pos in (marker_file_pos, marker_schema_pos, marker_log_pos) if pos >= 0
     ]
     earliest_marker_pos = min(marker_positions) if marker_positions else -1
     if (
@@ -1924,7 +1924,9 @@ def _run_script_model_route_enforced(
     env_base_url = _shell_assignment_value(launch_env_text, "SCION_BASE_URL")
 
     if not env_model:
-        failures.append({"reason": "scion_model_missing", "launch_env": str(launch_env)})
+        failures.append(
+            {"reason": "scion_model_missing", "launch_env": str(launch_env)}
+        )
     elif env_model != REQUIRED_SCION_MODEL:
         failures.append(
             {
@@ -1944,7 +1946,9 @@ def _run_script_model_route_enforced(
             }
         )
     if not env_base_url:
-        failures.append({"reason": "scion_base_url_missing", "launch_env": str(launch_env)})
+        failures.append(
+            {"reason": "scion_base_url_missing", "launch_env": str(launch_env)}
+        )
     if manifest_base_url and env_base_url and env_base_url != manifest_base_url:
         failures.append(
             {
@@ -1978,7 +1982,9 @@ def _run_script_model_route_enforced(
         else -1
     )
     proxy_base_pos = (
-        run_text.find("--base-url", proxy_pos, campaign_pos if campaign_pos >= 0 else None)
+        run_text.find(
+            "--base-url", proxy_pos, campaign_pos if campaign_pos >= 0 else None
+        )
         if proxy_base_ok
         else -1
     )
@@ -2061,7 +2067,9 @@ def _run_script_campaign_contract_consistency(
     config = _mapping_or_empty(manifest.get("config"))
     execution = _mapping_or_empty(manifest.get("execution"))
     manifest_command = manifest.get("command")
-    manifest_command_text = manifest_command if isinstance(manifest_command, str) else ""
+    manifest_command_text = (
+        manifest_command if isinstance(manifest_command, str) else ""
+    )
     manifest_run_root = str(manifest.get("run_root") or "")
     manifest_campaign_dir = str(manifest.get("campaign_dir") or "")
     manifest_path_from_root = (
@@ -2138,9 +2146,7 @@ def _run_script_campaign_contract_consistency(
     campaign_pos = _campaign_command_position(run_text)
     campaign_status_pos = run_text.find("STATUS=$?", campaign_pos)
     campaign_end_pos = (
-        campaign_status_pos
-        if campaign_status_pos >= 0
-        else len(run_text)
+        campaign_status_pos if campaign_status_pos >= 0 else len(run_text)
     )
     campaign_command_block = (
         run_text[campaign_pos:campaign_end_pos] if campaign_pos >= 0 else ""
@@ -2353,13 +2359,14 @@ def _run_script_no_early_stop_enforced(
     )
     campaign_pos = _campaign_command_position(run_text)
     campaign_status_pos = run_text.find("STATUS=$?", campaign_pos)
-    campaign_end_pos = campaign_status_pos if campaign_status_pos >= 0 else len(run_text)
+    campaign_end_pos = (
+        campaign_status_pos if campaign_status_pos >= 0 else len(run_text)
+    )
     campaign_command_block = (
         run_text[campaign_pos:campaign_end_pos] if campaign_pos >= 0 else ""
     )
-    command_has_flag = (
-        isinstance(manifest_command, str)
-        and command_has_shell_flag(manifest_command, "--disable-early-stop")
+    command_has_flag = isinstance(manifest_command, str) and command_has_shell_flag(
+        manifest_command, "--disable-early-stop"
     )
     run_script_has_flag = command_has_shell_flag(
         campaign_command_block,
@@ -2449,7 +2456,9 @@ def _run_script_proposal_headroom_enforced(
 
     campaign_pos = _campaign_command_position(run_text)
     campaign_status_pos = run_text.find("STATUS=$?", campaign_pos)
-    campaign_end_pos = campaign_status_pos if campaign_status_pos >= 0 else len(run_text)
+    campaign_end_pos = (
+        campaign_status_pos if campaign_status_pos >= 0 else len(run_text)
+    )
     campaign_command_block = (
         run_text[campaign_pos:campaign_end_pos] if campaign_pos >= 0 else ""
     )
@@ -2550,11 +2559,15 @@ def _run_script_proposal_headroom_enforced(
                         "field": field,
                         "source": source,
                         "expected_min": expected_min,
-                        "actual": env_raw
-                        if source == "launch_env"
-                        else execution.get(field)
-                        if source == "manifest_execution"
-                        else manifest_command_raw,
+                        "actual": (
+                            env_raw
+                            if source == "launch_env"
+                            else (
+                                execution.get(field)
+                                if source == "manifest_execution"
+                                else manifest_command_raw
+                            )
+                        ),
                     }
                 )
             elif value == 0 and zero_disables:
@@ -2626,10 +2639,14 @@ def _run_script_proposal_headroom_enforced(
     return ("ok" if not failures else "failed"), detail
 
 
-def _prepared_manifest_from_contract(root: Path, prepared_contract: Any) -> dict[str, Any]:
+def _prepared_manifest_from_contract(
+    root: Path, prepared_contract: Any
+) -> dict[str, Any]:
     manifest = prepared_contract if isinstance(prepared_contract, dict) else {}
     manifest_path = manifest.get("manifest_path")
-    path = Path(manifest_path) if manifest_path else root / "prepared_run_manifest.v1.json"
+    path = (
+        Path(manifest_path) if manifest_path else root / "prepared_run_manifest.v1.json"
+    )
     payload = _read_json(path)
     if not isinstance(payload, dict):
         return {}
@@ -2644,11 +2661,7 @@ def _shell_assignment_value(text: str, key: str) -> str | None:
         if not stripped or stripped.startswith("#") or not stripped.startswith(prefix):
             continue
         value = stripped[len(prefix) :].strip()
-        if (
-            len(value) >= 2
-            and value[0] == value[-1]
-            and value[0] in {"'", '"'}
-        ):
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
             value = value[1:-1]
         return value
     return None
@@ -2796,10 +2809,7 @@ def _line_is_campaign_command_echo(stripped_line: str) -> bool:
 
 
 def _line_is_non_executed_shell_text(stripped_line: str) -> bool:
-    return (
-        stripped_line.startswith("echo ")
-        or stripped_line.startswith("#")
-    )
+    return stripped_line.startswith("echo ") or stripped_line.startswith("#")
 
 
 def _run_script_postrun_reports_after_campaign(run_sh: Path) -> tuple[str, Any]:
@@ -2818,11 +2828,7 @@ def _run_script_postrun_reports_after_campaign(run_sh: Path) -> tuple[str, Any]:
         )
 
     campaign_pos = _campaign_command_position(text)
-    status_pos = (
-        text.find("STATUS=$?", campaign_pos)
-        if campaign_pos >= 0
-        else -1
-    )
+    status_pos = text.find("STATUS=$?", campaign_pos) if campaign_pos >= 0 else -1
     call_pos = (
         text.find("write_postrun_acceptance_reports", status_pos)
         if status_pos >= 0
@@ -2834,9 +2840,7 @@ def _run_script_postrun_reports_after_campaign(run_sh: Path) -> tuple[str, Any]:
         else -1
     )
     postrun_failed_marker_pos = (
-        text.find("POSTRUN_ACCEPTANCE_FAILED", call_pos)
-        if call_pos >= 0
-        else -1
+        text.find("POSTRUN_ACCEPTANCE_FAILED", call_pos) if call_pos >= 0 else -1
     )
     status_writer_pos = (
         text.find("tools/write_postrun_wrapper_status.py", call_pos)
@@ -2844,15 +2848,9 @@ def _run_script_postrun_reports_after_campaign(run_sh: Path) -> tuple[str, Any]:
         else -1
     )
     wrapper_effective_pos = (
-        text.find("WRAPPER_EXIT_STATUS_EFFECTIVE", call_pos)
-        if call_pos >= 0
-        else -1
+        text.find("WRAPPER_EXIT_STATUS_EFFECTIVE", call_pos) if call_pos >= 0 else -1
     )
-    exit_pos = (
-        text.find('exit "$STATUS"', status_pos)
-        if status_pos >= 0
-        else -1
-    )
+    exit_pos = text.find('exit "$STATUS"', status_pos) if status_pos >= 0 else -1
     failures: list[dict[str, Any]] = []
     if campaign_pos < 0:
         failures.append(
@@ -2930,7 +2928,9 @@ def _run_script_data_root_failure_reports(run_sh: Path) -> tuple[str, Any]:
     exit_pos = _find_next_exit_after(text, marker_pos)
     failures: list[dict[str, Any]] = []
     if call_pos < 0:
-        failures.append({"reason": "missing_postrun_report_call_after_data_root_failure"})
+        failures.append(
+            {"reason": "missing_postrun_report_call_after_data_root_failure"}
+        )
     if exit_pos < 0:
         failures.append({"reason": "missing_data_root_failure_exit"})
     if call_pos >= 0 and exit_pos >= 0 and call_pos > exit_pos:
@@ -3171,9 +3171,8 @@ def _find_runtime_guard_marker_position(
     for line in text.splitlines(keepends=True):
         stripped = line.strip()
         if marker in stripped:
-            non_executed = (
-                stripped.startswith("#")
-                or (not allow_echo and _line_is_non_executed_shell_text(stripped))
+            non_executed = stripped.startswith("#") or (
+                not allow_echo and _line_is_non_executed_shell_text(stripped)
             )
             if non_executed:
                 ignored += 1
@@ -3424,7 +3423,7 @@ def _prepared_handoff_rebuild_declared_outputs_present(root: Path) -> tuple[str,
                             "path": str(path),
                             "reason": "undeclared_generated_output",
                         }
-            )
+                    )
 
     detail["ok_families"] = ok_families
     detail["manifest_failures"] = manifest_failures
@@ -3434,14 +3433,16 @@ def _prepared_handoff_rebuild_declared_outputs_present(root: Path) -> tuple[str,
     detail["out_of_scope_outputs"] = out_of_scope_outputs
     detail["family_failures"] = family_failures
     return (
-        "failed"
-        if missing_outputs
-        or inconsistent_outputs
-        or unexpected_outputs
-        or out_of_scope_outputs
-        or manifest_failures
-        or family_failures
-        else "ok",
+        (
+            "failed"
+            if missing_outputs
+            or inconsistent_outputs
+            or unexpected_outputs
+            or out_of_scope_outputs
+            or manifest_failures
+            or family_failures
+            else "ok"
+        ),
         detail,
     )
 
@@ -3606,9 +3607,7 @@ def _prepared_analysis_contract_failures(
         )
 
     report_metadata = manifest_dict.get("report_metadata")
-    report_metadata_dict = (
-        report_metadata if isinstance(report_metadata, dict) else {}
-    )
+    report_metadata_dict = report_metadata if isinstance(report_metadata, dict) else {}
     expected_identity = {
         "manifest_path": str(manifest_path),
         "problem_family": manifest_dict.get("problem_family"),
@@ -3768,9 +3767,8 @@ def _prepared_contract_nested_comparison_value(
 def _prepared_contract_git_comparison_value(
     value: dict[str, Any],
 ) -> dict[str, Any]:
-    if (
-        value.get("consistent") is True
-        and value.get("commit") == value.get("manifest_commit")
+    if value.get("consistent") is True and value.get("commit") == value.get(
+        "manifest_commit"
     ):
         return {
             "commit": value.get("commit"),
@@ -4070,7 +4068,11 @@ def _with_completion_preflight_action(
         "model": model,
         "base_url": base_url,
     }
-    if classification in {"auth_token_invalidated", "not_authenticated", "unauthorized"}:
+    if classification in {
+        "auth_token_invalidated",
+        "not_authenticated",
+        "unauthorized",
+    }:
         action["next_step"] = (
             "Refresh the local proxy login, then rerun launch readiness until "
             "launch_ready=true."

@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-
 TOOLS_DIR = Path(__file__).resolve().parent
 SCION_PROJECT_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = Path(__file__).resolve().parents[2]
@@ -29,14 +28,15 @@ from postrun_analysis_brief import (  # noqa: E402
     render_markdown as render_brief_markdown,
 )
 from postrun_artifact_inventory import (  # noqa: E402
-    build_inventory,
     render_markdown as render_inventory_markdown,
 )
 from scion.postrun.handoff.prompt_context_readiness import (  # noqa: E402
     build_prepared_prompt_context_readiness,
     render_prompt_context_readiness_markdown,
 )
-
+from scion.problems.postrun_inventory import (
+    build_problem_inventory as build_inventory,
+)  # noqa: E402
 
 SCHEMA_VERSION = "scion.prepared_handoff_rebuild.v1"
 DEFAULT_FAMILIES = (
@@ -92,8 +92,7 @@ def rebuild_prepared_handoff(
     )
     family_results["prompt_context_readiness"] = _write_family(
         [
-            prompt_context_dir
-            / f"{stem}.prepared_prompt_context_readiness.v1.json",
+            prompt_context_dir / f"{stem}.prepared_prompt_context_readiness.v1.json",
             prompt_context_dir / f"{stem}.prepared_prompt_context_readiness.md",
         ],
         lambda: _write_prompt_context_readiness(root, prompt_context_dir, stem),
@@ -120,9 +119,9 @@ def rebuild_prepared_handoff(
         "run_root": str(root),
         "prepared_handoff_dir": str(handoff_dir),
         "report_stem": stem,
-        "problem_family": manifest.get("problem_family")
-        if isinstance(manifest, dict)
-        else None,
+        "problem_family": (
+            manifest.get("problem_family") if isinstance(manifest, dict) else None
+        ),
         "prepared_manifest_commit": _manifest_commit(manifest),
         "checkout_commit": _git_output(("rev-parse", "--short", "HEAD")),
         "families": family_results,
@@ -157,7 +156,9 @@ def rebuild_prepared_handoff(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_root", help="Prepared launch root.")
-    parser.add_argument("--report-stem", help="Filename stem for rebuilt handoff files.")
+    parser.add_argument(
+        "--report-stem", help="Filename stem for rebuilt handoff files."
+    )
     parser.add_argument(
         "--strict",
         action="store_true",
@@ -235,7 +236,9 @@ def _write_prompt_context_readiness(
     stem: str,
 ) -> None:
     report = build_prepared_prompt_context_readiness(root)
-    (prompt_context_dir / f"{stem}.prepared_prompt_context_readiness.v1.json").write_text(
+    (
+        prompt_context_dir / f"{stem}.prepared_prompt_context_readiness.v1.json"
+    ).write_text(
         _stable_json(report),
         encoding="utf-8",
     )
