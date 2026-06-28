@@ -631,6 +631,11 @@ def compose_campaign_services(
         handle_failure=owner._handle_failure,
         circuit_breaker=owner._circuit_breaker,
         mark_balance_exhausted=lambda: _mark_balance_exhausted(owner),
+        launch_research_focus_provider=lambda: getattr(
+            owner,
+            "_launch_research_focus",
+            {},
+        ),
         lineage_registry=owner._registry,
         split_manifest=owner._split_manifest,
         seed_ledger=owner._seed_ledger,

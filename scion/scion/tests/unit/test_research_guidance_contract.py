@@ -194,6 +194,31 @@ def test_context_only_required_mechanism_renders_without_hard_launch_binding(
     assert guard_lines == []
 
 
+def test_legacy_manifest_projects_successor_focus_metadata(tmp_path) -> None:
+    manifest = {
+        "problem_family": "dummy_family",
+        "analysis_intent": "Legacy successor focus.",
+        "research_focus": {
+            "schema_version": "legacy-focus.v1",
+            "reviewed_mechanism_ids": ["reviewed_probe"],
+            "successor_opportunity_families": ["successor_family"],
+            "default_avoid_directions": ["acceptance variants"],
+            "next_required_direction": "Choose a successor.",
+        },
+    }
+
+    payload = launch_research_guidance_payload(
+        manifest_path=tmp_path / "prepared_run_manifest.v1.json",
+        manifest=manifest,
+    )
+
+    assert payload["reviewed_mechanism_ids"] == ["reviewed_probe"]
+    assert payload["successor_opportunity_families"] == ["successor_family"]
+    assert payload["default_avoid_directions"] == ["acceptance variants"]
+    assert payload["next_required_direction"] == "Choose a successor."
+    assert "acceptance variants" in payload["guidance_text"]
+
+
 @pytest.mark.parametrize(
     ("case_name", "expected_error"),
     [

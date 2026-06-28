@@ -21,6 +21,7 @@ from scion.tests.unit.agentic_schema_test_support import (
 REVIEWED_ID = "large_instance_intra_route_two_opt_seed"
 SUCCESSOR_ID = "bounded_local_search_variant_probe"
 SUCCESSOR_FAMILY = "bounded_local_search_variant"
+DEFAULT_AVOID = "route-pressure acceptance variants"
 
 
 def _branch_hygiene(*, protected: bool = True, allowed: bool = False) -> dict:
@@ -58,6 +59,7 @@ def _successor_launch_focus(*, flat: bool = False) -> dict:
     focus = {
         "reviewed_mechanism_ids": [REVIEWED_ID],
         "successor_opportunity_families": [SUCCESSOR_FAMILY],
+        "default_avoid_directions": [DEFAULT_AVOID],
         "next_required_direction": "Test a materially different successor.",
     }
     if flat:
@@ -229,6 +231,154 @@ def test_successor_focus_prompts_do_not_force_reviewed_same_mechanism() -> None:
     assert "Select a target intent for the protected mechanism" not in target_user
 
 
+def test_successor_focus_prompts_render_on_clean_successor_branch() -> None:
+    context = _prompt_context()
+    context["branch_hygiene"] = {
+        "hypothesis_generation_mode": "open_exploration",
+        "branch_followup_policy": "open_exploration_allowed",
+        "same_mechanism_followup_required": False,
+        "protected_mechanism_ids": [],
+        "allowed_mechanism_ids": [],
+    }
+    context["branch_hygiene_guidance"] = ""
+    context["branch_followup_policy"] = "open_exploration_allowed"
+
+    conflict = launch_focus_prepared_successor_conflict(context)
+    target_blocks, target_user = _split_hypothesis_target_intent_context(context)
+    target_text = "\n\n".join(
+        str(block.get("text") or "") for block in target_blocks
+    ) + target_user
+
+    assert conflict["active"] is False
+    assert conflict["configured"] is True
+    assert "## Prepared Successor Focus" in target_text
+    assert REVIEWED_ID in target_text
+    assert SUCCESSOR_FAMILY in target_text
+    assert DEFAULT_AVOID in target_text
+    assert "Test a materially different successor." in target_text
+    assert "do not select or repeat a reviewed mechanism id" in target_text
+    assert "Do not spend this target intent on default_avoid_directions" in (
+        target_text
+    )
+    assert "## Same-Mechanism Follow-up Constraints" not in target_text
+
+
+def test_successor_focus_rejects_default_avoid_target_intent() -> None:
+    context = _tool_context(
+        branch_hygiene={
+            "hypothesis_generation_mode": "open_exploration",
+            "branch_followup_policy": "open_exploration_allowed",
+            "same_mechanism_followup_required": False,
+            "protected_mechanism_ids": [],
+            "allowed_mechanism_ids": [],
+        }
+    )
+
+    resolution = resolve_target_intent_authority(
+        {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/acceptance.py",
+            "mechanism_id": "route_pressure_acceptance",
+            "mechanism_family": "destroy_repair_selection",
+        },
+        context,
+    )
+
+    diagnostics = resolution.diagnostics
+    assert resolution.intent["mechanism_id_status"] == (
+        "prepared_launch_focus_default_avoid_rejects_target_intent"
+    )
+    assert diagnostics["target_intent_rejected"] is True
+    assert diagnostics["matched_default_avoid_direction"] == DEFAULT_AVOID
+    assert diagnostics["matched_default_avoid_tokens"] == [
+        "route",
+        "pressure",
+        "acceptance",
+    ]
+
+    variant_resolution = resolve_target_intent_authority(
+        {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/acceptance.py",
+            "mechanism_id": "variance_tempered_acceptance",
+            "mechanism_family": "destroy_repair_selection",
+        },
+        context,
+    )
+
+    assert variant_resolution.intent["mechanism_id_status"] == (
+        "prepared_launch_focus_default_avoid_rejects_target_intent"
+    )
+    assert variant_resolution.diagnostics["matched_default_avoid_tokens"] == [
+        "acceptance",
+    ]
+
+    unrelated_file_resolution = resolve_target_intent_authority(
+        {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/acceptance.py",
+            "mechanism_id": "risk_aware_capacity_probe",
+            "mechanism_family": "destroy_repair_selection",
+        },
+        context,
+    )
+
+    assert "mechanism_id_status" not in unrelated_file_resolution.intent
+    assert unrelated_file_resolution.diagnostics == {}
+
+
+def test_successor_default_avoid_explicit_identity_does_not_block_sibling() -> None:
+    focus = _successor_launch_focus()
+    focus["research_focus"]["default_avoid_directions"] = [
+        "unchanged bounded_interroute_2opt_bridge local-search bridge"
+    ]
+    context = _tool_context(
+        branch_hygiene={
+            "hypothesis_generation_mode": "open_exploration",
+            "branch_followup_policy": "open_exploration_allowed",
+            "same_mechanism_followup_required": False,
+            "protected_mechanism_ids": [],
+            "allowed_mechanism_ids": [],
+        },
+        launch_research_focus=focus,
+    )
+
+    exact_resolution = resolve_target_intent_authority(
+        {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/local_search.py",
+            "mechanism_id": "bounded_interroute_2opt_bridge",
+            "mechanism_family": "bounded_local_search_variant",
+        },
+        context,
+    )
+
+    assert exact_resolution.intent["mechanism_id_status"] == (
+        "prepared_launch_focus_default_avoid_rejects_target_intent"
+    )
+    assert exact_resolution.diagnostics["matched_default_avoid_mode"] == (
+        "explicit_mechanism_identity"
+    )
+
+    sibling_resolution = resolve_target_intent_authority(
+        {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/local_search.py",
+            "mechanism_id": "bounded_2route_reinsertion_polish",
+            "mechanism_family": "bounded_local_search_variant",
+        },
+        context,
+    )
+
+    assert "mechanism_id_status" not in sibling_resolution.intent
+    assert sibling_resolution.diagnostics == {}
+
+
 def test_rejected_target_intent_does_not_bind_formal_hypothesis() -> None:
     context = _prompt_context()
     context["agentic_hypothesis_target_intent"] = {
@@ -254,6 +404,42 @@ def test_rejected_target_intent_does_not_bind_formal_hypothesis() -> None:
     assert "Selected target-intent binding was rejected" in hypothesis_user
     assert "Do not use reviewed mechanism ids" in hypothesis_user
     assert f"Write formal `mechanism_changes[].id` as `{REVIEWED_ID}`" not in (
+        hypothesis_user
+    )
+
+
+def test_default_avoid_rejected_target_intent_does_not_bind_formal_hypothesis() -> None:
+    context = _prompt_context()
+    rejected_id = "route_pressure_acceptance"
+    context["agentic_hypothesis_target_intent"] = {
+        "intent": {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/acceptance.py",
+            "mechanism_id": rejected_id,
+            "mechanism_family": "destroy_repair_selection",
+        },
+        "host_adjustments": {
+            "target_intent_authority": {
+                "authority_status": (
+                    "prepared_launch_focus_default_avoid_rejects_target_intent"
+                ),
+                "target_intent_rejected": True,
+                "rejected_mechanism_id": rejected_id,
+                "matched_default_avoid_direction": DEFAULT_AVOID,
+            },
+        },
+    }
+
+    _blocks, hypothesis_user = _split_hypothesis_context(context)
+
+    assert "Selected target-intent binding was rejected" in hypothesis_user
+    assert "Rejection status" in hypothesis_user
+    assert "default_avoid_directions" in hypothesis_user
+    assert f"Write formal `mechanism_changes[].id` as `{rejected_id}`" not in (
+        hypothesis_user
+    )
+    assert "Selected target-intent binding: this formal hypothesis must keep" not in (
         hypothesis_user
     )
 

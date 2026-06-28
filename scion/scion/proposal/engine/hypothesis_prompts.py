@@ -531,7 +531,11 @@ def _target_intent_launch_focus_required_mechanism_lines(
 def _prepared_successor_focus_conflict_prompt(
     successor_conflict: Mapping[str, Any],
 ) -> str:
-    if not successor_conflict.get("active"):
+    if not successor_conflict.get("configured"):
+        return ""
+    if successor_conflict.get("required_mechanism_ids"):
+        return ""
+    if not successor_conflict.get("successor_opportunity_families"):
         return ""
     reviewed_ids = ", ".join(
         f"`{item}`"
@@ -548,6 +552,32 @@ def _prepared_successor_focus_conflict_prompt(
         for item in successor_conflict.get("successor_opportunity_families", ())
         if str(item).strip()
     )
+    default_avoid = _prepared_successor_focus_prompt_list(
+        successor_conflict.get("default_avoid_directions", ())
+    )
+    next_required_direction = str(
+        successor_conflict.get("next_required_direction") or ""
+    ).strip()
+    current_question = str(successor_conflict.get("current_question") or "").strip()
+    branch_scope = (
+        "For this prepared run, this supersedes same-mechanism branch "
+        "continuation: "
+        if successor_conflict.get("active")
+        else "For this prepared run, "
+    )
+    default_avoid_text = (
+        f"default_avoid_directions:\n{default_avoid}\n"
+        if default_avoid
+        else ""
+    )
+    direction_text = (
+        f"next_required_direction={next_required_direction}\n"
+        if next_required_direction
+        else ""
+    )
+    question_text = (
+        f"current_question={current_question}\n" if current_question else ""
+    )
     return (
         "## Prepared Successor Focus\n"
         "schema_version=prepared_successor_focus_prompt.v1\n"
@@ -555,13 +585,29 @@ def _prepared_successor_focus_conflict_prompt(
         f"reviewed_mechanism_ids={reviewed_ids or 'none'}\n"
         f"reviewed_branch_mechanism_ids={reviewed_branch_ids or 'none'}\n"
         f"successor_opportunity_families={successor_families or 'none'}\n"
-        "The prepared launch focus marks the branch-local mechanism ids above "
+        f"{direction_text}"
+        f"{question_text}"
+        f"{default_avoid_text}"
+        "The prepared launch focus marks the reviewed mechanism ids above "
         "as already reviewed for this run and supplies successor opportunity "
-        "families. For this prepared run, this supersedes same-mechanism "
-        "branch continuation: do not select or repeat a reviewed mechanism id. "
-        "Choose a materially different successor mechanism and describe the "
+        f"families. {branch_scope}do not select or repeat a reviewed mechanism id. "
+        "Choose a materially different successor mechanism from the prepared "
+        "successor opportunity families where possible. Do not spend this "
+        "target intent on default_avoid_directions unless the proposal states "
+        "a new causal path not covered by those avoid entries. Describe the "
         "causal path that distinguishes it from the reviewed branch mechanism."
     )
+
+
+def _prepared_successor_focus_prompt_list(value: Any) -> str:
+    if not isinstance(value, (list, tuple)):
+        return ""
+    lines = []
+    for item in value:
+        text = str(item or "").strip()
+        if text:
+            lines.append(f"- {text}")
+    return "\n".join(lines)
 
 
 def _launch_focus_required_mechanism_ids(context: Mapping[str, Any]) -> list[str]:
@@ -1159,11 +1205,16 @@ def _rejected_target_intent_binding_task_lines(
     authority = host_adjustments.get("target_intent_authority")
     if not isinstance(authority, Mapping):
         return []
-    if (
-        str(authority.get("authority_status") or "").strip()
-        != "prepared_successor_focus_rejects_reviewed_mechanism"
+    status = str(authority.get("authority_status") or "").strip()
+    legacy_rejection_statuses = {
+        "prepared_successor_focus_rejects_reviewed_mechanism",
+        "prepared_launch_focus_default_avoid_rejects_target_intent",
+    }
+    if not authority.get("target_intent_rejected") and (
+        status not in legacy_rejection_statuses
     ):
         return []
+    rejected_id = str(authority.get("rejected_mechanism_id") or "").strip()
     reviewed_ids = ", ".join(
         f"`{item}`"
         for item in authority.get("reviewed_mechanism_ids", ())
@@ -1174,23 +1225,45 @@ def _rejected_target_intent_binding_task_lines(
         for item in authority.get("successor_opportunity_families", ())
         if str(item).strip()
     )
-    return [
-        "Selected target-intent binding was rejected by prepared successor "
-        "focus. Do not bind this formal hypothesis to the rejected target "
+    lines = [
+        "Selected target-intent binding was rejected by host target-intent "
+        "authority. Do not bind this formal hypothesis to the rejected target "
         "file or mechanism from the preflight artifact.",
-        (
-            "Do not use reviewed mechanism ids in mechanism_changes"
-            f"{': ' + reviewed_ids if reviewed_ids else ''}."
-        ),
-        (
-            "Choose a materially different successor mechanism consistent "
-            "with the prepared successor opportunity families"
-            f"{': ' + successor_families if successor_families else ''}."
-        ),
-        "If no successor mechanism can be named, stop and require a "
-        "host-controlled target-intent reselect before formal hypothesis "
-        "generation.",
     ]
+    if status:
+        lines.append(f"Rejection status: `{status}`.")
+    if rejected_id:
+        lines.append(
+            f"Do not use rejected mechanism id `{rejected_id}` in "
+            "mechanism_changes, novelty_signature, or expected telemetry refs."
+        )
+    if reviewed_ids:
+        lines.append(
+            "Do not use reviewed mechanism ids in mechanism_changes: "
+            f"{reviewed_ids}."
+        )
+    if successor_families:
+        lines.append(
+            "Choose a materially different successor mechanism consistent "
+            "with the prepared successor opportunity families: "
+            f"{successor_families}."
+        )
+    default_avoid = str(
+        authority.get("matched_default_avoid_direction") or ""
+    ).strip()
+    if default_avoid:
+        lines.append(
+            "Choose a materially different target outside the matched "
+            f"default_avoid_directions entry: `{default_avoid}`."
+        )
+    lines.extend(
+        [
+            "If no valid successor mechanism can be named, stop and require a "
+            "host-controlled target-intent reselect before formal hypothesis "
+            "generation.",
+        ]
+    )
+    return lines
 
 
 def _material_difference_requirement_task_lines(

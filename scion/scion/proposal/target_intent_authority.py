@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+import re
 from typing import TYPE_CHECKING, Any, Mapping
 
 from scion.core.branch_hygiene import (
@@ -71,6 +72,27 @@ def resolve_target_intent_authority(
                 intent=updated,
                 diagnostics=diagnostics,
             )
+
+    default_avoid_match = _launch_focus_default_avoid_target_intent_match(
+        intent,
+        tool_context,
+    )
+    if not required_ids and default_avoid_match:
+        status = "prepared_launch_focus_default_avoid_rejects_target_intent"
+        diagnostics = _default_avoid_target_intent_diagnostics(
+            status=status,
+            match=default_avoid_match,
+            intent=intent,
+            original=original,
+            original_action=_clean_string(intent.get("action")),
+        )
+        updated["mechanism_id_status"] = status
+        updated["target_intent_authority"] = diagnostics
+        updated["launch_focus_default_avoid"] = diagnostics
+        return TargetIntentAuthorityResolution(
+            intent=updated,
+            diagnostics=diagnostics,
+        )
 
     if not required_ids:
         return TargetIntentAuthorityResolution(intent=updated)
@@ -257,6 +279,11 @@ def launch_focus_prepared_successor_conflict(
     successor_families = _unique_strings(
         research_focus.get("successor_opportunity_families")
     )
+    default_avoid = _unique_strings(research_focus.get("default_avoid_directions"))
+    next_required_direction = _clean_string(
+        research_focus.get("next_required_direction")
+    )
+    current_question = _clean_string(research_focus.get("current_question"))
     if required_ids or not reviewed_ids or not successor_families:
         return _drop_empty(
             {
@@ -266,6 +293,9 @@ def launch_focus_prepared_successor_conflict(
                 "required_mechanism_ids": list(required_ids),
                 "reviewed_mechanism_ids": list(reviewed_ids),
                 "successor_opportunity_families": list(successor_families),
+                "default_avoid_directions": list(default_avoid),
+                "next_required_direction": next_required_direction,
+                "current_question": current_question,
             }
         )
 
@@ -297,6 +327,9 @@ def launch_focus_prepared_successor_conflict(
             "authority_status": status,
             "reviewed_mechanism_ids": list(reviewed_ids),
             "successor_opportunity_families": list(successor_families),
+            "default_avoid_directions": list(default_avoid),
+            "next_required_direction": next_required_direction,
+            "current_question": current_question,
             "branch_local_authority": branch_authority.branch_local,
             "branch_protected_mechanism_ids": list(branch_authority.protected_ids),
             "branch_allowed_mechanism_ids": list(branch_authority.allowed_ids),
@@ -459,6 +492,152 @@ def _successor_conflict_diagnostics(
             ),
         }
     )
+
+
+def _default_avoid_target_intent_diagnostics(
+    *,
+    status: str,
+    match: Mapping[str, Any],
+    intent: Mapping[str, Any],
+    original: Mapping[str, Any],
+    original_action: str,
+) -> dict[str, Any]:
+    selected_id = _clean_string(intent.get("mechanism_id"))
+    return _drop_empty(
+        {
+            "name": "target_intent_authority",
+            "status": status,
+            "authority_status": status,
+            "authority_source": "prepared_launch_research_focus_default_avoid",
+            "source": "prepared_launch_research_focus_default_avoid",
+            "applied": True,
+            "prepared_focus_applied": True,
+            "target_intent_updated": False,
+            "target_intent_rejected": True,
+            "selected_mechanism_id": selected_id,
+            "rejected_mechanism_id": selected_id,
+            "matched_default_avoid_direction": match.get(
+                "matched_default_avoid_direction"
+            ),
+            "matched_default_avoid_tokens": list(
+                match.get("matched_default_avoid_tokens") or ()
+            ),
+            "matched_default_avoid_mode": match.get("matched_default_avoid_mode"),
+            "candidate_identity_tokens": list(
+                match.get("candidate_identity_tokens") or ()
+            ),
+            "original_target_intent_action": original_action,
+            "selected_target_intent_action": _normalize_action(original_action),
+            "original_target_intent_mechanism": dict(original),
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "tainted": True,
+            "rule": (
+                "Prepared launch focus default_avoid_directions rejected this "
+                "target intent by explicit mechanism identity or broad "
+                "family-token overlap. Select a materially different successor "
+                "target or state a new causal path outside the matched avoid "
+                "direction."
+            ),
+        }
+    )
+
+
+def _launch_focus_default_avoid_target_intent_match(
+    intent: Mapping[str, Any],
+    tool_context: ProposalToolContext,
+) -> dict[str, Any]:
+    focus = _launch_focus_from_any_context(tool_context)
+    research_focus = _launch_focus_research_focus_payload(focus)
+    default_avoid = _unique_strings(research_focus.get("default_avoid_directions"))
+    if not default_avoid:
+        return {}
+    candidate_tokens = _target_intent_identity_tokens(intent)
+    if not candidate_tokens:
+        return {}
+    candidate_set = set(candidate_tokens)
+    for avoid_direction in default_avoid:
+        explicit_matches = _explicit_default_avoid_identity_matches(
+            avoid_direction,
+            candidate_set,
+        )
+        if explicit_matches:
+            return {
+                "matched_default_avoid_direction": avoid_direction,
+                "matched_default_avoid_tokens": explicit_matches,
+                "matched_default_avoid_mode": "explicit_mechanism_identity",
+                "candidate_identity_tokens": candidate_tokens,
+            }
+        if _default_avoid_has_explicit_identity(avoid_direction):
+            continue
+        avoid_tokens = _default_avoid_tokens(avoid_direction)
+        overlap = [token for token in avoid_tokens if token in candidate_set]
+        if len(overlap) >= 2 or ("variants" in avoid_tokens and overlap):
+            return {
+                "matched_default_avoid_direction": avoid_direction,
+                "matched_default_avoid_tokens": overlap,
+                "matched_default_avoid_mode": "broad_family_phrase",
+                "candidate_identity_tokens": candidate_tokens,
+            }
+    return {}
+
+
+def _target_intent_identity_tokens(intent: Mapping[str, Any]) -> list[str]:
+    fields = (
+        intent.get("mechanism_id"),
+        intent.get("raw_mechanism_id"),
+        intent.get("mechanism_family"),
+    )
+    return _unique_strings(*(_tokenize_identity_text(item) for item in fields))
+
+
+def _default_avoid_tokens(value: Any) -> list[str]:
+    return _unique_strings(_tokenize_identity_text(value))
+
+
+def _explicit_default_avoid_identity_matches(
+    value: Any,
+    candidate_set: set[str],
+) -> list[str]:
+    for tokens in _explicit_default_avoid_identity_token_sets(value):
+        if tokens and set(tokens).issubset(candidate_set):
+            return list(tokens)
+    return []
+
+
+def _default_avoid_has_explicit_identity(value: Any) -> bool:
+    return bool(_explicit_default_avoid_identity_token_sets(value))
+
+
+def _explicit_default_avoid_identity_token_sets(value: Any) -> tuple[tuple[str, ...], ...]:
+    text = str(value or "").lower()
+    identities: list[tuple[str, ...]] = []
+    for raw_identity in re.findall(r"\b[a-z0-9]+(?:_[a-z0-9]+)+\b", text):
+        tokens = _unique_strings(_tokenize_identity_text(raw_identity))
+        if len(tokens) >= 2:
+            identities.append(tokens)
+    return tuple(identities)
+
+
+def _tokenize_identity_text(value: Any) -> list[str]:
+    text = str(value or "").replace("_", " ").replace("-", " ").lower()
+    stop = {
+        "and",
+        "for",
+        "from",
+        "into",
+        "new",
+        "not",
+        "the",
+        "this",
+        "with",
+        "without",
+    }
+    return [
+        token
+        for token in re.findall(r"[a-z0-9]+", text)
+        if len(token) > 2 and token not in stop
+    ]
 
 
 def _is_branch_local_authority_mode(

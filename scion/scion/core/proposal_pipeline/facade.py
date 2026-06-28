@@ -168,6 +168,7 @@ class ProposalPipeline(
     handle_failure: Callable[[Branch, FailureEvent], None]
     circuit_breaker: CircuitBreakerLike
     mark_balance_exhausted: Callable[[], None]
+    launch_research_focus_provider: Callable[[], Mapping[str, Any]] = lambda: {}
     hypothesis_failure_details: MutableMapping[str, str] = field(default_factory=dict)
     use_agentic_proposal: bool = False
     agentic_session: AgenticProposalSessionLike | None = None

@@ -235,6 +235,12 @@ def launch_research_guidance_payload(
         "successor_opportunity_families": _string_list(
             legacy_focus.get("successor_opportunity_families")
         ),
+        "default_avoid_directions": _string_list(
+            legacy_focus.get("default_avoid_directions")
+        ),
+        "next_required_direction": _string(
+            legacy_focus.get("next_required_direction")
+        ),
         "required_mechanism_ids": [
             mechanism.mechanism_id
             for mechanism in contract.required_mechanisms

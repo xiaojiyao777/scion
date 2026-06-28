@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from scion.core.branch_hygiene import (
     branch_hygiene_context,
@@ -27,6 +27,22 @@ from scion.proposal.context.branch_followup import branch_current_file_sources
 from .boundaries import _declared_solver_design_surface_names
 from .protocols import AgenticProposalSessionLike
 from .utils import _runtime_attr
+
+_LAUNCH_RESEARCH_FOCUS_SIGNAL_KEYS = frozenset(
+    {
+        "acceptance_focus",
+        "analysis_intent",
+        "contract_source",
+        "current_question",
+        "decision_boundary",
+        "default_avoid_directions",
+        "guidance_text",
+        "next_required_direction",
+        "required_mechanism_ids",
+        "reviewed_mechanism_ids",
+        "successor_opportunity_families",
+    }
+)
 
 
 class AgenticRequestMixin:
@@ -164,13 +180,10 @@ class AgenticRequestMixin:
             str((hypothesis_context or {}).get("forced_target_file") or "").strip()
             or (self.forced_surface_target_file if forced_surface else None)
         )
-        launch_research_focus = (
-            (hypothesis_context or {}).get("launch_research_focus")
-            if isinstance(hypothesis_context, Mapping)
-            else None
+        launch_research_focus = _launch_research_focus_from_context_or_provider(
+            hypothesis_context,
+            self.launch_research_focus_provider,
         )
-        if not isinstance(launch_research_focus, Mapping):
-            launch_research_focus = {}
 
         active_boundary = _declared_solver_design_surface_names(problem_spec)
         if not active_boundary and adapter is not None:
@@ -216,6 +229,41 @@ class AgenticRequestMixin:
             branch_hygiene_guidance=branch_hygiene_guidance(branch),
             launch_research_focus=launch_research_focus,
         )
+
+
+def _launch_research_focus_from_context_or_provider(
+    hypothesis_context: Mapping[str, Any] | None,
+    provider: Callable[[], Mapping[str, Any]],
+) -> Mapping[str, Any]:
+    """Return prepared launch guidance for proposal-visible tool context."""
+
+    launch_research_focus = (
+        hypothesis_context.get("launch_research_focus")
+        if isinstance(hypothesis_context, Mapping)
+        else None
+    )
+    if _launch_research_focus_has_signal(launch_research_focus):
+        return launch_research_focus
+    provider_focus = provider()
+    if isinstance(provider_focus, Mapping):
+        return provider_focus
+    return {}
+
+
+def _launch_research_focus_has_signal(value: Any) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    nested = value.get("launch_research_focus")
+    if _launch_research_focus_has_signal(nested):
+        return True
+    research_focus = value.get("research_focus")
+    if _launch_research_focus_has_signal(research_focus):
+        return True
+    for key in _LAUNCH_RESEARCH_FOCUS_SIGNAL_KEYS:
+        item = value.get(key)
+        if item not in (None, "", [], {}, ()):
+            return True
+    return False
 
 
 def _context_profile_from_hypothesis_context(

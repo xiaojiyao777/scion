@@ -215,6 +215,7 @@ def _pipeline(
     seed_ledger_hash: str | None = None,
     production_campaign: bool = False,
     require_agentic_problem_anchors: bool = False,
+    launch_research_focus_provider=lambda: {},
 ):
     branch = _branch()
     sibling = _branch("sibling")
@@ -267,6 +268,7 @@ def _pipeline(
         handle_failure=lambda b, f: failures.append((b, f)),
         circuit_breaker=circuit,
         mark_balance_exhausted=lambda: balance_exhausted.__setitem__("value", True),
+        launch_research_focus_provider=launch_research_focus_provider,
         use_agentic_proposal=use_agentic_proposal,
         agentic_session=agentic_session,
         agentic_artifact_dir=agentic_artifact_dir,
