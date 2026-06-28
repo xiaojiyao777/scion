@@ -15,9 +15,9 @@ focused validation passes (`108 passed`) plus
 `git diff --check`. Earlier WSL conda `scion` validation also passed
 (`108 passed`) after sync, but current continuation should use the server
 conda `claw` environment until WSL is available again. The local gpt-5.5 proxy
-at `127.0.0.1:8080` is authenticated after the 2026-06-28 Codex relogin and
-proxy restart; `/v1/models` lists `gpt-5.5`, and a `gpt-5.5` chat completion
-returns HTTP 200. The current local worktree also adds generic prepared
+at `127.0.0.1:8080` is authenticated after the 2026-06-28 Codex relogin; no
+additional proxy restart was needed in the latest check. `/v1/models` lists
+`gpt-5.5`, and a `gpt-5.5` chat completion returns HTTP 200. The current local worktree also adds generic prepared
 successor-focus arbitration: reviewed branch-local mechanism ids plus declared
 successor opportunity families supersede same-mechanism branch continuation
 for prepared target-intent and schema-preview purposes, reviewed mechanism
@@ -51,10 +51,22 @@ problem-owned mechanism. The local successor2 probe prepared and launched from
 commit `eaa11f98` with readiness/preflight clean, but failed before Protocol
 rows after three rejected-target binding mismatches; that root is
 proposal-loop failure evidence, not solver evidence, and motivated the
-rejected-target/default-avoid repair above. Focused local
-validation passes for CVRP successor provider/usage/brief slices, full
-postrun brief (`39 passed`), full postrun acceptance (`85 passed`), plus
-`py_compile` and `git diff --check`.
+rejected-target/default-avoid repair above. The follow-up local successor2 root
+from commit `19811b02` verifies the repair: it finished valid/complete and
+postrun-ready, reached one formal Protocol screening row instead of
+circuit-breaking, and produced clean successor evidence for
+`intra_route_or_opt_reinsert`. The solver result is negative, not infra or
+proposal-loop failure: win-rate `0.25`, median delta `-0.75`, CI high `7.5`
+below CVRP MDE, CMT2/CMT4 both `1` win and `3` losses, and no promotion.
+CVRP-owned successor review now maps this mechanism to
+`bounded_local_search_variant`, marks the checklist `proven`, and records
+outcome `measured_no_positive_at_mde`; prepared guidance adds the exact
+mechanism id to reviewed/default-avoid evidence while leaving the broader
+family available only for distinct bounded-local-search causal paths. Focused
+local validation passes for CVRP successor provider/usage/brief slices, full
+postrun brief/acceptance (`124 passed`), prepared successor/guidance (`40
+passed`), opportunity/boundary (`28 passed`), plus `py_compile` and
+`git diff --check`.
 A generic launcher resume/status repair is also
 implemented locally: CVRP and warehouse resume launches now quarantine copied
 terminal artifacts under `run_root/resume_snapshot/` instead of canonical
@@ -687,6 +699,21 @@ Current checkpoint:
   repair now prevents rejected target intents from binding formal hypotheses
   and requires single-token `variants` default-avoid matches to use specific
   tokens.
+- The repaired local successor2 verification
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor2-19811b02-local-1r-gpt55-20260628T123904Z-claw`
+  finished wrapper-valid/complete and postrun-ready from commit `19811b02`.
+  It validates the rejected-target/default-avoid proposal-loop repair: one
+  proposal attempt, zero quality blocks, one effective Protocol screening row,
+  `current_run_analysis_ready=true`, `delegation_ready=true`, and no readiness
+  failures after postrun rebuild. The selected formal mechanism was
+  `intra_route_or_opt_reinsert`, a distinct bounded-local-search path from
+  reviewed large-twoopt and bounded cross-exchange. It is solver-negative:
+  win-rate `0.25`, median delta `-0.75`, CI high `7.5` below MDE, CMT2/CMT4
+  both `1` win and `3` losses, runtime evidence sufficient, champion stayed
+  `v1`, and promotions `0`. Current CVRP successor review now maps that exact
+  mechanism id to `bounded_local_search_variant`, marks required evidence
+  `proven`, and records outcome `measured_no_positive_at_mde`. The next CVRP
+  attempt should not repeat this exact Or-opt reinsertion path.
 - Design N skeleton implementation is present in `scion.postrun`: typed ports
   for postrun inventory, run-evidence lifecycle, exposure policy,
   problem-owned review, registry, and readiness orchestration. The current

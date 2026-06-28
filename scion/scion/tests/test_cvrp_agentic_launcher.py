@@ -144,6 +144,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for requirement in typed_contract["evidence_requirements"]
     )
     assert any(
+        requirement["requirement_id"] == "or_opt_reinsert_reviewed_no_positive"
+        for requirement in typed_contract["evidence_requirements"]
+    )
+    assert any(
         block["block_id"] == "successor_portfolio_direction"
         for block in typed_contract["guidance_blocks"]
     )
@@ -159,6 +163,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert launch_payload["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
+        "intra_route_or_opt_reinsert",
     ]
     assert prepared_manifest["research_focus"]["scope"] == (
         "report_only_prepared_handoff"
@@ -184,6 +189,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert any(
         "bounded_2node_cross_exchange" in item
+        and "measured_no_positive_at_mde" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "intra_route_or_opt_reinsert" in item
         and "measured_no_positive_at_mde" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
@@ -260,7 +270,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "materially different CVRP-owned" in prepared_manifest["research_focus"][
         "current_question"
     ]
-    assert "bounded cross-exchange successor" in prepared_manifest["research_focus"][
+    assert "first two bounded-local-search successors" in prepared_manifest["research_focus"][
         "current_question"
     ]
     assert (
@@ -270,11 +280,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "preferably to `destroy_repair_selection`" in prepared_manifest[
         "research_focus"
     ]["next_required_direction"]
-    assert "causal path distinct from cross-exchange" in prepared_manifest[
+    assert "causal path distinct from cross-exchange and intra-route" in prepared_manifest[
         "research_focus"
     ]["next_required_direction"]
     assert "measured_no_positive_at_mde" in prepared_manifest_md
     assert "bounded_2node_cross_exchange" in prepared_manifest_md
+    assert "intra_route_or_opt_reinsert" in prepared_manifest_md
     assert "Rotate" in prepared_manifest["research_focus"][
         "next_required_direction"
     ]
@@ -282,6 +293,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
+        "intra_route_or_opt_reinsert",
     ]
     assert prepared_manifest["research_focus"]["successor_opportunity_families"] == [
         "bounded_local_search_variant",

@@ -65,6 +65,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert "successor_causal_path_direct_effect" in rendered.text
     assert "large_instance_intra_route_two_opt_seed" in rendered.text
     assert "bounded_2node_cross_exchange" in rendered.text
+    assert "intra_route_or_opt_reinsert" in rendered.text
     assert "bounded_local_search_variant" in rendered.text
     assert "measured_no_positive_at_mde" in rendered.text
     assert "destroy_repair_selection" in rendered.text
@@ -100,6 +101,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
+        "intra_route_or_opt_reinsert",
     ]
     assert focus["successor_opportunity_families"] == [
         "bounded_local_search_variant",
@@ -107,10 +109,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     ]
     assert "positive-at-MDE" in focus["current_question"]
     assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
+    assert "intra_route_or_opt_reinsert" in focus["next_required_direction"]
     assert "preferably to `destroy_repair_selection`" in focus[
         "next_required_direction"
     ]
-    assert "causal path distinct from cross-exchange" in focus[
+    assert "causal path distinct from cross-exchange and intra-route" in focus[
         "next_required_direction"
     ]
     assert focus["measurement_opportunity_diagnostics"] == measurement
@@ -129,6 +132,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     )
     assert any(
         "bounded_2node_cross_exchange" in item
+        and "measured_no_positive_at_mde" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "intra_route_or_opt_reinsert" in item
         and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
     )
@@ -152,7 +160,19 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
                 "bounded-local-search causal path and direct per-case "
                 "objective-effect evidence."
             ),
-        }
+        },
+        {
+            "mechanism_id": "intra_route_or_opt_reinsert",
+            "mechanism_family": "bounded_local_search_variant",
+            "checklist_status": "proven",
+            "outcome_status": "measured_no_positive_at_mde",
+            "next_use_rule": (
+                "Do not spend the next CVRP branch on the same intra-route "
+                "Or-opt reinsertion path unless the hypothesis names a "
+                "materially new bounded-local-search causal path and direct "
+                "per-case objective-effect evidence."
+            ),
+        },
     ]
 
     large_twoopt = focus["large_instance_two_opt_constraints"]
@@ -193,6 +213,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert launch_payload["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
+        "intra_route_or_opt_reinsert",
     ]
     assert launch_payload["successor_opportunity_families"] == [
         "bounded_local_search_variant",

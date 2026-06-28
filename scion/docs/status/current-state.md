@@ -58,8 +58,9 @@ chronology belongs in focused experiment reports and git history.
   that area needs a design split into named ports or problem-owned validators
   rather than more helper/projection growth.
 - Current local gpt-5.5 proxy at `127.0.0.1:8080` is authenticated after the
-  2026-06-28 Codex relogin and proxy restart. `/v1/models` lists `gpt-5.5`,
-  and a `gpt-5.5` chat completion returns HTTP 200.
+  2026-06-28 Codex relogin. The latest check did not require another proxy
+  restart. `/v1/models` lists `gpt-5.5`, and a `gpt-5.5` chat completion
+  returns HTTP 200.
 - Prepared successor-focus arbitration is implemented locally in the proposal
   layer. When a prepared launch focus marks branch-local mechanism ids as
   `reviewed_mechanism_ids` and supplies non-empty
@@ -398,6 +399,24 @@ chronology belongs in focused experiment reports and git history.
   target intents as still binding for formal hypotheses. The local repair now
   keeps rejected target intents from acting as binding sources and narrows
   single-token `variants` matches to specific tokens.
+- Repaired local successor2 verification:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor2-19811b02-local-1r-gpt55-20260628T123904Z-claw`.
+  It finished valid/complete and postrun-ready from commit `19811b02`, with
+  one proposal attempt, zero quality blocks, one effective Protocol screening
+  row, `current_run_analysis_ready=true`, `delegation_ready=true`, and no
+  readiness failures after postrun rebuild. This accepts the proposal-loop
+  repair: the run reached formal screening rather than circuit-breaking on a
+  rejected target intent. The selected mechanism was
+  `intra_route_or_opt_reinsert`, a distinct bounded-local-search path from the
+  reviewed large-twoopt seed and `bounded_2node_cross_exchange`. The solver
+  result is negative: win-rate `0.25`, median delta `-0.75`, CI high `7.5`
+  below CVRP MDE, CMT2/CMT4 both `1` win and `3` losses, champion stayed `v1`,
+  and promotions `0`. CVRP-owned `cvrp_successor_summary` now maps this exact
+  mechanism id to `bounded_local_search_variant`, marks the checklist
+  `proven`, records outcome `measured_no_positive_at_mde`, and leaves no
+  successor evidence gaps. Prepared guidance now lists the exact mechanism id
+  as reviewed/default-avoid without blocking the whole bounded-local-search
+  family.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
   finished valid/complete and postrun-ready:
@@ -583,17 +602,13 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 ## Next Actions
 
 1. Continue CVRP/VRP successor work using the problem-owned successor review
-   layer. The reviewed `large_instance_intra_route_two_opt_seed` path and the
-   first bounded local-search successor are both solver-negative under current
-   evidence, and the bounded successor is now explicitly reviewed through
-   `cvrp_successor_summary` and CVRP prepared guidance rather than the old
-   large-twoopt summary. The next prepared attempt should test a materially
-   different `destroy_repair_selection`/construction successor or a stronger
-   bounded-local-search causal path that is explicitly distinct from
-   `bounded_2node_cross_exchange`. First rerun the local successor2 probe after
-   the rejected-target/default-avoid repairs to verify the proposal loop reaches
-   a formal hypothesis and Protocol screening instead of circuit-breaking
-   before evidence generation.
+   layer. The reviewed `large_instance_intra_route_two_opt_seed` path,
+   `bounded_2node_cross_exchange`, and `intra_route_or_opt_reinsert` are all
+   solver-negative under current evidence, and the bounded successors are now
+   explicitly reviewed through `cvrp_successor_summary` and CVRP prepared
+   guidance. The next prepared attempt should test a materially different
+   `destroy_repair_selection`/construction successor or a bounded-local-search
+   causal path explicitly distinct from both reviewed bounded successors.
 2. Continue design-first postrun/readiness cleanup only where it removes active
    risk. `scion.postrun` should own generic artifact, lifecycle, schema,
    readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit

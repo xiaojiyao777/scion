@@ -30,9 +30,13 @@ SUCCESSOR_OPPORTUNITY_FAMILIES = (
 REVIEWED_SUCCESSOR_MECHANISM_ID = "bounded_2node_cross_exchange"
 REVIEWED_SUCCESSOR_FAMILY = "bounded_local_search_variant"
 REVIEWED_SUCCESSOR_OUTCOME_STATUS = "measured_no_positive_at_mde"
+REVIEWED_OR_OPT_REINSERT_MECHANISM_ID = "intra_route_or_opt_reinsert"
+REVIEWED_OR_OPT_REINSERT_FAMILY = "bounded_local_search_variant"
+REVIEWED_OR_OPT_REINSERT_OUTCOME_STATUS = "measured_no_positive_at_mde"
 REVIEWED_MECHANISM_IDS = (
     REQUIRED_MECHANISM_ID,
     REVIEWED_SUCCESSOR_MECHANISM_ID,
+    REVIEWED_OR_OPT_REINSERT_MECHANISM_ID,
 )
 PROTECTED_CASES = ("CMT2", "CMT4")
 
@@ -60,6 +64,10 @@ DEFAULT_AVOID_DIRECTIONS = (
     "unchanged cmt_slack_aware_segment_swap local-search segment swap",
     (
         "unchanged bounded_2node_cross_exchange bounded-local-search successor "
+        "after cvrp_successor_summary measured_no_positive_at_mde review"
+    ),
+    (
+        "unchanged intra_route_or_opt_reinsert bounded-local-search successor "
         "after cvrp_successor_summary measured_no_positive_at_mde review"
     ),
     (
@@ -214,14 +222,28 @@ REVIEWED_SUCCESSOR_EVIDENCE = {
                 "bounded-local-search causal path and direct per-case "
                 "objective-effect evidence."
             ),
-        }
+        },
+        {
+            "mechanism_id": REVIEWED_OR_OPT_REINSERT_MECHANISM_ID,
+            "mechanism_family": REVIEWED_OR_OPT_REINSERT_FAMILY,
+            "checklist_status": "proven",
+            "outcome_status": REVIEWED_OR_OPT_REINSERT_OUTCOME_STATUS,
+            "next_use_rule": (
+                "Do not spend the next CVRP branch on the same intra-route "
+                "Or-opt reinsertion path unless the hypothesis names a "
+                "materially new bounded-local-search causal path and direct "
+                "per-case objective-effect evidence."
+            ),
+        },
     ],
 }
 REVIEWED_SUCCESSOR_GUIDANCE_LINE = (
-    f"Reviewed successor evidence: `{REVIEWED_SUCCESSOR_MECHANISM_ID}` "
-    f"belongs to `{REVIEWED_SUCCESSOR_FAMILY}` and has "
+    "Reviewed successor evidence: "
+    f"`{REVIEWED_SUCCESSOR_MECHANISM_ID}` and "
+    f"`{REVIEWED_OR_OPT_REINSERT_MECHANISM_ID}` both belong to "
+    f"`{REVIEWED_SUCCESSOR_FAMILY}` and have "
     f"`{REVIEWED_SUCCESSOR_OUTCOME_STATUS}` in `cvrp_successor_summary`; "
-    "prefer destroy/repair or another non-cross-exchange causal path next."
+    "prefer destroy/repair, construction, or another non-reviewed causal path next."
 )
 
 NEXT_REQUIRED_DIRECTION = (
@@ -231,18 +253,23 @@ NEXT_REQUIRED_DIRECTION = (
     "checklist but measured no positive effect at or above MDE. The first "
     "bounded successor, `bounded_2node_cross_exchange`, is also reviewed by "
     "`cvrp_successor_summary` with checklist proven and "
-    "measured_no_positive_at_mde. Rotate the next CVRP solver-design attempt "
-    "preferably to `destroy_repair_selection` or another materially different "
-    "problem-owned causal path; revisit bounded local search only when the "
-    "hypothesis names a causal path distinct from cross-exchange and carries "
-    "direct per-case objective-effect evidence."
+    "measured_no_positive_at_mde. The next bounded-local-search successor, "
+    "`intra_route_or_opt_reinsert`, reached formal screening with complete "
+    "activation/effect telemetry but was abandoned for low win-rate and "
+    "negative aggregate effect. Rotate the next CVRP solver-design attempt "
+    "preferably to `destroy_repair_selection`, construction, or another "
+    "materially different problem-owned causal path; revisit bounded local "
+    "search only when the hypothesis names a causal path distinct from "
+    "cross-exchange and intra-route Or-opt reinsertion and carries direct "
+    "per-case objective-effect evidence."
 )
 CURRENT_QUESTION = (
     "After both the large-instance intra-route two-opt checklist and the "
-    "first bounded cross-exchange successor were reviewed without "
+    "first two bounded-local-search successors were reviewed without "
     "positive-at-MDE solver effect, can a materially different CVRP-owned "
-    "mechanism improve total_distance with direct per-case objective-effect "
-    "evidence and without repeating prior default-avoid families?"
+    "destroy/repair, construction, or non-reviewed local-search mechanism "
+    "improve total_distance with direct per-case objective-effect evidence "
+    "and without repeating prior default-avoid families?"
 )
 REQUIRED_EVIDENCE = (
     (
@@ -291,13 +318,15 @@ REQUIRED_EVIDENCE = (
         "for successor bounded-local-search or destroy/repair attempts, "
         "declare the causal path difference from the reviewed intra-route "
         "two-opt seed, reviewed bounded_2node_cross_exchange successor, "
-        "and prior default-avoid families before spending another branch slot"
+        "reviewed intra_route_or_opt_reinsert successor, and prior "
+        "default-avoid families before spending another branch slot"
     ),
     (
-        "prefer destroy_repair_selection or another non-cross-exchange "
-        "CVRP-owned causal path after bounded_2node_cross_exchange was "
-        "reviewed no-positive-at-MDE; bounded-local-search revisits must "
-        "name a new causal path and direct objective-effect telemetry"
+        "prefer destroy_repair_selection, construction, or another "
+        "non-reviewed CVRP-owned causal path after bounded_2node_cross_exchange "
+        "and intra_route_or_opt_reinsert were reviewed no-positive-at-MDE; "
+        "bounded-local-search revisits must name a new causal path and direct "
+        "objective-effect telemetry"
     ),
 )
 MEASURABLE_OPPORTUNITY_CLASSES = (
@@ -312,8 +341,9 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
     (
         "bounded_local_search_variant: require feasible route-level "
         "objective deltas with bounded search effort; after the reviewed "
-        "bounded_2node_cross_exchange no-positive-at-MDE result, require a "
-        "bounded-local-search causal path distinct from cross-exchange"
+        "bounded_2node_cross_exchange and intra_route_or_opt_reinsert "
+        "no-positive-at-MDE results, require a bounded-local-search causal "
+        "path distinct from cross-exchange and same-route Or-opt reinsertion"
     ),
     (
         "large_instance_intra_route_two_opt_seed: direct WSL external-control "
@@ -334,11 +364,11 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
 SUCCESSOR_PORTFOLIO_RULE = (
     "Because large_instance_intra_route_two_opt_seed has complete checklist "
     "evidence but no positive-at-MDE outcome, and "
-    "bounded_2node_cross_exchange has now repeated that no-positive outcome "
-    "as the first bounded successor, the next CVRP slot should prefer a "
-    "destroy/repair or otherwise non-cross-exchange portfolio attempt. Use "
-    "problem-owned evidence requirements and keep this guidance out of "
-    "DecisionFeatures."
+    "bounded_2node_cross_exchange plus intra_route_or_opt_reinsert have now "
+    "repeated that no-positive outcome as bounded successors, the next CVRP "
+    "slot should prefer a destroy/repair, construction, or otherwise "
+    "non-reviewed portfolio attempt. Use problem-owned evidence requirements "
+    "and keep this guidance out of DecisionFeatures."
 )
 ROUTE_MERGE_EXCEPTION_RULE = (
     "Only continue route_merge_repair when the proposal names a causal path "
@@ -468,7 +498,7 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
             description=(
                 "Require a materially different bounded-local-search or "
                 "destroy/repair causal path after the reviewed large-twoopt "
-                "and bounded cross-exchange no-positive-at-MDE results."
+                "plus bounded-local-search no-positive-at-MDE results."
             ),
             mechanism_ids=SUCCESSOR_OPPORTUNITY_FAMILIES,
             protected_items=PROTECTED_CASES,
@@ -476,6 +506,7 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "successor mechanism family",
                 "material causal-path difference from reviewed large-twoopt",
                 "material causal-path difference from reviewed cross-exchange",
+                "material causal-path difference from reviewed Or-opt reinsertion",
                 "per-case total_distance delta tied to the changed mechanism",
                 "feasibility and route-count preservation or explicit caveat",
                 "runtime budget evidence under the formal policy",
@@ -497,6 +528,30 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 (
                     "cvrp_successor_summary "
                     f"outcome_status={REVIEWED_SUCCESSOR_OUTCOME_STATUS}"
+                ),
+                "new bounded-local-search causal path if revisited",
+                "direct per-case total_distance objective-effect telemetry",
+            ),
+        ),
+        EvidenceRequirement(
+            requirement_id="or_opt_reinsert_reviewed_no_positive",
+            category="reviewed_successor_evidence",
+            description=(
+                "The second bounded-local-search successor, "
+                f"{REVIEWED_OR_OPT_REINSERT_MECHANISM_ID}, is reviewed "
+                f"evidence with outcome {REVIEWED_OR_OPT_REINSERT_OUTCOME_STATUS}; "
+                "do not repeat it as the next CVRP attempt without a "
+                "materially new bounded-local-search causal path."
+            ),
+            mechanism_ids=(
+                REVIEWED_OR_OPT_REINSERT_MECHANISM_ID,
+                REVIEWED_OR_OPT_REINSERT_FAMILY,
+            ),
+            required_fields=(
+                "cvrp_successor_summary checklist_status=proven",
+                (
+                    "cvrp_successor_summary "
+                    f"outcome_status={REVIEWED_OR_OPT_REINSERT_OUTCOME_STATUS}"
                 ),
                 "new bounded-local-search causal path if revisited",
                 "direct per-case total_distance objective-effect telemetry",
@@ -558,6 +613,8 @@ def _avoid_applies_to(text: str) -> tuple[str, ...]:
         applies_to.append(REQUIRED_MECHANISM_ID)
     if REVIEWED_SUCCESSOR_MECHANISM_ID in text:
         applies_to.append(REVIEWED_SUCCESSOR_MECHANISM_ID)
+    if REVIEWED_OR_OPT_REINSERT_MECHANISM_ID in text:
+        applies_to.append(REVIEWED_OR_OPT_REINSERT_MECHANISM_ID)
     return tuple(applies_to)
 
 
@@ -567,6 +624,7 @@ def _continuity_requirements() -> tuple[ContinuityRequirement, ...]:
         *SUCCESSOR_OPPORTUNITY_FAMILIES,
         REQUIRED_MECHANISM_ID,
         REVIEWED_SUCCESSOR_MECHANISM_ID,
+        REVIEWED_OR_OPT_REINSERT_MECHANISM_ID,
         REVIEWED_SUCCESSOR_FAMILY,
         *PROTECTED_CASES,
     )

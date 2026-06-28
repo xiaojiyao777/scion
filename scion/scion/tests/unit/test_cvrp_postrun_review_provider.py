@@ -60,6 +60,27 @@ def test_cvrp_postrun_provider_builds_successor_summary_problem_owned() -> None:
     assert bounded["protected_cases_observed"] == ["CMT2", "CMT4"]
 
 
+def test_cvrp_successor_summary_maps_or_opt_reinsert_to_bounded_family() -> None:
+    summaries = CvrpPostrunSummaryProvider().build_summaries(
+        _context(
+            measurement_effect_summary=_bounded_successor_measurement_summary(
+                mechanism_id="intra_route_or_opt_reinsert"
+            )
+        )
+    )
+    summary = summaries["cvrp_successor_summary"]
+    bounded = summary["by_family"]["bounded_local_search_variant"]
+
+    assert summary["observed_successor_families"] == [
+        "bounded_local_search_variant"
+    ]
+    assert bounded["checklist_status"] == "proven"
+    assert bounded["outcome_status"] == "measured_no_positive_at_mde"
+    assert bounded["activation_observed_count"] == 1
+    assert bounded["objective_effect_observed_count"] == 1
+    assert bounded["phase_telemetry_observed_count"] == 1
+
+
 def test_cvrp_postrun_review_port_uses_existing_summary_without_raw_prompt_parse() -> None:
     summary = _build_cvrp_large_twoopt_summary()
     review = CvrpLargeTwoOptReviewPort().review(
@@ -217,7 +238,10 @@ def _inventory() -> dict[str, Any]:
     }
 
 
-def _bounded_successor_measurement_summary() -> dict[str, Any]:
+def _bounded_successor_measurement_summary(
+    *,
+    mechanism_id: str = "bounded_2node_cross_exchange",
+) -> dict[str, Any]:
     return {
         "available": True,
         "aggregate": {
@@ -229,7 +253,7 @@ def _bounded_successor_measurement_summary() -> dict[str, Any]:
             "mechanism_family_mapped_row_count": 1,
             "mechanism_family_unmapped_row_count": 0,
             "mechanism_family_effects": {
-                "bounded_2node_cross_exchange": {
+                mechanism_id: {
                     "protocol_row_count": 1,
                     "positive_rows": 0,
                     "nonpositive_rows": 1,
@@ -246,12 +270,12 @@ def _bounded_successor_measurement_summary() -> dict[str, Any]:
                         {
                             "round": 1,
                             "branch_id": "branch-1",
-                            "mechanism_family": "bounded_2node_cross_exchange",
+                            "mechanism_family": mechanism_id,
                             "stage": "screening",
                             "median_delta": 0.0,
                             "positive_effect_at_or_above_mde": False,
                             "mechanism_evidence": {
-                                "primary_mechanism": "bounded_2node_cross_exchange",
+                                "primary_mechanism": mechanism_id,
                                 "primary_activation_status": "observed",
                                 "primary_effect_status": "zero_objective_effect",
                                 "activation_evidence_status": "activation_observed",
@@ -263,7 +287,7 @@ def _bounded_successor_measurement_summary() -> dict[str, Any]:
                             },
                             "candidate_phase_telemetry_summary": {
                                 "buckets": {
-                                    "bounded_2node_cross_exchange": {
+                                    mechanism_id: {
                                         "weighted_sum_ms": 20.0,
                                         "max_ms": 10.0,
                                     }
