@@ -140,6 +140,29 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert any("zero branch cards" in item for item in resume_continuity["rules"])
     assert "DecisionFeatures" in focus["decision_boundary"]
 
+    launch_payload = launch_research_guidance_payload(
+        manifest_path="/tmp/prepared_run_manifest.v1.json",
+        manifest={
+            "problem_family": "cvrp",
+            "research_guidance_contract": research_guidance_contract_to_dict(
+                build_cvrp_research_guidance_contract(
+                    measurement_opportunity_diagnostics=measurement
+                )
+            ),
+            "research_focus": focus,
+        },
+    )
+    assert launch_payload["reviewed_mechanism_ids"] == [
+        "large_instance_intra_route_two_opt_seed"
+    ]
+    assert launch_payload["successor_opportunity_families"] == [
+        "bounded_local_search_variant",
+        "destroy_repair_selection",
+    ]
+    assert launch_payload["legacy_research_focus_schema_version"] == (
+        "scion.cvrp_research_focus.v1"
+    )
+
 
 def test_cvrp_contract_rejects_non_cvrp_context() -> None:
     try:

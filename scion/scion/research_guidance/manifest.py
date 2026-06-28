@@ -206,6 +206,9 @@ def launch_research_guidance_payload(
     contract, rendered, source = render_prepared_research_guidance_from_manifest(
         manifest
     )
+    legacy_focus = manifest.get("research_focus")
+    if not isinstance(legacy_focus, Mapping):
+        legacy_focus = {}
     expected_paths = expected_research_guidance_rendered_paths(contract)
     return {
         "schema_version": RESEARCH_GUIDANCE_PROMPT_SCHEMA,
@@ -222,6 +225,15 @@ def launch_research_guidance_payload(
         "contract_schema_version": contract.schema_version,
         "current_question": contract.current_question,
         "decision_boundary": contract.decision_boundary,
+        "legacy_research_focus_schema_version": _string(
+            legacy_focus.get("schema_version")
+        ),
+        "reviewed_mechanism_ids": _string_list(
+            legacy_focus.get("reviewed_mechanism_ids")
+        ),
+        "successor_opportunity_families": _string_list(
+            legacy_focus.get("successor_opportunity_families")
+        ),
         "required_mechanism_ids": [
             mechanism.mechanism_id
             for mechanism in contract.required_mechanisms
