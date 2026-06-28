@@ -50,6 +50,14 @@ from scion.problems.cvrp.surface_policy import (
 )
 
 
+CVRP_SOLVER_DESIGN_STATIC_QUALITY_FAILURE = (
+    "agent_quality_blocked:cvrp_solver_design_static_quality"
+)
+CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE = (
+    "agent_quality_blocked:cvrp_construction_seed_direct_effect_missing"
+)
+
+
 class CvrpAdapter:
     def __init__(self, spec: ProblemSpecV1) -> None:
         self._spec = spec
@@ -102,6 +110,72 @@ class CvrpAdapter:
         )
 
         return CvrpSolverDesignProvider()
+
+    def validate_patch_quality(
+        self,
+        *,
+        branch: Any | None,
+        hypothesis: Any,
+        patch: Any,
+        step_history: Sequence[Any] | None = None,
+    ) -> Mapping[str, Any]:
+        """Problem-owned solver-design patch quality checks for CVRP."""
+
+        del branch, step_history
+        from scion.problems.cvrp.solver_design.static_quality import static_smoke_issue
+
+        issue = static_smoke_issue(patch=patch, hypothesis=hypothesis)
+        if issue is None:
+            return {"allowed": True, "gate_name": "cvrp_solver_design_static_quality"}
+        construction_seed_issue = "construction seed" in issue.lower()
+        failure_code = (
+            CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE
+            if construction_seed_issue
+            else CVRP_SOLVER_DESIGN_STATIC_QUALITY_FAILURE
+        )
+        missing_code_elements = (
+            ["construction_seed_direct_effect_record_move"]
+            if construction_seed_issue
+            else ["solver_design_static_quality"]
+        )
+        retry_constraint = (
+            "Revise the CVRP solver-design patch before protocol: construction "
+            "seed/portfolio mechanisms must record selected-seed-vs-baseline "
+            "objective effect with context.record_move under the declared "
+            "mechanism id. Activation, phase timing, seed-pool size, or fallback "
+            "use is not objective-effect evidence."
+            if construction_seed_issue
+            else "Revise the CVRP solver-design patch to satisfy problem-owned "
+            "static quality constraints before protocol."
+        )
+        return {
+            "allowed": False,
+            "detail": f"{failure_code}: {issue}",
+            "gate_name": "cvrp_solver_design_static_quality",
+            "structured_rejection": {
+                "source": "cvrp_problem_adapter",
+                "gate_name": "cvrp_solver_design_static_quality",
+                "failure_code": failure_code,
+                "agent_block_reason": "agent_quality_blocked",
+                "retry_constraint": retry_constraint,
+                "repair_template": {
+                    "repair_type": "cvrp_solver_design_static_quality",
+                    "required_code_signals": {
+                        "activation": [
+                            "context.record_iteration('<mechanism>', count)",
+                            "context.record_phase('<mechanism>', elapsed_ms)",
+                        ],
+                        "direct_effect": [
+                            "context.record_move('<mechanism>', attempted=1, "
+                            "accepted=..., delta=..., best_improved=...)"
+                        ],
+                    },
+                    "missing_items": missing_code_elements,
+                },
+                "missing_code_elements": missing_code_elements,
+                "decision_features_excluded": True,
+            },
+        }
 
     def active_research_surface_names(self) -> tuple[str, ...]:
         return ACTIVE_RESEARCH_SURFACE_NAMES

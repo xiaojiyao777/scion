@@ -350,6 +350,25 @@ chronology belongs in focused experiment reports and git history.
   local search unless the hypothesis names a non-reviewed causal path. This is
   CVRP-owned guidance/projection, not generic core or `DecisionFeatures`
   behavior.
+- The latest local CVRP successor7 run is complete and postrun-ready:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor7-47c8169b-local-2r-gpt55-20260628T192208Z-claw`.
+  It launched from commit `47c8169b`, resumed successor6, and selected a real
+  construction seed selection mechanism, `savings_seed_selection_probe`, rather
+  than repeating reviewed 3-opt/radial/farthest mechanisms. The run finished
+  valid/complete with 2 of 2 effective screening rows, 0 quality blocks, and
+  0 active-slot blocks. Strict postrun acceptance reports
+  `current_run_analysis_ready=true`, `delegation_ready=true`, and no failed
+  required checks; the only failed optional check is
+  `postrun_report_status_marker`. Solver outcome is still below threshold:
+  champion stayed `v1`, rows at or above CVRP MDE were `0`, screening rows were
+  `4/2/26` then `4/1/43` wins/losses/ties, and both median deltas were `0.0`.
+  The key framework gap is now enforcement, not routing: the candidate recorded
+  construction activation/phase telemetry without same-mechanism direct
+  objective-effect `record_move`. The current local repair adds a CVRP-owned
+  proposal-side patch-quality block for construction seed/portfolio patches
+  lacking selected-seed-vs-baseline direct effect attribution under the declared
+  mechanism id. This is problem-owned solver-design quality, not a generic core
+  gate.
 - Previous local CVRP CMT-commitment follow-through root:
   `/home/clawd/research/scion-experiments/v04-cvrp-cmtcommit-33e79e0b-server-2r-2r-gpt55-20260628T022008Z-claw`.
   It finished valid/complete and postrun-ready with 2 of 2 effective screening
@@ -685,8 +704,12 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   proof with no positive-at-MDE effect; the first two bounded-local-search
   successors are reviewed negative; and the first construction-seed successor
   is reviewed as checklist-unproven because declared activation telemetry was
-  missing. The next CVRP/VRP work should test a materially different
-  problem-owned successor opportunity with direct effect evidence, not add
+  missing. Successor7 reached the intended construction seed family and exposed
+  a narrower code-quality gap: construction seed activation/phase telemetry is
+  not direct objective-effect evidence. CVRP now blocks such patches before
+  protocol unless the code records selected-seed-vs-baseline direct effect under
+  the declared mechanism id. The next CVRP/VRP work should test a materially
+  different problem-owned successor opportunity with direct effect evidence, not add
   CVRP-specific core gates or keep spending branch slots on the same
   seed/bounded/construction paths without new causal evidence.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
@@ -705,9 +728,11 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    reviewed destroy/repair no-positive-at-MDE evidence, and
    `bounded_intra_route_3opt` is reviewed bounded-local-search no-positive
    evidence after successor6 expanded and rejected it. Prepared CVRP guidance
-   now exposes these as exact reviewed/default-avoid mechanisms. The next CVRP
-   attempt should prefer a construction seed portfolio with same-run seed-effect
-   evidence, a materially different destroy/repair causal path, or another
+   now exposes these as exact reviewed/default-avoid mechanisms. Successor7
+   confirms construction routing but blocks activation-only seed-selection code
+   going forward. The next CVRP attempt should prefer a construction seed
+   portfolio only with same-run seed-effect `record_move` evidence, a materially
+   different destroy/repair causal path, or another
    non-reviewed CVRP-owned mechanism. It should not repeat unchanged 3-opt,
    radial-string, farthest-noise, angular-sector, cross-exchange, Or-opt, or
    large two-opt seed paths. Use problem-owned opportunity design to select a

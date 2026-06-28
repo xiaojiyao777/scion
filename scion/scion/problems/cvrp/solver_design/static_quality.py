@@ -22,6 +22,7 @@ def static_smoke_issue(
         or _double_bridge_semantic_drift_issue(text, changes)
         or _destroy_effect_attribution_issue(hypothesis, changes)
         or _acceptance_effect_attribution_issue(hypothesis, changes)
+        or _construction_seed_effect_attribution_issue(hypothesis, changes)
     )
 
 
@@ -116,6 +117,35 @@ def _acceptance_effect_attribution_issue(
             "to ordinary ALNS best-improvement bookkeeping."
         )
     return None
+
+
+def _construction_seed_effect_attribution_issue(
+    hypothesis: HypothesisProposal | None,
+    changes: dict[str, str],
+) -> str | None:
+    if not _is_construction_seed_hypothesis(hypothesis):
+        return None
+    code_by_path = {
+        path: code
+        for path, code in changes.items()
+        if _is_construction_seed_patch_path(path)
+    }
+    if not code_by_path:
+        return None
+    code = "\n".join(code_by_path.values())
+    mechanisms = _mechanism_ids(hypothesis)
+    if any(_records_move_effect(code, mechanism) for mechanism in mechanisms):
+        return None
+    mechanism_hint = ", ".join(mechanisms) or "<declared construction seed mechanism>"
+    return (
+        "solver_design static smoke rejected construction seed activation-only "
+        "telemetry: construction seed/portfolio patches must provide direct "
+        "same-mechanism objective-effect attribution before downstream ALNS/VNS "
+        "can claim the effect. Record a selected-seed-vs-baseline delta with "
+        "`context.record_move('<mechanism>', attempted=1, accepted=..., "
+        "delta=..., best_improved=...)` under the declared mechanism id. "
+        f"Missing direct effect telemetry for: {mechanism_hint}."
+    )
 
 
 def _looks_cross_route_double_bridge(code: str) -> bool:
@@ -296,6 +326,45 @@ def _is_destroy_or_removal_mechanism(mechanism: str) -> bool:
 def _is_acceptance_or_temperature_mechanism(mechanism: str) -> bool:
     text = _normalize(mechanism)
     return _has_any(text, ("accept", "acceptance", "temperature", "anneal", "sa "))
+
+
+def _is_construction_seed_hypothesis(
+    hypothesis: HypothesisProposal | None,
+) -> bool:
+    if hypothesis is None:
+        return False
+    text = _hypothesis_text(hypothesis)
+    novelty_text = _normalize(getattr(hypothesis, "novelty_signature", ""))
+    combined = f"{text} {novelty_text}"
+    return (
+        _has_any(
+            combined,
+            (
+                " construction seed ",
+                " seed portfolio ",
+                " seed selection ",
+                " construction portfolio ",
+                " initial solution ",
+                " clarke wright ",
+                " savings seed ",
+                " savings selection ",
+            ),
+        )
+        or " construction " in combined
+        and _has_any(combined, (" seed ", " portfolio ", " initializer "))
+    )
+
+
+def _is_construction_seed_patch_path(path: str) -> bool:
+    try:
+        normalized = normalize_relative_patch_path(path)
+    except ValueError:
+        normalized = str(path or "")
+    return normalized in {
+        "policies/baseline_modules/construction.py",
+        "policies/baseline_modules/scheduler.py",
+        "policies/baseline_algorithm.py",
+    }
 
 
 def _has_any(text: str, needles: tuple[str, ...]) -> bool:

@@ -904,3 +904,83 @@ def test_cvrp_smoke_provider_rejects_acceptance_broad_loop_effect() -> None:
 
     assert issue is not None
     assert "broad-loop acceptance telemetry" in issue
+
+
+def test_cvrp_smoke_provider_rejects_construction_seed_activation_only() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a construction seed selection portfolio that chooses a "
+            "Clarke-Wright savings seed before ALNS."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/construction.py",
+        novelty_signature={"mechanism_family": "construction_seed_portfolio"},
+        mechanism_changes=(SimpleNamespace(id="savings_seed_selection_probe"),),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/construction.py",
+        action="modify",
+        code_content=(
+            "def _savings_seed_selection_probe(instance, rng, context=None):\n"
+            "    if context:\n"
+            "        phase_start = context.elapsed_ms()\n"
+            "        context.record_iteration('savings_seed_selection_probe', 1)\n"
+            "        context.record_phase('savings_seed_selection_probe', "
+            "context.elapsed_ms() - phase_start)\n"
+            "    return _construct_initial_solution(instance, rng)\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is not None
+    assert "construction seed activation-only" in issue
+    assert "savings_seed_selection_probe" in issue
+
+
+def test_cvrp_smoke_provider_allows_construction_seed_direct_effect() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a construction seed selection portfolio that compares the "
+            "selected seed against the same-run baseline seed."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/construction.py",
+        novelty_signature={"mechanism_family": "construction_seed_portfolio"},
+        mechanism_changes=(SimpleNamespace(id="savings_seed_selection_probe"),),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/construction.py",
+        action="modify",
+        code_content=(
+            "def _savings_seed_selection_probe(instance, rng, context=None):\n"
+            "    baseline = _construct_initial_solution(instance, rng)\n"
+            "    candidate = _construct_savings_solution(instance, rng)\n"
+            "    delta = baseline.distance - candidate.distance\n"
+            "    accepted = delta > 0\n"
+            "    if context:\n"
+            "        context.record_iteration('savings_seed_selection_probe', 1)\n"
+            "        context.record_move('savings_seed_selection_probe', "
+            "attempted=1, accepted=accepted, delta=delta, "
+            "best_improved=accepted)\n"
+            "    return candidate if accepted else baseline\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is None

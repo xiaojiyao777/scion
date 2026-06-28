@@ -15,9 +15,9 @@ focused validation passes (`108 passed`) plus
 `git diff --check`. Earlier WSL conda `scion` validation also passed
 (`108 passed`) after sync, but current continuation should use the server
 conda `claw` environment until WSL is available again. The local gpt-5.5 proxy
-at `127.0.0.1:8080` is authenticated after the 2026-06-28 Codex relogin and
-proxy restart. `/v1/models` lists `gpt-5.5`, and a `gpt-5.5` chat completion
-returns HTTP 200. The current local worktree also adds generic prepared
+at `127.0.0.1:8080` is authenticated after the 2026-06-28 Codex relogin without
+requiring a proxy restart. `/v1/models` lists `gpt-5.5`, and a `gpt-5.5` chat
+completion returns HTTP 200. The current local worktree also adds generic prepared
 successor-focus arbitration: reviewed branch-local mechanism ids plus declared
 successor opportunity families supersede same-mechanism branch continuation
 for prepared target-intent and schema-preview purposes, reviewed mechanism
@@ -122,6 +122,19 @@ eligible, and bounded local search is demoted unless it names a non-reviewed
 causal path with direct per-case objective-effect telemetry. This stays in
 CVRP problem-owned guidance and prompt projection, not generic core or
 `DecisionFeatures`.
+The successor7 construction-seed run from commit `47c8169b` finished
+valid/complete and postrun-ready after selecting a real construction seed
+selection mechanism, `savings_seed_selection_probe`. This is positive framework
+evidence that the prepared guidance can route away from reviewed 3-opt/radial/
+farthest repeats into construction, but still not solver progress: 2 screening
+rows, 8 total wins, 3 losses, 69 ties, median delta `0.0`, rows at or above MDE
+`0`, champion stayed `v1`, and strict postrun acceptance has no required
+failures. The important repair finding is enforcement: the candidate recorded
+activation/phase telemetry but no same-mechanism direct objective-effect
+`record_move`. CVRP now owns a proposal-side patch-quality block for
+construction seed/portfolio patches that lack selected-seed-vs-baseline direct
+effect attribution under the declared mechanism id; this remains problem-owned
+solver-design quality, not a generic gate.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with

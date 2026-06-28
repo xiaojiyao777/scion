@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from scion.tests.cvrp_adapter_test_support import *
+from scion.core.models import HypothesisProposal, MechanismChange
+from scion.core.proposal_pipeline.problem_quality import validate_problem_patch_quality
+
 
 def test_cvrp_problem_spec_loads(cvrp_spec: ProblemSpecV1, cvrp_adapter: ProblemAdapter) -> None:
     assert cvrp_spec.id == "cvrp"
@@ -69,6 +72,55 @@ def test_cvrp_solver_design_surface_interface_renders_safe_instance_api(
     assert "Never use `instance.customers`" in rendered
     assert "context.record_move" in rendered
     assert "policies/baseline_modules/*.py" in rendered
+
+
+def test_cvrp_adapter_patch_quality_blocks_construction_seed_activation_only(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a construction seed selection portfolio that chooses a "
+            "Clarke-Wright savings seed before ALNS."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/construction.py",
+        novelty_signature={"mechanism_family": "construction_seed_portfolio"},
+        mechanism_changes=(
+            MechanismChange(id="savings_seed_selection_probe", change_type="add"),
+        ),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/construction.py",
+        action="modify",
+        code_content=(
+            "def _savings_seed_selection_probe(instance, rng, context=None):\n"
+            "    if context:\n"
+            "        context.record_iteration('savings_seed_selection_probe', 1)\n"
+            "        context.record_phase('savings_seed_selection_probe', 1)\n"
+            "    return _construct_initial_solution(instance, rng)\n"
+        ),
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=cvrp_adapter),
+        SimpleNamespace(branch_id="branch-1"),
+        hypothesis,
+        patch,
+    )
+
+    assert check.allowed is False
+    assert "cvrp_construction_seed_direct_effect_missing" in check.detail
+    assert "agent_quality_blocked" in check.detail
+    assert check.structured_rejection["gate_name"] == "cvrp_solver_design_static_quality"
+    assert (
+        check.structured_rejection["failure_code"]
+        == "agent_quality_blocked:cvrp_construction_seed_direct_effect_missing"
+    )
+    assert check.structured_rejection["agent_block_reason"] == "agent_quality_blocked"
+    assert "construction_seed_direct_effect_record_move" in (
+        check.structured_rejection["missing_code_elements"]
+    )
 
 
 @pytest.mark.parametrize(
