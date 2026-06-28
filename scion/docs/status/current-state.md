@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-06-26
+Last updated: 2026-06-28
 
 This file is the operational resume point, not a run log. Historical root
 chronology belongs in focused experiment reports and git history.
@@ -39,10 +39,10 @@ chronology belongs in focused experiment reports and git history.
 - Local validation uses this machine's conda `claw` environment. The combined
   proposal/runtime-pressure/protocol focused suite passes (`108 passed`), and
   `git diff --check` is clean.
-- The WSL reverse SSH tunnel is restored. The current local repair files were
-  synced to the WSL runner worktree, and WSL conda `scion` focused validation
-  passes (`108 passed`). Local and WSL sync commits have been recorded in git;
-  use each checkout's `git rev-parse --short HEAD` as the current sync point.
+- Earlier WSL conda `scion` focused validation passed (`108 passed`) after
+  sync, but current continuation should use this server's local conda `claw`
+  environment. Do not assume the WSL reverse SSH channel is available until it
+  has been rechecked after the local WSL runner is brought back up.
 - Postrun acceptance rechecks now prefer the stored inventory artifact declared
   by the rebuild manifest before falling back to live inventory rebuild. This
   prevents historical roots from failing prepared-contract git consistency
@@ -57,9 +57,10 @@ chronology belongs in focused experiment reports and git history.
   freeze new semantics in the oversized postrun/helper scripts; future work in
   that area needs a design split into named ports or problem-owned validators
   rather than more helper/projection growth.
-- Current short diagnostics and tests should use this server's local conda
-  `claw` environment. Do not assume the WSL reverse SSH channel is available
-  until it has been rechecked after the local WSL runner is brought back up.
+- Current local gpt-5.5 proxy at `127.0.0.1:8080` is reachable but not
+  authenticated for chat completions: `/auth/status` has no active account and
+  completion preflight returns `401 invalid_api_key`. Refresh the local proxy
+  login before launching another agentic Scion run.
 - Design N skeleton from
   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md` is
   implemented locally as the problem-neutral `scion.postrun` package:
@@ -199,6 +200,12 @@ chronology belongs in focused experiment reports and git history.
   `scion/docs/experiments/v0.4/v04-cvrp-seed-family-review-alignment-20260626.md`
   and
   `scion/docs/experiments/v0.4/v04-cvrp-proofstatus-followup-postrun-20260625.md`.
+- The CMT follow-through repair now projects that remaining missing field into
+  the CVRP problem-owned code-phase opportunity commitment: next
+  `large_instance_intra_route_two_opt_seed` code prompts should see
+  `missing_cmt_case_protection_evidence` and the requirement for case-level
+  `total_distance` deltas on CMT2 and CMT4. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-cmt-commitment-followthrough-20260628.md`.
 
 ## Current Decision
 
@@ -209,7 +216,8 @@ chronology belongs in focused experiment reports and git history.
   follow-up, MDE-aware rejection, prompt/source visibility, and
   budget-exhausting runtime semantics. The prepared seed-family review repair
   also separates observed large-twoopt requirement evidence from positive
-  solver outcome. CVRP still lacks solver improvement or promotion.
+  solver outcome, and the remaining CMT gap is now rendered as an actionable
+  code-phase commitment. CVRP still lacks solver improvement or promotion.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
   finished valid/complete and postrun-ready:

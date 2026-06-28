@@ -185,10 +185,16 @@ def _evidence_requirements(
                         "cmt2_cmt4_case_protection",
                     ),
                     summary=(
-                        "Prepared CVRP follow-up must keep CMT2/CMT4 protection "
-                        "visible or record an unresolved protection caveat."
+                        "Prepared CVRP follow-up must produce case-level "
+                        "total_distance deltas for CMT2/CMT4, or record a "
+                        "formal case-selection caveat; mentioning protection "
+                        "without case deltas is not enough."
                     ),
-                    required_observations=protected_observations,
+                    required_observations=_large_twoopt_requirement_observations(
+                        protected_observations,
+                        large_twoopt_signal,
+                        "cmt2_cmt4_case_protection",
+                    ),
                     protected_cases=_string_tuple(recipe.get("protected_cases")),
                     reason_codes=_large_twoopt_requirement_reason_codes(
                         large_twoopt_signal,
@@ -238,14 +244,14 @@ def _large_twoopt_requirement_status(
         return "current_run_required"
     if signal.get("current_run_evidence") is not True:
         return "current_run_required"
-    if signal.get("available") is not True:
-        return "postrun_summary_unavailable"
     evidence = _mapping_or_empty(signal.get("evidence"))
     requirement = _large_twoopt_requirement_payload(evidence, requirement_id)
     if requirement:
         if requirement.get("status") == "observed":
             return "current_run_required_evidence_observed"
         return "current_run_selected_but_required_evidence_missing"
+    if signal.get("available") is not True:
+        return "postrun_summary_unavailable"
     mechanism = _mapping_or_empty(evidence.get("large_twoopt_mechanism"))
     if mechanism.get("direct_evidence_ready") is True:
         return "current_run_direct_evidence_ready"
@@ -276,6 +282,28 @@ def _large_twoopt_requirement_reason_codes(
         return gaps
     interpretation = str(signal.get("interpretation") or "").strip()
     return (interpretation,) if interpretation else ()
+
+
+def _large_twoopt_requirement_observations(
+    base_observations: tuple[str, ...],
+    signal: Mapping[str, Any],
+    requirement_id: str,
+) -> tuple[str, ...]:
+    evidence = _mapping_or_empty(signal.get("evidence"))
+    requirement = _large_twoopt_requirement_payload(evidence, requirement_id)
+    observations = list(base_observations)
+    missing = _string_tuple(requirement.get("missing_fields"))
+    for item in missing:
+        observations.append(f"current postrun missing: {item}")
+    required_cases = _string_tuple(requirement.get("required_protected_cases"))
+    observed_cases = set(_string_tuple(requirement.get("protected_cases_observed")))
+    missing_cases = [case for case in required_cases if case not in observed_cases]
+    if missing_cases:
+        observations.append(
+            "case-level total_distance deltas still required for protected "
+            f"cases: {', '.join(missing_cases)}"
+        )
+    return tuple(dict.fromkeys(observations))
 
 
 def _large_twoopt_requirement_payload(

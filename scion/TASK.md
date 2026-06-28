@@ -14,8 +14,10 @@ of `DecisionFeatures`, Protocol gates, and raw artifacts. Local conda `claw`
 focused validation passes (`108 passed`) plus
 `git diff --check`. Earlier WSL conda `scion` validation also passed
 (`108 passed`) after sync, but current continuation should use the server
-conda `claw` environment until the WSL reverse SSH channel is rechecked. The
-warehouse postrun audit
+conda `claw` environment until WSL is available again. The local gpt-5.5 proxy
+at `127.0.0.1:8080` is reachable but currently unauthenticated for chat
+completion preflight; refresh proxy login before launching another agentic run.
+The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with
 stored postrun analysis artifacts. The checker now prefers the stored inventory
@@ -204,13 +206,17 @@ evidence and treats `zero_objective_effect` as measured objective telemetry
 without treating it as solver success. Recomputing the local mirror changes
 `required_evidence_proof.checklist_status` from `not_ready` to `unproven`;
 activation/objective/phase evidence is observed, positive-at-MDE remains
-absent, and CMT case protection remains missing. Detailed reports:
+absent, and CMT case protection remains missing. The CMT follow-through repair
+now projects that remaining gap into the CVRP code-phase opportunity
+commitment as `missing_cmt_case_protection_evidence` plus explicit CMT2/CMT4
+case-level `total_distance` delta requirements. Detailed reports:
+`scion/docs/experiments/v0.4/v04-cvrp-cmt-commitment-followthrough-20260628.md`,
 `scion/docs/experiments/v0.4/v04-cvrp-seed-family-review-alignment-20260626.md`
 and
 `scion/docs/experiments/v0.4/v04-cvrp-proofstatus-followup-postrun-20260625.md`.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
-*Updated: 2026-06-26*
+*Updated: 2026-06-28*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
 experiments. The goal is not to keep tuning campaign knobs blindly. The goal is
