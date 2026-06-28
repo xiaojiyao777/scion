@@ -23,9 +23,10 @@ implemented locally: CVRP and warehouse resume launches now quarantine copied
 terminal artifacts under `run_root/resume_snapshot/` instead of canonical
 current-run paths, expose `resume_snapshot_ref`, and let prepared prompt-context
 readiness read copied status/summary from the declared snapshot as historical
-resume context. It also reports in-flight Protocol state with running/complete
-semantics, pair counters, child subprocess details, and redacted case/seed
-aliases without inflating completed-only counters. Focused local
+resume context. Running and preflight-failure launcher status preserve the
+same snapshot reference after launch. It also reports in-flight Protocol state
+with running/complete semantics, pair counters, child subprocess details, and
+redacted case/seed aliases without inflating completed-only counters. Focused local
 launcher/status/postrun validation passes. The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with

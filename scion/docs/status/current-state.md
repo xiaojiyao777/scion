@@ -70,11 +70,12 @@ chronology belongs in focused experiment reports and git history.
   `artifacts/formal_candidates/index.jsonl`). Launch metadata and postrun
   inventory expose `resume_snapshot_ref`, and prepared prompt-context readiness
   reads copied campaign status/summary from the declared snapshot as historical
-  resume context instead of requiring stale canonical campaign files. In-flight
-  Protocol status now explicitly reports running state, `complete=false`, pair
-  counters, child subprocess details, and redacted case/seed aliases without
-  changing completed-only counters such as `protocol_metric_results` or
-  `last_result`.
+  resume context instead of requiring stale canonical campaign files. Running
+  and preflight-failure launcher status now preserve the same snapshot
+  reference for launched resumed roots. In-flight Protocol status explicitly
+  reports running state, `complete=false`, pair counters, child subprocess
+  details, and redacted case/seed aliases without changing completed-only
+  counters such as `protocol_metric_results` or `last_result`.
   Local focused validation passes for launcher resume preparation, CVRP and
   warehouse resume launchers, prepared-handoff rebuilds, running-status
   reporting, and postrun snapshot/in-flight summaries.

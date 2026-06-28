@@ -68,6 +68,32 @@ def test_build_status_projects_actionable_preflight_failure(tmp_path: Path) -> N
     ]
 
 
+def test_build_status_preserves_resume_snapshot_metadata(tmp_path: Path) -> None:
+    tool = _load_tool_module()
+    detail_path = tmp_path / "pre_campaign_completion_preflight.v1.json"
+    detail_path.write_text(
+        '{"chat":{"classification":"not_authenticated"}}\n',
+        encoding="utf-8",
+    )
+
+    status = tool.build_status(
+        exit_code=64,
+        detail_path=detail_path,
+        resume_from_campaign="/tmp/source-campaign",
+        resume_snapshot_ref="resume_snapshot/resume_source_manifest.v1.json",
+        copied_campaign_status_present=True,
+        copied_campaign_summary_present=True,
+    )
+
+    assert status["resume_from_campaign"] == "/tmp/source-campaign"
+    assert (
+        status["resume_snapshot_ref"]
+        == "resume_snapshot/resume_source_manifest.v1.json"
+    )
+    assert status["copied_campaign_status_present"] is True
+    assert status["copied_campaign_summary_present"] is True
+
+
 def test_write_status_tolerates_missing_detail(tmp_path: Path) -> None:
     tool = _load_tool_module()
     output = tmp_path / "run_status.json"

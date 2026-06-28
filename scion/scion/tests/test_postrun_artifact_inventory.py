@@ -1052,6 +1052,7 @@ def test_inventory_marks_prepared_only_resume_snapshot_not_current_run(
             "schema_version": "scion.launcher_prepared_run_manifest.v1",
             "execution": {"rounds": 3},
             "resume_from_campaign": "/tmp/source-campaign",
+            "resume_snapshot_ref": "resume_snapshot/resume_source_manifest.v1.json",
         },
     )
     _write_json(
@@ -1076,6 +1077,10 @@ def test_inventory_marks_prepared_only_resume_snapshot_not_current_run(
     assert data["lifecycle"]["prepared_only"] is True
     assert data["lifecycle"]["evidence_scope"] == (
         "prepared_launch_root_with_resume_snapshot"
+    )
+    assert (
+        data["lifecycle"]["resume_snapshot_ref"]
+        == "resume_snapshot/resume_source_manifest.v1.json"
     )
     assert data["validity"]["run_validity_status"] == "prepared_only"
     assert data["validity"]["run_completeness_status"] == "not_started"

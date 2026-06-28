@@ -74,6 +74,31 @@ def test_write_status_writes_json_payload(tmp_path: Path) -> None:
     assert loaded["prepared_only"] is False
 
 
+def test_build_status_preserves_resume_snapshot_metadata(tmp_path: Path) -> None:
+    tool = _load_tool_module()
+
+    status = tool.build_status(
+        run_root=tmp_path / "run",
+        campaign_dir=tmp_path / "run" / "campaign",
+        git_commit="abc1234",
+        model="gpt-5.5",
+        started_utc="2026-06-23T08:00:00Z",
+        pid=12345,
+        resume_from_campaign="/tmp/source-campaign",
+        resume_snapshot_ref="resume_snapshot/resume_source_manifest.v1.json",
+        copied_campaign_status_present=True,
+        copied_campaign_summary_present=True,
+    )
+
+    assert status["resume_from_campaign"] == "/tmp/source-campaign"
+    assert (
+        status["resume_snapshot_ref"]
+        == "resume_snapshot/resume_source_manifest.v1.json"
+    )
+    assert status["copied_campaign_status_present"] is True
+    assert status["copied_campaign_summary_present"] is True
+
+
 def test_cvrp_launcher_marks_root_running_before_campaign(tmp_path: Path) -> None:
     status_before_campaign = tmp_path / "status-before-campaign.json"
     fake_python = _write_fake_campaign_python(tmp_path, status_before_campaign)
@@ -109,6 +134,11 @@ def test_cvrp_launcher_marks_root_running_before_campaign(tmp_path: Path) -> Non
 
     assert run_result.returncode == 0
     assert "tools/write_launcher_running_status.py" in run_sh_text
+    assert '--resume-snapshot-ref "$RESUME_SNAPSHOT_MANIFEST_REF"' in run_sh_text
+    assert (
+        '--copied-campaign-status-present "$RESUME_COPIED_CAMPAIGN_STATUS_PRESENT"'
+        in run_sh_text
+    )
     assert run_sh_text.index("tools/write_launcher_running_status.py") < (
         run_sh_text.index("tools/check_gpt55_proxy.py")
     )
@@ -158,6 +188,11 @@ def test_warehouse_launcher_marks_root_running_before_campaign(tmp_path: Path) -
 
     assert run_result.returncode == 0
     assert "tools/write_launcher_running_status.py" in run_sh_text
+    assert '--resume-snapshot-ref "$RESUME_SNAPSHOT_MANIFEST_REF"' in run_sh_text
+    assert (
+        '--copied-campaign-status-present "$RESUME_COPIED_CAMPAIGN_STATUS_PRESENT"'
+        in run_sh_text
+    )
     assert run_sh_text.index("WAREHOUSE_DATA_ROOT_MISSING") < (
         run_sh_text.index("tools/write_launcher_running_status.py")
     )

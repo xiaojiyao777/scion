@@ -824,6 +824,9 @@ def _lifecycle_inventory(
     resume_from = status_doc.get("resume_from_campaign")
     if resume_from is None:
         resume_from = manifest.get("resume_from_campaign")
+    resume_snapshot_ref = status_doc.get("resume_snapshot_ref")
+    if resume_snapshot_ref is None:
+        resume_snapshot_ref = manifest.get("resume_snapshot_ref")
     if prepared_only:
         evidence_scope = "prepared_launch_root_with_resume_snapshot"
     elif launcher_status_unavailable:
@@ -868,7 +871,7 @@ def _lifecycle_inventory(
         "status": _string_or_none(status_doc.get("status")),
         "prepared_status_schema": _string_or_none(status_doc.get("schema")),
         "resume_from_campaign": _string_or_none(resume_from),
-        "resume_snapshot_ref": _string_or_none(status_doc.get("resume_snapshot_ref")),
+        "resume_snapshot_ref": _string_or_none(resume_snapshot_ref),
         "copied_campaign_status_present": status_doc.get(
             "copied_campaign_status_present"
         ),

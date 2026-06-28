@@ -355,7 +355,11 @@ if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then
     "$PY" "$SCION_DIR/tools/write_completion_preflight_status.py" \
       --output "$RUN_ROOT/run_status.json" \
       --exit-code "$PREFLIGHT_STATUS" \
-      --detail "$PREFLIGHT_DETAIL"
+      --detail "$PREFLIGHT_DETAIL" \
+      --resume-from-campaign "$RESUME_FROM_CAMPAIGN" \
+      --resume-snapshot-ref "$RESUME_SNAPSHOT_MANIFEST_REF" \
+      --copied-campaign-status-present "$RESUME_COPIED_CAMPAIGN_STATUS_PRESENT" \
+      --copied-campaign-summary-present "$RESUME_COPIED_CAMPAIGN_SUMMARY_PRESENT"
     write_postrun_acceptance_reports
     exit "$PREFLIGHT_STATUS"
   fi
@@ -377,6 +381,10 @@ LAUNCHER_RUNNING_STATUS_WRITE_STATUS=0
   --scion-base-url "$SCION_BASE_URL" \
   --completion-preflight "$COMPLETION_PREFLIGHT" \
   --postrun-reports "$POSTRUN_REPORTS" \
+  --resume-from-campaign "$RESUME_FROM_CAMPAIGN" \
+  --resume-snapshot-ref "$RESUME_SNAPSHOT_MANIFEST_REF" \
+  --copied-campaign-status-present "$RESUME_COPIED_CAMPAIGN_STATUS_PRESENT" \
+  --copied-campaign-summary-present "$RESUME_COPIED_CAMPAIGN_SUMMARY_PRESENT" \
   >> "$RUN_ROOT/run.log" 2>&1 || LAUNCHER_RUNNING_STATUS_WRITE_STATUS=$?
 if [[ "$LAUNCHER_RUNNING_STATUS_WRITE_STATUS" -ne 0 ]]; then
   {
