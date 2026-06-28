@@ -129,12 +129,19 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert typed_contract["problem_family"] == "cvrp"
     assert typed_contract["proposal_visibility_only"] is True
     assert typed_contract["decision_features_excluded"] is True
-    assert typed_contract["required_mechanisms"][0]["mechanism_id"] == (
-        "large_instance_intra_route_two_opt_seed"
+    assert typed_contract["required_mechanisms"] == []
+    assert any(
+        requirement["requirement_id"] == "successor_causal_path_direct_effect"
+        for requirement in typed_contract["evidence_requirements"]
     )
-    assert typed_contract["required_mechanisms"][0][
-        "hypothesis_mechanism_binding"
-    ] == "required"
+    assert any(
+        requirement["requirement_id"] == "large_instance_two_opt_reviewed_evidence"
+        for requirement in typed_contract["evidence_requirements"]
+    )
+    assert any(
+        block["block_id"] == "successor_portfolio_direction"
+        for block in typed_contract["guidance_blocks"]
+    )
     assert any(
         block["block_id"] == "large_instance_two_opt_constraints"
         for block in typed_contract["guidance_blocks"]
@@ -143,9 +150,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         manifest_path=run_root / "prepared_run_manifest.v1.json",
         manifest=prepared_manifest,
     )
-    assert launch_payload["required_mechanism_ids"] == [
-        "large_instance_intra_route_two_opt_seed"
-    ]
+    assert launch_payload["required_mechanism_ids"] == []
     assert prepared_manifest["research_focus"]["scope"] == (
         "report_only_prepared_handoff"
     )
@@ -215,10 +220,16 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "mechanism_family"
     ] == "construction_seed_portfolio"
     assert measurement["mechanism_effect_ranking"][0]["mechanism_family"] == (
-        "large_instance_intra_route_two_opt_seed"
+        "bounded_local_search_variant"
     )
     assert measurement["mechanism_effect_ranking"][0]["opportunity_status"] == (
-        "highest_current_followup"
+        "highest_current_successor"
+    )
+    assert measurement["mechanism_effect_ranking"][2]["mechanism_family"] == (
+        "large_instance_intra_route_two_opt_seed"
+    )
+    assert measurement["mechanism_effect_ranking"][2]["opportunity_status"] == (
+        "reviewed_not_next_required"
     )
     assert measurement["opportunity_diagnostics"][0]["diagnostic_type"] == (
         "measurement_power"
@@ -232,25 +243,30 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
             "measurable_opportunity_classes"
         ]
     )
-    assert "large-instance intra-route two-opt seed" in prepared_manifest[
+    assert "materially different CVRP-owned solver mechanism" in prepared_manifest[
         "research_focus"
     ]["current_question"]
-    assert "or select another" not in prepared_manifest["research_focus"][
-        "current_question"
-    ]
     assert (
-        "large_instance_intra_route_two_opt_seed"
+        "reviewed evidence"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
-    assert prepared_manifest["research_focus"]["required_mechanism_ids"] == [
+    assert "Rotate" in prepared_manifest["research_focus"][
+        "next_required_direction"
+    ]
+    assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
+    assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed"
     ]
-    assert "First attempt" in prepared_manifest["research_focus"][
+    assert prepared_manifest["research_focus"]["successor_opportunity_families"] == [
+        "bounded_local_search_variant",
+        "destroy_repair_selection",
+    ]
+    assert "First attempt" not in prepared_manifest["research_focus"][
         "next_required_direction"
     ]
     assert any(
-        "large_instance_intra_route_two_opt_seed" in item
-        and "first attempted direction" in item
+        "successor opportunity family" in item
+        and "reviewed no-positive-at-MDE" in item
         for item in prepared_manifest["research_focus"]["required_evidence"]
     )
     assert any(
@@ -267,7 +283,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "large_instance_intra_route_two_opt_seed" in missing_primary_rule
     assert any(
         "large_instance_intra_route_two_opt_seed" in item
-        and "deadline-aware bounded search effort" in item
+        and "reviewed evidence/default-avoid" in item
         and "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md" in item
         for item in prepared_manifest["research_focus"][
             "measurable_opportunity_classes"
@@ -375,7 +391,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prepared_manifest_md
     assert "screening_headroom" in prepared_manifest_md
     assert "mechanism_effect_ranking" in prepared_manifest_md
-    assert "highest_current_followup" in prepared_manifest_md
+    assert "highest_current_successor" in prepared_manifest_md
+    assert "reviewed_not_next_required" in prepared_manifest_md
     assert "opportunity_diagnostics" in prepared_manifest_md
     assert "route-merge absorption" in prepared_manifest_md
     assert "bounded_interroute_2opt_bridge" in prepared_manifest_md
@@ -781,7 +798,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prompt_summary["missing_rendered_paths"] == []
     assert prompt_summary["guidance_text_digest_present"] is True
     assert (
-        "required_mechanisms.large_instance_intra_route_two_opt_seed"
+        "evidence_requirements.successor_causal_path_direct_effect"
+        in prompt_summary["rendered_paths"]
+    )
+    assert (
+        "guidance_blocks.successor_portfolio_direction"
         in prompt_summary["rendered_paths"]
     )
     assert (

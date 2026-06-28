@@ -57,6 +57,8 @@ CVRP_MEASUREMENT_PROMPT_SUMMARY_COMPARE_FIELDS = (
     "screening_headroom_present",
     "mechanism_effect_ranking_present",
     "highest_current_followup_present",
+    "highest_current_successor_present",
+    "highest_current_rank_signal_present",
     "mechanism_rank_count",
 )
 CVRP_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS = {
@@ -341,6 +343,9 @@ def cvrp_problem_measurement_diagnostics_prompt_summary(
         "highest_current_followup_present": (
             "highest_current_followup" in rendered_prompt
         ),
+        "highest_current_successor_present": (
+            "highest_current_successor" in rendered_prompt
+        ),
         "decision_features_exclusion_present": (
             "excluded from DecisionFeatures" in rendered_prompt
             or "excluded_from_decision_features" in rendered_prompt
@@ -358,6 +363,10 @@ def cvrp_problem_measurement_diagnostics_prompt_summary(
         "warehouse_v2_followup_present": False,
         "forbidden_prompt_tokens_present": forbidden_present,
     }
+    summary["highest_current_rank_signal_present"] = (
+        summary["highest_current_followup_present"]
+        or summary["highest_current_successor_present"]
+    )
     required_true_fields = [
         "adapter_schema_present",
         "prompt_section_present",
@@ -367,7 +376,7 @@ def cvrp_problem_measurement_diagnostics_prompt_summary(
         "decision_features_exclusion_present",
         "screening_headroom_present",
         "mechanism_effect_ranking_present",
-        "highest_current_followup_present",
+        "highest_current_rank_signal_present",
     ]
     available = (
         bool(payload)

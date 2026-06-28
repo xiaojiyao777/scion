@@ -37,13 +37,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert contract.problem_family == "cvrp"
     assert contract.proposal_visibility_only is True
     assert contract.decision_features_excluded is True
-    assert [item.mechanism_id for item in contract.required_mechanisms] == [
-        "large_instance_intra_route_two_opt_seed"
-    ]
-    mechanism_bindings = [
-        item.hypothesis_mechanism_binding for item in contract.required_mechanisms
-    ]
-    assert mechanism_bindings == ["required"]
+    assert contract.required_mechanisms == ()
     assert any(
         "total_distance delta by case and seed" in field
         for requirement in contract.evidence_requirements
@@ -68,7 +62,9 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     )
     assert contract.measurement_summary is not None
     assert "screening MDE 9.9" in contract.measurement_summary.summary
+    assert "successor_causal_path_direct_effect" in rendered.text
     assert "large_instance_intra_route_two_opt_seed" in rendered.text
+    assert "no-positive-at-MDE" in rendered.text
     assert "CMT2/CMT4 case protection" in rendered.text
     assert "excluded from DecisionFeatures" in rendered.text
 
@@ -79,9 +75,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
             "research_guidance_contract": research_guidance_contract_to_dict(contract),
         },
     )
-    assert launch_payload["required_mechanism_ids"] == [
-        "large_instance_intra_route_two_opt_seed"
-    ]
+    assert launch_payload["required_mechanism_ids"] == []
 
 
 def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
@@ -98,11 +92,16 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
 
     assert focus["schema_version"] == "scion.cvrp_research_focus.v1"
     assert focus["scope"] == "report_only_prepared_handoff"
-    assert focus["required_mechanism_ids"] == [
+    assert focus["required_mechanism_ids"] == []
+    assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed"
     ]
-    assert "large-instance intra-route two-opt seed" in focus["current_question"]
-    assert "First attempt" in focus["next_required_direction"]
+    assert focus["successor_opportunity_families"] == [
+        "bounded_local_search_variant",
+        "destroy_repair_selection",
+    ]
+    assert "no positive-at-MDE" in focus["current_question"]
+    assert "Rotate" in focus["next_required_direction"]
     assert focus["measurement_opportunity_diagnostics"] == measurement
     assert focus["measurement_opportunity_diagnostics"] is not measurement
     assert any(

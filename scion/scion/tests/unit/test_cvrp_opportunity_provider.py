@@ -63,7 +63,8 @@ def test_cvrp_opportunity_provider_preserves_problem_owned_signals() -> None:
     assert "large_instance_intra_route_two_opt_seed" in mechanism_families
     assert {"CMT2", "CMT4"} <= protected_cases
     assert "broad_vns_removal" in default_avoid
-    assert "CVRP_LARGE_INSTANCE_TWO_OPT_SEED" in reason_codes
+    assert "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE" in reason_codes
+    assert "SUCCESSOR_CAUSAL_PATH_REQUIRED" in reason_codes
 
 
 def test_cvrp_opportunity_provider_projects_required_evidence_recipe() -> None:
@@ -84,8 +85,14 @@ def test_cvrp_opportunity_provider_projects_required_evidence_recipe() -> None:
         "large_instance_two_opt_objective_runtime_requirement"
     ]
     protected = requirements["cmt2_cmt4_case_protection"]
+    successor = requirements["successor_bounded_local_search_direct_effect"]
     required_text = json.dumps(pair_evidence, sort_keys=True)
 
+    assert successor["mechanism_family"] == "bounded_local_search_variant"
+    assert successor["status"] == (
+        "successor_required_after_large_twoopt_no_positive_at_mde"
+    )
+    assert "SUCCESSOR_CAUSAL_PATH_REQUIRED" in successor["reason_codes"]
     assert pair_evidence["mechanism_family"] == (
         "large_instance_intra_route_two_opt_seed"
     )
@@ -192,7 +199,14 @@ def test_cvrp_opportunity_provider_uses_problem_owned_requirement_statuses() -> 
     ]
     protected = requirements["cmt2_cmt4_case_protection"]
 
-    assert pair_evidence["status"] == "current_run_required_evidence_observed"
+    successor = requirements["successor_bounded_local_search_direct_effect"]
+
+    assert successor["mechanism_family"] == "bounded_local_search_variant"
+    assert successor["status"] == (
+        "successor_required_after_large_twoopt_no_positive_at_mde"
+    )
+    assert "SUCCESSOR_CAUSAL_PATH_REQUIRED" in successor["reason_codes"]
+    assert pair_evidence["status"] == "reviewed_no_positive_at_mde"
     assert protected["status"] == "current_run_required_evidence_observed"
     assert pair_evidence["reason_codes"] == ["measured_no_positive_at_mde"]
     assert protected["reason_codes"] == ["CVRP_PROTECTED_CASE_REVIEW_REQUIRED"]
@@ -258,6 +272,7 @@ def test_cvrp_opportunity_provider_projects_missing_cmt_as_actionable_requiremen
     protected = requirements["cmt2_cmt4_case_protection"]
     protected_text = json.dumps(protected, sort_keys=True)
 
+    assert "successor_bounded_local_search_direct_effect" not in requirements
     assert pair_evidence["status"] == "current_run_required_evidence_observed"
     assert pair_evidence["reason_codes"] == ["measured_no_positive_at_mde"]
     assert protected["status"] == "current_run_selected_but_required_evidence_missing"

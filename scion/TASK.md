@@ -592,6 +592,22 @@ Current checkpoint:
   problem-owned CVRP/VRP solver-opportunity provider, not more generic
   two-opt/CMT/ALNS/VNS rules. Design basis:
   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`.
+- Latest local CVRP postprojection follow-up
+  `/home/clawd/research/scion-experiments/v04-cvrp-postprojection-followup-e687d758-local-4r-gpt55-4r-gpt55-20260628T065805Z-claw`
+  finished valid/complete and postrun-ready from commit `e687d758`:
+  `current_run_analysis_ready=true`, `delegation_ready=true`, 4 of 4
+  effective rounds, 4 screening Protocol rows, 0 quality blocks, champion
+  still `v1`, promotions `0`, positive rows `0`, and rows at or above CVRP
+  MDE `0`. The framework loop is healthy enough to prove the
+  large-instance intra-route two-opt checklist, including activation,
+  objective/phase evidence and CMT2/CMT4 protection, but the measured solver
+  outcome is still `measured_no_positive_at_mde`. Current interpretation: treat
+  `large_instance_intra_route_two_opt_seed` as reviewed evidence/default-avoid,
+  not the next hard-required mechanism. The next CVRP/VRP branch slot should
+  target a materially different problem-owned successor family such as
+  `bounded_local_search_variant` or `destroy_repair_selection`, unless a
+  same-seed revisit explicitly names a new causal path. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-postprojection-successor-portfolio-20260628.md`.
 - Design N skeleton implementation is present in `scion.postrun`: typed ports
   for postrun inventory, run-evidence lifecycle, exposure policy,
   problem-owned review, registry, and readiness orchestration. The current

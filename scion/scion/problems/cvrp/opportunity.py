@@ -18,6 +18,7 @@ from scion.problems.cvrp.research_guidance import (
     CVRP_PROBLEM_FAMILY,
     PROTECTED_CASES,
     REQUIRED_MECHANISM_ID,
+    SUCCESSOR_OPPORTUNITY_FAMILIES,
 )
 
 
@@ -146,6 +147,15 @@ def _evidence_requirements(
     requirements: list[OpportunityEvidenceRequirement] = []
     recipe = _mapping_or_empty(source.get("top_opportunity_recipe"))
     large_twoopt_signal = _large_twoopt_postrun_signal(postrun_reports)
+    large_twoopt_reviewed = _large_twoopt_reviewed_no_positive_at_mde(
+        large_twoopt_signal
+    )
+    if not large_twoopt_signal:
+        large_twoopt_reviewed = _recipe_large_twoopt_reviewed_no_positive_at_mde(
+            recipe
+        )
+    if large_twoopt_reviewed:
+        requirements.extend(_successor_evidence_requirements())
     if recipe:
         family = str(recipe.get("mechanism_family") or REQUIRED_MECHANISM_ID)
         requirements.append(
@@ -220,6 +230,62 @@ def _evidence_requirements(
     return tuple(requirements)
 
 
+def _successor_evidence_requirements() -> tuple[OpportunityEvidenceRequirement, ...]:
+    common_observations = (
+        "material causal-path difference from reviewed large_instance_intra_route_two_opt_seed",
+        "per-case total_distance delta tied to the changed mechanism",
+        "feasibility and route-count preservation or explicit caveat",
+        "runtime budget evidence under the formal policy",
+        "CMT2/CMT4 protection plan or unresolved protected-case caveat",
+    )
+    bounded_family, destroy_repair_family = SUCCESSOR_OPPORTUNITY_FAMILIES
+    return (
+        OpportunityEvidenceRequirement(
+            requirement_id="successor_bounded_local_search_direct_effect",
+            mechanism_family=bounded_family,
+            status="successor_required_after_large_twoopt_no_positive_at_mde",
+            summary=(
+                "The large-instance intra-route two-opt checklist is proven "
+                "but measured no positive-at-MDE effect; a bounded local-search "
+                "successor must change a different causal path before another "
+                "branch slot is spent."
+            ),
+            recommended_action=(
+                "Prefer a bounded local-search mechanism outside the reviewed "
+                "seed path, with direct route-level objective deltas and "
+                "formal-budget evidence."
+            ),
+            required_observations=common_observations,
+            protected_cases=PROTECTED_CASES,
+            reason_codes=(
+                "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE",
+                "SUCCESSOR_CAUSAL_PATH_REQUIRED",
+            ),
+        ),
+        OpportunityEvidenceRequirement(
+            requirement_id="successor_destroy_repair_direct_effect",
+            mechanism_family=destroy_repair_family,
+            status="successor_required_after_large_twoopt_no_positive_at_mde",
+            summary=(
+                "A destroy/repair successor is eligible only if it materially "
+                "changes removal or repair selection and reports direct "
+                "per-case objective attribution."
+            ),
+            recommended_action=(
+                "Do not repeat unchanged demand-slack, route-merge, or "
+                "cluster-biased variants; name the new selection rule and "
+                "objective-effect telemetry before screening."
+            ),
+            required_observations=common_observations,
+            protected_cases=PROTECTED_CASES,
+            reason_codes=(
+                "MATERIAL_DIFFERENCE_REQUIRED",
+                "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
+            ),
+        ),
+    )
+
+
 def _large_twoopt_postrun_signal(
     postrun_reports: tuple[Mapping[str, Any], ...],
 ) -> dict[str, Any]:
@@ -248,6 +314,17 @@ def _large_twoopt_requirement_status(
     requirement = _large_twoopt_requirement_payload(evidence, requirement_id)
     if requirement:
         if requirement.get("status") == "observed":
+            if (
+                requirement_id
+                == "large_instance_two_opt_objective_runtime_requirement"
+                and _mapping_or_empty(
+                    evidence.get("evidence_requirement_statuses")
+                ).get("complete")
+                is True
+                and str(requirement.get("outcome_status") or "").strip()
+                == "measured_no_positive_at_mde"
+            ):
+                return "reviewed_no_positive_at_mde"
             return "current_run_required_evidence_observed"
         return "current_run_selected_but_required_evidence_missing"
     if signal.get("available") is not True:
@@ -282,6 +359,38 @@ def _large_twoopt_requirement_reason_codes(
         return gaps
     interpretation = str(signal.get("interpretation") or "").strip()
     return (interpretation,) if interpretation else ()
+
+
+def _large_twoopt_reviewed_no_positive_at_mde(
+    signal: Mapping[str, Any],
+) -> bool:
+    if not signal:
+        return False
+    if signal.get("current_run_evidence") is not True:
+        return False
+    evidence = _mapping_or_empty(signal.get("evidence"))
+    statuses = _mapping_or_empty(evidence.get("evidence_requirement_statuses"))
+    if statuses.get("complete") is not True:
+        return False
+    requirement = _large_twoopt_requirement_payload(
+        evidence,
+        "large_instance_two_opt_objective_runtime_requirement",
+    )
+    return (
+        requirement.get("status") == "observed"
+        and str(requirement.get("outcome_status") or "").strip()
+        == "measured_no_positive_at_mde"
+    )
+
+
+def _recipe_large_twoopt_reviewed_no_positive_at_mde(
+    recipe: Mapping[str, Any],
+) -> bool:
+    return (
+        str(recipe.get("mechanism_family") or "").strip() == REQUIRED_MECHANISM_ID
+        and str(recipe.get("review_status") or "").strip()
+        == "reviewed_no_positive_at_mde"
+    )
 
 
 def _large_twoopt_requirement_observations(

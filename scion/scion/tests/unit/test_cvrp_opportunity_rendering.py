@@ -71,7 +71,8 @@ def test_cvrp_problem_opportunity_summary_reaches_prompt_and_manifest() -> None:
         in rendered_summary
     )
     assert "elapsed wall-clock" in rendered_summary
-    assert "CVRP_LARGE_INSTANCE_TWO_OPT_SEED" in rendered_summary
+    assert "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE" in rendered_summary
+    assert "SUCCESSOR_CAUSAL_PATH_REQUIRED" in rendered_summary
     assert "CMT2" in rendered_summary
     assert "CMT4" in rendered_summary
     assert "excluded_from_decision_features" in rendered_summary

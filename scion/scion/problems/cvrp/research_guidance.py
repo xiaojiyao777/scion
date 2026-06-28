@@ -23,6 +23,10 @@ LARGE_INSTANCE_TWO_OPT_SEED_REPORT = (
     "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md"
 )
 REQUIRED_MECHANISM_ID = "large_instance_intra_route_two_opt_seed"
+SUCCESSOR_OPPORTUNITY_FAMILIES = (
+    "bounded_local_search_variant",
+    "destroy_repair_selection",
+)
 PROTECTED_CASES = ("CMT2", "CMT4")
 
 DEFAULT_AVOID_DIRECTIONS = (
@@ -183,25 +187,28 @@ RESUME_CONTINUITY_REQUIREMENTS = {
 }
 
 NEXT_REQUIRED_DIRECTION = (
-    "First attempt `large_instance_intra_route_two_opt_seed` as a "
-    "deadline-aware bounded local-search mechanism in "
-    "`policies/baseline_modules/local_search.py`; do not substitute a "
-    "different mechanism under this prepared focus unless the prepared "
-    "research_focus is explicitly updated after review."
+    "The `large_instance_intra_route_two_opt_seed` checklist is now "
+    "reviewed evidence, not the next hard-required mechanism: current-run "
+    "postrun evidence completed the activation/objective/phase and CMT2/CMT4 "
+    "checklist but measured no positive effect at or above MDE. Rotate the "
+    "next CVRP solver-design attempt to a materially different problem-owned "
+    "causal path, preferably `bounded_local_search_variant` outside the "
+    "reviewed seed path or `destroy_repair_selection`, with direct per-case "
+    "objective-effect evidence."
 )
 CURRENT_QUESTION = (
-    "Can the still-untried large-instance intra-route two-opt seed improve "
-    "total_distance when implemented as a deadline-aware bounded "
-    "local-search mechanism with wall-clock, feasibility, route-count, and "
-    "pair-level objective evidence? The next proposal should attempt this "
-    "direction first; do not substitute another mechanism under this "
-    "prepared focus."
+    "After the large-instance intra-route two-opt checklist was proven but "
+    "measured no positive-at-MDE solver effect, can a materially different "
+    "CVRP-owned solver mechanism improve total_distance with direct "
+    "per-case objective-effect evidence and without repeating prior "
+    "default-avoid families?"
 )
 REQUIRED_EVIDENCE = (
     (
-        "live target-intent or hypothesis explicitly names "
-        "large_instance_intra_route_two_opt_seed as the first attempted "
-        "direction for this prepared focus"
+        "live target-intent or hypothesis explicitly names a successor "
+        "opportunity family or records why revisiting "
+        "large_instance_intra_route_two_opt_seed is justified despite the "
+        "reviewed no-positive-at-MDE postrun evidence"
     ),
     (
         "bounded or deadline-aware implementation evidence for any "
@@ -239,6 +246,12 @@ REQUIRED_EVIDENCE = (
         "unless current-run telemetry proves the declared primary mechanism "
         "activates with the exact large_instance_intra_route_two_opt_seed id"
     ),
+    (
+        "for successor bounded-local-search or destroy/repair attempts, "
+        "declare the causal path difference from the reviewed intra-route "
+        "two-opt seed and from prior default-avoid families before spending "
+        "another branch slot"
+    ),
 )
 MEASURABLE_OPPORTUNITY_CLASSES = (
     (
@@ -255,9 +268,10 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
     ),
     (
         "large_instance_intra_route_two_opt_seed: direct WSL external-control "
-        "replay showed 8/8 feasible XL wins, but the unbounded diff is not "
-        "accepted; require deadline-aware bounded search effort, pair-level "
-        "objective/feasibility/route-count/wall-clock evidence, and see "
+        "replay showed 8/8 feasible XL wins, and current-run checklist "
+        "evidence is now complete, but the measured outcome remains "
+        "no-positive-at-MDE; treat it as reviewed evidence/default-avoid "
+        "unless a new causal path invalidates that postrun conclusion; see "
         f"{LARGE_INSTANCE_TWO_OPT_SEED_REPORT}"
     ),
     (
@@ -267,6 +281,13 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         "the next CVRP branch slot here without a new non-acceptance "
         "causal path"
     ),
+)
+SUCCESSOR_PORTFOLIO_RULE = (
+    "Because large_instance_intra_route_two_opt_seed has complete checklist "
+    "evidence but no positive-at-MDE outcome, the next CVRP slot should be a "
+    "successor portfolio attempt rather than another same-seed refinement. "
+    "Use problem-owned evidence requirements and keep this guidance out of "
+    "DecisionFeatures."
 )
 ROUTE_MERGE_EXCEPTION_RULE = (
     "Only continue route_merge_repair when the proposal names a causal path "
@@ -358,7 +379,9 @@ def build_cvrp_legacy_research_focus(
         "schema_version": "scion.cvrp_research_focus.v1",
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
-        "required_mechanism_ids": [REQUIRED_MECHANISM_ID],
+        "required_mechanism_ids": [],
+        "reviewed_mechanism_ids": [REQUIRED_MECHANISM_ID],
+        "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
         "current_question": CURRENT_QUESTION,
         "required_evidence": list(REQUIRED_EVIDENCE),
         "measurement_opportunity_diagnostics": _legacy_mapping(
@@ -381,30 +404,37 @@ def build_cvrp_legacy_research_focus(
 
 
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
-    constraints = LARGE_INSTANCE_TWO_OPT_CONSTRAINTS
-    observations = tuple(
-        str(item) for item in constraints["required_pair_evidence"]
-    )
-    return (
-        RequiredMechanism(
-            mechanism_id=REQUIRED_MECHANISM_ID,
-            category="bounded_local_search_variant",
-            description=NEXT_REQUIRED_DIRECTION,
-            required_observations=observations,
-            protected_items=PROTECTED_CASES,
-        ),
-    )
+    return ()
 
 
 def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
     constraints = LARGE_INSTANCE_TWO_OPT_CONSTRAINTS
     return (
         EvidenceRequirement(
-            requirement_id="large_instance_two_opt_pair_evidence",
-            category="bounded_local_search_evidence",
+            requirement_id="successor_causal_path_direct_effect",
+            category="successor_solver_opportunity_evidence",
             description=(
-                "Require pair-level objective, feasibility, route-count, "
-                "and wall-clock evidence for the bounded two-opt seed."
+                "Require a materially different bounded-local-search or "
+                "destroy/repair causal path after the reviewed large-twoopt "
+                "no-positive-at-MDE result."
+            ),
+            mechanism_ids=SUCCESSOR_OPPORTUNITY_FAMILIES,
+            protected_items=PROTECTED_CASES,
+            required_fields=(
+                "successor mechanism family",
+                "material causal-path difference from reviewed large-twoopt",
+                "per-case total_distance delta tied to the changed mechanism",
+                "feasibility and route-count preservation or explicit caveat",
+                "runtime budget evidence under the formal policy",
+            ),
+        ),
+        EvidenceRequirement(
+            requirement_id="large_instance_two_opt_reviewed_evidence",
+            category="reviewed_bounded_local_search_evidence",
+            description=(
+                "The bounded two-opt seed checklist remains useful reviewed "
+                "evidence, but no longer justifies a hard first-attempt "
+                "mechanism after no positive-at-MDE outcome."
             ),
             mechanism_ids=(REQUIRED_MECHANISM_ID,),
             required_fields=tuple(
@@ -452,10 +482,14 @@ def _avoid_rules() -> tuple[AvoidRule, ...]:
 
 def _continuity_requirements() -> tuple[ContinuityRequirement, ...]:
     resume = RESUME_CONTINUITY_REQUIREMENTS
-    related_ids = (REQUIRED_MECHANISM_ID, *PROTECTED_CASES)
+    related_ids = (
+        *SUCCESSOR_OPPORTUNITY_FAMILIES,
+        REQUIRED_MECHANISM_ID,
+        *PROTECTED_CASES,
+    )
     return (
         ContinuityRequirement(
-            requirement_id="first_attempt_prepared_direction",
+            requirement_id="successor_after_large_twoopt_review",
             category="prepared_focus_continuity",
             description=NEXT_REQUIRED_DIRECTION,
             related_ids=related_ids,
@@ -473,10 +507,14 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
     constraints = LARGE_INSTANCE_TWO_OPT_CONSTRAINTS
     return (
         GuidanceBlock(
-            block_id="next_required_direction",
+            block_id="successor_portfolio_direction",
             category="proposal_focus",
-            title="Next required direction",
-            lines=(NEXT_REQUIRED_DIRECTION, CURRENT_QUESTION),
+            title="Successor portfolio direction",
+            lines=(
+                NEXT_REQUIRED_DIRECTION,
+                CURRENT_QUESTION,
+                SUCCESSOR_PORTFOLIO_RULE,
+            ),
         ),
         GuidanceBlock(
             block_id="large_instance_two_opt_constraints",

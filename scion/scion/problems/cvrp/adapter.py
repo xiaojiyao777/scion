@@ -39,6 +39,7 @@ from scion.problems.cvrp.research_guidance import (
     NEXT_REQUIRED_DIRECTION,
     PROTECTED_CASES,
     REQUIRED_MECHANISM_ID,
+    SUCCESSOR_OPPORTUNITY_FAMILIES,
 )
 from scion.problems.cvrp.surface_policy import (
     ACTIVE_RESEARCH_SURFACE_NAMES,
@@ -244,6 +245,8 @@ class CvrpAdapter:
                 "proposal_visibility_only": True,
                 "decision_features_excluded": True,
                 "mechanism_family": REQUIRED_MECHANISM_ID,
+                "review_status": "reviewed_no_positive_at_mde",
+                "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
                 "target_surface": "solver_design",
                 "target_files": ["policies/baseline_modules/local_search.py"],
                 "next_required_direction": NEXT_REQUIRED_DIRECTION,
@@ -268,66 +271,69 @@ class CvrpAdapter:
             "mechanism_effect_ranking": [
                 {
                     "rank": 1,
-                    "mechanism_family": "large_instance_intra_route_two_opt_seed",
-                    "evidence_status": "external_seed_positive_current_run_required",
-                    "opportunity_status": "highest_current_followup",
-                    "effect_status": "proposal_seed_positive_not_promotion_evidence",
+                    "mechanism_family": "bounded_local_search_variant",
+                    "evidence_status": "successor_required_after_reviewed_no_effect",
+                    "opportunity_status": "highest_current_successor",
+                    "effect_status": "unknown_current_effect",
                     "summary": (
-                        "External-control replay is the strongest current "
-                        "mechanism seed, but it is proposal guidance only "
-                        "until a bounded/deadline-aware current run shows "
-                        "direct objective effect and wall-clock evidence."
+                        "The large-instance intra-route two-opt checklist is "
+                        "now complete but measured no positive-at-MDE effect. "
+                        "Prefer a bounded local-search successor only if it "
+                        "changes a materially different causal path and "
+                        "reports direct route-level objective deltas."
                     ),
                     "recommended_action": (
-                        "Prefer this family only with bounded intra-route "
-                        "two-opt phase telemetry and pair-level objective, "
-                        "feasibility, route-count, and elapsed-time evidence."
+                        "Do not repeat the reviewed seed path; declare the "
+                        "bounded trigger, runtime guard, and direct effect "
+                        "field for a different local-search mechanism."
                     ),
                     "reason_codes": [
-                        "CVRP_LARGE_INSTANCE_TWO_OPT_SEED",
-                        "BOUNDED_DEADLINE_REQUIRED",
+                        "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE",
+                        "SUCCESSOR_CAUSAL_PATH_REQUIRED",
                     ],
                 },
                 {
                     "rank": 2,
-                    "mechanism_family": "bounded_local_search_variant",
-                    "evidence_status": "measurable_but_needs_direct_effect",
-                    "opportunity_status": "eligible_if_causal_path_changes",
+                    "mechanism_family": "destroy_repair_selection",
+                    "evidence_status": "successor_required_after_reviewed_no_effect",
+                    "opportunity_status": "eligible_if_materially_different",
                     "effect_status": "unknown_current_effect",
                     "summary": (
-                        "Bounded local-search variants remain plausible only "
-                        "when they change a specific causal path and report "
-                        "direct route-level objective deltas under the budget."
+                        "Destroy/repair selection is the next plausible "
+                        "successor family only when it changes a material "
+                        "removal or repair choice and reports per-case "
+                        "objective attribution."
                     ),
                     "recommended_action": (
-                        "Avoid broad VNS removal or unbounded polish; declare "
-                        "the bounded trigger, budget poll, and direct effect "
-                        "field before formal screening."
+                        "Avoid unchanged demand-slack, route-merge, or "
+                        "cluster-biased variants; name the new causal path and "
+                        "direct total_distance evidence before screening."
                     ),
                     "reason_codes": [
-                        "BOUNDED_SEARCH_REQUIRED",
+                        "MATERIAL_DIFFERENCE_REQUIRED",
                         "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
                     ],
                 },
                 {
                     "rank": 3,
-                    "mechanism_family": "destroy_repair_selection",
-                    "evidence_status": "plausible_but_prior_variants_weak",
-                    "opportunity_status": "eligible_if_materially_different",
-                    "effect_status": "prior_weak_or_no_accepted_effect",
+                    "mechanism_family": "large_instance_intra_route_two_opt_seed",
+                    "evidence_status": "checklist_complete_no_positive_at_mde",
+                    "opportunity_status": "reviewed_not_next_required",
+                    "effect_status": "measured_no_positive_at_mde",
                     "summary": (
-                        "Destroy/repair selection can be revisited only with "
-                        "a materially different selection rule and per-case "
-                        "total_distance attribution."
+                        "External-control replay seeded this family and the "
+                        "current-run checklist is complete, including "
+                        "CMT2/CMT4 protection, but the postrun outcome still "
+                        "has no positive row at or above MDE."
                     ),
                     "recommended_action": (
-                        "Do not repeat unchanged demand-slack, route-merge, "
-                        "or cluster-biased removal variants without a new "
-                        "causal path."
+                        "Treat additional same-seed refinements as default "
+                        "avoid unless a new causal path invalidates the "
+                        "reviewed no-effect conclusion."
                     ),
                     "reason_codes": [
-                        "DEFAULT_AVOID_PRIOR_WEAK_OR_NEGATIVE",
-                        "MATERIAL_DIFFERENCE_REQUIRED",
+                        "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE",
+                        "ROTATE_TO_SUCCESSOR_OPPORTUNITY",
                     ],
                 },
                 {

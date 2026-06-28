@@ -312,6 +312,23 @@ chronology belongs in focused experiment reports and git history.
   prepared manifest, but final root `run_status.json` dropped the field after
   copying campaign status; the local final-status writer repair now preserves
   resume metadata for future roots.
+- Latest local CVRP postprojection follow-up:
+  `/home/clawd/research/scion-experiments/v04-cvrp-postprojection-followup-e687d758-local-4r-gpt55-4r-gpt55-20260628T065805Z-claw`.
+  It launched from commit `e687d758`, finished valid/complete and
+  postrun-ready, and rechecks with `current_run_analysis_ready=true`,
+  `delegation_ready=true`, and no failed required postrun-acceptance checks.
+  It is clean framework evidence, not solver progress: 4 of 4 effective
+  rounds, 4 screening Protocol rows, 0 quality blocks, champion still `v1`,
+  promotions `0`, positive rows `0`, and rows at or above CVRP MDE `0`.
+  The important conclusion is problem-owned: the
+  `large_instance_intra_route_two_opt_seed` checklist is now proven, including
+  activation/objective/phase and CMT2/CMT4 protection evidence, but measured
+  `measured_no_positive_at_mde`. The current local CVRP guidance repair therefore
+  downgrades that seed to reviewed evidence/default-avoid and rotates the next
+  branch slot to a materially different successor opportunity family
+  (`bounded_local_search_variant` or `destroy_repair_selection`) unless a
+  same-seed revisit explicitly names a new causal path. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-postprojection-successor-portfolio-20260628.md`.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
   finished valid/complete and postrun-ready:
@@ -481,14 +498,15 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   research and current plateau-review readiness for v0.4; a narrow repeat is
   optional only for independent solver-level plateau confirmation.
 - CVRP: use A/A MDE and case variance while seeking branch depth,
-  same-mechanism follow-up, and solver-design improvements. The current-sync
-  and opportunity-recipe roots are clean acceptance evidence for repaired
-  continuation, MDE-aware rejection, and problem-owned opportunity-summary
-  visibility, but not for solver improvement. The fresh no-resume Q/R root
-  validates code-phase opportunity commitment visibility on a synced launch.
-  The next CVRP/VRP work should improve problem-owned solver-opportunity
-  evidence and the required-evidence checklist follow-through, not add
-  CVRP-specific core gates.
+  same-mechanism follow-up, and solver-design improvements. The current-sync,
+  opportunity-recipe, Q/R, CMT-commitment, and postprojection roots are clean
+  evidence for repaired continuation, MDE-aware rejection, opportunity
+  visibility, code-phase commitment visibility, and required-evidence
+  follow-through. They are not solver-improvement evidence. The
+  large-instance intra-route two-opt seed is now reviewed after checklist
+  proof with no positive-at-MDE effect; the next CVRP/VRP work should test a
+  materially different problem-owned successor opportunity, not add
+  CVRP-specific core gates or keep spending branch slots on the same seed path.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
@@ -496,10 +514,12 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 ## Next Actions
 
 1. Use the repaired CVRP postrun evidence path for the next solver-design
-   follow-up: the framework can now show whether a selected large-instance
-   opportunity satisfied its required evidence checklist, so the next question
-   is actual solver improvement or a better problem-owned opportunity, not more
-   prompt/acceptance plumbing.
+   follow-up, but rotate away from the reviewed
+   `large_instance_intra_route_two_opt_seed` path. The next prepared CVRP
+   attempt should target a materially different problem-owned successor family
+   such as `bounded_local_search_variant` or `destroy_repair_selection`, with
+   direct per-case objective-effect evidence and runtime/CMT protection
+   evidence.
 2. Continue design-first postrun/readiness cleanup only where it removes active
    risk. `scion.postrun` should own generic artifact, lifecycle, schema,
    readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit
@@ -527,6 +547,8 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-stored-inventory-recheck-20260623.md`
 - CVRP current-sync postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-current-sync-large-twoopt-postrun-20260624.md`
+- CVRP postprojection successor portfolio:
+  `scion/docs/experiments/v0.4/v04-cvrp-postprojection-successor-portfolio-20260628.md`
 - Task source: `scion/TASK.md`
 - Audit basis:
   `scion/reports/v04-core-framework-review-20260611.md`,
