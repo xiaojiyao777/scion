@@ -135,6 +135,18 @@ activation/phase telemetry but no same-mechanism direct objective-effect
 construction seed/portfolio patches that lack selected-seed-vs-baseline direct
 effect attribution under the declared mechanism id; this remains problem-owned
 solver-design quality, not a generic gate.
+The successor8 construction-seed run from commit `ac64db75` finished
+valid/complete and postrun-ready after the enforcement repair. It again
+selected `savings_seed_selection_probe`, but now included same-mechanism direct
+objective-effect telemetry through `record_move(... delta=..., best_improved=...)`.
+Strict postrun acceptance reports `current_run_analysis_ready=true`,
+`delegation_ready=true`, and no failed required or optional checks. A CVRP-owned
+mechanism-family alias registry now maps savings seed-selection identifiers to
+`construction_seed_portfolio` for successor/opportunity review; rebuilding the
+successor8 postrun acceptance marks that family observed and checklist
+`proven` with activation/objective/phase counts `2/2/2` plus CMT2/CMT4
+protection. Solver outcome remains negative: champion stayed `v1`, rows at or
+above CVRP MDE were `0`, and both median deltas were `0.0`.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with

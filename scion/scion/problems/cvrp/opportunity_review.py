@@ -6,6 +6,7 @@ import re
 from collections.abc import Iterable
 from typing import Any, Mapping
 
+from scion.problems.cvrp.mechanism_families import CVRP_SUCCESSOR_FAMILY_ALIASES
 from scion.problems.cvrp.research_guidance import (
     CVRP_PROBLEM_FAMILY,
     DEFAULT_AVOID_DIRECTIONS,
@@ -33,47 +34,7 @@ _OPPORTUNITY_FAMILY_ALIASES = {
         "two_opt_seed",
         "2opt_seed",
     ),
-    "bounded_local_search_variant": (
-        "bounded_local_search_variant",
-        "bounded_local_search",
-        "deadline_aware_local_search",
-        "local_search",
-        "bounded_2node_cross_exchange",
-        "two_node_cross_exchange",
-        "2node_cross_exchange",
-        "cross_exchange",
-        "bounded_intra_route_3opt",
-        "bounded_intra_route_three_opt",
-        "intra_route_3opt",
-        "intra_route_three_opt",
-        "3opt",
-        "three_opt",
-        "segment_swap",
-        "two_opt_intra_bounded",
-    ),
-    "destroy_repair_selection": (
-        "destroy_repair_selection",
-        "destroy_repair",
-        "angular_sector_removal",
-        "angular_sector",
-        "radial_string_removal",
-        "farthest_noise_related_removal",
-        "removal",
-        "repair",
-        "regret_insertion",
-        "insertion",
-    ),
-    "construction_seed_portfolio": (
-        "construction_seed_portfolio",
-        "construction_seed",
-        "seed_portfolio",
-        "initial_solution",
-        "rotated_sweep_seed_tournament",
-        "sweep_seed_tournament",
-        "rotated_sweep_seed",
-        "sweep_seed",
-        "sweep_construction",
-    ),
+    **CVRP_SUCCESSOR_FAMILY_ALIASES,
     "acceptance_or_adaptive_weighting": (
         "acceptance_or_adaptive_weighting",
         "adaptive_weighting",

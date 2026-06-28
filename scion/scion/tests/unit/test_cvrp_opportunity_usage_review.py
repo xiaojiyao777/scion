@@ -274,6 +274,38 @@ def test_cvrp_opportunity_usage_maps_rotated_sweep_to_construction_successor() -
     )
 
 
+def test_cvrp_opportunity_usage_maps_savings_seed_to_construction_successor() -> None:
+    summary = build_cvrp_opportunity_usage_summary(
+        problem_family="cvrp",
+        current_run_evidence=True,
+        prompt_context_visibility_summary=_visible_prompt_summary(),
+        proposal_trajectory_manifests=[
+            {
+                "sessions": [
+                    _session(
+                        "s-savings-seed",
+                        mechanism_ids=["savings_seed_selection_probe"],
+                        target_file="policies/baseline_modules/construction.py",
+                    )
+                ],
+            }
+        ],
+        cvrp_successor_summary=_successor_summary(
+            "construction_seed_portfolio",
+            checklist_status="proven",
+        ),
+    )
+
+    assert summary["usage_status"] == "used"
+    assert summary["counts"]["used_opportunity"] == 1
+    assert summary["entries"][0]["opportunity_families"] == [
+        "construction_seed_portfolio"
+    ]
+    assert summary["entries"][0]["required_evidence_family"] == (
+        "construction_seed_portfolio"
+    )
+
+
 def test_cvrp_opportunity_usage_requires_visible_summary() -> None:
     summary = build_cvrp_opportunity_usage_summary(
         problem_family="cvrp",

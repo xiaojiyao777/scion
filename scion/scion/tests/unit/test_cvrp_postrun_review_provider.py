@@ -116,6 +116,29 @@ def test_cvrp_successor_summary_maps_rotated_sweep_to_construction_family() -> N
     assert construction["missing"] == ["missing_activation_observed"]
 
 
+def test_cvrp_successor_summary_maps_savings_seed_to_construction_family() -> None:
+    summaries = CvrpPostrunSummaryProvider().build_summaries(
+        _context(
+            measurement_effect_summary=_construction_successor_measurement_summary(
+                mechanism_id="savings_seed_selection_probe",
+                activation_observed=True,
+            )
+        )
+    )
+    summary = summaries["cvrp_successor_summary"]
+    construction = summary["by_family"]["construction_seed_portfolio"]
+
+    assert summary["observed_successor_families"] == ["construction_seed_portfolio"]
+    assert construction["mechanism_family_available"] is True
+    assert construction["checklist_status"] == "proven"
+    assert construction["outcome_status"] == "measured_no_positive_at_mde"
+    assert construction["activation_observed_count"] == 1
+    assert construction["objective_effect_observed_count"] == 1
+    assert construction["phase_telemetry_observed_count"] == 1
+    assert construction["protected_cases_observed"] == ["CMT2", "CMT4"]
+    assert "missing" not in construction
+
+
 def test_cvrp_postrun_review_port_uses_existing_summary_without_raw_prompt_parse() -> (
     None
 ):
@@ -339,7 +362,16 @@ def _bounded_successor_measurement_summary(
     }
 
 
-def _construction_successor_measurement_summary() -> dict[str, Any]:
+def _construction_successor_measurement_summary(
+    *,
+    mechanism_id: str = "rotated_sweep_seed_tournament",
+    activation_observed: bool = False,
+) -> dict[str, Any]:
+    activation_status = "observed" if activation_observed else "missing"
+    activation_evidence = (
+        "activation_observed" if activation_observed else "missing_activation"
+    )
+    phase_bucket = mechanism_id if activation_observed else "construction"
     return {
         "available": True,
         "aggregate": {
@@ -351,7 +383,7 @@ def _construction_successor_measurement_summary() -> dict[str, Any]:
             "mechanism_family_mapped_row_count": 1,
             "mechanism_family_unmapped_row_count": 0,
             "mechanism_family_effects": {
-                "rotated_sweep_seed_tournament": {
+                mechanism_id: {
                     "protocol_row_count": 1,
                     "positive_rows": 0,
                     "nonpositive_rows": 1,
@@ -367,15 +399,15 @@ def _construction_successor_measurement_summary() -> dict[str, Any]:
                     "top_rows_by_effect_to_mde": [
                         {
                             "branch_id": "branch-1",
-                            "mechanism_family": "rotated_sweep_seed_tournament",
+                            "mechanism_family": mechanism_id,
                             "stage": "screening",
                             "median_delta": 0.0,
                             "positive_effect_at_or_above_mde": False,
                             "mechanism_evidence": {
-                                "primary_mechanism": ("rotated_sweep_seed_tournament"),
-                                "primary_activation_status": "missing",
+                                "primary_mechanism": mechanism_id,
+                                "primary_activation_status": activation_status,
                                 "primary_effect_status": "missing",
-                                "activation_evidence_status": "missing_activation",
+                                "activation_evidence_status": activation_evidence,
                                 "objective_effect_status": "zero_objective_effect",
                             },
                             "case_level_deltas": {
@@ -392,7 +424,7 @@ def _construction_successor_measurement_summary() -> dict[str, Any]:
                             },
                             "candidate_phase_telemetry_summary": {
                                 "buckets": {
-                                    "construction": {
+                                    phase_bucket: {
                                         "weighted_sum_ms": 20.0,
                                         "max_ms": 10.0,
                                     }

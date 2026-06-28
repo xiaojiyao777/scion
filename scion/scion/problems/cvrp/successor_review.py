@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping
 
+from scion.problems.cvrp.mechanism_families import CVRP_SUCCESSOR_FAMILY_ALIASES
 from scion.problems.cvrp.research_guidance import (
     CVRP_PROBLEM_FAMILY,
     PROTECTED_CASES,
@@ -13,59 +14,6 @@ from scion.problems.cvrp.research_guidance import (
 
 SCHEMA_VERSION = "scion.postrun_cvrp_successor_summary.v1"
 PROOF_SCHEMA_VERSION = "scion.postrun_cvrp_successor_required_evidence_proof.v1"
-
-_FAMILY_ALIASES = {
-    "construction_seed_portfolio": (
-        "construction_seed_portfolio",
-        "construction_seed",
-        "seed_portfolio",
-        "initial_solution",
-        "rotated_sweep_seed_tournament",
-        "sweep_seed_tournament",
-        "rotated_sweep_seed",
-        "sweep_seed",
-        "sweep_construction",
-        "construction",
-    ),
-    "bounded_local_search_variant": (
-        "bounded_local_search_variant",
-        "bounded_local_search",
-        "local_search",
-        "deadline_aware_local_search",
-        "bounded_2node_cross_exchange",
-        "two_node_cross_exchange",
-        "2node_cross_exchange",
-        "cross_exchange",
-        "intra_route_or_opt_reinsert",
-        "or_opt_reinsert",
-        "same_route_or_opt_reinsertion",
-        "intra_route_block_reinsert",
-        "bounded_same_route_or_opt_reinsertion",
-        "alns_vns_intra_route_block_reinsert",
-        "bounded_intra_route_3opt",
-        "bounded_intra_route_three_opt",
-        "intra_route_3opt",
-        "intra_route_three_opt",
-        "3opt",
-        "three_opt",
-        "segment_swap",
-        "route_pair_exchange",
-    ),
-    "destroy_repair_selection": (
-        "destroy_repair_selection",
-        "destroy_repair",
-        "angular_sector_removal",
-        "angular_sector",
-        "radial_string_removal",
-        "farthest_noise_related_removal",
-        "removal",
-        "repair",
-        "regret_insertion",
-        "insertion",
-        "shaw_removal",
-        "worst_removal",
-    ),
-}
 
 
 def cvrp_successor_summary(
@@ -639,7 +587,7 @@ def _family_matches(value: Any, family: str) -> bool:
     if not normalized:
         return False
     aliases = (_normalize(family),) + tuple(
-        _normalize(alias) for alias in _FAMILY_ALIASES.get(family, ())
+        _normalize(alias) for alias in CVRP_SUCCESSOR_FAMILY_ALIASES.get(family, ())
     )
     return any(
         alias and (normalized == alias or alias in normalized or normalized in alias)
