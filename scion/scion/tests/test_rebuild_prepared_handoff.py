@@ -661,6 +661,65 @@ def test_rebuild_prompt_context_readiness_accepts_no_resume_without_copied_campa
     assert copied_status["detail"]["resume_from_campaign"] == ""
 
 
+def test_rebuild_prompt_context_readiness_reads_resume_snapshot(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_rebuild_fixture_root(
+        tmp_path,
+        problem_family="cvrp",
+        report_stem="cvrp_on_full",
+        research_focus=_cvrp_research_focus(),
+        control_pair_key="cvrp.prepared:rep01",
+        resume_from_campaign="/tmp/source-campaign",
+    )
+    campaign_dir = run_root / "campaign"
+    snapshot_dir = run_root / "resume_snapshot" / "campaign"
+    snapshot_dir.mkdir(parents=True)
+    for ref in ("campaign_summary.json", "status.json"):
+        (snapshot_dir / ref).write_text(
+            (campaign_dir / ref).read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (campaign_dir / ref).unlink()
+
+    snapshot_manifest = run_root / "resume_snapshot" / "resume_source_manifest.v1.json"
+    _write_json(
+        snapshot_manifest,
+        {
+            "schema_version": "scion.launcher_resume_preparation.v1",
+            "terminal_artifacts": [
+                {
+                    "original_ref": "campaign_summary.json",
+                    "snapshot_ref": "resume_snapshot/campaign/campaign_summary.json",
+                },
+                {
+                    "original_ref": "status.json",
+                    "snapshot_ref": "resume_snapshot/campaign/status.json",
+                },
+            ],
+        },
+    )
+    manifest_path = run_root / "prepared_run_manifest.v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["resume_snapshot_ref"] = (
+        "resume_snapshot/resume_source_manifest.v1.json"
+    )
+    _write_json(manifest_path, manifest)
+
+    prompt_context = rebuild_tool.build_prepared_prompt_context_readiness(run_root)
+
+    assert prompt_context["readiness"]["ready_for_launch_prompt_audit"] is True
+    assert prompt_context["readiness"]["missing_required"] == []
+    copied_summary = prompt_context["signals"]["copied_campaign_summary"]
+    copied_status = prompt_context["signals"]["copied_campaign_status"]
+    assert copied_summary["available"] is True
+    assert copied_summary["detail"]["source_kind"] == "resume_snapshot"
+    assert copied_status["available"] is True
+    assert copied_status["detail"]["source_kind"] == "resume_snapshot"
+    shape_detail = prompt_context["signals"]["research_shape_prompt_signal"]["detail"]
+    assert shape_detail["prompt_summary"]["payload_source"] == "copied_campaign_status"
+
+
 def test_rebuild_prepared_handoff_cli_uses_current_checkout_without_pythonpath(
     tmp_path: Path,
 ) -> None:

@@ -651,7 +651,46 @@ def test_warehouse_agentic_launcher_can_copy_resume_campaign(tmp_path: Path) -> 
         encoding="utf-8",
     )
     (source_campaign / "campaign_summary.json").write_text(
-        json.dumps({"run_complete": True}),
+        json.dumps(
+            {
+                "run_complete": True,
+                "branches": [{"id": "branch-a"}],
+                "agentic_session_trace_index": {
+                    "sessions": [{"prompt_manifest": "traces/branch-a/prompt.json"}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (source_campaign / "status.json").write_text(
+        json.dumps(
+            {
+                "branches": [{"id": "branch-a"}],
+                "cross_branch_research_summary": {
+                    "research_shape_diagnostics": {
+                        "schema_version": "campaign_research_shape_diagnostics.v1",
+                        "policy": "summary_status_observability_only",
+                        "advisory_only": True,
+                        "decision_features_excluded": True,
+                        "max_branch_depth": 2,
+                        "mechanism_family_breadth": {
+                            "family_count": 1,
+                            "families": {"warehouse_route_rebalance": 1},
+                        },
+                        "active_research_shape_signal": {
+                            "shape": "deep_focused",
+                            "active_branch_count": 1,
+                            "active_mechanism_families": [
+                                "warehouse_route_rebalance"
+                            ],
+                        },
+                        "proposal_guidance": [
+                            "continue warehouse route rebalance evidence"
+                        ],
+                    },
+                },
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -702,6 +741,24 @@ def test_warehouse_agentic_launcher_can_copy_resume_campaign(tmp_path: Path) -> 
     )
     assert prepare_status["copied_campaign_status_present"] is True
     assert prepare_status["copied_campaign_summary_present"] is True
+    prompt_context = json.loads(
+        (
+            run_root
+            / "prepared_handoff"
+            / "prompt_context_readiness"
+            / "warehouse_on_full.prepared_prompt_context_readiness.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert prompt_context["readiness"]["ready_for_launch_prompt_audit"] is True
+    assert prompt_context["readiness"]["missing_required"] == []
+    assert (
+        prompt_context["signals"]["copied_campaign_status"]["detail"]["source_kind"]
+        == "resume_snapshot"
+    )
+    assert (
+        prompt_context["signals"]["copied_campaign_summary"]["detail"]["source_kind"]
+        == "resume_snapshot"
+    )
     launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
     command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
     assert f"RESUME_FROM_CAMPAIGN={source_campaign}" in launch_env

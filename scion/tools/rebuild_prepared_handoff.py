@@ -444,10 +444,20 @@ def build_prepared_prompt_context_readiness(run_root: Path | str) -> dict[str, A
     manifest = _read_json(manifest_path)
     manifest_dict = manifest if isinstance(manifest, dict) else {}
     campaign_dir = _resolve_campaign_dir(root, manifest_dict)
-    summary_path = campaign_dir / "campaign_summary.json"
-    status_path = campaign_dir / "status.json"
-    campaign_summary = _read_json(summary_path)
-    campaign_status = _read_json(status_path)
+    campaign_summary, summary_source, summary_source_kind = (
+        _read_resume_context_artifact(
+            root=root,
+            manifest=manifest_dict,
+            campaign_dir=campaign_dir,
+            ref="campaign_summary.json",
+        )
+    )
+    campaign_status, status_source, status_source_kind = _read_resume_context_artifact(
+        root=root,
+        manifest=manifest_dict,
+        campaign_dir=campaign_dir,
+        ref="status.json",
+    )
     summary_dict = campaign_summary if isinstance(campaign_summary, dict) else {}
     status_dict = campaign_status if isinstance(campaign_status, dict) else {}
     research_focus = _mapping_or_empty(manifest_dict.get("research_focus"))
@@ -481,10 +491,11 @@ def build_prepared_prompt_context_readiness(run_root: Path | str) -> dict[str, A
         "copied_campaign_summary",
         available=bool(summary_dict),
         required=copied_campaign_required,
-        source=str(summary_path),
+        source=str(summary_source),
         detail={
             "keys": sorted(summary_dict)[:12],
             "resume_from_campaign": resume_from_campaign,
+            "source_kind": summary_source_kind,
         },
     )
     _add_signal(
@@ -492,10 +503,11 @@ def build_prepared_prompt_context_readiness(run_root: Path | str) -> dict[str, A
         "copied_campaign_status",
         available=bool(status_dict),
         required=copied_campaign_required,
-        source=str(status_path),
+        source=str(status_source),
         detail={
             "keys": sorted(status_dict)[:12],
             "resume_from_campaign": resume_from_campaign,
+            "source_kind": status_source_kind,
         },
     )
     _add_signal(
@@ -571,6 +583,71 @@ def build_prepared_prompt_context_readiness(run_root: Path | str) -> dict[str, A
             "Branch-level next-prompt context may be generated only after launch.",
         ],
     }
+
+
+def _read_resume_context_artifact(
+    *,
+    root: Path,
+    manifest: dict[str, Any],
+    campaign_dir: Path,
+    ref: str,
+) -> tuple[Any, Path, str]:
+    """Read copied resume context without requiring stale canonical artifacts."""
+
+    canonical_path = campaign_dir / ref
+    canonical_doc = _read_json(canonical_path)
+    if isinstance(canonical_doc, dict):
+        return canonical_doc, canonical_path, "campaign_canonical"
+
+    snapshot_path = _resume_snapshot_artifact_path(
+        root=root,
+        manifest=manifest,
+        original_ref=ref,
+    )
+    if snapshot_path is not None:
+        snapshot_doc = _read_json(snapshot_path)
+        if isinstance(snapshot_doc, dict):
+            return snapshot_doc, snapshot_path, "resume_snapshot"
+
+    return canonical_doc, canonical_path, "campaign_canonical_missing"
+
+
+def _resume_snapshot_artifact_path(
+    *,
+    root: Path,
+    manifest: dict[str, Any],
+    original_ref: str,
+) -> Path | None:
+    manifest_ref = str(manifest.get("resume_snapshot_ref") or "").strip()
+    if not manifest_ref:
+        run_status = _read_json(root / "run_status.json")
+        if isinstance(run_status, dict):
+            manifest_ref = str(run_status.get("resume_snapshot_ref") or "").strip()
+    if not manifest_ref:
+        return None
+    snapshot_manifest_path = (root / manifest_ref).resolve()
+    try:
+        snapshot_manifest_path.relative_to(root)
+    except ValueError:
+        return None
+    snapshot_manifest = _read_json(snapshot_manifest_path)
+    if not isinstance(snapshot_manifest, dict):
+        return None
+    for item in snapshot_manifest.get("terminal_artifacts") or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("original_ref") != original_ref:
+            continue
+        snapshot_ref = str(item.get("snapshot_ref") or "").strip()
+        if not snapshot_ref:
+            return None
+        snapshot_path = (root / snapshot_ref).resolve()
+        try:
+            snapshot_path.relative_to(root)
+        except ValueError:
+            return None
+        return snapshot_path
+    return None
 
 
 def render_prompt_context_readiness_markdown(report: dict[str, Any]) -> str:

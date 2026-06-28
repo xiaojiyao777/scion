@@ -68,13 +68,16 @@ chronology belongs in focused experiment reports and git history.
   `run_root/resume_snapshot/` instead of occupying canonical current-run paths
   (`run_status.json`, `status.json`, `campaign_summary.json`, `exit.txt`, and
   `artifacts/formal_candidates/index.jsonl`). Launch metadata and postrun
-  inventory expose `resume_snapshot_ref`. In-flight Protocol status now
-  explicitly reports running state, `complete=false`, pair counters, child
-  subprocess details, and redacted case/seed aliases without changing
-  completed-only counters such as `protocol_metric_results` or `last_result`.
+  inventory expose `resume_snapshot_ref`, and prepared prompt-context readiness
+  reads copied campaign status/summary from the declared snapshot as historical
+  resume context instead of requiring stale canonical campaign files. In-flight
+  Protocol status now explicitly reports running state, `complete=false`, pair
+  counters, child subprocess details, and redacted case/seed aliases without
+  changing completed-only counters such as `protocol_metric_results` or
+  `last_result`.
   Local focused validation passes for launcher resume preparation, CVRP and
-  warehouse resume launchers, running-status reporting, and postrun
-  snapshot/in-flight summaries.
+  warehouse resume launchers, prepared-handoff rebuilds, running-status
+  reporting, and postrun snapshot/in-flight summaries.
 - Design N skeleton from
   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md` is
   implemented locally as the problem-neutral `scion.postrun` package:
