@@ -57,11 +57,9 @@ chronology belongs in focused experiment reports and git history.
   freeze new semantics in the oversized postrun/helper scripts; future work in
   that area needs a design split into named ports or problem-owned validators
   rather than more helper/projection growth.
-- Current local gpt-5.5 proxy at `127.0.0.1:8080` is authenticated after
-  importing refreshed Codex CLI tokens into the proxy account store.
-  `/auth/status` reports one active Pro account and
-  `check_gpt55_proxy.py --model gpt-5.5` returns HTTP 200 with a healthy chat
-  completion. Restarting the proxy was not required.
+- Current local gpt-5.5 proxy at `127.0.0.1:8080` is authenticated after the
+  2026-06-28 Codex relogin and proxy restart. `/v1/models` lists `gpt-5.5`,
+  and a `gpt-5.5` chat completion returns HTTP 200.
 - Generic launcher resume handling is repaired locally for CVRP and warehouse:
   resumed campaign runtime state is copied forward, while stale terminal
   artifacts from the copied source campaign are quarantined under
@@ -114,7 +112,12 @@ chronology belongs in focused experiment reports and git history.
   brief, acceptance, and opportunity visibility suites; the
   artifact/lifecycle/evidence/review-input/prompt-visibility/research-telemetry
   port tests pass (`19 passed` each), and full postrun acceptance passes
-  (`85 passed` each) in both environments.
+  (`85 passed` each) in both environments. The first postrun CLI migration
+  slice now moves generic prepared-run contract inventory checks into
+  `scion.postrun.inventory.prepared_contract`; `postrun_artifact_inventory.py`
+  keeps legacy output shape and only appends the still-unmigrated
+  CVRP/warehouse prepared-handoff checks. The new generic module is source
+  guarded against CVRP/warehouse/VRP vocabulary.
 - Design O initial slice is implemented locally as
   `scion.measurement.MeasurementConsumerView`. It reduces problem-owned
   measurement declarations to generic status/runtime/pairing/effect/MDE fields
@@ -455,9 +458,10 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    semantics should sit in problem-owned validators/providers. Design basis:
    `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md` and
    `scion/design/v0.4-postrun-cli-port-migration-design.md`. The next concrete
-   migration is to thin `postrun_artifact_inventory.py` and
-   `rebuild_prepared_handoff.py` into CLI adapters without changing legacy
-   output shape or live runtime behavior.
+   migration is to move CVRP/warehouse prepared-handoff checks into
+   problem-owned providers, then continue thinning
+   `rebuild_prepared_handoff.py` without changing legacy output shape or live
+   runtime behavior.
 2. Extend problem-owned opportunity providers/reviews beyond the CVRP initial
    slice only when a concrete problem package needs it. Generic core should
    continue to render/audit `ProblemOpportunitySummary`; residual opportunity,

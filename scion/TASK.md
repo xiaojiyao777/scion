@@ -15,10 +15,9 @@ focused validation passes (`108 passed`) plus
 `git diff --check`. Earlier WSL conda `scion` validation also passed
 (`108 passed`) after sync, but current continuation should use the server
 conda `claw` environment until WSL is available again. The local gpt-5.5 proxy
-at `127.0.0.1:8080` is authenticated after importing refreshed Codex CLI
-tokens into the proxy account store; `/auth/status` reports one active Pro
-account and `check_gpt55_proxy.py --model gpt-5.5` returns HTTP 200. Restarting
-the proxy was not required. A generic launcher resume/status repair is also
+at `127.0.0.1:8080` is authenticated after the 2026-06-28 Codex relogin and
+proxy restart; `/v1/models` lists `gpt-5.5`, and a `gpt-5.5` chat completion
+returns HTTP 200. A generic launcher resume/status repair is also
 implemented locally: CVRP and warehouse resume launches now quarantine copied
 terminal artifacts under `run_root/resume_snapshot/` instead of canonical
 current-run paths, expose `resume_snapshot_ref`, and let prepared prompt-context
@@ -122,7 +121,13 @@ semantics, while `scion.postrun.problem_summary_common_input_consistency_detail`
 owns only common protocol/measurement/runtime/continuity/quality-block input
 projection. `check_postrun_acceptance.py` is now back under the 1000-line
 warning threshold. Local and WSL full postrun acceptance still passes
-(`85 passed` each).
+(`85 passed` each). The first postrun CLI migration slice is implemented:
+generic prepared-run contract inventory checks now live in
+`scion.postrun.inventory.prepared_contract`, while
+`postrun_artifact_inventory.py` preserves legacy payloads and only appends the
+still-unmigrated CVRP/warehouse prepared-handoff checks. The generic module is
+source-guarded against problem-family vocabulary and keeps CVRP/warehouse/VRP
+semantics out of `scion.postrun.inventory`.
 Design O initial slice is implemented locally as
 `scion.measurement.MeasurementConsumerView`; `ProtocolConfig` now consumes the
 typed view while preserving its legacy readiness payload shape. Proposal
@@ -651,6 +656,16 @@ Current checkpoint:
   expected problem summary function and preserves the legacy check name and
   payload shape. Local conda `claw` and WSL conda `scion` full postrun
   acceptance tests pass (`85 passed` each).
+- Design N prepared-contract inventory migration is present:
+  `scion.postrun.inventory.prepared_contract` now owns generic
+  prepared-manifest schema, launcher field, path, git identity, secret-free,
+  report-only, `decision_features_excluded`, command pointer, model preflight,
+  and report-family checks. `postrun_artifact_inventory.py` calls the package
+  port and then appends the still-legacy CVRP/warehouse handoff checks so JSON
+  keys, Markdown rendering, and launch-readiness behavior remain compatible.
+  The new generic source is guarded against CVRP/warehouse/VRP vocabulary;
+  focused local tests pass for the new port and legacy artifact inventory
+  behavior.
 - Design O initial implementation is present in
   `scion.measurement.MeasurementConsumerView`: generic consumers receive
   normalized readiness, runtime model, pairing validity, effect scale,

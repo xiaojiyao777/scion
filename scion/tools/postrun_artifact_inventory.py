@@ -5,15 +5,21 @@ from __future__ import annotations
 
 import argparse
 import json
-import shlex
 import sqlite3
-import subprocess
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
 import yaml
+
+from scion.postrun.inventory.prepared_contract import (
+    PREPARED_RUN_CONTRACT_SCHEMA,
+    PREPARED_RUN_MANIFEST_SCHEMA,
+    build_prepared_run_contract as _build_prepared_run_contract,
+    command_has_shell_flag,
+    resolve_manifest_path as _resolve_prepared_manifest_path,
+)
 
 
 HANDOFF_DOC = "scion/docs/operations/postrun-analysis-handoff.md"
@@ -106,8 +112,6 @@ POSTRUN_REPORT_DIRS = (
     "readiness",
     "rebuild",
 )
-PREPARED_RUN_MANIFEST_SCHEMA = "scion.launcher_prepared_run_manifest.v1"
-PREPARED_RUN_CONTRACT_SCHEMA = "scion.prepared_run_contract_inventory.v1"
 SCION_PROJECT_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = Path(__file__).resolve().parents[2]
 CVRP_LARGE_TWOOPT_OPPORTUNITY_TOKEN = "large_instance_intra_route_two_opt_seed"
@@ -1124,207 +1128,32 @@ def _postrun_report_inventory(run_root: Path) -> dict[str, Any]:
 def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
     """Return report-only checks for a prepared launch root."""
 
-    manifest_path = run_root / "prepared_run_manifest.v1.json"
-    manifest = _read_json(manifest_path)
     inferred_family = _infer_problem_family_from_run_root(run_root)
-    command_text = _read_text(run_root / "command.txt")
-    checks: dict[str, dict[str, Any]] = {}
+    generic = _build_prepared_run_contract(
+        run_root,
+        repo_dir=REPO_DIR,
+        scion_project_dir=SCION_PROJECT_DIR,
+        postrun_report_dirs=POSTRUN_REPORT_DIRS,
+        inferred_problem_family=inferred_family,
+    )
+    contract = generic.contract
+    if not generic.manifest_is_mapping:
+        return contract
+
+    checks = contract["checks"]
 
     def add_check(name: str, passed: bool, detail: Any = "") -> None:
         checks[name] = {"passed": bool(passed), "detail": detail}
 
-    manifest_is_dict = isinstance(manifest, dict)
-    add_check("manifest_present", manifest_path.exists(), str(manifest_path))
-    add_check("manifest_json_object", manifest_is_dict, type(manifest).__name__)
-    if not manifest_is_dict:
-        return {
-            "schema_version": PREPARED_RUN_CONTRACT_SCHEMA,
-            "report_only": True,
-            "quality_judgment": False,
-            "decision_features_excluded": True,
-            "manifest_path": str(manifest_path),
-            "manifest_present": manifest_path.exists(),
-            "contract_complete": False,
-            "problem_family": inferred_family["problem_family"],
-            "problem_family_source": inferred_family["source"],
-            "problem_family_inferred": inferred_family["problem_family"] is not None,
-            "problem_family_inference_evidence": inferred_family["evidence"],
-            "model": None,
-            "analysis_intent": None,
-            "acceptance_focus": [],
-            "research_focus": {},
-            "execution": {},
-            "resume_from_campaign": None,
-            "control_pair_key": None,
-            "completion_preflight": None,
-            "postrun_reports": None,
-            "checks": checks,
-        }
-
-    rendered_manifest = json.dumps(manifest, sort_keys=True)
-    run_root_text = str(manifest.get("run_root") or "")
-    campaign_dir_text = str(manifest.get("campaign_dir") or "")
-    report_metadata = manifest.get("report_metadata")
-    if not isinstance(report_metadata, dict):
-        report_metadata = {}
-    model = manifest.get("model")
-    if not isinstance(model, dict):
-        model = {}
-    git = manifest.get("git")
-    if not isinstance(git, dict):
-        git = {}
-    config = manifest.get("config")
-    if not isinstance(config, dict):
-        config = {}
-    execution = manifest.get("execution")
-    execution_is_dict = isinstance(execution, dict)
-    if not execution_is_dict:
-        execution = {}
-    manifest_problem_family = _string_or_none(manifest.get("problem_family"))
-    problem_family = manifest_problem_family or inferred_family["problem_family"]
-    problem_family_source = (
-        "prepared_run_manifest"
-        if manifest_problem_family is not None
-        else inferred_family["source"]
-    )
-    problem_family_inferred = (
-        manifest_problem_family is None and inferred_family["problem_family"] is not None
-    )
-    problem_check_manifest = dict(manifest)
-    if problem_family is not None and manifest_problem_family is None:
-        problem_check_manifest["problem_family"] = problem_family
-
-    add_check(
-        "manifest_schema",
-        manifest.get("schema_version") == PREPARED_RUN_MANIFEST_SCHEMA,
-        manifest.get("schema_version"),
-    )
-    for key in ("report_only", "decision_features_excluded"):
-        add_check(f"manifest_{key}", manifest.get(key) is True, manifest.get(key))
-    for key in (
-        "quality_judgment",
-        "campaign_state_mutated",
-        "scheduler_state_mutated",
-        "promotion_state_mutated",
-    ):
-        add_check(f"manifest_{key}", manifest.get(key) is False, manifest.get(key))
-    add_check(
-        "manifest_secret_free",
-        "SCION_API_KEY" not in rendered_manifest,
-        "SCION_API_KEY absent",
-    )
-    add_check(
-        "run_root_identity",
-        _same_path_or_leaf(run_root_text, run_root),
-        run_root_text,
-    )
-    add_check(
-        "campaign_dir_identity",
-        _same_path_or_leaf(campaign_dir_text, run_root / "campaign"),
-        campaign_dir_text,
-    )
-
-    command = str(manifest.get("command") or "")
-    add_check("command_txt_present", bool(command_text.strip()), "command.txt")
-    add_check(
-        "command_matches_manifest",
-        bool(command and command in command_text),
-        command,
-    )
-    add_check(
-        "prepared_manifest_pointer",
-        _command_points_to_prepared_manifest(command_text, run_root, run_root_text),
-        "PREPARED_RUN_MANIFEST",
-    )
-    add_check("model_is_gpt55", model.get("name") == "gpt-5.5", model.get("name"))
-    add_check(
-        "completion_preflight_enabled",
-        model.get("completion_preflight") is True,
-        model.get("completion_preflight"),
-    )
-    add_check(
-        "control_pair_key_present",
-        bool(report_metadata.get("control_pair_key")),
-        report_metadata.get("control_pair_key"),
-    )
-    add_check(
-        "postrun_reports_enabled",
-        report_metadata.get("postrun_reports") is True,
-        report_metadata.get("postrun_reports"),
-    )
-    families = report_metadata.get("postrun_acceptance_families")
-    missing_families = [
-        family for family in POSTRUN_REPORT_DIRS if family not in (families or [])
-    ]
-    add_check(
-        "postrun_families_complete",
-        isinstance(families, list) and not missing_families,
-        ",".join(missing_families),
-    )
-    add_check("execution_present", execution_is_dict, "execution")
-    add_check(
-        "execution_rounds_positive",
-        _positive_number(execution.get("rounds")),
-        execution.get("rounds"),
-    )
-    add_check(
-        "execution_disable_early_stop",
-        execution.get("disable_early_stop") is True,
-        execution.get("disable_early_stop"),
-    )
-    add_check(
-        "command_disable_early_stop",
-        command_has_shell_flag(command, "--disable-early-stop"),
-        command,
-    )
-    missing_config_paths = _missing_manifest_config_paths(
-        config,
-        manifest_run_root=run_root_text,
-        local_run_root=run_root,
-    )
-    add_check(
-        "config_paths_resolvable",
-        not missing_config_paths,
-        ",".join(missing_config_paths),
-    )
-    git_consistency = _git_runtime_consistency(git)
-    add_check(
-        "git_runtime_consistent",
-        git_consistency.get("consistent") is True,
-        git_consistency.get("detail"),
-    )
     _add_cvrp_measurement_handoff_checks(
-        problem_check_manifest,
+        generic.problem_check_manifest,
         add_check,
-        manifest_run_root=run_root_text,
+        manifest_run_root=generic.manifest_run_root,
         local_run_root=run_root,
     )
-    _add_warehouse_followup_handoff_checks(problem_check_manifest, add_check)
-
-    return {
-        "schema_version": PREPARED_RUN_CONTRACT_SCHEMA,
-        "report_only": True,
-        "quality_judgment": False,
-        "decision_features_excluded": True,
-        "manifest_path": str(manifest_path),
-        "manifest_present": True,
-        "contract_complete": all(item["passed"] for item in checks.values()),
-        "problem_family": problem_family,
-        "problem_family_source": problem_family_source,
-        "problem_family_inferred": problem_family_inferred,
-        "problem_family_inference_evidence": inferred_family["evidence"],
-        "model": model.get("name"),
-        "analysis_intent": _string_or_none(manifest.get("analysis_intent")),
-        "acceptance_focus": _string_items(manifest.get("acceptance_focus")),
-        "research_focus": _mapping_or_empty(manifest.get("research_focus")),
-        "execution": _prepared_contract_execution(execution),
-        "resume_from_campaign": _string_or_none(manifest.get("resume_from_campaign")),
-        "git": _prepared_contract_git_identity(git_consistency),
-        "control_pair_key": report_metadata.get("control_pair_key"),
-        "completion_preflight": model.get("completion_preflight"),
-        "postrun_reports": report_metadata.get("postrun_reports"),
-        "checks": checks,
-    }
+    _add_warehouse_followup_handoff_checks(generic.problem_check_manifest, add_check)
+    contract["contract_complete"] = all(item["passed"] for item in checks.values())
+    return contract
 
 
 def _infer_problem_family_from_run_root(run_root: Path) -> dict[str, Any]:
@@ -1368,36 +1197,6 @@ def _problem_family_from_starting_campaign_log(text: str) -> str | None:
         if problem_family in {"warehouse_delivery", "cvrp"}:
             return problem_family
     return None
-
-
-def _prepared_contract_execution(execution: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        "rounds": execution.get("rounds"),
-        "time_limit_sec": execution.get("time_limit_sec"),
-        "agentic_session_timeout_sec": execution.get("agentic_session_timeout_sec"),
-        "agentic_tool_max_steps": execution.get("agentic_tool_max_steps"),
-        "agentic_tool_max_calls": execution.get("agentic_tool_max_calls"),
-        "agentic_code_tool_max_calls": execution.get("agentic_code_tool_max_calls"),
-        "agentic_observation_max_chars": execution.get(
-            "agentic_observation_max_chars"
-        ),
-        "proposal_attempt_limit": execution.get("proposal_attempt_limit"),
-        "proposal_quality_loop_limit": execution.get("proposal_quality_loop_limit"),
-        "stage_transition_drain_limit": execution.get("stage_transition_drain_limit"),
-        "measurement_governance": execution.get("measurement_governance"),
-        "proposal_context_ablation": execution.get("proposal_context_ablation"),
-        "agentic_proposal": execution.get("agentic_proposal"),
-        "disable_early_stop": execution.get("disable_early_stop"),
-    }
-
-
-def _prepared_contract_git_identity(
-    git_consistency: Mapping[str, Any],
-) -> dict[str, Any]:
-    return {
-        **dict(git_consistency),
-        "commit": git_consistency.get("manifest_commit"),
-    }
 
 
 def _add_cvrp_measurement_handoff_checks(
@@ -1755,16 +1554,6 @@ def _positive_number(value: Any) -> bool:
     return not isinstance(value, bool) and isinstance(value, (float, int)) and value > 0
 
 
-def command_has_shell_flag(command: Any, flag: str) -> bool:
-    if not isinstance(command, str):
-        return False
-    try:
-        tokens = shlex.split(command, comments=False, posix=True)
-    except ValueError:
-        return False
-    return flag in tokens
-
-
 def _mapping_or_empty(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -1782,207 +1571,6 @@ def _prepared_contract_checks_for_markdown(value: Any) -> dict[str, dict[str, An
         for key, item in sorted(checks.items())
         if isinstance(item, dict)
     }
-
-
-def _same_path_or_leaf(manifest_path: str, local_path: Path) -> bool:
-    if not manifest_path:
-        return False
-    remote = Path(manifest_path)
-    if remote == local_path:
-        return True
-    if remote.name == local_path.name and local_path.name != "campaign":
-        return True
-    return (
-        remote.name == local_path.name
-        and remote.parent.name == local_path.parent.name
-    )
-
-
-def _command_points_to_prepared_manifest(
-    command_text: str,
-    run_root: Path,
-    manifest_run_root: str,
-) -> bool:
-    for line in command_text.splitlines():
-        if not line.startswith("PREPARED_RUN_MANIFEST="):
-            continue
-        raw_path = line.split("=", 1)[1].strip()
-        if raw_path == str(run_root / "prepared_run_manifest.v1.json"):
-            return True
-        if raw_path == str(Path(manifest_run_root) / "prepared_run_manifest.v1.json"):
-            return True
-        prepared_path = Path(raw_path)
-        return (
-            prepared_path.name == "prepared_run_manifest.v1.json"
-            and prepared_path.parent.name == run_root.name
-        )
-    return False
-
-
-def _missing_manifest_config_paths(
-    config: dict[str, Any],
-    *,
-    manifest_run_root: str,
-    local_run_root: Path,
-) -> list[str]:
-    missing: list[str] = []
-    for key, value in sorted(config.items()):
-        if not isinstance(value, str) or not value.strip():
-            continue
-        if key.endswith("data_root") or key in {
-            "warehouse_data_root",
-            "problem_data_root",
-        }:
-            continue
-        if _manifest_path_resolves(value, manifest_run_root, local_run_root):
-            continue
-        missing.append(f"{key}={value}")
-    return missing
-
-
-def _manifest_path_resolves(
-    value: str,
-    manifest_run_root: str,
-    local_run_root: Path,
-) -> bool:
-    return (
-        _resolve_manifest_path(value, manifest_run_root, local_run_root)
-        is not None
-    )
-
-
-def _resolve_manifest_path(
-    value: str,
-    manifest_run_root: str = "",
-    local_run_root: Path | None = None,
-) -> Path | None:
-    for candidate in _manifest_path_candidates(
-        value,
-        manifest_run_root,
-        local_run_root,
-    ):
-        if candidate.exists():
-            return candidate
-    return None
-
-
-def _manifest_path_candidates(
-    value: str,
-    manifest_run_root: str = "",
-    local_run_root: Path | None = None,
-) -> list[Path]:
-    path = Path(value)
-    candidates = [path]
-    if not path.is_absolute():
-        candidates.extend(
-            (
-                REPO_DIR / path,
-                SCION_PROJECT_DIR / path,
-                SCION_PROJECT_DIR / "scion" / path,
-            )
-        )
-    if (
-        local_run_root is not None
-        and manifest_run_root
-        and value.startswith(manifest_run_root)
-    ):
-        try:
-            candidates.append(
-                local_run_root / Path(value).relative_to(manifest_run_root)
-            )
-        except ValueError:
-            pass
-    return candidates
-
-
-def _git_runtime_consistency(git: dict[str, Any]) -> dict[str, Any]:
-    manifest_commit = str(git.get("commit") or "").strip()
-    runtime_guard_paths = str(git.get("runtime_guard_paths") or "").strip()
-    checkout_commit = _git_output(("rev-parse", "--short", "HEAD"))
-    if not manifest_commit:
-        return {
-            "consistent": False,
-            "manifest_commit": None,
-            "checkout_commit": checkout_commit,
-            "runtime_guard_paths": runtime_guard_paths,
-            "detail": "missing manifest git.commit",
-        }
-    if not checkout_commit:
-        return {
-            "consistent": False,
-            "manifest_commit": manifest_commit,
-            "checkout_commit": None,
-            "runtime_guard_paths": runtime_guard_paths,
-            "detail": "unable to read checkout HEAD",
-        }
-    if checkout_commit == manifest_commit:
-        return {
-            "consistent": True,
-            "manifest_commit": manifest_commit,
-            "checkout_commit": checkout_commit,
-            "runtime_guard_paths": runtime_guard_paths,
-            "detail": "checkout matches manifest commit",
-        }
-    if not runtime_guard_paths:
-        return {
-            "consistent": False,
-            "manifest_commit": manifest_commit,
-            "checkout_commit": checkout_commit,
-            "runtime_guard_paths": runtime_guard_paths,
-            "detail": "checkout differs and runtime guard paths are missing",
-        }
-    pathspecs = runtime_guard_paths.split()
-    diff = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(REPO_DIR),
-            "diff",
-            "--quiet",
-            f"{manifest_commit}..HEAD",
-            "--",
-            *pathspecs,
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if diff.returncode == 0:
-        return {
-            "consistent": True,
-            "manifest_commit": manifest_commit,
-            "checkout_commit": checkout_commit,
-            "runtime_guard_paths": runtime_guard_paths,
-            "detail": "checkout differs, but runtime guard paths are unchanged",
-        }
-    if diff.returncode == 1:
-        return {
-            "consistent": False,
-            "manifest_commit": manifest_commit,
-            "checkout_commit": checkout_commit,
-            "runtime_guard_paths": runtime_guard_paths,
-            "detail": "checkout differs and runtime guard paths changed",
-        }
-    detail = (diff.stderr or diff.stdout or "git diff failed").strip()
-    return {
-        "consistent": False,
-        "manifest_commit": manifest_commit,
-        "checkout_commit": checkout_commit,
-        "runtime_guard_paths": runtime_guard_paths,
-        "detail": detail,
-    }
-
-
-def _git_output(args: tuple[str, ...]) -> str | None:
-    result = subprocess.run(
-        ["git", "-C", str(REPO_DIR), *args],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return None
-    return result.stdout.strip() or None
 
 
 def _phase4_evidence_coverage(
@@ -2451,10 +2039,12 @@ def _cvrp_protected_cases_split_status(
     protected_case_tokens = [_cvrp_case_token(item) for item in protected_cases]
     split_value = config.get("split")
     split_path = (
-        _resolve_manifest_path(
+        _resolve_prepared_manifest_path(
             split_value,
             manifest_run_root=manifest_run_root,
             local_run_root=local_run_root,
+            repo_dir=REPO_DIR,
+            scion_project_dir=SCION_PROJECT_DIR,
         )
         if isinstance(split_value, str) and split_value.strip()
         else None
