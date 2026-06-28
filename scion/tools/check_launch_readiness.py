@@ -22,7 +22,7 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from postrun_artifact_inventory import build_inventory, command_has_shell_flag  # noqa: E402
-from prepared_prompt_context import (  # noqa: E402
+from scion.postrun.handoff.prepared_prompt_context import (  # noqa: E402
     ACTIVE_SUBJECT_CODE_CONSTRAINTS_PROMPT_SUMMARY_SCHEMA,
     PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_SUMMARY_SCHEMA,
     RESEARCH_FOCUS_PROMPT_SUMMARY_SCHEMA,

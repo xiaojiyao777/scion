@@ -129,9 +129,18 @@ chronology belongs in focused experiment reports and git history.
   `scion.problems.warehouse_delivery.prompt_bridge` own measurement and
   active-subject signal names, source markers, problem-v1 candidates, and
   surfaces. `scion.postrun.handoff.prompt_context_readiness` owns the generic
-  spec, problem-v1 resolver, and provider-payload summary used by both
-  rebuild and launch-readiness tooling. The generic module is source guarded
-  against CVRP/warehouse/VRP vocabulary.
+  spec, problem-v1 resolver, provider-payload summary, and prepared
+  prompt-context readiness build/render path used by both rebuild and
+  launch-readiness tooling. Shared prepared prompt/context audit summaries now
+  live in `scion.postrun.handoff.prepared_prompt_context`; the legacy
+  `scion/tools/prepared_prompt_context.py` path is only a compatibility
+  wrapper. `rebuild_prepared_handoff.py` is back to CLI/file-output
+  orchestration rather than owning readiness semantics. The generic module is
+  source guarded against CVRP/warehouse/VRP vocabulary. Local validation
+  passes for rebuild delegation/problem prepared-handoff ports (`8 passed`),
+  CVRP/warehouse prepare launchers (`2 passed`), py_compile, and the
+  dirty-sensitive postrun artifact inventory plus launch-readiness suite
+  (`134 passed`).
 - Design O initial slice is implemented locally as
   `scion.measurement.MeasurementConsumerView`. It reduces problem-owned
   measurement declarations to generic status/runtime/pairing/effect/MDE fields

@@ -11,6 +11,7 @@ from scion.research_guidance import (
     legacy_research_focus_to_contract,
     research_guidance_contract_to_dict,
 )
+from scion.postrun.handoff import prompt_context_readiness
 
 
 TOOL_PATH = Path(__file__).parents[2] / "tools" / "rebuild_prepared_handoff.py"
@@ -19,6 +20,17 @@ assert SPEC is not None
 rebuild_tool = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(rebuild_tool)
+
+
+def test_rebuild_tool_delegates_prompt_context_readiness_to_package_module() -> None:
+    assert (
+        rebuild_tool.build_prepared_prompt_context_readiness
+        is prompt_context_readiness.build_prepared_prompt_context_readiness
+    )
+    assert (
+        rebuild_tool.render_prompt_context_readiness_markdown
+        is prompt_context_readiness.render_prompt_context_readiness_markdown
+    )
 
 
 def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
