@@ -8,7 +8,6 @@ import pytest
 
 from scion.research_guidance import launch_research_guidance_payload
 
-
 SCION_DIR = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 LAUNCHER = SCION_DIR / "tools" / "launch_cvrp_agentic_campaign.py"
@@ -139,12 +138,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for requirement in typed_contract["evidence_requirements"]
     )
     assert any(
-        requirement["requirement_id"]
-        == "bounded_cross_exchange_reviewed_no_positive"
+        requirement["requirement_id"] == "bounded_cross_exchange_reviewed_no_positive"
         for requirement in typed_contract["evidence_requirements"]
     )
     assert any(
         requirement["requirement_id"] == "or_opt_reinsert_reviewed_no_positive"
+        for requirement in typed_contract["evidence_requirements"]
+    )
+    assert any(
+        requirement["requirement_id"] == "angular_sector_removal_reviewed_no_positive"
         for requirement in typed_contract["evidence_requirements"]
     )
     assert any(
@@ -164,13 +166,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
+        "angular_sector_removal",
     ]
     assert prepared_manifest["research_focus"]["scope"] == (
         "report_only_prepared_handoff"
     )
-    assert "route-merge absorption" in prepared_manifest["research_focus"][
-        "default_avoid_directions"
-    ]
+    assert (
+        "route-merge absorption"
+        in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
     assert any(
         "rank-gap acceptance" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
@@ -188,13 +192,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
-        "bounded_2node_cross_exchange" in item
-        and "measured_no_positive_at_mde" in item
+        "bounded_2node_cross_exchange" in item and "measured_no_positive_at_mde" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
-        "intra_route_or_opt_reinsert" in item
-        and "measured_no_positive_at_mde" in item
+        "intra_route_or_opt_reinsert" in item and "measured_no_positive_at_mde" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "angular_sector_removal" in item and "measured_no_positive_at_mde" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
@@ -222,9 +228,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert measurement["calibration"]["calibration_run"]["selected_case_count"] == 8
     assert measurement["calibration"]["calibration_run"]["selected_seed_count"] == 4
-    assert measurement["calibration"]["calibration_run"]["runtime_policy"][
-        "selected_policy"
-    ] == "protocol_time_limits"
+    assert (
+        measurement["calibration"]["calibration_run"]["runtime_policy"][
+            "selected_policy"
+        ]
+        == "protocol_time_limits"
+    )
     assert measurement["measurement_readiness"]["status"] == "ready"
     assert (
         measurement["measurement_readiness"]["calibration_evidence_level"]
@@ -240,9 +249,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "cvrp_measurement_opportunity_diagnostic.v1"
     )
     assert measurement["screening_headroom"]["case_count_gap_pct_at_least_3"] == 12
-    assert measurement["measurable_opportunity_classes"][0][
-        "mechanism_family"
-    ] == "construction_seed_portfolio"
+    assert (
+        measurement["measurable_opportunity_classes"][0]["mechanism_family"]
+        == "construction_seed_portfolio"
+    )
     assert measurement["mechanism_effect_ranking"][0]["mechanism_family"] == (
         "bounded_local_search_variant"
     )
@@ -267,45 +277,53 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
             "measurable_opportunity_classes"
         ]
     )
-    assert "materially different CVRP-owned" in prepared_manifest["research_focus"][
-        "current_question"
-    ]
-    assert "first two bounded-local-search successors" in prepared_manifest["research_focus"][
-        "current_question"
-    ]
+    assert (
+        "materially different CVRP-owned"
+        in prepared_manifest["research_focus"]["current_question"]
+    )
+    assert (
+        "first bounded-local-search and destroy/repair successors"
+        in prepared_manifest["research_focus"]["current_question"]
+    )
     assert (
         "reviewed evidence"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
-    assert "preferably to `destroy_repair_selection`" in prepared_manifest[
-        "research_focus"
-    ]["next_required_direction"]
-    assert "causal path distinct from cross-exchange and intra-route" in prepared_manifest[
-        "research_focus"
-    ]["next_required_direction"]
+    assert (
+        "angular_sector_removal"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "Rotate the next CVRP solver-design attempt to construction"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "causal path distinct from cross-exchange, intra-route"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
     assert "measured_no_positive_at_mde" in prepared_manifest_md
     assert "bounded_2node_cross_exchange" in prepared_manifest_md
     assert "intra_route_or_opt_reinsert" in prepared_manifest_md
-    assert "Rotate" in prepared_manifest["research_focus"][
-        "next_required_direction"
-    ]
+    assert "angular_sector_removal" in prepared_manifest_md
+    assert "Rotate" in prepared_manifest["research_focus"]["next_required_direction"]
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
+        "angular_sector_removal",
     ]
     assert prepared_manifest["research_focus"]["successor_opportunity_families"] == [
         "destroy_repair_selection",
         "construction_seed_portfolio",
         "bounded_local_search_variant",
     ]
-    assert "First attempt" not in prepared_manifest["research_focus"][
-        "next_required_direction"
-    ]
+    assert (
+        "First attempt"
+        not in prepared_manifest["research_focus"]["next_required_direction"]
+    )
     assert any(
-        "successor opportunity family" in item
-        and "reviewed no-positive-at-MDE" in item
+        "successor opportunity family" in item and "reviewed no-positive-at-MDE" in item
         for item in prepared_manifest["research_focus"]["required_evidence"]
     )
     assert any(
@@ -383,9 +401,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert any(
         "target-intent" in item for item in resume_continuity["required_evidence"]
     )
-    assert "DecisionFeatures" in prepared_manifest["research_focus"][
-        "decision_boundary"
-    ]
+    assert (
+        "DecisionFeatures" in prepared_manifest["research_focus"]["decision_boundary"]
+    )
     assert prepared_manifest["execution"]["rounds"] == 4
     assert prepared_manifest["execution"]["agentic_session_timeout_sec"] == 3600
     assert prepared_manifest["execution"]["agentic_tool_max_steps"] == 0
@@ -461,8 +479,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert (
         "GIT_RUNTIME_GUARD_PATHS="
         "'scion/scion :(exclude)scion/scion/tests "
-        "scion/tools scion/problems/cvrp vrp'"
-        in launch_env
+        "scion/tools scion/problems/cvrp vrp'" in launch_env
     )
     assert "SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT=0" in launch_env
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in launch_env
@@ -510,9 +527,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "scion.launcher_campaign_execution_marker.v1" in run_sh_text
     assert "CAMPAIGN_EXECUTION_MARKER:" in run_sh_text
     assert "write_postrun_acceptance_reports() {" in run_sh_text
-    assert "--output \"$RUN_ROOT/run_status.json\"" in run_sh_text
-    assert "--exit-code \"$PREFLIGHT_STATUS\"" in run_sh_text
-    assert "--detail \"$PREFLIGHT_DETAIL\"" in run_sh_text
+    assert '--output "$RUN_ROOT/run_status.json"' in run_sh_text
+    assert '--exit-code "$PREFLIGHT_STATUS"' in run_sh_text
+    assert '--detail "$PREFLIGHT_DETAIL"' in run_sh_text
     assert 'cp "$CAMPAIGN_DIR/run_status.json" "$RUN_ROOT/run_status.json"' in (
         run_sh_text
     )
@@ -521,8 +538,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "tools/check_postrun_acceptance.py" in run_sh_text
     assert "tools/write_postrun_wrapper_status.py" in run_sh_text
     assert "--strict" in run_sh_text
-    assert "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json" in (
-        run_sh_text
+    assert (
+        "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json"
+        in (run_sh_text)
     )
     assert "--require-current-run-ready" in run_sh_text
     assert '--report-stem "$REPORT_STEM"' in run_sh_text
@@ -548,8 +566,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert (
         "GIT_RUNTIME_GUARD_PATHS="
         "scion/scion :(exclude)scion/scion/tests "
-        "scion/tools scion/problems/cvrp vrp"
-        in command_txt
+        "scion/tools scion/problems/cvrp vrp" in command_txt
     )
     assert "POSTRUN_REPORTS=1" in command_txt
     assert "CONTROL_PAIR_KEY=cvrp.unit-cvrp:prepared" in command_txt
@@ -573,19 +590,13 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert '--measurement-governance "$MEASUREMENT_GOVERNANCE"' in run_sh_text
     assert '--agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS"' in run_sh_text
     assert '--agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS"' in run_sh_text
-    assert (
-        '--agentic-code-tool-max-calls "$AGENTIC_CODE_TOOL_MAX_CALLS"'
-        in run_sh_text
-    )
+    assert '--agentic-code-tool-max-calls "$AGENTIC_CODE_TOOL_MAX_CALLS"' in run_sh_text
     assert (
         '--agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS"'
         in run_sh_text
     )
     assert '--proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT"' in run_sh_text
-    assert (
-        '--proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT"'
-        in run_sh_text
-    )
+    assert '--proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT"' in run_sh_text
     assert '--proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION"' in run_sh_text
     assert "nohup setsid bash run.sh > nohup.log 2>&1 &" in command_txt
 
@@ -596,9 +607,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         / "cvrp_on_full.prepared_analysis_brief.v1.json"
     )
     brief_md = (
-        prepared_handoff
-        / "analysis_brief"
-        / "cvrp_on_full.prepared_analysis_brief.md"
+        prepared_handoff / "analysis_brief" / "cvrp_on_full.prepared_analysis_brief.md"
     )
     inventory_json = (
         prepared_handoff
@@ -606,9 +615,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         / "cvrp_on_full.prepared_artifact_inventory.v1.json"
     )
     inventory_md = (
-        prepared_handoff
-        / "inventory"
-        / "cvrp_on_full.prepared_artifact_inventory.md"
+        prepared_handoff / "inventory" / "cvrp_on_full.prepared_artifact_inventory.md"
     )
     readiness_json = (
         prepared_handoff
@@ -630,9 +637,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         / "prompt_context_readiness"
         / "cvrp_on_full.prepared_prompt_context_readiness.md"
     )
-    rebuild_json = (
-        prepared_handoff / "rebuild" / "prepared_handoff_rebuild.v1.json"
-    )
+    rebuild_json = prepared_handoff / "rebuild" / "prepared_handoff_rebuild.v1.json"
     assert brief_json.is_file()
     assert brief_md.is_file()
     assert inventory_json.is_file()
@@ -655,25 +660,28 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_brief["validity"]["run_validity_status"] == "prepared_only"
     assert prepared_brief["counters"]["effective_rounds_completed"] == 0
     assert any(
-        "PREPARED-ONLY ROOT" in item
-        for item in prepared_brief["stop_conditions"]
+        "PREPARED-ONLY ROOT" in item for item in prepared_brief["stop_conditions"]
     )
     assert prepared_brief["prepared_run_contract"]["problem_family"] == "cvrp"
-    assert "CVRP post-pivot" in prepared_brief["prepared_run_contract"][
-        "analysis_intent"
-    ]
-    assert prepared_brief["prepared_run_contract"]["research_focus"][
-        "scope"
-    ] == "report_only_prepared_handoff"
+    assert (
+        "CVRP post-pivot" in prepared_brief["prepared_run_contract"]["analysis_intent"]
+    )
+    assert (
+        prepared_brief["prepared_run_contract"]["research_focus"]["scope"]
+        == "report_only_prepared_handoff"
+    )
     assert any(
         "current-run pair-level total_distance" in item
         for item in prepared_brief["prepared_run_contract"]["research_focus"][
             "required_evidence"
         ]
     )
-    assert "route-merge absorption" in prepared_brief["prepared_run_contract"][
-        "research_focus"
-    ]["default_avoid_directions"]
+    assert (
+        "route-merge absorption"
+        in prepared_brief["prepared_run_contract"]["research_focus"][
+            "default_avoid_directions"
+        ]
+    )
     assert any(
         "route-pressure acceptance/adaptive-weighting" in item
         for item in prepared_brief["prepared_run_contract"]["research_focus"][
@@ -698,12 +706,18 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
             "measurable_opportunity_classes"
         ]
     )
-    assert prepared_brief["prepared_run_contract"]["research_focus"][
-        "measurement_opportunity_diagnostics"
-    ]["screening_mde_at_power_80"] == 9.9
-    assert prepared_brief["prepared_run_contract"]["research_focus"][
-        "measurement_opportunity_diagnostics"
-    ]["source"] == "problem_v1.measurement.calibration_ref"
+    assert (
+        prepared_brief["prepared_run_contract"]["research_focus"][
+            "measurement_opportunity_diagnostics"
+        ]["screening_mde_at_power_80"]
+        == 9.9
+    )
+    assert (
+        prepared_brief["prepared_run_contract"]["research_focus"][
+            "measurement_opportunity_diagnostics"
+        ]["source"]
+        == "problem_v1.measurement.calibration_ref"
+    )
     brief_missing_primary_rule = prepared_brief["prepared_run_contract"][
         "research_focus"
     ]["missing_primary_telemetry_rule"]
@@ -713,26 +727,23 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     cvrp_checks = prepared_brief["prepared_run_contract"]["checks"]
     assert cvrp_checks["cvrp_measurement_handoff_present"]["passed"] is True
     assert (
-        cvrp_checks["cvrp_measurement_handoff_problem_owned_source"]["passed"]
-        is True
+        cvrp_checks["cvrp_measurement_handoff_problem_owned_source"]["passed"] is True
     )
     assert cvrp_checks["cvrp_default_avoid_directions_present"]["passed"] is True
     assert cvrp_checks["cvrp_direct_effect_rules_present"]["passed"] is True
-    assert cvrp_checks["cvrp_missing_primary_telemetry_rule_present"][
-        "passed"
-    ] is True
+    assert cvrp_checks["cvrp_missing_primary_telemetry_rule_present"]["passed"] is True
     assert (
-        cvrp_checks["cvrp_large_twoopt_bounded_constraints_present"]["passed"]
-        is True
+        cvrp_checks["cvrp_large_twoopt_bounded_constraints_present"]["passed"] is True
     )
     assert cvrp_checks["cvrp_resume_continuity_present"]["passed"] is True
     assert cvrp_checks["cvrp_protected_cases_in_split"]["passed"] is True
     assert cvrp_checks["cvrp_protected_cases_in_split"]["detail"][
         "stage_membership"
     ] == {"CMT2": ["screening"], "CMT4": ["screening"]}
-    assert cvrp_checks["cvrp_protected_cases_in_split"]["detail"][
-        "required_stage"
-    ] == "screening"
+    assert (
+        cvrp_checks["cvrp_protected_cases_in_split"]["detail"]["required_stage"]
+        == "screening"
+    )
     assert cvrp_checks["cvrp_handoff_decision_boundary_present"]["passed"] is True
     assert any(
         "Decision input" in item
@@ -761,35 +772,39 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         assert problem_specific[key]["available"] is True
     assert prepared_inventory["lifecycle"]["prepared_only"] is True
     assert prepared_inventory["launcher"]["artifacts"]["prepared_handoff"] is True
-    assert prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
-        "control_pair_key_present"
-    ]["passed"] is True
-    assert prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
-        "cvrp_default_avoid_directions_present"
-    ]["passed"] is True
-    assert prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
-        "cvrp_missing_primary_telemetry_rule_present"
-    ]["passed"] is True
+    assert (
+        prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
+            "control_pair_key_present"
+        ]["passed"]
+        is True
+    )
+    assert (
+        prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
+            "cvrp_default_avoid_directions_present"
+        ]["passed"]
+        is True
+    )
+    assert (
+        prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
+            "cvrp_missing_primary_telemetry_rule_present"
+        ]["passed"]
+        is True
+    )
     assert prepared_readiness["schema_version"] == "scion.launch_readiness.v1"
     assert prepared_readiness["static_ready"] is False
     assert prepared_readiness["launch_ready"] is False
-    assert prepared_readiness["checks"]["prepared_contract_complete"][
-        "status"
-    ] == "failed"
+    assert (
+        prepared_readiness["checks"]["prepared_contract_complete"]["status"] == "failed"
+    )
     assert prepared_readiness["checks"]["completion_preflight"]["status"] == "skipped"
     assert prepared_prompt_context["schema_version"] == (
         "scion.prepared_prompt_context_readiness.v1"
     )
     assert prepared_prompt_context["report_only"] is True
-    assert (
-        prepared_prompt_context["readiness"]["ready_for_launch_prompt_audit"]
-        is True
-    )
+    assert prepared_prompt_context["readiness"]["ready_for_launch_prompt_audit"] is True
     assert prepared_prompt_context["readiness"]["missing_required"] == []
     assert (
-        prepared_prompt_context["signals"]["research_shape_prompt_signal"][
-            "available"
-        ]
+        prepared_prompt_context["signals"]["research_shape_prompt_signal"]["available"]
         is True
     )
     assert (
@@ -822,9 +837,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         ]
         is True
     )
-    assert prepared_prompt_context["signals"]["cvrp_missing_primary_telemetry_rule"][
-        "available"
-    ] is True
+    assert (
+        prepared_prompt_context["signals"]["cvrp_missing_primary_telemetry_rule"][
+            "available"
+        ]
+        is True
+    )
     prompt_summary = prepared_prompt_context["signals"][
         "prepared_research_focus_prompt_bridge"
     ]["detail"]["prompt_summary"]
@@ -851,13 +869,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_rebuild["schema_version"] == "scion.prepared_handoff_rebuild.v1"
     assert prepared_rebuild["complete"] is True
     assert prepared_rebuild["families"]["analysis_brief"]["status"] == "ok"
-    assert (
-        prepared_rebuild["families"]["prompt_context_readiness"]["status"] == "ok"
-    )
-    assert (
-        "## Prepared Run Contract"
-        in brief_md.read_text(encoding="utf-8")
-    )
+    assert prepared_rebuild["families"]["prompt_context_readiness"]["status"] == "ok"
+    assert "## Prepared Run Contract" in brief_md.read_text(encoding="utf-8")
     brief_text = brief_md.read_text(encoding="utf-8")
     inventory_text = inventory_md.read_text(encoding="utf-8")
     assert "Current research focus" in brief_text
@@ -870,10 +883,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "cvrp_large_twoopt_bounded_constraints_handoff" in brief_text
     assert "cvrp_resume_continuity_handoff" in brief_text
     assert "cvrp_missing_primary_telemetry_handoff" in brief_text
-    assert (
-        "## Launcher Artifacts"
-        in inventory_text
-    )
+    assert "## Launcher Artifacts" in inventory_text
     assert "### Prepared Research Focus" in inventory_text
     assert "construction_seed_portfolio" in inventory_text
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in inventory_text
@@ -884,9 +894,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "cvrp_resume_continuity_handoff" in inventory_text
     assert "cvrp_missing_primary_telemetry_handoff" in inventory_text
     assert "not_evaluated/not_triggered" in inventory_text
-    assert "copied_campaign_summary" in prompt_context_md.read_text(
-        encoding="utf-8"
-    )
+    assert "copied_campaign_summary" in prompt_context_md.read_text(encoding="utf-8")
     assert "Launch only after rerunning this tool" in readiness_md.read_text(
         encoding="utf-8"
     )
@@ -950,9 +958,9 @@ def test_cvrp_agentic_launcher_can_copy_resume_campaign(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     (source_campaign / "artifacts" / "branch_evidence").mkdir(parents=True)
-    (
-        source_campaign / "artifacts" / "branch_evidence" / "branch-a.json"
-    ).write_text("{}", encoding="utf-8")
+    (source_campaign / "artifacts" / "branch_evidence" / "branch-a.json").write_text(
+        "{}", encoding="utf-8"
+    )
 
     result = subprocess.run(
         [
@@ -977,9 +985,9 @@ def test_cvrp_agentic_launcher_can_copy_resume_campaign(tmp_path: Path) -> None:
     )
     run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
 
-    assert (
-        run_root / "campaign" / "scion.db"
-    ).read_text(encoding="utf-8") == "fake-cvrp-db"
+    assert (run_root / "campaign" / "scion.db").read_text(
+        encoding="utf-8"
+    ) == "fake-cvrp-db"
     assert (
         run_root / "campaign" / "champions" / "champion_v3" / "registry.yaml"
     ).is_file()
@@ -1094,9 +1102,7 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
     assert f"SPLIT={split}" in launch_env
     assert f"SEEDS={seeds}" in launch_env
     assert "MEASUREMENT_GOVERNANCE=record-only" in launch_env
-    assert (
-        "PROPOSAL_CONTEXT_ABLATION=compact-measurement-diagnostics" in launch_env
-    )
+    assert "PROPOSAL_CONTEXT_ABLATION=compact-measurement-diagnostics" in launch_env
     assert "CONTROL_PAIR_KEY=pair-a-vs-b" in launch_env
     assert "SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT=3" in launch_env
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=2" in launch_env
@@ -1107,9 +1113,7 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
     assert f"--split {split}" in command_txt
     assert f"--seeds {seeds}" in command_txt
     assert "--measurement-governance record-only" in command_txt
-    assert (
-        "--proposal-context-ablation compact-measurement-diagnostics" in command_txt
-    )
+    assert "--proposal-context-ablation compact-measurement-diagnostics" in command_txt
     assert "CONTROL_PAIR_KEY=pair-a-vs-b" in command_txt
     assert "SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT=3" in command_txt
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=2" in command_txt
@@ -1120,9 +1124,9 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
     assert "--fresh-runtime-replay-drain-limit 3" in command_txt
     assert "--stage-transition-drain-limit 2" in command_txt
     assert "--control-pair-key" not in command_txt
-    run_command_block = run_sh_text.split(
-        '"$PY" -m scion.cli.main run \\', maxsplit=1
-    )[1].split("STATUS=$?", maxsplit=1)[0]
+    run_command_block = run_sh_text.split('"$PY" -m scion.cli.main run \\', maxsplit=1)[
+        1
+    ].split("STATUS=$?", maxsplit=1)[0]
     assert "--control-pair-key" not in run_command_block
     assert '--proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT"' in run_command_block
     assert (
@@ -1343,15 +1347,15 @@ def test_cvrp_agentic_launcher_fails_on_postrun_readiness_failure(
     fake_python.write_text(
         "#!/usr/bin/env bash\n"
         "set -u\n"
-        "if [[ \"${1:-}\" == \"-m\" ]]; then\n"
+        'if [[ "${1:-}" == "-m" ]]; then\n'
         "  exit 0\n"
         "fi\n"
-        "case \"${1:-}\" in\n"
+        'case "${1:-}" in\n'
         "  */rebuild_postrun_acceptance.py)\n"
         "    exit 0\n"
         "    ;;\n"
         "  */check_postrun_acceptance.py)\n"
-        "    if [[ \"$*\" == *\"--require-current-run-ready\"* ]]; then\n"
+        '    if [[ "$*" == *"--require-current-run-ready"* ]]; then\n'
         "      printf '{\"current_run_analysis_ready\":false}\\n'\n"
         "      exit 64\n"
         "    fi\n"
@@ -1359,7 +1363,7 @@ def test_cvrp_agentic_launcher_fails_on_postrun_readiness_failure(
         "    exit 0\n"
         "    ;;\n"
         "  */write_postrun_wrapper_status.py)\n"
-        f"    exec {sys.executable} \"$@\"\n"
+        f'    exec {sys.executable} "$@"\n'
         "    ;;\n"
         "esac\n"
         "exit 0\n",
@@ -1476,9 +1480,9 @@ def test_cvrp_agentic_launcher_api_key_env_preserves_inherited_scion_key(
 
     assert run_result.returncode == 0
     assert seen_env.read_text(encoding="utf-8").strip() == "fake-inherited-secret"
-    assert "SCION_API_KEY_ENV_MISSING" not in (
-        run_root / "exit.txt"
-    ).read_text(encoding="utf-8")
+    assert "SCION_API_KEY_ENV_MISSING" not in (run_root / "exit.txt").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_cvrp_agentic_launcher_prepare_writes_completion_preflight(
@@ -1513,9 +1517,9 @@ def test_cvrp_agentic_launcher_prepare_writes_completion_preflight(
     assert "COMPLETION_PREFLIGHT=1" in launch_env
     assert "COMPLETION_PREFLIGHT=1" in command_txt
     assert "tools/check_gpt55_proxy.py" in run_sh_text
-    assert "--base-url \"$SCION_BASE_URL\"" in run_sh_text
-    assert "--model \"$SCION_MODEL\"" in run_sh_text
-    assert "--api-key \"$SCION_API_KEY\"" in run_sh_text
+    assert '--base-url "$SCION_BASE_URL"' in run_sh_text
+    assert '--model "$SCION_MODEL"' in run_sh_text
+    assert '--api-key "$SCION_API_KEY"' in run_sh_text
     assert "--login-url-on-failure" in run_sh_text
     assert "--json" in run_sh_text
     assert "pre_campaign_completion_preflight.v1.json" in run_sh_text
@@ -1566,23 +1570,16 @@ def test_cvrp_agentic_launcher_prepare_threads_forced_target(
 
     assert "FORCE_SURFACE=solver_design" in launch_env
     assert "FORCE_ACTION=modify" in launch_env
-    assert (
-        "FORCE_TARGET_FILE=policies/baseline_modules/local_search.py"
-        in launch_env
-    )
+    assert "FORCE_TARGET_FILE=policies/baseline_modules/local_search.py" in launch_env
     assert "--force-surface solver_design" in command_txt
     assert "--force-action modify" in command_txt
     assert (
-        "--force-target-file policies/baseline_modules/local_search.py"
-        in command_txt
+        "--force-target-file policies/baseline_modules/local_search.py" in command_txt
     )
     assert "FORCE_ARGS=()" in run_sh_text
     assert 'FORCE_ARGS+=(--force-surface "$FORCE_SURFACE")' in run_sh_text
     assert 'FORCE_ARGS+=(--force-action "$FORCE_ACTION")' in run_sh_text
-    assert (
-        'FORCE_ARGS+=(--force-target-file "$FORCE_TARGET_FILE")'
-        in run_sh_text
-    )
+    assert 'FORCE_ARGS+=(--force-target-file "$FORCE_TARGET_FILE")' in run_sh_text
     assert '"${FORCE_ARGS[@]}" \\' in run_sh_text
     assert prepared_manifest["execution"]["force_surface"] == "solver_design"
     assert prepared_manifest["execution"]["force_action"] == "modify"

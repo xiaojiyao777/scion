@@ -11,7 +11,6 @@ from scion.problems.cvrp.research_guidance import (
     SUCCESSOR_OPPORTUNITY_FAMILIES,
 )
 
-
 SCHEMA_VERSION = "scion.postrun_cvrp_successor_summary.v1"
 PROOF_SCHEMA_VERSION = "scion.postrun_cvrp_successor_required_evidence_proof.v1"
 
@@ -49,6 +48,8 @@ _FAMILY_ALIASES = {
     "destroy_repair_selection": (
         "destroy_repair_selection",
         "destroy_repair",
+        "angular_sector_removal",
+        "angular_sector",
         "removal",
         "repair",
         "regret_insertion",
@@ -109,7 +110,11 @@ def cvrp_successor_summary(
         gaps.append("missing_current_run_evidence")
     if measurement_effect_summary.get("available") is not True:
         gaps.append("missing_measurement_effect_summary")
-    if current_run_evidence and measurement_effect_summary.get("available") is True and not observed:
+    if (
+        current_run_evidence
+        and measurement_effect_summary.get("available") is True
+        and not observed
+    ):
         gaps.append("no_successor_family_protocol_evidence")
     return {
         **base,
@@ -200,9 +205,7 @@ def _successor_family_proof(
             "objective_effect_observed_count": direct[
                 "objective_effect_observed_count"
             ],
-            "phase_telemetry_observed_count": direct[
-                "phase_telemetry_observed_count"
-            ],
+            "phase_telemetry_observed_count": direct["phase_telemetry_observed_count"],
             "protected_case_complete_row_count": direct[
                 "protected_case_complete_row_count"
             ],
@@ -290,7 +293,9 @@ def _requirement_statuses(
         "successor_direct_objective_runtime_requirement": _requirement_status(
             missing=objective_missing,
             observed_fields={
-                "activation_observed_count": _int(direct.get("activation_observed_count")),
+                "activation_observed_count": _int(
+                    direct.get("activation_observed_count")
+                ),
                 "objective_effect_observed_count": _int(
                     direct.get("objective_effect_observed_count")
                 ),
@@ -321,8 +326,7 @@ def _requirement_statuses(
         }
     )
     complete = all(
-        _mapping(item).get("status") == "observed"
-        for item in requirements.values()
+        _mapping(item).get("status") == "observed" for item in requirements.values()
     )
     return {
         "schema_version": "scion.postrun_cvrp_successor_evidence_requirement_statuses.v1",
@@ -414,7 +418,9 @@ def _mechanism_activation_observed(row: Mapping[str, Any], *, family: str) -> bo
     for item in _mapping_items(evidence.get("mechanisms")):
         if _family_matches(item.get("mechanism"), family):
             statuses.append(item.get("activation_status"))
-    return any(_status_observed(status, ("activation_observed",)) for status in statuses)
+    return any(
+        _status_observed(status, ("activation_observed",)) for status in statuses
+    )
 
 
 def _mechanism_objective_effect_observed(
@@ -461,8 +467,14 @@ def _phase_telemetry_observed(row: Mapping[str, Any], *, family: str) -> bool:
             return True
         if _float(payload.get("max_ms")) not in (None, 0.0):
             return True
-    for key in ("solver_algorithm_phase_improvement_counts", "phase_improvement_counts"):
-        if _nested_positive_count_for_phase(_mapping(summary.get(key)), family=family) > 0:
+    for key in (
+        "solver_algorithm_phase_improvement_counts",
+        "phase_improvement_counts",
+    ):
+        if (
+            _nested_positive_count_for_phase(_mapping(summary.get(key)), family=family)
+            > 0
+        ):
             return True
     return False
 

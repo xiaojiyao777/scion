@@ -650,11 +650,13 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    direct activation checklist. The first preferred destroy/repair successor,
    `angular_sector_removal`, proved its evidence checklist but measured no
    positive-at-MDE effect. The next prepared attempt should avoid unchanged
-   `angular_sector_removal`; use a materially different destroy/repair causal
-   path with direct effect evidence, or a construction seed mechanism that
-   records a same-run seed-baseline/accepted-delta effect under its declared
-   mechanism id. Bounded-local-search revisits need a causal path explicitly
-   distinct from both reviewed bounded successors.
+   `angular_sector_removal`; prepared CVRP guidance now marks that exact
+   mechanism as reviewed/default-avoid while leaving materially different
+   `destroy_repair_selection` paths available. Use a distinct destroy/repair
+   causal path with direct effect evidence, or a construction seed mechanism
+   that records a same-run seed-baseline/accepted-delta effect under its
+   declared mechanism id. Bounded-local-search revisits need a causal path
+   explicitly distinct from both reviewed bounded successors.
 2. Continue design-first postrun/readiness cleanup only where it removes active
    risk. `scion.postrun` should own generic artifact, lifecycle, schema,
    readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit

@@ -66,9 +66,10 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert "large_instance_intra_route_two_opt_seed" in rendered.text
     assert "bounded_2node_cross_exchange" in rendered.text
     assert "intra_route_or_opt_reinsert" in rendered.text
+    assert "angular_sector_removal" in rendered.text
     assert "bounded_local_search_variant" in rendered.text
-    assert "measured_no_positive_at_mde" in rendered.text
     assert "destroy_repair_selection" in rendered.text
+    assert "measured_no_positive_at_mde" in rendered.text
     assert "no-positive-at-MDE" in rendered.text
     assert "CMT2/CMT4 case protection" in rendered.text
     assert "excluded from DecisionFeatures" in rendered.text
@@ -102,6 +103,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
+        "angular_sector_removal",
     ]
     assert focus["successor_opportunity_families"] == [
         "destroy_repair_selection",
@@ -111,12 +113,14 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "positive-at-MDE" in focus["current_question"]
     assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
     assert "intra_route_or_opt_reinsert" in focus["next_required_direction"]
-    assert "preferably to `destroy_repair_selection`" in focus[
-        "next_required_direction"
-    ]
-    assert "causal path distinct from cross-exchange and intra-route" in focus[
-        "next_required_direction"
-    ]
+    assert "angular_sector_removal" in focus["next_required_direction"]
+    assert (
+        "Rotate the next CVRP solver-design attempt to construction"
+        in focus["next_required_direction"]
+    )
+    assert "distinct from cross-exchange, intra-route Or-opt reinsertion" in (
+        focus["next_required_direction"]
+    )
     assert focus["measurement_opportunity_diagnostics"] == measurement
     assert focus["measurement_opportunity_diagnostics"] is not measurement
     assert any(
@@ -124,21 +128,19 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["required_evidence"]
     )
     assert any(
-        "route-merge absorption" in item
+        "route-merge absorption" in item for item in focus["default_avoid_directions"]
+    )
+    assert any("ec052599-style" in item for item in focus["default_avoid_directions"])
+    assert any(
+        "bounded_2node_cross_exchange" in item and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
     )
     assert any(
-        "ec052599-style" in item
+        "intra_route_or_opt_reinsert" in item and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
     )
     assert any(
-        "bounded_2node_cross_exchange" in item
-        and "measured_no_positive_at_mde" in item
-        for item in focus["default_avoid_directions"]
-    )
-    assert any(
-        "intra_route_or_opt_reinsert" in item
-        and "measured_no_positive_at_mde" in item
+        "angular_sector_removal" in item and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
     )
     assert not any(
@@ -172,6 +174,18 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
                 "Or-opt reinsertion path unless the hypothesis names a "
                 "materially new bounded-local-search causal path and direct "
                 "per-case objective-effect evidence."
+            ),
+        },
+        {
+            "mechanism_id": "angular_sector_removal",
+            "mechanism_family": "destroy_repair_selection",
+            "checklist_status": "proven",
+            "outcome_status": "measured_no_positive_at_mde",
+            "next_use_rule": (
+                "Do not spend the next CVRP branch on the same angular-sector "
+                "removal path unless the hypothesis names a materially new "
+                "destroy/repair selection causal path and direct per-case "
+                "objective-effect evidence."
             ),
         },
     ]
@@ -215,6 +229,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
+        "angular_sector_removal",
     ]
     assert launch_payload["successor_opportunity_families"] == [
         "destroy_repair_selection",
@@ -228,7 +243,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
 
 def test_cvrp_contract_rejects_non_cvrp_context() -> None:
     try:
-        build_cvrp_research_guidance_contract(GuidanceContext(problem_family="warehouse"))
+        build_cvrp_research_guidance_contract(
+            GuidanceContext(problem_family="warehouse")
+        )
     except ValueError as exc:
         assert "cvrp" in str(exc)
     else:

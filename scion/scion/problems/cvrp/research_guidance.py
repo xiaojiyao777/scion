@@ -34,10 +34,14 @@ REVIEWED_SUCCESSOR_OUTCOME_STATUS = "measured_no_positive_at_mde"
 REVIEWED_OR_OPT_REINSERT_MECHANISM_ID = "intra_route_or_opt_reinsert"
 REVIEWED_OR_OPT_REINSERT_FAMILY = "bounded_local_search_variant"
 REVIEWED_OR_OPT_REINSERT_OUTCOME_STATUS = "measured_no_positive_at_mde"
+REVIEWED_DESTROY_REPAIR_MECHANISM_ID = "angular_sector_removal"
+REVIEWED_DESTROY_REPAIR_FAMILY = "destroy_repair_selection"
+REVIEWED_DESTROY_REPAIR_OUTCOME_STATUS = "measured_no_positive_at_mde"
 REVIEWED_MECHANISM_IDS = (
     REQUIRED_MECHANISM_ID,
     REVIEWED_SUCCESSOR_MECHANISM_ID,
     REVIEWED_OR_OPT_REINSERT_MECHANISM_ID,
+    REVIEWED_DESTROY_REPAIR_MECHANISM_ID,
 )
 PROTECTED_CASES = ("CMT2", "CMT4")
 
@@ -70,6 +74,10 @@ DEFAULT_AVOID_DIRECTIONS = (
     (
         "unchanged intra_route_or_opt_reinsert bounded-local-search successor "
         "after cvrp_successor_summary measured_no_positive_at_mde review"
+    ),
+    (
+        "unchanged angular_sector_removal destroy/repair successor after "
+        "cvrp_successor_summary measured_no_positive_at_mde review"
     ),
     (
         "ec052599-style weak_positive continuation when declared primary "
@@ -236,15 +244,30 @@ REVIEWED_SUCCESSOR_EVIDENCE = {
                 "per-case objective-effect evidence."
             ),
         },
+        {
+            "mechanism_id": REVIEWED_DESTROY_REPAIR_MECHANISM_ID,
+            "mechanism_family": REVIEWED_DESTROY_REPAIR_FAMILY,
+            "checklist_status": "proven",
+            "outcome_status": REVIEWED_DESTROY_REPAIR_OUTCOME_STATUS,
+            "next_use_rule": (
+                "Do not spend the next CVRP branch on the same angular-sector "
+                "removal path unless the hypothesis names a materially new "
+                "destroy/repair selection causal path and direct per-case "
+                "objective-effect evidence."
+            ),
+        },
     ],
 }
 REVIEWED_SUCCESSOR_GUIDANCE_LINE = (
     "Reviewed successor evidence: "
     f"`{REVIEWED_SUCCESSOR_MECHANISM_ID}` and "
     f"`{REVIEWED_OR_OPT_REINSERT_MECHANISM_ID}` both belong to "
-    f"`{REVIEWED_SUCCESSOR_FAMILY}` and have "
+    f"`{REVIEWED_SUCCESSOR_FAMILY}`; "
+    f"`{REVIEWED_DESTROY_REPAIR_MECHANISM_ID}` belongs to "
+    f"`{REVIEWED_DESTROY_REPAIR_FAMILY}`; all have "
     f"`{REVIEWED_SUCCESSOR_OUTCOME_STATUS}` in `cvrp_successor_summary`; "
-    "prefer destroy/repair, construction, or another non-reviewed causal path next."
+    "prefer construction or a materially different destroy/repair/local-search "
+    "causal path next."
 )
 
 NEXT_REQUIRED_DIRECTION = (
@@ -257,20 +280,23 @@ NEXT_REQUIRED_DIRECTION = (
     "measured_no_positive_at_mde. The next bounded-local-search successor, "
     "`intra_route_or_opt_reinsert`, reached formal screening with complete "
     "activation/effect telemetry but was abandoned for low win-rate and "
-    "negative aggregate effect. Rotate the next CVRP solver-design attempt "
-    "preferably to `destroy_repair_selection`, construction, or another "
-    "materially different problem-owned causal path; revisit bounded local "
-    "search only when the hypothesis names a causal path distinct from "
-    "cross-exchange and intra-route Or-opt reinsertion and carries direct "
-    "per-case objective-effect evidence."
+    "negative aggregate effect. The first destroy/repair successor, "
+    "`angular_sector_removal`, reached formal screening with complete "
+    "activation/effect telemetry but produced no positive-at-MDE outcome. "
+    "Rotate the next CVRP solver-design attempt to construction, a "
+    "materially different destroy/repair path, or another materially different "
+    "problem-owned causal path; revisit bounded local search or angular-sector "
+    "removal only when the hypothesis names a causal path distinct from "
+    "cross-exchange, intra-route Or-opt reinsertion, and angular-sector "
+    "removal and carries direct per-case objective-effect evidence."
 )
 CURRENT_QUESTION = (
     "After both the large-instance intra-route two-opt checklist and the "
-    "first two bounded-local-search successors were reviewed without "
-    "positive-at-MDE solver effect, can a materially different CVRP-owned "
-    "destroy/repair, construction, or non-reviewed local-search mechanism "
-    "improve total_distance with direct per-case objective-effect evidence "
-    "and without repeating prior default-avoid families?"
+    "first bounded-local-search and destroy/repair successors were reviewed "
+    "without positive-at-MDE solver effect, can a materially different "
+    "CVRP-owned construction, destroy/repair, or non-reviewed local-search "
+    "mechanism improve total_distance with direct per-case objective-effect "
+    "evidence and without repeating prior default-avoid families?"
 )
 REQUIRED_EVIDENCE = (
     (
@@ -319,15 +345,16 @@ REQUIRED_EVIDENCE = (
         "for successor bounded-local-search or destroy/repair attempts, "
         "declare the causal path difference from the reviewed intra-route "
         "two-opt seed, reviewed bounded_2node_cross_exchange successor, "
-        "reviewed intra_route_or_opt_reinsert successor, and prior "
+        "reviewed intra_route_or_opt_reinsert successor, reviewed "
+        "angular_sector_removal destroy/repair successor, and prior "
         "default-avoid families before spending another branch slot"
     ),
     (
-        "prefer destroy_repair_selection, construction, or another "
-        "non-reviewed CVRP-owned causal path after bounded_2node_cross_exchange "
-        "and intra_route_or_opt_reinsert were reviewed no-positive-at-MDE; "
-        "bounded-local-search revisits must name a new causal path and direct "
-        "objective-effect telemetry"
+        "prefer construction, materially different destroy_repair_selection, "
+        "or another non-reviewed CVRP-owned causal path after "
+        "bounded_2node_cross_exchange, intra_route_or_opt_reinsert, and "
+        "angular_sector_removal were reviewed no-positive-at-MDE; revisits "
+        "must name a new causal path and direct objective-effect telemetry"
     ),
 )
 MEASURABLE_OPPORTUNITY_CLASSES = (
@@ -337,7 +364,9 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
     ),
     (
         "destroy_repair_selection: require per-case total_distance deltas "
-        "tied to the changed repair/removal choice"
+        "tied to the changed repair/removal choice; after the reviewed "
+        "angular_sector_removal no-positive-at-MDE result, require a "
+        "destroy/repair causal path distinct from angular-sector removal"
     ),
     (
         "bounded_local_search_variant: require feasible route-level "
@@ -366,10 +395,12 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "Because large_instance_intra_route_two_opt_seed has complete checklist "
     "evidence but no positive-at-MDE outcome, and "
     "bounded_2node_cross_exchange plus intra_route_or_opt_reinsert have now "
-    "repeated that no-positive outcome as bounded successors, the next CVRP "
-    "slot should prefer a destroy/repair, construction, or otherwise "
-    "non-reviewed portfolio attempt. Use problem-owned evidence requirements "
-    "and keep this guidance out of DecisionFeatures."
+    "repeated that no-positive outcome as bounded successors, and "
+    "angular_sector_removal has repeated it as the first destroy/repair "
+    "successor, the next CVRP slot should prefer construction, a materially "
+    "different destroy/repair path, or otherwise non-reviewed portfolio "
+    "attempt. Use problem-owned evidence requirements and keep this guidance "
+    "out of DecisionFeatures."
 )
 ROUTE_MERGE_EXCEPTION_RULE = (
     "Only continue route_merge_repair when the proposal names a causal path "
@@ -479,9 +510,7 @@ def build_cvrp_legacy_research_focus(
         "construction_seed_rule": CONSTRUCTION_SEED_RULE,
         "missing_primary_telemetry_rule": MISSING_PRIMARY_TELEMETRY_RULE,
         "case_protection_requirements": deepcopy(CASE_PROTECTION_REQUIREMENTS),
-        "resume_continuity_requirements": deepcopy(
-            RESUME_CONTINUITY_REQUIREMENTS
-        ),
+        "resume_continuity_requirements": deepcopy(RESUME_CONTINUITY_REQUIREMENTS),
         "decision_boundary": DECISION_BOUNDARY,
     }
 
@@ -508,6 +537,7 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "material causal-path difference from reviewed large-twoopt",
                 "material causal-path difference from reviewed cross-exchange",
                 "material causal-path difference from reviewed Or-opt reinsertion",
+                "material causal-path difference from reviewed angular-sector removal",
                 "per-case total_distance delta tied to the changed mechanism",
                 "feasibility and route-count preservation or explicit caveat",
                 "runtime budget evidence under the formal policy",
@@ -555,6 +585,30 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                     f"outcome_status={REVIEWED_OR_OPT_REINSERT_OUTCOME_STATUS}"
                 ),
                 "new bounded-local-search causal path if revisited",
+                "direct per-case total_distance objective-effect telemetry",
+            ),
+        ),
+        EvidenceRequirement(
+            requirement_id="angular_sector_removal_reviewed_no_positive",
+            category="reviewed_successor_evidence",
+            description=(
+                "The first destroy/repair successor, "
+                f"{REVIEWED_DESTROY_REPAIR_MECHANISM_ID}, is reviewed "
+                f"evidence with outcome {REVIEWED_DESTROY_REPAIR_OUTCOME_STATUS}; "
+                "do not repeat it as the next CVRP attempt without a "
+                "materially new destroy/repair selection causal path."
+            ),
+            mechanism_ids=(
+                REVIEWED_DESTROY_REPAIR_MECHANISM_ID,
+                REVIEWED_DESTROY_REPAIR_FAMILY,
+            ),
+            required_fields=(
+                "cvrp_successor_summary checklist_status=proven",
+                (
+                    "cvrp_successor_summary "
+                    f"outcome_status={REVIEWED_DESTROY_REPAIR_OUTCOME_STATUS}"
+                ),
+                "new destroy/repair selection causal path if revisited",
                 "direct per-case total_distance objective-effect telemetry",
             ),
         ),
@@ -616,6 +670,8 @@ def _avoid_applies_to(text: str) -> tuple[str, ...]:
         applies_to.append(REVIEWED_SUCCESSOR_MECHANISM_ID)
     if REVIEWED_OR_OPT_REINSERT_MECHANISM_ID in text:
         applies_to.append(REVIEWED_OR_OPT_REINSERT_MECHANISM_ID)
+    if REVIEWED_DESTROY_REPAIR_MECHANISM_ID in text:
+        applies_to.append(REVIEWED_DESTROY_REPAIR_MECHANISM_ID)
     return tuple(applies_to)
 
 
@@ -626,7 +682,9 @@ def _continuity_requirements() -> tuple[ContinuityRequirement, ...]:
         REQUIRED_MECHANISM_ID,
         REVIEWED_SUCCESSOR_MECHANISM_ID,
         REVIEWED_OR_OPT_REINSERT_MECHANISM_ID,
+        REVIEWED_DESTROY_REPAIR_MECHANISM_ID,
         REVIEWED_SUCCESSOR_FAMILY,
+        REVIEWED_DESTROY_REPAIR_FAMILY,
         *PROTECTED_CASES,
     )
     return (

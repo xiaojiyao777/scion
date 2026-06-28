@@ -14,7 +14,6 @@ from scion.problems.cvrp.research_guidance import (
 )
 from scion.problems.cvrp.successor_review import cvrp_successor_proofs_by_family
 
-
 SCHEMA_VERSION = "scion.postrun_cvrp_opportunity_usage_summary.v2"
 
 _CONTRAST_FIELD_NAMES = frozenset(
@@ -49,6 +48,8 @@ _OPPORTUNITY_FAMILY_ALIASES = {
     "destroy_repair_selection": (
         "destroy_repair_selection",
         "destroy_repair",
+        "angular_sector_removal",
+        "angular_sector",
         "removal",
         "repair",
         "regret_insertion",
@@ -96,9 +97,7 @@ def build_cvrp_opportunity_usage_summary(
     )
     visibility = _opportunity_visibility(prompt_summary)
     manifests = [
-        item
-        for item in proposal_trajectory_manifests
-        if isinstance(item, Mapping)
+        item for item in proposal_trajectory_manifests if isinstance(item, Mapping)
     ]
     base = {
         "schema_version": SCHEMA_VERSION,
@@ -203,9 +202,7 @@ def cvrp_opportunity_usage_signature(value: Mapping[str, Any]) -> dict[str, Any]
         "recommended_opportunity_families": _string_list(
             payload.get("recommended_opportunity_families")
         ),
-        "default_avoid_families": _string_list(
-            payload.get("default_avoid_families")
-        ),
+        "default_avoid_families": _string_list(payload.get("default_avoid_families")),
         "required_evidence_proof": _required_evidence_proof_signature(
             payload.get("required_evidence_proof")
         ),
@@ -213,8 +210,7 @@ def cvrp_opportunity_usage_signature(value: Mapping[str, Any]) -> dict[str, Any]
             payload.get("required_evidence_proofs")
         ),
         "entries": [
-            _entry_signature(item)
-            for item in _mapping_items(payload.get("entries"))
+            _entry_signature(item) for item in _mapping_items(payload.get("entries"))
         ],
     }
 
@@ -532,9 +528,7 @@ def _aggregate_usage_status(
     used = _int(counts.get("used_opportunity")) + _int(
         counts.get("contrasted_opportunity")
     )
-    checklist_unproven = _int(
-        counts.get("opportunity_evidence_checklist_unproven")
-    )
+    checklist_unproven = _int(counts.get("opportunity_evidence_checklist_unproven"))
     ignored = _int(counts.get("ignored_or_unproven"))
     default_repeat = _int(counts.get("default_avoid_repeat"))
     if used > 0 and checklist_unproven == 0 and ignored == 0 and default_repeat == 0:
@@ -567,9 +561,7 @@ def _evidence_gaps(
     used = _int(counts.get("used_opportunity")) + _int(
         counts.get("contrasted_opportunity")
     )
-    checklist_unproven = _int(
-        counts.get("opportunity_evidence_checklist_unproven")
-    )
+    checklist_unproven = _int(counts.get("opportunity_evidence_checklist_unproven"))
     if current_run_evidence and opportunity_visible and proposal_session_count > 0:
         if used + checklist_unproven <= 0:
             gaps.append("no_structured_proposal_match_to_opportunity_summary")
@@ -593,8 +585,7 @@ def _recommended_opportunity_families() -> list[str]:
 
 def _default_avoid_family_ids() -> list[str]:
     return sorted(
-        _default_avoid_family_id(str(item))
-        for item in DEFAULT_AVOID_DIRECTIONS
+        _default_avoid_family_id(str(item)) for item in DEFAULT_AVOID_DIRECTIONS
     )
 
 
@@ -615,9 +606,7 @@ def _entry_signature(value: Mapping[str, Any]) -> dict[str, Any]:
         "usage_status": str(entry.get("usage_status") or ""),
         "opportunity_families": _string_list(entry.get("opportunity_families")),
         "default_avoid_families": _string_list(entry.get("default_avoid_families")),
-        "required_evidence_status": str(
-            entry.get("required_evidence_status") or ""
-        ),
+        "required_evidence_status": str(entry.get("required_evidence_status") or ""),
         "required_evidence_family": str(entry.get("required_evidence_family") or ""),
         "reason_codes": _string_list(entry.get("reason_codes")),
     }
@@ -652,9 +641,7 @@ def _required_evidence_proof_signature(value: Any) -> dict[str, Any]:
         "protected_case_complete_row_count": _int(
             proof.get("protected_case_complete_row_count")
         ),
-        "protected_cases_observed": _string_list(
-            proof.get("protected_cases_observed")
-        ),
+        "protected_cases_observed": _string_list(proof.get("protected_cases_observed")),
         "missing": _string_list(proof.get("missing")),
     }
 

@@ -769,6 +769,10 @@ Current checkpoint:
   above MDE `0`, both rows had win rate `0.25`, median deltas `-3.25` and
   `0.0`, and both CI highs were below MDE. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-destroy-repair-successor-review-20260628.md`.
+  The current CVRP guidance repair now marks `angular_sector_removal` as a
+  reviewed/default-avoid mechanism in prepared research focus and typed
+  guidance, while keeping `destroy_repair_selection` available for materially
+  different destroy/repair causal paths.
 - Design N skeleton implementation is present in `scion.postrun`: typed ports
   for postrun inventory, run-evidence lifecycle, exposure policy,
   problem-owned review, registry, and readiness orchestration. The current
