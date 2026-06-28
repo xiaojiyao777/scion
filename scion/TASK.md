@@ -112,6 +112,16 @@ clean-forked to `farthest_noise_related_removal` and rejected that mechanism
 too. Champion stayed `v1`, rows at or above CVRP MDE were `0`, and strict
 postrun acceptance has no required failures. Detailed report:
 `scion/docs/experiments/v0.4/v04-cvrp-successor6-branch-handoff-rejection-review-20260628.md`.
+The current CVRP-owned guidance/projection repair now turns successor5/6
+negative solver evidence into structured prepared handoff state:
+`bounded_intra_route_3opt`, `radial_string_removal`, and
+`farthest_noise_related_removal` are explicit reviewed/default-avoid
+mechanisms, `construction_seed_portfolio` is ranked first only with same-run
+seed-effect evidence, materially different `destroy_repair_selection` remains
+eligible, and bounded local search is demoted unless it names a non-reviewed
+causal path with direct per-case objective-effect telemetry. This stays in
+CVRP problem-owned guidance and prompt projection, not generic core or
+`DecisionFeatures`.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with
@@ -824,6 +834,17 @@ Current checkpoint:
   `0`, and strict postrun acceptance has `failed_required_checks=[]` with only
   optional `postrun_report_status_marker` missing. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-successor6-branch-handoff-rejection-review-20260628.md`.
+- The follow-up CVRP guidance/projection repair marks
+  `bounded_intra_route_3opt`, `radial_string_removal`, and
+  `farthest_noise_related_removal` as structured reviewed/default-avoid
+  mechanisms, updates CVRP successor aliases, and shifts proposal-visible
+  mechanism ranking toward construction seed-effect isolation or materially
+  different destroy/repair before any bounded-local-search revisit. Focused
+  local validation passes for CVRP guidance/measurement/launcher/rebuild and
+  postrun successor/opportunity review slices (`50 passed`), plus
+  `py_compile` and `git diff --check`. Launch-readiness broad tests still need
+  a clean commit because their runtime guard intentionally fails on dirty
+  runtime files.
 - Design N skeleton implementation is present in `scion.postrun`: typed ports
   for postrun inventory, run-evidence lifecycle, exposure policy,
   problem-owned review, registry, and readiness orchestration. The current

@@ -338,6 +338,18 @@ chronology belongs in focused experiment reports and git history.
   MDE-aware rejection, and lesson transfer, not CVRP solver progress. Detailed
   report:
   `scion/docs/experiments/v0.4/v04-cvrp-successor6-branch-handoff-rejection-review-20260628.md`.
+- The current local CVRP problem-owned guidance repair incorporates successor6
+  negative evidence into structured prepared handoff fields. `reviewed_mechanism_ids`
+  and `reviewed_successor_evidence.mechanisms[]` now include
+  `bounded_intra_route_3opt`, `radial_string_removal`, and
+  `farthest_noise_related_removal` alongside earlier reviewed successor paths,
+  with exact default-avoid directions for unchanged repeats. The CVRP adapter
+  proposal projection now ranks `construction_seed_portfolio` first only when
+  same-run seed-effect evidence is isolated, keeps materially different
+  `destroy_repair_selection` as the next eligible family, and demotes bounded
+  local search unless the hypothesis names a non-reviewed causal path. This is
+  CVRP-owned guidance/projection, not generic core or `DecisionFeatures`
+  behavior.
 - Previous local CVRP CMT-commitment follow-through root:
   `/home/clawd/research/scion-experiments/v04-cvrp-cmtcommit-33e79e0b-server-2r-2r-gpt55-20260628T022008Z-claw`.
   It finished valid/complete and postrun-ready with 2 of 2 effective screening
@@ -688,20 +700,18 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    `bounded_2node_cross_exchange`, and `intra_route_or_opt_reinsert` are all
    solver-negative under current evidence. The construction successor
    `rotated_sweep_seed_tournament` reached formal screening but failed the
-   direct activation checklist. The first preferred destroy/repair successor,
-   `angular_sector_removal`, proved its evidence checklist but measured no
-   positive-at-MDE effect. The next prepared attempt should avoid unchanged
-   `angular_sector_removal`; prepared CVRP guidance now marks that exact
-   mechanism as reviewed/default-avoid while leaving materially different
-   `destroy_repair_selection` paths available. Successor5 verified that the
-   guidance can route to new mechanisms: `radial_string_removal` was abandoned
-   as solver-negative, while `bounded_intra_route_3opt` produced weak-positive
-   low-SNR evidence. Successor6 expanded that 3-opt branch, rejected it after
-   CMT2-heavy losses, clean-forked to `farthest_noise_related_removal`, and
-   rejected that mechanism too. The next CVRP attempt should not repeat
-   unchanged 3-opt, radial-string, farthest-noise, or angular-sector paths.
-   Use problem-owned opportunity design to select a materially different solver
-   mechanism, or explicitly close/reframe the remaining
+   direct activation checklist. `angular_sector_removal`,
+   `radial_string_removal`, and `farthest_noise_related_removal` are all
+   reviewed destroy/repair no-positive-at-MDE evidence, and
+   `bounded_intra_route_3opt` is reviewed bounded-local-search no-positive
+   evidence after successor6 expanded and rejected it. Prepared CVRP guidance
+   now exposes these as exact reviewed/default-avoid mechanisms. The next CVRP
+   attempt should prefer a construction seed portfolio with same-run seed-effect
+   evidence, a materially different destroy/repair causal path, or another
+   non-reviewed CVRP-owned mechanism. It should not repeat unchanged 3-opt,
+   radial-string, farthest-noise, angular-sector, cross-exchange, Or-opt, or
+   large two-opt seed paths. Use problem-owned opportunity design to select a
+   materially different solver mechanism, or explicitly close/reframe the remaining
    `large_instance_intra_route_two_opt_seed` diagnostic branch before spending
    more active-slot budget there.
 2. Continue design-first postrun/readiness cleanup only where it removes active

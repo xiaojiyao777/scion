@@ -103,7 +103,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
+        "bounded_intra_route_3opt",
         "angular_sector_removal",
+        "radial_string_removal",
+        "farthest_noise_related_removal",
     ]
     assert focus["successor_opportunity_families"] == [
         "destroy_repair_selection",
@@ -113,7 +116,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "positive-at-MDE" in focus["current_question"]
     assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
     assert "intra_route_or_opt_reinsert" in focus["next_required_direction"]
+    assert "bounded_intra_route_3opt" in focus["next_required_direction"]
     assert "angular_sector_removal" in focus["next_required_direction"]
+    assert "radial_string_removal" in focus["next_required_direction"]
+    assert "farthest_noise_related_removal" in focus["next_required_direction"]
     assert (
         "Rotate the next CVRP solver-design attempt to construction"
         in focus["next_required_direction"]
@@ -143,6 +149,19 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "angular_sector_removal" in item and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
     )
+    assert any(
+        "bounded_intra_route_3opt" in item and "measured_no_positive_at_mde" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "radial_string_removal" in item and "measured_no_positive_at_mde" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "farthest_noise_related_removal" in item
+        and "measured_no_positive_at_mde" in item
+        for item in focus["default_avoid_directions"]
+    )
     assert not any(
         item.strip().lower() == "avoid bounded_local_search_variant"
         for item in focus["default_avoid_directions"]
@@ -151,44 +170,35 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     successor_evidence = focus["reviewed_successor_evidence"]
     assert successor_evidence["source_summary"] == "cvrp_successor_summary"
     assert successor_evidence["decision_features_excluded"] is True
-    assert successor_evidence["mechanisms"] == [
-        {
-            "mechanism_id": "bounded_2node_cross_exchange",
-            "mechanism_family": "bounded_local_search_variant",
-            "checklist_status": "proven",
-            "outcome_status": "measured_no_positive_at_mde",
-            "next_use_rule": (
-                "Do not spend the next CVRP branch on the same cross-exchange "
-                "successor path unless the hypothesis names a materially new "
-                "bounded-local-search causal path and direct per-case "
-                "objective-effect evidence."
-            ),
-        },
-        {
-            "mechanism_id": "intra_route_or_opt_reinsert",
-            "mechanism_family": "bounded_local_search_variant",
-            "checklist_status": "proven",
-            "outcome_status": "measured_no_positive_at_mde",
-            "next_use_rule": (
-                "Do not spend the next CVRP branch on the same intra-route "
-                "Or-opt reinsertion path unless the hypothesis names a "
-                "materially new bounded-local-search causal path and direct "
-                "per-case objective-effect evidence."
-            ),
-        },
-        {
-            "mechanism_id": "angular_sector_removal",
-            "mechanism_family": "destroy_repair_selection",
-            "checklist_status": "proven",
-            "outcome_status": "measured_no_positive_at_mde",
-            "next_use_rule": (
-                "Do not spend the next CVRP branch on the same angular-sector "
-                "removal path unless the hypothesis names a materially new "
-                "destroy/repair selection causal path and direct per-case "
-                "objective-effect evidence."
-            ),
-        },
-    ]
+    mechanisms_by_id = {
+        item["mechanism_id"]: item for item in successor_evidence["mechanisms"]
+    }
+    assert set(mechanisms_by_id) == {
+        "bounded_2node_cross_exchange",
+        "intra_route_or_opt_reinsert",
+        "bounded_intra_route_3opt",
+        "angular_sector_removal",
+        "radial_string_removal",
+        "farthest_noise_related_removal",
+    }
+    assert mechanisms_by_id["bounded_intra_route_3opt"][
+        "mechanism_family"
+    ] == "bounded_local_search_variant"
+    assert mechanisms_by_id["farthest_noise_related_removal"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
+    assert all(
+        item["checklist_status"] == "proven"
+        and item["outcome_status"] == "measured_no_positive_at_mde"
+        and "direct per-case objective-effect evidence" in item["next_use_rule"]
+        for item in mechanisms_by_id.values()
+    )
+    assert mechanisms_by_id["bounded_intra_route_3opt"]["effect_summary"][
+        "protected_case_cmt2_median_delta"
+    ] == -6.5
+    assert mechanisms_by_id["farthest_noise_related_removal"]["effect_summary"][
+        "protected_case_cmt2_median_delta"
+    ] == -12.0
 
     large_twoopt = focus["large_instance_two_opt_constraints"]
     assert large_twoopt["schema_version"] == (
@@ -229,7 +239,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
+        "bounded_intra_route_3opt",
         "angular_sector_removal",
+        "radial_string_removal",
+        "farthest_noise_related_removal",
     ]
     assert launch_payload["successor_opportunity_families"] == [
         "destroy_repair_selection",

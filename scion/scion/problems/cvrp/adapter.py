@@ -196,6 +196,12 @@ class CvrpAdapter:
                 "unchanged_cross_route_2opt_reconnect",
                 "unchanged_cluster_biased_worst_removal",
                 "unchanged_route_limit_seed_diversification",
+                "unchanged_bounded_2node_cross_exchange",
+                "unchanged_intra_route_or_opt_reinsert",
+                "unchanged_bounded_intra_route_3opt",
+                "unchanged_angular_sector_removal",
+                "unchanged_radial_string_removal",
+                "unchanged_farthest_noise_related_removal",
             ],
             "measurable_opportunity_classes": [
                 {
@@ -271,25 +277,25 @@ class CvrpAdapter:
             "mechanism_effect_ranking": [
                 {
                     "rank": 1,
-                    "mechanism_family": "bounded_local_search_variant",
-                    "evidence_status": "successor_required_after_reviewed_no_effect",
-                    "opportunity_status": "highest_current_successor",
-                    "effect_status": "unknown_current_effect",
+                    "mechanism_family": "construction_seed_portfolio",
+                    "evidence_status": "requires_same_run_seed_baseline",
+                    "opportunity_status": "preferred_if_seed_effect_is_isolated",
+                    "effect_status": "activation_not_objective_effect",
                     "summary": (
-                        "The large-instance intra-route two-opt checklist is "
-                        "now complete but measured no positive-at-MDE effect. "
-                        "Prefer a bounded local-search successor only if it "
-                        "changes a materially different causal path and "
-                        "reports direct route-level objective deltas."
+                        "Construction seed or portfolio changes are the least "
+                        "repeated successor direction, but only count as "
+                        "solver research when the run isolates objective-"
+                        "changing seed effect."
                     ),
                     "recommended_action": (
-                        "Do not repeat the reviewed seed path; declare the "
-                        "bounded trigger, runtime guard, and direct effect "
-                        "field for a different local-search mechanism."
+                        "Use a same-run seed baseline or accepted "
+                        "same-mechanism delta; do not claim progress from "
+                        "activation or fallback diversity alone."
                     ),
                     "reason_codes": [
-                        "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE",
-                        "SUCCESSOR_CAUSAL_PATH_REQUIRED",
+                        "CONSTRUCTION_SEED_NEEDS_DIRECT_EFFECT",
+                        "ACTIVATION_IS_NOT_OBJECTIVE_EFFECT",
+                        "SUCCESSOR_ROTATION_AFTER_REVIEWED_NO_EFFECT",
                     ],
                 },
                 {
@@ -299,23 +305,46 @@ class CvrpAdapter:
                     "opportunity_status": "eligible_if_materially_different",
                     "effect_status": "unknown_current_effect",
                     "summary": (
-                        "Destroy/repair selection is the next plausible "
-                        "successor family only when it changes a material "
-                        "removal or repair choice and reports per-case "
-                        "objective attribution."
+                        "Destroy/repair selection remains plausible only if "
+                        "it differs from angular-sector, radial-string, and "
+                        "farthest-noise removal and reports per-case objective "
+                        "attribution."
                     ),
                     "recommended_action": (
-                        "Avoid unchanged demand-slack, route-merge, or "
-                        "cluster-biased variants; name the new causal path and "
+                        "Name the changed removal or repair choice and its "
                         "direct total_distance evidence before screening."
                     ),
                     "reason_codes": [
                         "MATERIAL_DIFFERENCE_REQUIRED",
                         "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
+                        "DESTROY_REPAIR_PRIOR_PATHS_REVIEWED_NO_EFFECT",
                     ],
                 },
                 {
                     "rank": 3,
+                    "mechanism_family": "bounded_local_search_variant",
+                    "evidence_status": "successor_required_after_reviewed_no_effect",
+                    "opportunity_status": "lower_after_reviewed_3opt_no_effect",
+                    "effect_status": "unknown_current_effect",
+                    "summary": (
+                        "The large-instance two-opt seed, cross-exchange, "
+                        "Or-opt reinsertion, and bounded 3-opt paths are all "
+                        "reviewed no-positive-at-MDE evidence. A bounded local "
+                        "search revisit must be a different causal path."
+                    ),
+                    "recommended_action": (
+                        "Declare the bounded trigger, runtime guard, and "
+                        "direct route-level objective delta for a non-reviewed "
+                        "local-search mechanism."
+                    ),
+                    "reason_codes": [
+                        "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE",
+                        "BOUNDED_LOCAL_SEARCH_PRIOR_PATHS_REVIEWED_NO_EFFECT",
+                        "SUCCESSOR_CAUSAL_PATH_REQUIRED",
+                    ],
+                },
+                {
+                    "rank": 4,
                     "mechanism_family": "large_instance_intra_route_two_opt_seed",
                     "evidence_status": "checklist_complete_no_positive_at_mde",
                     "opportunity_status": "reviewed_not_next_required",
@@ -334,26 +363,6 @@ class CvrpAdapter:
                     "reason_codes": [
                         "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE",
                         "ROTATE_TO_SUCCESSOR_OPPORTUNITY",
-                    ],
-                },
-                {
-                    "rank": 4,
-                    "mechanism_family": "construction_seed_portfolio",
-                    "evidence_status": "requires_same_run_seed_baseline",
-                    "opportunity_status": "lower_until_seed_effect_is_isolated",
-                    "effect_status": "activation_not_objective_effect",
-                    "summary": (
-                        "Seed or portfolio expansion has not been useful when "
-                        "it only increases activation or fallback diversity."
-                    ),
-                    "recommended_action": (
-                        "Use only with a same-run seed baseline or accepted "
-                        "same-mechanism delta showing objective-changing seed "
-                        "effect."
-                    ),
-                    "reason_codes": [
-                        "CONSTRUCTION_SEED_NEEDS_DIRECT_EFFECT",
-                        "ACTIVATION_IS_NOT_OBJECTIVE_EFFECT",
                     ],
                 },
             ],

@@ -474,7 +474,8 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
     assert diagnostic_summary["measurable_opportunity_classes_present"] is True
     assert diagnostic_summary["mechanism_effect_ranking_present"] is True
     assert diagnostic_summary["highest_current_followup_present"] is False
-    assert diagnostic_summary["highest_current_successor_present"] is True
+    assert diagnostic_summary["highest_current_successor_present"] is False
+    assert diagnostic_summary["successor_rotation_direction_present"] is True
     assert diagnostic_summary["highest_current_rank_signal_present"] is True
     assert diagnostic_summary["mechanism_rank_count"] >= 1
     assert diagnostic_summary["forbidden_prompt_tokens_present"] == []

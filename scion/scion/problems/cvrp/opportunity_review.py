@@ -56,6 +56,8 @@ _OPPORTUNITY_FAMILY_ALIASES = {
         "destroy_repair",
         "angular_sector_removal",
         "angular_sector",
+        "radial_string_removal",
+        "farthest_noise_related_removal",
         "removal",
         "repair",
         "regret_insertion",

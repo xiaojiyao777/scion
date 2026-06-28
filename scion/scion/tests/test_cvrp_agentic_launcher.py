@@ -137,18 +137,19 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         requirement["requirement_id"] == "large_instance_two_opt_reviewed_evidence"
         for requirement in typed_contract["evidence_requirements"]
     )
-    assert any(
-        requirement["requirement_id"] == "bounded_cross_exchange_reviewed_no_positive"
+    reviewed_requirement_ids = {
+        requirement["requirement_id"]
         for requirement in typed_contract["evidence_requirements"]
-    )
-    assert any(
-        requirement["requirement_id"] == "or_opt_reinsert_reviewed_no_positive"
-        for requirement in typed_contract["evidence_requirements"]
-    )
-    assert any(
-        requirement["requirement_id"] == "angular_sector_removal_reviewed_no_positive"
-        for requirement in typed_contract["evidence_requirements"]
-    )
+        if requirement["category"] == "reviewed_successor_evidence"
+    }
+    assert {
+        "bounded_2node_cross_exchange_reviewed_no_positive",
+        "intra_route_or_opt_reinsert_reviewed_no_positive",
+        "bounded_intra_route_3opt_reviewed_no_positive",
+        "angular_sector_removal_reviewed_no_positive",
+        "radial_string_removal_reviewed_no_positive",
+        "farthest_noise_related_removal_reviewed_no_positive",
+    }.issubset(reviewed_requirement_ids)
     assert any(
         block["block_id"] == "successor_portfolio_direction"
         for block in typed_contract["guidance_blocks"]
@@ -166,7 +167,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
+        "bounded_intra_route_3opt",
         "angular_sector_removal",
+        "radial_string_removal",
+        "farthest_noise_related_removal",
     ]
     assert prepared_manifest["research_focus"]["scope"] == (
         "report_only_prepared_handoff"
@@ -201,6 +205,19 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert any(
         "angular_sector_removal" in item and "measured_no_positive_at_mde" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "bounded_intra_route_3opt" in item and "measured_no_positive_at_mde" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "radial_string_removal" in item and "measured_no_positive_at_mde" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "farthest_noise_related_removal" in item
+        and "measured_no_positive_at_mde" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
@@ -254,15 +271,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         == "construction_seed_portfolio"
     )
     assert measurement["mechanism_effect_ranking"][0]["mechanism_family"] == (
-        "bounded_local_search_variant"
+        "construction_seed_portfolio"
     )
     assert measurement["mechanism_effect_ranking"][0]["opportunity_status"] == (
-        "highest_current_successor"
+        "preferred_if_seed_effect_is_isolated"
     )
-    assert measurement["mechanism_effect_ranking"][2]["mechanism_family"] == (
+    assert measurement["mechanism_effect_ranking"][3]["mechanism_family"] == (
         "large_instance_intra_route_two_opt_seed"
     )
-    assert measurement["mechanism_effect_ranking"][2]["opportunity_status"] == (
+    assert measurement["mechanism_effect_ranking"][3]["opportunity_status"] == (
         "reviewed_not_next_required"
     )
     assert measurement["opportunity_diagnostics"][0]["diagnostic_type"] == (
@@ -294,6 +311,14 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert (
+        "bounded_intra_route_3opt"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "farthest_noise_related_removal"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
         "Rotate the next CVRP solver-design attempt to construction"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
@@ -304,14 +329,20 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "measured_no_positive_at_mde" in prepared_manifest_md
     assert "bounded_2node_cross_exchange" in prepared_manifest_md
     assert "intra_route_or_opt_reinsert" in prepared_manifest_md
+    assert "bounded_intra_route_3opt" in prepared_manifest_md
     assert "angular_sector_removal" in prepared_manifest_md
+    assert "radial_string_removal" in prepared_manifest_md
+    assert "farthest_noise_related_removal" in prepared_manifest_md
     assert "Rotate" in prepared_manifest["research_focus"]["next_required_direction"]
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
+        "bounded_intra_route_3opt",
         "angular_sector_removal",
+        "radial_string_removal",
+        "farthest_noise_related_removal",
     ]
     assert prepared_manifest["research_focus"]["successor_opportunity_families"] == [
         "destroy_repair_selection",
@@ -448,7 +479,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prepared_manifest_md
     assert "screening_headroom" in prepared_manifest_md
     assert "mechanism_effect_ranking" in prepared_manifest_md
-    assert "highest_current_successor" in prepared_manifest_md
+    assert "preferred_if_seed_effect_is_isolated" in prepared_manifest_md
+    assert "lower_after_reviewed_3opt_no_effect" in prepared_manifest_md
     assert "reviewed_not_next_required" in prepared_manifest_md
     assert "opportunity_diagnostics" in prepared_manifest_md
     assert "route-merge absorption" in prepared_manifest_md

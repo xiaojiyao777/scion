@@ -58,6 +58,7 @@ CVRP_MEASUREMENT_PROMPT_SUMMARY_COMPARE_FIELDS = (
     "mechanism_effect_ranking_present",
     "highest_current_followup_present",
     "highest_current_successor_present",
+    "successor_rotation_direction_present",
     "highest_current_rank_signal_present",
     "mechanism_rank_count",
 )
@@ -346,6 +347,11 @@ def cvrp_problem_measurement_diagnostics_prompt_summary(
         "highest_current_successor_present": (
             "highest_current_successor" in rendered_prompt
         ),
+        "successor_rotation_direction_present": (
+            "preferred_if_seed_effect_is_isolated" in rendered_prompt
+            or "eligible_if_materially_different" in rendered_prompt
+            or "lower_after_reviewed_3opt_no_effect" in rendered_prompt
+        ),
         "decision_features_exclusion_present": (
             "excluded from DecisionFeatures" in rendered_prompt
             or "excluded_from_decision_features" in rendered_prompt
@@ -366,6 +372,7 @@ def cvrp_problem_measurement_diagnostics_prompt_summary(
     summary["highest_current_rank_signal_present"] = (
         summary["highest_current_followup_present"]
         or summary["highest_current_successor_present"]
+        or summary["successor_rotation_direction_present"]
     )
     required_true_fields = [
         "adapter_schema_present",

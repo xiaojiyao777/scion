@@ -38,10 +38,12 @@ def test_cvrp_adapter_renders_proposal_only_measurement_opportunities() -> None:
         payload["default_avoid_directions"]
     )
     ranking = payload["mechanism_effect_ranking"]
-    assert ranking[0]["mechanism_family"] == "bounded_local_search_variant"
-    assert ranking[0]["opportunity_status"] == "highest_current_successor"
-    assert ranking[2]["mechanism_family"] == "large_instance_intra_route_two_opt_seed"
-    assert ranking[2]["opportunity_status"] == "reviewed_not_next_required"
+    assert ranking[0]["mechanism_family"] == "construction_seed_portfolio"
+    assert ranking[0]["opportunity_status"] == "preferred_if_seed_effect_is_isolated"
+    assert ranking[2]["mechanism_family"] == "bounded_local_search_variant"
+    assert ranking[2]["opportunity_status"] == "lower_after_reviewed_3opt_no_effect"
+    assert ranking[3]["mechanism_family"] == "large_instance_intra_route_two_opt_seed"
+    assert ranking[3]["opportunity_status"] == "reviewed_not_next_required"
     assert "bks" not in json.dumps(ranking, sort_keys=True).lower()
     reason_codes = {
         code
@@ -88,12 +90,12 @@ def test_context_manager_projects_cvrp_adapter_opportunities_top_level() -> None
         "construction_seed_portfolio"
     )
     assert payload["mechanism_effect_ranking"][0]["mechanism_family"] == (
-        "bounded_local_search_variant"
+        "construction_seed_portfolio"
     )
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in compact
     assert "TRAJECTORY_DIVERGENT_LOW_SNR" in compact
     assert "mechanism_effect_ranking" in compact
-    assert "highest_current_successor" in compact
+    assert "preferred_if_seed_effect_is_isolated" in compact
     assert "reviewed_not_next_required" in compact
     assert "measurable_opportunity_classes" in compact
     assert "case_count_gap_pct_at_least_3" in compact
