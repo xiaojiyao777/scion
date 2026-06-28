@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
 from scion.core.branch_hygiene import (
     BRANCH_LOCAL_FOLLOWUP_MODE,
@@ -14,7 +14,9 @@ from scion.core.branch_hygiene import (
     branch_requires_same_mechanism_followup,
 )
 from scion.proposal.target_intent_binding import target_intent_mechanism_identity
-from scion.proposal.tools.models import ProposalToolContext
+
+if TYPE_CHECKING:
+    from scion.proposal.tools.models import ProposalToolContext
 
 
 @dataclass(frozen=True)
@@ -45,13 +47,35 @@ def resolve_target_intent_authority(
     """Resolve prepared launch focus against branch-local mechanism authority."""
 
     required_ids = _launch_focus_required_mechanism_ids_from_context(tool_context)
+    successor_conflict = launch_focus_prepared_successor_conflict(tool_context)
     updated = dict(intent)
+    current_id = _clean_string(intent.get("mechanism_id"))
+    original = _original_target_intent_mechanism(intent)
+
+    if not required_ids and successor_conflict.get("active"):
+        reviewed_ids = set(successor_conflict.get("reviewed_mechanism_ids") or ())
+        if current_id and current_id in reviewed_ids:
+            status = "prepared_successor_focus_rejects_reviewed_mechanism"
+            diagnostics = _successor_conflict_diagnostics(
+                status=status,
+                successor_conflict=successor_conflict,
+                selected_id=current_id,
+                original=original,
+                original_action=_clean_string(intent.get("action")),
+                target_intent_rejected=True,
+            )
+            updated["mechanism_id_status"] = status
+            updated["target_intent_authority"] = diagnostics
+            updated["launch_focus_prepared_successor"] = diagnostics
+            return TargetIntentAuthorityResolution(
+                intent=updated,
+                diagnostics=diagnostics,
+            )
+
     if not required_ids:
         return TargetIntentAuthorityResolution(intent=updated)
 
     branch_authority = _branch_mechanism_authority(tool_context)
-    current_id = _clean_string(intent.get("mechanism_id"))
-    original = _original_target_intent_mechanism(intent)
 
     if branch_authority.branch_local and branch_authority.authority_ids:
         intersecting_id = _first_in_order(
@@ -202,6 +226,101 @@ def resolve_target_intent_authority(
     return TargetIntentAuthorityResolution(intent=updated, diagnostics=diagnostics)
 
 
+def launch_focus_prepared_successor_conflict(
+    context: Mapping[str, Any] | ProposalToolContext | None,
+) -> dict[str, Any]:
+    """Return proposal-only diagnostics when successor focus supersedes branch ids.
+
+    Generic core does not interpret problem-specific successor family names.
+    The contract is field-driven: a prepared launch focus can mark mechanism
+    ids as reviewed and provide successor opportunity families. If those
+    reviewed ids intersect the current branch-local mechanism authority, the
+    prepared run must not be forced back into same-mechanism continuation.
+    """
+
+    if context is None:
+        return {
+            "name": "prepared_successor_focus_conflict",
+            "active": False,
+            "configured": False,
+        }
+    launch_focus = _launch_focus_from_any_context(context)
+    if not isinstance(launch_focus, Mapping):
+        return {
+            "name": "prepared_successor_focus_conflict",
+            "active": False,
+            "configured": False,
+        }
+    research_focus = _launch_focus_research_focus_payload(launch_focus)
+    required_ids = _unique_strings(research_focus.get("required_mechanism_ids"))
+    reviewed_ids = _unique_strings(research_focus.get("reviewed_mechanism_ids"))
+    successor_families = _unique_strings(
+        research_focus.get("successor_opportunity_families")
+    )
+    if required_ids or not reviewed_ids or not successor_families:
+        return _drop_empty(
+            {
+                "name": "prepared_successor_focus_conflict",
+                "active": False,
+                "configured": bool(reviewed_ids or successor_families),
+                "required_mechanism_ids": list(required_ids),
+                "reviewed_mechanism_ids": list(reviewed_ids),
+                "successor_opportunity_families": list(successor_families),
+            }
+        )
+
+    branch = getattr(context, "branch", None)
+    hygiene = _branch_hygiene_from_any_context(context)
+    branch_authority = _branch_mechanism_authority_from_payloads(
+        branch=branch,
+        hygiene=hygiene,
+    )
+    branch_ids = branch_authority.authority_ids
+    reviewed_branch_ids = tuple(item for item in branch_ids if item in reviewed_ids)
+    active = bool(
+        branch_authority.branch_local
+        and branch_ids
+        and reviewed_branch_ids
+        and successor_families
+    )
+    status = (
+        "prepared_successor_supersedes_branch_same_mechanism"
+        if active
+        else "no_prepared_successor_branch_conflict"
+    )
+    return _drop_empty(
+        {
+            "name": "prepared_successor_focus_conflict",
+            "active": active,
+            "configured": True,
+            "status": status,
+            "authority_status": status,
+            "reviewed_mechanism_ids": list(reviewed_ids),
+            "successor_opportunity_families": list(successor_families),
+            "branch_local_authority": branch_authority.branch_local,
+            "branch_protected_mechanism_ids": list(branch_authority.protected_ids),
+            "branch_allowed_mechanism_ids": list(branch_authority.allowed_ids),
+            "branch_authority_mechanism_ids": list(branch_ids),
+            "reviewed_branch_mechanism_ids": list(reviewed_branch_ids),
+            "hypothesis_generation_mode": (
+                branch_authority.hypothesis_generation_mode
+            ),
+            "branch_followup_policy": branch_authority.branch_followup_policy,
+            "same_mechanism_followup_required": (
+                branch_authority.same_mechanism_followup_required
+            ),
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "tainted": True,
+            "rule": (
+                "Prepared launch focus reviewed_mechanism_ids plus "
+                "successor_opportunity_families supersede branch-local "
+                "same-mechanism continuation for reviewed branch mechanism ids."
+            ),
+        }
+    )
+
+
 def tool_context_with_target_intent_authority_overrides(
     tool_context: ProposalToolContext | None,
     target_intent: Mapping[str, Any] | None,
@@ -224,12 +343,18 @@ def tool_context_with_target_intent_authority_overrides(
 def _branch_mechanism_authority(
     tool_context: ProposalToolContext,
 ) -> _BranchMechanismAuthority:
-    branch = getattr(tool_context, "branch", None)
-    hygiene = (
-        dict(tool_context.branch_hygiene)
-        if isinstance(getattr(tool_context, "branch_hygiene", None), Mapping)
-        else {}
+    return _branch_mechanism_authority_from_payloads(
+        branch=getattr(tool_context, "branch", None),
+        hygiene=_branch_hygiene_from_any_context(tool_context),
     )
+
+
+def _branch_mechanism_authority_from_payloads(
+    *,
+    branch: Any = None,
+    hygiene: Mapping[str, Any] | None = None,
+) -> _BranchMechanismAuthority:
+    hygiene = dict(hygiene) if isinstance(hygiene, Mapping) else {}
     if not hygiene and branch is not None:
         hygiene = branch_hygiene_context(branch)
 
@@ -265,6 +390,74 @@ def _branch_mechanism_authority(
         hypothesis_generation_mode=generation_mode,
         branch_followup_policy=followup_policy,
         same_mechanism_followup_required=same_required,
+    )
+
+
+def _successor_conflict_diagnostics(
+    *,
+    status: str,
+    successor_conflict: Mapping[str, Any],
+    selected_id: str,
+    original: Mapping[str, Any],
+    original_action: str,
+    target_intent_rejected: bool,
+) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "name": "target_intent_authority",
+            "status": status,
+            "authority_status": status,
+            "authority_source": "prepared_launch_research_focus_successor",
+            "source": "prepared_launch_research_focus_successor",
+            "applied": True,
+            "prepared_focus_applied": True,
+            "target_intent_updated": False,
+            "target_intent_rejected": target_intent_rejected,
+            "selected_mechanism_id": selected_id,
+            "rejected_mechanism_id": selected_id if target_intent_rejected else "",
+            "reviewed_mechanism_ids": list(
+                successor_conflict.get("reviewed_mechanism_ids") or ()
+            ),
+            "successor_opportunity_families": list(
+                successor_conflict.get("successor_opportunity_families") or ()
+            ),
+            "reviewed_branch_mechanism_ids": list(
+                successor_conflict.get("reviewed_branch_mechanism_ids") or ()
+            ),
+            "branch_protected_mechanism_ids": list(
+                successor_conflict.get("branch_protected_mechanism_ids") or ()
+            ),
+            "branch_allowed_mechanism_ids": list(
+                successor_conflict.get("branch_allowed_mechanism_ids") or ()
+            ),
+            "branch_authority_mechanism_ids": list(
+                successor_conflict.get("branch_authority_mechanism_ids") or ()
+            ),
+            "branch_local_authority": successor_conflict.get(
+                "branch_local_authority"
+            ),
+            "hypothesis_generation_mode": successor_conflict.get(
+                "hypothesis_generation_mode"
+            ),
+            "branch_followup_policy": successor_conflict.get(
+                "branch_followup_policy"
+            ),
+            "same_mechanism_followup_required": successor_conflict.get(
+                "same_mechanism_followup_required"
+            ),
+            "original_target_intent_action": original_action,
+            "selected_target_intent_action": _normalize_action(original_action),
+            "original_target_intent_mechanism": dict(original),
+            "prepared_successor_focus_conflict": dict(successor_conflict),
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "tainted": True,
+            "rule": (
+                "A reviewed branch-local mechanism id cannot bind target intent "
+                "when prepared launch focus supplies successor opportunity "
+                "families for the next run."
+            ),
+        }
     )
 
 
@@ -446,13 +639,38 @@ def _launch_focus_with_deferred_required_ids(
 def _launch_focus_required_mechanism_ids_from_context(
     tool_context: ProposalToolContext,
 ) -> list[str]:
-    focus = getattr(tool_context, "launch_research_focus", {}) or {}
-    if not isinstance(focus, Mapping):
-        return []
-    research_focus = focus.get("research_focus")
-    if not isinstance(research_focus, Mapping):
-        research_focus = focus
+    focus = _launch_focus_from_any_context(tool_context)
+    research_focus = _launch_focus_research_focus_payload(focus)
     return list(_unique_strings(research_focus.get("required_mechanism_ids")))
+
+
+def _launch_focus_from_any_context(
+    context: Mapping[str, Any] | ProposalToolContext,
+) -> Mapping[str, Any]:
+    if isinstance(context, Mapping):
+        focus = context.get("launch_research_focus")
+    else:
+        focus = getattr(context, "launch_research_focus", None)
+    return focus if isinstance(focus, Mapping) else {}
+
+
+def _launch_focus_research_focus_payload(
+    focus: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    research_focus = focus.get("research_focus")
+    if isinstance(research_focus, Mapping):
+        return research_focus
+    return focus
+
+
+def _branch_hygiene_from_any_context(
+    context: Mapping[str, Any] | ProposalToolContext,
+) -> Mapping[str, Any]:
+    if isinstance(context, Mapping):
+        hygiene = context.get("branch_hygiene")
+    else:
+        hygiene = getattr(context, "branch_hygiene", None)
+    return hygiene if isinstance(hygiene, Mapping) else {}
 
 
 def _branch_local_followup_action(intent: Mapping[str, Any]) -> str:

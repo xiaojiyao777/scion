@@ -37,6 +37,9 @@ from scion.proposal.edit_protocol import (
     normalize_patch_typed_edits,
     source_digest_for_content,
 )
+from scion.proposal.target_intent_authority import (
+    launch_focus_prepared_successor_conflict,
+)
 from scion.proposal.schemas import (
     HypothesisProposalInput,
     PatchSchemaPreflightError,
@@ -604,6 +607,12 @@ def _hypothesis_schema_preview(
             hypothesis,
         )
     )
+    launch_focus_reviewed_mechanism_guard = (
+        _launch_focus_reviewed_mechanism_guard(
+            context,
+            hypothesis,
+        )
+    )
     launch_focus_default_avoid_guard = _launch_focus_default_avoid_guard(
         context,
         hypothesis,
@@ -617,6 +626,8 @@ def _hypothesis_schema_preview(
     if not branch_continuation_guard.get("passed", True):
         passed = False
     if not launch_focus_required_mechanism_guard.get("passed", True):
+        passed = False
+    if not launch_focus_reviewed_mechanism_guard.get("passed", True):
         passed = False
     if not launch_focus_default_avoid_guard.get("passed", True):
         passed = False
@@ -643,6 +654,10 @@ def _hypothesis_schema_preview(
     elif not launch_focus_required_mechanism_guard.get("passed", True):
         failure_reason = str(
             launch_focus_required_mechanism_guard.get("reason") or ""
+        )
+    elif not launch_focus_reviewed_mechanism_guard.get("passed", True):
+        failure_reason = str(
+            launch_focus_reviewed_mechanism_guard.get("reason") or ""
         )
     elif not launch_focus_default_avoid_guard.get("passed", True):
         failure_reason = str(
@@ -683,6 +698,9 @@ def _hypothesis_schema_preview(
         "launch_research_focus_required_mechanism_guard": (
             launch_focus_required_mechanism_guard
         ),
+        "launch_research_focus_reviewed_mechanism_guard": (
+            launch_focus_reviewed_mechanism_guard
+        ),
         "launch_research_focus_default_avoid_guard": (
             launch_focus_default_avoid_guard
         ),
@@ -709,6 +727,49 @@ def _branch_continuation_schema_preview(
     )
     if not same_mechanism_only:
         return {"passed": True}
+
+    successor_conflict = launch_focus_prepared_successor_conflict(context)
+    if successor_conflict.get("active"):
+        proposed = tuple(
+            dict.fromkeys(
+                str(change.id).strip()
+                for change in mechanism_changes(hypothesis)
+                if str(change.id).strip()
+            )
+        )
+        return _drop_empty_items(
+            {
+                "name": "same_mechanism_only_branch_guard",
+                "passed": True,
+                "configured": True,
+                "branch_authority_status": (
+                    "superseded_by_prepared_successor_focus"
+                ),
+                "protected_mechanism_ids": list(
+                    successor_conflict.get("branch_protected_mechanism_ids") or ()
+                ),
+                "allowed_mechanism_ids": list(
+                    successor_conflict.get("branch_authority_mechanism_ids") or ()
+                ),
+                "reviewed_branch_mechanism_ids": list(
+                    successor_conflict.get("reviewed_branch_mechanism_ids") or ()
+                ),
+                "successor_opportunity_families": list(
+                    successor_conflict.get("successor_opportunity_families") or ()
+                ),
+                "proposed_mechanism_ids": list(proposed),
+                "candidate_routing": "clean_successor_required",
+                "clean_fork_signal": True,
+                "proposal_visibility_only": True,
+                "decision_features_excluded": True,
+                "retry_constraint": (
+                    "Prepared successor focus supersedes same-mechanism branch "
+                    "continuation for reviewed branch mechanism ids. Use a "
+                    "materially different successor mechanism; do not repeat a "
+                    "reviewed mechanism id."
+                ),
+            }
+        )
 
     check = validate_branch_continuation_hypothesis(
         branch,
@@ -866,6 +927,89 @@ def _launch_focus_default_avoid_guard(
             "matching_structured_avoid_rule_ids": matching_structured_rules,
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
+        }
+    )
+
+
+def _launch_focus_reviewed_mechanism_guard(
+    context: ProposalToolContext,
+    hypothesis: HypothesisProposal,
+) -> dict[str, Any]:
+    successor_conflict = launch_focus_prepared_successor_conflict(context)
+    if not successor_conflict.get("active"):
+        return {
+            "name": "launch_research_focus_reviewed_mechanism",
+            "passed": True,
+            "configured": False,
+        }
+    reviewed_ids = _launch_focus_string_items(
+        successor_conflict.get("reviewed_mechanism_ids")
+    )
+    candidate_ids = [
+        str(change.id).strip()
+        for change in mechanism_changes(hypothesis)
+        if str(change.id).strip()
+    ]
+    reviewed_set = set(reviewed_ids)
+    matched_ids = [item for item in candidate_ids if item in reviewed_set]
+    if not matched_ids:
+        return _drop_empty_items(
+            {
+                "name": "launch_research_focus_reviewed_mechanism",
+                "passed": True,
+                "configured": True,
+                "reviewed_mechanism_ids": list(reviewed_ids),
+                "reviewed_branch_mechanism_ids": list(
+                    successor_conflict.get("reviewed_branch_mechanism_ids") or ()
+                ),
+                "successor_opportunity_families": list(
+                    successor_conflict.get("successor_opportunity_families") or ()
+                ),
+                "candidate_mechanism_ids": candidate_ids,
+                "proposal_visibility_only": True,
+                "decision_features_excluded": True,
+            }
+        )
+
+    successor_family_text = ", ".join(
+        str(item).strip()
+        for item in successor_conflict.get("successor_opportunity_families", ())
+        if str(item).strip()
+    )
+    reason = (
+        "launch_research_focus_reviewed_mechanism: prepared successor focus "
+        "requires a materially different mechanism; reviewed_mechanism_ids="
+        f"{list(reviewed_ids)!r}; candidate_mechanism_ids={candidate_ids!r}; "
+        f"matched_reviewed_mechanism_ids={matched_ids!r}; "
+        f"successor_opportunity_families={successor_family_text or 'none'}."
+    )
+    return _drop_empty_items(
+        {
+            "name": "launch_research_focus_reviewed_mechanism",
+            "passed": False,
+            "configured": True,
+            "failure_code": "launch_research_focus_reviewed_mechanism_repeat",
+            "reason": reason,
+            "reviewed_mechanism_ids": list(reviewed_ids),
+            "reviewed_branch_mechanism_ids": list(
+                successor_conflict.get("reviewed_branch_mechanism_ids") or ()
+            ),
+            "successor_opportunity_families": list(
+                successor_conflict.get("successor_opportunity_families") or ()
+            ),
+            "candidate_mechanism_ids": candidate_ids,
+            "matched_reviewed_mechanism_ids": matched_ids,
+            "candidate_target_file": hypothesis.target_file,
+            "candidate_change_locus": hypothesis.change_locus,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "retry_constraint": (
+                "Rewrite the hypothesis around a materially different successor "
+                "mechanism. Do not use reviewed mechanism ids in "
+                "mechanism_changes; choose a mechanism consistent with the "
+                "prepared successor opportunity families"
+                f"{': ' + successor_family_text if successor_family_text else ''}."
+            ),
         }
     )
 

@@ -60,6 +60,21 @@ chronology belongs in focused experiment reports and git history.
 - Current local gpt-5.5 proxy at `127.0.0.1:8080` is authenticated after the
   2026-06-28 Codex relogin and proxy restart. `/v1/models` lists `gpt-5.5`,
   and a `gpt-5.5` chat completion returns HTTP 200.
+- Prepared successor-focus arbitration is implemented locally in the proposal
+  layer. When a prepared launch focus marks branch-local mechanism ids as
+  `reviewed_mechanism_ids` and supplies non-empty
+  `successor_opportunity_families`, target-intent prompts and formal
+  hypothesis prompts no longer force same-mechanism continuation for those
+  reviewed ids, schema preview treats same-mechanism branch authority as
+  superseded for the prepared run, and reviewed mechanism repeats fail with a
+  proposal-only launch-focus guard. This is generic field-driven proposal
+  behavior, not CVRP-specific core logic, and remains excluded from
+  `DecisionFeatures`. Focused local validation passes for prepared successor
+  focus, target-intent authority, schema preview, generic prompt rendering, and
+  agentic hypothesis retry/binding tests (`80 passed`). Dirty-sensitive launch
+  readiness tests were also checked; their only current failure before commit
+  is the expected `git_runtime_worktree_clean` guard on this uncommitted
+  worktree.
 - Generic launcher resume handling is repaired locally for CVRP and warehouse:
   resumed campaign runtime state is copied forward, while stale terminal
   artifacts from the copied source campaign are quarantined under
@@ -519,7 +534,9 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    attempt should target a materially different problem-owned successor family
    such as `bounded_local_search_variant` or `destroy_repair_selection`, with
    direct per-case objective-effect evidence and runtime/CMT protection
-   evidence.
+   evidence. Launch this only from a clean commit so launch readiness can prove
+   the prepared successor focus is not being overridden by stale branch-local
+   same-mechanism authority.
 2. Continue design-first postrun/readiness cleanup only where it removes active
    risk. `scion.postrun` should own generic artifact, lifecycle, schema,
    readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit

@@ -16,6 +16,9 @@ from .solver_design_prompts import (
     _solver_design_hypothesis_guidance,
     _solver_design_target_intent_guidance,
 )
+from scion.proposal.target_intent_authority import (
+    launch_focus_prepared_successor_conflict,
+)
 
 _PROMPT_SAME_MECHANISM_ALLOWED_ACTIONS = (
     "tune",
@@ -91,7 +94,17 @@ def _split_hypothesis_context(
     if compact_research_signals:
         branch_context_parts.append(compact_research_signals)
 
-    same_mechanism_constraints = _same_mechanism_followup_constraints(D)
+    successor_conflict = launch_focus_prepared_successor_conflict(context)
+    same_mechanism_constraints = (
+        ""
+        if successor_conflict.get("active")
+        else _same_mechanism_followup_constraints(D)
+    )
+    successor_conflict_prompt = _prepared_successor_focus_conflict_prompt(
+        successor_conflict
+    )
+    if successor_conflict_prompt:
+        branch_context_parts.append(successor_conflict_prompt)
     if same_mechanism_constraints:
         branch_context_parts.append(same_mechanism_constraints)
 
@@ -121,11 +134,11 @@ def _split_hypothesis_context(
         branch_context_parts.append(
             f"## Cross-Branch Research Map\n{D['cross_branch_research']}"
         )
-    if D["branch_followup_policy"]:
+    if D["branch_followup_policy"] and not successor_conflict.get("active"):
         branch_context_parts.append(
             f"## Branch Follow-up Policy\n{D['branch_followup_policy']}"
         )
-    if D["branch_hygiene_guidance"]:
+    if D["branch_hygiene_guidance"] and not successor_conflict.get("active"):
         branch_context_parts.append(
             f"## Branch Code Status\n{D['branch_hygiene_guidance']}"
         )
@@ -321,7 +334,17 @@ def _split_hypothesis_target_intent_context(
         f"## Champion State\n{D['champion_stats']}"
     )
     branch_context_parts = []
-    same_mechanism_constraints = _same_mechanism_followup_constraints(D)
+    successor_conflict = launch_focus_prepared_successor_conflict(context)
+    same_mechanism_constraints = (
+        ""
+        if successor_conflict.get("active")
+        else _same_mechanism_followup_constraints(D)
+    )
+    successor_conflict_prompt = _prepared_successor_focus_conflict_prompt(
+        successor_conflict
+    )
+    if successor_conflict_prompt:
+        branch_context_parts.append(successor_conflict_prompt)
     if same_mechanism_constraints:
         branch_context_parts.append(same_mechanism_constraints)
     for key, title in (
@@ -334,6 +357,11 @@ def _split_hypothesis_target_intent_context(
         ("active_hyp_summary", "Currently Occupied"),
         ("sibling_summary", "Sibling Branches"),
     ):
+        if successor_conflict.get("active") and key in {
+            "branch_hygiene_guidance",
+            "branch_followup_policy",
+        }:
+            continue
         value = str(D[key]).strip()
         if value:
             branch_context_parts.append(f"## {title}\n{value}")
@@ -411,7 +439,15 @@ def _split_hypothesis_target_intent_context(
             f"boundary files when applicable: {targetable_files}."
         )
     task_lines.extend(_target_intent_launch_focus_required_mechanism_lines(context))
-    if same_mechanism_constraints:
+    if successor_conflict.get("active"):
+        task_lines.append(
+            "Prepared successor focus supersedes same-branch mechanism "
+            "continuation for the reviewed branch mechanism ids. Do not select "
+            "or repeat a reviewed mechanism id for this prepared target intent; "
+            "choose a materially different successor mechanism consistent with "
+            "the successor opportunity families."
+        )
+    elif same_mechanism_constraints:
         task_lines.append(
             "Same-branch refinement is same-mechanism only. Select a target "
             "intent for the protected mechanism. If the best idea is a new or "
@@ -490,6 +526,42 @@ def _target_intent_launch_focus_required_mechanism_lines(
     if question:
         lines.append(f"Prepared current_question: {question}")
     return lines
+
+
+def _prepared_successor_focus_conflict_prompt(
+    successor_conflict: Mapping[str, Any],
+) -> str:
+    if not successor_conflict.get("active"):
+        return ""
+    reviewed_ids = ", ".join(
+        f"`{item}`"
+        for item in successor_conflict.get("reviewed_mechanism_ids", ())
+        if str(item).strip()
+    )
+    reviewed_branch_ids = ", ".join(
+        f"`{item}`"
+        for item in successor_conflict.get("reviewed_branch_mechanism_ids", ())
+        if str(item).strip()
+    )
+    successor_families = ", ".join(
+        f"`{item}`"
+        for item in successor_conflict.get("successor_opportunity_families", ())
+        if str(item).strip()
+    )
+    return (
+        "## Prepared Successor Focus\n"
+        "schema_version=prepared_successor_focus_prompt.v1\n"
+        "decision_input_policy=excluded_from_decision_features\n"
+        f"reviewed_mechanism_ids={reviewed_ids or 'none'}\n"
+        f"reviewed_branch_mechanism_ids={reviewed_branch_ids or 'none'}\n"
+        f"successor_opportunity_families={successor_families or 'none'}\n"
+        "The prepared launch focus marks the branch-local mechanism ids above "
+        "as already reviewed for this run and supplies successor opportunity "
+        "families. For this prepared run, this supersedes same-mechanism "
+        "branch continuation: do not select or repeat a reviewed mechanism id. "
+        "Choose a materially different successor mechanism and describe the "
+        "causal path that distinguishes it from the reviewed branch mechanism."
+    )
 
 
 def _launch_focus_required_mechanism_ids(context: Mapping[str, Any]) -> list[str]:
@@ -1027,6 +1099,9 @@ def _target_intent_binding_task_lines(context: Mapping[str, Any]) -> list[str]:
     raw_intent = context.get("agentic_hypothesis_target_intent")
     if not isinstance(raw_intent, Mapping):
         return []
+    rejected_binding_lines = _rejected_target_intent_binding_task_lines(raw_intent)
+    if rejected_binding_lines:
+        return rejected_binding_lines
     intent_value = raw_intent.get("intent")
     intent = intent_value if isinstance(intent_value, Mapping) else raw_intent
     change_locus = str(
@@ -1073,6 +1148,49 @@ def _target_intent_binding_task_lines(context: Mapping[str, Any]) -> list[str]:
         "before formal hypothesis generation."
     )
     return lines
+
+
+def _rejected_target_intent_binding_task_lines(
+    raw_intent: Mapping[str, Any],
+) -> list[str]:
+    host_adjustments = raw_intent.get("host_adjustments")
+    if not isinstance(host_adjustments, Mapping):
+        return []
+    authority = host_adjustments.get("target_intent_authority")
+    if not isinstance(authority, Mapping):
+        return []
+    if (
+        str(authority.get("authority_status") or "").strip()
+        != "prepared_successor_focus_rejects_reviewed_mechanism"
+    ):
+        return []
+    reviewed_ids = ", ".join(
+        f"`{item}`"
+        for item in authority.get("reviewed_mechanism_ids", ())
+        if str(item).strip()
+    )
+    successor_families = ", ".join(
+        f"`{item}`"
+        for item in authority.get("successor_opportunity_families", ())
+        if str(item).strip()
+    )
+    return [
+        "Selected target-intent binding was rejected by prepared successor "
+        "focus. Do not bind this formal hypothesis to the rejected target "
+        "file or mechanism from the preflight artifact.",
+        (
+            "Do not use reviewed mechanism ids in mechanism_changes"
+            f"{': ' + reviewed_ids if reviewed_ids else ''}."
+        ),
+        (
+            "Choose a materially different successor mechanism consistent "
+            "with the prepared successor opportunity families"
+            f"{': ' + successor_families if successor_families else ''}."
+        ),
+        "If no successor mechanism can be named, stop and require a "
+        "host-controlled target-intent reselect before formal hypothesis "
+        "generation.",
+    ]
 
 
 def _material_difference_requirement_task_lines(
