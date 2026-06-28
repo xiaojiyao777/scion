@@ -229,6 +229,10 @@ if [[ "${{POSTRUN_REPORTS:-1}}" == "1" ]]; then
     --postrun-readiness-exit-code "$POSTRUN_READINESS_STATUS" \\
     --postrun-report-dir "$REPORT_DIR" \\
     --postrun-readiness-path "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json" \\
+    --resume-from-campaign "$RESUME_FROM_CAMPAIGN" \\
+    --resume-snapshot-ref "$RESUME_SNAPSHOT_MANIFEST_REF" \\
+    --copied-campaign-status-present "$RESUME_COPIED_CAMPAIGN_STATUS_PRESENT" \\
+    --copied-campaign-summary-present "$RESUME_COPIED_CAMPAIGN_SUMMARY_PRESENT" \\
     >> "$RUN_ROOT/run.log" 2>&1 || POSTRUN_STATUS_WRITE_STATUS=$?
   if [[ "$POSTRUN_STATUS_WRITE_STATUS" -ne 0 ]]; then
     echo "POSTRUN_STATUS_WRITE_EXIT_STATUS:$POSTRUN_STATUS_WRITE_STATUS" >> "$RUN_ROOT/run.log"

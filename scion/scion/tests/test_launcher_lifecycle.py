@@ -84,3 +84,13 @@ def test_render_run_sh_wraps_dummy_command_with_lifecycle_markers(
     assert campaign_marker < dummy_command
     assert dummy_command < postrun_call
     assert postrun_call < postrun_status
+    assert '--resume-from-campaign "$RESUME_FROM_CAMPAIGN"' in run_sh
+    assert '--resume-snapshot-ref "$RESUME_SNAPSHOT_MANIFEST_REF"' in run_sh
+    assert (
+        '--copied-campaign-status-present '
+        '"$RESUME_COPIED_CAMPAIGN_STATUS_PRESENT"'
+    ) in run_sh
+    assert (
+        '--copied-campaign-summary-present '
+        '"$RESUME_COPIED_CAMPAIGN_SUMMARY_PRESENT"'
+    ) in run_sh

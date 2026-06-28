@@ -236,16 +236,36 @@ chronology belongs in focused experiment reports and git history.
   also separates observed large-twoopt requirement evidence from positive
   solver outcome, and the remaining CMT gap is now rendered as an actionable
   code-phase commitment. CVRP still lacks solver improvement or promotion.
-- Active local CVRP CMT-commitment follow-through root:
+- Previous local CVRP CMT-commitment follow-through root:
   `/home/clawd/research/scion-experiments/v04-cvrp-cmtcommit-33e79e0b-server-2r-2r-gpt55-20260628T022008Z-claw`.
-  It launched from commit `33e79e0b` after the proxy was refreshed. The first
-  current-run screening row is valid and chose `expand_screening`: 32 of 32
-  valid pairs, measurable `large_instance_intra_route_two_opt_seed` telemetry,
-  mixed CMT2 objective effects, and ties on CMT4/M/X. This is a weak effective
-  research signal, not solver progress. Because this run started before the
-  resume-snapshot repair, stale copied terminal artifacts in canonical paths
-  must be ignored; use the DB, current status progress, and current metrics for
-  interpretation. Expand screening is still running.
+  It finished valid/complete and postrun-ready with 2 of 2 effective screening
+  rows, but remains solver-negative and not clean acceptance: it launched from
+  old commit `33e79e0b` before the resume-snapshot repair and the checkout
+  advanced while it was live. First screening was 32/32 valid with 2 wins, 2
+  losses, and 28 ties; expanded screening was 48/48 valid with 3 wins, 3
+  losses, and 42 ties. Postrun interpretation is
+  `protocol_evaluated_without_large_twoopt_direct_evidence`; opportunity usage
+  is `checklist_unproven`, with CMT protection still missing. Treat it as
+  weak effective-research behavior and a continuation seed, not solver
+  improvement.
+- Clean local CVRP CMT-commitment follow-up:
+  `/home/clawd/research/scion-experiments/v04-cvrp-cmtcommit-404c4f8c-cleanfollow-2r-gpt55-20260628T034012Z-claw`.
+  It resumed the previous CMT-commitment campaign from current HEAD
+  `404c4f8c`, passed strict launch readiness, and finished wrapper/postrun-ready:
+  validity `valid`, completeness `complete`, 2 of 2 effective screening rows,
+  2 Protocol metric rows, 2 proposal attempts, 0 quality blocks, and
+  `last_stop_reason=max_rounds_exhausted`. First screening was 32/32 valid
+  with 3 wins, 2 losses, and 27 ties; expanded screening was 48/48 valid with
+  1 win, 1 loss, and 46 ties. The run is clean effective-research evidence for
+  same-branch low-SNR follow-up and mechanism telemetry, not solver progress:
+  postrun interpretation is
+  `protocol_evaluated_without_large_twoopt_direct_evidence`, opportunity usage
+  is `checklist_unproven`, activation/objective/phase evidence is observed in
+  2 of 2 Protocol rows, positive-at-MDE is absent, and CMT protection evidence
+  remains incomplete. During postrun, the stored inventory recovered
+  `resume_snapshot_ref` from the prepared manifest, but final root
+  `run_status.json` dropped the field after copying campaign status; the local
+  final-status writer repair now preserves resume metadata for future roots.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
   finished valid/complete and postrun-ready:
@@ -429,36 +449,15 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 
 ## Next Actions
 
-1. Design the next repair as ports, not more helper/projection patches:
-   generic core should own artifact identity, current-run evidence,
-   fail-closed lifecycle/readiness status, schema validation, and exposure
-   boundaries; CVRP/warehouse/VRP review semantics should sit in problem-owned
-   validators/providers. Design basis:
-   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`. Design N
-   skeleton and the `check_postrun_acceptance.py` compatibility adapter are
-   implemented, CVRP large-twoopt plus warehouse follow-up reviews are now
-   problem-owned, and generic lifecycle/marker acceptance checks are behind
-   `PostrunLifecycleAcceptancePort` while artifact identity/schema checks are
-   behind `PostrunArtifactAcceptancePort`; evidence/brief consistency checks
-   are behind `PostrunEvidenceConsistencyAcceptancePort`; review-input summary
-   validation is behind `PostrunReviewInputAcceptancePort`; prompt/source
-   visibility envelope checks are behind `PostrunPromptVisibilityAcceptancePort`;
-   research-telemetry checks are behind
-   `PostrunResearchTelemetryAcceptancePort`. All six preserve legacy check
-   payloads.
-   Problem-summary actionability policy is now defined by
-   `ProblemSummaryActionabilitySpec` in each problem package, with the checker
-   retaining only compatibility dispatch.
-   Design O's typed measurement consumer feeds protocol config,
-   proposal-context measurement diagnostics, prepared measurement handoff
-   builders, and postrun research-efficiency fallback. Designs Q/R now make
-   selected opportunity commitments visible to code prompts and auditable in
-   postrun reports as ids/digests only, including report-only counts for
-   commitment summaries that were not accompanied by a rendered code prompt
-   section. A fresh no-resume CVRP launch has validated code-phase opportunity
-   commitment visibility; the next v0.4 work is problem-owned
-   opportunity/review evidence quality and checklist follow-through, not more
-   generic checker growth.
+1. Continue design-first postrun/readiness cleanup as ports, not more
+   helper/projection patches. `scion.postrun` should own generic artifact,
+   lifecycle, schema, readiness, and exposure boundaries; CVRP/warehouse/VRP
+   semantics should sit in problem-owned validators/providers. Design basis:
+   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md` and
+   `scion/design/v0.4-postrun-cli-port-migration-design.md`. The next concrete
+   migration is to thin `postrun_artifact_inventory.py` and
+   `rebuild_prepared_handoff.py` into CLI adapters without changing legacy
+   output shape or live runtime behavior.
 2. Extend problem-owned opportunity providers/reviews beyond the CVRP initial
    slice only when a concrete problem package needs it. Generic core should
    continue to render/audit `ProblemOpportunitySummary`; residual opportunity,

@@ -224,6 +224,19 @@ case-level `total_distance` delta requirements. Detailed reports:
 `scion/docs/experiments/v0.4/v04-cvrp-seed-family-review-alignment-20260626.md`
 and
 `scion/docs/experiments/v0.4/v04-cvrp-proofstatus-followup-postrun-20260625.md`.
+The clean local CVRP CMT-commitment follow-up root
+`/home/clawd/research/scion-experiments/v04-cvrp-cmtcommit-404c4f8c-cleanfollow-2r-gpt55-20260628T034012Z-claw`
+finished valid/complete and postrun-ready from current HEAD `404c4f8c`.
+It is clean effective-research evidence for same-branch low-SNR follow-up and
+mechanism telemetry, not solver progress: 2 of 2 effective screening rows,
+first screening 32/32 valid with 3 wins, 2 losses, and 27 ties, expanded
+screening 48/48 valid with 1 win, 1 loss, and 46 ties, opportunity usage
+`checklist_unproven`, activation/objective/phase evidence observed in 2 of 2
+Protocol rows, positive-at-MDE absent, and CMT protection evidence still
+incomplete. The run also exposed a final-status metadata gap: postrun inventory
+could recover `resume_snapshot_ref` from the prepared manifest, but final root
+`run_status.json` dropped it after campaign status copy. The final wrapper
+status writer now preserves resume metadata for future roots.
 One narrow warehouse repeat is optional only if an independent solver-level
 plateau confirmation is required.*
 *Updated: 2026-06-28*
