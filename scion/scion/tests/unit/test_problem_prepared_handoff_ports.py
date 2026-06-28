@@ -61,6 +61,13 @@ def test_cvrp_prepared_handoff_port_builds_legacy_checks_and_phase4(
     assert spec.active_subject_surface == "solver_design"
     assert "profile_projection" in spec.measurement_source_markers
     assert "large_twoopt_runtime_guard" in spec.active_subject_provider_markers
+    assert callable(spec.measurement_prompt_summary_builder)
+    assert callable(spec.active_subject_prompt_summary_builder)
+    assert "mechanism_rank_count" in spec.measurement_prompt_summary_compare_fields
+    assert (
+        "large_twoopt_runtime_guard_present"
+        in spec.active_subject_prompt_summary_compare_fields
+    )
 
 
 def test_warehouse_prepared_handoff_port_builds_legacy_checks_and_phase4() -> None:
@@ -105,6 +112,16 @@ def test_warehouse_prepared_handoff_port_builds_legacy_checks_and_phase4() -> No
     assert spec.active_subject_surface == "order_level"
     assert "profile_projection" in spec.measurement_source_markers
     assert "bounded_scan_guard" in spec.active_subject_provider_markers
+    assert callable(spec.measurement_prompt_summary_builder)
+    assert callable(spec.active_subject_prompt_summary_builder)
+    assert (
+        "opportunity_diagnostic_count"
+        in spec.measurement_prompt_summary_compare_fields
+    )
+    assert (
+        "warehouse_lexicographic_guard_present"
+        in spec.active_subject_prompt_summary_compare_fields
+    )
 
 
 def _measurement(

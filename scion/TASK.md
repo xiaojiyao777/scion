@@ -143,7 +143,14 @@ readiness build/render path used by both `rebuild_prepared_handoff.py` and
 `check_launch_readiness.py`. Shared prepared prompt/context audit summaries now
 live in `scion.postrun.handoff.prepared_prompt_context`; the tool path keeps a
 thin compatibility wrapper only, and `rebuild_prepared_handoff.py` is back to
-CLI/file-output orchestration rather than owning readiness semantics.
+CLI/file-output orchestration rather than owning readiness semantics. The
+second prompt-context split moves CVRP and warehouse active-subject and
+measurement diagnostics prompt-summary semantics into
+`scion.problems.cvrp.prompt_bridge` and
+`scion.problems.warehouse_delivery.prompt_bridge`; generic handoff code now
+dispatches through `ProblemPromptBridgeSpec`, and
+`scion.postrun.handoff.prompt_context_readiness_validation` owns the prepared
+artifact validation used by launch readiness.
 Design O initial slice is implemented locally as
 `scion.measurement.MeasurementConsumerView`; `ProtocolConfig` now consumes the
 typed view while preserving its legacy readiness payload shape. Proposal
@@ -704,6 +711,15 @@ Current checkpoint:
   prepare launchers (`8 passed`, `2 passed`), with py_compile clean; the
   dirty-sensitive postrun artifact inventory plus launch-readiness suite also
   passes after commit (`134 passed`).
+  A follow-up prompt-context boundary split moves CVRP/warehouse active-subject
+  and measurement diagnostics prompt-summary builders into problem-owned
+  `prompt_bridge` modules, keeps `prepared_prompt_context.py` to neutral
+  research-focus/research-shape summaries, and makes launch readiness call the
+  named package validator `prompt_context_readiness_validation` instead of
+  carrying a tool-local artifact helper block. Focused local validation passes
+  for source-boundary, rebuild, and problem ports (`12 passed`) plus
+  py_compile and `git diff --check`; the dirty-sensitive postrun artifact
+  inventory plus launch-readiness suite passes after commit (`134 passed`).
 - Design O initial implementation is present in
   `scion.measurement.MeasurementConsumerView`: generic consumers receive
   normalized readiness, runtime model, pairing validity, effect scale,

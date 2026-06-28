@@ -21,6 +21,10 @@ GENERIC_PREVIEW_PATHS = (
     PACKAGE_ROOT / "proposal" / "agentic_preview_compaction.py",
     *(PACKAGE_ROOT / "proposal" / "tools" / "previews").rglob("*.py"),
 )
+GENERIC_PREPARED_PROMPT_CONTEXT_FILES = (
+    PACKAGE_ROOT / "postrun" / "handoff" / "prepared_prompt_context.py",
+    PACKAGE_ROOT / "postrun" / "handoff" / "prompt_context_readiness_validation.py",
+)
 
 FORBIDDEN_PATTERNS = {
     "cvrp": re.compile(
@@ -114,6 +118,40 @@ def test_generic_preview_tools_do_not_hardcode_solver_algorithm_fields() -> None
         "Generic proposal preview tools must consume declared telemetry fields "
         "from problem/surface providers instead of hardcoding CVRP-shaped "
         "solver_algorithm_* names.\n"
+        + "\n".join(violations)
+    )
+
+
+def test_generic_prepared_prompt_context_does_not_own_problem_prompt_semantics() -> None:
+    forbidden = {
+        "cvrp": re.compile(r"\bcvrp\b|\bCVRP\b"),
+        "warehouse": re.compile(r"\bwarehouse(?:_delivery)?\b", re.IGNORECASE),
+        "alns": re.compile(r"\bALNS\b|\balns\b"),
+        "vns": re.compile(r"\bVNS\b|\bvns\b"),
+        "two_opt": re.compile(r"two[_-]?opt", re.IGNORECASE),
+        "validation_transfer": re.compile(r"validation_transfer"),
+        "problem_prompt_summary_field": re.compile(
+            r"large_twoopt_|warehouse_|mechanism_rank_count|"
+            r"opportunity_diagnostic_count|UNBOUNDED_TWO_OPT"
+        ),
+    }
+    violations: list[str] = []
+    for path in GENERIC_PREPARED_PROMPT_CONTEXT_FILES:
+        relative = path.relative_to(PACKAGE_ROOT).as_posix()
+        for line_number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(),
+            start=1,
+        ):
+            for label, pattern in forbidden.items():
+                if pattern.search(line):
+                    violations.append(
+                        f"{relative}:{line_number}: {label}: {line.strip()}"
+                    )
+
+    assert not violations, (
+        "Generic prepared prompt-context modules must dispatch through "
+        "problem-owned prompt_bridge providers instead of owning CVRP or "
+        "warehouse prompt-summary semantics.\n"
         + "\n".join(violations)
     )
 

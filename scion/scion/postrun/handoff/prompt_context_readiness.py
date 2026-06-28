@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import subprocess
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 
 _MODULE_PATH = Path(__file__).resolve()
@@ -15,8 +15,6 @@ DEFAULT_SCION_PROJECT_DIR = _MODULE_PATH.parents[3]
 DEFAULT_REPO_DIR = _MODULE_PATH.parents[4]
 
 from scion.postrun.handoff.prepared_prompt_context import (
-    active_subject_code_constraints_prompt_summary,
-    problem_measurement_diagnostics_prompt_summary,
     research_shape_prompt_summary,
     research_focus_prompt_summary,
     research_focus_projection_summary,
@@ -24,6 +22,9 @@ from scion.postrun.handoff.prepared_prompt_context import (
 
 
 SourceMarker = tuple[str, str]
+MeasurementPromptSummaryBuilder = Callable[..., dict[str, Any]]
+ActiveSubjectPromptSummaryBuilder = Callable[..., dict[str, Any]]
+PositiveFieldCheck = tuple[str, str]
 PROMPT_CONTEXT_READINESS_SCHEMA = "scion.prepared_prompt_context_readiness.v1"
 ACTIVE_SUBJECT_CODE_CONSTRAINT_PROVIDER_SUMMARY_SCHEMA = (
     "scion.active_subject_code_constraints_provider_payload_summary.v1"
@@ -81,23 +82,50 @@ class ProblemPromptBridgeSpec:
     measurement_signal_name: str
     measurement_failure_prefix: str
     measurement_source_markers: Mapping[str, SourceMarker]
+    measurement_marker_group: str
     measurement_bridge_scope: str
+    measurement_prompt_summary_schema: str
+    measurement_prompt_summary_builder: MeasurementPromptSummaryBuilder
+    measurement_prompt_summary_compare_fields: tuple[str, ...]
+    measurement_prompt_summary_positive_fields: tuple[str, ...]
     active_subject_signal_name: str
     active_subject_failure_prefix: str
     active_subject_surface: str
     active_subject_provider_markers: Mapping[str, SourceMarker]
+    active_subject_marker_group: str
+    active_subject_prompt_summary_schema: str
+    active_subject_prompt_summary_builder: ActiveSubjectPromptSummaryBuilder
+    active_subject_prompt_summary_compare_fields: tuple[str, ...]
+    active_subject_prompt_summary_positive_checks: tuple[PositiveFieldCheck, ...]
 
     @property
     def measurement_marker_group_name(self) -> str:
-        return f"{self.problem_family}_problem_measurement_diagnostics_source_markers"
+        return self.measurement_marker_group
 
     @property
     def active_subject_marker_group_name(self) -> str:
-        if self.problem_family == "cvrp":
-            return "cvrp_active_subject_code_constraint_source_markers"
-        if self.problem_family == "warehouse_delivery":
-            return "warehouse_active_subject_code_constraint_source_markers"
-        return f"{self.problem_family}_active_subject_code_constraint_source_markers"
+        return self.active_subject_marker_group
+
+    def measurement_prompt_summary(
+        self,
+        *,
+        problem_v1_path: Path | str | None,
+    ) -> dict[str, Any]:
+        return self.measurement_prompt_summary_builder(
+            problem_v1_path=problem_v1_path,
+            problem_family=self.problem_family,
+        )
+
+    def active_subject_prompt_summary(
+        self,
+        *,
+        problem_v1_path: Path | str | None,
+    ) -> dict[str, Any]:
+        return self.active_subject_prompt_summary_builder(
+            problem_v1_path=problem_v1_path,
+            problem_family=self.problem_family,
+            surface=self.active_subject_surface,
+        )
 
 
 def resolve_problem_v1_path(
@@ -203,7 +231,7 @@ def build_prepared_prompt_context_readiness(
     port_registry = (
         dict(ports_by_family)
         if ports_by_family is not None
-        else _default_prepared_handoff_ports_by_family()
+        else default_prepared_handoff_ports_by_family()
     )
     manifest_path = root / "prepared_run_manifest.v1.json"
     manifest = _read_json(manifest_path)
@@ -713,10 +741,8 @@ def _add_active_subject_code_constraints_prompt_signal(
         repo_dir=repo_dir,
         spec=spec,
     )
-    code_prompt_summary = active_subject_code_constraints_prompt_summary(
+    code_prompt_summary = spec.active_subject_prompt_summary(
         problem_v1_path=problem_v1,
-        problem_family=family,
-        surface=spec.active_subject_surface,
     )
     source_marker_results = {
         name: _source_contains(repo_dir, relative_path, marker)
@@ -774,9 +800,8 @@ def _add_problem_measurement_diagnostics_prompt_signal(
         repo_dir=repo_dir,
         spec=spec,
     )
-    diagnostic_summary = problem_measurement_diagnostics_prompt_summary(
+    diagnostic_summary = spec.measurement_prompt_summary(
         problem_v1_path=problem_v1,
-        problem_family=family,
     )
     source_marker_results = {
         name: _source_contains(repo_dir, relative_path, marker)
@@ -887,7 +912,7 @@ def _md_cell(value: Any) -> str:
     return rendered.replace("|", "\\|").replace("\n", " ")
 
 
-def _default_prepared_handoff_ports_by_family() -> dict[str, Any]:
+def default_prepared_handoff_ports_by_family() -> dict[str, Any]:
     from scion.problems.cvrp.postrun_handoff import CvrpPreparedHandoffReviewPort
     from scion.problems.warehouse_delivery.postrun_handoff import (
         WarehousePreparedHandoffReviewPort,
@@ -897,6 +922,10 @@ def _default_prepared_handoff_ports_by_family() -> dict[str, Any]:
         "cvrp": CvrpPreparedHandoffReviewPort(),
         "warehouse_delivery": WarehousePreparedHandoffReviewPort(),
     }
+
+
+def _default_prepared_handoff_ports_by_family() -> dict[str, Any]:
+    return default_prepared_handoff_ports_by_family()
 
 
 def _resolve_repo_dir(repo_dir: Path | str | None) -> Path:

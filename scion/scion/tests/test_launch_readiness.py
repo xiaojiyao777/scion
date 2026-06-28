@@ -7,6 +7,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+from scion.postrun.handoff import prepared_prompt_context
+from scion.postrun.handoff.prompt_context_readiness import resolve_problem_v1_path
+from scion.problems.cvrp.prompt_bridge import CVRP_PROMPT_BRIDGE_SPEC
+from scion.problems.warehouse_delivery.prompt_bridge import (
+    WAREHOUSE_PROMPT_BRIDGE_SPEC,
+)
 from scion.research_guidance import (
     legacy_research_focus_to_contract,
     research_guidance_contract_to_dict,
@@ -14,12 +20,17 @@ from scion.research_guidance import (
 
 
 SCION_DIR = Path(__file__).resolve().parents[2]
+REPO_DIR = SCION_DIR.parent
 TOOL_PATH = SCION_DIR / "tools" / "check_launch_readiness.py"
 SPEC = importlib.util.spec_from_file_location("check_launch_readiness", TOOL_PATH)
 assert SPEC is not None
 readiness_tool = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(readiness_tool)
+PROMPT_BRIDGE_SPECS = {
+    "cvrp": CVRP_PROMPT_BRIDGE_SPEC,
+    "warehouse_delivery": WAREHOUSE_PROMPT_BRIDGE_SPEC,
+}
 
 
 def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
@@ -4780,11 +4791,11 @@ def _write_prompt_context_readiness(
     }
     manifest_path = run_root / "prepared_run_manifest.v1.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    projection_summary = readiness_tool.research_focus_projection_summary(
+    projection_summary = prepared_prompt_context.research_focus_projection_summary(
         manifest_path=manifest_path,
         manifest=manifest,
     )
-    prompt_summary = readiness_tool.research_focus_prompt_summary(
+    prompt_summary = prepared_prompt_context.research_focus_prompt_summary(
         manifest_path=manifest_path,
         manifest=manifest,
     )
@@ -4818,16 +4829,15 @@ def _write_prompt_context_readiness(
     }
     problem_v1 = None
     if problem_family in {"cvrp", "warehouse_delivery"}:
-        problem_v1 = readiness_tool._resolve_problem_v1_path(
+        spec = PROMPT_BRIDGE_SPECS[problem_family]
+        problem_v1 = resolve_problem_v1_path(
             root=run_root,
             manifest=manifest,
-            problem_family=problem_family,
+            repo_dir=REPO_DIR,
+            spec=spec,
         )
-        diagnostic_summary = (
-            readiness_tool.problem_measurement_diagnostics_prompt_summary(
-                problem_v1_path=problem_v1,
-                problem_family=problem_family,
-            )
+        diagnostic_summary = spec.measurement_prompt_summary(
+            problem_v1_path=problem_v1,
         )
         diagnostic_signal_name = (
             "cvrp_problem_measurement_diagnostics_prompt_bridge"
@@ -4851,15 +4861,10 @@ def _write_prompt_context_readiness(
             "source": "fixture",
         }
     if include_code_constraint_bridge:
-        code_surface = {
-            "cvrp": "solver_design",
-            "warehouse_delivery": "order_level",
-        }.get(problem_family, "")
+        spec = PROMPT_BRIDGE_SPECS[problem_family]
         code_prompt_summary = (
-            readiness_tool.active_subject_code_constraints_prompt_summary(
+            spec.active_subject_prompt_summary(
                 problem_v1_path=problem_v1,
-                problem_family=problem_family,
-                surface=code_surface,
             )
         )
         if problem_family == "warehouse_delivery":

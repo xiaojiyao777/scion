@@ -141,6 +141,18 @@ chronology belongs in focused experiment reports and git history.
   CVRP/warehouse prepare launchers (`2 passed`), py_compile, and the
   dirty-sensitive postrun artifact inventory plus launch-readiness suite
   (`134 passed`).
+- The follow-up prepared prompt-context boundary split is implemented locally:
+  CVRP and warehouse active-subject/code-constraint and measurement-diagnostics
+  prompt-summary semantics live in `scion.problems.cvrp.prompt_bridge` and
+  `scion.problems.warehouse_delivery.prompt_bridge`. Generic handoff code
+  dispatches through `ProblemPromptBridgeSpec`; `prepared_prompt_context.py`
+  keeps only neutral research-focus/research-shape summaries; and
+  `check_launch_readiness.py` delegates prepared prompt-context artifact
+  validation to `scion.postrun.handoff.prompt_context_readiness_validation`.
+  Focused local validation passes for source-boundary, rebuild, and problem
+  port tests (`12 passed`), plus py_compile, `git diff --check`, and the
+  dirty-sensitive postrun artifact inventory plus launch-readiness suite
+  (`134 passed`).
 - Design O initial slice is implemented locally as
   `scion.measurement.MeasurementConsumerView`. It reduces problem-owned
   measurement declarations to generic status/runtime/pairing/effect/MDE fields
