@@ -24,8 +24,9 @@ LARGE_INSTANCE_TWO_OPT_SEED_REPORT = (
 )
 REQUIRED_MECHANISM_ID = "large_instance_intra_route_two_opt_seed"
 SUCCESSOR_OPPORTUNITY_FAMILIES = (
-    "bounded_local_search_variant",
     "destroy_repair_selection",
+    "construction_seed_portfolio",
+    "bounded_local_search_variant",
 )
 REVIEWED_SUCCESSOR_MECHANISM_ID = "bounded_2node_cross_exchange"
 REVIEWED_SUCCESSOR_FAMILY = "bounded_local_search_variant"

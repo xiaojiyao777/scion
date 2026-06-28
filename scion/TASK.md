@@ -62,11 +62,24 @@ CVRP-owned successor review now maps this mechanism to
 `bounded_local_search_variant`, marks the checklist `proven`, and records
 outcome `measured_no_positive_at_mde`; prepared guidance adds the exact
 mechanism id to reviewed/default-avoid evidence while leaving the broader
-family available only for distinct bounded-local-search causal paths. Focused
-local validation passes for CVRP successor provider/usage/brief slices, full
-postrun brief/acceptance (`124 passed`), prepared successor/guidance (`40
-passed`), opportunity/boundary (`28 passed`), plus `py_compile` and
-`git diff --check`.
+family available only for distinct bounded-local-search causal paths. The
+successor3 construction-seed run from commit `b430c646` finished
+valid/complete and postrun-ready, selected
+`rotated_sweep_seed_tournament` in `construction.py`, and reached 1 effective
+screening row with 32/32 valid pairs, but it is not solver progress: champion
+stayed `v1`, promotions `0`, rows at or above MDE `0`, and the branch was
+abandoned for `SCREENING_TELEMETRY_FAILED` because activation under the
+declared mechanism id was missing. The current CVRP-owned review repair makes
+`construction_seed_portfolio` a first-class successor family, maps rotated
+sweep aliases into successor/opportunity review, and leaves this construction
+attempt checklist `unproven` with `missing_activation_observed`; the next CVRP
+slot should prefer `destroy_repair_selection` or a construction seed mechanism
+with same-run seed-baseline/accepted-delta evidence. Focused local validation
+passes for CVRP successor provider/usage/brief slices, full postrun
+brief/acceptance (`124 passed` before this slice), prepared
+successor/guidance (`40 passed` before this slice), opportunity/boundary
+(`28 passed` before this slice), current construction-successor focused suites
+(`45 passed` and `39 passed`), plus `py_compile` and `git diff --check`.
 A generic launcher resume/status repair is also
 implemented locally: CVRP and warehouse resume launches now quarantine copied
 terminal artifacts under `run_root/resume_snapshot/` instead of canonical
@@ -714,6 +727,25 @@ Current checkpoint:
   mechanism id to `bounded_local_search_variant`, marks required evidence
   `proven`, and records outcome `measured_no_positive_at_mde`. The next CVRP
   attempt should not repeat this exact Or-opt reinsertion path.
+- The clean local successor3 construction-seed verification
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor3-b430c646-local-1r-gpt55-20260628T133031Z-claw`
+  finished valid/complete and postrun-ready from commit `b430c646`. It shows
+  the repaired successor guidance can drive a materially different construction
+  mechanism: target/code selected `rotated_sweep_seed_tournament` in
+  `construction.py`, produced one effective screening Protocol row, 32 of 32
+  valid screening pairs, 0 proposal quality blocks, and clean postrun
+  readiness after rebuild. It is solver-negative and checklist-unproven:
+  champion stayed `v1`, promotions `0`, rows at or above MDE `0`, top effect
+  row `win_rate=0.0`, `median_delta=0.0`, `ci_high=0.0`, and branch decision
+  `SCREENING_TELEMETRY_FAILED` because activation under the declared mechanism
+  id was missing. The current CVRP-owned review repair maps
+  `rotated_sweep_seed_tournament` to `construction_seed_portfolio` in both
+  successor review and opportunity usage, records outcome
+  `measured_no_positive_at_mde` with missing `missing_activation_observed`,
+  and keeps the next action problem-owned: prefer `destroy_repair_selection`
+  or a construction seed mechanism with same-run seed-baseline or accepted
+  candidate-vs-baseline objective-delta evidence. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-construction-successor-review-20260628.md`.
 - Design N skeleton implementation is present in `scion.postrun`: typed ports
   for postrun inventory, run-evidence lifecycle, exposure policy,
   problem-owned review, registry, and readiness orchestration. The current

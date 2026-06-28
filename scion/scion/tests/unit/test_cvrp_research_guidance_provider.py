@@ -104,8 +104,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "intra_route_or_opt_reinsert",
     ]
     assert focus["successor_opportunity_families"] == [
-        "bounded_local_search_variant",
         "destroy_repair_selection",
+        "construction_seed_portfolio",
+        "bounded_local_search_variant",
     ]
     assert "positive-at-MDE" in focus["current_question"]
     assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
@@ -216,8 +217,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "intra_route_or_opt_reinsert",
     ]
     assert launch_payload["successor_opportunity_families"] == [
-        "bounded_local_search_variant",
         "destroy_repair_selection",
+        "construction_seed_portfolio",
+        "bounded_local_search_variant",
     ]
     assert launch_payload["legacy_research_focus_schema_version"] == (
         "scion.cvrp_research_focus.v1"

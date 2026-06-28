@@ -231,76 +231,108 @@ def _evidence_requirements(
     return tuple(requirements)
 
 
+_SUCCESSOR_COMMON_OBSERVATIONS = (
+    "material causal-path difference from reviewed large_instance_intra_route_two_opt_seed",
+    "per-case total_distance delta tied to the changed mechanism",
+    "feasibility and route-count preservation or explicit caveat",
+    "runtime budget evidence under the formal policy",
+    "CMT2/CMT4 protection plan or unresolved protected-case caveat",
+)
+
+_SUCCESSOR_REQUIREMENT_SPECS = {
+    "bounded_local_search_variant": {
+        "requirement_id": "successor_bounded_local_search_direct_effect",
+        "summary": (
+            "The large-instance intra-route two-opt checklist is proven "
+            "but measured no positive-at-MDE effect; a bounded local-search "
+            "successor must change a different causal path before another "
+            "branch slot is spent."
+        ),
+        "recommended_action": (
+            "Prefer a bounded local-search mechanism outside the reviewed "
+            "seed path, with direct route-level objective deltas and "
+            "formal-budget evidence."
+        ),
+        "required_observations": _SUCCESSOR_COMMON_OBSERVATIONS,
+        "reason_codes": (
+            "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE",
+            "SUCCESSOR_CAUSAL_PATH_REQUIRED",
+        ),
+    },
+    "destroy_repair_selection": {
+        "requirement_id": "successor_destroy_repair_direct_effect",
+        "summary": (
+            "A destroy/repair successor is eligible only if it materially "
+            "changes removal or repair selection and reports direct "
+            "per-case objective attribution."
+        ),
+        "recommended_action": (
+            "Do not repeat unchanged demand-slack, route-merge, or "
+            "cluster-biased variants; name the new selection rule and "
+            "objective-effect telemetry before screening."
+        ),
+        "required_observations": _SUCCESSOR_COMMON_OBSERVATIONS,
+        "reason_codes": (
+            "MATERIAL_DIFFERENCE_REQUIRED",
+            "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
+        ),
+    },
+    "construction_seed_portfolio": {
+        "requirement_id": "successor_construction_seed_direct_effect",
+        "summary": (
+            "A construction seed/portfolio successor is eligible only if it "
+            "isolates seed quality with a same-run baseline or accepted "
+            "candidate-vs-baseline objective delta before downstream ALNS/VNS "
+            "attribution becomes ambiguous."
+        ),
+        "recommended_action": (
+            "Record activation for the construction path, then report a direct "
+            "seed-selection comparison or accepted delta under the declared "
+            "mechanism id before claiming solver improvement."
+        ),
+        "required_observations": (
+            "same-run seed baseline or accepted candidate-vs-baseline delta",
+            "per-case total_distance delta tied to the selected construction seed",
+            "feasibility and route-count preservation or explicit caveat",
+            "runtime budget evidence under the formal policy",
+            "CMT2/CMT4 protection plan or unresolved protected-case caveat",
+        ),
+        "reason_codes": (
+            "CONSTRUCTION_SEED_NEEDS_DIRECT_EFFECT",
+            "SAME_RUN_SEED_BASELINE_REQUIRED",
+        ),
+    },
+}
+
+
 def _successor_evidence_requirements(
     successor_signal: Mapping[str, Any] | None = None,
 ) -> tuple[OpportunityEvidenceRequirement, ...]:
-    common_observations = (
-        "material causal-path difference from reviewed large_instance_intra_route_two_opt_seed",
-        "per-case total_distance delta tied to the changed mechanism",
-        "feasibility and route-count preservation or explicit caveat",
-        "runtime budget evidence under the formal policy",
-        "CMT2/CMT4 protection plan or unresolved protected-case caveat",
-    )
-    bounded_family, destroy_repair_family = SUCCESSOR_OPPORTUNITY_FAMILIES
-    return (
-        OpportunityEvidenceRequirement(
-            requirement_id="successor_bounded_local_search_direct_effect",
-            mechanism_family=bounded_family,
-            status=_successor_requirement_status(
-                successor_signal,
-                bounded_family,
-            ),
-            summary=(
-                "The large-instance intra-route two-opt checklist is proven "
-                "but measured no positive-at-MDE effect; a bounded local-search "
-                "successor must change a different causal path before another "
-                "branch slot is spent."
-            ),
-            recommended_action=(
-                "Prefer a bounded local-search mechanism outside the reviewed "
-                "seed path, with direct route-level objective deltas and "
-                "formal-budget evidence."
-            ),
-            required_observations=common_observations,
-            protected_cases=PROTECTED_CASES,
-            reason_codes=_successor_requirement_reason_codes(
-                successor_signal,
-                bounded_family,
+    requirements: list[OpportunityEvidenceRequirement] = []
+    for family in SUCCESSOR_OPPORTUNITY_FAMILIES:
+        spec = _SUCCESSOR_REQUIREMENT_SPECS.get(family)
+        if not spec:
+            continue
+        requirements.append(
+            OpportunityEvidenceRequirement(
+                requirement_id=str(spec["requirement_id"]),
+                mechanism_family=family,
+                status=_successor_requirement_status(
+                    successor_signal,
+                    family,
+                ),
+                summary=str(spec["summary"]),
+                recommended_action=str(spec["recommended_action"]),
+                required_observations=tuple(spec["required_observations"]),
+                protected_cases=PROTECTED_CASES,
+                reason_codes=_successor_requirement_reason_codes(
+                    successor_signal,
+                    family,
+                )
+                or tuple(spec["reason_codes"]),
             )
-            or (
-                "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE",
-                "SUCCESSOR_CAUSAL_PATH_REQUIRED",
-            ),
-        ),
-        OpportunityEvidenceRequirement(
-            requirement_id="successor_destroy_repair_direct_effect",
-            mechanism_family=destroy_repair_family,
-            status=_successor_requirement_status(
-                successor_signal,
-                destroy_repair_family,
-            ),
-            summary=(
-                "A destroy/repair successor is eligible only if it materially "
-                "changes removal or repair selection and reports direct "
-                "per-case objective attribution."
-            ),
-            recommended_action=(
-                "Do not repeat unchanged demand-slack, route-merge, or "
-                "cluster-biased variants; name the new selection rule and "
-                "objective-effect telemetry before screening."
-            ),
-            required_observations=common_observations,
-            protected_cases=PROTECTED_CASES,
-            reason_codes=_successor_requirement_reason_codes(
-                successor_signal,
-                destroy_repair_family,
-            )
-            or (
-                "MATERIAL_DIFFERENCE_REQUIRED",
-                "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
-            ),
-        ),
-    )
+        )
+    return tuple(requirements)
 
 
 def _large_twoopt_postrun_signal(

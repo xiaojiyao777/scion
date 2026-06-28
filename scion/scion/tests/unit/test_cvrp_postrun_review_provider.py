@@ -81,6 +81,28 @@ def test_cvrp_successor_summary_maps_or_opt_reinsert_to_bounded_family() -> None
     assert bounded["phase_telemetry_observed_count"] == 1
 
 
+def test_cvrp_successor_summary_maps_rotated_sweep_to_construction_family() -> None:
+    summaries = CvrpPostrunSummaryProvider().build_summaries(
+        _context(
+            measurement_effect_summary=_construction_successor_measurement_summary()
+        )
+    )
+    summary = summaries["cvrp_successor_summary"]
+    construction = summary["by_family"]["construction_seed_portfolio"]
+
+    assert summary["observed_successor_families"] == [
+        "construction_seed_portfolio"
+    ]
+    assert construction["mechanism_family_available"] is True
+    assert construction["checklist_status"] == "unproven"
+    assert construction["outcome_status"] == "measured_no_positive_at_mde"
+    assert construction["activation_observed_count"] == 0
+    assert construction["objective_effect_observed_count"] == 1
+    assert construction["phase_telemetry_observed_count"] == 1
+    assert construction["protected_cases_observed"] == ["CMT2", "CMT4"]
+    assert construction["missing"] == ["missing_activation_observed"]
+
+
 def test_cvrp_postrun_review_port_uses_existing_summary_without_raw_prompt_parse() -> None:
     summary = _build_cvrp_large_twoopt_summary()
     review = CvrpLargeTwoOptReviewPort().review(
@@ -288,6 +310,75 @@ def _bounded_successor_measurement_summary(
                             "candidate_phase_telemetry_summary": {
                                 "buckets": {
                                     mechanism_id: {
+                                        "weighted_sum_ms": 20.0,
+                                        "max_ms": 10.0,
+                                    }
+                                }
+                            },
+                        }
+                    ]
+                }
+            }
+        ],
+    }
+
+
+def _construction_successor_measurement_summary() -> dict[str, Any]:
+    return {
+        "available": True,
+        "aggregate": {
+            "protocol_row_count": 1,
+            "rows_at_or_above_mde": 0,
+            "rows_with_ci_high_below_mde": 1,
+            "max_effect_to_mde_ratio": 0.0,
+            "interpretation_counts": {"all_available_ci_high_below_mde": 1},
+            "mechanism_family_mapped_row_count": 1,
+            "mechanism_family_unmapped_row_count": 0,
+            "mechanism_family_effects": {
+                "rotated_sweep_seed_tournament": {
+                    "protocol_row_count": 1,
+                    "positive_rows": 0,
+                    "nonpositive_rows": 1,
+                    "rows_at_or_above_mde": 0,
+                    "rows_with_ci_high_below_mde": 1,
+                    "max_effect_to_mde_ratio": 0.0,
+                }
+            },
+        },
+        "entries": [
+            {
+                "protocol_effects_vs_mde": {
+                    "top_rows_by_effect_to_mde": [
+                        {
+                            "branch_id": "branch-1",
+                            "mechanism_family": "rotated_sweep_seed_tournament",
+                            "stage": "screening",
+                            "median_delta": 0.0,
+                            "positive_effect_at_or_above_mde": False,
+                            "mechanism_evidence": {
+                                "primary_mechanism": (
+                                    "rotated_sweep_seed_tournament"
+                                ),
+                                "primary_activation_status": "missing",
+                                "primary_effect_status": "missing",
+                                "activation_evidence_status": "missing_activation",
+                                "objective_effect_status": "zero_objective_effect",
+                            },
+                            "case_level_deltas": {
+                                "cvrplib/CMT/CMT2.vrp": {
+                                    "metric_delta_medians": {
+                                        "total_distance": 0.0,
+                                    }
+                                },
+                                "cvrplib/CMT/CMT4.vrp": {
+                                    "metric_delta_medians": {
+                                        "total_distance": 0.0,
+                                    }
+                                },
+                            },
+                            "candidate_phase_telemetry_summary": {
+                                "buckets": {
+                                    "construction": {
                                         "weighted_sum_ms": 20.0,
                                         "max_ms": 10.0,
                                     }

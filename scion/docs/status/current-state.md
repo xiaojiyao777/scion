@@ -417,6 +417,27 @@ chronology belongs in focused experiment reports and git history.
   successor evidence gaps. Prepared guidance now lists the exact mechanism id
   as reviewed/default-avoid without blocking the whole bounded-local-search
   family.
+- Clean local successor3 construction-seed verification:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor3-b430c646-local-1r-gpt55-20260628T133031Z-claw`.
+  It resumed successor2 from commit `b430c646`, finished valid/complete and
+  postrun-ready, and rechecks with `current_run_analysis_ready=true`,
+  `delegation_ready=true`, and no failed postrun checks after rebuild. The
+  agent selected a materially different construction successor,
+  `rotated_sweep_seed_tournament` in `construction.py`, with 1 proposal
+  attempt, 0 quality blocks, 1 effective screening row, and 32 of 32 valid
+  screening pairs. It is not solver progress: champion stayed `v1`,
+  promotions `0`, rows at or above CVRP MDE `0`, top effect row
+  `win_rate=0.0`, `median_delta=0.0`, `ci_high=0.0`, and
+  `positive_effect_at_or_above_mde=false`. The branch was abandoned for
+  `SCREENING_TELEMETRY_FAILED`: ordinary construction phase runtime was
+  observed, but activation under the declared mechanism id was missing. The
+  current CVRP-owned review repair makes construction a first-class successor
+  family: live brief recomputation maps `rotated_sweep_seed_tournament` to
+  `construction_seed_portfolio`, records checklist `unproven`, outcome
+  `measured_no_positive_at_mde`, missing `missing_activation_observed`, and
+  maps opportunity usage to `construction_seed_portfolio` instead of
+  `no_structured_match`. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-construction-successor-review-20260628.md`.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
   finished valid/complete and postrun-ready:
@@ -592,9 +613,13 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   visibility, code-phase commitment visibility, and required-evidence
   follow-through. They are not solver-improvement evidence. The
   large-instance intra-route two-opt seed is now reviewed after checklist
-  proof with no positive-at-MDE effect; the next CVRP/VRP work should test a
-  materially different problem-owned successor opportunity, not add
-  CVRP-specific core gates or keep spending branch slots on the same seed path.
+  proof with no positive-at-MDE effect; the first two bounded-local-search
+  successors are reviewed negative; and the first construction-seed successor
+  is reviewed as checklist-unproven because declared activation telemetry was
+  missing. The next CVRP/VRP work should test a materially different
+  problem-owned successor opportunity with direct effect evidence, not add
+  CVRP-specific core gates or keep spending branch slots on the same
+  seed/bounded/construction paths without new causal evidence.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
@@ -604,11 +629,13 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 1. Continue CVRP/VRP successor work using the problem-owned successor review
    layer. The reviewed `large_instance_intra_route_two_opt_seed` path,
    `bounded_2node_cross_exchange`, and `intra_route_or_opt_reinsert` are all
-   solver-negative under current evidence, and the bounded successors are now
-   explicitly reviewed through `cvrp_successor_summary` and CVRP prepared
-   guidance. The next prepared attempt should test a materially different
-   `destroy_repair_selection`/construction successor or a bounded-local-search
-   causal path explicitly distinct from both reviewed bounded successors.
+   solver-negative under current evidence. The construction successor
+   `rotated_sweep_seed_tournament` reached formal screening but failed the
+   direct activation checklist. The next prepared attempt should prefer
+   `destroy_repair_selection`, or a construction seed mechanism that records a
+   same-run seed-baseline/accepted-delta effect under its declared mechanism
+   id. Bounded-local-search revisits need a causal path explicitly distinct
+   from both reviewed bounded successors.
 2. Continue design-first postrun/readiness cleanup only where it removes active
    risk. `scion.postrun` should own generic artifact, lifecycle, schema,
    readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit

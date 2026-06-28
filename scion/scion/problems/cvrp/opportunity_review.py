@@ -59,6 +59,11 @@ _OPPORTUNITY_FAMILY_ALIASES = {
         "construction_seed",
         "seed_portfolio",
         "initial_solution",
+        "rotated_sweep_seed_tournament",
+        "sweep_seed_tournament",
+        "rotated_sweep_seed",
+        "sweep_seed",
+        "sweep_construction",
     ),
     "acceptance_or_adaptive_weighting": (
         "acceptance_or_adaptive_weighting",

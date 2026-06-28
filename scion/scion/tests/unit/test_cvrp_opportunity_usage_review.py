@@ -202,6 +202,48 @@ def test_cvrp_opportunity_usage_applies_successor_family_proof() -> None:
     )
 
 
+def test_cvrp_opportunity_usage_maps_rotated_sweep_to_construction_successor() -> None:
+    summary = build_cvrp_opportunity_usage_summary(
+        problem_family="cvrp",
+        current_run_evidence=True,
+        prompt_context_visibility_summary=_visible_prompt_summary(),
+        proposal_trajectory_manifests=[
+            {
+                "sessions": [
+                    _session(
+                        "s-rotated-sweep",
+                        mechanism_ids=["rotated_sweep_seed_tournament"],
+                        target_file="policies/baseline_modules/construction.py",
+                    )
+                ],
+            }
+        ],
+        cvrp_successor_summary=_successor_summary(
+            "construction_seed_portfolio",
+            checklist_status="unproven",
+            missing=["missing_activation_observed"],
+        ),
+    )
+
+    assert summary["usage_status"] == "checklist_unproven"
+    assert summary["counts"]["opportunity_evidence_checklist_unproven"] == 1
+    assert (
+        summary["required_evidence_proofs"]["construction_seed_portfolio"][
+            "checklist_status"
+        ]
+        == "unproven"
+    )
+    assert summary["entries"][0]["opportunity_families"] == [
+        "construction_seed_portfolio"
+    ]
+    assert summary["entries"][0]["required_evidence_family"] == (
+        "construction_seed_portfolio"
+    )
+    assert "required_evidence_missing_activation_observed" in (
+        summary["entries"][0]["reason_codes"]
+    )
+
+
 def test_cvrp_opportunity_usage_requires_visible_summary() -> None:
     summary = build_cvrp_opportunity_usage_summary(
         problem_family="cvrp",

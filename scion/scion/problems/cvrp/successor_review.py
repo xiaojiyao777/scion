@@ -16,6 +16,18 @@ SCHEMA_VERSION = "scion.postrun_cvrp_successor_summary.v1"
 PROOF_SCHEMA_VERSION = "scion.postrun_cvrp_successor_required_evidence_proof.v1"
 
 _FAMILY_ALIASES = {
+    "construction_seed_portfolio": (
+        "construction_seed_portfolio",
+        "construction_seed",
+        "seed_portfolio",
+        "initial_solution",
+        "rotated_sweep_seed_tournament",
+        "sweep_seed_tournament",
+        "rotated_sweep_seed",
+        "sweep_seed",
+        "sweep_construction",
+        "construction",
+    ),
     "bounded_local_search_variant": (
         "bounded_local_search_variant",
         "bounded_local_search",

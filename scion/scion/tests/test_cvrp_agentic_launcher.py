@@ -296,8 +296,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "intra_route_or_opt_reinsert",
     ]
     assert prepared_manifest["research_focus"]["successor_opportunity_families"] == [
-        "bounded_local_search_variant",
         "destroy_repair_selection",
+        "construction_seed_portfolio",
+        "bounded_local_search_variant",
     ]
     assert "First attempt" not in prepared_manifest["research_focus"][
         "next_required_direction"
