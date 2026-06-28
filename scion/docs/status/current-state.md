@@ -438,6 +438,22 @@ chronology belongs in focused experiment reports and git history.
   maps opportunity usage to `construction_seed_portfolio` instead of
   `no_structured_match`. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-construction-successor-review-20260628.md`.
+- Clean local successor4 destroy/repair verification:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor4-6a50fcba-local-2r-gpt55-20260628T142639Z-claw-2r-gpt55-20260628T142639Z-claw`.
+  It resumed successor3 from commit `6a50fcba`, finished valid/complete and
+  postrun-ready, and rechecks with `current_run_analysis_ready=true`,
+  `delegation_ready=true`, and no failed postrun checks after rebuild. The
+  agent selected the preferred successor family,
+  `angular_sector_removal` in `destroy_repair.py`, with 2 proposal attempts,
+  0 quality blocks, 0 active-slot blocks, 2 formal candidate artifacts, and
+  2 effective screening rows. It is not solver progress: champion stayed `v1`,
+  promotions `0`, rows at or above CVRP MDE `0`, both effect rows had win rate
+  `0.25`, median deltas `-3.25` and `0.0`, and both CI highs were below MDE.
+  It is evidence-clean rejection: `cvrp_successor_summary` marks
+  `destroy_repair_selection` checklist `proven`, outcome
+  `measured_no_positive_at_mde`, and observes activation, objective effect,
+  phase telemetry, and CMT2/CMT4 protected-case evidence. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-destroy-repair-successor-review-20260628.md`.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
   finished valid/complete and postrun-ready:
@@ -631,11 +647,14 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    `bounded_2node_cross_exchange`, and `intra_route_or_opt_reinsert` are all
    solver-negative under current evidence. The construction successor
    `rotated_sweep_seed_tournament` reached formal screening but failed the
-   direct activation checklist. The next prepared attempt should prefer
-   `destroy_repair_selection`, or a construction seed mechanism that records a
-   same-run seed-baseline/accepted-delta effect under its declared mechanism
-   id. Bounded-local-search revisits need a causal path explicitly distinct
-   from both reviewed bounded successors.
+   direct activation checklist. The first preferred destroy/repair successor,
+   `angular_sector_removal`, proved its evidence checklist but measured no
+   positive-at-MDE effect. The next prepared attempt should avoid unchanged
+   `angular_sector_removal`; use a materially different destroy/repair causal
+   path with direct effect evidence, or a construction seed mechanism that
+   records a same-run seed-baseline/accepted-delta effect under its declared
+   mechanism id. Bounded-local-search revisits need a causal path explicitly
+   distinct from both reviewed bounded successors.
 2. Continue design-first postrun/readiness cleanup only where it removes active
    risk. `scion.postrun` should own generic artifact, lifecycle, schema,
    readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit

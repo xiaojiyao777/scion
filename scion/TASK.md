@@ -72,10 +72,17 @@ abandoned for `SCREENING_TELEMETRY_FAILED` because activation under the
 declared mechanism id was missing. The current CVRP-owned review repair makes
 `construction_seed_portfolio` a first-class successor family, maps rotated
 sweep aliases into successor/opportunity review, and leaves this construction
-attempt checklist `unproven` with `missing_activation_observed`; the next CVRP
-slot should prefer `destroy_repair_selection` or a construction seed mechanism
-with same-run seed-baseline/accepted-delta evidence. Focused local validation
-passes for CVRP successor provider/usage/brief slices, full postrun
+attempt checklist `unproven` with `missing_activation_observed`. The successor4
+destroy/repair run from commit `6a50fcba` then selected
+`angular_sector_removal`, completed 2/2 effective screening rows with clean
+postrun readiness, and proved the destroy/repair successor evidence checklist,
+but remained solver-negative: champion stayed `v1`, promotions `0`, rows at or
+above MDE `0`, win rate `0.25` in both rows, median deltas `-3.25` and `0.0`,
+and both CI highs below MDE. The next CVRP slot should not repeat unchanged
+`angular_sector_removal`; it should use a materially different destroy/repair
+causal path with direct objective-effect telemetry or a construction seed
+mechanism with same-run seed-baseline/accepted-delta evidence. Focused local
+validation passes for CVRP successor provider/usage/brief slices, full postrun
 brief/acceptance (`124 passed` before this slice), prepared
 successor/guidance (`40 passed` before this slice), opportunity/boundary
 (`28 passed` before this slice), current construction-successor focused suites
@@ -747,6 +754,21 @@ Current checkpoint:
   or a construction seed mechanism with same-run seed-baseline or accepted
   candidate-vs-baseline objective-delta evidence. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-construction-successor-review-20260628.md`.
+- The clean local successor4 destroy/repair verification
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor4-6a50fcba-local-2r-gpt55-20260628T142639Z-claw-2r-gpt55-20260628T142639Z-claw`
+  finished valid/complete and postrun-ready from commit `6a50fcba`, with no
+  failed postrun checks after rebuild. It shows successor routing can move to
+  the preferred `destroy_repair_selection` family without overfitting generic
+  core: target/code selected `angular_sector_removal` in
+  `destroy_repair.py`, produced 2 effective screening rows, 2 formal candidate
+  artifacts, 0 proposal quality blocks, and 0 active-slot blocks. It is
+  evidence-clean but solver-negative: `cvrp_successor_summary` marks
+  `destroy_repair_selection` checklist `proven`, outcome
+  `measured_no_positive_at_mde`, with activation/objective/phase and CMT2/CMT4
+  evidence all observed; champion stayed `v1`, promotions `0`, rows at or
+  above MDE `0`, both rows had win rate `0.25`, median deltas `-3.25` and
+  `0.0`, and both CI highs were below MDE. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-destroy-repair-successor-review-20260628.md`.
 - Design N skeleton implementation is present in `scion.postrun`: typed ports
   for postrun inventory, run-evidence lifecycle, exposure policy,
   problem-owned review, registry, and readiness orchestration. The current
