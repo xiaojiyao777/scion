@@ -146,7 +146,10 @@ mechanism-family alias registry now maps savings seed-selection identifiers to
 successor8 postrun acceptance marks that family observed and checklist
 `proven` with activation/objective/phase counts `2/2/2` plus CMT2/CMT4
 protection. Solver outcome remains negative: champion stayed `v1`, rows at or
-above CVRP MDE were `0`, and both median deltas were `0.0`.
+above CVRP MDE were `0`, and both median deltas were `0.0`. CVRP prepared
+guidance now records `savings_seed_selection_probe` as reviewed/default-avoid
+evidence; future construction revisits must name a distinct construction
+seed-selection causal path and direct objective-effect evidence plan.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with

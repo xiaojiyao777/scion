@@ -149,6 +149,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "angular_sector_removal_reviewed_no_positive",
         "radial_string_removal_reviewed_no_positive",
         "farthest_noise_related_removal_reviewed_no_positive",
+        "savings_seed_selection_probe_reviewed_no_positive",
     }.issubset(reviewed_requirement_ids)
     assert any(
         block["block_id"] == "successor_portfolio_direction"
@@ -171,6 +172,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
+        "savings_seed_selection_probe",
     ]
     assert prepared_manifest["research_focus"]["scope"] == (
         "report_only_prepared_handoff"
@@ -217,6 +219,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert any(
         "farthest_noise_related_removal" in item
+        and "measured_no_positive_at_mde" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "savings_seed_selection_probe" in item
         and "measured_no_positive_at_mde" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
@@ -299,7 +306,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
-        "first bounded-local-search and destroy/repair successors"
+        "first bounded-local-search, destroy/repair, and construction seed successors"
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
@@ -319,7 +326,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert (
-        "Rotate the next CVRP solver-design attempt to construction"
+        "savings_seed_selection_probe"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "Rotate the next CVRP solver-design attempt to a materially different"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert (
@@ -333,6 +344,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "angular_sector_removal" in prepared_manifest_md
     assert "radial_string_removal" in prepared_manifest_md
     assert "farthest_noise_related_removal" in prepared_manifest_md
+    assert "savings_seed_selection_probe" in prepared_manifest_md
     assert "Rotate" in prepared_manifest["research_focus"]["next_required_direction"]
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
@@ -343,6 +355,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
+        "savings_seed_selection_probe",
     ]
     assert prepared_manifest["research_focus"]["successor_opportunity_families"] == [
         "destroy_repair_selection",

@@ -384,7 +384,10 @@ chronology belongs in focused experiment reports and git history.
   protection observed, and outcome `measured_no_positive_at_mde`. This is clean
   framework/evidence-chain progress, not solver progress: 2 screening rows,
   champion stayed `v1`, rows at or above CVRP MDE were `0`, and median deltas
-  were `0.0`.
+  were `0.0`. CVRP prepared guidance now records
+  `savings_seed_selection_probe` as reviewed/default-avoid evidence; future
+  construction revisits must name a distinct construction seed-selection causal
+  path and direct objective-effect evidence plan.
 - Previous local CVRP CMT-commitment follow-through root:
   `/home/clawd/research/scion-experiments/v04-cvrp-cmtcommit-33e79e0b-server-2r-2r-gpt55-20260628T022008Z-claw`.
   It finished valid/complete and postrun-ready with 2 of 2 effective screening

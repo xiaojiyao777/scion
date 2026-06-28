@@ -107,6 +107,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
+        "savings_seed_selection_probe",
     ]
     assert focus["successor_opportunity_families"] == [
         "destroy_repair_selection",
@@ -120,8 +121,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "angular_sector_removal" in focus["next_required_direction"]
     assert "radial_string_removal" in focus["next_required_direction"]
     assert "farthest_noise_related_removal" in focus["next_required_direction"]
+    assert "savings_seed_selection_probe" in focus["next_required_direction"]
     assert (
-        "Rotate the next CVRP solver-design attempt to construction"
+        "Rotate the next CVRP solver-design attempt to a materially different"
         in focus["next_required_direction"]
     )
     assert "distinct from cross-exchange, intra-route Or-opt reinsertion" in (
@@ -162,6 +164,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
     )
+    assert any(
+        "savings_seed_selection_probe" in item
+        and "measured_no_positive_at_mde" in item
+        for item in focus["default_avoid_directions"]
+    )
     assert not any(
         item.strip().lower() == "avoid bounded_local_search_variant"
         for item in focus["default_avoid_directions"]
@@ -180,6 +187,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
+        "savings_seed_selection_probe",
     }
     assert mechanisms_by_id["bounded_intra_route_3opt"][
         "mechanism_family"
@@ -187,6 +195,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["farthest_noise_related_removal"][
         "mechanism_family"
     ] == "destroy_repair_selection"
+    assert mechanisms_by_id["savings_seed_selection_probe"][
+        "mechanism_family"
+    ] == "construction_seed_portfolio"
     assert all(
         item["checklist_status"] == "proven"
         and item["outcome_status"] == "measured_no_positive_at_mde"
@@ -243,6 +254,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
+        "savings_seed_selection_probe",
     ]
     assert launch_payload["successor_opportunity_families"] == [
         "destroy_repair_selection",

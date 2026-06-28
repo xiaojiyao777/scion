@@ -276,6 +276,7 @@ class CvrpAdapter:
                 "unchanged_angular_sector_removal",
                 "unchanged_radial_string_removal",
                 "unchanged_farthest_noise_related_removal",
+                "unchanged_savings_seed_selection_probe",
             ],
             "measurable_opportunity_classes": [
                 {
