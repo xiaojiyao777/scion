@@ -103,7 +103,16 @@ branch cards through a generic `scion.postrun.handoff.resume_snapshot` helper
 and render bounded `resume_snapshot.top_branches` as report-only launch input,
 not current-run evidence. A rebuilt successor6 prepared handoff verifies the
 active weak-positive `bounded_intra_route_3opt` branch, CMT2 loss caveat, and
-allowed follow-up actions are visible before launch. The warehouse postrun audit
+allowed follow-up actions are visible before launch. The launched successor6
+root from commit `dbd478af` finished valid/complete and postrun-ready with 2/2
+effective screening rows, 0 quality blocks, and 0 active-slot blocks. It is
+positive framework evidence but negative solver evidence: Scion expanded the
+active 3-opt branch, rejected it after CMT2-heavy quality regression, then
+clean-forked to `farthest_noise_related_removal` and rejected that mechanism
+too. Champion stayed `v1`, rows at or above CVRP MDE were `0`, and strict
+postrun acceptance has no required failures. Detailed report:
+`scion/docs/experiments/v0.4/v04-cvrp-successor6-branch-handoff-rejection-review-20260628.md`.
+The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with
 stored postrun analysis artifacts. The checker now prefers the stored inventory
@@ -793,6 +802,21 @@ Current checkpoint:
   `destroy_repair_selection` and `bounded_local_search_variant` checklist
   `proven` with outcome `measured_no_positive_at_mde`. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-successor5-3opt-followup-review-20260628.md`.
+- The clean local successor6 branch-handoff verification
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor6-dbd478af-local-2r-gpt55-2r-gpt55-20260628T172422Z-claw`
+  finished valid/complete and postrun-ready from commit `dbd478af`, with 2/2
+  effective rounds, 2 Protocol rows, 2 proposal attempts, 0 proposal quality
+  blocks, and 0 active-slot blocks. It validates the framework repair but not
+  solver improvement: the prepared resume snapshot exposed the active
+  `bounded_intra_route_3opt` weak-positive branch, Scion expanded it to 48
+  valid pairs, then abandoned it after CMT2-heavy negative evidence
+  (`CMT2` median `-6.5`, branch outcome `measured_no_positive_at_mde`). It
+  then clean-forked to `farthest_noise_related_removal`, reached 32 valid
+  pairs, and abandoned that mechanism as solver-negative (`median_delta=-1.0`,
+  CMT2 median `-12.0`). Champion stayed `v1`, rows at or above CVRP MDE were
+  `0`, and strict postrun acceptance has `failed_required_checks=[]` with only
+  optional `postrun_report_status_marker` missing. Detailed report:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor6-branch-handoff-rejection-review-20260628.md`.
 - Design N skeleton implementation is present in `scion.postrun`: typed ports
   for postrun inventory, run-evidence lifecycle, exposure policy,
   problem-owned review, registry, and readiness orchestration. The current

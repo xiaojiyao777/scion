@@ -307,6 +307,24 @@ chronology belongs in focused experiment reports and git history.
   deltas from public raw-metrics refs, and the CVRP-owned review consumes them
   as CMT2/CMT4 `total_distance` protection evidence. CVRP still lacks solver
   improvement or promotion.
+- The latest local CVRP successor6 run is complete and postrun-ready:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor6-dbd478af-local-2r-gpt55-2r-gpt55-20260628T172422Z-claw`.
+  It launched from commit `dbd478af`, resumed successor5, and validates the
+  generic resume-snapshot branch handoff repair under live execution. The run
+  finished valid/complete with wrapper exit `0`, 2 of 2 effective screening
+  rows, 2 Protocol metric rows, 2 proposal attempts, 0 quality blocks, and
+  0 active-slot blocks. Strict postrun acceptance reports
+  `current_run_analysis_ready=true` and `failed_required_checks=[]`; the only
+  failed optional check is `postrun_report_status_marker`. Solver outcome is
+  negative: champion stayed `v1`, rows at or above MDE were `0`, positive rows
+  were `0`, and all available CI highs were below MDE. Round 1 expanded the
+  active `bounded_intra_route_3opt` branch to 48 valid pairs, then abandoned it
+  as quality regression after CMT2 and other losses. Round 2 clean-forked to
+  `farthest_noise_related_removal`, reached 32 valid pairs, and abandoned it as
+  quality regression. This is positive framework evidence for continuation,
+  MDE-aware rejection, and lesson transfer, not CVRP solver progress. Detailed
+  report:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor6-branch-handoff-rejection-review-20260628.md`.
 - Previous local CVRP CMT-commitment follow-through root:
   `/home/clawd/research/scion-experiments/v04-cvrp-cmtcommit-33e79e0b-server-2r-2r-gpt55-20260628T022008Z-claw`.
   It finished valid/complete and postrun-ready with 2 of 2 effective screening
@@ -665,10 +683,14 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    `destroy_repair_selection` paths available. Successor5 verified that the
    guidance can route to new mechanisms: `radial_string_removal` was abandoned
    as solver-negative, while `bounded_intra_route_3opt` produced weak-positive
-   low-SNR evidence and remains the active follow-up branch. The next CVRP
-   attempt should resume that 3-opt branch only with CMT2 protection and a
-   material refinement; do not repeat unchanged radial-string removal or
-   angular-sector removal.
+   low-SNR evidence. Successor6 expanded that 3-opt branch, rejected it after
+   CMT2-heavy losses, clean-forked to `farthest_noise_related_removal`, and
+   rejected that mechanism too. The next CVRP attempt should not repeat
+   unchanged 3-opt, radial-string, farthest-noise, or angular-sector paths.
+   Use problem-owned opportunity design to select a materially different solver
+   mechanism, or explicitly close/reframe the remaining
+   `large_instance_intra_route_two_opt_seed` diagnostic branch before spending
+   more active-slot budget there.
 2. Continue design-first postrun/readiness cleanup only where it removes active
    risk. `scion.postrun` should own generic artifact, lifecycle, schema,
    readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit
