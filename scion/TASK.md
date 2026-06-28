@@ -15,9 +15,9 @@ focused validation passes (`108 passed`) plus
 `git diff --check`. Earlier WSL conda `scion` validation also passed
 (`108 passed`) after sync, but current continuation should use the server
 conda `claw` environment until WSL is available again. The local gpt-5.5 proxy
-at `127.0.0.1:8080` is authenticated after the 2026-06-28 Codex relogin; no
-additional proxy restart was needed in the latest check. `/v1/models` lists
-`gpt-5.5`, and a `gpt-5.5` chat completion returns HTTP 200. The current local worktree also adds generic prepared
+at `127.0.0.1:8080` is authenticated after the 2026-06-28 Codex relogin and
+proxy restart. `/v1/models` lists `gpt-5.5`, and a `gpt-5.5` chat completion
+returns HTTP 200. The current local worktree also adds generic prepared
 successor-focus arbitration: reviewed branch-local mechanism ids plus declared
 successor opportunity families supersede same-mechanism branch continuation
 for prepared target-intent and schema-preview purposes, reviewed mechanism
@@ -79,7 +79,8 @@ passes for CVRP successor provider/usage/brief slices, full postrun
 brief/acceptance (`124 passed` before this slice), prepared
 successor/guidance (`40 passed` before this slice), opportunity/boundary
 (`28 passed` before this slice), current construction-successor focused suites
-(`45 passed` and `39 passed`), plus `py_compile` and `git diff --check`.
+(`45 passed` and `39 passed`), launch/postrun broad suite (`264 passed` after
+commit `883b2e9a`), plus `py_compile` and `git diff --check`.
 A generic launcher resume/status repair is also
 implemented locally: CVRP and warehouse resume launches now quarantine copied
 terminal artifacts under `run_root/resume_snapshot/` instead of canonical
