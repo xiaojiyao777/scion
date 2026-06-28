@@ -96,6 +96,25 @@ def test_cvrp_successor_summary_maps_intra_route_3opt_to_bounded_family() -> Non
     assert bounded["phase_telemetry_observed_count"] == 1
 
 
+def test_cvrp_successor_summary_maps_ejection_chain_to_bounded_family() -> None:
+    summaries = CvrpPostrunSummaryProvider().build_summaries(
+        _context(
+            measurement_effect_summary=_bounded_successor_measurement_summary(
+                mechanism_id="bounded_ejection_chain_relocate"
+            )
+        )
+    )
+    summary = summaries["cvrp_successor_summary"]
+    bounded = summary["by_family"]["bounded_local_search_variant"]
+
+    assert summary["observed_successor_families"] == ["bounded_local_search_variant"]
+    assert bounded["checklist_status"] == "proven"
+    assert bounded["outcome_status"] == "measured_no_positive_at_mde"
+    assert bounded["activation_observed_count"] == 1
+    assert bounded["objective_effect_observed_count"] == 1
+    assert bounded["phase_telemetry_observed_count"] == 1
+
+
 def test_cvrp_successor_summary_maps_rotated_sweep_to_construction_family() -> None:
     summaries = CvrpPostrunSummaryProvider().build_summaries(
         _context(

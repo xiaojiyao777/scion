@@ -150,6 +150,19 @@ above CVRP MDE were `0`, and both median deltas were `0.0`. CVRP prepared
 guidance now records `savings_seed_selection_probe` as reviewed/default-avoid
 evidence; future construction revisits must name a distinct construction
 seed-selection causal path and direct objective-effect evidence plan.
+The successor9 run from commit `fb685975` finished valid/complete and
+postrun-ready after the savings reviewed/default-avoid repair. It clean-forked
+away from the savings branch and selected a new bounded-local-search mechanism,
+`bounded_ejection_chain_relocate`. This is positive framework/evidence-chain
+evidence and marginal solver signal, not promotion-grade progress: 2/2
+effective screening rows, 0 quality blocks, 0 active-slot blocks, strict
+postrun acceptance ready with no required or optional failures after rebuilding
+the ejection-chain alias mapping, median deltas `4.25` and `3.75`, max
+effect/MDE ratio `0.429293`, rows at or above MDE `0`, CMT2/CMT4 losses in the
+expanded row, and champion stayed `v1`. CVRP prepared guidance now records
+`bounded_ejection_chain_relocate` as reviewed/default-avoid evidence; future
+bounded-local-search revisits must name a distinct causal path with direct
+objective-effect evidence.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with

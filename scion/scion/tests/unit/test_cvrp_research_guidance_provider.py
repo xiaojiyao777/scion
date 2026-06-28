@@ -104,6 +104,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
         "bounded_intra_route_3opt",
+        "bounded_ejection_chain_relocate",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -118,6 +119,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
     assert "intra_route_or_opt_reinsert" in focus["next_required_direction"]
     assert "bounded_intra_route_3opt" in focus["next_required_direction"]
+    assert "bounded_ejection_chain_relocate" in focus["next_required_direction"]
     assert "angular_sector_removal" in focus["next_required_direction"]
     assert "radial_string_removal" in focus["next_required_direction"]
     assert "farthest_noise_related_removal" in focus["next_required_direction"]
@@ -156,6 +158,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["default_avoid_directions"]
     )
     assert any(
+        "bounded_ejection_chain_relocate" in item
+        and "measured_no_positive_at_mde" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
         "radial_string_removal" in item and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
     )
@@ -184,12 +191,16 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
         "bounded_intra_route_3opt",
+        "bounded_ejection_chain_relocate",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
         "savings_seed_selection_probe",
     }
     assert mechanisms_by_id["bounded_intra_route_3opt"][
+        "mechanism_family"
+    ] == "bounded_local_search_variant"
+    assert mechanisms_by_id["bounded_ejection_chain_relocate"][
         "mechanism_family"
     ] == "bounded_local_search_variant"
     assert mechanisms_by_id["farthest_noise_related_removal"][
@@ -251,6 +262,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
         "bounded_intra_route_3opt",
+        "bounded_ejection_chain_relocate",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",

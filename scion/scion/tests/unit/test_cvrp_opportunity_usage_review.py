@@ -306,6 +306,38 @@ def test_cvrp_opportunity_usage_maps_savings_seed_to_construction_successor() ->
     )
 
 
+def test_cvrp_opportunity_usage_maps_ejection_chain_to_bounded_successor() -> None:
+    summary = build_cvrp_opportunity_usage_summary(
+        problem_family="cvrp",
+        current_run_evidence=True,
+        prompt_context_visibility_summary=_visible_prompt_summary(),
+        proposal_trajectory_manifests=[
+            {
+                "sessions": [
+                    _session(
+                        "s-ejection-chain",
+                        mechanism_ids=["bounded_ejection_chain_relocate"],
+                        target_file="policies/baseline_modules/local_search.py",
+                    )
+                ],
+            }
+        ],
+        cvrp_successor_summary=_successor_summary(
+            "bounded_local_search_variant",
+            checklist_status="proven",
+        ),
+    )
+
+    assert summary["usage_status"] == "used"
+    assert summary["counts"]["used_opportunity"] == 1
+    assert summary["entries"][0]["opportunity_families"] == [
+        "bounded_local_search_variant"
+    ]
+    assert summary["entries"][0]["required_evidence_family"] == (
+        "bounded_local_search_variant"
+    )
+
+
 def test_cvrp_opportunity_usage_requires_visible_summary() -> None:
     summary = build_cvrp_opportunity_usage_summary(
         problem_family="cvrp",

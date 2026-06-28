@@ -146,6 +146,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_2node_cross_exchange_reviewed_no_positive",
         "intra_route_or_opt_reinsert_reviewed_no_positive",
         "bounded_intra_route_3opt_reviewed_no_positive",
+        "bounded_ejection_chain_relocate_reviewed_no_positive",
         "angular_sector_removal_reviewed_no_positive",
         "radial_string_removal_reviewed_no_positive",
         "farthest_noise_related_removal_reviewed_no_positive",
@@ -169,6 +170,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
         "bounded_intra_route_3opt",
+        "bounded_ejection_chain_relocate",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -211,6 +213,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert any(
         "bounded_intra_route_3opt" in item and "measured_no_positive_at_mde" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "bounded_ejection_chain_relocate" in item
+        and "measured_no_positive_at_mde" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
@@ -322,6 +329,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert (
+        "bounded_ejection_chain_relocate"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
         "farthest_noise_related_removal"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
@@ -341,6 +352,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "bounded_2node_cross_exchange" in prepared_manifest_md
     assert "intra_route_or_opt_reinsert" in prepared_manifest_md
     assert "bounded_intra_route_3opt" in prepared_manifest_md
+    assert "bounded_ejection_chain_relocate" in prepared_manifest_md
     assert "angular_sector_removal" in prepared_manifest_md
     assert "radial_string_removal" in prepared_manifest_md
     assert "farthest_noise_related_removal" in prepared_manifest_md
@@ -352,6 +364,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
         "bounded_intra_route_3opt",
+        "bounded_ejection_chain_relocate",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",

@@ -273,6 +273,7 @@ class CvrpAdapter:
                 "unchanged_bounded_2node_cross_exchange",
                 "unchanged_intra_route_or_opt_reinsert",
                 "unchanged_bounded_intra_route_3opt",
+                "unchanged_bounded_ejection_chain_relocate",
                 "unchanged_angular_sector_removal",
                 "unchanged_radial_string_removal",
                 "unchanged_farthest_noise_related_removal",
