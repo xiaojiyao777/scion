@@ -272,8 +272,11 @@ chronology belongs in focused experiment reports and git history.
   follow-up, MDE-aware rejection, prompt/source visibility, and
   budget-exhausting runtime semantics. The prepared seed-family review repair
   also separates observed large-twoopt requirement evidence from positive
-  solver outcome, and the remaining CMT gap is now rendered as an actionable
-  code-phase commitment. CVRP still lacks solver improvement or promotion.
+  solver outcome. The CMT gap is now closed at the report layer: generic
+  research-efficiency postrun projection carries bounded case-level metric
+  deltas from public raw-metrics refs, and the CVRP-owned review consumes them
+  as CMT2/CMT4 `total_distance` protection evidence. CVRP still lacks solver
+  improvement or promotion.
 - Previous local CVRP CMT-commitment follow-through root:
   `/home/clawd/research/scion-experiments/v04-cvrp-cmtcommit-33e79e0b-server-2r-2r-gpt55-20260628T022008Z-claw`.
   It finished valid/complete and postrun-ready with 2 of 2 effective screening
@@ -297,13 +300,18 @@ chronology belongs in focused experiment reports and git history.
   1 win, 1 loss, and 46 ties. The run is clean effective-research evidence for
   same-branch low-SNR follow-up and mechanism telemetry, not solver progress:
   postrun interpretation is
-  `protocol_evaluated_without_large_twoopt_direct_evidence`, opportunity usage
-  is `checklist_unproven`, activation/objective/phase evidence is observed in
-  2 of 2 Protocol rows, positive-at-MDE is absent, and CMT protection evidence
-  remains incomplete. During postrun, the stored inventory recovered
-  `resume_snapshot_ref` from the prepared manifest, but final root
-  `run_status.json` dropped the field after copying campaign status; the local
-  final-status writer repair now preserves resume metadata for future roots.
+  `protocol_evaluated_without_large_twoopt_direct_evidence`, activation,
+  objective, and phase evidence are observed in 2 of 2 Protocol rows, and
+  positive-at-MDE is absent. After rebuilding postrun acceptance with the
+  report-only case-delta projection, opportunity usage is `used`,
+  `required_evidence_proof.checklist_status=proven`, CMT2/CMT4 protected cases
+  are observed, `evidence_requirement_statuses.status=complete`, and
+  `check_postrun_acceptance.py --require-current-run-ready` reports
+  `current_run_analysis_ready=true` with no failed required checks. During
+  postrun, the stored inventory recovered `resume_snapshot_ref` from the
+  prepared manifest, but final root `run_status.json` dropped the field after
+  copying campaign status; the local final-status writer repair now preserves
+  resume metadata for future roots.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
   finished valid/complete and postrun-ready:
@@ -487,25 +495,25 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 
 ## Next Actions
 
-1. Continue design-first postrun/readiness cleanup as ports, not more
-   helper/projection patches. `scion.postrun` should own generic artifact,
-   lifecycle, schema, readiness, and exposure boundaries; CVRP/warehouse/VRP
-   semantics should sit in problem-owned validators/providers. Design basis:
-   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md` and
-   `scion/design/v0.4-postrun-cli-port-migration-design.md`. The next concrete
-   migration is to move CVRP/warehouse prepared-handoff checks into
-   problem-owned providers, then continue thinning
-   `rebuild_prepared_handoff.py` without changing legacy output shape or live
-   runtime behavior.
-2. Extend problem-owned opportunity providers/reviews beyond the CVRP initial
+1. Use the repaired CVRP postrun evidence path for the next solver-design
+   follow-up: the framework can now show whether a selected large-instance
+   opportunity satisfied its required evidence checklist, so the next question
+   is actual solver improvement or a better problem-owned opportunity, not more
+   prompt/acceptance plumbing.
+2. Continue design-first postrun/readiness cleanup only where it removes active
+   risk. `scion.postrun` should own generic artifact, lifecycle, schema,
+   readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit
+   in problem-owned validators/providers. Do not add more behavior to oversized
+   postrun scripts when a typed port or cohesive report module is appropriate.
+3. Extend problem-owned opportunity providers/reviews beyond the CVRP initial
    slice only when a concrete problem package needs it. Generic core should
    continue to render/audit `ProblemOpportunitySummary`; residual opportunity,
    protected cases, mechanism evidence, direct-effect requirements, and MDE
    comparison stay in problem-owned providers and out of `DecisionFeatures`.
-3. Keep warehouse as positive effective-research evidence. Launch one narrow
+4. Keep warehouse as positive effective-research evidence. Launch one narrow
    warehouse repeat only if an independent solver-level plateau confirmation is
    explicitly needed.
-4. Keep evaluating v0.4 against effective research behavior: warehouse plateau
+5. Keep evaluating v0.4 against effective research behavior: warehouse plateau
    evidence, CVRP branch depth and solver-design follow-up, MDE-aware
    rejection, and absence of framework-control blockers.
 

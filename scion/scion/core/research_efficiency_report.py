@@ -20,6 +20,7 @@ from scion.core.evidence_recording.actionability_classification import (
     scheduler_metadata_with_result_context,
 )
 from scion.core.evidence_recording.common import reduced_measurement_readiness_payload
+from scion.core.protocol_case_delta_projection import protocol_case_level_deltas
 from scion.measurement.consumer_view import measurement_consumer_view_from_mapping
 
 SCHEMA_VERSION = "scion.research_efficiency_report.v1"
@@ -275,6 +276,7 @@ def build_research_efficiency_report(
             steps,
             measurement_readiness or {},
             branch_family_map,
+            campaign_path=campaign_path,
         ),
         "research_shape": _compact_research_shape_diagnostics(
             research_shape_diagnostics
@@ -1105,6 +1107,8 @@ def _protocol_effects_vs_mde(
     steps: list[Any],
     measurement_readiness: Mapping[str, Any],
     branch_family_map: Mapping[str, Any] | None = None,
+    *,
+    campaign_path: Path,
 ) -> dict[str, Any]:
     mde = _first_float(measurement_readiness.get("mde_at_power_80"))
     family_map = _mapping_value(branch_family_map)
@@ -1115,7 +1119,13 @@ def _protocol_effects_vs_mde(
         protocol = item.get("protocol_result")
         if not isinstance(protocol, Mapping):
             continue
-        row = _protocol_effect_row(item, protocol, mde, family_map)
+        row = _protocol_effect_row(
+            item,
+            protocol,
+            mde,
+            family_map,
+            campaign_path=campaign_path,
+        )
         if row:
             rows.append(row)
 
@@ -1159,6 +1169,8 @@ def _protocol_effect_row(
     protocol: Mapping[str, Any],
     mde: float | None,
     branch_family_map: Mapping[str, Any],
+    *,
+    campaign_path: Path,
 ) -> dict[str, Any] | None:
     median_delta = _first_float(protocol.get("median_delta"))
     ci_low = _first_float(protocol.get("ci_low"))
@@ -1171,6 +1183,10 @@ def _protocol_effect_row(
     )
     phase_telemetry = _compact_candidate_phase_telemetry_summary(
         _mapping_value(protocol.get("candidate_phase_telemetry_summary"))
+    )
+    case_level_deltas = protocol_case_level_deltas(
+        protocol,
+        campaign_path=campaign_path,
     )
     effect_to_mde_ratio = (
         round(median_delta / mde, 6)
@@ -1205,6 +1221,8 @@ def _protocol_effect_row(
         row["mechanism_evidence"] = mechanism_evidence
     if phase_telemetry:
         row["candidate_phase_telemetry_summary"] = phase_telemetry
+    if case_level_deltas:
+        row["case_level_deltas"] = case_level_deltas
     return row
 
 
@@ -1442,6 +1460,8 @@ def _top_effect_rows(
             item["candidate_phase_telemetry_summary"] = row.get(
                 "candidate_phase_telemetry_summary"
             )
+        if row.get("case_level_deltas"):
+            item["case_level_deltas"] = row.get("case_level_deltas")
         compact_rows.append(item)
     return compact_rows
 

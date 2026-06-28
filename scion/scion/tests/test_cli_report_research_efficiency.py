@@ -66,6 +66,13 @@ def test_research_efficiency_report_separates_accounting_and_taxonomy(tmp_path):
     assert power["top_rows_by_effect_to_mde"][0][
         "candidate_phase_telemetry_summary"
     ]["buckets"]["construction"]["weighted_sum_ms"] == 24.0
+    case_deltas = power["top_rows_by_effect_to_mde"][0]["case_level_deltas"]
+    assert case_deltas["cvrplib/CMT/CMT2.vrp"]["metric_delta_medians"][
+        "total_distance"
+    ] == -6.0
+    assert case_deltas["cvrplib/CMT/CMT4.vrp"]["metric_delta_medians"][
+        "total_distance"
+    ] == 0.0
     assert "raw_metrics_ref" not in power["top_rows_by_effect_to_mde"][0]
     family_effects = power["mechanism_family_effect_summary"]
     assert family_effects["decision_features_excluded"] is True
@@ -600,6 +607,8 @@ def _make_research_efficiency_fixture(tmp_path: Path) -> tuple[Path, Path]:
                     "gate_outcome": "pass",
                     "effective_reason_codes": ["SCREENING_PASS"],
                     "raw_metrics_ref": "/tmp/internal-screening-a.json",
+                    "raw_metrics_public_ref": "metrics/screening-a.json",
+                    "raw_metrics_ref_scope": "public_artifact_ref",
                     "mechanism_evidence": {
                         "primary_mechanism": "regret_insertion",
                         "primary_activation_status": "observed",
@@ -683,6 +692,38 @@ def _make_research_efficiency_fixture(tmp_path: Path) -> tuple[Path, Path]:
     }
     (campaign_dir / "campaign_summary.json").write_text(
         json.dumps(summary),
+        encoding="utf-8",
+    )
+    metrics_dir = campaign_dir / "metrics"
+    metrics_dir.mkdir()
+    (metrics_dir / "screening-a.json").write_text(
+        json.dumps(
+            {
+                "pairs": [
+                    {
+                        "case": "cvrplib/CMT/CMT2.vrp",
+                        "seed": 11,
+                        "comparison": "loss",
+                        "delta": -20.0,
+                        "metric_deltas": {"total_distance": -20.0},
+                    },
+                    {
+                        "case": "cvrplib/CMT/CMT2.vrp",
+                        "seed": 29,
+                        "comparison": "win",
+                        "delta": 8.0,
+                        "metric_deltas": {"total_distance": 8.0},
+                    },
+                    {
+                        "case": "cvrplib/CMT/CMT4.vrp",
+                        "seed": 11,
+                        "comparison": "tie",
+                        "delta": 0.0,
+                        "metric_deltas": {"total_distance": 0.0},
+                    },
+                ]
+            }
+        ),
         encoding="utf-8",
     )
     (campaign_dir / "status.json").write_text(
