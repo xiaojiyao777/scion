@@ -868,6 +868,7 @@ def _lifecycle_inventory(
         "status": _string_or_none(status_doc.get("status")),
         "prepared_status_schema": _string_or_none(status_doc.get("schema")),
         "resume_from_campaign": _string_or_none(resume_from),
+        "resume_snapshot_ref": _string_or_none(status_doc.get("resume_snapshot_ref")),
         "copied_campaign_status_present": status_doc.get(
             "copied_campaign_status_present"
         ),

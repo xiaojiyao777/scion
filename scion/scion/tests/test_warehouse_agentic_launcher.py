@@ -563,11 +563,9 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert prepared_prompt_context["report_only"] is True
     assert (
         prepared_prompt_context["readiness"]["ready_for_launch_prompt_audit"]
-        is False
+        is True
     )
-    assert "copied_campaign_status" in prepared_prompt_context["readiness"][
-        "missing_required"
-    ]
+    assert prepared_prompt_context["readiness"]["missing_required"] == []
     assert (
         prepared_prompt_context["signals"]["research_shape_prompt_signal"][
             "available"
@@ -686,12 +684,22 @@ def test_warehouse_agentic_launcher_can_copy_resume_campaign(tmp_path: Path) -> 
     assert (
         run_root / "campaign" / "champions" / "champion_v2" / "registry.yaml"
     ).is_file()
+    assert not (run_root / "campaign" / "run_status.json").exists()
+    assert not (run_root / "campaign" / "campaign_summary.json").exists()
+    resume_snapshot = run_root / "resume_snapshot"
+    assert (resume_snapshot / "campaign" / "run_status.json").is_file()
+    assert (resume_snapshot / "campaign" / "campaign_summary.json").is_file()
+    assert (resume_snapshot / "resume_source_manifest.v1.json").is_file()
     prepare_status = json.loads(
         (run_root / "run_status.json").read_text(encoding="utf-8")
     )
     assert prepare_status["status"] == "prepared"
     assert prepare_status["prepared_only"] is True
     assert prepare_status["resume_from_campaign"] == str(source_campaign)
+    assert (
+        prepare_status["resume_snapshot_ref"]
+        == "resume_snapshot/resume_source_manifest.v1.json"
+    )
     assert prepare_status["copied_campaign_status_present"] is True
     assert prepare_status["copied_campaign_summary_present"] is True
     launch_env = (run_root / "launch.env").read_text(encoding="utf-8")

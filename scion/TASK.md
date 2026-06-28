@@ -15,9 +15,16 @@ focused validation passes (`108 passed`) plus
 `git diff --check`. Earlier WSL conda `scion` validation also passed
 (`108 passed`) after sync, but current continuation should use the server
 conda `claw` environment until WSL is available again. The local gpt-5.5 proxy
-at `127.0.0.1:8080` is reachable but currently unauthenticated for chat
-completion preflight; refresh proxy login before launching another agentic run.
-The warehouse postrun audit
+at `127.0.0.1:8080` is authenticated after importing refreshed Codex CLI
+tokens into the proxy account store; `/auth/status` reports one active Pro
+account and `check_gpt55_proxy.py --model gpt-5.5` returns HTTP 200. Restarting
+the proxy was not required. A generic launcher resume/status repair is also
+implemented locally: CVRP and warehouse resume launches now quarantine copied
+terminal artifacts under `run_root/resume_snapshot/` instead of canonical
+current-run paths, expose `resume_snapshot_ref`, and report in-flight Protocol
+state with running/complete semantics, pair counters, child subprocess details,
+and redacted case/seed aliases without inflating completed-only counters.
+Focused local launcher/status/postrun validation passes. The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with
 stored postrun analysis artifacts. The checker now prefers the stored inventory

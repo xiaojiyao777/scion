@@ -8,7 +8,6 @@ import hashlib
 import json
 import re
 import shlex
-import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -25,6 +24,10 @@ from scion.launcher.lifecycle import (
     CampaignCommandPlan,
     LauncherLifecyclePlan,
     render_run_sh,
+)
+from scion.launcher.resume import (
+    ResumePreparationError,
+    prepare_launcher_campaign,
 )
 
 
@@ -597,6 +600,9 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "RUN_ROOT",
         "CAMPAIGN_DIR",
         "RESUME_FROM_CAMPAIGN",
+        "RESUME_SNAPSHOT_MANIFEST_REF",
+        "RESUME_COPIED_CAMPAIGN_STATUS_PRESENT",
+        "RESUME_COPIED_CAMPAIGN_SUMMARY_PRESENT",
         "PREPARED_RUN_MANIFEST",
         "REPO_ROOT",
         "SCION_DIR",
@@ -742,6 +748,7 @@ def _launch(run_root: Path) -> str:
 def _write_prepare_status(run_root: Path, env: dict[str, object]) -> None:
     campaign_dir = Path(env["CAMPAIGN_DIR"])
     resume_from = str(env.get("RESUME_FROM_CAMPAIGN") or "")
+    resume_snapshot_ref = str(env.get("RESUME_SNAPSHOT_MANIFEST_REF") or "")
     status = {
         "schema": "scion.launcher_prepare.v1",
         "status": "prepared",
@@ -749,10 +756,13 @@ def _write_prepare_status(run_root: Path, env: dict[str, object]) -> None:
         "run_root": str(run_root),
         "campaign_dir": str(campaign_dir),
         "resume_from_campaign": resume_from,
-        "copied_campaign_status_present": bool(resume_from)
-        and (campaign_dir / "run_status.json").is_file(),
-        "copied_campaign_summary_present": bool(resume_from)
-        and (campaign_dir / "campaign_summary.json").is_file(),
+        "resume_snapshot_ref": resume_snapshot_ref,
+        "copied_campaign_status_present": bool(
+            int(env.get("RESUME_COPIED_CAMPAIGN_STATUS_PRESENT", 0))
+        ),
+        "copied_campaign_summary_present": bool(
+            int(env.get("RESUME_COPIED_CAMPAIGN_SUMMARY_PRESENT", 0))
+        ),
         "scion_model": str(env["SCION_MODEL"]),
         "scion_base_url": str(env["SCION_BASE_URL"]),
         "completion_preflight": bool(int(env["COMPLETION_PREFLIGHT"])),
@@ -807,6 +817,7 @@ def _write_prepared_run_manifest(
         "run_root": str(run_root),
         "campaign_dir": str(env["CAMPAIGN_DIR"]),
         "resume_from_campaign": str(env.get("RESUME_FROM_CAMPAIGN") or ""),
+        "resume_snapshot_ref": str(env.get("RESUME_SNAPSHOT_MANIFEST_REF") or ""),
         "command": command,
         "launch_command": "nohup setsid bash run.sh > nohup.log 2>&1 &",
         "model": {
@@ -1148,18 +1159,14 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     )
     run_root = args.experiments_root.expanduser().resolve() / run_name
     campaign_dir = run_root / "campaign"
-    if args.resume_from_campaign is None:
-        campaign_dir.mkdir(parents=True, exist_ok=False)
-        resume_from_campaign = ""
-    else:
-        resume_source = args.resume_from_campaign.expanduser().resolve()
-        if not resume_source.is_dir():
-            raise SystemExit(
-                f"--resume-from-campaign is not a directory: {resume_source}"
-            )
-        run_root.mkdir(parents=True, exist_ok=False)
-        shutil.copytree(resume_source, campaign_dir)
-        resume_from_campaign = str(resume_source)
+    try:
+        resume_state = prepare_launcher_campaign(
+            resume_from_campaign=args.resume_from_campaign,
+            campaign_dir=campaign_dir,
+            run_root=run_root,
+        )
+    except ResumePreparationError as exc:
+        raise SystemExit(str(exc)) from exc
     api_key, api_key_env = _resolve_api_key(args)
     control_pair_key = _prepared_control_pair_key(
         args.control_pair_key,
@@ -1169,7 +1176,6 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     env: dict[str, object] = {
         "RUN_ROOT": run_root,
         "CAMPAIGN_DIR": campaign_dir,
-        "RESUME_FROM_CAMPAIGN": resume_from_campaign,
         "PREPARED_RUN_MANIFEST": run_root / "prepared_run_manifest.v1.json",
         "REPO_ROOT": repo_root,
         "SCION_DIR": scion_dir,
@@ -1216,6 +1222,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         ),
         "STARTED_UTC": started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
+    env.update(resume_state.env())
 
     command = _build_command(env)
     _write_launch_env(run_root, env)
@@ -1255,6 +1262,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             f"PREPARED_RUN_MANIFEST={env['RUN_ROOT'] / 'prepared_run_manifest.v1.json'}\n\n"
             f"PREPARED_HANDOFF_DIR={env['RUN_ROOT'] / 'prepared_handoff'}\n\n"
             f"RESUME_FROM_CAMPAIGN={env['RESUME_FROM_CAMPAIGN']}\n\n"
+            f"RESUME_SNAPSHOT_MANIFEST_REF={env['RESUME_SNAPSHOT_MANIFEST_REF']}\n\n"
             "command:\n"
             f"{command}\n\n"
             "launch:\n"

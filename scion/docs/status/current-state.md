@@ -57,10 +57,24 @@ chronology belongs in focused experiment reports and git history.
   freeze new semantics in the oversized postrun/helper scripts; future work in
   that area needs a design split into named ports or problem-owned validators
   rather than more helper/projection growth.
-- Current local gpt-5.5 proxy at `127.0.0.1:8080` is reachable but not
-  authenticated for chat completions: `/auth/status` has no active account and
-  completion preflight returns `401 invalid_api_key`. Refresh the local proxy
-  login before launching another agentic Scion run.
+- Current local gpt-5.5 proxy at `127.0.0.1:8080` is authenticated after
+  importing refreshed Codex CLI tokens into the proxy account store.
+  `/auth/status` reports one active Pro account and
+  `check_gpt55_proxy.py --model gpt-5.5` returns HTTP 200 with a healthy chat
+  completion. Restarting the proxy was not required.
+- Generic launcher resume handling is repaired locally for CVRP and warehouse:
+  resumed campaign runtime state is copied forward, while stale terminal
+  artifacts from the copied source campaign are quarantined under
+  `run_root/resume_snapshot/` instead of occupying canonical current-run paths
+  (`run_status.json`, `status.json`, `campaign_summary.json`, `exit.txt`, and
+  `artifacts/formal_candidates/index.jsonl`). Launch metadata and postrun
+  inventory expose `resume_snapshot_ref`. In-flight Protocol status now
+  explicitly reports running state, `complete=false`, pair counters, child
+  subprocess details, and redacted case/seed aliases without changing
+  completed-only counters such as `protocol_metric_results` or `last_result`.
+  Local focused validation passes for launcher resume preparation, CVRP and
+  warehouse resume launchers, running-status reporting, and postrun
+  snapshot/in-flight summaries.
 - Design N skeleton from
   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md` is
   implemented locally as the problem-neutral `scion.postrun` package:
@@ -218,6 +232,16 @@ chronology belongs in focused experiment reports and git history.
   also separates observed large-twoopt requirement evidence from positive
   solver outcome, and the remaining CMT gap is now rendered as an actionable
   code-phase commitment. CVRP still lacks solver improvement or promotion.
+- Active local CVRP CMT-commitment follow-through root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-cmtcommit-33e79e0b-server-2r-2r-gpt55-20260628T022008Z-claw`.
+  It launched from commit `33e79e0b` after the proxy was refreshed. The first
+  current-run screening row is valid and chose `expand_screening`: 32 of 32
+  valid pairs, measurable `large_instance_intra_route_two_opt_seed` telemetry,
+  mixed CMT2 objective effects, and ties on CMT4/M/X. This is a weak effective
+  research signal, not solver progress. Because this run started before the
+  resume-snapshot repair, stale copied terminal artifacts in canonical paths
+  must be ignored; use the DB, current status progress, and current metrics for
+  interpretation. Expand screening is still running.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
   finished valid/complete and postrun-ready:
@@ -334,10 +358,11 @@ chronology belongs in focused experiment reports and git history.
 - WSL repo: `/home/xjy-ubuntu/research/or-autoresearch-agent`
 - WSL Python: `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`
 - WSL experiment root: `/home/xjy-ubuntu/research/scion-experiments`
-- Current server-side SSH probe:
+- Server-side SSH probe to re-run before using WSL:
   `ssh -i /home/clawd/.ssh/id_ed25519_codex_wsl -p 2222 -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=no xjy-ubuntu@127.0.0.1 'echo SSH_OK; hostname; whoami; /home/xjy-ubuntu/miniconda3/envs/scion/bin/python --version'`
-- Current probe result: `SSH_OK`, host `xjy-workspace`, user `xjy-ubuntu`,
-  Python `3.10.20`.
+- Current execution uses the server conda `claw` environment. Treat WSL as
+  unavailable until the probe above succeeds after the local WSL runner is
+  brought back up.
 
 Before launching any prepared root, require strict launch readiness from the
 same WSL checkout:

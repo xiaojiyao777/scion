@@ -66,6 +66,10 @@ def _in_flight_protocol_snapshot(progress: Mapping[str, Any]) -> dict[str, Any]:
     complete = bool(progress.get("complete", False))
     snapshot = {
         "phase": phase or (f"formal_{stage}" if stage else "formal_protocol"),
+        "protocol_state": progress.get(
+            "protocol_state",
+            "complete" if complete else "running",
+        ),
         "stage": stage or None,
         "branch_id": progress.get("branch_id"),
         "candidate": _drop_none(
@@ -112,8 +116,8 @@ def _in_flight_protocol_snapshot(progress: Mapping[str, Any]) -> dict[str, Any]:
         "runtime_budget_diagnostic_code": progress.get(
             "runtime_budget_diagnostic_code"
         ),
-        "last_case": progress.get("case"),
-        "last_seed": progress.get("seed"),
+        "last_case": progress.get("last_case", progress.get("case")),
+        "last_seed": progress.get("last_seed", progress.get("seed")),
         "step_started_at": progress.get("step_started_at"),
         "last_progress_at": progress.get("last_progress_at"),
     }

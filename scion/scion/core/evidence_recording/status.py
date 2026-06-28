@@ -113,6 +113,26 @@ def _normalize_child_process_fields(
             progress["child_phase"] = "solver_subprocess_complete"
 
 
+def _ensure_running_protocol_fields(progress: Dict[str, Any]) -> None:
+    """Expose in-flight protocol state without changing completed counters."""
+
+    if progress.get("complete") is True:
+        progress["protocol_state"] = "complete"
+    elif progress.get("stage") or progress.get("phase") or progress.get("child_pid"):
+        progress.setdefault("complete", False)
+        progress["protocol_state"] = "running"
+        progress.setdefault("attempted_pairs", 0)
+
+
+def _sync_protocol_progress_aliases(progress: Dict[str, Any]) -> None:
+    """Mirror redacted protocol fields under human-readable stable names."""
+
+    if progress.get("case") is not None:
+        progress["last_case"] = progress.get("case")
+    if progress.get("seed") is not None:
+        progress["last_seed"] = progress.get("seed")
+
+
 def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
     """Mirror stable loop accounting fields at the status top level."""
     loop = payload.get("campaign_loop")
@@ -991,11 +1011,13 @@ class StatusWriterMixin:
         _ensure_runtime_evidence_policy(progress)
         _ensure_runtime_gate_visibility(progress)
         _ensure_observability_value_visibility(progress)
+        _ensure_running_protocol_fields(progress)
         if progress.get("raw_metrics_ref"):
             progress["raw_metrics_ref_scope"] = "public_artifact_ref"
             progress["raw_metrics_internal_only"] = True
         progress["last_progress_at"] = datetime.now().isoformat()
         progress = redact_public_refs(progress, base_dir=self.campaign_dir)
+        _sync_protocol_progress_aliases(progress)
         self.current_status_progress = progress
         self.in_flight_protocol = _in_flight_protocol_snapshot(progress)
         self.write_status()

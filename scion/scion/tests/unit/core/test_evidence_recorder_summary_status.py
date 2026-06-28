@@ -3501,6 +3501,7 @@ def test_sigterm_during_formal_screening_keeps_n_experiments_zero_and_reports_in
     assert status["last_result"]["reason"] == "agent_quality_blocked"
     inflight = status["in_flight_protocol"]
     assert inflight["phase"] == "formal_screening"
+    assert inflight["protocol_state"] == "running"
     assert inflight["branch_id"] == "branch-1"
     assert inflight["candidate"]["mechanism_changes"][0]["id"] == (
         "random_segment_removal"
@@ -3535,6 +3536,12 @@ def test_protocol_progress_completion_clears_child_pid(tmp_path: Path) -> None:
         case="/tmp/private/s1.vrp",
         seed=10,
     )
+    status = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    progress = status["current_progress"]
+    assert progress["protocol_state"] == "running"
+    assert progress["complete"] is False
+    assert progress["last_case"].startswith("case:s1.vrp#")
+    assert progress["last_seed"] == 10
     recorder.record_protocol_progress(
         branch_id="branch-1",
         stage="screening",
@@ -3553,6 +3560,7 @@ def test_protocol_progress_completion_clears_child_pid(tmp_path: Path) -> None:
     status = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
     progress = status["current_progress"]
     inflight = status["in_flight_protocol"]
+    assert progress["protocol_state"] == "running"
     assert "child_pid" not in progress
     assert "child_pid" not in inflight
     assert progress["child_exit_code"] == 0
