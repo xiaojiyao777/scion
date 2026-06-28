@@ -7,7 +7,9 @@ from typing import Any, Callable, Mapping
 
 import yaml
 
+from scion.postrun.handoff.prompt_context_readiness import ProblemPromptBridgeSpec
 from scion.postrun.inventory.prepared_contract import resolve_manifest_path
+from scion.problems.cvrp.prompt_bridge import CVRP_PROMPT_BRIDGE_SPEC
 from scion.problems.cvrp.research_guidance import (
     PROTECTED_CASES,
     REQUIRED_MECHANISM_ID,
@@ -150,6 +152,9 @@ class CvrpPreparedHandoffReviewPort:
         research_focus: Mapping[str, Any],
     ) -> dict[str, dict[str, Any]]:
         return cvrp_prepared_prompt_context_signals(manifest, research_focus)
+
+    def prompt_bridge_spec(self) -> ProblemPromptBridgeSpec:
+        return CVRP_PROMPT_BRIDGE_SPEC
 
 
 def add_cvrp_prepared_handoff_checks(

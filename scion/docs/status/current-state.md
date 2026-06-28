@@ -123,8 +123,15 @@ chronology belongs in focused experiment reports and git history.
   those ports, not by owning problem semantics. Prepared prompt-context focus
   signals for CVRP and warehouse now come from the same problem-owned ports;
   `rebuild_prepared_handoff.py` merges those signals and retains common
-  artifact orchestration plus common decision-boundary readiness. The generic
-  module is source guarded against CVRP/warehouse/VRP vocabulary.
+  artifact orchestration plus common decision-boundary readiness. Prepared
+  prompt bridge metadata is also problem-owned:
+  `scion.problems.cvrp.prompt_bridge` and
+  `scion.problems.warehouse_delivery.prompt_bridge` own measurement and
+  active-subject signal names, source markers, problem-v1 candidates, and
+  surfaces. `scion.postrun.handoff.prompt_context_readiness` owns the generic
+  spec, problem-v1 resolver, and provider-payload summary used by both
+  rebuild and launch-readiness tooling. The generic module is source guarded
+  against CVRP/warehouse/VRP vocabulary.
 - Design O initial slice is implemented locally as
   `scion.measurement.MeasurementConsumerView`. It reduces problem-owned
   measurement declarations to generic status/runtime/pairing/effect/MDE fields

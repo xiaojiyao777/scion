@@ -43,6 +43,7 @@ def test_cvrp_prepared_handoff_port_builds_legacy_checks_and_phase4(
         manifest,
         manifest["research_focus"],
     )
+    spec = port.prompt_bridge_spec()
 
     assert checks["cvrp_measurement_handoff_present"]["passed"] is True
     assert checks["cvrp_protected_cases_in_split"]["passed"] is True
@@ -51,6 +52,15 @@ def test_cvrp_prepared_handoff_port_builds_legacy_checks_and_phase4(
     assert phase4["cvrp_cmt_case_protection_handoff"]["available"] is True
     assert signals["cvrp_measurement_opportunity_handoff"]["available"] is True
     assert signals["cvrp_resume_continuity_requirements"]["available"] is True
+    assert spec.measurement_signal_name == (
+        "cvrp_problem_measurement_diagnostics_prompt_bridge"
+    )
+    assert spec.active_subject_signal_name == (
+        "cvrp_active_subject_code_constraints_prompt_bridge"
+    )
+    assert spec.active_subject_surface == "solver_design"
+    assert "profile_projection" in spec.measurement_source_markers
+    assert "large_twoopt_runtime_guard" in spec.active_subject_provider_markers
 
 
 def test_warehouse_prepared_handoff_port_builds_legacy_checks_and_phase4() -> None:
@@ -77,6 +87,7 @@ def test_warehouse_prepared_handoff_port_builds_legacy_checks_and_phase4() -> No
         manifest,
         manifest["research_focus"],
     )
+    spec = port.prompt_bridge_spec()
 
     assert checks["warehouse_followup_handoff_present"]["passed"] is True
     assert checks["warehouse_followup_required_evidence_complete"]["passed"] is True
@@ -85,6 +96,15 @@ def test_warehouse_prepared_handoff_port_builds_legacy_checks_and_phase4() -> No
     assert phase4["warehouse_required_evidence_handoff"]["available"] is True
     assert signals["warehouse_measurement_runtime_handoff"]["available"] is True
     assert signals["warehouse_required_evidence"]["available"] is True
+    assert spec.measurement_signal_name == (
+        "warehouse_problem_measurement_diagnostics_prompt_bridge"
+    )
+    assert spec.active_subject_signal_name == (
+        "warehouse_active_subject_code_constraints_prompt_bridge"
+    )
+    assert spec.active_subject_surface == "order_level"
+    assert "profile_projection" in spec.measurement_source_markers
+    assert "bounded_scan_guard" in spec.active_subject_provider_markers
 
 
 def _measurement(

@@ -39,6 +39,10 @@ from prepared_prompt_context import (  # noqa: E402
     research_focus_prompt_summary,
     research_focus_projection_summary,
 )
+from scion.postrun.handoff.prompt_context_readiness import (  # noqa: E402
+    active_subject_code_constraints_provider_payload_summary,
+    resolve_problem_v1_path,
+)
 from scion.problems.cvrp.postrun_handoff import (  # noqa: E402
     CvrpPreparedHandoffReviewPort,
 )
@@ -95,104 +99,6 @@ ACTIVE_SUBJECT_CODE_CONSTRAINT_PROMPT_MARKERS = {
     "code_prompt_renderer": (
         "scion/scion/proposal/engine/code_prompts.py",
         "Active Subject Code Constraints",
-    ),
-}
-CVRP_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS = {
-    "adapter_hook": (
-        "scion/scion/problems/cvrp/adapter.py",
-        "def render_problem_measurement_diagnostics",
-    ),
-    "context_payload": (
-        "scion/scion/proposal/context_manager/manager.py",
-        "problem_measurement_diagnostics",
-    ),
-    "profile_projection": (
-        "scion/scion/proposal/engine/hypothesis_context_profiles.py",
-        "mechanism_effect_ranking",
-    ),
-    "prompt_renderer": (
-        "scion/scion/proposal/engine/hypothesis_prompts.py",
-        "Problem Measurement Diagnostics",
-    ),
-}
-WAREHOUSE_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS = {
-    "adapter_hook": (
-        "scion/scion/problems/warehouse_delivery/adapter.py",
-        "def render_problem_measurement_diagnostics",
-    ),
-    "context_payload": (
-        "scion/scion/proposal/context_manager/manager.py",
-        "problem_measurement_diagnostics",
-    ),
-    "profile_projection": (
-        "scion/scion/proposal/engine/hypothesis_context_profiles.py",
-        "adapter_diagnostics",
-    ),
-    "prompt_renderer": (
-        "scion/scion/proposal/engine/hypothesis_prompts.py",
-        "Problem Measurement Diagnostics",
-    ),
-}
-PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS_BY_FAMILY = {
-    "cvrp": CVRP_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS,
-    "warehouse_delivery": WAREHOUSE_PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS,
-}
-PROBLEM_MEASUREMENT_DIAGNOSTICS_SIGNAL_NAMES = {
-    "cvrp": "cvrp_problem_measurement_diagnostics_prompt_bridge",
-    "warehouse_delivery": "warehouse_problem_measurement_diagnostics_prompt_bridge",
-}
-CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS = {
-    "provider_hook": (
-        "scion/scion/problems/cvrp/solver_design_provider.py",
-        "def active_subject_code_constraints",
-    ),
-    "large_twoopt_runtime_guard": (
-        "scion/scion/problems/cvrp/solver_design_provider.py",
-        "large_instance_two_opt_runtime_guard",
-    ),
-    "unbounded_twoopt_reject": (
-        "scion/scion/problems/cvrp/solver_design_provider.py",
-        "UNBOUNDED_TWO_OPT_DEFAULT_REJECT",
-    ),
-}
-WAREHOUSE_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS = {
-    "provider_hook": (
-        "scion/scion/problems/warehouse_delivery/adapter.py",
-        "def active_subject_code_constraints",
-    ),
-    "diagnostics_contract": (
-        "scion/scion/problems/warehouse_delivery/adapter.py",
-        "self.validation_transfer_diagnostics",
-    ),
-    "bounded_scan_guard": (
-        "scion/scion/problems/warehouse_delivery/adapter.py",
-        "unbounded full vehicle-pair scans",
-    ),
-    "lexicographic_guard": (
-        "scion/scion/problems/warehouse_delivery/adapter.py",
-        "lexicographic",
-    ),
-}
-ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS_BY_FAMILY = {
-    "cvrp": CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS,
-    "warehouse_delivery": WAREHOUSE_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS,
-}
-ACTIVE_SUBJECT_CODE_CONSTRAINT_SIGNAL_NAMES = {
-    "cvrp": "cvrp_active_subject_code_constraints_prompt_bridge",
-    "warehouse_delivery": "warehouse_active_subject_code_constraints_prompt_bridge",
-}
-ACTIVE_SUBJECT_CODE_CONSTRAINT_PROVIDER_SUMMARY_SCHEMA = (
-    "scion.active_subject_code_constraints_provider_payload_summary.v1"
-)
-ACTIVE_SUBJECT_CODE_CONSTRAINT_SURFACES = {
-    "cvrp": "solver_design",
-    "warehouse_delivery": "order_level",
-}
-PROBLEM_V1_CANDIDATES_BY_FAMILY = {
-    "cvrp": ("scion/scion/problems/cvrp/problem-v1.yaml",),
-    "warehouse_delivery": (
-        "scion/problems/warehouse_delivery/problem-v1.yaml",
-        "scion/scion/problems/warehouse_delivery/problem-v1.yaml",
     ),
 }
 PREPARED_HANDOFF_PORTS_BY_FAMILY = {
@@ -926,24 +832,25 @@ def _add_active_subject_code_constraints_prompt_signal(
     problem_family: Any,
 ) -> None:
     family = str(problem_family or "")
-    provider_markers = ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS_BY_FAMILY.get(family)
-    if not provider_markers:
+    spec = _problem_prompt_bridge_spec(family)
+    if spec is None:
         return
-    surface = ACTIVE_SUBJECT_CODE_CONSTRAINT_SURFACES.get(family, "")
-    problem_v1 = _resolve_problem_v1_path(
+    problem_v1 = resolve_problem_v1_path(
         root=root,
         manifest=manifest,
-        problem_family=family,
+        repo_dir=REPO_DIR,
+        spec=spec,
     )
-    provider_payload = _active_subject_code_constraints_provider_payload_summary(
+    provider_payload = active_subject_code_constraints_provider_payload_summary(
         root=root,
         manifest=manifest,
-        problem_family=family,
+        repo_dir=REPO_DIR,
+        spec=spec,
     )
     code_prompt_summary = active_subject_code_constraints_prompt_summary(
         problem_v1_path=problem_v1,
         problem_family=family,
-        surface=surface,
+        surface=spec.active_subject_surface,
     )
     source_marker_results = {
         name: _source_contains(relative_path, marker)
@@ -953,11 +860,11 @@ def _add_active_subject_code_constraints_prompt_signal(
     }
     provider_marker_results = {
         name: _source_contains(relative_path, marker)
-        for name, (relative_path, marker) in provider_markers.items()
+        for name, (relative_path, marker) in spec.active_subject_provider_markers.items()
     }
     _add_signal(
         signals,
-        ACTIVE_SUBJECT_CODE_CONSTRAINT_SIGNAL_NAMES[family],
+        spec.active_subject_signal_name,
         available=(
             all(source_marker_results.values())
             and all(provider_marker_results.values())
@@ -990,14 +897,14 @@ def _add_problem_measurement_diagnostics_prompt_signal(
     problem_family: Any,
 ) -> None:
     family = str(problem_family or "")
-    markers = PROBLEM_MEASUREMENT_DIAGNOSTICS_PROMPT_MARKERS_BY_FAMILY.get(family)
-    signal_name = PROBLEM_MEASUREMENT_DIAGNOSTICS_SIGNAL_NAMES.get(family)
-    if not markers or not signal_name:
+    spec = _problem_prompt_bridge_spec(family)
+    if spec is None:
         return
-    problem_v1 = _resolve_problem_v1_path(
+    problem_v1 = resolve_problem_v1_path(
         root=root,
         manifest=manifest,
-        problem_family=family,
+        repo_dir=REPO_DIR,
+        spec=spec,
     )
     diagnostic_summary = problem_measurement_diagnostics_prompt_summary(
         problem_v1_path=problem_v1,
@@ -1005,16 +912,11 @@ def _add_problem_measurement_diagnostics_prompt_signal(
     )
     source_marker_results = {
         name: _source_contains(relative_path, marker)
-        for name, (relative_path, marker) in markers.items()
+        for name, (relative_path, marker) in spec.measurement_source_markers.items()
     }
-    bridge_scope = (
-        "mechanism effect ranking"
-        if family == "cvrp"
-        else "validation-transfer follow-up diagnostics"
-    )
     _add_signal(
         signals,
-        signal_name,
+        spec.measurement_signal_name,
         available=(
             all(source_marker_results.values())
             and diagnostic_summary.get("available") is True
@@ -1029,11 +931,18 @@ def _add_problem_measurement_diagnostics_prompt_signal(
             "diagnostic_summary": diagnostic_summary,
             "boundary": (
                 "report-only problem-owned diagnostics bridge; "
-                f"{bridge_scope} guide proposal planning and stay out of "
+                f"{spec.measurement_bridge_scope} guide proposal planning and stay out of "
                 "DecisionFeatures"
             ),
         },
     )
+
+
+def _problem_prompt_bridge_spec(family: str) -> Any | None:
+    port = PREPARED_HANDOFF_PORTS_BY_FAMILY.get(family)
+    if port is None:
+        return None
+    return port.prompt_bridge_spec()
 
 
 def _add_signal(
@@ -1053,94 +962,6 @@ def _add_signal(
         "detail": detail,
         "runtime_generated_after_launch": bool(runtime_generated_after_launch),
     }
-
-
-def _active_subject_code_constraints_provider_payload_summary(
-    *,
-    root: Path,
-    manifest: dict[str, Any],
-    problem_family: str,
-) -> dict[str, Any]:
-    surface = ACTIVE_SUBJECT_CODE_CONSTRAINT_SURFACES.get(problem_family, "")
-    problem_v1 = _resolve_problem_v1_path(
-        root=root,
-        manifest=manifest,
-        problem_family=problem_family,
-    )
-    base = {
-        "schema_version": ACTIVE_SUBJECT_CODE_CONSTRAINT_PROVIDER_SUMMARY_SCHEMA,
-        "problem_family": problem_family,
-        "surface": surface,
-        "problem_v1_path": str(problem_v1) if problem_v1 else "",
-        "report_only": True,
-        "quality_judgment": False,
-        "decision_features_excluded": True,
-        "raw_payload_excluded": True,
-    }
-    if not problem_v1:
-        return {**base, "available": False, "reason": "problem_v1_not_found"}
-    try:
-        from scion.problem.bridge import load_problem_spec_v1_from_yaml
-        from scion.problem.loader import load_problem_adapter
-        from scion.problem.providers import active_subject_code_constraints_payload
-
-        spec = load_problem_spec_v1_from_yaml(problem_v1)
-        adapter = load_problem_adapter(spec)
-        payload = active_subject_code_constraints_payload(
-            problem_spec=spec,
-            adapter=adapter,
-            surface=surface,
-        )
-    except Exception as exc:  # pragma: no cover - surfaced as readiness detail.
-        return {
-            **base,
-            "available": False,
-            "reason": "provider_payload_error",
-            "error_type": type(exc).__name__,
-            "error": str(exc),
-        }
-
-    counts = {
-        "constraint_count": _sequence_count(payload.get("constraints")),
-        "object_model_hint_count": _sequence_count(payload.get("object_model_hints")),
-        "api_contract_count": _sequence_count(payload.get("api_contracts")),
-        "forbidden_pattern_count": _sequence_count(payload.get("forbidden_patterns")),
-    }
-    total = sum(counts.values())
-    version = str(payload.get("version") or "").strip()
-    available = bool(payload) and bool(version) and total > 0
-    return {
-        **base,
-        "available": available,
-        "reason": "ok" if available else "empty_payload",
-        "version": version,
-        "subject_id": str(payload.get("subject_id") or "").strip(),
-        **counts,
-        "total_guidance_item_count": total,
-    }
-
-
-def _resolve_problem_v1_path(
-    *,
-    root: Path,
-    manifest: dict[str, Any],
-    problem_family: str,
-) -> Path | None:
-    config = _mapping_or_empty(manifest.get("config"))
-    candidates: list[Path] = []
-    configured = str(config.get("problem_v1") or "").strip()
-    if configured:
-        path = Path(configured).expanduser()
-        if path.is_absolute():
-            candidates.append(path)
-        else:
-            candidates.extend((root / path, REPO_DIR / path))
-    for rel in PROBLEM_V1_CANDIDATES_BY_FAMILY.get(problem_family, ()):
-        candidates.append(REPO_DIR / rel)
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate.resolve()
-    return None
 
 
 def _resolve_campaign_dir(root: Path, manifest: dict[str, Any]) -> Path:

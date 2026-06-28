@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, Mapping
 
+from scion.postrun.handoff.prompt_context_readiness import ProblemPromptBridgeSpec
+from scion.problems.warehouse_delivery.prompt_bridge import WAREHOUSE_PROMPT_BRIDGE_SPEC
 from scion.problems.warehouse_delivery.research_guidance import (
     WAREHOUSE_DEFAULT_AVOID_DIRECTIONS,
     WAREHOUSE_REQUIRED_EVIDENCE,
@@ -84,6 +86,9 @@ class WarehousePreparedHandoffReviewPort:
             manifest,
             research_focus,
         )
+
+    def prompt_bridge_spec(self) -> ProblemPromptBridgeSpec:
+        return WAREHOUSE_PROMPT_BRIDGE_SPEC
 
 
 def add_warehouse_prepared_handoff_checks(
