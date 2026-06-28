@@ -23,8 +23,14 @@ successor opportunity families supersede same-mechanism branch continuation
 for prepared target-intent and schema-preview purposes, reviewed mechanism
 repeats are blocked by a proposal-only launch-focus guard, and the behavior is
 excluded from `DecisionFeatures` without adding CVRP-specific core logic.
-Focused local validation for the successor-focus, target-intent, schema,
-generic prompt, and agentic retry/binding surfaces passes (`80 passed`).
+Default-avoid target-intent rejection is inherited by formal hypothesis prompts
+through the generic `target_intent_rejected` authority field, and broad
+default-avoid matching no longer uses `target_file` path tokens as mechanism
+identity. Current local head `0c0afd9b` passes the focused
+prepared-successor/proposal-pipeline suite (`58 passed`), the broader
+target-intent/schema/opportunity prompt suite (`91 passed`), the narrow
+rejected-binding/authority suite (`21 passed`), `py_compile`, and
+`git diff --check`.
 A generic launcher resume/status repair is also
 implemented locally: CVRP and warehouse resume launches now quarantine copied
 terminal artifacts under `run_root/resume_snapshot/` instead of canonical
@@ -616,6 +622,26 @@ Current checkpoint:
   `bounded_local_search_variant` or `destroy_repair_selection`, unless a
   same-seed revisit explicitly names a new causal path. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-postprojection-successor-portfolio-20260628.md`.
+- Latest local CVRP successor diagnostic/evaluation
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor-7a4590a7-local-1r-gpt55-20260628T111147Z-claw`
+  launched from runtime commit `7a4590a7` before the final `0c0afd9b`
+  rejected-binding prompt fix, but validates the repaired successor-focus
+  propagation and clean successor branch path: the target-intent prompt
+  rendered prepared successor/default-avoid guidance and selected
+  `bounded_2node_cross_exchange` in `bounded_local_search_variant`, not the
+  reviewed large-instance two-opt seed or acceptance variants. The run
+  finished wrapper-valid/complete and postrun-ready with
+  `current_run_analysis_ready=true`, `delegation_ready=true`, 1 of 1 effective
+  Protocol row, 0 quality blocks, 0 telemetry failures, and 32 of 32 valid
+  screening pairs. It remains solver-negative: champion stayed `v1`,
+  promotions `0`, pair results were 10 wins, 14 losses, and 8 ties, median
+  delta `0.0`, rows at or above CVRP MDE `0`, CI high below MDE `1`, and max
+  effect/MDE `-0.10101`. Case-level signal was mixed: CMT4 was positive/tie,
+  CMT2 was 0/4 losses. Current interpretation: Scion can now route a
+  materially different successor into code and formal screening, but this
+  bounded local-search successor did not improve the solver; the remaining
+  work is problem-owned successor review/provider design, not another generic
+  gate.
 - Design N skeleton implementation is present in `scion.postrun`: typed ports
   for postrun inventory, run-evidence lifecycle, exposure policy,
   problem-owned review, registry, and readiness orchestration. The current

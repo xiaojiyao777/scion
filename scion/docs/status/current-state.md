@@ -67,14 +67,16 @@ chronology belongs in focused experiment reports and git history.
   hypothesis prompts no longer force same-mechanism continuation for those
   reviewed ids, schema preview treats same-mechanism branch authority as
   superseded for the prepared run, and reviewed mechanism repeats fail with a
-  proposal-only launch-focus guard. This is generic field-driven proposal
-  behavior, not CVRP-specific core logic, and remains excluded from
-  `DecisionFeatures`. Focused local validation passes for prepared successor
-  focus, target-intent authority, schema preview, generic prompt rendering, and
-  agentic hypothesis retry/binding tests (`80 passed`). Dirty-sensitive launch
-  readiness tests were also checked; their only current failure before commit
-  is the expected `git_runtime_worktree_clean` guard on this uncommitted
-  worktree.
+  proposal-only launch-focus guard. Default-avoid target-intent rejection is
+  now inherited by formal hypothesis prompts through the generic
+  `target_intent_rejected` authority field, and broad default-avoid matching
+  no longer uses `target_file` path tokens as mechanism identity. This is
+  generic field-driven proposal behavior, not CVRP-specific core logic, and
+  remains excluded from `DecisionFeatures`. Current local head `0c0afd9b`
+  passes the focused prepared-successor/proposal-pipeline suite (`58 passed`),
+  the broader target-intent/schema/opportunity prompt suite (`91 passed`), and
+  the narrow rejected-binding/authority suite (`21 passed`) plus
+  `py_compile` and `git diff --check`.
 - Generic launcher resume handling is repaired locally for CVRP and warehouse:
   resumed campaign runtime state is copied forward, while stale terminal
   artifacts from the copied source campaign are quarantined under
@@ -344,6 +346,25 @@ chronology belongs in focused experiment reports and git history.
   (`bounded_local_search_variant` or `destroy_repair_selection`) unless a
   same-seed revisit explicitly names a new causal path. Detailed report:
   `scion/docs/experiments/v0.4/v04-cvrp-postprojection-successor-portfolio-20260628.md`.
+- Latest local CVRP successor diagnostic/evaluation:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor-7a4590a7-local-1r-gpt55-20260628T111147Z-claw`.
+  It launched before the final `0c0afd9b` rejected-binding prompt fix, from
+  runtime commit `7a4590a7`, but it validates the repaired successor-focus
+  propagation and clean successor branch path. The target-intent prompt
+  rendered prepared successor/default-avoid guidance, selected
+  `bounded_2node_cross_exchange` in `bounded_local_search_variant`, and did
+  not repeat the reviewed large-instance two-opt seed or acceptance variants.
+  The run finished wrapper-valid/complete and postrun-ready with
+  `current_run_analysis_ready=true`, `delegation_ready=true`, 1 of 1 effective
+  Protocol row, 0 quality blocks, 0 telemetry failures, and 32 of 32 valid
+  screening pairs. It is solver-negative: champion stayed `v1`, promotions
+  `0`, pair results were 10 wins, 14 losses, and 8 ties, median delta `0.0`,
+  rows at or above CVRP MDE `0`, CI high below MDE `1`, and max effect/MDE
+  `-0.10101`. Case-level signal was mixed: CMT4 was positive/tie, CMT2 was
+  0/4 losses. Current interpretation: the framework now supports a materially
+  different successor attempt, but this bounded local-search successor did not
+  produce solver improvement; the remaining work is problem-owned successor
+  review/provider design, not another generic gate.
 - Warehouse has positive movement evidence from earlier v2-to-v3 work. The
   fresh positive-control run from synchronized status/runtime commit `2f8e9f21`
   finished valid/complete and postrun-ready:
@@ -528,15 +549,14 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
 
 ## Next Actions
 
-1. Use the repaired CVRP postrun evidence path for the next solver-design
-   follow-up, but rotate away from the reviewed
-   `large_instance_intra_route_two_opt_seed` path. The next prepared CVRP
-   attempt should target a materially different problem-owned successor family
-   such as `bounded_local_search_variant` or `destroy_repair_selection`, with
-   direct per-case objective-effect evidence and runtime/CMT protection
-   evidence. Launch this only from a clean commit so launch readiness can prove
-   the prepared successor focus is not being overridden by stale branch-local
-   same-mechanism authority.
+1. Continue CVRP/VRP successor work in the problem-owned opportunity/review
+   layer. The reviewed `large_instance_intra_route_two_opt_seed` path and the
+   first bounded local-search successor are both solver-negative under current
+   evidence. The next prepared attempt should either test a materially
+   different `destroy_repair_selection`/construction successor or improve the
+   CVRP successor-review provider so non-two-opt families get direct
+   activation/objective/phase and CMT2/CMT4 evidence interpretation instead of
+   being judged primarily through the old large-twoopt summary.
 2. Continue design-first postrun/readiness cleanup only where it removes active
    risk. `scion.postrun` should own generic artifact, lifecycle, schema,
    readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit
