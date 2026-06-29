@@ -178,6 +178,22 @@ screened W/L/T `13/13/6` with pair median `0.0`, CMT2 median `-4.5`, and CMT4
 median `3.0`. CVRP prepared guidance now records both as reviewed/default-avoid
 destroy/repair evidence; future destroy/repair revisits must name a distinct
 causal path with direct objective-effect evidence.
+The successor11 run from commit `0c402130` finished valid/complete and
+postrun-ready after the successor10 reviewed/default-avoid repair. It clean-forked
+to two additional destroy/repair mechanisms,
+`adjacency_pair_removal_repair` and `load_compatible_ruin_recreate`, without
+repeating savings, ejection-chain, polar-sweep, or route-fragment mechanisms.
+This is continued effective-research evidence and still negative solver
+evidence: 2/2 effective screening rows, 0 quality blocks, 0 active-slot blocks,
+strict postrun acceptance ready with no required or optional failures, `32/32`
+valid pairs for both rows, and champion stayed `v1`. Solver outcome remains
+no-positive-at-MDE: `adjacency_pair_removal_repair` screened W/L/T `15/11/6`
+with pair median `0.0`, CMT2 median `-7.5`, and CMT4 median `-6.0`;
+`load_compatible_ruin_recreate` screened W/L/T `16/11/5` with pair median `0.5`,
+CMT2 median `-13.0`, and CMT4 median `-10.0`. CVRP prepared guidance now records
+both as reviewed/default-avoid destroy/repair evidence; future destroy/repair
+revisits must name a causal path distinct from adjacency-pair removal and
+load-compatible ruin/recreate, with direct objective-effect evidence.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with

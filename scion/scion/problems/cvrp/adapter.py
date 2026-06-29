@@ -279,6 +279,8 @@ class CvrpAdapter:
                 "unchanged_farthest_noise_related_removal",
                 "unchanged_polar_sweep_destroy_repair",
                 "unchanged_route_fragment_recombination_repair",
+                "unchanged_adjacency_pair_removal_repair",
+                "unchanged_load_compatible_ruin_recreate",
                 "unchanged_savings_seed_selection_probe",
             ],
             "measurable_opportunity_classes": [

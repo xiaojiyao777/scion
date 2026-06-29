@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-06-28
+Last updated: 2026-06-29
 
 This file is the operational resume point, not a run log. Historical root
 chronology belongs in focused experiment reports and git history.
@@ -406,7 +406,7 @@ chronology belongs in focused experiment reports and git history.
   CVRP prepared guidance now records `bounded_ejection_chain_relocate` as
   reviewed/default-avoid evidence; future bounded-local-search revisits must
   name a distinct causal path with direct objective-effect evidence.
-- The latest local CVRP successor10 run is complete and postrun-ready:
+- The previous local CVRP successor10 run is complete and postrun-ready:
   `/home/clawd/research/scion-experiments/v04-cvrp-successor10-20620b3a-local-2r-gpt55-20260628T233735Z-claw`.
   It launched from commit `20620b3a`, resumed successor9, and validated that
   the reviewed/default-avoid guidance suppresses savings/ejection-chain
@@ -425,6 +425,23 @@ chronology belongs in focused experiment reports and git history.
   guidance now records both mechanisms as reviewed/default-avoid
   destroy/repair evidence; future destroy/repair revisits must name a distinct
   causal path with direct objective-effect evidence.
+- The latest local CVRP successor11 run is complete and postrun-ready:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor11-0c402130-local-2r-gpt55-20260629T004514Z-claw`.
+  It launched from commit `0c402130`, resumed successor10, and validated that
+  reviewed/default-avoid guidance suppresses the previously reviewed savings,
+  ejection-chain, polar-sweep, and route-fragment paths. The run clean-forked to
+  `adjacency_pair_removal_repair` and `load_compatible_ruin_recreate`. It
+  finished valid/complete with 2 of 2 effective screening rows, 2 Protocol rows,
+  0 quality blocks, and 0 active-slot blocks. Strict postrun acceptance reports
+  `current_run_analysis_ready=true`, `delegation_ready=true`, and no failed
+  required or optional checks after rebuild. This is continued effective-research
+  evidence, not promotion-grade solver progress: both rows were `32/32` valid
+  with 0 failed pairs, champion stayed `v1`, rows at or above MDE were `0`,
+  `adjacency_pair_removal_repair` screened W/L/T `15/11/6` with pair median
+  `0.0` and CMT2/CMT4 medians `-7.5`/`-6.0`, and
+  `load_compatible_ruin_recreate` screened W/L/T `16/11/5` with pair median
+  `0.5` and CMT2/CMT4 medians `-13.0`/`-10.0`. CVRP prepared guidance now
+  records both mechanisms as reviewed/default-avoid destroy/repair evidence.
 - Previous local CVRP CMT-commitment follow-through root:
   `/home/clawd/research/scion-experiments/v04-cvrp-cmtcommit-33e79e0b-server-2r-2r-gpt55-20260628T022008Z-claw`.
   It finished valid/complete and postrun-ready with 2 of 2 effective screening
@@ -765,10 +782,11 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   construction evidence-chain gap for `savings_seed_selection_probe`: direct
   objective-effect telemetry is now observed under the declared mechanism id,
   and the construction checklist is proven after postrun rebuild, but the
-  solver outcome is still no-positive-at-MDE. Successor10 shows the framework
-  can now execute new destroy/repair research paths end-to-end, but
-  `polar_sweep_destroy_repair` and `route_fragment_recombination_repair` are
-  also reviewed no-positive-at-MDE. The next CVRP/VRP work should test a
+  solver outcome is still no-positive-at-MDE. Successor10 and successor11 show
+  the framework can now execute new destroy/repair research paths end-to-end,
+  but `polar_sweep_destroy_repair`, `route_fragment_recombination_repair`,
+  `adjacency_pair_removal_repair`, and `load_compatible_ruin_recreate` are also
+  reviewed no-positive-at-MDE. The next CVRP/VRP work should test a
   materially different problem-owned successor opportunity with direct effect
   evidence, not add CVRP-specific core gates or keep spending branch slots on
   the same seed/bounded/construction/destroy-repair paths without new causal
@@ -789,18 +807,20 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    `bounded_ejection_chain_relocate` is now reviewed bounded-local-search
    no-positive-at-MDE evidence with CMT2/CMT4 losses. `angular_sector_removal`,
    `radial_string_removal`, `farthest_noise_related_removal`,
-   `polar_sweep_destroy_repair`, and `route_fragment_recombination_repair`
+   `polar_sweep_destroy_repair`, `route_fragment_recombination_repair`,
+   `adjacency_pair_removal_repair`, and `load_compatible_ruin_recreate`
    are all reviewed destroy/repair no-positive-at-MDE evidence, and
    `bounded_intra_route_3opt` is reviewed bounded-local-search no-positive
    evidence after successor6 expanded and rejected it. Prepared CVRP guidance
-   now exposes these as exact reviewed/default-avoid mechanisms. Successor10
+   now exposes these as exact reviewed/default-avoid mechanisms. Successor11
    confirms effective-research recovery on CVRP, so the next CVRP attempt
    should prefer a materially different non-reviewed CVRP-owned mechanism. It
    should not repeat unchanged 3-opt, radial-string, farthest-noise,
-   angular-sector, polar-sweep, route-fragment recombination, cross-exchange,
-   Or-opt, large two-opt seed, savings seed-selection, or ejection-chain
-   relocation paths unless the hypothesis names a distinct causal path and direct
-   objective-effect evidence plan. Use
+   angular-sector, polar-sweep, route-fragment recombination, adjacency-pair
+   removal, load-compatible ruin/recreate, cross-exchange, Or-opt, large two-opt
+   seed, savings seed-selection, or ejection-chain relocation paths unless the
+   hypothesis names a distinct causal path and direct objective-effect evidence
+   plan. Use
    problem-owned opportunity design to select a materially different solver
    mechanism, or explicitly close/reframe the remaining
    `large_instance_intra_route_two_opt_seed` diagnostic branch before spending
