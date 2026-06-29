@@ -116,6 +116,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "route_pair_crossover_repair",
         "timewarp_string_removal",
         "savings_seed_selection_probe",
+        "granular_savings_seed_portfolio",
+        "exact_short_route_polish",
     ]
     assert focus["suppressed_mechanism_ids"] == ["seed_post_optimization_selector"]
     assert focus["successor_opportunity_families"] == [
@@ -141,13 +143,15 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "granular_savings_seed_portfolio" in focus["next_required_direction"]
     assert "seed_post_optimization_selector" in focus["next_required_direction"]
     assert "savings_seed_selection_probe" in focus["next_required_direction"]
-    assert "material granular_savings_seed_portfolio follow-up" in (
+    assert "do not repeat unchanged granular_savings_seed_portfolio" in (
         focus["next_required_direction"]
     )
+    assert "exact_short_route_polish" in focus["next_required_direction"]
+    assert "clean-fork" in focus["next_required_direction"]
     assert "repair seed_post_optimization_selector activation" in (
         focus["next_required_direction"]
     )
-    assert "Successor17" in focus["next_required_direction"]
+    assert "Successor18b" in focus["next_required_direction"]
     assert "distinct from cross-exchange, intra-route Or-opt reinsertion" in (
         focus["next_required_direction"]
     )
@@ -232,6 +236,16 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["default_avoid_directions"]
     )
     assert any(
+        "granular_savings_seed_portfolio" in item
+        and "successor18b measured below-MDE" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "exact_short_route_polish" in item
+        and "quality-regression/loss-heavy" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
         "seed_post_optimization_selector" in item
         and "missing-activation/inactive" in item
         for item in focus["default_avoid_directions"]
@@ -263,6 +277,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "route_pair_crossover_repair",
         "timewarp_string_removal",
         "savings_seed_selection_probe",
+        "granular_savings_seed_portfolio",
+        "exact_short_route_polish",
     }
     assert "seed_post_optimization_selector" not in mechanisms_by_id
     assert mechanisms_by_id["bounded_intra_route_3opt"][
@@ -298,6 +314,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["savings_seed_selection_probe"][
         "mechanism_family"
     ] == "construction_seed_portfolio"
+    assert mechanisms_by_id["granular_savings_seed_portfolio"][
+        "mechanism_family"
+    ] == "construction_seed_portfolio"
+    assert mechanisms_by_id["exact_short_route_polish"][
+        "mechanism_family"
+    ] == "construction_seed_portfolio"
     assert all(
         item["checklist_status"] == "proven"
         and item["outcome_status"] == "measured_no_positive_at_mde"
@@ -331,6 +353,20 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["timewarp_string_removal"]["effect_summary"][
         "research_efficiency_median_delta"
     ] == -5.25
+    granular_effect = mechanisms_by_id["granular_savings_seed_portfolio"][
+        "effect_summary"
+    ]
+    assert granular_effect["median_delta"] == 5.0
+    assert granular_effect["effect_to_mde_ratio"] == 0.505051
+    assert granular_effect["rows_at_or_above_mde"] == 0
+    assert granular_effect["protected_case_cmt2_median_delta"] == 20.5
+    assert granular_effect["source_root_label"] == "successor18b"
+    exact_effect = mechanisms_by_id["exact_short_route_polish"]["effect_summary"]
+    assert exact_effect["median_delta"] == -5.75
+    assert exact_effect["ci_high"] == 0.5
+    assert exact_effect["protected_case_cmt2_median_delta"] == -80.0
+    assert exact_effect["protected_case_cmt4_median_delta"] == -33.5
+    assert exact_effect["source_root_label"] == "successor18b"
 
     large_twoopt = focus["large_instance_two_opt_constraints"]
     assert large_twoopt["schema_version"] == (
@@ -384,6 +420,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "route_pair_crossover_repair",
         "timewarp_string_removal",
         "savings_seed_selection_probe",
+        "granular_savings_seed_portfolio",
+        "exact_short_route_polish",
     ]
     assert launch_payload["suppressed_mechanism_ids"] == [
         "seed_post_optimization_selector"

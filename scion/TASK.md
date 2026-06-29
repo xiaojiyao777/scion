@@ -270,10 +270,10 @@ destroy/repair evidence (`32/32`, W/L/T `10/17/5`, median delta `-4.75`, CI
 `granular_savings_seed_portfolio`, a distinct construction seed-portfolio path
 with weak-positive but below-MDE evidence (`32/32`, W/L/T `17/8/7`, median
 delta `3.5`, CI `[0.0, 12.75]`, effect/MDE `0.354`, rows at or above MDE
-`0`). This is not promotion evidence, but it is the current CVRP forward
-signal: A-n64, CMT2, CMT4, and M-n200 were positive; E/P were mixed; X-n110
-has a one-loss caveat. The current guidance records
-`load_complement_pair_removal` as reviewed/default-avoid but keeps
+`0`). This was not promotion evidence, but it was the CVRP forward signal at
+that point: A-n64, CMT2, CMT4, and M-n200 were positive; E/P were mixed;
+X-n110 has a one-loss caveat. Post-successor15 guidance recorded
+`load_complement_pair_removal` as reviewed/default-avoid but kept
 `granular_savings_seed_portfolio` active for same-mechanism follow-up. Detailed
 report:
 `scion/docs/experiments/v0.4/v04-cvrp-successor15-postrun-20260629.md`.
@@ -289,13 +289,13 @@ case W/L/T `7/1/4`, median delta `4.5`, CI `[-0.5, 12.75]`, effect/MDE
 reviewed/default-avoid closure. The second screened construction follow-up,
 `seed_post_optimization_selector`, reached 32/32 valid pairs but was inactive:
 the declared primary mechanism was not observed, case W/L/T was `0/0/8`,
-median delta was `0.0`, and postrun diagnosed missing activation. Current
-guidance therefore keeps `granular_savings_seed_portfolio` as the retained
-marginal construction checkpoint, adds only unchanged
-`seed_post_optimization_selector` to default-avoid activation caveats, and
-requires the next CVRP attempt to make a material granular variant, explicitly
-repair seed-post activation, or choose a materially different non-reviewed
-problem-owned causal path. Detailed report:
+median delta was `0.0`, and postrun diagnosed missing activation.
+Post-successor16 guidance therefore kept
+`granular_savings_seed_portfolio` as the retained marginal construction
+checkpoint, added only unchanged `seed_post_optimization_selector` to
+default-avoid activation caveats, and required the next CVRP attempt to make a
+material granular variant, explicitly repair seed-post activation, or choose a
+materially different non-reviewed problem-owned causal path. Detailed report:
 `scion/docs/experiments/v0.4/v04-cvrp-successor16-postrun-20260629.md`.
 The successor17 run from commit `dcf08884` finished valid/complete and
 postrun-ready with 2 effective rounds, 2 proposal attempts, 2 formal screening
@@ -312,10 +312,10 @@ twice-missing-activation mechanisms were not. The local repair adds
 problem-provided `suppressed_mechanism_ids` to prepared research focus and lets
 generic scheduler, target-intent, formal-hypothesis, and schema-preview paths
 exclude those ids without treating them as reviewed no-positive evidence or
-DecisionFeatures. CVRP now suppresses unchanged
+DecisionFeatures. At this point CVRP suppressed unchanged
 `seed_post_optimization_selector` for prepared scheduling, while retaining
 `granular_savings_seed_portfolio` only as marginal weak-positive evidence that
-needs a stronger material follow-up or replacement by a different causal path.
+needed a stronger material follow-up or replacement by a different causal path.
 The successor18 pre-run check exposed a mechanism-granularity issue in that
 suppression rule: a mixed active branch carrying both the suppressed
 `seed_post_optimization_selector` id and the still-live
@@ -326,6 +326,26 @@ suppressed; mixed branches remain schedulable, and proposal/target-intent
 authority remains responsible for rejecting any suppressed mechanism selection.
 Detailed report:
 `scion/docs/experiments/v0.4/v04-cvrp-successor17-postrun-20260629.md`.
+The successor18b verification run from commit `43d3f64a` finished
+valid/complete and postrun-ready with 2 effective rounds, 2 proposal attempts,
+2 formal screening rows, 0 quality blocks, 0 active-slot blocked attempts,
+champion still `v1`, and strict postrun readiness clean. This verifies the
+generic mechanism-granular scheduler repair in a real prepared run: the mixed
+branch stayed schedulable because it still contained a non-suppressed mechanism.
+Solver evidence remained below-MDE. The first row expanded
+`granular_savings_seed_portfolio` to 48/48 pairs with activation/effect
+evidence, median delta `5.0`, CI `[-2.75, 12.75]`, effect/MDE `0.505`, and no
+positive-at-MDE row. The follow-up `exact_short_route_polish` screened 32/32
+pairs but was loss-heavy/quality-regression evidence: pair W/L/T `8/20/4`,
+median delta `-5.75`, CI `[-20.25, 0.5]`, CMT2 `-80.0`,
+and CMT4 `-33.5`; the branch was parked. CVRP problem-owned guidance now moves
+both `granular_savings_seed_portfolio` and `exact_short_route_polish` into
+reviewed/default-avoid successor evidence, keeps
+`seed_post_optimization_selector` only as a suppressed activation-repair target,
+and requires the next CVRP slot to clean-fork to a materially different
+non-reviewed causal path or explicitly repair seed-post activation. Detailed
+report:
+`scion/docs/experiments/v0.4/v04-cvrp-successor18b-postrun-20260629.md`.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with

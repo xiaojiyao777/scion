@@ -158,6 +158,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "route_pair_crossover_repair_reviewed_no_positive",
         "timewarp_string_removal_reviewed_no_positive",
         "savings_seed_selection_probe_reviewed_no_positive",
+        "granular_savings_seed_portfolio_reviewed_no_positive",
+        "exact_short_route_polish_reviewed_no_positive",
     }.issubset(reviewed_requirement_ids)
     assert any(
         block["block_id"] == "successor_portfolio_direction"
@@ -189,6 +191,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "route_pair_crossover_repair",
         "timewarp_string_removal",
         "savings_seed_selection_probe",
+        "granular_savings_seed_portfolio",
+        "exact_short_route_polish",
     ]
     assert launch_payload["suppressed_mechanism_ids"] == [
         "seed_post_optimization_selector"
@@ -284,6 +288,16 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert any(
         "savings_seed_selection_probe" in item
         and "measured_no_positive_at_mde" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "granular_savings_seed_portfolio" in item
+        and "successor18b measured below-MDE" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "exact_short_route_polish" in item
+        and "quality-regression/loss-heavy" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
@@ -430,13 +444,18 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert (
+        "exact_short_route_polish"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
         "seed_post_optimization_selector"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert (
-        "material granular_savings_seed_portfolio follow-up"
+        "do not repeat unchanged granular_savings_seed_portfolio"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
+    assert "clean-fork" in prepared_manifest["research_focus"]["next_required_direction"]
     assert (
         "repair seed_post_optimization_selector activation"
         in prepared_manifest["research_focus"]["next_required_direction"]
@@ -461,10 +480,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "route_pair_crossover_repair" in prepared_manifest_md
     assert "timewarp_string_removal" in prepared_manifest_md
     assert "granular_savings_seed_portfolio" in prepared_manifest_md
+    assert "exact_short_route_polish" in prepared_manifest_md
     assert "seed_post_optimization_selector" in prepared_manifest_md
     assert "savings_seed_selection_probe" in prepared_manifest_md
     assert (
-        "material granular"
+        "clean-fork"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
@@ -485,6 +505,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "route_pair_crossover_repair",
         "timewarp_string_removal",
         "savings_seed_selection_probe",
+        "granular_savings_seed_portfolio",
+        "exact_short_route_polish",
     ]
     assert prepared_manifest["research_focus"]["suppressed_mechanism_ids"] == [
         "seed_post_optimization_selector"

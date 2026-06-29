@@ -229,6 +229,44 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
             "source_root_label": "successor8",
         },
     },
+    {
+        "mechanism_id": "granular_savings_seed_portfolio",
+        "mechanism_family": "construction_seed_portfolio",
+        "path_label": "granular savings seed-portfolio construction path",
+        "causal_path_label": "construction granular savings seed-portfolio",
+        "effect_summary": {
+            "median_delta": 5.0,
+            "ci_low": -2.75,
+            "ci_high": 12.75,
+            "effect_to_mde_ratio": 0.505051,
+            "rows_at_or_above_mde": 0,
+            "screening_wins": 32,
+            "screening_losses": 14,
+            "screening_ties": 2,
+            "protected_case_cmt2_median_delta": 20.5,
+            "protected_case_cmt4_median_delta": 6.0,
+            "source_root_label": "successor18b",
+        },
+    },
+    {
+        "mechanism_id": "exact_short_route_polish",
+        "mechanism_family": "construction_seed_portfolio",
+        "path_label": "exact short-route polish construction follow-up",
+        "causal_path_label": "construction exact short-route polish",
+        "effect_summary": {
+            "median_delta": -5.75,
+            "ci_low": -20.25,
+            "ci_high": 0.5,
+            "effect_to_mde_ratio": -0.580808,
+            "rows_at_or_above_mde": 0,
+            "screening_wins": 8,
+            "screening_losses": 20,
+            "screening_ties": 4,
+            "protected_case_cmt2_median_delta": -80.0,
+            "protected_case_cmt4_median_delta": -33.5,
+            "source_root_label": "successor18b",
+        },
+    },
 )
 
 DEFAULT_AVOID_DIRECTIONS = (
@@ -314,6 +352,14 @@ DEFAULT_AVOID_DIRECTIONS = (
     (
         "unchanged savings_seed_selection_probe construction seed successor "
         "after cvrp_successor_summary measured_no_positive_at_mde review"
+    ),
+    (
+        "unchanged granular_savings_seed_portfolio construction seed successor "
+        "after successor18b measured below-MDE and parked its branch"
+    ),
+    (
+        "unchanged exact_short_route_polish construction follow-up after "
+        "successor18b quality-regression/loss-heavy CMT2/CMT4 evidence"
     ),
     (
         "unchanged seed_post_optimization_selector construction post-optimization "

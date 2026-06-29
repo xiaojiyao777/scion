@@ -880,6 +880,22 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   branches with a non-excluded mechanism remain schedulable under proposal
   guards. CVRP uses this for unchanged `seed_post_optimization_selector`; it is
   not reviewed no-positive evidence.
+  Successor18b from commit `43d3f64a` then verified that mechanism-granular
+  scheduler repair in a real prepared run: it completed 2 effective rounds with
+  2 formal screening rows, 0 quality blocks, 0 active-slot blocked attempts,
+  champion still `v1`, and strict postrun readiness clean. The mixed branch
+  stayed schedulable because it still contained
+  `granular_savings_seed_portfolio`, but solver evidence remained below MDE.
+  The granular row reached 48/48 pairs with median delta `5.0`, CI
+  `[-2.75, 12.75]`, effect/MDE `0.505`, and no positive-at-MDE row. The
+  follow-up `exact_short_route_polish` screened 32/32 pairs but was loss-heavy
+  quality-regression evidence: pair W/L/T `8/20/4`, median delta `-5.75`,
+  CI `[-20.25, 0.5]`, CMT2 `-80.0`, and CMT4 `-33.5`;
+  the branch was parked. CVRP problem-owned guidance now treats both
+  `granular_savings_seed_portfolio` and `exact_short_route_polish` as
+  reviewed/default-avoid successor evidence, while
+  `seed_post_optimization_selector` remains only a suppressed activation-repair
+  target.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
@@ -910,24 +926,24 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    `route_pair_crossover_repair` and `timewarp_string_removal` as
    reviewed/default-avoid successor evidence. Successor15 adds
    `load_complement_pair_removal` to that reviewed/default-avoid set.
-   Successor16/17 confirm that Scion can follow the active granular
-   construction branch, but the result is marginal below-MDE rather than solver
-   closure. Successor17 also upgrades unchanged
-   `seed_post_optimization_selector` from a prompt caveat to a prepared-run
-   suppressed mechanism after repeated missing activation. The next CVRP
-   attempt should make a stronger material
-   `granular_savings_seed_portfolio` variant that directly addresses E/P/X
-   variability and the MDE gap, explicitly repair
-   `seed_post_optimization_selector` activation with pre-protocol and formal
-   mechanism evidence, or name a materially different non-reviewed CVRP-owned
-   mechanism. It should not
+   Successor16-18b confirm that Scion can follow the active granular
+   construction branch and avoid the mixed-branch active-slot block, but the
+   result is below-MDE rather than solver closure. Successor18b moves
+   `granular_savings_seed_portfolio` and `exact_short_route_polish` into
+   reviewed/default-avoid successor evidence. Successor17 also upgrades
+   unchanged `seed_post_optimization_selector` from a prompt caveat to a
+   prepared-run suppressed mechanism after repeated missing activation. The
+   next CVRP attempt should clean-fork to a materially different non-reviewed
+   CVRP-owned mechanism or explicitly repair `seed_post_optimization_selector`
+   activation with pre-protocol and formal mechanism evidence. It should not
    repeat unchanged route-pair, timewarp-string removal, load-complement pair
-   removal, seed-post selector, 3-opt, radial-string, farthest-noise,
-   angular-sector, polar-sweep, route-fragment recombination, adjacency-pair
-   removal, load-compatible ruin/recreate, cross-exchange, Or-opt, large
-   two-opt seed, savings seed-selection, or ejection-chain relocation paths
-   unless the hypothesis names a distinct causal path and direct
-   objective-effect evidence plan. Use
+   removal, granular savings seed-portfolio, exact short-route polish,
+   seed-post selector, 3-opt, radial-string, farthest-noise, angular-sector,
+   polar-sweep, route-fragment recombination, adjacency-pair removal,
+   load-compatible ruin/recreate, cross-exchange, Or-opt, large two-opt seed,
+   savings seed-selection, or ejection-chain relocation paths unless the
+   hypothesis names a distinct causal path and direct objective-effect evidence
+   plan. Use
    the corrected row-local `mechanism_family` summary, direct
    `mechanism_evidence.primary_mechanism`, and phase telemetry as the current
    source of truth for successor review. Explicitly close/reframe the
@@ -970,6 +986,8 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   `scion/docs/experiments/v0.4/v04-cvrp-successor16-postrun-20260629.md`
 - CVRP successor17 postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor17-postrun-20260629.md`
+- CVRP successor18b postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor18b-postrun-20260629.md`
 - Task source: `scion/TASK.md`
 - Audit basis:
   `scion/reports/v04-core-framework-review-20260611.md`,
