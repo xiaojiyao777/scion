@@ -71,6 +71,8 @@ DESTROY_REPAIR_SELECTION_ALIASES = (
     "adjacency_pair_removal",
     "load_compatible_ruin_recreate",
     "load_compatible_ruin",
+    "capacity_tightness_removal",
+    "capacity_tightness",
     "removal",
     "repair",
     "regret_insertion",

@@ -109,3 +109,81 @@ def test_prepared_successor_focus_runs_clean_existing_branch_when_available():
 
     assert action.action == "run_existing"
     assert action.branch is clean
+
+
+def test_prepared_successor_focus_creates_clean_fork_for_reviewed_expand():
+    branch = _branch("reviewed-expand", state=BranchState.EXPLORE_EXPAND)
+    branch.branch_code_status = "clean"
+    branch.last_screening_feedback_tier = "marginal"
+    branch.branch_mechanism_ids = ("reviewed_mechanism",)
+
+    action = Scheduler(max_active_branches=3).select_next(
+        [branch],
+        launch_research_focus=_successor_focus(),
+    )
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason == PREPARED_SUCCESSOR_FOCUS_CLEAN_FORK_REASON
+    focus_audit = action.audit_metadata["prepared_successor_focus"]
+    assert focus_audit["excluded_branch_ids"] == ["reviewed-expand"]
+    assert focus_audit["reviewed_mechanism_ids"] == ["reviewed_mechanism"]
+
+
+def test_prepared_successor_focus_runs_unrelated_expand_when_available():
+    reviewed = _branch(
+        "reviewed-expand",
+        state=BranchState.EXPLORE_EXPAND,
+        created_offset_s=0,
+    )
+    reviewed.branch_code_status = "clean"
+    reviewed.last_screening_feedback_tier = "marginal"
+    reviewed.branch_mechanism_ids = ("reviewed_mechanism",)
+    unrelated = _branch(
+        "unrelated-expand",
+        state=BranchState.EXPLORE_EXPAND,
+        created_offset_s=10,
+    )
+    unrelated.branch_mechanism_ids = ("unrelated_mechanism",)
+
+    action = Scheduler(max_active_branches=3).select_next(
+        [reviewed, unrelated],
+        launch_research_focus=_successor_focus(),
+    )
+
+    assert action.action == "run_existing"
+    assert action.branch is unrelated
+
+
+def test_prepared_successor_focus_does_not_override_validating_branch():
+    branch = _branch("validating-reviewed", state=BranchState.VALIDATING)
+    branch.branch_code_status = "active_no_effect"
+    branch.branch_mechanism_ids = ("reviewed_mechanism",)
+
+    action = Scheduler(max_active_branches=3).select_next(
+        [branch],
+        launch_research_focus=_successor_focus(),
+    )
+
+    assert action.action == "run_existing"
+    assert action.branch is branch
+
+
+def test_prepared_successor_focus_capacity_block_for_reviewed_expand():
+    branch = _branch("reviewed-expand", state=BranchState.EXPLORE_EXPAND)
+    branch.branch_code_status = "active_no_effect"
+    branch.branch_mechanism_ids = ("reviewed_mechanism",)
+
+    action = Scheduler(max_active_branches=1).select_next(
+        [branch],
+        launch_research_focus=_successor_focus(),
+    )
+
+    assert action.action == "at_capacity"
+    assert action.branch is None
+    assert action.slot == "capacity_blocked"
+    assert action.reason == "active_branch_limit_reached"
+    focus_audit = action.audit_metadata["prepared_successor_focus"]
+    assert focus_audit["excluded_branch_ids"] == ["reviewed-expand"]
+    assert focus_audit["reviewed_mechanism_ids"] == ["reviewed_mechanism"]

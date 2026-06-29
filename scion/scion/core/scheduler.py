@@ -192,6 +192,53 @@ class Scheduler:
         for tier in _HIGH_PRIORITY_TIERS:
             candidates = [b for b in schedulable if b.state in tier]
             if candidates:
+                successor_excluded_expand = [
+                    branch
+                    for branch in candidates
+                    if _prepared_successor_focus_excludes_expand_branch(
+                        branch,
+                        successor_focus,
+                    )
+                ]
+                if successor_excluded_expand:
+                    excluded_ids = {
+                        branch.branch_id for branch in successor_excluded_expand
+                    }
+                    candidates = [
+                        branch
+                        for branch in candidates
+                        if branch.branch_id not in excluded_ids
+                    ]
+                    if not candidates:
+                        successor_focus_audit = (
+                            _prepared_successor_focus_audit_metadata(
+                                successor_focus,
+                                excluded_branches=successor_excluded_expand,
+                            )
+                        )
+                        if len(active_for_slots) < self._max_active_branches:
+                            return SchedulerAction(
+                                action="create_new",
+                                branch=None,
+                                reason=PREPARED_SUCCESSOR_FOCUS_CLEAN_FORK_REASON,
+                                slot="explore_new",
+                                audit_metadata=_merge_audit_metadata(
+                                    _clean_fork_selection_audit(
+                                        successor_excluded_expand,
+                                        reason=(
+                                            PREPARED_SUCCESSOR_FOCUS_CLEAN_FORK_REASON
+                                        ),
+                                    ),
+                                    successor_focus_audit,
+                                ),
+                            )
+                        return SchedulerAction(
+                            action="at_capacity",
+                            branch=None,
+                            reason="active_branch_limit_reached",
+                            slot="capacity_blocked",
+                            audit_metadata=successor_focus_audit,
+                        )
                 selected = _select_fair(candidates)
                 return SchedulerAction(
                     action="run_existing",
@@ -628,6 +675,21 @@ def _prepared_successor_focus_excludes_branch(
     if not focus.active:
         return False
     if not branch_requires_same_mechanism_followup(branch):
+        return False
+    reviewed_ids = set(focus.reviewed_mechanism_ids)
+    return bool(
+        reviewed_ids
+        and set(_prepared_successor_branch_mechanism_ids(branch)) & reviewed_ids
+    )
+
+
+def _prepared_successor_focus_excludes_expand_branch(
+    branch: Branch,
+    focus: _PreparedSuccessorSchedulingFocus,
+) -> bool:
+    if not focus.active:
+        return False
+    if branch.state != BranchState.EXPLORE_EXPAND:
         return False
     reviewed_ids = set(focus.reviewed_mechanism_ids)
     return bool(

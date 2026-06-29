@@ -194,6 +194,24 @@ CMT2 median `-13.0`, and CMT4 median `-10.0`. CVRP prepared guidance now records
 both as reviewed/default-avoid destroy/repair evidence; future destroy/repair
 revisits must name a causal path distinct from adjacency-pair removal and
 load-compatible ruin/recreate, with direct objective-effect evidence.
+The successor12 run from commit `4af12dc1` finished valid/complete and
+postrun-ready, but it exposed one remaining generic scheduler gap: a copied
+reviewed `EXPLORE_EXPAND` branch for `load_compatible_ruin_recreate` bypassed
+prepared successor-focus filtering and consumed the first Protocol row before
+being parked. That row is repair evidence, not a new successor choice: 48/48
+valid pairs, W/L/T `19/21/8`, median delta `0.0`, and CMT2 median `-13.0`.
+The run then clean-forked to a new destroy/repair mechanism,
+`capacity_tightness_removal`, which is useful weak-positive follow-up evidence
+but not promotion-grade solver progress: 32/32 valid pairs, W/L/T `17/10/5`,
+median delta `2.0`, effect/MDE `0.202`, CI high `5.5 < 9.9` MDE, CMT2 median
+`4.0`, CMT4 median `-13.0`, champion stayed `v1`, and strict postrun
+acceptance is ready with no required failures. The scheduler repair is generic:
+prepared successor focus now suppresses reviewed branch-local mechanism ids in
+high-priority `EXPLORE_EXPAND` selection, returns a clean fork when capacity is
+available, and reports an explicit capacity block with audit metadata when it
+is not; validation/frozen states are not suppressed, and no CVRP-specific core
+gate is added. `capacity_tightness_removal` should remain an active
+same-mechanism follow-up candidate rather than reviewed/default-avoid evidence.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with

@@ -80,6 +80,16 @@ chronology belongs in focused experiment reports and git history.
   validation passes for prepared-successor/proposal-pipeline, target-intent
   binding, schema retry, CVRP launch guidance, and v3 problem-boundary suites,
   plus `py_compile` and `git diff --check`.
+- The successor12 resume run exposed and repaired one remaining prepared
+  successor-focus scheduler gap: copied reviewed `EXPLORE_EXPAND` branches were
+  still selected by the high-priority tier before the research-state
+  successor-focus filter ran. The scheduler fix is generic and field-driven:
+  only reviewed branch-local mechanism ids in `EXPLORE_EXPAND` are suppressed
+  for prepared successor clean-fork selection; validation/frozen states are not
+  suppressed; when capacity is full the result is an explicit capacity block
+  with prepared-successor audit metadata rather than an implicit same-mechanism
+  repeat. This remains outside `DecisionFeatures` and contains no CVRP-specific
+  core logic.
 - Generic launcher resume handling is repaired locally for CVRP and warehouse:
   resumed campaign runtime state is copied forward, while stale terminal
   artifacts from the copied source campaign are quarantined under
@@ -786,11 +796,19 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   the framework can now execute new destroy/repair research paths end-to-end,
   but `polar_sweep_destroy_repair`, `route_fragment_recombination_repair`,
   `adjacency_pair_removal_repair`, and `load_compatible_ruin_recreate` are also
-  reviewed no-positive-at-MDE. The next CVRP/VRP work should test a
-  materially different problem-owned successor opportunity with direct effect
-  evidence, not add CVRP-specific core gates or keep spending branch slots on
-  the same seed/bounded/construction/destroy-repair paths without new causal
-  evidence.
+  reviewed no-positive-at-MDE. Successor12 is valid/postrun-ready but
+  partially tainted by the reviewed-`EXPLORE_EXPAND` scheduler gap above: its
+  first row repeated `load_compatible_ruin_recreate` and should be treated as
+  repair evidence, not a new successor choice. Its clean-forked second row,
+  `capacity_tightness_removal`, is useful weak-positive CVRP evidence rather
+  than promotion evidence: 32/32 valid pairs, W/L/T `17/10/5`, median delta
+  `2.0`, effect/MDE `0.202`, CI high `5.5 < 9.9` MDE, CMT2 median `4.0`, CMT4
+  median `-13.0`, branch state `explore_expand` with marginal evidence. The
+  next CVRP work should follow up `capacity_tightness_removal` as an active
+  same-mechanism candidate, or test a materially different problem-owned
+  successor opportunity with direct effect evidence; it should not add
+  CVRP-specific core gates or spend branch slots repeating reviewed/default-avoid
+  paths without new causal evidence.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
@@ -820,11 +838,12 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    removal, load-compatible ruin/recreate, cross-exchange, Or-opt, large two-opt
    seed, savings seed-selection, or ejection-chain relocation paths unless the
    hypothesis names a distinct causal path and direct objective-effect evidence
-   plan. Use
-   problem-owned opportunity design to select a materially different solver
-   mechanism, or explicitly close/reframe the remaining
-   `large_instance_intra_route_two_opt_seed` diagnostic branch before spending
-   more active-slot budget there.
+   plan. The current active CVRP successor signal is
+   `capacity_tightness_removal`: follow it with same-mechanism expansion that
+   explains and protects CMT4, or use problem-owned opportunity design to select
+   a materially different solver mechanism. Explicitly close/reframe the
+   remaining `large_instance_intra_route_two_opt_seed` diagnostic branch before
+   spending more active-slot budget there.
 2. Continue design-first postrun/readiness cleanup only where it removes active
    risk. `scion.postrun` should own generic artifact, lifecycle, schema,
    readiness, and exposure boundaries; CVRP/warehouse/VRP semantics should sit

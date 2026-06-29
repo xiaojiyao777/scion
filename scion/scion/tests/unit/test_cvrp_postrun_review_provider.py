@@ -200,6 +200,7 @@ def test_cvrp_successor_summary_maps_successor11_destroy_repair_family() -> None
     for mechanism_id in (
         "adjacency_pair_removal_repair",
         "load_compatible_ruin_recreate",
+        "capacity_tightness_removal",
     ):
         summaries = CvrpPostrunSummaryProvider().build_summaries(
             _context(
