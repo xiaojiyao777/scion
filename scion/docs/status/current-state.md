@@ -846,6 +846,18 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   at or above MDE. It is active weak-positive construction evidence rather
   than promotion or reviewed/default-avoid evidence: A-n64, CMT2, CMT4, and
   M-n200 were positive; E/P were mixed; X-n110 has a one-loss caveat.
+  Successor16 from commit `78bf620c` followed that branch first and finished
+  valid/complete with strict postrun readiness clean. The expanded
+  `granular_savings_seed_portfolio` row reached 48/48 valid pairs with
+  activation/effect evidence and marginal positive but below-MDE signal: pair
+  W/L/T `32/13/3`, case W/L/T `7/1/4`, median delta `4.5`, CI
+  `[-0.5, 12.75]`, effect/MDE `0.455`, rows at or above MDE `0`. It remains
+  the retained marginal construction checkpoint, not promotion or
+  reviewed/default-avoid evidence. The second screened construction follow-up,
+  `seed_post_optimization_selector`, reached 32/32 valid pairs but was
+  inactive/missing activation: case W/L/T `0/0/8`, median delta `0.0`, and the
+  declared primary mechanism was not observed. Two pre-protocol attempts were
+  correctly blocked by proposal quality diagnostics.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
@@ -875,19 +887,22 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    solver improvement evidence. Local problem-owned guidance now also treats
    `route_pair_crossover_repair` and `timewarp_string_removal` as
    reviewed/default-avoid successor evidence. Successor15 adds
-   `load_complement_pair_removal` to that reviewed/default-avoid set and
-   leaves `granular_savings_seed_portfolio` active as weak-positive
-   construction evidence. The next CVRP attempt should prefer same-mechanism
-   follow-up on `granular_savings_seed_portfolio`, preserving CMT2/CMT4/M
-   gains while addressing X-n110, E/P mixed cases, and runtime-saturation
-   observability. If it does not follow that active branch, it must name a
-   materially different non-reviewed CVRP-owned mechanism. It should not repeat
-   unchanged route-pair, timewarp-string removal, load-complement pair removal,
-   3-opt, radial-string, farthest-noise, angular-sector, polar-sweep,
-   route-fragment recombination, adjacency-pair removal, load-compatible
-   ruin/recreate, cross-exchange, Or-opt, large two-opt seed, savings
-   seed-selection, or ejection-chain relocation paths unless the hypothesis
-   names a distinct causal path and direct objective-effect evidence plan. Use
+   `load_complement_pair_removal` to that reviewed/default-avoid set.
+   Successor16 confirms that Scion can follow the active granular construction
+   branch first, but the result is marginal below-MDE rather than solver
+   closure; it also marks unchanged `seed_post_optimization_selector` as an
+   activation caveat, not evidence-complete no-positive-at-MDE. The next CVRP
+   attempt should make a material `granular_savings_seed_portfolio` variant
+   (trigger/schedule/threshold/composition), explicitly repair
+   `seed_post_optimization_selector` activation with mechanism evidence, or
+   name a materially different non-reviewed CVRP-owned mechanism. It should not
+   repeat unchanged route-pair, timewarp-string removal, load-complement pair
+   removal, seed-post selector, 3-opt, radial-string, farthest-noise,
+   angular-sector, polar-sweep, route-fragment recombination, adjacency-pair
+   removal, load-compatible ruin/recreate, cross-exchange, Or-opt, large
+   two-opt seed, savings seed-selection, or ejection-chain relocation paths
+   unless the hypothesis names a distinct causal path and direct
+   objective-effect evidence plan. Use
    the corrected row-local `mechanism_family` summary, direct
    `mechanism_evidence.primary_mechanism`, and phase telemetry as the current
    source of truth for successor review. Explicitly close/reframe the
@@ -926,6 +941,8 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   `scion/docs/experiments/v0.4/v04-cvrp-successor13-postrun-20260629.md`
 - CVRP successor14 postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor14-postrun-20260629.md`
+- CVRP successor16 postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor16-postrun-20260629.md`
 - Task source: `scion/TASK.md`
 - Audit basis:
   `scion/reports/v04-core-framework-review-20260611.md`,

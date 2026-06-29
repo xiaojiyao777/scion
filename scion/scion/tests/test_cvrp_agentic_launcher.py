@@ -284,6 +284,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
+        "seed_post_optimization_selector" in item
+        and "missing-activation/inactive" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
         "unbounded large-instance two-opt fallback" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
@@ -422,7 +427,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert (
-        "should prefer same-mechanism follow-up"
+        "seed_post_optimization_selector"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "material granular_savings_seed_portfolio follow-up"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "repair seed_post_optimization_selector activation"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert (
@@ -445,9 +458,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "route_pair_crossover_repair" in prepared_manifest_md
     assert "timewarp_string_removal" in prepared_manifest_md
     assert "granular_savings_seed_portfolio" in prepared_manifest_md
+    assert "seed_post_optimization_selector" in prepared_manifest_md
     assert "savings_seed_selection_probe" in prepared_manifest_md
     assert (
-        "same-mechanism follow-up"
+        "material granular"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []

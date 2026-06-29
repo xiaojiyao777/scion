@@ -305,6 +305,11 @@ DEFAULT_AVOID_DIRECTIONS = (
         "after cvrp_successor_summary measured_no_positive_at_mde review"
     ),
     (
+        "unchanged seed_post_optimization_selector construction post-optimization "
+        "successor after successor16 missing-activation/inactive screening; "
+        "repair activation wiring only with explicit mechanism evidence"
+    ),
+    (
         "ec052599-style weak_positive continuation when declared primary "
         "mechanism telemetry is missing or not_evaluated/not_triggered"
     ),

@@ -277,6 +277,26 @@ has a one-loss caveat. The current guidance records
 `granular_savings_seed_portfolio` active for same-mechanism follow-up. Detailed
 report:
 `scion/docs/experiments/v0.4/v04-cvrp-successor15-postrun-20260629.md`.
+The successor16 run from commit `78bf620c` finished valid/complete and
+postrun-ready after following that active granular construction branch first.
+It completed 2 effective rounds from 4 proposal attempts, with 2 formal
+screening rows, 2 proposal quality blocks, champion still `v1`, and strict
+postrun readiness clean. The first row expanded
+`granular_savings_seed_portfolio` to 48/48 pairs with direct activation/effect
+evidence and marginal positive but below-MDE effect (pair W/L/T `32/13/3`,
+case W/L/T `7/1/4`, median delta `4.5`, CI `[-0.5, 12.75]`, effect/MDE
+`0.455`). This is useful follow-up evidence but not promotion evidence or
+reviewed/default-avoid closure. The second screened construction follow-up,
+`seed_post_optimization_selector`, reached 32/32 valid pairs but was inactive:
+the declared primary mechanism was not observed, case W/L/T was `0/0/8`,
+median delta was `0.0`, and postrun diagnosed missing activation. Current
+guidance therefore keeps `granular_savings_seed_portfolio` as the retained
+marginal construction checkpoint, adds only unchanged
+`seed_post_optimization_selector` to default-avoid activation caveats, and
+requires the next CVRP attempt to make a material granular variant, explicitly
+repair seed-post activation, or choose a materially different non-reviewed
+problem-owned causal path. Detailed report:
+`scion/docs/experiments/v0.4/v04-cvrp-successor16-postrun-20260629.md`.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with

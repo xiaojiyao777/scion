@@ -138,8 +138,14 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "route_pair_crossover_repair" in focus["next_required_direction"]
     assert "timewarp_string_removal" in focus["next_required_direction"]
     assert "granular_savings_seed_portfolio" in focus["next_required_direction"]
+    assert "seed_post_optimization_selector" in focus["next_required_direction"]
     assert "savings_seed_selection_probe" in focus["next_required_direction"]
-    assert "should prefer same-mechanism follow-up" in focus["next_required_direction"]
+    assert "material granular_savings_seed_portfolio follow-up" in (
+        focus["next_required_direction"]
+    )
+    assert "repair seed_post_optimization_selector activation" in (
+        focus["next_required_direction"]
+    )
     assert "distinct from cross-exchange, intra-route Or-opt reinsertion" in (
         focus["next_required_direction"]
     )
@@ -223,6 +229,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
     )
+    assert any(
+        "seed_post_optimization_selector" in item
+        and "missing-activation/inactive" in item
+        for item in focus["default_avoid_directions"]
+    )
     assert not any(
         item.strip().lower() == "avoid bounded_local_search_variant"
         for item in focus["default_avoid_directions"]
@@ -251,6 +262,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "timewarp_string_removal",
         "savings_seed_selection_probe",
     }
+    assert "seed_post_optimization_selector" not in mechanisms_by_id
     assert mechanisms_by_id["bounded_intra_route_3opt"][
         "mechanism_family"
     ] == "bounded_local_search_variant"
