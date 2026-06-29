@@ -830,6 +830,10 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   `9/15/8`, raw pair median `0.0`, research-efficiency median `-5.25`, CI high
   `0.0 < 9.9`, and was abandoned/discarded as loss-heavy evidence. This is
   effective-research/closed-loop evidence, not solver-improvement evidence.
+  The local CVRP guidance repair now records both successor14 mechanisms in a
+  problem-owned `successor_evidence_catalog` as reviewed/default-avoid evidence
+  before successor15 preparation, while keeping generic core and
+  `DecisionFeatures` free of CVRP mechanism semantics.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
@@ -855,7 +859,9 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    confirms the generic prepared-successor scheduler repair, and successor14
    confirms Scion can park the route-pair quality-regression branch and
    clean-fork to a distinct destroy/repair mechanism, but neither run provides
-   solver improvement evidence. The next CVRP attempt should prefer a
+   solver improvement evidence. Local problem-owned guidance now also treats
+   `route_pair_crossover_repair` and `timewarp_string_removal` as
+   reviewed/default-avoid successor evidence. The next CVRP attempt should prefer a
    materially different non-reviewed CVRP-owned mechanism, or explicitly name a
    distinct route-pair causal change with direct CMT2/CMT4/X-n110 protection
    and runtime-cost reasoning. It should not repeat unchanged route-pair,

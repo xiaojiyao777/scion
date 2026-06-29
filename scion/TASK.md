@@ -251,7 +251,12 @@ and fixed a generic postrun readiness drift: stored postrun inventory can be
 generated before final launcher `run.log` markers are appended, so
 `check_postrun_acceptance.py` now overlays live current-root launcher marker
 counts on stored inventory marker counts for readiness checks. Focused local
-validation passes (`90 passed`). Detailed report:
+validation passes (`90 passed`). The current local CVRP guidance repair now
+moves reviewed successor evidence/default-avoid facts into the problem-owned
+`successor_evidence_catalog` and records both successor14 mechanisms,
+`route_pair_crossover_repair` and `timewarp_string_removal`, as
+reviewed/default-avoid evidence before successor15 preparation. Focused
+provider/launcher validation passes (`21 passed`). Detailed report:
 `scion/docs/experiments/v0.4/v04-cvrp-successor14-postrun-20260629.md`.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail

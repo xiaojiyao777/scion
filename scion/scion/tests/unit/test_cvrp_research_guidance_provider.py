@@ -112,6 +112,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "route_fragment_recombination_repair",
         "adjacency_pair_removal_repair",
         "load_compatible_ruin_recreate",
+        "route_pair_crossover_repair",
+        "timewarp_string_removal",
         "savings_seed_selection_probe",
     ]
     assert focus["successor_opportunity_families"] == [
@@ -131,6 +133,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "route_fragment_recombination_repair" in focus["next_required_direction"]
     assert "adjacency_pair_removal_repair" in focus["next_required_direction"]
     assert "load_compatible_ruin_recreate" in focus["next_required_direction"]
+    assert "route_pair_crossover_repair" in focus["next_required_direction"]
+    assert "timewarp_string_removal" in focus["next_required_direction"]
     assert "savings_seed_selection_probe" in focus["next_required_direction"]
     assert (
         "Rotate the next CVRP solver-design attempt to a materially different"
@@ -200,6 +204,16 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["default_avoid_directions"]
     )
     assert any(
+        "route_pair_crossover_repair" in item
+        and "measured_no_positive_at_mde" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "timewarp_string_removal" in item
+        and "measured_no_positive_at_mde" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
         "savings_seed_selection_probe" in item
         and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
@@ -227,6 +241,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "route_fragment_recombination_repair",
         "adjacency_pair_removal_repair",
         "load_compatible_ruin_recreate",
+        "route_pair_crossover_repair",
+        "timewarp_string_removal",
         "savings_seed_selection_probe",
     }
     assert mechanisms_by_id["bounded_intra_route_3opt"][
@@ -248,6 +264,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "mechanism_family"
     ] == "destroy_repair_selection"
     assert mechanisms_by_id["load_compatible_ruin_recreate"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
+    assert mechanisms_by_id["route_pair_crossover_repair"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
+    assert mechanisms_by_id["timewarp_string_removal"][
         "mechanism_family"
     ] == "destroy_repair_selection"
     assert mechanisms_by_id["savings_seed_selection_probe"][
@@ -277,6 +299,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["load_compatible_ruin_recreate"]["effect_summary"][
         "protected_case_cmt2_median_delta"
     ] == -13.0
+    assert mechanisms_by_id["route_pair_crossover_repair"]["effect_summary"][
+        "protected_case_x_n110_median_delta"
+    ] == -6.0
+    assert mechanisms_by_id["timewarp_string_removal"]["effect_summary"][
+        "research_efficiency_median_delta"
+    ] == -5.25
 
     large_twoopt = focus["large_instance_two_opt_constraints"]
     assert large_twoopt["schema_version"] == (
@@ -326,6 +354,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "route_fragment_recombination_repair",
         "adjacency_pair_removal_repair",
         "load_compatible_ruin_recreate",
+        "route_pair_crossover_repair",
+        "timewarp_string_removal",
         "savings_seed_selection_probe",
     ]
     assert launch_payload["successor_opportunity_families"] == [

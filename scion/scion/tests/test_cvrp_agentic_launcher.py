@@ -154,6 +154,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "route_fragment_recombination_repair_reviewed_no_positive",
         "adjacency_pair_removal_repair_reviewed_no_positive",
         "load_compatible_ruin_recreate_reviewed_no_positive",
+        "route_pair_crossover_repair_reviewed_no_positive",
+        "timewarp_string_removal_reviewed_no_positive",
         "savings_seed_selection_probe_reviewed_no_positive",
     }.issubset(reviewed_requirement_ids)
     assert any(
@@ -182,6 +184,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "route_fragment_recombination_repair",
         "adjacency_pair_removal_repair",
         "load_compatible_ruin_recreate",
+        "route_pair_crossover_repair",
+        "timewarp_string_removal",
         "savings_seed_selection_probe",
     ]
     assert prepared_manifest["research_focus"]["scope"] == (
@@ -254,6 +258,16 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert any(
         "load_compatible_ruin_recreate" in item
+        and "measured_no_positive_at_mde" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "route_pair_crossover_repair" in item
+        and "measured_no_positive_at_mde" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "timewarp_string_removal" in item
         and "measured_no_positive_at_mde" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
@@ -381,6 +395,14 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert (
+        "route_pair_crossover_repair"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "timewarp_string_removal"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
         "savings_seed_selection_probe"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
@@ -404,6 +426,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "route_fragment_recombination_repair" in prepared_manifest_md
     assert "adjacency_pair_removal_repair" in prepared_manifest_md
     assert "load_compatible_ruin_recreate" in prepared_manifest_md
+    assert "route_pair_crossover_repair" in prepared_manifest_md
+    assert "timewarp_string_removal" in prepared_manifest_md
     assert "savings_seed_selection_probe" in prepared_manifest_md
     assert "Rotate" in prepared_manifest["research_focus"]["next_required_direction"]
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
@@ -420,6 +444,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "route_fragment_recombination_repair",
         "adjacency_pair_removal_repair",
         "load_compatible_ruin_recreate",
+        "route_pair_crossover_repair",
+        "timewarp_string_removal",
         "savings_seed_selection_probe",
     ]
     assert prepared_manifest["research_focus"]["successor_opportunity_families"] == [
