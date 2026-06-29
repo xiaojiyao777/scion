@@ -1176,13 +1176,17 @@ def _protocol_effect_row(
     ci_low = _first_float(protocol.get("ci_low"))
     ci_high = _first_float(protocol.get("ci_high"))
     win_rate = _first_float(protocol.get("win_rate"), protocol.get("case_win_rate"))
-    branch_id = _first_str(step.get("branch_id"))
-    mechanism_family = _mechanism_family_for_branch(branch_id, branch_family_map)
     mechanism_evidence = _compact_protocol_mechanism_evidence(
         _mapping_value(protocol.get("mechanism_evidence"))
     )
     phase_telemetry = _compact_candidate_phase_telemetry_summary(
         _mapping_value(protocol.get("candidate_phase_telemetry_summary"))
+    )
+    branch_id = _first_str(step.get("branch_id"))
+    mechanism_family = _mechanism_family_for_protocol_row(
+        branch_id,
+        branch_family_map,
+        mechanism_evidence,
     )
     case_level_deltas = protocol_case_level_deltas(
         protocol,
@@ -1321,6 +1325,27 @@ def _mechanism_family_for_branch(
     if isinstance(entry, str):
         return _first_str(entry)
     return ""
+
+
+def _mechanism_family_for_protocol_row(
+    branch_id: str,
+    branch_family_map: Mapping[str, Any],
+    mechanism_evidence: Mapping[str, Any],
+) -> str:
+    primary = _first_str(mechanism_evidence.get("primary_mechanism"))
+    if primary:
+        return primary
+    mechanisms = mechanism_evidence.get("mechanisms")
+    if isinstance(mechanisms, list):
+        for item in mechanisms:
+            if not isinstance(item, Mapping):
+                continue
+            if _first_str(item.get("role")).lower() != "primary":
+                continue
+            mechanism = _first_str(item.get("mechanism"))
+            if mechanism:
+                return mechanism
+    return _mechanism_family_for_branch(branch_id, branch_family_map)
 
 
 def _mechanism_family_effect_summary(

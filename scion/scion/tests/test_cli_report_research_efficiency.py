@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from scion.core.research_efficiency_report import _protocol_effects_vs_mde
+
 from .cli_test_support import _make_campaign, app, runner
 
 
@@ -137,6 +139,82 @@ def test_research_efficiency_report_separates_accounting_and_taxonomy(tmp_path):
     assert data["failures"]["tool_timeout"]["count"] == 1
     assert data["run_status"]["run_validity"]["reason"] == "valid"
     assert data["run_status"]["stopped_reason"] == "max_rounds_exhausted"
+
+
+def test_protocol_effects_use_row_local_primary_mechanism_before_branch_family(
+    tmp_path,
+):
+    report = _protocol_effects_vs_mde(
+        [
+            {
+                "round": 1,
+                "branch_id": "branch-a",
+                "decision": "continue_explore",
+                "protocol_result": {
+                    "stage": "screening",
+                    "win_rate": 0.56,
+                    "median_delta": 2.0,
+                    "ci_low": -7.5,
+                    "ci_high": 5.5,
+                    "gate_outcome": "expand",
+                    "mechanism_evidence": {
+                        "primary_mechanism": "capacity_tightness_removal",
+                        "primary_activation_status": "observed",
+                        "primary_effect_status": "positive",
+                    },
+                },
+            },
+            {
+                "round": 2,
+                "branch_id": "branch-a",
+                "decision": "continue_explore",
+                "protocol_result": {
+                    "stage": "screening",
+                    "win_rate": 0.41,
+                    "median_delta": 0.0,
+                    "ci_low": -6.5,
+                    "ci_high": 10.5,
+                    "gate_outcome": "expand",
+                    "mechanism_evidence": {
+                        "mechanisms": [
+                            {
+                                "mechanism": "route_pair_crossover_repair",
+                                "role": "primary",
+                                "activation_status": "observed",
+                            }
+                        ],
+                    },
+                },
+            },
+        ],
+        {
+            "status": "ready",
+            "reason_code": "ok",
+            "mde_at_power_80": 9.9,
+        },
+        {
+            "branch-a": {
+                "primary_family": "route_pair_crossover_repair",
+                "families": {
+                    "capacity_tightness_removal": 1,
+                    "route_pair_crossover_repair": 2,
+                },
+            }
+        },
+        campaign_path=tmp_path,
+    )
+
+    rows_by_round = {
+        row["round"]: row for row in report["top_rows_by_effect_to_mde"]
+    }
+    assert rows_by_round[1]["mechanism_family"] == "capacity_tightness_removal"
+    assert rows_by_round[2]["mechanism_family"] == "route_pair_crossover_repair"
+
+    by_family = report["mechanism_family_effect_summary"]["by_family"]
+    assert by_family["capacity_tightness_removal"]["protocol_row_count"] == 1
+    assert by_family["capacity_tightness_removal"]["positive_rows"] == 1
+    assert by_family["route_pair_crossover_repair"]["protocol_row_count"] == 1
+    assert by_family["route_pair_crossover_repair"]["nonpositive_rows"] == 1
 
 
 def test_research_efficiency_report_write_to_file_from_campaign_dir(tmp_path):

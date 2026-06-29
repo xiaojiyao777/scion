@@ -803,12 +803,22 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   `capacity_tightness_removal`, is useful weak-positive CVRP evidence rather
   than promotion evidence: 32/32 valid pairs, W/L/T `17/10/5`, median delta
   `2.0`, effect/MDE `0.202`, CI high `5.5 < 9.9` MDE, CMT2 median `4.0`, CMT4
-  median `-13.0`, branch state `explore_expand` with marginal evidence. The
-  next CVRP work should follow up `capacity_tightness_removal` as an active
-  same-mechanism candidate, or test a materially different problem-owned
-  successor opportunity with direct effect evidence; it should not add
-  CVRP-specific core gates or spend branch slots repeating reviewed/default-avoid
-  paths without new causal evidence.
+  median `-13.0`, branch state `explore_expand` with marginal evidence.
+  Successor13 then verified the prepared successor-focus repair on commit
+  `46b01ebb`: the first row followed `capacity_tightness_removal` instead of
+  the reviewed `load_compatible_ruin_recreate` repeat, bad code was blocked
+  before Protocol, and postrun acceptance stayed current-run ready. Solver
+  evidence remained no-positive-at-MDE: `capacity_tightness_removal` screened
+  `48/48` W/L/T `27/19/2`, median delta `2.0`; two
+  `route_pair_crossover_repair` rows screened `32/32` each with W/L/T
+  `13/12/7` and `13/13/6`, both median delta `0.0`; champion stayed `v1`.
+  The clean route-pair branch is active marginal `explore_expand` evidence,
+  but any continuation must directly address CMT2/CMT4/X-n110 losses and
+  runtime cost or switch to a materially different problem-owned mechanism.
+  The report-layer bug exposed by this run is fixed: research-efficiency now
+  resolves row-level `mechanism_family` from direct primary-mechanism evidence
+  before branch-level family summaries, so the capacity row is no longer
+  mislabeled as route-pair after postrun rebuild.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
@@ -830,18 +840,21 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    are all reviewed destroy/repair no-positive-at-MDE evidence, and
    `bounded_intra_route_3opt` is reviewed bounded-local-search no-positive
    evidence after successor6 expanded and rejected it. Prepared CVRP guidance
-   now exposes these as exact reviewed/default-avoid mechanisms. Successor11
-   confirms effective-research recovery on CVRP, so the next CVRP attempt
-   should prefer a materially different non-reviewed CVRP-owned mechanism. It
+   now exposes these as exact reviewed/default-avoid mechanisms. Successor13
+   confirms the generic prepared-successor scheduler repair and extends CVRP
+   effective-research evidence, but not solver improvement evidence. The next
+   CVRP attempt should either refine the active marginal
+   `route_pair_crossover_repair` branch with explicit CMT2/CMT4/X-n110
+   protection and runtime-cost reasoning, or prefer a materially different
+   non-reviewed CVRP-owned mechanism. It
    should not repeat unchanged 3-opt, radial-string, farthest-noise,
    angular-sector, polar-sweep, route-fragment recombination, adjacency-pair
    removal, load-compatible ruin/recreate, cross-exchange, Or-opt, large two-opt
    seed, savings seed-selection, or ejection-chain relocation paths unless the
    hypothesis names a distinct causal path and direct objective-effect evidence
-   plan. The current active CVRP successor signal is
-   `capacity_tightness_removal`: follow it with same-mechanism expansion that
-   explains and protects CMT4, or use problem-owned opportunity design to select
-   a materially different solver mechanism. Explicitly close/reframe the
+   plan. Use the corrected row-local `mechanism_family` summary, direct
+   `mechanism_evidence.primary_mechanism`, and phase telemetry as the current
+   source of truth for successor review. Explicitly close/reframe the
    remaining `large_instance_intra_route_two_opt_seed` diagnostic branch before
    spending more active-slot budget there.
 2. Continue design-first postrun/readiness cleanup only where it removes active
@@ -873,6 +886,8 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   `scion/docs/experiments/v0.4/v04-cvrp-current-sync-large-twoopt-postrun-20260624.md`
 - CVRP postprojection successor portfolio:
   `scion/docs/experiments/v0.4/v04-cvrp-postprojection-successor-portfolio-20260628.md`
+- CVRP successor13 postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor13-postrun-20260629.md`
 - Task source: `scion/TASK.md`
 - Audit basis:
   `scion/reports/v04-core-framework-review-20260611.md`,

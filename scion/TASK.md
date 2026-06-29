@@ -212,6 +212,27 @@ available, and reports an explicit capacity block with audit metadata when it
 is not; validation/frozen states are not suppressed, and no CVRP-specific core
 gate is added. `capacity_tightness_removal` should remain an active
 same-mechanism follow-up candidate rather than reviewed/default-avoid evidence.
+The successor13 run from commit `46b01ebb` finished valid/complete and
+postrun-ready after the prepared successor-focus repair. It verified the
+scheduler behavior by following `capacity_tightness_removal` instead of
+spending the first row on the reviewed `load_compatible_ruin_recreate` repeat.
+Solver evidence is still no-positive-at-MDE: 3 formal screening metrics,
+effective rounds `2`, proposal attempts `4`, proposal quality blocks `2`,
+champion stayed `v1`, rows at or above CVRP MDE were `0`, and strict postrun
+acceptance reports `current_run_analysis_ready=true`,
+`delegation_ready=true`, and no failed required checks. The prepared
+capacity row was weak positive but below MDE (`48/48`, W/L/T `27/19/2`,
+median delta `2.0`). Two `route_pair_crossover_repair` rows then recorded
+direct activation/effect telemetry but ended at median delta `0.0`
+(`13/12/7` and `13/13/6` W/L/T). The clean route-pair branch remains active
+as marginal `explore_expand` evidence, but any continuation must address
+CMT2/CMT4/X-n110 losses and runtime cost or move to a materially different
+problem-owned mechanism. A report-layer bug exposed by this run is fixed:
+research-efficiency now resolves row-level `mechanism_family` from
+`mechanism_evidence.primary_mechanism` before branch-level family summaries,
+so row 1 correctly reports `capacity_tightness_removal`; rebuilt postrun
+acceptance now has no failed required or optional checks. Detailed report:
+`scion/docs/experiments/v0.4/v04-cvrp-successor13-postrun-20260629.md`.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with
