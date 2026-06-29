@@ -182,6 +182,25 @@ def test_prepared_successor_focus_runs_unrelated_expand_when_available():
     assert action.branch is unrelated
 
 
+def test_prepared_successor_focus_runs_mixed_expand_with_available_mechanism():
+    branch = _branch("mixed-expand", state=BranchState.EXPLORE_EXPAND)
+    branch.branch_code_status = "clean"
+    branch.last_screening_feedback_tier = "marginal"
+    branch.branch_mechanism_ids = (
+        "reviewed_mechanism",
+        "available_successor_mechanism",
+    )
+
+    action = Scheduler(max_active_branches=1).select_next(
+        [branch],
+        launch_research_focus=_successor_focus(),
+    )
+
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert "prepared_successor_focus" not in action.audit_metadata
+
+
 def test_prepared_successor_focus_does_not_override_validating_branch():
     branch = _branch("validating-reviewed", state=BranchState.VALIDATING)
     branch.branch_code_status = "active_no_effect"

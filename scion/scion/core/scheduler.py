@@ -685,13 +685,7 @@ def _prepared_successor_focus_excludes_branch(
         return False
     if not branch_requires_same_mechanism_followup(branch):
         return False
-    excluded_ids = set(focus.reviewed_mechanism_ids) | set(
-        focus.suppressed_mechanism_ids
-    )
-    return bool(
-        excluded_ids
-        and set(_prepared_successor_branch_mechanism_ids(branch)) & excluded_ids
-    )
+    return _prepared_successor_focus_excludes_entire_branch(branch, focus)
 
 
 def _prepared_successor_focus_excludes_expand_branch(
@@ -702,13 +696,18 @@ def _prepared_successor_focus_excludes_expand_branch(
         return False
     if branch.state != BranchState.EXPLORE_EXPAND:
         return False
+    return _prepared_successor_focus_excludes_entire_branch(branch, focus)
+
+
+def _prepared_successor_focus_excludes_entire_branch(
+    branch: Branch,
+    focus: _PreparedSuccessorSchedulingFocus,
+) -> bool:
     excluded_ids = set(focus.reviewed_mechanism_ids) | set(
         focus.suppressed_mechanism_ids
     )
-    return bool(
-        excluded_ids
-        and set(_prepared_successor_branch_mechanism_ids(branch)) & excluded_ids
-    )
+    branch_ids = set(_prepared_successor_branch_mechanism_ids(branch))
+    return bool(excluded_ids and branch_ids and branch_ids <= excluded_ids)
 
 
 def _prepared_successor_branch_mechanism_ids(branch: Branch | None) -> tuple[str, ...]:

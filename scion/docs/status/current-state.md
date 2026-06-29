@@ -80,16 +80,19 @@ chronology belongs in focused experiment reports and git history.
   validation passes for prepared-successor/proposal-pipeline, target-intent
   binding, schema retry, CVRP launch guidance, and v3 problem-boundary suites,
   plus `py_compile` and `git diff --check`.
-- The successor12 resume run exposed and repaired one remaining prepared
-  successor-focus scheduler gap: copied reviewed `EXPLORE_EXPAND` branches were
-  still selected by the high-priority tier before the research-state
-  successor-focus filter ran. The scheduler fix is generic and field-driven:
-  only reviewed branch-local mechanism ids in `EXPLORE_EXPAND` are suppressed
-  for prepared successor clean-fork selection; validation/frozen states are not
-  suppressed; when capacity is full the result is an explicit capacity block
-  with prepared-successor audit metadata rather than an implicit same-mechanism
-  repeat. This remains outside `DecisionFeatures` and contains no CVRP-specific
-  core logic.
+- The successor12 resume run exposed and repaired one prepared successor-focus
+  scheduler gap: copied reviewed `EXPLORE_EXPAND` branches were still selected
+  by the high-priority tier before the research-state successor-focus filter
+  ran. The scheduler fix is generic and field-driven: branch-local reviewed or
+  suppressed mechanism ids can trigger prepared successor clean-fork selection,
+  but branch-level suppression applies only when all visible branch mechanism
+  ids are reviewed/suppressed. Mixed branches with a non-excluded mechanism
+  remain schedulable, and proposal/target-intent authority must reject any
+  suppressed mechanism selection. Validation/frozen states are not suppressed;
+  when capacity is full and no eligible branch remains, the result is an
+  explicit capacity block with prepared-successor audit metadata rather than an
+  implicit same-mechanism repeat. This remains outside `DecisionFeatures` and
+  contains no CVRP-specific core logic.
 - Generic launcher resume handling is repaired locally for CVRP and warehouse:
   resumed campaign runtime state is copied forward, while stale terminal
   artifacts from the copied source campaign are quarantined under
@@ -872,8 +875,11 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   `suppressed_mechanism_ids` alongside `reviewed_mechanism_ids`; scheduler,
   target-intent, formal-hypothesis, and schema-preview paths exclude those ids
   for the prepared run while keeping the problem reason out of
-  `DecisionFeatures`. CVRP uses this for unchanged
-  `seed_post_optimization_selector`; it is not reviewed no-positive evidence.
+  `DecisionFeatures`. The scheduler treats this as a mechanism-level branch
+  filter: pure reviewed/suppressed branches can be superseded, while mixed
+  branches with a non-excluded mechanism remain schedulable under proposal
+  guards. CVRP uses this for unchanged `seed_post_optimization_selector`; it is
+  not reviewed no-positive evidence.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.

@@ -316,6 +316,14 @@ DecisionFeatures. CVRP now suppresses unchanged
 `seed_post_optimization_selector` for prepared scheduling, while retaining
 `granular_savings_seed_portfolio` only as marginal weak-positive evidence that
 needs a stronger material follow-up or replacement by a different causal path.
+The successor18 pre-run check exposed a mechanism-granularity issue in that
+suppression rule: a mixed active branch carrying both the suppressed
+`seed_post_optimization_selector` id and the still-live
+`granular_savings_seed_portfolio` mechanism was being treated as fully
+excluded. The local scheduler repair keeps the rule generic by suppressing an
+entire branch only when all visible branch mechanism ids are reviewed or
+suppressed; mixed branches remain schedulable, and proposal/target-intent
+authority remains responsible for rejecting any suppressed mechanism selection.
 Detailed report:
 `scion/docs/experiments/v0.4/v04-cvrp-successor17-postrun-20260629.md`.
 The warehouse postrun audit
