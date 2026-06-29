@@ -37,10 +37,9 @@ The remaining gap is evidence closure:
 - CVRP still has no promotion-grade solver improvement.
 - warehouse calibration artifacts are not present in the checked-in path
   referenced by `problem-v1.yaml`.
-- `TASK.md` still contains too much accumulated history for a task source and
-  should be reduced after the current audit result is integrated. `current-state`
-  is also near the same risk boundary and should remain a live snapshot, not a
-  run log.
+- `TASK.md` and `current-state.md` have now been compacted back into active
+  operating documents; keep that discipline and put future chronology in
+  focused reports.
 - several production and test files exceed 1000 lines; this is now an
   engineering-risk backlog item for design-first modularization, not a reason
   to add more helper/projection layers.
@@ -94,12 +93,13 @@ readiness; problem packages own CVRP/warehouse semantics.
 - it keeps warehouse as the positive-control / plateau-review reference;
 - it requires focused validation and status updates for repairs.
 
-However, `TASK.md` is no longer a good operational task file in its current
-size. It mixes phase gates, current status, detailed run history, repair notes,
-and repeated experiment records. That conflicts with the current-state policy
-that status docs should not become a run log.
+Before the 2026-06-29 compaction pass, `TASK.md` mixed phase gates, current
+status, detailed run history, repair notes, and repeated experiment records.
+That conflicted with the current-state policy that status docs should not
+become a run log. The active file has now been reduced to current phase status,
+acceptance criteria, and next actions.
 
-Recommended cleanup:
+Ongoing cleanup rule:
 
 - keep only current phase gates, acceptance criteria, and the next 3-5 actions
   in `TASK.md`;
@@ -127,10 +127,10 @@ Recommended cleanup:
    clean-fork to a materially different problem-owned causal path or explicitly
    repair `seed_post_optimization_selector` activation.
 
-3. **TASK.md and current-state need compaction.**
-   `TASK.md` is over 2000 lines and `current-state.md` is at the 1000-line risk
-   boundary. Reduce them after this audit. Keep audit-relevant acceptance
-   criteria and the active snapshot; move history out.
+3. **Status compaction discipline must hold.**
+   `TASK.md` and `current-state.md` were compacted on 2026-06-29. Keep them as
+   active operating documents. Detailed root counters, launch notes, and old
+   interpretations belong in focused experiment reports or git history.
 
 4. **Large-file risk needs design-first modularization.**
    Several production files exceed 1000 lines, including
@@ -148,9 +148,8 @@ Recommended cleanup:
 ## Recommended Next Order
 
 1. Restore or explicitly resolve the warehouse calibration artifact mismatch.
-2. Compact `TASK.md` into an operational task source.
-3. Continue one CVRP run from the current guidance: clean fork to a
+2. Continue one CVRP run from the current guidance: clean fork to a
    non-reviewed causal path or seed-post activation repair.
-4. Do a lightweight large-file modularization design note before further
+3. Do a lightweight large-file modularization design note before further
    touching oversized core/postrun/proposal files.
-5. Prepare, but do not run, the v0.5 governance ablation preregistration.
+4. Prepare, but do not run, the v0.5 governance ablation preregistration.
