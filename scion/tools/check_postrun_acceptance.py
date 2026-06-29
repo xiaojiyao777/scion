@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
@@ -58,6 +59,10 @@ from scion.problems.warehouse_delivery.postrun_review import (  # noqa: E402
     WAREHOUSE_FOLLOWUP_ACTIONABILITY_SPEC,
     WarehouseFollowupReviewPort,
     warehouse_followup_input_consistency,
+)
+from scion.postrun.inventory.constants import (  # noqa: E402
+    EXIT_MARKERS,
+    RUN_LOG_MARKERS,
 )
 
 SCHEMA_VERSION = "scion.postrun_acceptance_readiness.v1"
@@ -114,6 +119,7 @@ def build_readiness(
     else:
         inventory = build_inventory(root)
         inventory_source = "live_inventory_rebuild"
+    inventory = _with_live_launcher_markers(root, inventory)
     postrun_reports = _mapping_or_empty(inventory.get("postrun_reports"))
     postrun_counts = _mapping_or_empty(postrun_reports.get("counts"))
 
@@ -323,6 +329,54 @@ def _failed_check_names(
         if check.get("required") is required
         and check.get("status") not in {"ok", "skipped"}
     ]
+
+
+def _with_live_launcher_markers(
+    root: Path,
+    inventory: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Overlay final launcher marker counts that may be written after inventory."""
+
+    updated = dict(inventory)
+    launcher = dict(_mapping_or_empty(updated.get("launcher")))
+    launcher["run_log_markers"] = _merged_marker_counts(
+        _mapping_or_empty(launcher.get("run_log_markers")),
+        _marker_counts_from_file(root / "run.log", RUN_LOG_MARKERS),
+    )
+    launcher["exit_markers"] = _merged_marker_counts(
+        _mapping_or_empty(launcher.get("exit_markers")),
+        _marker_counts_from_file(root / "exit.txt", EXIT_MARKERS),
+    )
+    updated["launcher"] = launcher
+    return updated
+
+
+def _marker_counts_from_file(path: Path, markers: tuple[str, ...]) -> dict[str, int]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    marker_set = set(markers)
+    counts: Counter[str] = Counter()
+    for raw_line in text.splitlines():
+        key = raw_line.split(":", 1)[0].strip()
+        if key in marker_set:
+            counts[key] += 1
+    return dict(sorted(counts.items()))
+
+
+def _merged_marker_counts(
+    stored: Mapping[str, Any],
+    live: Mapping[str, Any],
+) -> dict[str, int]:
+    keys = set(stored) | set(live)
+    merged: dict[str, int] = {}
+    for key in sorted(keys):
+        merged[key] = max(
+            _int_or_zero(stored.get(key)),
+            _int_or_zero(live.get(key)),
+        )
+    return merged
 
 
 def render_markdown(readiness: Mapping[str, Any]) -> str:

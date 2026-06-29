@@ -819,6 +819,17 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   resolves row-level `mechanism_family` from direct primary-mechanism evidence
   before branch-level family summaries, so the capacity row is no longer
   mislabeled as route-pair after postrun rebuild.
+  Successor14 from commit `9fed32ad` then completed 2 effective rounds with 2
+  formal screening rows, 0 quality blocks, and strict postrun acceptance ready
+  after a generic launcher-marker readiness repair. Solver evidence remained
+  no-positive-at-MDE: the active `route_pair_crossover_repair` follow-up
+  screened 48/48 pairs with raw W/L/T `19/24/5`, raw pair median `-0.5`,
+  research-efficiency median `-3.5`, CI high `6.5 < 9.9`, and persistent
+  CMT2/CMT4/X-n110 losses; the branch was parked as quality regression. The
+  clean fork `timewarp_string_removal` screened 32/32 pairs with raw W/L/T
+  `9/15/8`, raw pair median `0.0`, research-efficiency median `-5.25`, CI high
+  `0.0 < 9.9`, and was abandoned/discarded as loss-heavy evidence. This is
+  effective-research/closed-loop evidence, not solver-improvement evidence.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
@@ -841,13 +852,14 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    `bounded_intra_route_3opt` is reviewed bounded-local-search no-positive
    evidence after successor6 expanded and rejected it. Prepared CVRP guidance
    now exposes these as exact reviewed/default-avoid mechanisms. Successor13
-   confirms the generic prepared-successor scheduler repair and extends CVRP
-   effective-research evidence, but not solver improvement evidence. The next
-   CVRP attempt should either refine the active marginal
-   `route_pair_crossover_repair` branch with explicit CMT2/CMT4/X-n110
-   protection and runtime-cost reasoning, or prefer a materially different
-   non-reviewed CVRP-owned mechanism. It
-   should not repeat unchanged 3-opt, radial-string, farthest-noise,
+   confirms the generic prepared-successor scheduler repair, and successor14
+   confirms Scion can park the route-pair quality-regression branch and
+   clean-fork to a distinct destroy/repair mechanism, but neither run provides
+   solver improvement evidence. The next CVRP attempt should prefer a
+   materially different non-reviewed CVRP-owned mechanism, or explicitly name a
+   distinct route-pair causal change with direct CMT2/CMT4/X-n110 protection
+   and runtime-cost reasoning. It should not repeat unchanged route-pair,
+   timewarp-string removal, 3-opt, radial-string, farthest-noise,
    angular-sector, polar-sweep, route-fragment recombination, adjacency-pair
    removal, load-compatible ruin/recreate, cross-exchange, Or-opt, large two-opt
    seed, savings seed-selection, or ejection-chain relocation paths unless the
@@ -888,6 +900,8 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   `scion/docs/experiments/v0.4/v04-cvrp-postprojection-successor-portfolio-20260628.md`
 - CVRP successor13 postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor13-postrun-20260629.md`
+- CVRP successor14 postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor14-postrun-20260629.md`
 - Task source: `scion/TASK.md`
 - Audit basis:
   `scion/reports/v04-core-framework-review-20260611.md`,

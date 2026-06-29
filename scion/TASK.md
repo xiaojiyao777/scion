@@ -233,6 +233,26 @@ research-efficiency now resolves row-level `mechanism_family` from
 so row 1 correctly reports `capacity_tightness_removal`; rebuilt postrun
 acceptance now has no failed required or optional checks. Detailed report:
 `scion/docs/experiments/v0.4/v04-cvrp-successor13-postrun-20260629.md`.
+The successor14 run from commit `9fed32ad` finished valid/complete and
+postrun-ready from the repaired successor13 state. It is positive framework
+evidence and negative solver evidence: 2 effective rounds, 2 proposal attempts,
+2 formal screening rows, 0 proposal quality blocks, champion stayed `v1`, rows
+at or above CVRP MDE were `0`, and strict postrun acceptance now reports
+`current_run_analysis_ready=true`, `delegation_ready=true`, and no failed
+required or optional checks. The active `route_pair_crossover_repair` branch was
+screened on 48/48 pairs, then parked as quality regression: raw W/L/T
+`19/24/5`, raw pair median `-0.5`, research-efficiency case-level median
+`-3.5`, CI high `6.5 < 9.9` MDE, with CMT2/CMT4/X-n110 still negative. The
+second round clean-forked to a materially different CVRP-owned destroy/repair
+mechanism, `timewarp_string_removal`, screened 32/32 pairs, and abandoned it as
+loss-heavy evidence: raw W/L/T `9/15/8`, raw pair median `0.0`,
+research-efficiency median `-5.25`, CI high `0.0 < 9.9` MDE. This run exposed
+and fixed a generic postrun readiness drift: stored postrun inventory can be
+generated before final launcher `run.log` markers are appended, so
+`check_postrun_acceptance.py` now overlays live current-root launcher marker
+counts on stored inventory marker counts for readiness checks. Focused local
+validation passes (`90 passed`). Detailed report:
+`scion/docs/experiments/v0.4/v04-cvrp-successor14-postrun-20260629.md`.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with
