@@ -102,6 +102,38 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "polar_sweep_destroy_repair",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "polar-sweep destroy/repair path",
+        "causal_path_label": "destroy/repair selection",
+        "effect_summary": {
+            "median_delta": 0.0,
+            "rows_at_or_above_mde": 0,
+            "screening_wins": 11,
+            "screening_losses": 15,
+            "screening_ties": 6,
+            "protected_case_cmt2_median_delta": -19.5,
+            "protected_case_cmt4_median_delta": -12.0,
+            "source_root_label": "successor10",
+        },
+    },
+    {
+        "mechanism_id": "route_fragment_recombination_repair",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "route-fragment recombination repair path",
+        "causal_path_label": "destroy/repair selection",
+        "effect_summary": {
+            "median_delta": 0.0,
+            "rows_at_or_above_mde": 0,
+            "screening_wins": 13,
+            "screening_losses": 13,
+            "screening_ties": 6,
+            "protected_case_cmt2_median_delta": -4.5,
+            "protected_case_cmt4_median_delta": 3.0,
+            "source_root_label": "successor10",
+        },
+    },
+    {
         "mechanism_id": "savings_seed_selection_probe",
         "mechanism_family": "construction_seed_portfolio",
         "path_label": "savings seed-selection construction path",
@@ -185,6 +217,15 @@ DEFAULT_AVOID_DIRECTIONS = (
     (
         "unchanged farthest_noise_related_removal destroy/repair successor "
         "after cvrp_successor_summary measured_no_positive_at_mde review"
+    ),
+    (
+        "unchanged polar_sweep_destroy_repair destroy/repair successor after "
+        "cvrp_successor_summary measured_no_positive_at_mde review"
+    ),
+    (
+        "unchanged route_fragment_recombination_repair destroy/repair "
+        "successor after cvrp_successor_summary measured_no_positive_at_mde "
+        "review"
     ),
     (
         "unchanged savings_seed_selection_probe construction seed successor "
@@ -386,7 +427,11 @@ NEXT_REQUIRED_DIRECTION = (
     "activation/effect telemetry but produced no positive-at-MDE outcome. "
     "Later destroy/repair attempts `radial_string_removal` and "
     "`farthest_noise_related_removal` were also abandoned without "
-    "positive-at-MDE effect. The evidence-complete construction successor "
+    "positive-at-MDE effect. Successor10 destroy/repair attempts "
+    "`polar_sweep_destroy_repair` and "
+    "`route_fragment_recombination_repair` completed direct evidence but "
+    "also measured no positive-at-MDE effect. The evidence-complete "
+    "construction successor "
     "`savings_seed_selection_probe` also measured no positive-at-MDE effect. "
     "Rotate the next CVRP solver-design attempt to a materially different "
     "destroy/repair path, a distinct construction seed-selection path, or "
@@ -394,7 +439,8 @@ NEXT_REQUIRED_DIRECTION = (
     "problem-owned causal path; revisit bounded local search or angular-sector "
     "removal only when the hypothesis names a causal path distinct from "
     "cross-exchange, intra-route Or-opt reinsertion, 3-opt, ejection-chain "
-    "relocation, angular-sector, radial-string, farthest-noise removal, and "
+    "relocation, angular-sector, radial-string, farthest-noise removal, "
+    "polar-sweep destroy/repair, route-fragment recombination repair, and "
     "savings seed selection and carries direct per-case objective-effect "
     "evidence."
 )
@@ -457,8 +503,9 @@ REQUIRED_EVIDENCE = (
         "reviewed intra_route_or_opt_reinsert successor, reviewed "
         "bounded_intra_route_3opt successor, reviewed "
         "bounded_ejection_chain_relocate successor, reviewed "
-        "angular_sector_removal, radial_string_removal, and "
-        "farthest_noise_related_removal destroy/repair successors, reviewed "
+        "angular_sector_removal, radial_string_removal, "
+        "farthest_noise_related_removal, polar_sweep_destroy_repair, and "
+        "route_fragment_recombination_repair destroy/repair successors, reviewed "
         "savings_seed_selection_probe construction successor, and prior "
         "default-avoid families before spending another branch slot"
     ),
@@ -468,10 +515,11 @@ REQUIRED_EVIDENCE = (
         "path after "
         "bounded_2node_cross_exchange, intra_route_or_opt_reinsert, "
         "bounded_intra_route_3opt, bounded_ejection_chain_relocate, "
-        "angular_sector_removal, "
-        "radial_string_removal, farthest_noise_related_removal, and "
-        "savings_seed_selection_probe were reviewed no-positive-at-MDE; revisits "
-        "must name a new causal path and direct objective-effect telemetry"
+        "angular_sector_removal, radial_string_removal, "
+        "farthest_noise_related_removal, polar_sweep_destroy_repair, "
+        "route_fragment_recombination_repair, and savings_seed_selection_probe "
+        "were reviewed no-positive-at-MDE; revisits must name a new causal "
+        "path and direct objective-effect telemetry"
     ),
 )
 MEASURABLE_OPPORTUNITY_CLASSES = (
@@ -485,8 +533,10 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         "destroy_repair_selection: require per-case total_distance deltas "
         "tied to the changed repair/removal choice; after the reviewed "
         "angular_sector_removal, radial_string_removal, and "
-        "farthest_noise_related_removal no-positive-at-MDE results, require "
-        "a destroy/repair causal path distinct from those removal paths"
+        "farthest_noise_related_removal, polar_sweep_destroy_repair, and "
+        "route_fragment_recombination_repair no-positive-at-MDE results, "
+        "require a destroy/repair causal path distinct from those removal "
+        "and repair paths"
     ),
     (
         "bounded_local_search_variant: require feasible route-level "
@@ -519,8 +569,9 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "bounded_2node_cross_exchange, intra_route_or_opt_reinsert, and "
     "bounded_intra_route_3opt plus bounded_ejection_chain_relocate have "
     "repeated that no-positive outcome as bounded successors, and "
-    "angular_sector_removal, radial_string_removal, and "
-    "farthest_noise_related_removal have repeated it as destroy/repair "
+    "angular_sector_removal, radial_string_removal, "
+    "farthest_noise_related_removal, polar_sweep_destroy_repair, and "
+    "route_fragment_recombination_repair have repeated it as destroy/repair "
     "successors, and savings_seed_selection_probe has repeated it as an "
     "evidence-complete construction successor, the next CVRP slot should "
     "prefer a materially different destroy/repair path, a distinct construction "
@@ -669,6 +720,8 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "material causal-path difference from reviewed angular-sector removal",
                 "material causal-path difference from reviewed radial-string removal",
                 "material causal-path difference from reviewed farthest-noise removal",
+                "material causal-path difference from reviewed polar-sweep destroy/repair",
+                "material causal-path difference from reviewed route-fragment recombination repair",
                 "material causal-path difference from reviewed savings seed selection",
                 "per-case total_distance delta tied to the changed mechanism",
                 "feasibility and route-count preservation or explicit caveat",

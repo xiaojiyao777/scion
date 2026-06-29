@@ -158,6 +158,44 @@ def test_cvrp_successor_summary_maps_savings_seed_to_construction_family() -> No
     assert "missing" not in construction
 
 
+def test_cvrp_successor_summary_maps_polar_sweep_to_destroy_repair_family() -> None:
+    summaries = CvrpPostrunSummaryProvider().build_summaries(
+        _context(
+            measurement_effect_summary=_bounded_successor_measurement_summary(
+                mechanism_id="polar_sweep_destroy_repair"
+            )
+        )
+    )
+    summary = summaries["cvrp_successor_summary"]
+    destroy_repair = summary["by_family"]["destroy_repair_selection"]
+
+    assert summary["observed_successor_families"] == ["destroy_repair_selection"]
+    assert destroy_repair["checklist_status"] == "proven"
+    assert destroy_repair["outcome_status"] == "measured_no_positive_at_mde"
+    assert destroy_repair["activation_observed_count"] == 1
+    assert destroy_repair["objective_effect_observed_count"] == 1
+    assert destroy_repair["phase_telemetry_observed_count"] == 1
+
+
+def test_cvrp_successor_summary_maps_route_fragment_to_destroy_repair_family() -> None:
+    summaries = CvrpPostrunSummaryProvider().build_summaries(
+        _context(
+            measurement_effect_summary=_bounded_successor_measurement_summary(
+                mechanism_id="route_fragment_recombination_repair"
+            )
+        )
+    )
+    summary = summaries["cvrp_successor_summary"]
+    destroy_repair = summary["by_family"]["destroy_repair_selection"]
+
+    assert summary["observed_successor_families"] == ["destroy_repair_selection"]
+    assert destroy_repair["checklist_status"] == "proven"
+    assert destroy_repair["outcome_status"] == "measured_no_positive_at_mde"
+    assert destroy_repair["activation_observed_count"] == 1
+    assert destroy_repair["objective_effect_observed_count"] == 1
+    assert destroy_repair["phase_telemetry_observed_count"] == 1
+
+
 def test_cvrp_postrun_review_port_uses_existing_summary_without_raw_prompt_parse() -> (
     None
 ):

@@ -108,6 +108,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
+        "polar_sweep_destroy_repair",
+        "route_fragment_recombination_repair",
         "savings_seed_selection_probe",
     ]
     assert focus["successor_opportunity_families"] == [
@@ -123,6 +125,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "angular_sector_removal" in focus["next_required_direction"]
     assert "radial_string_removal" in focus["next_required_direction"]
     assert "farthest_noise_related_removal" in focus["next_required_direction"]
+    assert "polar_sweep_destroy_repair" in focus["next_required_direction"]
+    assert "route_fragment_recombination_repair" in focus["next_required_direction"]
     assert "savings_seed_selection_probe" in focus["next_required_direction"]
     assert (
         "Rotate the next CVRP solver-design attempt to a materially different"
@@ -172,6 +176,16 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["default_avoid_directions"]
     )
     assert any(
+        "polar_sweep_destroy_repair" in item
+        and "measured_no_positive_at_mde" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "route_fragment_recombination_repair" in item
+        and "measured_no_positive_at_mde" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
         "savings_seed_selection_probe" in item
         and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
@@ -195,6 +209,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
+        "polar_sweep_destroy_repair",
+        "route_fragment_recombination_repair",
         "savings_seed_selection_probe",
     }
     assert mechanisms_by_id["bounded_intra_route_3opt"][
@@ -204,6 +220,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "mechanism_family"
     ] == "bounded_local_search_variant"
     assert mechanisms_by_id["farthest_noise_related_removal"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
+    assert mechanisms_by_id["polar_sweep_destroy_repair"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
+    assert mechanisms_by_id["route_fragment_recombination_repair"][
         "mechanism_family"
     ] == "destroy_repair_selection"
     assert mechanisms_by_id["savings_seed_selection_probe"][
@@ -221,6 +243,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["farthest_noise_related_removal"]["effect_summary"][
         "protected_case_cmt2_median_delta"
     ] == -12.0
+    assert mechanisms_by_id["polar_sweep_destroy_repair"]["effect_summary"][
+        "protected_case_cmt2_median_delta"
+    ] == -19.5
+    assert mechanisms_by_id["route_fragment_recombination_repair"]["effect_summary"][
+        "screening_wins"
+    ] == 13
 
     large_twoopt = focus["large_instance_two_opt_constraints"]
     assert large_twoopt["schema_version"] == (
@@ -266,6 +294,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
+        "polar_sweep_destroy_repair",
+        "route_fragment_recombination_repair",
         "savings_seed_selection_probe",
     ]
     assert launch_payload["successor_opportunity_families"] == [

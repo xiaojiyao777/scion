@@ -388,7 +388,7 @@ chronology belongs in focused experiment reports and git history.
   `savings_seed_selection_probe` as reviewed/default-avoid evidence; future
   construction revisits must name a distinct construction seed-selection causal
   path and direct objective-effect evidence plan.
-- The latest local CVRP successor9 run is complete and postrun-ready:
+- The previous local CVRP successor9 run is complete and postrun-ready:
   `/home/clawd/research/scion-experiments/v04-cvrp-successor9-fb685975-local-2r-gpt55-20260628T221602Z-claw`.
   It launched from commit `fb685975`, resumed successor8, and validated that
   reviewed/default-avoid guidance suppresses the savings branch: prepared
@@ -406,6 +406,25 @@ chronology belongs in focused experiment reports and git history.
   CVRP prepared guidance now records `bounded_ejection_chain_relocate` as
   reviewed/default-avoid evidence; future bounded-local-search revisits must
   name a distinct causal path with direct objective-effect evidence.
+- The latest local CVRP successor10 run is complete and postrun-ready:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor10-20620b3a-local-2r-gpt55-20260628T233735Z-claw`.
+  It launched from commit `20620b3a`, resumed successor9, and validated that
+  the reviewed/default-avoid guidance suppresses savings/ejection-chain
+  repeats. The run clean-forked to two destroy/repair mechanisms,
+  `polar_sweep_destroy_repair` and `route_fragment_recombination_repair`.
+  It finished valid/complete with 2 of 2 effective screening rows, 2 Protocol
+  rows, 0 quality blocks, and 0 active-slot blocks. Strict postrun acceptance
+  reports `current_run_analysis_ready=true`, `delegation_ready=true`, and no
+  failed required or optional checks after rebuild. This is strong
+  framework/effective-research evidence and weak solver evidence, not
+  promotion-grade progress: both rows were `32/32` valid with 0 failed pairs,
+  champion stayed `v1`, rows at or above MDE were `0`, `polar_sweep` screened
+  W/L/T `11/15/6` with pair median `0.0` and CMT2/CMT4 medians
+  `-19.5`/`-12.0`, and `route_fragment` screened W/L/T `13/13/6` with pair
+  median `0.0`, CMT2 median `-4.5`, and CMT4 median `3.0`. CVRP prepared
+  guidance now records both mechanisms as reviewed/default-avoid
+  destroy/repair evidence; future destroy/repair revisits must name a distinct
+  causal path with direct objective-effect evidence.
 - Previous local CVRP CMT-commitment follow-through root:
   `/home/clawd/research/scion-experiments/v04-cvrp-cmtcommit-33e79e0b-server-2r-2r-gpt55-20260628T022008Z-claw`.
   It finished valid/complete and postrun-ready with 2 of 2 effective screening
@@ -746,10 +765,14 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   construction evidence-chain gap for `savings_seed_selection_probe`: direct
   objective-effect telemetry is now observed under the declared mechanism id,
   and the construction checklist is proven after postrun rebuild, but the
-  solver outcome is still no-positive-at-MDE. The next CVRP/VRP work should
-  test a materially different problem-owned successor opportunity with direct
-  effect evidence, not add CVRP-specific core gates or keep spending branch
-  slots on the same seed/bounded/construction paths without new causal evidence.
+  solver outcome is still no-positive-at-MDE. Successor10 shows the framework
+  can now execute new destroy/repair research paths end-to-end, but
+  `polar_sweep_destroy_repair` and `route_fragment_recombination_repair` are
+  also reviewed no-positive-at-MDE. The next CVRP/VRP work should test a
+  materially different problem-owned successor opportunity with direct effect
+  evidence, not add CVRP-specific core gates or keep spending branch slots on
+  the same seed/bounded/construction/destroy-repair paths without new causal
+  evidence.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
@@ -765,17 +788,18 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    direct construction-seed evidence but remains no-positive-at-MDE.
    `bounded_ejection_chain_relocate` is now reviewed bounded-local-search
    no-positive-at-MDE evidence with CMT2/CMT4 losses. `angular_sector_removal`,
-   `radial_string_removal`, and `farthest_noise_related_removal` are all
-   reviewed destroy/repair no-positive-at-MDE evidence, and
+   `radial_string_removal`, `farthest_noise_related_removal`,
+   `polar_sweep_destroy_repair`, and `route_fragment_recombination_repair`
+   are all reviewed destroy/repair no-positive-at-MDE evidence, and
    `bounded_intra_route_3opt` is reviewed bounded-local-search no-positive
    evidence after successor6 expanded and rejected it. Prepared CVRP guidance
-   now exposes these as exact reviewed/default-avoid mechanisms. Successor8
-   confirms the construction evidence-chain repair, so the next CVRP attempt
-   should prefer a materially different destroy/repair causal path or another
-   non-reviewed CVRP-owned mechanism. It should not repeat unchanged 3-opt,
-   radial-string, farthest-noise, angular-sector, cross-exchange, Or-opt, large
-   two-opt seed, savings seed-selection, or ejection-chain relocation paths
-   unless the hypothesis names a distinct causal path and direct
+   now exposes these as exact reviewed/default-avoid mechanisms. Successor10
+   confirms effective-research recovery on CVRP, so the next CVRP attempt
+   should prefer a materially different non-reviewed CVRP-owned mechanism. It
+   should not repeat unchanged 3-opt, radial-string, farthest-noise,
+   angular-sector, polar-sweep, route-fragment recombination, cross-exchange,
+   Or-opt, large two-opt seed, savings seed-selection, or ejection-chain
+   relocation paths unless the hypothesis names a distinct causal path and direct
    objective-effect evidence plan. Use
    problem-owned opportunity design to select a materially different solver
    mechanism, or explicitly close/reframe the remaining

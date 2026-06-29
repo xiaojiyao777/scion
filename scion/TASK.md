@@ -163,6 +163,21 @@ expanded row, and champion stayed `v1`. CVRP prepared guidance now records
 `bounded_ejection_chain_relocate` as reviewed/default-avoid evidence; future
 bounded-local-search revisits must name a distinct causal path with direct
 objective-effect evidence.
+The successor10 run from commit `20620b3a` finished valid/complete and
+postrun-ready after the ejection-chain reviewed/default-avoid repair. It
+clean-forked to two destroy/repair mechanisms,
+`polar_sweep_destroy_repair` and `route_fragment_recombination_repair`,
+without repeating savings or ejection-chain. This is strong framework
+effective-research evidence and weak solver evidence: 2/2 effective screening
+rows, 0 quality blocks, 0 active-slot blocks, strict postrun acceptance ready
+with no required or optional failures after rebuild, `32/32` valid pairs for
+both rows, and champion stayed `v1`. Solver outcome remains no-positive-at-MDE:
+`polar_sweep_destroy_repair` screened W/L/T `11/15/6` with pair median `0.0`
+and CMT2/CMT4 medians `-19.5`/`-12.0`; `route_fragment_recombination_repair`
+screened W/L/T `13/13/6` with pair median `0.0`, CMT2 median `-4.5`, and CMT4
+median `3.0`. CVRP prepared guidance now records both as reviewed/default-avoid
+destroy/repair evidence; future destroy/repair revisits must name a distinct
+causal path with direct objective-effect evidence.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with

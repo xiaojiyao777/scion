@@ -338,6 +338,70 @@ def test_cvrp_opportunity_usage_maps_ejection_chain_to_bounded_successor() -> No
     )
 
 
+def test_cvrp_opportunity_usage_maps_polar_sweep_to_destroy_repair_successor() -> None:
+    summary = build_cvrp_opportunity_usage_summary(
+        problem_family="cvrp",
+        current_run_evidence=True,
+        prompt_context_visibility_summary=_visible_prompt_summary(),
+        proposal_trajectory_manifests=[
+            {
+                "sessions": [
+                    _session(
+                        "s-polar-sweep",
+                        mechanism_ids=["polar_sweep_destroy_repair"],
+                        target_file="policies/baseline_modules/destroy_repair.py",
+                    )
+                ],
+            }
+        ],
+        cvrp_successor_summary=_successor_summary(
+            "destroy_repair_selection",
+            checklist_status="proven",
+        ),
+    )
+
+    assert summary["usage_status"] == "used"
+    assert summary["counts"]["used_opportunity"] == 1
+    assert summary["entries"][0]["opportunity_families"] == [
+        "destroy_repair_selection"
+    ]
+    assert summary["entries"][0]["required_evidence_family"] == (
+        "destroy_repair_selection"
+    )
+
+
+def test_cvrp_opportunity_usage_maps_route_fragment_to_destroy_repair_successor() -> None:
+    summary = build_cvrp_opportunity_usage_summary(
+        problem_family="cvrp",
+        current_run_evidence=True,
+        prompt_context_visibility_summary=_visible_prompt_summary(),
+        proposal_trajectory_manifests=[
+            {
+                "sessions": [
+                    _session(
+                        "s-route-fragment",
+                        mechanism_ids=["route_fragment_recombination_repair"],
+                        target_file="policies/baseline_modules/destroy_repair.py",
+                    )
+                ],
+            }
+        ],
+        cvrp_successor_summary=_successor_summary(
+            "destroy_repair_selection",
+            checklist_status="proven",
+        ),
+    )
+
+    assert summary["usage_status"] == "used"
+    assert summary["counts"]["used_opportunity"] == 1
+    assert summary["entries"][0]["opportunity_families"] == [
+        "destroy_repair_selection"
+    ]
+    assert summary["entries"][0]["required_evidence_family"] == (
+        "destroy_repair_selection"
+    )
+
+
 def test_cvrp_opportunity_usage_requires_visible_summary() -> None:
     summary = build_cvrp_opportunity_usage_summary(
         problem_family="cvrp",
