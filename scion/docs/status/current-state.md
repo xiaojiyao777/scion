@@ -16,8 +16,9 @@ history.
 - v0.4 closes only after Scion demonstrates effective research behavior on the
   repaired framework. v0.5 is for broad controlled experiment matrices, not
   deferred v0.4 framework repair.
-- Current execution should use the server conda `claw` environment unless WSL
-  SSH is rechecked and available.
+- Server-local validation and small/single experiment runs use conda `claw`.
+  WSL is retained as the high-resource runner for large or concurrent
+  experiment batches; its conda environment is named `scion`.
 
 ## Current Decision
 
@@ -113,10 +114,15 @@ CVRP:
 Server:
 
 - Repo: `/home/clawd/research/or-autoresearch-agent`
-- Use conda `claw` for local validation/runs unless the task explicitly
-  requires WSL.
+- Use conda `claw` for local validation and small/single runs, especially when
+  WSL is unavailable.
 
 WSL, only after rechecking connectivity:
+
+- Repo: `/home/xjy-ubuntu/research/or-autoresearch-agent`
+- Python/env: `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`
+- Intended use: large or concurrent experiment batches that exceed the server's
+  comfortable local capacity.
 
 ```bash
 ssh -i /home/clawd/.ssh/id_ed25519_codex_wsl -p 2222 \

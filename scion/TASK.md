@@ -123,6 +123,16 @@ solver-level plateau confirmation is explicitly needed.
 Resolve the warehouse calibration artifact mismatch before treating warehouse
 measurement readiness as fully checked-in and reproducible.
 
+## Execution Environment
+
+- Server-local validation and small/single experiment runs use the local conda
+  `claw` environment.
+- WSL is the high-resource runner for large or concurrent experiment batches.
+  Its conda environment is named `scion` and lives under
+  `/home/xjy-ubuntu/miniconda3/envs/scion`.
+- Do not assume WSL is available. Recheck the reverse SSH path before assigning
+  work there.
+
 ## Next Actions
 
 1. Resolve warehouse calibration provenance:
