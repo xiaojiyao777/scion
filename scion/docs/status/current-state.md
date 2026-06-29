@@ -834,6 +834,18 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   problem-owned `successor_evidence_catalog` as reviewed/default-avoid evidence
   before successor15 preparation, while keeping generic core and
   `DecisionFeatures` free of CVRP mechanism semantics.
+  Successor15 from commit `dc0603c6` then completed 2 effective rounds with 2
+  formal screening rows, 0 quality blocks, champion still `v1`, and strict
+  postrun acceptance ready. It did not repeat unchanged route-pair or timewarp
+  paths. The first clean fork, `load_complement_pair_removal`, screened 32/32
+  pairs, W/L/T `10/17/5`, median delta `-4.75`, CI `[-8.75, 0.0]`, with CMT4
+  `-15.0` and X-n110 `-6.0`; it was abandoned as loss-heavy evidence and is
+  now problem-owned reviewed/default-avoid. The second row,
+  `granular_savings_seed_portfolio`, screened 32/32 pairs, W/L/T `17/8/7`,
+  median delta `3.5`, CI `[0.0, 12.75]`, and effect/MDE `0.354`, with no rows
+  at or above MDE. It is active weak-positive construction evidence rather
+  than promotion or reviewed/default-avoid evidence: A-n64, CMT2, CMT4, and
+  M-n200 were positive; E/P were mixed; X-n110 has a one-loss caveat.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
@@ -851,8 +863,9 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    no-positive-at-MDE evidence with CMT2/CMT4 losses. `angular_sector_removal`,
    `radial_string_removal`, `farthest_noise_related_removal`,
    `polar_sweep_destroy_repair`, `route_fragment_recombination_repair`,
-   `adjacency_pair_removal_repair`, and `load_compatible_ruin_recreate`
-   are all reviewed destroy/repair no-positive-at-MDE evidence, and
+   `adjacency_pair_removal_repair`, `load_compatible_ruin_recreate`, and
+   `load_complement_pair_removal` are all reviewed destroy/repair
+   no-positive-at-MDE evidence, and
    `bounded_intra_route_3opt` is reviewed bounded-local-search no-positive
    evidence after successor6 expanded and rejected it. Prepared CVRP guidance
    now exposes these as exact reviewed/default-avoid mechanisms. Successor13
@@ -861,16 +874,21 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    clean-fork to a distinct destroy/repair mechanism, but neither run provides
    solver improvement evidence. Local problem-owned guidance now also treats
    `route_pair_crossover_repair` and `timewarp_string_removal` as
-   reviewed/default-avoid successor evidence. The next CVRP attempt should prefer a
-   materially different non-reviewed CVRP-owned mechanism, or explicitly name a
-   distinct route-pair causal change with direct CMT2/CMT4/X-n110 protection
-   and runtime-cost reasoning. It should not repeat unchanged route-pair,
-   timewarp-string removal, 3-opt, radial-string, farthest-noise,
-   angular-sector, polar-sweep, route-fragment recombination, adjacency-pair
-   removal, load-compatible ruin/recreate, cross-exchange, Or-opt, large two-opt
-   seed, savings seed-selection, or ejection-chain relocation paths unless the
-   hypothesis names a distinct causal path and direct objective-effect evidence
-   plan. Use the corrected row-local `mechanism_family` summary, direct
+   reviewed/default-avoid successor evidence. Successor15 adds
+   `load_complement_pair_removal` to that reviewed/default-avoid set and
+   leaves `granular_savings_seed_portfolio` active as weak-positive
+   construction evidence. The next CVRP attempt should prefer same-mechanism
+   follow-up on `granular_savings_seed_portfolio`, preserving CMT2/CMT4/M
+   gains while addressing X-n110, E/P mixed cases, and runtime-saturation
+   observability. If it does not follow that active branch, it must name a
+   materially different non-reviewed CVRP-owned mechanism. It should not repeat
+   unchanged route-pair, timewarp-string removal, load-complement pair removal,
+   3-opt, radial-string, farthest-noise, angular-sector, polar-sweep,
+   route-fragment recombination, adjacency-pair removal, load-compatible
+   ruin/recreate, cross-exchange, Or-opt, large two-opt seed, savings
+   seed-selection, or ejection-chain relocation paths unless the hypothesis
+   names a distinct causal path and direct objective-effect evidence plan. Use
+   the corrected row-local `mechanism_family` summary, direct
    `mechanism_evidence.primary_mechanism`, and phase telemetry as the current
    source of truth for successor review. Explicitly close/reframe the
    remaining `large_instance_intra_route_two_opt_seed` diagnostic branch before

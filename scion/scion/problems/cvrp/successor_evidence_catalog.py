@@ -147,6 +147,28 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "load_complement_pair_removal",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "load-complement pair removal path",
+        "causal_path_label": "destroy/repair load-complement pair selection",
+        "effect_summary": {
+            "median_delta": -4.75,
+            "ci_low": -8.75,
+            "ci_high": 0.0,
+            "rows_at_or_above_mde": 0,
+            "screening_wins": 10,
+            "screening_losses": 17,
+            "screening_ties": 5,
+            "case_win_count": 1,
+            "case_loss_count": 5,
+            "case_tie_count": 2,
+            "protected_case_cmt2_median_delta": -0.5,
+            "protected_case_cmt4_median_delta": -15.0,
+            "protected_case_x_n110_median_delta": -6.0,
+            "source_root_label": "successor15",
+        },
+    },
+    {
         "mechanism_id": "route_pair_crossover_repair",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "route-pair crossover repair path",
@@ -264,6 +286,10 @@ DEFAULT_AVOID_DIRECTIONS = (
     ),
     (
         "unchanged load_compatible_ruin_recreate destroy/repair successor after "
+        "cvrp_successor_summary measured_no_positive_at_mde review"
+    ),
+    (
+        "unchanged load_complement_pair_removal destroy/repair successor after "
         "cvrp_successor_summary measured_no_positive_at_mde review"
     ),
     (

@@ -258,6 +258,25 @@ moves reviewed successor evidence/default-avoid facts into the problem-owned
 reviewed/default-avoid evidence before successor15 preparation. Focused
 provider/launcher validation passes (`21 passed`). Detailed report:
 `scion/docs/experiments/v0.4/v04-cvrp-successor14-postrun-20260629.md`.
+The successor15 run from commit `dc0603c6` finished valid/complete and
+postrun-ready with 2 effective rounds, 2 proposal attempts, 2 formal screening
+rows, 0 quality blocks, champion still `v1`, and strict postrun acceptance
+ready with no required or optional failures. It confirms useful closed-loop
+behavior after the successor14 guidance repair: Scion did not repeat unchanged
+route-pair or timewarp paths, clean-forked to
+`load_complement_pair_removal`, measured it, and abandoned it as loss-heavy
+destroy/repair evidence (`32/32`, W/L/T `10/17/5`, median delta `-4.75`, CI
+`[-8.75, 0.0]`, CMT4 `-15.0`, X-n110 `-6.0`). The second row found
+`granular_savings_seed_portfolio`, a distinct construction seed-portfolio path
+with weak-positive but below-MDE evidence (`32/32`, W/L/T `17/8/7`, median
+delta `3.5`, CI `[0.0, 12.75]`, effect/MDE `0.354`, rows at or above MDE
+`0`). This is not promotion evidence, but it is the current CVRP forward
+signal: A-n64, CMT2, CMT4, and M-n200 were positive; E/P were mixed; X-n110
+has a one-loss caveat. The current guidance records
+`load_complement_pair_removal` as reviewed/default-avoid but keeps
+`granular_savings_seed_portfolio` active for same-mechanism follow-up. Detailed
+report:
+`scion/docs/experiments/v0.4/v04-cvrp-successor15-postrun-20260629.md`.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with
