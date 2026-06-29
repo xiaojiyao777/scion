@@ -1,6 +1,16 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
+*Latest basis audit*:
+`scion/reports/v04-task-basis-alignment-audit-20260629.md` compares the current
+checkout and this task against `scion-architecture-v3.md`, the two 2026-06-11
+framework reviews, and the v0.5 evidence-uplift roadmap. Current judgment:
+v3 boundaries and core v0.4 framework repairs are broadly aligned, but v0.4 is
+still open because CVRP remains solver-negative, warehouse calibration artifact
+provenance needs explicit resolution, this file and current-state need
+compaction discipline, and future large-file work must be design-first
+modularization rather than more helper/projection growth.
+
 *Status: v0.4 is not closed. Designs A-K are accepted local framework repairs
 for scheduling status, guidance contracts, lifecycle/failure routing,
 target-intent authority, launcher lifecycle, and mechanism-evidence follow-up.
@@ -608,9 +618,9 @@ This task defines the v0.4 closeout objective before v0.5 broad controlled
 experiments. The goal is not to keep tuning campaign knobs blindly. The goal is
 to prove whether the measurement instrument can detect useful effects, repair
 the framework so agents can do effective research, introduce the minimal
-measurement declaration layer needed for self-diagnosis, and then run a
-governance on/off comparison to test whether that layer improves research
-efficiency and evidence quality.
+measurement declaration layer needed for self-diagnosis, and prepare the
+governance comparison design without treating the broad comparison matrix as a
+v0.4 closure requirement.
 
 The primary task basis is `v04-core-framework-code-review-20260611.md`,
 `v04-core-framework-review-20260611.md`, and
@@ -625,7 +635,9 @@ purposes, problem classes, and governance directions.
 1. First prove whether the measurement instrument is effective.
 2. Then repair Scion framework behavior that prevents effective agent research.
 3. Then implement the minimal viable measurement declaration layer.
-4. Finally run governance on/off comparisons for CVRP and warehouse.
+4. Finally preregister the governance on/off comparison design for v0.5; run
+   only narrow v0.4 smoke checks when needed to prove the repaired framework is
+   executable.
 
 Do not begin additional framework code repair until Phase 1 A/A calibration has
 quantified whether the current protocol can detect the effects being claimed.
@@ -641,8 +653,9 @@ The v0.4 objective is therefore:
   research.
 - Add the smallest problem-owned measurement declaration layer needed for Scion
   to know whether it can measure the claimed effect.
-- Run governance on/off only after the baseline framework is repaired, so the
-  comparison measures governance value rather than unresolved v0.4 debt.
+- Prepare governance on/off only after the baseline framework is repaired, so
+  the v0.5 comparison measures governance value rather than unresolved v0.4
+  debt.
 
 ## Phase Gates
 
@@ -659,10 +672,11 @@ The v0.4 objective is therefore:
 - Phase 4 gate: repaired v0.4 must show effective research behavior before the
   governance value experiment starts, especially CVRP branch depth,
   same-mechanism follow-up, and evidence interpreted against A/A MDE.
-- Phase 5 gate: governance on/off arms must be matched on problem, champion
-  start, model, round budget, cases, seeds, runtime budgets, and candidate or
-  proposal replay controls strong enough to distinguish governance effects from
-  LLM/RNG trajectory divergence.
+- v0.5 handoff gate: governance on/off arms must be preregistered and matched
+  on problem, champion start, model, evaluation budget, cases, seeds, runtime
+  budgets, and candidate or proposal replay controls strong enough to
+  distinguish governance effects from LLM/RNG trajectory divergence. The broad
+  matrix itself belongs to v0.5, not v0.4 closeout.
 - No phase closes until `scion/TASK.md`, current state, v0.4 history, and the
   v0.4 repair plan have been updated with artifact paths, commands, caveats,
   and the next owner.

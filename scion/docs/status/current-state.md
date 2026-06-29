@@ -18,6 +18,13 @@ chronology belongs in focused experiment reports and git history.
 - Current posture: avoid broad budgets, generic truncation/compression, and
   decorative gates. Keep CVRP/warehouse semantics problem-owned and keep
   `DecisionFeatures` problem-neutral.
+- Latest basis-alignment audit:
+  `scion/reports/v04-task-basis-alignment-audit-20260629.md`. It confirms v0.4
+  is broadly aligned with the 2026-06-11 framework audits and v3 boundaries,
+  but not closed: CVRP remains solver-negative, warehouse calibration artifact
+  provenance needs explicit resolution, `TASK.md` and this current-state file
+  need compaction discipline, and large files require design-first
+  modularization rather than more helper/projection growth.
 
 ## Current Design Gate
 
@@ -988,6 +995,8 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   `scion/docs/experiments/v0.4/v04-cvrp-successor17-postrun-20260629.md`
 - CVRP successor18b postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor18b-postrun-20260629.md`
+- v0.4 task-basis alignment audit:
+  `scion/reports/v04-task-basis-alignment-audit-20260629.md`
 - Task source: `scion/TASK.md`
 - Audit basis:
   `scion/reports/v04-core-framework-review-20260611.md`,
