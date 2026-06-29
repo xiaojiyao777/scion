@@ -121,6 +121,7 @@ class _PreparedSuccessorSchedulingFocus:
     active: bool = False
     configured: bool = False
     reviewed_mechanism_ids: tuple[str, ...] = ()
+    suppressed_mechanism_ids: tuple[str, ...] = ()
     successor_opportunity_families: tuple[str, ...] = ()
     required_mechanism_ids: tuple[str, ...] = ()
 
@@ -641,14 +642,22 @@ def _prepared_successor_scheduling_focus(
         return _PreparedSuccessorSchedulingFocus()
     required_ids = _unique_strings(payload.get("required_mechanism_ids"))
     reviewed_ids = _unique_strings(payload.get("reviewed_mechanism_ids"))
+    suppressed_ids = _unique_strings(payload.get("suppressed_mechanism_ids"))
     successor_families = _unique_strings(
         payload.get("successor_opportunity_families")
     )
-    configured = bool(reviewed_ids or successor_families or required_ids)
+    configured = bool(
+        reviewed_ids or suppressed_ids or successor_families or required_ids
+    )
     return _PreparedSuccessorSchedulingFocus(
-        active=bool(not required_ids and reviewed_ids and successor_families),
+        active=bool(
+            not required_ids
+            and successor_families
+            and (reviewed_ids or suppressed_ids)
+        ),
         configured=configured,
         reviewed_mechanism_ids=tuple(reviewed_ids),
+        suppressed_mechanism_ids=tuple(suppressed_ids),
         successor_opportunity_families=tuple(successor_families),
         required_mechanism_ids=tuple(required_ids),
     )
@@ -676,10 +685,12 @@ def _prepared_successor_focus_excludes_branch(
         return False
     if not branch_requires_same_mechanism_followup(branch):
         return False
-    reviewed_ids = set(focus.reviewed_mechanism_ids)
+    excluded_ids = set(focus.reviewed_mechanism_ids) | set(
+        focus.suppressed_mechanism_ids
+    )
     return bool(
-        reviewed_ids
-        and set(_prepared_successor_branch_mechanism_ids(branch)) & reviewed_ids
+        excluded_ids
+        and set(_prepared_successor_branch_mechanism_ids(branch)) & excluded_ids
     )
 
 
@@ -691,10 +702,12 @@ def _prepared_successor_focus_excludes_expand_branch(
         return False
     if branch.state != BranchState.EXPLORE_EXPAND:
         return False
-    reviewed_ids = set(focus.reviewed_mechanism_ids)
+    excluded_ids = set(focus.reviewed_mechanism_ids) | set(
+        focus.suppressed_mechanism_ids
+    )
     return bool(
-        reviewed_ids
-        and set(_prepared_successor_branch_mechanism_ids(branch)) & reviewed_ids
+        excluded_ids
+        and set(_prepared_successor_branch_mechanism_ids(branch)) & excluded_ids
     )
 
 
@@ -727,6 +740,7 @@ def _prepared_successor_focus_audit_metadata(
             "proposal_visibility_only": True,
             "required_mechanism_ids": list(focus.required_mechanism_ids),
             "reviewed_mechanism_ids": list(focus.reviewed_mechanism_ids),
+            "suppressed_mechanism_ids": list(focus.suppressed_mechanism_ids),
             "successor_opportunity_families": list(
                 focus.successor_opportunity_families
             ),
@@ -741,7 +755,7 @@ def _prepared_successor_focus_audit_metadata(
                 if branch.branch_id
             },
             "selection_policy": (
-                "reviewed_same_mechanism_followup_requires_clean_fork"
+                "reviewed_or_suppressed_same_mechanism_followup_requires_clean_fork"
             ),
             "clean_fork_reason": PREPARED_SUCCESSOR_FOCUS_CLEAN_FORK_REASON,
         }

@@ -232,6 +232,9 @@ def launch_research_guidance_payload(
         "reviewed_mechanism_ids": _string_list(
             legacy_focus.get("reviewed_mechanism_ids")
         ),
+        "suppressed_mechanism_ids": _string_list(
+            legacy_focus.get("suppressed_mechanism_ids")
+        ),
         "successor_opportunity_families": _string_list(
             legacy_focus.get("successor_opportunity_families")
         ),

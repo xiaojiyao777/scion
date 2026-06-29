@@ -858,6 +858,22 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   inactive/missing activation: case W/L/T `0/0/8`, median delta `0.0`, and the
   declared primary mechanism was not observed. Two pre-protocol attempts were
   correctly blocked by proposal quality diagnostics.
+  Successor17 from commit `dcf08884` then finished valid/complete with strict
+  postrun readiness clean. It showed one remaining prepared-run scheduling gap:
+  the resumed `seed_post_optimization_selector` diagnostic branch consumed the
+  first Protocol row even though successor16 had already shown missing
+  activation. The row again had missing primary activation (`48/48`, pair W/L/T
+  `2/2/44`, case W/L/T `0/0/12`, median delta `0.0`). The material
+  `granular_savings_seed_portfolio` follow-up activated and remained
+  weak-positive but below MDE (`32/32`, pair W/L/T `16/8/8`, case W/L/T
+  `4/2/2`, median delta `3.0`, CI `[-0.5, 12.75]`, effect/MDE `0.303`), with
+  E/P regressions and B/X ties. The local repair is generic:
+  prepared research focus now carries problem-provided
+  `suppressed_mechanism_ids` alongside `reviewed_mechanism_ids`; scheduler,
+  target-intent, formal-hypothesis, and schema-preview paths exclude those ids
+  for the prepared run while keeping the problem reason out of
+  `DecisionFeatures`. CVRP uses this for unchanged
+  `seed_post_optimization_selector`; it is not reviewed no-positive evidence.
 - Runtime semantics: keep budget-exhausting runtime ratios observational while
   preserving comparative runtime evidence as a valid pressure and failure
   signal.
@@ -888,14 +904,17 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
    `route_pair_crossover_repair` and `timewarp_string_removal` as
    reviewed/default-avoid successor evidence. Successor15 adds
    `load_complement_pair_removal` to that reviewed/default-avoid set.
-   Successor16 confirms that Scion can follow the active granular construction
-   branch first, but the result is marginal below-MDE rather than solver
-   closure; it also marks unchanged `seed_post_optimization_selector` as an
-   activation caveat, not evidence-complete no-positive-at-MDE. The next CVRP
-   attempt should make a material `granular_savings_seed_portfolio` variant
-   (trigger/schedule/threshold/composition), explicitly repair
-   `seed_post_optimization_selector` activation with mechanism evidence, or
-   name a materially different non-reviewed CVRP-owned mechanism. It should not
+   Successor16/17 confirm that Scion can follow the active granular
+   construction branch, but the result is marginal below-MDE rather than solver
+   closure. Successor17 also upgrades unchanged
+   `seed_post_optimization_selector` from a prompt caveat to a prepared-run
+   suppressed mechanism after repeated missing activation. The next CVRP
+   attempt should make a stronger material
+   `granular_savings_seed_portfolio` variant that directly addresses E/P/X
+   variability and the MDE gap, explicitly repair
+   `seed_post_optimization_selector` activation with pre-protocol and formal
+   mechanism evidence, or name a materially different non-reviewed CVRP-owned
+   mechanism. It should not
    repeat unchanged route-pair, timewarp-string removal, load-complement pair
    removal, seed-post selector, 3-opt, radial-string, farthest-noise,
    angular-sector, polar-sweep, route-fragment recombination, adjacency-pair
@@ -943,6 +962,8 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion \
   `scion/docs/experiments/v0.4/v04-cvrp-successor14-postrun-20260629.md`
 - CVRP successor16 postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor16-postrun-20260629.md`
+- CVRP successor17 postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor17-postrun-20260629.md`
 - Task source: `scion/TASK.md`
 - Audit basis:
   `scion/reports/v04-core-framework-review-20260611.md`,

@@ -201,6 +201,7 @@ def test_legacy_manifest_projects_successor_focus_metadata(tmp_path) -> None:
         "research_focus": {
             "schema_version": "legacy-focus.v1",
             "reviewed_mechanism_ids": ["reviewed_probe"],
+            "suppressed_mechanism_ids": ["suppressed_probe"],
             "successor_opportunity_families": ["successor_family"],
             "default_avoid_directions": ["acceptance variants"],
             "next_required_direction": "Choose a successor.",
@@ -213,6 +214,7 @@ def test_legacy_manifest_projects_successor_focus_metadata(tmp_path) -> None:
     )
 
     assert payload["reviewed_mechanism_ids"] == ["reviewed_probe"]
+    assert payload["suppressed_mechanism_ids"] == ["suppressed_probe"]
     assert payload["successor_opportunity_families"] == ["successor_family"]
     assert payload["default_avoid_directions"] == ["acceptance variants"]
     assert payload["next_required_direction"] == "Choose a successor."

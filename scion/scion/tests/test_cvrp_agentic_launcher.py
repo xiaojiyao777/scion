@@ -190,6 +190,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "timewarp_string_removal",
         "savings_seed_selection_probe",
     ]
+    assert launch_payload["suppressed_mechanism_ids"] == [
+        "seed_post_optimization_selector"
+    ]
     assert prepared_manifest["research_focus"]["scope"] == (
         "report_only_prepared_handoff"
     )
@@ -482,6 +485,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "route_pair_crossover_repair",
         "timewarp_string_removal",
         "savings_seed_selection_probe",
+    ]
+    assert prepared_manifest["research_focus"]["suppressed_mechanism_ids"] == [
+        "seed_post_optimization_selector"
     ]
     assert prepared_manifest["research_focus"]["successor_opportunity_families"] == [
         "destroy_repair_selection",

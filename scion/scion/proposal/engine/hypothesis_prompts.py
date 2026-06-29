@@ -542,9 +542,19 @@ def _prepared_successor_focus_conflict_prompt(
         for item in successor_conflict.get("reviewed_mechanism_ids", ())
         if str(item).strip()
     )
+    suppressed_ids = ", ".join(
+        f"`{item}`"
+        for item in successor_conflict.get("suppressed_mechanism_ids", ())
+        if str(item).strip()
+    )
     reviewed_branch_ids = ", ".join(
         f"`{item}`"
         for item in successor_conflict.get("reviewed_branch_mechanism_ids", ())
+        if str(item).strip()
+    )
+    suppressed_branch_ids = ", ".join(
+        f"`{item}`"
+        for item in successor_conflict.get("suppressed_branch_mechanism_ids", ())
         if str(item).strip()
     )
     successor_families = ", ".join(
@@ -583,14 +593,19 @@ def _prepared_successor_focus_conflict_prompt(
         "schema_version=prepared_successor_focus_prompt.v1\n"
         "decision_input_policy=excluded_from_decision_features\n"
         f"reviewed_mechanism_ids={reviewed_ids or 'none'}\n"
+        f"suppressed_mechanism_ids={suppressed_ids or 'none'}\n"
         f"reviewed_branch_mechanism_ids={reviewed_branch_ids or 'none'}\n"
+        f"suppressed_branch_mechanism_ids={suppressed_branch_ids or 'none'}\n"
         f"successor_opportunity_families={successor_families or 'none'}\n"
         f"{direction_text}"
         f"{question_text}"
         f"{default_avoid_text}"
         "The prepared launch focus marks the reviewed mechanism ids above "
-        "as already reviewed for this run and supplies successor opportunity "
-        f"families. {branch_scope}do not select or repeat a reviewed mechanism id. "
+        "as already reviewed, and marks the suppressed mechanism ids as "
+        "unsuitable to spend this prepared run on without host-side repair "
+        f"evidence. It supplies successor opportunity families. {branch_scope}"
+        "do not select or repeat a reviewed mechanism id, and do not select "
+        "or repeat a suppressed mechanism id without host-side repair evidence. "
         "Choose a materially different successor mechanism from the prepared "
         "successor opportunity families where possible. Do not spend this "
         "target intent on default_avoid_directions unless the proposal states "
@@ -1208,6 +1223,7 @@ def _rejected_target_intent_binding_task_lines(
     status = str(authority.get("authority_status") or "").strip()
     legacy_rejection_statuses = {
         "prepared_successor_focus_rejects_reviewed_mechanism",
+        "prepared_successor_focus_rejects_suppressed_mechanism",
         "prepared_launch_focus_default_avoid_rejects_target_intent",
     }
     if not authority.get("target_intent_rejected") and (
@@ -1218,6 +1234,11 @@ def _rejected_target_intent_binding_task_lines(
     reviewed_ids = ", ".join(
         f"`{item}`"
         for item in authority.get("reviewed_mechanism_ids", ())
+        if str(item).strip()
+    )
+    suppressed_ids = ", ".join(
+        f"`{item}`"
+        for item in authority.get("suppressed_mechanism_ids", ())
         if str(item).strip()
     )
     successor_families = ", ".join(
@@ -1241,6 +1262,11 @@ def _rejected_target_intent_binding_task_lines(
         lines.append(
             "Do not use reviewed mechanism ids in mechanism_changes: "
             f"{reviewed_ids}."
+        )
+    if suppressed_ids:
+        lines.append(
+            "Do not use suppressed mechanism ids in mechanism_changes: "
+            f"{suppressed_ids}."
         )
     if successor_families:
         lines.append(

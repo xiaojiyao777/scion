@@ -117,6 +117,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "timewarp_string_removal",
         "savings_seed_selection_probe",
     ]
+    assert focus["suppressed_mechanism_ids"] == ["seed_post_optimization_selector"]
     assert focus["successor_opportunity_families"] == [
         "destroy_repair_selection",
         "construction_seed_portfolio",
@@ -146,6 +147,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "repair seed_post_optimization_selector activation" in (
         focus["next_required_direction"]
     )
+    assert "Successor17" in focus["next_required_direction"]
     assert "distinct from cross-exchange, intra-route Or-opt reinsertion" in (
         focus["next_required_direction"]
     )
@@ -382,6 +384,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "route_pair_crossover_repair",
         "timewarp_string_removal",
         "savings_seed_selection_probe",
+    ]
+    assert launch_payload["suppressed_mechanism_ids"] == [
+        "seed_post_optimization_selector"
     ]
     assert launch_payload["successor_opportunity_families"] == [
         "destroy_repair_selection",

@@ -30,11 +30,13 @@ def _successor_focus(
     *,
     required: tuple[str, ...] = (),
     reviewed: tuple[str, ...] = ("reviewed_mechanism",),
+    suppressed: tuple[str, ...] = (),
     successors: tuple[str, ...] = ("successor_family",),
 ) -> dict[str, object]:
     return {
         "required_mechanism_ids": list(required),
         "reviewed_mechanism_ids": list(reviewed),
+        "suppressed_mechanism_ids": list(suppressed),
         "successor_opportunity_families": list(successors),
     }
 
@@ -77,6 +79,30 @@ def test_prepared_successor_focus_handles_multiple_reviewed_ids():
     focus_audit = action.audit_metadata["prepared_successor_focus"]
     assert focus_audit["excluded_branch_ids"] == ["second-reviewed-branch"]
     assert focus_audit["reviewed_mechanism_ids"] == ["reviewed_a", "reviewed_b"]
+
+
+def test_prepared_successor_focus_creates_clean_fork_for_suppressed_pending_retry():
+    branch = _branch("suppressed-retry")
+    branch.branch_code_status = "active_no_effect"
+    branch.branch_mechanism_ids = ("suppressed_mechanism",)
+    branch.pending_retry = True
+
+    action = Scheduler(max_active_branches=3).select_next(
+        [branch],
+        launch_research_focus=_successor_focus(
+            reviewed=(),
+            suppressed=("suppressed_mechanism",),
+        ),
+    )
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason == PREPARED_SUCCESSOR_FOCUS_CLEAN_FORK_REASON
+    focus_audit = action.audit_metadata["prepared_successor_focus"]
+    assert focus_audit["excluded_branch_ids"] == ["suppressed-retry"]
+    assert focus_audit["reviewed_mechanism_ids"] == []
+    assert focus_audit["suppressed_mechanism_ids"] == ["suppressed_mechanism"]
 
 
 def test_prepared_successor_focus_does_not_override_required_mechanism_focus():

@@ -21,6 +21,7 @@ from scion.problems.cvrp.successor_evidence_catalog import (
     REVIEWED_SUCCESSOR_MECHANISMS,
     REVIEWED_SUCCESSOR_OUTCOME_STATUS,
     SUCCESSOR_OPPORTUNITY_FAMILIES,
+    SUPPRESSED_SUCCESSOR_MECHANISMS,
 )
 
 CVRP_PROBLEM_FAMILY = "cvrp"
@@ -32,6 +33,9 @@ REQUIRED_MECHANISM_ID = "large_instance_intra_route_two_opt_seed"
 REVIEWED_MECHANISM_IDS = (
     REQUIRED_MECHANISM_ID,
     *(str(item["mechanism_id"]) for item in REVIEWED_SUCCESSOR_MECHANISMS),
+)
+SUPPRESSED_MECHANISM_IDS = tuple(
+    str(item["mechanism_id"]) for item in SUPPRESSED_SUCCESSOR_MECHANISMS
 )
 REVIEWED_BOUNDED_LOCAL_SEARCH_IDS = tuple(
     str(item["mechanism_id"])
@@ -263,14 +267,17 @@ NEXT_REQUIRED_DIRECTION = (
     "branch first and expanded it to 48/48 pairs; the mechanism activated and "
     "remained marginal positive (W/L/T 32/13/3, case W/L/T 7/1/4, median "
     "delta 4.5, CI [-0.5, 12.75]) but still below the 9.9 MDE, with a "
-    "borderline negative CI low. Its second construction follow-up, "
-    "`seed_post_optimization_selector`, screened 32/32 pairs but was inactive: "
-    "the declared primary mechanism was not triggered, all cases tied, and "
-    "median delta was 0.0. The next CVRP solver-design attempt should either "
-    "make a material granular_savings_seed_portfolio follow-up "
-    "(trigger/schedule/threshold/composition, not unchanged repetition), "
-    "repair seed_post_optimization_selector activation with explicit mechanism "
-    "evidence, or choose a materially different problem-owned causal path; "
+    "borderline negative CI low. Successor17 then spent one diagnostic row on "
+    "`seed_post_optimization_selector` from the resumed branch, which again "
+    "showed missing activation. Its material granular follow-up activated and "
+    "screened 32/32 pairs with weak-positive but lower aggregate signal "
+    "(W/L/T 16/8/8, case W/L/T 4/2/2, median delta 3.0, CI [-0.5, 12.75], "
+    "effect/MDE 0.303), with E/P regressions and B/X ties. The next CVRP "
+    "solver-design attempt should either make a stronger material "
+    "granular_savings_seed_portfolio follow-up that directly addresses E/P/X "
+    "variability and the 9.9 MDE gap, repair seed_post_optimization_selector "
+    "activation with explicit pre-protocol and formal mechanism evidence, or "
+    "choose a materially different problem-owned causal path; "
     "revisit bounded local search or angular-sector "
     "removal only when the hypothesis names a causal path distinct from "
     "cross-exchange, intra-route Or-opt reinsertion, 3-opt, ejection-chain "
@@ -352,10 +359,12 @@ REQUIRED_EVIDENCE = (
         "default-avoid families before spending another branch slot"
     ),
     (
-        "prefer a material follow-up on the active marginal "
-        "granular_savings_seed_portfolio branch, or repair the inactive "
+        "prefer only a stronger material follow-up on the active marginal "
+        "granular_savings_seed_portfolio branch that addresses E/P/X "
+        "variability and the MDE gap, or repair the twice-inactive "
         "seed_post_optimization_selector activation path with explicit "
-        "mechanism evidence, or otherwise choose a materially different "
+        "pre-protocol and formal mechanism evidence, or otherwise choose a "
+        "materially different "
         "destroy_repair_selection, distinct construction seed-selection, or "
         "another non-reviewed CVRP-owned causal path after "
         "bounded_2node_cross_exchange, intra_route_or_opt_reinsert, "
@@ -366,8 +375,8 @@ REQUIRED_EVIDENCE = (
         "load_compatible_ruin_recreate, load_complement_pair_removal, "
         "route_pair_crossover_repair, timewarp_string_removal, and "
         "savings_seed_selection_probe were reviewed no-positive-at-MDE and "
-        "unchanged seed_post_optimization_selector produced missing-activation "
-        "inactive evidence; "
+        "unchanged seed_post_optimization_selector produced repeated "
+        "missing-activation inactive evidence in successor16 and successor17; "
         "revisits must name a new causal path and direct objective-effect "
         "telemetry"
     ),
@@ -375,12 +384,13 @@ REQUIRED_EVIDENCE = (
 MEASURABLE_OPPORTUNITY_CLASSES = (
     (
         "construction_seed_portfolio: require same-run seed baseline or "
-        "same-mechanism accepted objective delta; successor16 expanded "
-        "granular_savings_seed_portfolio to marginal below-MDE evidence, so "
-        "only material trigger/schedule/threshold/composition follow-up should "
-        "continue it; do not repeat unchanged seed_post_optimization_selector "
-        "after missing activation unless repairing activation wiring with "
-        "explicit mechanism evidence; after reviewed "
+        "same-mechanism accepted objective delta; successor16 and successor17 "
+        "expanded granular_savings_seed_portfolio to marginal below-MDE "
+        "evidence, so only material trigger/schedule/threshold/composition "
+        "follow-up that addresses E/P/X variability and the MDE gap should "
+        "continue it; do not repeat seed_post_optimization_selector after "
+        "twice-missing activation unless repairing activation wiring with "
+        "explicit pre-protocol and formal mechanism evidence; after reviewed "
         "savings_seed_selection_probe no-positive-at-MDE "
         "evidence, require any new construction path to be causally distinct"
     ),
@@ -434,10 +444,12 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "as destroy/repair successors, and savings_seed_selection_probe has "
     "repeated it as an evidence-complete construction successor. "
     "`granular_savings_seed_portfolio` is marginal positive rather than "
-    "reviewed/default-avoid after successor16 expansion, but unchanged "
-    "repetition is not enough; seed_post_optimization_selector is inactive "
-    "missing-activation evidence. The next CVRP slot should prefer a material "
-    "granular follow-up, an activation repair for seed_post_optimization_selector, "
+    "reviewed/default-avoid after successor16/17 expansion, but unchanged "
+    "repetition is not enough and the effect remains below MDE; "
+    "seed_post_optimization_selector is twice-inactive missing-activation "
+    "evidence and is suppressed for prepared scheduling unless explicitly "
+    "repaired. The next CVRP slot should prefer a stronger material granular "
+    "follow-up, an activation repair for seed_post_optimization_selector, "
     "or otherwise a non-reviewed portfolio attempt. Use "
     "problem-owned evidence requirements and keep this guidance out of "
     "DecisionFeatures."
@@ -534,6 +546,7 @@ def build_cvrp_legacy_research_focus(
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
         "reviewed_mechanism_ids": list(REVIEWED_MECHANISM_IDS),
+        "suppressed_mechanism_ids": list(SUPPRESSED_MECHANISM_IDS),
         "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
         "reviewed_successor_evidence": deepcopy(REVIEWED_SUCCESSOR_EVIDENCE),
         "current_question": CURRENT_QUESTION,

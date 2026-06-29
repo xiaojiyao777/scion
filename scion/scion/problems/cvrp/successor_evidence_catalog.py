@@ -8,6 +8,17 @@ SUCCESSOR_OPPORTUNITY_FAMILIES = (
     "bounded_local_search_variant",
 )
 REVIEWED_SUCCESSOR_OUTCOME_STATUS = "measured_no_positive_at_mde"
+SUPPRESSED_SUCCESSOR_MECHANISMS = (
+    {
+        "mechanism_id": "seed_post_optimization_selector",
+        "mechanism_family": "construction_seed_portfolio",
+        "reason": (
+            "successor16 and successor17 both reached formal screening but "
+            "reported missing activation/not_evaluated telemetry for the "
+            "declared primary mechanism"
+        ),
+    },
+)
 REVIEWED_SUCCESSOR_MECHANISMS = (
     {
         "mechanism_id": "bounded_2node_cross_exchange",
@@ -306,8 +317,9 @@ DEFAULT_AVOID_DIRECTIONS = (
     ),
     (
         "unchanged seed_post_optimization_selector construction post-optimization "
-        "successor after successor16 missing-activation/inactive screening; "
-        "repair activation wiring only with explicit mechanism evidence"
+        "successor after successor16 and successor17 missing-activation/"
+        "inactive screening; repair activation wiring only with explicit "
+        "mechanism evidence"
     ),
     (
         "ec052599-style weak_positive continuation when declared primary "

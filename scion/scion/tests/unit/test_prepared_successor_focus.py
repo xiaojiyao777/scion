@@ -20,6 +20,7 @@ from scion.tests.unit.agentic_schema_test_support import (
 
 REVIEWED_ID = "large_instance_intra_route_two_opt_seed"
 REVIEWED_ID_2 = "bounded_2node_cross_exchange"
+SUPPRESSED_ID = "seed_post_optimization_selector"
 SUCCESSOR_ID = "bounded_local_search_variant_probe"
 SUCCESSOR_FAMILY = "bounded_local_search_variant"
 DEFAULT_AVOID = "route-pressure acceptance variants"
@@ -59,6 +60,7 @@ def _branch_hygiene_guidance() -> str:
 def _successor_launch_focus(*, flat: bool = False) -> dict:
     focus = {
         "reviewed_mechanism_ids": [REVIEWED_ID, REVIEWED_ID_2],
+        "suppressed_mechanism_ids": [SUPPRESSED_ID],
         "successor_opportunity_families": [SUCCESSOR_FAMILY],
         "default_avoid_directions": [DEFAULT_AVOID],
         "next_required_direction": "Test a materially different successor.",
@@ -554,6 +556,29 @@ def test_schema_preview_rejects_reviewed_mechanism_repeat(
     assert second_section["passed"] is False
     assert second_guard["passed"] is False
     assert second_guard["matched_reviewed_mechanism_ids"] == [REVIEWED_ID_2]
+
+
+def test_schema_preview_rejects_suppressed_mechanism_repeat(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": _hypothesis_payload([SUPPRESSED_ID])},
+        _schema_context(tmp_path),
+    )
+
+    section = preview.structured_payload["hypothesis"]
+    reviewed_guard = section["launch_research_focus_reviewed_mechanism_guard"]
+    assert section["passed"] is False
+    assert reviewed_guard["passed"] is False
+    assert reviewed_guard["failure_code"] == (
+        "launch_research_focus_reviewed_mechanism_repeat"
+    )
+    assert reviewed_guard.get("matched_reviewed_mechanism_ids", []) == []
+    assert reviewed_guard["matched_suppressed_mechanism_ids"] == [SUPPRESSED_ID]
+    assert reviewed_guard["matched_excluded_mechanism_ids"] == [SUPPRESSED_ID]
 
 
 def test_schema_preview_rejects_mixed_reviewed_and_successor_mechanisms(

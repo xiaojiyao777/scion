@@ -40,6 +40,7 @@ _LAUNCH_RESEARCH_FOCUS_SIGNAL_KEYS = frozenset(
         "next_required_direction",
         "required_mechanism_ids",
         "reviewed_mechanism_ids",
+        "suppressed_mechanism_ids",
         "successor_opportunity_families",
     }
 )

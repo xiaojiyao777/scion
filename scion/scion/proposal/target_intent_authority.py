@@ -55,8 +55,14 @@ def resolve_target_intent_authority(
 
     if not required_ids and successor_conflict.get("active"):
         reviewed_ids = set(successor_conflict.get("reviewed_mechanism_ids") or ())
-        if current_id and current_id in reviewed_ids:
-            status = "prepared_successor_focus_rejects_reviewed_mechanism"
+        suppressed_ids = set(successor_conflict.get("suppressed_mechanism_ids") or ())
+        excluded_ids = reviewed_ids | suppressed_ids
+        if current_id and current_id in excluded_ids:
+            status = (
+                "prepared_successor_focus_rejects_reviewed_mechanism"
+                if current_id in reviewed_ids
+                else "prepared_successor_focus_rejects_suppressed_mechanism"
+            )
             diagnostics = _successor_conflict_diagnostics(
                 status=status,
                 successor_conflict=successor_conflict,
@@ -276,6 +282,7 @@ def launch_focus_prepared_successor_conflict(
     research_focus = _launch_focus_research_focus_payload(launch_focus)
     required_ids = _unique_strings(research_focus.get("required_mechanism_ids"))
     reviewed_ids = _unique_strings(research_focus.get("reviewed_mechanism_ids"))
+    suppressed_ids = _unique_strings(research_focus.get("suppressed_mechanism_ids"))
     successor_families = _unique_strings(
         research_focus.get("successor_opportunity_families")
     )
@@ -284,14 +291,16 @@ def launch_focus_prepared_successor_conflict(
         research_focus.get("next_required_direction")
     )
     current_question = _clean_string(research_focus.get("current_question"))
-    if required_ids or not reviewed_ids or not successor_families:
+    excluded_ids = _unique_strings(reviewed_ids, suppressed_ids)
+    if required_ids or not excluded_ids or not successor_families:
         return _drop_empty(
             {
                 "name": "prepared_successor_focus_conflict",
                 "active": False,
-                "configured": bool(reviewed_ids or successor_families),
+                "configured": bool(excluded_ids or successor_families),
                 "required_mechanism_ids": list(required_ids),
                 "reviewed_mechanism_ids": list(reviewed_ids),
+                "suppressed_mechanism_ids": list(suppressed_ids),
                 "successor_opportunity_families": list(successor_families),
                 "default_avoid_directions": list(default_avoid),
                 "next_required_direction": next_required_direction,
@@ -307,10 +316,14 @@ def launch_focus_prepared_successor_conflict(
     )
     branch_ids = branch_authority.authority_ids
     reviewed_branch_ids = tuple(item for item in branch_ids if item in reviewed_ids)
+    suppressed_branch_ids = tuple(
+        item for item in branch_ids if item in suppressed_ids
+    )
+    excluded_branch_ids = _unique_strings(reviewed_branch_ids, suppressed_branch_ids)
     active = bool(
         branch_authority.branch_local
         and branch_ids
-        and reviewed_branch_ids
+        and excluded_branch_ids
         and successor_families
     )
     status = (
@@ -326,6 +339,7 @@ def launch_focus_prepared_successor_conflict(
             "status": status,
             "authority_status": status,
             "reviewed_mechanism_ids": list(reviewed_ids),
+            "suppressed_mechanism_ids": list(suppressed_ids),
             "successor_opportunity_families": list(successor_families),
             "default_avoid_directions": list(default_avoid),
             "next_required_direction": next_required_direction,
@@ -335,6 +349,8 @@ def launch_focus_prepared_successor_conflict(
             "branch_allowed_mechanism_ids": list(branch_authority.allowed_ids),
             "branch_authority_mechanism_ids": list(branch_ids),
             "reviewed_branch_mechanism_ids": list(reviewed_branch_ids),
+            "suppressed_branch_mechanism_ids": list(suppressed_branch_ids),
+            "excluded_branch_mechanism_ids": list(excluded_branch_ids),
             "hypothesis_generation_mode": (
                 branch_authority.hypothesis_generation_mode
             ),
@@ -347,8 +363,9 @@ def launch_focus_prepared_successor_conflict(
             "tainted": True,
             "rule": (
                 "Prepared launch focus reviewed_mechanism_ids plus "
-                "successor_opportunity_families supersede branch-local "
-                "same-mechanism continuation for reviewed branch mechanism ids."
+                "suppressed_mechanism_ids plus successor_opportunity_families "
+                "supersede branch-local same-mechanism continuation for those "
+                "branch mechanism ids."
             ),
         }
     )
@@ -451,11 +468,20 @@ def _successor_conflict_diagnostics(
             "reviewed_mechanism_ids": list(
                 successor_conflict.get("reviewed_mechanism_ids") or ()
             ),
+            "suppressed_mechanism_ids": list(
+                successor_conflict.get("suppressed_mechanism_ids") or ()
+            ),
             "successor_opportunity_families": list(
                 successor_conflict.get("successor_opportunity_families") or ()
             ),
             "reviewed_branch_mechanism_ids": list(
                 successor_conflict.get("reviewed_branch_mechanism_ids") or ()
+            ),
+            "suppressed_branch_mechanism_ids": list(
+                successor_conflict.get("suppressed_branch_mechanism_ids") or ()
+            ),
+            "excluded_branch_mechanism_ids": list(
+                successor_conflict.get("excluded_branch_mechanism_ids") or ()
             ),
             "branch_protected_mechanism_ids": list(
                 successor_conflict.get("branch_protected_mechanism_ids") or ()

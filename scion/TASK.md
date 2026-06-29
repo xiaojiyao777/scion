@@ -297,6 +297,27 @@ requires the next CVRP attempt to make a material granular variant, explicitly
 repair seed-post activation, or choose a materially different non-reviewed
 problem-owned causal path. Detailed report:
 `scion/docs/experiments/v0.4/v04-cvrp-successor16-postrun-20260629.md`.
+The successor17 run from commit `dcf08884` finished valid/complete and
+postrun-ready with 2 effective rounds, 2 proposal attempts, 2 formal screening
+rows, 0 quality blocks, champion still `v1`, and strict postrun readiness
+clean. Solver evidence remains below-MDE: the resumed
+`seed_post_optimization_selector` diagnostic row again showed missing
+activation (`48/48`, pair W/L/T `2/2/44`, case W/L/T `0/0/12`, median delta
+`0.0`), while the material `granular_savings_seed_portfolio` follow-up
+activated and stayed weak-positive but lower than successor16 (`32/32`, pair
+W/L/T `16/8/8`, case W/L/T `4/2/2`, median delta `3.0`, CI
+`[-0.5, 12.75]`, effect/MDE `0.303`). This run exposed a generic prepared-run
+scheduling gap: reviewed mechanisms were suppressed for successor focus, but
+twice-missing-activation mechanisms were not. The local repair adds
+problem-provided `suppressed_mechanism_ids` to prepared research focus and lets
+generic scheduler, target-intent, formal-hypothesis, and schema-preview paths
+exclude those ids without treating them as reviewed no-positive evidence or
+DecisionFeatures. CVRP now suppresses unchanged
+`seed_post_optimization_selector` for prepared scheduling, while retaining
+`granular_savings_seed_portfolio` only as marginal weak-positive evidence that
+needs a stronger material follow-up or replacement by a different causal path.
+Detailed report:
+`scion/docs/experiments/v0.4/v04-cvrp-successor17-postrun-20260629.md`.
 The warehouse postrun audit
 exposed a generic postrun acceptance recheck drift: historical roots could fail
 after checkout advances because the checker mixed live rebuilt inventory with

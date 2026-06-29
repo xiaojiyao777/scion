@@ -945,13 +945,20 @@ def _launch_focus_reviewed_mechanism_guard(
     reviewed_ids = _launch_focus_string_items(
         successor_conflict.get("reviewed_mechanism_ids")
     )
+    suppressed_ids = _launch_focus_string_items(
+        successor_conflict.get("suppressed_mechanism_ids")
+    )
     candidate_ids = [
         str(change.id).strip()
         for change in mechanism_changes(hypothesis)
         if str(change.id).strip()
     ]
     reviewed_set = set(reviewed_ids)
-    matched_ids = [item for item in candidate_ids if item in reviewed_set]
+    suppressed_set = set(suppressed_ids)
+    excluded_set = reviewed_set | suppressed_set
+    matched_ids = [item for item in candidate_ids if item in excluded_set]
+    matched_reviewed_ids = [item for item in candidate_ids if item in reviewed_set]
+    matched_suppressed_ids = [item for item in candidate_ids if item in suppressed_set]
     if not matched_ids:
         return _drop_empty_items(
             {
@@ -959,8 +966,12 @@ def _launch_focus_reviewed_mechanism_guard(
                 "passed": True,
                 "configured": True,
                 "reviewed_mechanism_ids": list(reviewed_ids),
+                "suppressed_mechanism_ids": list(suppressed_ids),
                 "reviewed_branch_mechanism_ids": list(
                     successor_conflict.get("reviewed_branch_mechanism_ids") or ()
+                ),
+                "suppressed_branch_mechanism_ids": list(
+                    successor_conflict.get("suppressed_branch_mechanism_ids") or ()
                 ),
                 "successor_opportunity_families": list(
                     successor_conflict.get("successor_opportunity_families") or ()
@@ -979,8 +990,9 @@ def _launch_focus_reviewed_mechanism_guard(
     reason = (
         "launch_research_focus_reviewed_mechanism: prepared successor focus "
         "requires a materially different mechanism; reviewed_mechanism_ids="
-        f"{list(reviewed_ids)!r}; candidate_mechanism_ids={candidate_ids!r}; "
-        f"matched_reviewed_mechanism_ids={matched_ids!r}; "
+        f"{list(reviewed_ids)!r}; suppressed_mechanism_ids="
+        f"{list(suppressed_ids)!r}; candidate_mechanism_ids={candidate_ids!r}; "
+        f"matched_excluded_mechanism_ids={matched_ids!r}; "
         f"successor_opportunity_families={successor_family_text or 'none'}."
     )
     return _drop_empty_items(
@@ -991,14 +1003,20 @@ def _launch_focus_reviewed_mechanism_guard(
             "failure_code": "launch_research_focus_reviewed_mechanism_repeat",
             "reason": reason,
             "reviewed_mechanism_ids": list(reviewed_ids),
+            "suppressed_mechanism_ids": list(suppressed_ids),
             "reviewed_branch_mechanism_ids": list(
                 successor_conflict.get("reviewed_branch_mechanism_ids") or ()
+            ),
+            "suppressed_branch_mechanism_ids": list(
+                successor_conflict.get("suppressed_branch_mechanism_ids") or ()
             ),
             "successor_opportunity_families": list(
                 successor_conflict.get("successor_opportunity_families") or ()
             ),
             "candidate_mechanism_ids": candidate_ids,
-            "matched_reviewed_mechanism_ids": matched_ids,
+            "matched_reviewed_mechanism_ids": matched_reviewed_ids,
+            "matched_suppressed_mechanism_ids": matched_suppressed_ids,
+            "matched_excluded_mechanism_ids": matched_ids,
             "candidate_target_file": hypothesis.target_file,
             "candidate_change_locus": hypothesis.change_locus,
             "proposal_visibility_only": True,
@@ -1006,8 +1024,9 @@ def _launch_focus_reviewed_mechanism_guard(
             "retry_constraint": (
                 "Rewrite the hypothesis around a materially different successor "
                 "mechanism. Do not use reviewed mechanism ids in "
-                "mechanism_changes; choose a mechanism consistent with the "
-                "prepared successor opportunity families"
+                "mechanism_changes, and do not use suppressed mechanism ids "
+                "without host-side repair evidence; choose a mechanism "
+                "consistent with the prepared successor opportunity families"
                 f"{': ' + successor_family_text if successor_family_text else ''}."
             ),
         }
