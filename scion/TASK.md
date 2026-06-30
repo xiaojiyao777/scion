@@ -172,6 +172,14 @@ seed set after a strictly bounded short-horizon trajectory, record baseline
 versus selected post-trajectory objective delta before full ALNS/VNS, and keep
 generic core and `DecisionFeatures` unchanged. The design plan is
 `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-plan-20260630.md`.
+It is currently running on the server-local `claw` environment at
+`/home/clawd/research/scion-experiments/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-server-2r-gpt55-20260630T132452Z-claw`
+with PID `1279060`, commit `6896451f`, and completion preflight passed. The
+in-flight record is
+`scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-inflight-20260630.md`.
+The first WSL launch attempt failed before campaign execution because WSL HTTPS
+TLS handshakes failed; treat that WSL root as an environment preflight failure,
+not campaign evidence.
 
 Reviewed or suppressed paths include the large two-opt seed line, cross
 exchange, Or-opt reinsertion, 3-opt, ejection-chain relocation, several
@@ -212,11 +220,9 @@ from the current checkout.
 2. Park unchanged successor23-style scheduler q scheduling and successor24-style
    insertion-cost lookahead repair; also do not repeat unchanged successor25
    construction seed-baseline selection.
-3. Launch successor26 from the WSL runner after syncing the updated
-   guidance/catalog/tests and plan:
-   `v04-cvrp-successor26-short-horizon-seed-trajectory-selector`, forced
-   `solver_design` / `modify` /
-   `policies/baseline_modules/scheduler.py`.
+3. Monitor the active server-local successor26 run above. When it finishes,
+   inspect postrun readiness, formal row decisions, direct mechanism telemetry,
+   and CMT2/CMT4 case-level deltas before designing any successor27.
 4. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 5. Keep the v0.5 governance ablation frozen as a preregistered design; do not
