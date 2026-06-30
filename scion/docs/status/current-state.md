@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-06-29
+Last updated: 2026-06-30
 
 This file is the operational resume point, not a run log. Historical root
 chronology belongs in focused experiment reports, sparse milestones, and git
@@ -40,14 +40,25 @@ The framework direction is largely correct:
 
 The remaining closeout gaps are:
 
-- CVRP remains solver-negative. Recent successor work proves framework
-  behavior, not promotion-grade solver improvement.
-- Warehouse calibration provenance is incomplete: both warehouse spec copies
-  reference `calibration/aa_noise_floor.json`, but the artifact is not checked
-  in under the corresponding calibration directories.
+- CVRP remains solver-negative. Successor19 and successor20 prove repaired
+  framework behavior on `bounded_route_segment_exchange`, but not
+  promotion-grade solver improvement. Successor21 completed on WSL with active
+  scheduler destroy-size telemetry and no infra/proposal failures, but the
+  actual mechanism was `operator_pair_destroy_size_bands`, not
+  `stagnation_adaptive_destroy_size_schedule`; its expanded row was
+  loss-heavy below MDE. Successor22b correctly targeted
+  `stagnation_adaptive_destroy_size_schedule`, but q was unchanged versus the
+  champion in aligned ALNS traces and both screening rows had median delta
+  `0.0`. Successor23 repaired the observable q trajectory for the same
+  scheduler family, but both rows remained below MDE, the expanded row was
+  negative, explicit q-audit fields were missing, and the branch parked as
+  quality regression. Successor24 completed as a valid insertion-cost
+  lookahead repair clean fork, but both rows remained below MDE and the v2 row
+  recorded direct-effect-zero telemetry.
 - Large files remain a design risk. Further behavior changes in oversized
-  core/postrun/proposal/problem files need a modularization design first.
-- The v0.5 governance ablation matrix should be preregistered, but not run as a
+  core/postrun/proposal/problem files should follow the new modularization
+  design before implementation.
+- The v0.5 governance ablation matrix is preregistered, but must not run as a
   v0.4 closeout substitute.
 
 ## Active Technical State
@@ -82,31 +93,125 @@ Warehouse:
 - Treat the clean v2 positive-control run as restored effective-research and
   plateau-review evidence for v0.4 framework purposes.
 - Do not launch another warehouse run by default.
-- Resolve the checked-in calibration artifact mismatch before treating
-  warehouse measurement readiness as fully reproducible.
+- Warehouse calibration provenance is resolved in the current checkout: both
+  warehouse spec copies set `root_dir` to `surrogate`, so
+  `calibration/aa_noise_floor.json` resolves to the checked-in canonical
+  artifact at `surrogate/calibration/aa_noise_floor.json`.
 
 CVRP:
 
-- Treat current successor evidence as framework-positive and solver-negative.
+- Treat current completed successor evidence as framework-positive and
+  solver-negative. Successor19 completed locally with postrun readiness ready:
+  two screening rows, no validation/frozen rows, `rows_at_or_above_mde=0`, and
+  final `continue_explore`.
+- Successor20 completed on WSL and is postrun-ready:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-successor20-bounded-segment-refine-2r-gpt55-20260629T150851Z-claw`.
+  It resumed successor19 and forced `solver_design` / `modify` /
+  `policies/baseline_modules/local_search.py`. The current-run metrics are:
+  two screening rows, no validation/frozen rows, `positive_rows=0`,
+  `rows_at_or_above_mde=0`, `max_median_delta=0.0`, and
+  `interpretation=all_available_ci_high_below_mde`.
+- Successor21 completed on WSL and is postrun-ready:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-successor21-adaptive-destroy-size-2r-gpt55-20260629T172740Z-claw`.
+  It forced `solver_design` / `modify` /
+  `policies/baseline_modules/scheduler.py`. The actual mechanism was
+  `operator_pair_destroy_size_bands`; it activated and changed q, but row 1
+  remained below MDE and row 2 failed closed with median delta `-5.5`, CI
+  `[-8.0, 2.75]`, and CMT4 median `-2.0`.
+- Successor22b completed on WSL and is postrun-ready:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-successor22b-stagnation-required-2r-gpt55-20260629T193044Z-claw`.
+  It forced `solver_design` / `modify` /
+  `policies/baseline_modules/scheduler.py`, used local `gpt-5.5`, and
+  completed two screening rows with no proposal, verification, telemetry, or
+  infra failure. The mechanism was
+  `stagnation_adaptive_destroy_size_schedule`, but row 1 had `0 / 505` aligned
+  ALNS q changes and row 2 had `0 / 737`; both rows had median delta `0.0`,
+  CI `[0.0, 0.0]`, and no case-level wins.
 - Continue using A/A MDE and case variance when interpreting CVRP effects.
-- Do not repeat unchanged reviewed mechanisms. The next attempt should
-  clean-fork to a materially different CVRP-owned causal path or explicitly
-  repair `seed_post_optimization_selector` activation.
+- Do not repeat unchanged reviewed mechanisms. Successor23 already repaired the
+  successor22b observable q-trajectory no-op, but it stayed solver-negative and
+  missed explicit q-audit fields. Successor24 then completed as an active
+  destroy/repair insertion-cost lookahead attempt, but row 1 stayed below MDE
+  and row 2 was direct-effect-zero plus below MDE. The next solver attempt
+  should clean-fork to a materially different CVRP-owned causal path.
+- Successor23 completed on WSL and is postrun-ready:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-successor23-stagnation-q-delta-repair-2r-gpt55-20260630T020559Z-claw`.
+  It was prepared from WSL runner commit `b0adf692`, passed completion
+  preflight with `gpt-5.5`, base URL `http://127.0.0.1:8080`, and completed
+  two screening rows. The mechanism was
+  `stagnation_adaptive_destroy_size_schedule`; aligned q traces changed versus
+  champion in most pairs, but explicit `baseline_q/adapted_q/q_delta` runtime
+  fields were missing. Objective evidence stayed below MDE: row 1 median
+  delta `0.0`, CI `[-2.0, 3.5]`; row 2 median delta `-0.5`, CI
+  `[-3.0, 3.25]`; `rows_at_or_above_mde=0`. Treat the branch as
+  `activation-repaired-but-below-MDE` with `quality-regression-parked` and
+  `explicit-q-delta-telemetry-missing` caveats.
+- Successor24 completed on WSL and is postrun-ready:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-successor24-lookahead-insertion-repair-2r-gpt55-20260630T073830Z-claw`.
+  It passed completion preflight with `gpt-5.5`, used runner commit `462d6e0a`,
+  and completed two screening rows. Row 1 mechanism
+  `lookahead_insertion_cost_repair` had median delta `-0.75`, CI
+  `[-5.5, 0.5]`; row 2 mechanism `lookahead_insertion_cost_repair_v2` had
+  median delta `-2.0`, CI `[-12.0, 1.5]`, and direct-effect-zero telemetry
+  (`candidate_present=60`, `candidate_positive=0`, `candidate_zero=60`).
+  Treat both as reviewed/default-avoid. Postrun report:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor24-lookahead-insertion-repair-postrun-20260630.md`.
+- The CVRP problem-owned guidance/catalog and measurement-opportunity adapter
+  are aligned to that result: prepared handoffs emit an empty hard
+  `required_mechanism_ids` list, treat successor23 and successor24 mechanisms as
+  reviewed/default-avoid evidence, and now treat unchanged successor25 raw seed
+  selection as reviewed/default-avoid evidence.
+- Successor25 completed on WSL and is postrun-ready:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-successor25-cw-sweep-seed-baseline-selector-2r-gpt55-20260630T101601Z-claw`.
+  It was prepared from WSL runner commit `d501b900`, used local `gpt-5.5`, and
+  forced `solver_design` / `modify` /
+  `policies/baseline_modules/construction.py`. It completed two screening rows
+  with mechanism activation/runtime observed, but objective evidence stayed
+  below MDE: both rows had median delta `0.0`, CI `[0.0, 0.0]`,
+  `rows_at_or_above_mde=0`. The expanded row was abandoned as quality
+  regression. It observed direct seed delta on `B-n67-k10`, but that effect did
+  not survive downstream search. Postrun report:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor25-cw-sweep-seed-baseline-selector-postrun-20260630.md`.
+- Successor25 plan/in-flight records:
+  `cw_sweep_seed_baseline_selector`, owned by
+  `policies/baseline_modules/construction.py` with scheduler edits limited to
+  selector invocation and direct selected-seed versus baseline telemetry. Plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor25-cw-sweep-seed-baseline-selector-plan-20260630.md`.
+  In-flight record:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor25-cw-sweep-seed-baseline-selector-inflight-20260630.md`.
+- Successor26 is designed and ready to launch after WSL sync/tests:
+  `short_horizon_seed_trajectory_selector`, owned by
+  `policies/baseline_modules/scheduler.py`. It should compare a small existing
+  seed set after a strictly bounded short-horizon trajectory and record
+  baseline versus selected post-trajectory objective delta before full ALNS/VNS.
+  Plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-plan-20260630.md`.
+- Successor22a was stopped before formal screening because the live hypothesis
+  drifted to `bounded_repair_retry_on_reject`; treat it as a wrong-mechanism
+  diagnostic, not solver evidence.
+- The `seed_post_optimization_selector` repair plan remains a deferred
+  diagnostic fallback because successor16/17 showed missing activation rather
+  than evidence-complete negative solver effect.
 - Use problem-owned successor review evidence, row-local `mechanism_family`,
   direct `mechanism_evidence.primary_mechanism`, and phase telemetry as the
   current source of truth.
 
 ## Next Actions
 
-1. Resolve warehouse calibration provenance by restoring the artifact, changing
-   both specs to a checked-in artifact, or documenting intentional external
-   calibration.
-2. Continue one CVRP successor attempt from the current problem-owned guidance:
-   materially new causal path or explicit seed-post activation repair.
-3. Write a lightweight large-file modularization design before adding behavior
-   to oversized files.
-4. Preregister the v0.5 governance on/off experiment matrix.
-5. Keep status documents compact; put detailed root counters and caveats in
+1. Use the successor25 postrun report as the current CVRP interpretation:
+   `scion/docs/experiments/v0.4/v04-cvrp-successor25-cw-sweep-seed-baseline-selector-postrun-20260630.md`.
+2. Park unchanged successor23-style scheduler q scheduling and successor24-style
+   insertion-cost lookahead repair; also do not repeat unchanged successor25
+   construction seed-baseline selection.
+3. Launch successor26 from the WSL runner after syncing the updated
+   guidance/catalog/tests and plan:
+   `v04-cvrp-successor26-short-horizon-seed-trajectory-selector`, forced
+   `solver_design` / `modify` /
+   `policies/baseline_modules/scheduler.py`.
+4. Use the v0.4 large-file modularization plan before adding behavior to
+   oversized files.
+5. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+6. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes
@@ -119,10 +224,15 @@ Server:
 
 WSL, only after rechecking connectivity:
 
-- Repo: `/home/xjy-ubuntu/research/or-autoresearch-agent`
+- Primary repo: `/home/xjy-ubuntu/research/or-autoresearch-agent`
+- Current synced runner copy:
+  `/home/xjy-ubuntu/research/or-autoresearch-agent-v04dev-runner-20260629`
 - Python/env: `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`
 - Intended use: large or concurrent experiment batches that exceed the server's
   comfortable local capacity.
+- Current caveat: SSH/env checks pass and the 2026-06-30 successor24 WSL root
+  passed `gpt-5.5` completion preflight (HTTP 200) and completed. Still rerun
+  completion preflight on any future freshly prepared root.
 
 ```bash
 ssh -i /home/clawd/.ssh/id_ed25519_codex_wsl -p 2222 \
@@ -148,6 +258,9 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
 - Problem-owned declarations define runtime model, effect scale, pairing
   validity, practical delta, and readiness diagnostics; generic consumers use
   normalized deterministic views.
+- New behavior should not be added by piling helper functions into oversized
+  files. Design package/module boundaries first, then implement through named
+  ports/providers or coherent independent modules.
 - Status docs should replace stale facts rather than append chronology.
 
 ## Pointers
@@ -162,8 +275,58 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
   `scion/design/v0.4-postrun-readiness-and-opportunity-ports.md`
 - v0.4 planning:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`
+- v0.5 governance ablation preregistration:
+  `scion/docs/planning/v0.5/governance-ablation-preregistration-20260629.md`
 - Sparse milestone index: `scion/docs/status/v0.4-history.md`
 - Detailed experiment evidence: `scion/docs/experiments/v0.4/`
+- Warehouse calibration provenance:
+  `scion/docs/experiments/v0.4/v04-warehouse-calibration-provenance-resolution-20260629.md`
+- CVRP successor19 plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor19-cleanfork-plan-20260629.md`
+- CVRP successor19 in-flight record:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor19-cleanfork-inflight-20260629.md`
+- CVRP successor19 local postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor19-cleanfork-local-postrun-20260629.md`
+- CVRP successor20 in-flight record:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor20-bounded-segment-refine-inflight-20260629.md`
+- CVRP successor20 WSL postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor20-bounded-segment-refine-postrun-20260629.md`
+- CVRP successor21 adaptive destroy-size plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor21-adaptive-destroy-size-plan-20260629.md`
+- CVRP successor21 adaptive destroy-size in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor21-adaptive-destroy-size-inflight-20260629.md`
+- CVRP successor21 adaptive destroy-size postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor21-adaptive-destroy-size-postrun-20260629.md`
+- CVRP successor22 stagnation destroy-size plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor22-stagnation-destroy-size-plan-20260629.md`
+- CVRP successor22 stagnation destroy-size in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor22-stagnation-destroy-size-inflight-20260629.md`
+- CVRP successor22b stagnation required postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor22b-stagnation-required-postrun-20260630.md`
+- CVRP successor23 q-delta activation repair plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor23-stagnation-q-delta-repair-plan-20260630.md`
+- CVRP successor23 q-delta activation repair in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor23-stagnation-q-delta-repair-inflight-20260630.md`
+- CVRP successor23 q-delta activation repair postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor23-stagnation-q-delta-repair-postrun-20260630.md`
+- CVRP successor24 lookahead insertion repair plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor24-lookahead-insertion-repair-plan-20260630.md`
+- CVRP successor24 lookahead insertion repair in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor24-lookahead-insertion-repair-inflight-20260630.md`
+- CVRP successor24 lookahead insertion repair postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor24-lookahead-insertion-repair-postrun-20260630.md`
+- CVRP successor25 CW/sweep seed-baseline selector plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor25-cw-sweep-seed-baseline-selector-plan-20260630.md`
+- CVRP successor25 CW/sweep seed-baseline selector in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor25-cw-sweep-seed-baseline-selector-inflight-20260630.md`
+- CVRP successor25 CW/sweep seed-baseline selector postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor25-cw-sweep-seed-baseline-selector-postrun-20260630.md`
+- CVRP successor26 short-horizon seed trajectory selector plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-plan-20260630.md`
+- CVRP deferred seed-post selector activation plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor21-seed-post-selector-activation-plan-20260629.md`
+- v0.4 large-file modularization plan:
+  `scion/docs/engineering/module-debt/v04-large-file-modularization-plan-20260629.md`
 - Audit basis:
   `scion/reports/v04-core-framework-review-20260611.md`,
   `scion/reports/v04-core-framework-code-review-20260611.md`,

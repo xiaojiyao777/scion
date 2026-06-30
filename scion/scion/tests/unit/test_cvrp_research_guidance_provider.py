@@ -63,6 +63,15 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert contract.measurement_summary is not None
     assert "screening MDE 9.9" in contract.measurement_summary.summary
     assert "successor_causal_path_direct_effect" in rendered.text
+    assert "stagnation_adaptive_destroy_size_schedule" in rendered.text
+    assert "lookahead_insertion_cost_repair" in rendered.text
+    assert "cw_sweep_seed_baseline_selector" in rendered.text
+    assert "short_horizon_seed_trajectory_selector" in rendered.text
+    assert "policies/baseline_modules/destroy_repair.py" in rendered.text
+    assert "policies/baseline_modules/scheduler.py" in rendered.text
+    assert "policies/baseline_modules/construction.py" in rendered.text
+    assert "baseline_q" in rendered.text
+    assert "q_delta" in rendered.text
     assert "large_instance_intra_route_two_opt_seed" in rendered.text
     assert "bounded_2node_cross_exchange" in rendered.text
     assert "intra_route_or_opt_reinsert" in rendered.text
@@ -105,6 +114,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "intra_route_or_opt_reinsert",
         "bounded_intra_route_3opt",
         "bounded_ejection_chain_relocate",
+        "bounded_route_segment_exchange",
+        "operator_pair_destroy_size_bands",
+        "stagnation_adaptive_destroy_size_schedule",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -115,21 +127,32 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "load_complement_pair_removal",
         "route_pair_crossover_repair",
         "timewarp_string_removal",
+        "lookahead_insertion_cost_repair",
+        "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
         "granular_savings_seed_portfolio",
         "exact_short_route_polish",
+        "cw_sweep_seed_baseline_selector",
     ]
     assert focus["suppressed_mechanism_ids"] == ["seed_post_optimization_selector"]
     assert focus["successor_opportunity_families"] == [
+        "scheduler_destroy_size_policy",
         "destroy_repair_selection",
         "construction_seed_portfolio",
         "bounded_local_search_variant",
     ]
     assert "positive-at-MDE" in focus["current_question"]
+    assert "short_horizon_seed_trajectory_selector" in focus["current_question"]
+    assert "short-horizon seed trajectory selector" in focus["current_question"]
     assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
     assert "intra_route_or_opt_reinsert" in focus["next_required_direction"]
     assert "bounded_intra_route_3opt" in focus["next_required_direction"]
     assert "bounded_ejection_chain_relocate" in focus["next_required_direction"]
+    assert "bounded_route_segment_exchange" in focus["next_required_direction"]
+    assert "Successor19 and successor20" in focus["next_required_direction"]
+    assert "stagnation_adaptive_destroy_size_schedule" in (
+        focus["next_required_direction"]
+    )
     assert "angular_sector_removal" in focus["next_required_direction"]
     assert "radial_string_removal" in focus["next_required_direction"]
     assert "farthest_noise_related_removal" in focus["next_required_direction"]
@@ -143,12 +166,40 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "granular_savings_seed_portfolio" in focus["next_required_direction"]
     assert "seed_post_optimization_selector" in focus["next_required_direction"]
     assert "savings_seed_selection_probe" in focus["next_required_direction"]
-    assert "do not repeat unchanged granular_savings_seed_portfolio" in (
+    assert "Do not repeat unchanged granular_savings_seed_portfolio" in (
         focus["next_required_direction"]
     )
+    assert "bounded_route_segment_exchange" in focus["next_required_direction"]
+    assert "operator_pair_destroy_size_bands" in focus["next_required_direction"]
+    assert "Successor23 repaired the observable q trajectory" in (
+        focus["next_required_direction"]
+    )
+    assert "below MDE" in focus["next_required_direction"]
+    assert "quality regression" in focus["next_required_direction"]
+    assert "explicit baseline_q/adapted_q/q_delta runtime fields were missing" in (
+        focus["next_required_direction"]
+    )
+    assert "baseline_q" in focus["next_required_direction"]
+    assert "q_delta" in focus["next_required_direction"]
     assert "exact_short_route_polish" in focus["next_required_direction"]
-    assert "clean-fork" in focus["next_required_direction"]
-    assert "repair seed_post_optimization_selector activation" in (
+    assert "Successor25 then clean-forked" in focus["next_required_direction"]
+    assert "cw_sweep_seed_baseline_selector" in focus["next_required_direction"]
+    assert "not preserved by downstream ALNS/VNS" in focus["next_required_direction"]
+    assert "successor26 solver research" in focus["next_required_direction"]
+    assert "short_horizon_seed_trajectory_selector" in focus[
+        "next_required_direction"
+    ]
+    assert "policies/baseline_modules/scheduler.py" in (
+        focus["next_required_direction"]
+    )
+    assert "`required_mechanism_ids` remains empty" in (
+        focus["next_required_direction"]
+    )
+    assert "clean-fork to a materially different CVRP-owned causal path" in (
+        focus["next_required_direction"]
+    )
+    assert "telemetry-only q-audit repair" in focus["next_required_direction"]
+    assert "seed-post selector repair is deferred" in (
         focus["next_required_direction"]
     )
     assert "Successor18b" in focus["next_required_direction"]
@@ -159,6 +210,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["measurement_opportunity_diagnostics"] is not measurement
     assert any(
         "current-run pair-level total_distance" in item
+        for item in focus["required_evidence"]
+    )
+    assert any(
+        "short_horizon_seed_trajectory_selector" in item
+        and "policies/baseline_modules/scheduler.py" in item
         for item in focus["required_evidence"]
     )
     assert any(
@@ -184,6 +240,22 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert any(
         "bounded_ejection_chain_relocate" in item
         and "measured_no_positive_at_mde" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "bounded_route_segment_exchange" in item and "below-MDE" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "operator_pair_destroy_size_bands" in item and "below-MDE" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "stagnation_adaptive_destroy_size_schedule" in item
+        and "successor23 repaired observable q deltas" in item
+        and "below-MDE" in item
+        and "quality-regression" in item
+        and "baseline_q/adapted_q/q_delta" in item
         for item in focus["default_avoid_directions"]
     )
     assert any(
@@ -231,6 +303,15 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["default_avoid_directions"]
     )
     assert any(
+        "lookahead_insertion_cost_repair" in item and "successor24" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "lookahead_insertion_cost_repair_v2" in item
+        and "direct-effect-zero" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
         "savings_seed_selection_probe" in item
         and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
@@ -243,6 +324,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert any(
         "exact_short_route_polish" in item
         and "quality-regression/loss-heavy" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "cw_sweep_seed_baseline_selector" in item
+        and "successor25 below-MDE evidence" in item
+        and "downstream-unpreserved direct seed delta" in item
         for item in focus["default_avoid_directions"]
     )
     assert any(
@@ -266,6 +353,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "intra_route_or_opt_reinsert",
         "bounded_intra_route_3opt",
         "bounded_ejection_chain_relocate",
+        "bounded_route_segment_exchange",
+        "operator_pair_destroy_size_bands",
+        "stagnation_adaptive_destroy_size_schedule",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -276,9 +366,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "load_complement_pair_removal",
         "route_pair_crossover_repair",
         "timewarp_string_removal",
+        "lookahead_insertion_cost_repair",
+        "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
         "granular_savings_seed_portfolio",
         "exact_short_route_polish",
+        "cw_sweep_seed_baseline_selector",
     }
     assert "seed_post_optimization_selector" not in mechanisms_by_id
     assert mechanisms_by_id["bounded_intra_route_3opt"][
@@ -287,6 +380,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["bounded_ejection_chain_relocate"][
         "mechanism_family"
     ] == "bounded_local_search_variant"
+    assert mechanisms_by_id["operator_pair_destroy_size_bands"][
+        "mechanism_family"
+    ] == "scheduler_destroy_size_policy"
+    assert mechanisms_by_id["stagnation_adaptive_destroy_size_schedule"][
+        "mechanism_family"
+    ] == "scheduler_destroy_size_policy"
     assert mechanisms_by_id["farthest_noise_related_removal"][
         "mechanism_family"
     ] == "destroy_repair_selection"
@@ -311,6 +410,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["timewarp_string_removal"][
         "mechanism_family"
     ] == "destroy_repair_selection"
+    assert mechanisms_by_id["lookahead_insertion_cost_repair"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
+    assert mechanisms_by_id["lookahead_insertion_cost_repair_v2"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
     assert mechanisms_by_id["savings_seed_selection_probe"][
         "mechanism_family"
     ] == "construction_seed_portfolio"
@@ -318,6 +423,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "mechanism_family"
     ] == "construction_seed_portfolio"
     assert mechanisms_by_id["exact_short_route_polish"][
+        "mechanism_family"
+    ] == "construction_seed_portfolio"
+    assert mechanisms_by_id["cw_sweep_seed_baseline_selector"][
         "mechanism_family"
     ] == "construction_seed_portfolio"
     assert all(
@@ -353,6 +461,18 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["timewarp_string_removal"]["effect_summary"][
         "research_efficiency_median_delta"
     ] == -5.25
+    lookahead_effect = mechanisms_by_id["lookahead_insertion_cost_repair"][
+        "effect_summary"
+    ]
+    assert lookahead_effect["median_delta"] == -0.75
+    assert lookahead_effect["protected_case_cmt4_median_delta"] == -5.5
+    assert lookahead_effect["source_root_label"] == "successor24"
+    lookahead_v2_effect = mechanisms_by_id["lookahead_insertion_cost_repair_v2"][
+        "effect_summary"
+    ]
+    assert lookahead_v2_effect["median_delta"] == -2.0
+    assert lookahead_v2_effect["direct_effect_candidate_positive"] == 0
+    assert lookahead_v2_effect["source_root_label"] == "successor24"
     granular_effect = mechanisms_by_id["granular_savings_seed_portfolio"][
         "effect_summary"
     ]
@@ -367,6 +487,34 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert exact_effect["protected_case_cmt2_median_delta"] == -80.0
     assert exact_effect["protected_case_cmt4_median_delta"] == -33.5
     assert exact_effect["source_root_label"] == "successor18b"
+    seed_baseline_effect = mechanisms_by_id["cw_sweep_seed_baseline_selector"][
+        "effect_summary"
+    ]
+    assert seed_baseline_effect["median_delta"] == 0.0
+    assert seed_baseline_effect["direct_seed_delta_positive_pairs"] == 4
+    assert seed_baseline_effect["direct_seed_delta_total_pairs"] == 48
+    assert seed_baseline_effect["interpretation"] == "seed_delta_not_preserved_downstream"
+    assert seed_baseline_effect["source_root_label"] == "successor25"
+    stagnation_effect = mechanisms_by_id["stagnation_adaptive_destroy_size_schedule"][
+        "effect_summary"
+    ]
+    assert stagnation_effect["row1_median_delta"] == 0.0
+    assert stagnation_effect["row2_median_delta"] == -0.5
+    assert stagnation_effect["rows_at_or_above_mde"] == 0
+    assert stagnation_effect["aligned_q_delta_iteration_count"] == 948
+    assert stagnation_effect["aligned_q_delta_total_iterations"] == 1219
+    assert stagnation_effect["aligned_q_delta_pair_count"] == 75
+    assert stagnation_effect["explicit_q_audit_field_count"] == 0
+    assert stagnation_effect["missing_q_audit_fields"] == (
+        "baseline_q",
+        "adapted_q",
+        "q_delta",
+    )
+    assert stagnation_effect["q_trajectory_status"] == "observable_q_deltas_repaired"
+    assert stagnation_effect["q_audit_status"] == "explicit_q_delta_telemetry_missing"
+    assert stagnation_effect["parked_status"] == "quality_regression"
+    assert stagnation_effect["predecessor_source_root_label"] == "successor22b"
+    assert stagnation_effect["source_root_label"] == "successor23"
 
     large_twoopt = focus["large_instance_two_opt_constraints"]
     assert large_twoopt["schema_version"] == (
@@ -409,6 +557,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "intra_route_or_opt_reinsert",
         "bounded_intra_route_3opt",
         "bounded_ejection_chain_relocate",
+        "bounded_route_segment_exchange",
+        "operator_pair_destroy_size_bands",
+        "stagnation_adaptive_destroy_size_schedule",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -419,14 +570,19 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "load_complement_pair_removal",
         "route_pair_crossover_repair",
         "timewarp_string_removal",
+        "lookahead_insertion_cost_repair",
+        "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
         "granular_savings_seed_portfolio",
         "exact_short_route_polish",
+        "cw_sweep_seed_baseline_selector",
     ]
+    assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["suppressed_mechanism_ids"] == [
         "seed_post_optimization_selector"
     ]
     assert launch_payload["successor_opportunity_families"] == [
+        "scheduler_destroy_size_policy",
         "destroy_repair_selection",
         "construction_seed_portfolio",
         "bounded_local_search_variant",

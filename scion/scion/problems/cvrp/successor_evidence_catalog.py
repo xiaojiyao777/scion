@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 SUCCESSOR_OPPORTUNITY_FAMILIES = (
+    "scheduler_destroy_size_policy",
     "destroy_repair_selection",
     "construction_seed_portfolio",
     "bounded_local_search_variant",
@@ -58,6 +59,82 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
             "protected_case_cmt2_median_delta": -14.0,
             "protected_case_cmt4_median_delta": -5.0,
             "source_root_label": "successor9",
+        },
+    },
+    {
+        "mechanism_id": "bounded_route_segment_exchange",
+        "mechanism_family": "bounded_local_search_variant",
+        "path_label": "bounded route-segment exchange path",
+        "causal_path_label": "bounded route-segment local search",
+        "effect_summary": {
+            "median_delta": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "max_median_delta": 0.0,
+            "interpretation": "all_available_ci_high_below_mde",
+            "source_root_label": "successor20",
+        },
+    },
+    {
+        "mechanism_id": "operator_pair_destroy_size_bands",
+        "mechanism_family": "scheduler_destroy_size_policy",
+        "path_label": "operator-pair destroy-size band scheduler path",
+        "causal_path_label": "scheduler destroy-size policy",
+        "effect_summary": {
+            "median_delta": -5.5,
+            "ci_low": -8.0,
+            "ci_high": 2.75,
+            "rows_at_or_above_mde": 0,
+            "max_median_delta": 0.25,
+            "max_effect_to_mde_ratio": 0.025253,
+            "screening_wins": 17,
+            "screening_losses": 29,
+            "screening_ties": 2,
+            "protected_case_cmt2_median_delta": 6.5,
+            "protected_case_cmt4_median_delta": -2.0,
+            "source_root_label": "successor21",
+        },
+    },
+    {
+        "mechanism_id": "stagnation_adaptive_destroy_size_schedule",
+        "mechanism_family": "scheduler_destroy_size_policy",
+        "path_label": "stagnation-adaptive destroy-size schedule path",
+        "causal_path_label": "scheduler destroy-size q-delta policy",
+        "effect_summary": {
+            "median_delta": -0.5,
+            "ci_low": -3.0,
+            "ci_high": 3.25,
+            "row1_median_delta": 0.0,
+            "row1_ci_low": -2.0,
+            "row1_ci_high": 3.5,
+            "row2_median_delta": -0.5,
+            "row2_ci_low": -3.0,
+            "row2_ci_high": 3.25,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "max_median_delta": 0.0,
+            "max_effect_to_mde_ratio": 0.0,
+            "interpretation": "activation_repaired_but_below_mde",
+            "parked_status": "quality_regression",
+            "screening_case_wins": 7,
+            "screening_case_losses": 5,
+            "screening_case_ties": 8,
+            "screening_pair_wins": 33,
+            "screening_pair_losses": 30,
+            "screening_pair_ties": 17,
+            "aligned_q_delta_iteration_count": 948,
+            "aligned_q_delta_total_iterations": 1219,
+            "aligned_q_delta_pair_count": 75,
+            "aligned_q_delta_total_pairs": 80,
+            "explicit_q_audit_field_count": 0,
+            "missing_q_audit_fields": ("baseline_q", "adapted_q", "q_delta"),
+            "q_trajectory_status": "observable_q_deltas_repaired",
+            "q_audit_status": "explicit_q_delta_telemetry_missing",
+            "predecessor_source_root_label": "successor22b",
+            "predecessor_q_trajectory_status": "inactive_q_trajectory_noop",
+            "source_root_label": "successor23",
         },
     },
     {
@@ -218,6 +295,50 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "lookahead_insertion_cost_repair",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "lookahead insertion-cost repair path",
+        "causal_path_label": "destroy/repair insertion-cost lookahead",
+        "effect_summary": {
+            "median_delta": -0.75,
+            "ci_low": -5.5,
+            "ci_high": 0.5,
+            "effect_to_mde_ratio": -0.075758,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "screening_pairs": 32,
+            "protected_case_cmt2_median_delta": 8.5,
+            "protected_case_cmt4_median_delta": -5.5,
+            "protected_case_x_n110_median_delta": -6.0,
+            "telemetry_status": "activation_observed_runtime_observed",
+            "source_root_label": "successor24",
+        },
+    },
+    {
+        "mechanism_id": "lookahead_insertion_cost_repair_v2",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "lookahead insertion-cost repair v2 path",
+        "causal_path_label": "destroy/repair paired insertion-cost lookahead",
+        "effect_summary": {
+            "median_delta": -2.0,
+            "ci_low": -12.0,
+            "ci_high": 1.5,
+            "effect_to_mde_ratio": -0.20202,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "screening_pairs": 32,
+            "protected_case_cmt2_median_delta": -4.0,
+            "protected_case_cmt4_median_delta": -15.5,
+            "protected_case_p_n65_median_delta": -12.0,
+            "protected_case_x_n110_median_delta": -6.0,
+            "telemetry_status": "activation_observed_runtime_observed_effect_zero",
+            "direct_effect_candidate_present": 60,
+            "direct_effect_candidate_positive": 0,
+            "direct_effect_candidate_zero": 60,
+            "source_root_label": "successor24",
+        },
+    },
+    {
         "mechanism_id": "savings_seed_selection_probe",
         "mechanism_family": "construction_seed_portfolio",
         "path_label": "savings seed-selection construction path",
@@ -267,6 +388,28 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
             "source_root_label": "successor18b",
         },
     },
+    {
+        "mechanism_id": "cw_sweep_seed_baseline_selector",
+        "mechanism_family": "construction_seed_portfolio",
+        "path_label": "CW/sweep seed-baseline selector path",
+        "causal_path_label": "construction seed-baseline selection",
+        "effect_summary": {
+            "median_delta": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "row1_median_delta": 0.0,
+            "row2_median_delta": 0.0,
+            "direct_seed_delta_positive_pairs": 4,
+            "direct_seed_delta_total_pairs": 48,
+            "direct_seed_delta_case": "B-n67-k10",
+            "direct_seed_delta_best": 956.0,
+            "downstream_case_b_n67_median_delta": -2.5,
+            "interpretation": "seed_delta_not_preserved_downstream",
+            "source_root_label": "successor25",
+        },
+    },
 )
 
 DEFAULT_AVOID_DIRECTIONS = (
@@ -313,6 +456,22 @@ DEFAULT_AVOID_DIRECTIONS = (
         "review"
     ),
     (
+        "unchanged bounded_route_segment_exchange bounded-local-search "
+        "successor after successor20 measured active zero-effect "
+        "below-MDE evidence"
+    ),
+    (
+        "unchanged operator_pair_destroy_size_bands scheduler destroy-size "
+        "policy after successor21 measured active below-MDE and loss-heavy "
+        "follow-up evidence"
+    ),
+    (
+        "unchanged stagnation_adaptive_destroy_size_schedule scheduler "
+        "destroy-size policy after successor23 repaired observable q deltas "
+        "but stayed below-MDE, parked as quality-regression, and missed "
+        "explicit baseline_q/adapted_q/q_delta runtime fields"
+    ),
+    (
         "unchanged radial_string_removal destroy/repair successor after "
         "cvrp_successor_summary measured_no_positive_at_mde review"
     ),
@@ -350,6 +509,14 @@ DEFAULT_AVOID_DIRECTIONS = (
         "cvrp_successor_summary measured_no_positive_at_mde review"
     ),
     (
+        "unchanged lookahead_insertion_cost_repair destroy/repair repair-scoring "
+        "successor after successor24 activation-observed below-MDE evidence"
+    ),
+    (
+        "unchanged lookahead_insertion_cost_repair_v2 destroy/repair repair-scoring "
+        "successor after successor24 direct-effect-zero and below-MDE evidence"
+    ),
+    (
         "unchanged savings_seed_selection_probe construction seed successor "
         "after cvrp_successor_summary measured_no_positive_at_mde review"
     ),
@@ -360,6 +527,11 @@ DEFAULT_AVOID_DIRECTIONS = (
     (
         "unchanged exact_short_route_polish construction follow-up after "
         "successor18b quality-regression/loss-heavy CMT2/CMT4 evidence"
+    ),
+    (
+        "unchanged cw_sweep_seed_baseline_selector construction seed-baseline "
+        "successor after successor25 below-MDE evidence and downstream-"
+        "unpreserved direct seed delta"
     ),
     (
         "unchanged seed_post_optimization_selector construction post-optimization "

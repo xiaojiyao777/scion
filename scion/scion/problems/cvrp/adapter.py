@@ -35,10 +35,10 @@ from scion.problems.cvrp.preview.dispatch import (
 )
 from scion.problems.cvrp.research_guidance import (
     CASE_PROTECTION_REQUIREMENTS,
-    LARGE_INSTANCE_TWO_OPT_CONSTRAINTS,
     NEXT_REQUIRED_DIRECTION,
     PROTECTED_CASES,
-    REQUIRED_MECHANISM_ID,
+    SUCCESSOR26_MECHANISM_ID,
+    SUCCESSOR26_TARGET_FILE,
     SUCCESSOR_OPPORTUNITY_FAMILIES,
 )
 from scion.problems.cvrp.surface_policy import (
@@ -274,6 +274,7 @@ class CvrpAdapter:
                 "unchanged_intra_route_or_opt_reinsert",
                 "unchanged_bounded_intra_route_3opt",
                 "unchanged_bounded_ejection_chain_relocate",
+                "unchanged_bounded_route_segment_exchange",
                 "unchanged_angular_sector_removal",
                 "unchanged_radial_string_removal",
                 "unchanged_farthest_noise_related_removal",
@@ -281,7 +282,10 @@ class CvrpAdapter:
                 "unchanged_route_fragment_recombination_repair",
                 "unchanged_adjacency_pair_removal_repair",
                 "unchanged_load_compatible_ruin_recreate",
+                "unchanged_lookahead_insertion_cost_repair",
+                "unchanged_lookahead_insertion_cost_repair_v2",
                 "unchanged_savings_seed_selection_probe",
+                "unchanged_cw_sweep_seed_baseline_selector",
             ],
             "measurable_opportunity_classes": [
                 {
@@ -289,6 +293,14 @@ class CvrpAdapter:
                     "required_evidence": (
                         "same-run seed baseline or same-mechanism accepted "
                         "delta showing objective-changing seed effect"
+                    ),
+                },
+                {
+                    "mechanism_family": "scheduler_destroy_size_policy",
+                    "required_evidence": (
+                        "activation telemetry and q-distribution or trace "
+                        "evidence showing destroy magnitude changed before "
+                        "existing destroy/repair operators ran"
                     ),
                 },
                 {
@@ -330,56 +342,117 @@ class CvrpAdapter:
                 "schema_version": "scion.cvrp_opportunity_recipe.v1",
                 "proposal_visibility_only": True,
                 "decision_features_excluded": True,
-                "mechanism_family": REQUIRED_MECHANISM_ID,
-                "review_status": "reviewed_no_positive_at_mde",
+                "mechanism_family": "construction_seed_portfolio",
+                "mechanism_id": SUCCESSOR26_MECHANISM_ID,
+                "review_status": "prepared_clean_fork",
                 "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
                 "target_surface": "solver_design",
-                "target_files": ["policies/baseline_modules/local_search.py"],
+                "target_files": [
+                    SUCCESSOR26_TARGET_FILE,
+                    "policies/baseline_modules/construction.py",
+                ],
                 "next_required_direction": NEXT_REQUIRED_DIRECTION,
-                "required_observations": list(
-                    LARGE_INSTANCE_TWO_OPT_CONSTRAINTS["required_pair_evidence"]
-                ),
-                "implementation_constraints": list(
-                    LARGE_INSTANCE_TWO_OPT_CONSTRAINTS[
-                        "implementation_constraints"
-                    ]
-                ),
+                "required_observations": [
+                    (
+                        "same-run baseline versus selected short-horizon "
+                        "post-trajectory total_distance delta before ALNS/VNS"
+                    ),
+                    (
+                        "material causal-path difference from reviewed construction "
+                        "and successor mechanisms"
+                    ),
+                    "feasibility, route-count, and runtime budget evidence",
+                    "effect-vs-MDE interpretation",
+                ],
+                "implementation_constraints": [
+                    (
+                        "do not continue unchanged successor23-style "
+                        "stagnation_adaptive_destroy_size_schedule scheduling"
+                    ),
+                    (
+                        "use scheduler_destroy_size_policy only for a "
+                        "telemetry-only q-audit repair or a materially different "
+                        "scheduler causal path"
+                    ),
+                    (
+                        "do not continue unchanged successor24-style "
+                        "lookahead insertion-cost repair"
+                    ),
+                    (
+                        "do not continue unchanged successor25-style raw "
+                        "cw_sweep_seed_baseline_selector selection"
+                    ),
+                    (
+                        "keep CVRP semantics in problem-owned solver files and "
+                        "generic core unchanged"
+                    ),
+                ],
                 "protected_cases": list(PROTECTED_CASES),
                 "protected_case_required_evidence": list(
                     CASE_PROTECTION_REQUIREMENTS["required_evidence"]
                 ),
-                "default_reject_directions": list(
-                    LARGE_INSTANCE_TWO_OPT_CONSTRAINTS[
-                        "default_reject_directions"
-                    ]
-                ),
+                "default_reject_directions": [
+                    "unchanged stagnation_adaptive_destroy_size_schedule",
+                    "unchanged operator_pair_destroy_size_bands",
+                    "unchanged bounded_route_segment_exchange",
+                    "unchanged lookahead_insertion_cost_repair",
+                    "unchanged lookahead_insertion_cost_repair_v2",
+                    "unchanged cw_sweep_seed_baseline_selector",
+                    "same-family scheduler q changes without explicit q-audit fields",
+                ],
             },
             "mechanism_effect_ranking": [
                 {
                     "rank": 1,
                     "mechanism_family": "construction_seed_portfolio",
-                    "evidence_status": "requires_same_run_seed_baseline",
-                    "opportunity_status": "preferred_if_seed_effect_is_isolated",
-                    "effect_status": "activation_not_objective_effect",
+                    "evidence_status": "successor25_seed_delta_not_preserved",
+                    "opportunity_status": "prepared_successor26_clean_fork",
+                    "effect_status": "unknown_current_effect",
                     "summary": (
-                        "Construction seed or portfolio changes are the least "
-                        "repeated successor direction, but only count as "
-                        "solver research when the run isolates objective-"
-                        "changing seed effect."
+                        "Successor26 should test "
+                        "short_horizon_seed_trajectory_selector with direct "
+                        "baseline versus selected post-trajectory total_distance "
+                        "attribution before full ALNS/VNS. Successor25 showed "
+                        "raw seed deltas were not preserved downstream."
                     ),
                     "recommended_action": (
-                        "Use a same-run seed baseline or accepted "
-                        "same-mechanism delta; do not claim progress from "
-                        "activation or fallback diversity alone."
+                        "Compare only a small existing seed set after a bounded "
+                        "short-horizon trajectory, record feasibility, route "
+                        "count, budget reserve, and same-run objective delta; "
+                        "do not claim progress from raw seed diversity alone."
                     ),
                     "reason_codes": [
                         "CONSTRUCTION_SEED_NEEDS_DIRECT_EFFECT",
+                        "SUCCESSOR25_REVIEWED_SEED_DELTA_NOT_PRESERVED",
+                        "SUCCESSOR26_PREPARED_CLEAN_FORK",
                         "ACTIVATION_IS_NOT_OBJECTIVE_EFFECT",
-                        "SUCCESSOR_ROTATION_AFTER_REVIEWED_NO_EFFECT",
                     ],
                 },
                 {
                     "rank": 2,
+                    "mechanism_family": "scheduler_destroy_size_policy",
+                    "evidence_status": "successor23_reviewed_solver_negative",
+                    "opportunity_status": "eligible_only_if_materially_different_or_telemetry_audit",
+                    "effect_status": "below_mde_quality_regression",
+                    "summary": (
+                        "Successor23 repaired observable q deltas for "
+                        "stagnation_adaptive_destroy_size_schedule, but stayed "
+                        "below MDE, parked as quality regression, and missed "
+                        "explicit baseline_q/adapted_q/q_delta runtime fields."
+                    ),
+                    "recommended_action": (
+                        "Do not continue the unchanged scheduler policy; use "
+                        "this family only for telemetry-only q-audit repair or "
+                        "a materially different scheduler causal path."
+                    ),
+                    "reason_codes": [
+                        "SUCCESSOR23_REVIEWED_BELOW_MDE",
+                        "QUALITY_REGRESSION_PARKED",
+                        "EXPLICIT_Q_AUDIT_FIELDS_MISSING",
+                    ],
+                },
+                {
+                    "rank": 3,
                     "mechanism_family": "destroy_repair_selection",
                     "evidence_status": "successor_required_after_reviewed_no_effect",
                     "opportunity_status": "eligible_if_materially_different",
@@ -387,7 +460,8 @@ class CvrpAdapter:
                     "summary": (
                         "Destroy/repair selection remains plausible only if "
                         "it differs from angular-sector, radial-string, and "
-                        "farthest-noise removal and reports per-case objective "
+                        "farthest-noise removal plus successor24 insertion-cost "
+                        "lookahead repair, and reports per-case objective "
                         "attribution."
                     ),
                     "recommended_action": (
@@ -401,16 +475,17 @@ class CvrpAdapter:
                     ],
                 },
                 {
-                    "rank": 3,
+                    "rank": 4,
                     "mechanism_family": "bounded_local_search_variant",
                     "evidence_status": "successor_required_after_reviewed_no_effect",
                     "opportunity_status": "lower_after_reviewed_3opt_no_effect",
                     "effect_status": "unknown_current_effect",
                     "summary": (
                         "The large-instance two-opt seed, cross-exchange, "
-                        "Or-opt reinsertion, and bounded 3-opt paths are all "
-                        "reviewed no-positive-at-MDE evidence. A bounded local "
-                        "search revisit must be a different causal path."
+                        "Or-opt reinsertion, bounded 3-opt, ejection-chain, "
+                        "and bounded route-segment paths are all reviewed "
+                        "no-positive-at-MDE evidence. A bounded local-search "
+                        "revisit must be a different causal path."
                     ),
                     "recommended_action": (
                         "Declare the bounded trigger, runtime guard, and "
@@ -424,7 +499,7 @@ class CvrpAdapter:
                     ],
                 },
                 {
-                    "rank": 4,
+                    "rank": 5,
                     "mechanism_family": "large_instance_intra_route_two_opt_seed",
                     "evidence_status": "checklist_complete_no_positive_at_mde",
                     "opportunity_status": "reviewed_not_next_required",
@@ -471,7 +546,9 @@ class CvrpAdapter:
                 {
                     "diagnostic_type": "residual_opportunity",
                     "surface": "solver_design",
-                    "mechanism_family": "construction_destroy_repair_local_search",
+                    "mechanism_family": (
+                        "scheduler_policy_construction_destroy_repair_local_search"
+                    ),
                     "metric": "total_distance",
                     "summary": (
                         "Formal screening cases retain aggregate reference-gap "
@@ -489,6 +566,29 @@ class CvrpAdapter:
                     "reason_codes": [
                         "CVRP_AGGREGATE_HEADROOM_REMAINS",
                         "DEFAULT_AVOID_PRIOR_WEAK_OR_NEGATIVE",
+                    ],
+                },
+                {
+                    "diagnostic_type": "reviewed_scheduler_policy",
+                    "surface": "solver_design",
+                    "mechanism_family": "scheduler_destroy_size_policy",
+                    "metric": "total_distance",
+                    "summary": (
+                        "The latest scheduler destroy-size successor repaired "
+                        "observable q trajectory but remained below MDE, parked "
+                        "as quality regression, and missed explicit q-audit "
+                        "fields."
+                    ),
+                    "recommended_action": (
+                        "Clean-fork to a materially different CVRP-owned causal "
+                        "path, or explicitly scope a telemetry-only repair that "
+                        "records baseline_q, adapted_q, and q_delta."
+                    ),
+                    "confidence": "medium",
+                    "reason_codes": [
+                        "SUCCESSOR23_REVIEWED_BELOW_MDE",
+                        "QUALITY_REGRESSION_PARKED",
+                        "EXPLICIT_Q_AUDIT_FIELDS_MISSING",
                     ],
                 },
                 {

@@ -39,11 +39,22 @@ def test_cvrp_adapter_renders_proposal_only_measurement_opportunities() -> None:
     )
     ranking = payload["mechanism_effect_ranking"]
     assert ranking[0]["mechanism_family"] == "construction_seed_portfolio"
-    assert ranking[0]["opportunity_status"] == "preferred_if_seed_effect_is_isolated"
-    assert ranking[2]["mechanism_family"] == "bounded_local_search_variant"
-    assert ranking[2]["opportunity_status"] == "lower_after_reviewed_3opt_no_effect"
-    assert ranking[3]["mechanism_family"] == "large_instance_intra_route_two_opt_seed"
-    assert ranking[3]["opportunity_status"] == "reviewed_not_next_required"
+    assert ranking[0]["opportunity_status"] == (
+        "prepared_successor26_clean_fork"
+    )
+    assert ranking[0]["evidence_status"] == "successor25_seed_delta_not_preserved"
+    assert "short_horizon_seed_trajectory_selector" in ranking[0]["summary"]
+    assert "not preserved downstream" in ranking[0]["summary"]
+    assert ranking[1]["mechanism_family"] == "scheduler_destroy_size_policy"
+    assert ranking[1]["opportunity_status"] == (
+        "eligible_only_if_materially_different_or_telemetry_audit"
+    )
+    assert ranking[1]["evidence_status"] == "successor23_reviewed_solver_negative"
+    assert "baseline_q/adapted_q/q_delta" in ranking[1]["summary"]
+    assert ranking[3]["mechanism_family"] == "bounded_local_search_variant"
+    assert ranking[3]["opportunity_status"] == "lower_after_reviewed_3opt_no_effect"
+    assert ranking[4]["mechanism_family"] == "large_instance_intra_route_two_opt_seed"
+    assert ranking[4]["opportunity_status"] == "reviewed_not_next_required"
     assert "bks" not in json.dumps(ranking, sort_keys=True).lower()
     reason_codes = {
         code
@@ -95,7 +106,10 @@ def test_context_manager_projects_cvrp_adapter_opportunities_top_level() -> None
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in compact
     assert "TRAJECTORY_DIVERGENT_LOW_SNR" in compact
     assert "mechanism_effect_ranking" in compact
-    assert "preferred_if_seed_effect_is_isolated" in compact
+    assert "prepared_successor26_clean_fork" in compact
+    assert "SUCCESSOR25_REVIEWED_SEED_DELTA_NOT_PRESERVED" in compact
+    assert "eligible_only_if_materially_different_or_telemetry_audit" in compact
+    assert "SUCCESSOR23_REVIEWED_BELOW_MDE" in compact
     assert "reviewed_not_next_required" in compact
     assert "measurable_opportunity_classes" in compact
     assert "case_count_gap_pct_at_least_3" in compact

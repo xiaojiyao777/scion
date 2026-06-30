@@ -147,6 +147,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "intra_route_or_opt_reinsert_reviewed_no_positive",
         "bounded_intra_route_3opt_reviewed_no_positive",
         "bounded_ejection_chain_relocate_reviewed_no_positive",
+        "bounded_route_segment_exchange_reviewed_no_positive",
+        "operator_pair_destroy_size_bands_reviewed_no_positive",
+        "stagnation_adaptive_destroy_size_schedule_reviewed_no_positive",
         "angular_sector_removal_reviewed_no_positive",
         "radial_string_removal_reviewed_no_positive",
         "farthest_noise_related_removal_reviewed_no_positive",
@@ -157,9 +160,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "load_complement_pair_removal_reviewed_no_positive",
         "route_pair_crossover_repair_reviewed_no_positive",
         "timewarp_string_removal_reviewed_no_positive",
+        "lookahead_insertion_cost_repair_reviewed_no_positive",
+        "lookahead_insertion_cost_repair_v2_reviewed_no_positive",
         "savings_seed_selection_probe_reviewed_no_positive",
         "granular_savings_seed_portfolio_reviewed_no_positive",
         "exact_short_route_polish_reviewed_no_positive",
+        "cw_sweep_seed_baseline_selector_reviewed_no_positive",
     }.issubset(reviewed_requirement_ids)
     assert any(
         block["block_id"] == "successor_portfolio_direction"
@@ -180,6 +186,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "intra_route_or_opt_reinsert",
         "bounded_intra_route_3opt",
         "bounded_ejection_chain_relocate",
+        "bounded_route_segment_exchange",
+        "operator_pair_destroy_size_bands",
+        "stagnation_adaptive_destroy_size_schedule",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -190,9 +199,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "load_complement_pair_removal",
         "route_pair_crossover_repair",
         "timewarp_string_removal",
+        "lookahead_insertion_cost_repair",
+        "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
         "granular_savings_seed_portfolio",
         "exact_short_route_polish",
+        "cw_sweep_seed_baseline_selector",
     ]
     assert launch_payload["suppressed_mechanism_ids"] == [
         "seed_post_optimization_selector"
@@ -306,6 +318,14 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
+        "stagnation_adaptive_destroy_size_schedule" in item
+        and "successor23 repaired observable q deltas" in item
+        and "below-MDE" in item
+        and "quality-regression" in item
+        and "baseline_q/adapted_q/q_delta" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
         "unbounded large-instance two-opt fallback" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
@@ -359,12 +379,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "construction_seed_portfolio"
     )
     assert measurement["mechanism_effect_ranking"][0]["opportunity_status"] == (
-        "preferred_if_seed_effect_is_isolated"
+        "prepared_successor26_clean_fork"
     )
-    assert measurement["mechanism_effect_ranking"][3]["mechanism_family"] == (
+    assert measurement["mechanism_effect_ranking"][0]["evidence_status"] == (
+        "successor25_seed_delta_not_preserved"
+    )
+    assert measurement["mechanism_effect_ranking"][4]["mechanism_family"] == (
         "large_instance_intra_route_two_opt_seed"
     )
-    assert measurement["mechanism_effect_ranking"][3]["opportunity_status"] == (
+    assert measurement["mechanism_effect_ranking"][4]["opportunity_status"] == (
         "reviewed_not_next_required"
     )
     assert measurement["opportunity_diagnostics"][0]["diagnostic_type"] == (
@@ -380,7 +403,19 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         ]
     )
     assert (
-        "materially different CVRP-owned"
+        "successor26 clean-fork"
+        in prepared_manifest["research_focus"]["current_question"]
+    )
+    assert (
+        "short_horizon_seed_trajectory_selector"
+        in prepared_manifest["research_focus"]["current_question"]
+    )
+    assert (
+        "short-horizon seed trajectory selector"
+        in prepared_manifest["research_focus"]["current_question"]
+    )
+    assert (
+        "baseline versus selected post-trajectory"
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
@@ -452,12 +487,47 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert (
-        "do not repeat unchanged granular_savings_seed_portfolio"
+        "Do not repeat unchanged granular_savings_seed_portfolio"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
-    assert "clean-fork" in prepared_manifest["research_focus"]["next_required_direction"]
     assert (
-        "repair seed_post_optimization_selector activation"
+        "stagnation_adaptive_destroy_size_schedule"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "successor26 solver research"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "short_horizon_seed_trajectory_selector"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "policies/baseline_modules/scheduler.py"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "cw_sweep_seed_baseline_selector"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "not preserved by downstream ALNS/VNS"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "`required_mechanism_ids` remains empty"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "clean-fork to a materially different CVRP-owned causal path"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "telemetry-only q-audit repair"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "seed-post selector repair is deferred"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert (
@@ -481,10 +551,24 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "timewarp_string_removal" in prepared_manifest_md
     assert "granular_savings_seed_portfolio" in prepared_manifest_md
     assert "exact_short_route_polish" in prepared_manifest_md
+    assert "Successor23 repaired the observable q trajectory" in prepared_manifest_md
+    assert "lookahead_insertion_cost_repair" in prepared_manifest_md
+    assert "cw_sweep_seed_baseline_selector" in prepared_manifest_md
+    assert "short_horizon_seed_trajectory_selector" in prepared_manifest_md
+    assert "policies/baseline_modules/destroy_repair.py" in prepared_manifest_md
+    assert "policies/baseline_modules/scheduler.py" in prepared_manifest_md
+    assert "policies/baseline_modules/construction.py" in prepared_manifest_md
+    assert "below MDE" in prepared_manifest_md
+    assert "quality regression" in prepared_manifest_md
+    assert "explicit baseline_q/adapted_q/q_delta runtime fields were missing" in (
+        prepared_manifest_md
+    )
+    assert "baseline_q" in prepared_manifest_md
+    assert "q_delta" in prepared_manifest_md
     assert "seed_post_optimization_selector" in prepared_manifest_md
     assert "savings_seed_selection_probe" in prepared_manifest_md
     assert (
-        "clean-fork"
+        "telemetry-only q-audit repair"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
@@ -494,6 +578,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "intra_route_or_opt_reinsert",
         "bounded_intra_route_3opt",
         "bounded_ejection_chain_relocate",
+        "bounded_route_segment_exchange",
+        "operator_pair_destroy_size_bands",
+        "stagnation_adaptive_destroy_size_schedule",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -504,14 +591,18 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "load_complement_pair_removal",
         "route_pair_crossover_repair",
         "timewarp_string_removal",
+        "lookahead_insertion_cost_repair",
+        "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
         "granular_savings_seed_portfolio",
         "exact_short_route_polish",
+        "cw_sweep_seed_baseline_selector",
     ]
     assert prepared_manifest["research_focus"]["suppressed_mechanism_ids"] == [
         "seed_post_optimization_selector"
     ]
     assert prepared_manifest["research_focus"]["successor_opportunity_families"] == [
+        "scheduler_destroy_size_policy",
         "destroy_repair_selection",
         "construction_seed_portfolio",
         "bounded_local_search_variant",
@@ -646,7 +737,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prepared_manifest_md
     assert "screening_headroom" in prepared_manifest_md
     assert "mechanism_effect_ranking" in prepared_manifest_md
-    assert "preferred_if_seed_effect_is_isolated" in prepared_manifest_md
+    assert "prepared_successor26_clean_fork" in prepared_manifest_md
+    assert "direct seed gains were not preserved downstream" in prepared_manifest_md
+    assert "eligible_only_if_materially_different_or_telemetry_audit" in prepared_manifest_md
     assert "lower_after_reviewed_3opt_no_effect" in prepared_manifest_md
     assert "reviewed_not_next_required" in prepared_manifest_md
     assert "opportunity_diagnostics" in prepared_manifest_md
