@@ -229,6 +229,16 @@ CVRP:
   `-19.0`. Treat unchanged construction seed trajectory selection as
   reviewed/default-avoid. Postrun report:
   `scion/docs/experiments/v0.4/v04-cvrp-successor26b-short-horizon-seed-trajectory-selector-postrun-20260630.md`.
+- Successor27 is in flight as the next non-seed clean fork:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor27-non-seed-clean-fork-server-2r-gpt55-20260630T151408Z-claw`.
+  It launched from commit `5241eb22` on server-local `claw`, used local
+  `gpt-5.5`, passed completion preflight, and forced
+  `solver_design` / `modify` /
+  `policies/baseline_modules/destroy_repair.py`. Initial traces include
+  `hypothesis_target_intent`, `hypothesis`, `tool_selection`, and `code`, all
+  on `gpt-5.5`; no protocol row had completed at the first health check.
+  In-flight record:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor27-non-seed-clean-fork-inflight-20260630.md`.
 - Successor22a was stopped before formal screening because the live hypothesis
   drifted to `bounded_repair_retry_on_reject`; treat it as a wrong-mechanism
   diagnostic, not solver evidence.
@@ -248,10 +258,9 @@ CVRP:
 2. Park unchanged successor23-style scheduler q scheduling, successor24-style
    insertion-cost lookahead repair, successor25 raw construction seed-baseline
    selection, and successor26b construction seed trajectory selection.
-3. After committing the guidance/catalog update, launch successor27 as a small
-   server-local `claw` run unless WSL completion preflight is revalidated first.
-   The next forced target should be a materially different non-seed owner file,
-   preferably destroy/repair or bounded local search.
+3. Monitor the in-flight successor27 server-local run. When it completes,
+   inspect wrapper status, postrun readiness, failures, LLM trace health, and
+   effect-vs-MDE before changing guidance or launching another follow-up.
 4. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 5. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.

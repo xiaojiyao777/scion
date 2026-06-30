@@ -220,6 +220,14 @@ Treat unchanged construction seed trajectory selection as reviewed/default-
 avoid. The next CVRP solver slot should clean-fork to a materially different
 non-seed path, with no hard `required_mechanism_ids`.
 
+Successor27 is now in flight as that non-seed clean fork, forced to
+`solver_design` / `modify` / `policies/baseline_modules/destroy_repair.py` on
+the server-local `claw` runner:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor27-non-seed-clean-fork-server-2r-gpt55-20260630T151408Z-claw`.
+It launched from commit `5241eb22` with healthy `gpt-5.5` completion preflight.
+The in-flight record is
+`scion/docs/experiments/v0.4/v04-cvrp-successor27-non-seed-clean-fork-inflight-20260630.md`.
+
 Reviewed or suppressed paths include the large two-opt seed line, cross
 exchange, Or-opt reinsertion, 3-opt, ejection-chain relocation, several
 destroy/repair variants, granular savings seed portfolio, exact short-route
@@ -261,10 +269,9 @@ from the current checkout.
 2. Park unchanged successor23-style scheduler q scheduling, successor24-style
    insertion-cost lookahead repair, successor25 construction seed-baseline
    selection, and successor26b construction seed trajectory selection.
-3. Launch the next small CVRP run as successor27 only after committing the
-   guidance/catalog update. It should be a materially different non-seed clean
-   fork, preferably forced to a destroy/repair or bounded-local-search owner
-   file, not another scheduler construction seed trajectory selector.
+3. Monitor the in-flight successor27 server-local run. After it completes,
+   inspect wrapper status, postrun readiness, failures, LLM trace health, and
+   effect-vs-MDE before changing guidance or launching another follow-up.
 4. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 5. Keep the v0.5 governance ablation frozen as a preregistered design; do not
