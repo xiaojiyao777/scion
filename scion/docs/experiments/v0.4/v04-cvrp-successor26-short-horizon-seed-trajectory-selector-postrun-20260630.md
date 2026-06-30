@@ -92,11 +92,18 @@ Design before development:
   any accepted alias style;
 - relaunch only after targeted tests pass.
 
+Follow-up decision: use a static-quality recognizer repair plus clearer retry
+language, not a relaxation of the construction-seed direct-effect gate. The
+recognizer should accept module-level mechanism-id aliases used inside solver
+class methods, while still rejecting dynamic local alias shadowing. The retry
+language should describe same-run seed/trajectory-vs-baseline objective effect
+so successor26b can record the short-horizon post-trajectory delta directly.
+
 ## Next Checkpoints
 
-- Review `campaign/agentic_sessions/*/output.json` and transcripts for the
-  exact rejected patch forms.
-- Review `scion/problems/cvrp/solver_design/static_quality.py` and
-  `CvrpAdapter.validate_patch_quality` for successor26-specific feedback.
-- Update `TASK.md` and `current-state.md` only after deciding whether
-  successor26b is a guidance repair or a static-quality recognizer repair.
+- Commit and sync the recognizer/template-language repair after targeted tests
+  pass.
+- Launch successor26b with the same forced owner:
+  `solver_design` / `modify` / `policies/baseline_modules/scheduler.py`.
+- Prefer the server-local `claw` runner for this small two-round follow-up
+  unless WSL completion preflight is revalidated first.

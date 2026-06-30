@@ -8,7 +8,7 @@ history.
 
 ## Operating Frame
 
-- Branch: `codex/v04-evidence-repair-plan`.
+- Branch: `v0.4-dev`.
 - Boundary authority: `scion/design/scion-architecture-v3.md`.
 - Current task source: `scion/TASK.md`.
 - Latest cross-document audit:
@@ -206,6 +206,12 @@ CVRP:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-2r-gpt55-20260630T132127Z-claw`;
   it reported HTTP `502` / `tls handshake eof` and should be treated as an
   environment preflight failure, not campaign evidence.
+- Successor26 follow-up selected a static-quality recognizer repair, not a
+  relaxation of the direct-effect gate. The repair accepts module-level
+  mechanism-id aliases used inside solver class methods and still rejects local
+  dynamic alias shadowing. Retry guidance now asks for same-run
+  seed/trajectory-vs-baseline objective effect, matching the short-horizon
+  trajectory-selector design. Targeted CVRP tests pass locally.
 - Successor22a was stopped before formal screening because the live hypothesis
   drifted to `bounded_repair_retry_on_reject`; treat it as a wrong-mechanism
   diagnostic, not solver evidence.
@@ -218,15 +224,16 @@ CVRP:
 
 ## Next Actions
 
-1. Use the successor25 postrun report as the current CVRP interpretation:
-   `scion/docs/experiments/v0.4/v04-cvrp-successor25-cw-sweep-seed-baseline-selector-postrun-20260630.md`.
+1. Treat successor26 as invalid no-effective-rounds, not solver-negative
+   evidence. Its follow-up repair is a static recognizer/template-language
+   repair for direct same-mechanism `record_move` effect attribution.
 2. Park unchanged successor23-style scheduler q scheduling and successor24-style
    insertion-cost lookahead repair; also do not repeat unchanged successor25
    construction seed-baseline selection.
-3. Before relaunching successor26, inspect the rejected candidate patches and
-   decide whether successor26b needs a guidance/template repair or a static
-   recognizer repair for direct `record_move` telemetry. Do not treat the
-   invalid no-effective-round run as solver evidence.
+3. After committing and syncing the repair, launch successor26b as a small
+   server-local `claw` run unless WSL completion preflight is revalidated first.
+   Keep the forced target at `solver_design` / `modify` /
+   `policies/baseline_modules/scheduler.py`.
 4. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 5. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.

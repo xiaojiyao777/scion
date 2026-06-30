@@ -984,3 +984,86 @@ def test_cvrp_smoke_provider_allows_construction_seed_direct_effect() -> None:
     )
 
     assert issue is None
+
+
+def test_cvrp_smoke_provider_allows_construction_seed_effect_alias_in_method() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a construction seed trajectory selector that compares the "
+            "selected short-horizon trajectory against the baseline trajectory."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        novelty_signature={"mechanism_family": "construction_seed_portfolio"},
+        mechanism_changes=(
+            SimpleNamespace(id="short_horizon_seed_trajectory_selector"),
+        ),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/scheduler.py",
+        action="modify",
+        code_content=(
+            "MECHANISM_ID = 'short_horizon_seed_trajectory_selector'\n"
+            "class Scheduler:\n"
+            "    def choose_seed(self, baseline, candidate):\n"
+            "        delta = baseline.distance - candidate.distance\n"
+            "        accepted = delta > 0\n"
+            "        self.context.record_move(MECHANISM_ID, attempted=1, "
+            "accepted=accepted, delta=delta, best_improved=accepted)\n"
+            "        return candidate if accepted else baseline\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is None
+
+
+def test_cvrp_smoke_provider_rejects_construction_seed_dynamic_alias_shadow() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a construction seed trajectory selector that compares the "
+            "selected short-horizon trajectory against the baseline trajectory."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        novelty_signature={"mechanism_family": "construction_seed_portfolio"},
+        mechanism_changes=(
+            SimpleNamespace(id="short_horizon_seed_trajectory_selector"),
+        ),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/scheduler.py",
+        action="modify",
+        code_content=(
+            "MECHANISM_ID = 'short_horizon_seed_trajectory_selector'\n"
+            "class Scheduler:\n"
+            "    def choose_seed(self, baseline, candidate):\n"
+            "        MECHANISM_ID = choose_runtime_mechanism()\n"
+            "        delta = baseline.distance - candidate.distance\n"
+            "        accepted = delta > 0\n"
+            "        self.context.record_move(MECHANISM_ID, attempted=1, "
+            "accepted=accepted, delta=delta, best_improved=accepted)\n"
+            "        return candidate if accepted else baseline\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is not None
+    assert "construction seed activation-only" in issue
+    assert "short_horizon_seed_trajectory_selector" in issue

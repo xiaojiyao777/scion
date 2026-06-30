@@ -141,7 +141,8 @@ def _construction_seed_effect_attribution_issue(
         "solver_design static smoke rejected construction seed activation-only "
         "telemetry: construction seed/portfolio patches must provide direct "
         "same-mechanism objective-effect attribution before downstream ALNS/VNS "
-        "can claim the effect. Record a selected-seed-vs-baseline delta with "
+        "can claim the effect. Record a same-run seed/trajectory-vs-baseline "
+        "delta with "
         "`context.record_move('<mechanism>', attempted=1, accepted=..., "
         "delta=..., best_improved=...)` under the declared mechanism id. "
         f"Missing direct effect telemetry for: {mechanism_hint}."
@@ -190,14 +191,19 @@ def _records_move_effect_via_local_alias(code: str, mechanism: str) -> bool:
     except SyntaxError:
         return False
 
-    def visit_block(statements: list[ast.stmt]) -> bool:
-        aliases = _local_string_aliases(statements)
+    def visit_block(
+        statements: list[ast.stmt],
+        inherited_aliases: dict[str, str] | None = None,
+    ) -> bool:
+        aliases = _local_string_aliases(statements, inherited_aliases)
         for statement in statements:
             if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if visit_block(statement.body):
+                if visit_block(statement.body, aliases):
                     return True
                 continue
             if isinstance(statement, ast.ClassDef):
+                if visit_class(statement, aliases):
+                    return True
                 continue
             for node in _walk_without_nested_scopes(statement):
                 if not isinstance(node, ast.Call):
@@ -213,6 +219,15 @@ def _records_move_effect_via_local_alias(code: str, mechanism: str) -> bool:
                     flags=re.IGNORECASE | re.DOTALL,
                 ):
                     return True
+        return False
+
+    def visit_class(statement: ast.ClassDef, aliases: dict[str, str]) -> bool:
+        for child in statement.body:
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if visit_block(child.body, aliases):
+                    return True
+            elif isinstance(child, ast.ClassDef) and visit_class(child, aliases):
+                return True
         return False
 
     return isinstance(tree, ast.Module) and visit_block(tree.body)
@@ -242,8 +257,11 @@ def _first_arg_matches(
     return False
 
 
-def _local_string_aliases(statements: list[ast.stmt]) -> dict[str, str]:
-    aliases: dict[str, str] = {}
+def _local_string_aliases(
+    statements: list[ast.stmt],
+    inherited_aliases: dict[str, str] | None = None,
+) -> dict[str, str]:
+    aliases: dict[str, str] = dict(inherited_aliases or {})
     invalid: set[str] = set()
     for statement in statements:
         for node in _walk_without_nested_scopes(statement):

@@ -140,10 +140,10 @@ class CvrpAdapter:
         )
         retry_constraint = (
             "Revise the CVRP solver-design patch before protocol: construction "
-            "seed/portfolio mechanisms must record selected-seed-vs-baseline "
-            "objective effect with context.record_move under the declared "
-            "mechanism id. Activation, phase timing, seed-pool size, or fallback "
-            "use is not objective-effect evidence."
+            "seed/portfolio mechanisms must record same-run seed/trajectory-"
+            "vs-baseline objective effect with context.record_move under the "
+            "declared mechanism id. Activation, phase timing, seed-pool size, "
+            "or fallback use is not objective-effect evidence."
             if construction_seed_issue
             else "Revise the CVRP solver-design patch to satisfy problem-owned "
             "static quality constraints before protocol."
