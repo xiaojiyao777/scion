@@ -133,6 +133,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "granular_savings_seed_portfolio",
         "exact_short_route_polish",
         "cw_sweep_seed_baseline_selector",
+        "short_horizon_seed_trajectory_selector",
+        "short_horizon_seed_trajectory_selector_v2",
     ]
     assert focus["suppressed_mechanism_ids"] == ["seed_post_optimization_selector"]
     assert focus["successor_opportunity_families"] == [
@@ -144,6 +146,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "positive-at-MDE" in focus["current_question"]
     assert "short_horizon_seed_trajectory_selector" in focus["current_question"]
     assert "short-horizon seed trajectory selector" in focus["current_question"]
+    assert "clean-fork away from construction seed trajectory selectors" in (
+        focus["current_question"]
+    )
     assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
     assert "intra_route_or_opt_reinsert" in focus["next_required_direction"]
     assert "bounded_intra_route_3opt" in focus["next_required_direction"]
@@ -185,17 +190,21 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "Successor25 then clean-forked" in focus["next_required_direction"]
     assert "cw_sweep_seed_baseline_selector" in focus["next_required_direction"]
     assert "not preserved by downstream ALNS/VNS" in focus["next_required_direction"]
-    assert "successor26 solver research" in focus["next_required_direction"]
+    assert "successor26b reran" in focus["next_required_direction"]
     assert "short_horizon_seed_trajectory_selector" in focus[
         "next_required_direction"
     ]
+    assert "short_horizon_seed_trajectory_selector_v2" in focus[
+        "next_required_direction"
+    ]
+    assert "CMT4 median -19.0" in focus["next_required_direction"]
     assert "policies/baseline_modules/scheduler.py" in (
         focus["next_required_direction"]
     )
     assert "`required_mechanism_ids` remains empty" in (
         focus["next_required_direction"]
     )
-    assert "clean-fork to a materially different CVRP-owned causal path" in (
+    assert "clean-fork away from construction seed trajectory selectors" in (
         focus["next_required_direction"]
     )
     assert "telemetry-only q-audit repair" in focus["next_required_direction"]
@@ -213,8 +222,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["required_evidence"]
     )
     assert any(
-        "short_horizon_seed_trajectory_selector" in item
-        and "policies/baseline_modules/scheduler.py" in item
+        "non-seed-trajectory causal path" in item
+        and "successor26b reviewed/default-avoid evidence" in item
         for item in focus["required_evidence"]
     )
     assert any(
@@ -333,6 +342,17 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["default_avoid_directions"]
     )
     assert any(
+        "short_horizon_seed_trajectory_selector" in item
+        and "successor26b valid screening" in item
+        and "below-MDE" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "short_horizon_seed_trajectory_selector_v2" in item
+        and "CMT2/CMT4 losses" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
         "seed_post_optimization_selector" in item
         and "missing-activation/inactive" in item
         for item in focus["default_avoid_directions"]
@@ -372,6 +392,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "granular_savings_seed_portfolio",
         "exact_short_route_polish",
         "cw_sweep_seed_baseline_selector",
+        "short_horizon_seed_trajectory_selector",
+        "short_horizon_seed_trajectory_selector_v2",
     }
     assert "seed_post_optimization_selector" not in mechanisms_by_id
     assert mechanisms_by_id["bounded_intra_route_3opt"][
@@ -426,6 +448,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "mechanism_family"
     ] == "construction_seed_portfolio"
     assert mechanisms_by_id["cw_sweep_seed_baseline_selector"][
+        "mechanism_family"
+    ] == "construction_seed_portfolio"
+    assert mechanisms_by_id["short_horizon_seed_trajectory_selector"][
+        "mechanism_family"
+    ] == "construction_seed_portfolio"
+    assert mechanisms_by_id["short_horizon_seed_trajectory_selector_v2"][
         "mechanism_family"
     ] == "construction_seed_portfolio"
     assert all(
@@ -573,10 +601,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
-        "granular_savings_seed_portfolio",
-        "exact_short_route_polish",
-        "cw_sweep_seed_baseline_selector",
-    ]
+            "granular_savings_seed_portfolio",
+            "exact_short_route_polish",
+            "cw_sweep_seed_baseline_selector",
+            "short_horizon_seed_trajectory_selector",
+            "short_horizon_seed_trajectory_selector_v2",
+        ]
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["suppressed_mechanism_ids"] == [
         "seed_post_optimization_selector"

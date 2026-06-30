@@ -124,6 +124,13 @@ Open blockers before v0.4 closeout:
   recorded direct-effect-zero telemetry. Successor25 then completed on WSL as
   a valid `cw_sweep_seed_baseline_selector` construction clean fork, but both
   rows had median delta `0.0`, CI `[0.0, 0.0]`, and no row at or above MDE.
+  Successor26 first exposed a static-quality recognizer gap, not solver
+  evidence. Successor26b then completed as a valid server-local rerun of the
+  repaired short-horizon construction seed trajectory selector path: both rows
+  reached screening, but `short_horizon_seed_trajectory_selector` stayed at
+  median delta `0.0`, CI `[0.0, 0.0]`, and
+  `short_horizon_seed_trajectory_selector_v2` stayed below MDE with median
+  delta `-5.0`, CI `[-8.0, 9.0]`, and CMT2/CMT4 losses.
 - Several production/test files remain over the 1000-line risk threshold and
   need design-first modularization before more behavior is added there.
 - v0.5 governance ablation is preregistered as a clean experiment matrix, but
@@ -165,11 +172,10 @@ The problem-owned CVRP guidance/catalog still emits no hard
 `required_mechanism_ids`, and now treats unchanged successor25-style raw seed
 selection as reviewed/default-avoid evidence.
 
-The prepared successor26 direction is
-`short_horizon_seed_trajectory_selector`, owned by
-`policies/baseline_modules/scheduler.py`. It should compare a small existing
-seed set after a strictly bounded short-horizon trajectory, record baseline
-versus selected post-trajectory objective delta before full ALNS/VNS, and keep
+Successor26 targeted `short_horizon_seed_trajectory_selector`, owned by
+`policies/baseline_modules/scheduler.py`. The design compared a small existing
+seed set after a strictly bounded short-horizon trajectory, recorded baseline
+versus selected post-trajectory objective delta before full ALNS/VNS, and kept
 generic core and `DecisionFeatures` unchanged. The design plan is
 `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-plan-20260630.md`.
 It ran on the server-local `claw` environment at
@@ -198,6 +204,21 @@ rejecting local dynamic alias shadowing. Retry guidance now asks for same-run
 seed/trajectory-vs-baseline objective effect, matching the short-horizon
 trajectory-selector design. Targeted CVRP tests pass in the local `claw`
 environment.
+
+Successor26b reran after that repair on the server-local `claw` runner:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor26b-short-horizon-seed-trajectory-selector-static-recognizer-server-2r-gpt55-20260630T134339Z-claw`.
+It completed two effective screening rows with local `gpt-5.5`, no quality
+blocks, no postrun failures, and postrun readiness ready. This time the result
+is valid solver-negative evidence: row 1
+`short_horizon_seed_trajectory_selector` had median delta `0.0`, CI
+`[0.0, 0.0]`, win rate `0.0`; row 2
+`short_horizon_seed_trajectory_selector_v2` had median delta `-5.0`, CI
+`[-8.0, 9.0]`, win rate `0.25`, CMT2 median `-8.0`, and CMT4 median `-19.0`.
+The postrun report is
+`scion/docs/experiments/v0.4/v04-cvrp-successor26b-short-horizon-seed-trajectory-selector-postrun-20260630.md`.
+Treat unchanged construction seed trajectory selection as reviewed/default-
+avoid. The next CVRP solver slot should clean-fork to a materially different
+non-seed path, with no hard `required_mechanism_ids`.
 
 Reviewed or suppressed paths include the large two-opt seed line, cross
 exchange, Or-opt reinsertion, 3-opt, ejection-chain relocation, several
@@ -233,16 +254,17 @@ from the current checkout.
 
 ## Next Actions
 
-1. Treat successor26 as invalid no-effective-rounds, not solver-negative
-   evidence. Its follow-up repair is a static recognizer/template-language
-   repair for direct same-mechanism `record_move` effect attribution.
-2. Park unchanged successor23-style scheduler q scheduling and successor24-style
-   insertion-cost lookahead repair; also do not repeat unchanged successor25
-   construction seed-baseline selection.
-3. After committing and syncing the repair, launch successor26b as a small
-   server-local `claw` run unless WSL completion preflight is revalidated first.
-   Keep the forced target at `solver_design` / `modify` /
-   `policies/baseline_modules/scheduler.py`.
+1. Treat successor26b as valid solver-negative evidence for unchanged
+   short-horizon construction seed trajectory selection. Do not relaunch
+   unchanged `short_horizon_seed_trajectory_selector` or
+   `short_horizon_seed_trajectory_selector_v2`.
+2. Park unchanged successor23-style scheduler q scheduling, successor24-style
+   insertion-cost lookahead repair, successor25 construction seed-baseline
+   selection, and successor26b construction seed trajectory selection.
+3. Launch the next small CVRP run as successor27 only after committing the
+   guidance/catalog update. It should be a materially different non-seed clean
+   fork, preferably forced to a destroy/repair or bounded-local-search owner
+   file, not another scheduler construction seed trajectory selector.
 4. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 5. Keep the v0.5 governance ablation frozen as a preregistered design; do not

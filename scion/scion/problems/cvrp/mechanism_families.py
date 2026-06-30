@@ -20,6 +20,7 @@ CONSTRUCTION_SEED_PORTFOLIO_ALIASES = (
     "savings_seed",
     "cw_sweep_seed_baseline_selector",
     "short_horizon_seed_trajectory_selector",
+    "short_horizon_seed_trajectory_selector_v2",
     "seed_trajectory_selector",
     "post_trajectory_seed_selector",
     "savings_construction",

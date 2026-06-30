@@ -54,7 +54,12 @@ The remaining closeout gaps are:
   negative, explicit q-audit fields were missing, and the branch parked as
   quality regression. Successor24 completed as a valid insertion-cost
   lookahead repair clean fork, but both rows remained below MDE and the v2 row
-  recorded direct-effect-zero telemetry.
+  recorded direct-effect-zero telemetry. Successor25 completed as a valid raw
+  construction seed-baseline clean fork but stayed at median delta `0.0`.
+  Successor26 first exposed a static-quality recognizer gap; successor26b then
+  reran the repaired short-horizon construction seed trajectory selector path
+  and completed valid screening, but both rows were below MDE and the v2 row
+  lost on CMT2/CMT4.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -160,7 +165,8 @@ CVRP:
   are aligned to that result: prepared handoffs emit an empty hard
   `required_mechanism_ids` list, treat successor23 and successor24 mechanisms as
   reviewed/default-avoid evidence, and now treat unchanged successor25 raw seed
-  selection as reviewed/default-avoid evidence.
+  selection plus successor26b construction seed trajectory selection as
+  reviewed/default-avoid evidence.
 - Successor25 completed on WSL and is postrun-ready:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-successor25-cw-sweep-seed-baseline-selector-2r-gpt55-20260630T101601Z-claw`.
   It was prepared from WSL runner commit `d501b900`, used local `gpt-5.5`, and
@@ -179,10 +185,10 @@ CVRP:
   `scion/docs/experiments/v0.4/v04-cvrp-successor25-cw-sweep-seed-baseline-selector-plan-20260630.md`.
   In-flight record:
   `scion/docs/experiments/v0.4/v04-cvrp-successor25-cw-sweep-seed-baseline-selector-inflight-20260630.md`.
-- Successor26 is designed and has been launched:
+- Successor26 targeted:
   `short_horizon_seed_trajectory_selector`, owned by
-  `policies/baseline_modules/scheduler.py`. It should compare a small existing
-  seed set after a strictly bounded short-horizon trajectory and record
+  `policies/baseline_modules/scheduler.py`. It compared a small existing
+  seed set after a strictly bounded short-horizon trajectory and recorded
   baseline versus selected post-trajectory objective delta before full ALNS/VNS.
   Plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-plan-20260630.md`.
@@ -212,6 +218,17 @@ CVRP:
   dynamic alias shadowing. Retry guidance now asks for same-run
   seed/trajectory-vs-baseline objective effect, matching the short-horizon
   trajectory-selector design. Targeted CVRP tests pass locally.
+- Successor26b completed on the server-local `claw` runner and is postrun-ready:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor26b-short-horizon-seed-trajectory-selector-static-recognizer-server-2r-gpt55-20260630T134339Z-claw`.
+  It used local `gpt-5.5`, completed two effective screening rows, had no
+  proposal-quality blocks, no postrun failures, and readiness passed. Row 1
+  `short_horizon_seed_trajectory_selector` had median delta `0.0`, CI
+  `[0.0, 0.0]`, win rate `0.0`; row 2
+  `short_horizon_seed_trajectory_selector_v2` had median delta `-5.0`, CI
+  `[-8.0, 9.0]`, win rate `0.25`, CMT2 median `-8.0`, and CMT4 median
+  `-19.0`. Treat unchanged construction seed trajectory selection as
+  reviewed/default-avoid. Postrun report:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor26b-short-horizon-seed-trajectory-selector-postrun-20260630.md`.
 - Successor22a was stopped before formal screening because the live hypothesis
   drifted to `bounded_repair_retry_on_reject`; treat it as a wrong-mechanism
   diagnostic, not solver evidence.
@@ -224,16 +241,17 @@ CVRP:
 
 ## Next Actions
 
-1. Treat successor26 as invalid no-effective-rounds, not solver-negative
-   evidence. Its follow-up repair is a static recognizer/template-language
-   repair for direct same-mechanism `record_move` effect attribution.
-2. Park unchanged successor23-style scheduler q scheduling and successor24-style
-   insertion-cost lookahead repair; also do not repeat unchanged successor25
-   construction seed-baseline selection.
-3. After committing and syncing the repair, launch successor26b as a small
+1. Treat successor26b as valid solver-negative evidence for unchanged
+   short-horizon construction seed trajectory selection. Do not relaunch
+   unchanged `short_horizon_seed_trajectory_selector` or
+   `short_horizon_seed_trajectory_selector_v2`.
+2. Park unchanged successor23-style scheduler q scheduling, successor24-style
+   insertion-cost lookahead repair, successor25 raw construction seed-baseline
+   selection, and successor26b construction seed trajectory selection.
+3. After committing the guidance/catalog update, launch successor27 as a small
    server-local `claw` run unless WSL completion preflight is revalidated first.
-   Keep the forced target at `solver_design` / `modify` /
-   `policies/baseline_modules/scheduler.py`.
+   The next forced target should be a materially different non-seed owner file,
+   preferably destroy/repair or bounded local search.
 4. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 5. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.

@@ -101,9 +101,16 @@ so successor26b can record the short-horizon post-trajectory delta directly.
 
 ## Next Checkpoints
 
-- Commit and sync the recognizer/template-language repair after targeted tests
-  pass.
-- Launch successor26b with the same forced owner:
+Completed follow-up:
+
+- The recognizer/template-language repair was committed after targeted tests
+  passed.
+- Successor26b launched on the server-local `claw` runner with the same forced
+  owner:
   `solver_design` / `modify` / `policies/baseline_modules/scheduler.py`.
-- Prefer the server-local `claw` runner for this small two-round follow-up
-  unless WSL completion preflight is revalidated first.
+- Successor26b completed as a valid two-row solver-negative run with no
+  proposal-quality, telemetry, model-call, or postrun-readiness failure.
+
+Follow-up report:
+
+`scion/docs/experiments/v0.4/v04-cvrp-successor26b-short-horizon-seed-trajectory-selector-postrun-20260630.md`

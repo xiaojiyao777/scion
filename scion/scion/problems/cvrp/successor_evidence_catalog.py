@@ -410,6 +410,52 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
             "source_root_label": "successor25",
         },
     },
+    {
+        "mechanism_id": "short_horizon_seed_trajectory_selector",
+        "mechanism_family": "construction_seed_portfolio",
+        "path_label": "short-horizon seed trajectory selector path",
+        "causal_path_label": "construction seed trajectory selection",
+        "effect_summary": {
+            "median_delta": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "win_rate": 0.0,
+            "screening_pairs": 32,
+            "case_median_win_count": 1,
+            "case_median_loss_count": 2,
+            "case_median_tie_count": 5,
+            "protected_case_cmt2_median_delta": 0.0,
+            "protected_case_cmt4_median_delta": 0.0,
+            "interpretation": "all_available_ci_high_below_mde",
+            "source_root_label": "successor26b",
+        },
+    },
+    {
+        "mechanism_id": "short_horizon_seed_trajectory_selector_v2",
+        "mechanism_family": "construction_seed_portfolio",
+        "path_label": "short-horizon seed trajectory selector v2 path",
+        "causal_path_label": "construction seed trajectory selection",
+        "effect_summary": {
+            "median_delta": -5.0,
+            "ci_low": -8.0,
+            "ci_high": 9.0,
+            "effect_to_mde_ratio": -0.505051,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "win_rate": 0.25,
+            "screening_pairs": 32,
+            "case_median_win_count": 2,
+            "case_median_loss_count": 5,
+            "case_median_tie_count": 1,
+            "protected_case_cmt2_median_delta": -8.0,
+            "protected_case_cmt4_median_delta": -19.0,
+            "protected_case_x_n110_median_delta": 9.0,
+            "interpretation": "all_available_ci_high_below_mde",
+            "source_root_label": "successor26b",
+        },
+    },
 )
 
 DEFAULT_AVOID_DIRECTIONS = (
@@ -532,6 +578,16 @@ DEFAULT_AVOID_DIRECTIONS = (
         "unchanged cw_sweep_seed_baseline_selector construction seed-baseline "
         "successor after successor25 below-MDE evidence and downstream-"
         "unpreserved direct seed delta"
+    ),
+    (
+        "unchanged short_horizon_seed_trajectory_selector construction seed "
+        "trajectory selector after successor26b valid screening stayed "
+        "below-MDE with median delta 0.0 and no positive-at-MDE row"
+    ),
+    (
+        "unchanged short_horizon_seed_trajectory_selector_v2 construction seed "
+        "trajectory selector after successor26b valid screening stayed "
+        "below-MDE with median delta -5.0 and CMT2/CMT4 losses"
     ),
     (
         "unchanged seed_post_optimization_selector construction post-optimization "

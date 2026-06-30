@@ -38,21 +38,25 @@ def test_cvrp_adapter_renders_proposal_only_measurement_opportunities() -> None:
         payload["default_avoid_directions"]
     )
     ranking = payload["mechanism_effect_ranking"]
-    assert ranking[0]["mechanism_family"] == "construction_seed_portfolio"
+    assert ranking[0]["mechanism_family"] == "destroy_repair_selection"
     assert ranking[0]["opportunity_status"] == (
-        "prepared_successor26_clean_fork"
+        "next_non_seed_clean_fork_candidate"
     )
-    assert ranking[0]["evidence_status"] == "successor25_seed_delta_not_preserved"
-    assert "short_horizon_seed_trajectory_selector" in ranking[0]["summary"]
-    assert "not preserved downstream" in ranking[0]["summary"]
-    assert ranking[1]["mechanism_family"] == "scheduler_destroy_size_policy"
-    assert ranking[1]["opportunity_status"] == (
+    assert ranking[0]["evidence_status"] == "eligible_after_seed_trajectory_review"
+    assert "successor26b closed" in ranking[0]["summary"]
+    assert "construction seed trajectory" in ranking[0]["summary"]
+    assert ranking[1]["mechanism_family"] == "bounded_local_search_variant"
+    assert ranking[1]["opportunity_status"] == "eligible_if_materially_different"
+    assert ranking[2]["mechanism_family"] == "construction_seed_portfolio"
+    assert ranking[2]["opportunity_status"] == "reviewed_default_avoid"
+    assert ranking[2]["evidence_status"] == "successor26b_seed_trajectory_below_mde"
+    assert "short_horizon_seed_trajectory_selector_v2" in ranking[2]["summary"]
+    assert ranking[3]["mechanism_family"] == "scheduler_destroy_size_policy"
+    assert ranking[3]["opportunity_status"] == (
         "eligible_only_if_materially_different_or_telemetry_audit"
     )
-    assert ranking[1]["evidence_status"] == "successor23_reviewed_solver_negative"
-    assert "baseline_q/adapted_q/q_delta" in ranking[1]["summary"]
-    assert ranking[3]["mechanism_family"] == "bounded_local_search_variant"
-    assert ranking[3]["opportunity_status"] == "lower_after_reviewed_3opt_no_effect"
+    assert ranking[3]["evidence_status"] == "successor23_reviewed_solver_negative"
+    assert "baseline_q/adapted_q/q_delta" in ranking[3]["summary"]
     assert ranking[4]["mechanism_family"] == "large_instance_intra_route_two_opt_seed"
     assert ranking[4]["opportunity_status"] == "reviewed_not_next_required"
     assert "bks" not in json.dumps(ranking, sort_keys=True).lower()
@@ -101,13 +105,13 @@ def test_context_manager_projects_cvrp_adapter_opportunities_top_level() -> None
         "construction_seed_portfolio"
     )
     assert payload["mechanism_effect_ranking"][0]["mechanism_family"] == (
-        "construction_seed_portfolio"
+        "destroy_repair_selection"
     )
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in compact
     assert "TRAJECTORY_DIVERGENT_LOW_SNR" in compact
     assert "mechanism_effect_ranking" in compact
-    assert "prepared_successor26_clean_fork" in compact
-    assert "SUCCESSOR25_REVIEWED_SEED_DELTA_NOT_PRESERVED" in compact
+    assert "next_non_seed_clean_fork_candidate" in compact
+    assert "SUCCESSOR26B_REVIEWED_BELOW_MDE" in compact
     assert "eligible_only_if_materially_different_or_telemetry_audit" in compact
     assert "SUCCESSOR23_REVIEWED_BELOW_MDE" in compact
     assert "reviewed_not_next_required" in compact

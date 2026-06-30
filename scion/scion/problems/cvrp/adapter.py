@@ -37,8 +37,6 @@ from scion.problems.cvrp.research_guidance import (
     CASE_PROTECTION_REQUIREMENTS,
     NEXT_REQUIRED_DIRECTION,
     PROTECTED_CASES,
-    SUCCESSOR26_MECHANISM_ID,
-    SUCCESSOR26_TARGET_FILE,
     SUCCESSOR_OPPORTUNITY_FAMILIES,
 )
 from scion.problems.cvrp.surface_policy import (
@@ -286,6 +284,8 @@ class CvrpAdapter:
                 "unchanged_lookahead_insertion_cost_repair_v2",
                 "unchanged_savings_seed_selection_probe",
                 "unchanged_cw_sweep_seed_baseline_selector",
+                "unchanged_short_horizon_seed_trajectory_selector",
+                "unchanged_short_horizon_seed_trajectory_selector_v2",
             ],
             "measurable_opportunity_classes": [
                 {
@@ -342,26 +342,27 @@ class CvrpAdapter:
                 "schema_version": "scion.cvrp_opportunity_recipe.v1",
                 "proposal_visibility_only": True,
                 "decision_features_excluded": True,
-                "mechanism_family": "construction_seed_portfolio",
-                "mechanism_id": SUCCESSOR26_MECHANISM_ID,
-                "review_status": "prepared_clean_fork",
+                "mechanism_family": "destroy_repair_selection",
+                "mechanism_id": "successor27_non_seed_clean_fork",
+                "review_status": "next_non_seed_clean_fork",
                 "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
                 "target_surface": "solver_design",
                 "target_files": [
-                    SUCCESSOR26_TARGET_FILE,
-                    "policies/baseline_modules/construction.py",
+                    "policies/baseline_modules/destroy_repair.py",
+                    "policies/baseline_modules/local_search.py",
                 ],
                 "next_required_direction": NEXT_REQUIRED_DIRECTION,
                 "required_observations": [
                     (
-                        "same-run baseline versus selected short-horizon "
-                        "post-trajectory total_distance delta before ALNS/VNS"
+                        "material causal-path difference from reviewed "
+                        "construction seed-baseline and seed-trajectory selectors"
                     ),
                     (
-                        "material causal-path difference from reviewed construction "
-                        "and successor mechanisms"
+                        "per-case total_distance delta tied to the changed "
+                        "destroy/repair or bounded-local-search mechanism"
                     ),
                     "feasibility, route-count, and runtime budget evidence",
+                    "CMT2/CMT4 case-level evidence or an explicit caveat",
                     "effect-vs-MDE interpretation",
                 ],
                 "implementation_constraints": [
@@ -383,6 +384,10 @@ class CvrpAdapter:
                         "cw_sweep_seed_baseline_selector selection"
                     ),
                     (
+                        "do not continue unchanged successor26-style "
+                        "short_horizon_seed_trajectory_selector selection"
+                    ),
+                    (
                         "keep CVRP semantics in problem-owned solver files and "
                         "generic core unchanged"
                     ),
@@ -398,38 +403,89 @@ class CvrpAdapter:
                     "unchanged lookahead_insertion_cost_repair",
                     "unchanged lookahead_insertion_cost_repair_v2",
                     "unchanged cw_sweep_seed_baseline_selector",
+                    "unchanged short_horizon_seed_trajectory_selector",
+                    "unchanged short_horizon_seed_trajectory_selector_v2",
                     "same-family scheduler q changes without explicit q-audit fields",
                 ],
             },
             "mechanism_effect_ranking": [
                 {
                     "rank": 1,
-                    "mechanism_family": "construction_seed_portfolio",
-                    "evidence_status": "successor25_seed_delta_not_preserved",
-                    "opportunity_status": "prepared_successor26_clean_fork",
+                    "mechanism_family": "destroy_repair_selection",
+                    "evidence_status": "eligible_after_seed_trajectory_review",
+                    "opportunity_status": "next_non_seed_clean_fork_candidate",
                     "effect_status": "unknown_current_effect",
                     "summary": (
-                        "Successor26 should test "
-                        "short_horizon_seed_trajectory_selector with direct "
-                        "baseline versus selected post-trajectory total_distance "
-                        "attribution before full ALNS/VNS. Successor25 showed "
-                        "raw seed deltas were not preserved downstream."
+                        "After successor26b closed the construction seed "
+                        "trajectory path below MDE, the next branch should "
+                        "clean-fork to a materially different destroy/repair "
+                        "or bounded-local-search causal path with per-case "
+                        "objective attribution."
                     ),
                     "recommended_action": (
-                        "Compare only a small existing seed set after a bounded "
-                        "short-horizon trajectory, record feasibility, route "
-                        "count, budget reserve, and same-run objective delta; "
-                        "do not claim progress from raw seed diversity alone."
+                        "Name the changed removal, repair, or bounded local "
+                        "search choice before code work; reject renamed "
+                        "seed-baseline, seed-trajectory, insertion-cost "
+                        "lookahead, and reviewed removal variants."
                     ),
                     "reason_codes": [
-                        "CONSTRUCTION_SEED_NEEDS_DIRECT_EFFECT",
-                        "SUCCESSOR25_REVIEWED_SEED_DELTA_NOT_PRESERVED",
-                        "SUCCESSOR26_PREPARED_CLEAN_FORK",
-                        "ACTIVATION_IS_NOT_OBJECTIVE_EFFECT",
+                        "SUCCESSOR26B_REVIEWED_BELOW_MDE",
+                        "NON_SEED_CLEAN_FORK_REQUIRED",
+                        "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
                     ],
                 },
                 {
                     "rank": 2,
+                    "mechanism_family": "bounded_local_search_variant",
+                    "evidence_status": "successor_required_after_reviewed_no_effect",
+                    "opportunity_status": "eligible_if_materially_different",
+                    "effect_status": "unknown_current_effect",
+                    "summary": (
+                        "The large-instance two-opt seed, cross-exchange, "
+                        "Or-opt reinsertion, bounded 3-opt, ejection-chain, "
+                        "and bounded route-segment paths are all reviewed "
+                        "no-positive-at-MDE evidence. A bounded local-search "
+                        "revisit must be a different causal path."
+                    ),
+                    "recommended_action": (
+                        "Declare the bounded trigger, runtime guard, and "
+                        "direct route-level objective delta for a non-reviewed "
+                        "local-search mechanism."
+                    ),
+                    "reason_codes": [
+                        "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE",
+                        "BOUNDED_LOCAL_SEARCH_PRIOR_PATHS_REVIEWED_NO_EFFECT",
+                        "SUCCESSOR_CAUSAL_PATH_REQUIRED",
+                    ],
+                },
+                {
+                    "rank": 3,
+                    "mechanism_family": "construction_seed_portfolio",
+                    "evidence_status": "successor26b_seed_trajectory_below_mde",
+                    "opportunity_status": "reviewed_default_avoid",
+                    "effect_status": "measured_no_positive_at_mde",
+                    "summary": (
+                        "Successor25 showed raw construction seed deltas were "
+                        "not preserved downstream; successor26b validly "
+                        "screened short_horizon_seed_trajectory_selector and "
+                        "short_horizon_seed_trajectory_selector_v2, but both "
+                        "stayed below MDE and v2 lost on CMT2/CMT4."
+                    ),
+                    "recommended_action": (
+                        "Do not continue unchanged construction seed-baseline "
+                        "or seed-trajectory selection. Any construction revisit "
+                        "must name a new causal path and explain why successor25/"
+                        "successor26b evidence no longer applies."
+                    ),
+                    "reason_codes": [
+                        "CONSTRUCTION_SEED_NEEDS_DIRECT_EFFECT",
+                        "SUCCESSOR25_REVIEWED_SEED_DELTA_NOT_PRESERVED",
+                        "SUCCESSOR26B_REVIEWED_BELOW_MDE",
+                        "ACTIVATION_IS_NOT_OBJECTIVE_EFFECT",
+                    ],
+                },
+                {
+                    "rank": 4,
                     "mechanism_family": "scheduler_destroy_size_policy",
                     "evidence_status": "successor23_reviewed_solver_negative",
                     "opportunity_status": "eligible_only_if_materially_different_or_telemetry_audit",
@@ -449,53 +505,6 @@ class CvrpAdapter:
                         "SUCCESSOR23_REVIEWED_BELOW_MDE",
                         "QUALITY_REGRESSION_PARKED",
                         "EXPLICIT_Q_AUDIT_FIELDS_MISSING",
-                    ],
-                },
-                {
-                    "rank": 3,
-                    "mechanism_family": "destroy_repair_selection",
-                    "evidence_status": "successor_required_after_reviewed_no_effect",
-                    "opportunity_status": "eligible_if_materially_different",
-                    "effect_status": "unknown_current_effect",
-                    "summary": (
-                        "Destroy/repair selection remains plausible only if "
-                        "it differs from angular-sector, radial-string, and "
-                        "farthest-noise removal plus successor24 insertion-cost "
-                        "lookahead repair, and reports per-case objective "
-                        "attribution."
-                    ),
-                    "recommended_action": (
-                        "Name the changed removal or repair choice and its "
-                        "direct total_distance evidence before screening."
-                    ),
-                    "reason_codes": [
-                        "MATERIAL_DIFFERENCE_REQUIRED",
-                        "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
-                        "DESTROY_REPAIR_PRIOR_PATHS_REVIEWED_NO_EFFECT",
-                    ],
-                },
-                {
-                    "rank": 4,
-                    "mechanism_family": "bounded_local_search_variant",
-                    "evidence_status": "successor_required_after_reviewed_no_effect",
-                    "opportunity_status": "lower_after_reviewed_3opt_no_effect",
-                    "effect_status": "unknown_current_effect",
-                    "summary": (
-                        "The large-instance two-opt seed, cross-exchange, "
-                        "Or-opt reinsertion, bounded 3-opt, ejection-chain, "
-                        "and bounded route-segment paths are all reviewed "
-                        "no-positive-at-MDE evidence. A bounded local-search "
-                        "revisit must be a different causal path."
-                    ),
-                    "recommended_action": (
-                        "Declare the bounded trigger, runtime guard, and "
-                        "direct route-level objective delta for a non-reviewed "
-                        "local-search mechanism."
-                    ),
-                    "reason_codes": [
-                        "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE",
-                        "BOUNDED_LOCAL_SEARCH_PRIOR_PATHS_REVIEWED_NO_EFFECT",
-                        "SUCCESSOR_CAUSAL_PATH_REQUIRED",
                     ],
                 },
                 {
