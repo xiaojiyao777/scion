@@ -186,13 +186,22 @@ CVRP:
   baseline versus selected post-trajectory objective delta before full ALNS/VNS.
   Plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-plan-20260630.md`.
-- Successor26 is now running on the server-local `claw` environment because the
-  WSL preflight failed before campaign execution with HTTPS TLS errors:
+- Successor26 ran on the server-local `claw` environment because the WSL
+  preflight failed before campaign execution with HTTPS TLS errors:
   `/home/clawd/research/scion-experiments/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-server-2r-gpt55-20260630T132452Z-claw`.
-  PID `1279060`, commit `6896451f`, local `gpt-5.5`, completion preflight
-  passed, forced `solver_design` / `modify` /
-  `policies/baseline_modules/scheduler.py`. In-flight record:
+  Commit `6896451f`, local `gpt-5.5`, completion preflight passed, forced
+  `solver_design` / `modify` / `policies/baseline_modules/scheduler.py`. The
+  run ended invalid with `invalid_no_effective_rounds`,
+  `interrupted_incomplete`, stop reason `repeated_quality_block_signature`,
+  `proposal_quality_blocks=3`, and `protocol_metric_results=0`. All proposals
+  were blocked before effective screening by
+  `agent_quality_blocked:cvrp_construction_seed_direct_effect_missing` because
+  the candidate patches did not satisfy direct
+  `context.record_move("short_horizon_seed_trajectory_selector", ...)` effect
+  telemetry. This is not solver-negative evidence. In-flight record:
   `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-inflight-20260630.md`.
+  Postrun report:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-postrun-20260630.md`.
   The failed WSL preflight root is
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-2r-gpt55-20260630T132127Z-claw`;
   it reported HTTP `502` / `tls handshake eof` and should be treated as an
@@ -214,9 +223,10 @@ CVRP:
 2. Park unchanged successor23-style scheduler q scheduling and successor24-style
    insertion-cost lookahead repair; also do not repeat unchanged successor25
    construction seed-baseline selection.
-3. Monitor the active server-local successor26 run above. When it finishes,
-   inspect postrun readiness, formal row decisions, direct mechanism telemetry,
-   and CMT2/CMT4 case-level deltas before designing any successor27.
+3. Before relaunching successor26, inspect the rejected candidate patches and
+   decide whether successor26b needs a guidance/template repair or a static
+   recognizer repair for direct `record_move` telemetry. Do not treat the
+   invalid no-effective-round run as solver evidence.
 4. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 5. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
@@ -334,6 +344,8 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
   `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-plan-20260630.md`
 - CVRP successor26 short-horizon seed trajectory selector in-flight:
   `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-inflight-20260630.md`
+- CVRP successor26 short-horizon seed trajectory selector invalid postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-postrun-20260630.md`
 - CVRP deferred seed-post selector activation plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor21-seed-post-selector-activation-plan-20260629.md`
 - v0.4 large-file modularization plan:

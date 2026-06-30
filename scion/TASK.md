@@ -172,11 +172,20 @@ seed set after a strictly bounded short-horizon trajectory, record baseline
 versus selected post-trajectory objective delta before full ALNS/VNS, and keep
 generic core and `DecisionFeatures` unchanged. The design plan is
 `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-plan-20260630.md`.
-It is currently running on the server-local `claw` environment at
+It ran on the server-local `claw` environment at
 `/home/clawd/research/scion-experiments/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-server-2r-gpt55-20260630T132452Z-claw`
-with PID `1279060`, commit `6896451f`, and completion preflight passed. The
-in-flight record is
+with commit `6896451f` and completion preflight passed, but it ended invalid:
+`run_validity_status=invalid_no_effective_rounds`,
+`run_completeness_status=interrupted_incomplete`, stop reason
+`repeated_quality_block_signature`, `proposal_quality_blocks=3`, and
+`protocol_metric_results=0`. All proposals were blocked before effective
+screening by `agent_quality_blocked:cvrp_construction_seed_direct_effect_missing`
+because the candidate patches did not satisfy the required direct
+`context.record_move("short_horizon_seed_trajectory_selector", ...)` effect
+telemetry. This is not solver-negative evidence. The in-flight record is
 `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-inflight-20260630.md`.
+The postrun report is
+`scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-postrun-20260630.md`.
 The first WSL launch attempt failed before campaign execution because WSL HTTPS
 TLS handshakes failed; treat that WSL root as an environment preflight failure,
 not campaign evidence.
@@ -220,9 +229,10 @@ from the current checkout.
 2. Park unchanged successor23-style scheduler q scheduling and successor24-style
    insertion-cost lookahead repair; also do not repeat unchanged successor25
    construction seed-baseline selection.
-3. Monitor the active server-local successor26 run above. When it finishes,
-   inspect postrun readiness, formal row decisions, direct mechanism telemetry,
-   and CMT2/CMT4 case-level deltas before designing any successor27.
+3. Before relaunching successor26, inspect the rejected candidate patches and
+   decide whether successor26b needs a guidance/template repair or a static
+   recognizer repair for direct `record_move` telemetry. Do not treat the
+   invalid no-effective-round run as solver evidence.
 4. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 5. Keep the v0.5 governance ablation frozen as a preregistered design; do not
