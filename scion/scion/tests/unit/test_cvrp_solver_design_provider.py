@@ -360,10 +360,10 @@ def test_cvrp_target_intent_guidance_prefers_pivot_after_route_merge_plateau() -
     assert "broader formal-surface activation" in rendered
     assert "same-run seed baseline" in rendered
     assert "fallback activation as effect" in rendered
-    assert "successor33 should select" in rendered
-    assert "`neighbor_list_vns_filter`" in rendered
+    assert "successor34 should select" in rendered
+    assert "`frozen_safe_neighbor_list_vns_filter`" in rendered
     assert "existing VNS neighborhood candidate enumeration" in rendered
-    assert "A non-local-search target is not preferred for the current successor33 slot" in (
+    assert "A non-local-search target is not preferred for the current successor34 slot" in (
         rendered
     )
     assert "neighborhood name, attempted/accepted counts" in rendered

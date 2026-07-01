@@ -39,12 +39,12 @@ def test_cvrp_adapter_renders_proposal_only_measurement_opportunities() -> None:
     )
     ranking = payload["mechanism_effect_ranking"]
     assert ranking[0]["mechanism_family"] == "bounded_local_search_variant"
-    assert ranking[0]["opportunity_status"] == "eligible_clean_fork"
+    assert ranking[0]["opportunity_status"] == "eligible_same_family_repair"
     assert ranking[0]["evidence_status"] == (
-        "successor33_ready_after_successor32_zero_effect"
+        "successor34_ready_after_successor33_frozen_unsafe"
     )
-    assert "neighbor_list_vns_filter" in ranking[0]["summary"]
-    assert "candidate enumeration" in ranking[0]["summary"]
+    assert "frozen_safe_neighbor_list_vns_filter" in ranking[0]["summary"]
+    assert "candidate timeouts" in ranking[0]["summary"]
     assert ranking[1]["mechanism_family"] == "acceptance_or_adaptive_weighting"
     assert ranking[1]["opportunity_status"] == "reviewed_default_avoid"
     assert ranking[1]["evidence_status"] == "successor32_reviewed_zero_effect"
@@ -69,8 +69,8 @@ def test_cvrp_adapter_renders_proposal_only_measurement_opportunities() -> None:
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in reason_codes
     assert "CONSTRUCTION_SEED_NEEDS_DIRECT_EFFECT" in reason_codes
     assert "BUDGET_EXHAUSTING_RUNTIME_REPORT_ONLY" in reason_codes
-    assert "validation" not in rendered.lower()
-    assert "frozen" not in rendered.lower()
+    assert "SUCCESSOR34_FROZEN_SAFE_NEIGHBOR_LIST_READY" in rendered
+    assert "SUCCESSOR33_VALIDATION_POSITIVE_FROZEN_UNSAFE" in rendered
     assert "holdout" not in rendered.lower()
     assert "bks" not in rendered.lower()
 
@@ -111,9 +111,9 @@ def test_context_manager_projects_cvrp_adapter_opportunities_top_level() -> None
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in compact
     assert "TRAJECTORY_DIVERGENT_LOW_SNR" in compact
     assert "mechanism_effect_ranking" in compact
-    assert "eligible_clean_fork" in compact
-    assert "SUCCESSOR33_NEIGHBOR_LIST_VNS_FILTER_READY" in compact
-    assert "SUCCESSOR32_ZERO_EFFECT_DEFAULT_AVOID" in compact
+    assert "eligible_same_family_repair" in compact
+    assert "SUCCESSOR34_FROZEN_SAFE_NEIGHBOR_LIST_READY" in compact
+    assert "SUCCESSOR33_VALIDATION_POSITIVE_FROZEN_UNSAFE" in compact
     assert "ROUTE_PAIR_OVERLAP_LINE_PARKED" in compact
     assert "eligible_only_if_materially_different_or_telemetry_audit" in compact
     assert "SUCCESSOR23_REVIEWED_BELOW_MDE" in compact

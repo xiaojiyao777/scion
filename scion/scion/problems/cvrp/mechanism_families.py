@@ -52,6 +52,7 @@ BOUNDED_LOCAL_SEARCH_VARIANT_ALIASES = (
     "bounded_ejection_chain_relocate",
     "ejection_chain_relocate",
     "neighbor_list_vns_filter",
+    "frozen_safe_neighbor_list_vns_filter",
     "neighbor_list_filter",
     "vns_candidate_list_filter",
     "candidate_list_vns_filter",

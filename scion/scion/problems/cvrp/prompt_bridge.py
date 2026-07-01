@@ -350,6 +350,7 @@ def cvrp_problem_measurement_diagnostics_prompt_summary(
         "successor_rotation_direction_present": (
             "preferred_if_seed_effect_is_isolated" in rendered_prompt
             or "eligible_clean_fork" in rendered_prompt
+            or "eligible_same_family_repair" in rendered_prompt
             or "eligible_if_materially_different" in rendered_prompt
             or "lower_after_reviewed_3opt_no_effect" in rendered_prompt
         ),

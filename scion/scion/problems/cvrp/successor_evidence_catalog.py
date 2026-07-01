@@ -96,6 +96,38 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "neighbor_list_vns_filter",
+        "mechanism_family": "bounded_local_search_variant",
+        "path_label": "neighbor-list VNS filter path",
+        "causal_path_label": "neighbor-list VNS candidate filtering",
+        "outcome_status": "frozen_unsafe_validation_positive",
+        "effect_summary": {
+            "screening_pair_wins": 20,
+            "screening_pair_losses": 6,
+            "screening_pair_ties": 6,
+            "screening_case_wins": 6,
+            "screening_case_losses": 0,
+            "screening_case_ties": 2,
+            "screening_median_delta": 6.25,
+            "screening_ci_low": 1.5,
+            "screening_ci_high": 18.5,
+            "validation_pair_wins": 24,
+            "validation_pair_losses": 7,
+            "validation_pair_ties": 1,
+            "validation_median_delta": 7.75,
+            "validation_ci_low": 0.75,
+            "validation_ci_high": 96.5,
+            "frozen_pair_wins": 9,
+            "frozen_pair_losses": 12,
+            "frozen_pair_ties": 3,
+            "frozen_candidate_timeout_failures": 6,
+            "frozen_runtime_failure": True,
+            "interpretation": "validation_positive_but_frozen_unsafe",
+            "recommended_followup": "frozen_safe_neighbor_list_vns_filter",
+            "source_root_label": "successor33",
+        },
+    },
+    {
         "mechanism_id": "operator_pair_destroy_size_bands",
         "mechanism_family": "scheduler_destroy_size_policy",
         "path_label": "operator-pair destroy-size band scheduler path",
@@ -739,6 +771,12 @@ DEFAULT_AVOID_DIRECTIONS = (
     (
         "unchanged adaptive_embedded_vns_runtime_allocation scheduler runtime "
         "allocation after successor31 valid zero-effect below-MDE evidence"
+    ),
+    (
+        "unchanged neighbor_list_vns_filter bounded-local-search candidate "
+        "filter after successor33 passed screening/validation but failed "
+        "frozen on candidate-side timeouts; continue only with frozen-safe "
+        "deadline guards and a materially repaired implementation"
     ),
     (
         "unchanged seed_post_optimization_selector construction post-optimization "

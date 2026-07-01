@@ -39,9 +39,9 @@ from scion.problems.cvrp.research_guidance import (
     PROTECTED_CASES,
     SUCCESSOR32_MECHANISM_ID,
     SUCCESSOR32_TARGET_FILE,
-    SUCCESSOR33_DESIGN_PATH,
-    SUCCESSOR33_MECHANISM_ID,
-    SUCCESSOR33_TARGET_FILE,
+    SUCCESSOR34_DESIGN_PATH,
+    SUCCESSOR34_MECHANISM_ID,
+    SUCCESSOR34_TARGET_FILE,
     SUCCESSOR_OPPORTUNITY_FAMILIES,
 )
 from scion.problems.cvrp.surface_policy import (
@@ -62,8 +62,8 @@ CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE = (
 CVRP_SUCCESSOR32_FOCUS_FAILURE = (
     "agent_quality_blocked:cvrp_successor32_focus_mismatch"
 )
-CVRP_SUCCESSOR33_FOCUS_FAILURE = (
-    "agent_quality_blocked:cvrp_successor33_focus_mismatch"
+CVRP_SUCCESSOR34_FOCUS_FAILURE = (
+    "agent_quality_blocked:cvrp_successor34_focus_mismatch"
 )
 
 
@@ -133,23 +133,26 @@ class CvrpAdapter:
         change_locus = str(getattr(hypothesis, "change_locus", "") or "").strip()
         target_file = str(getattr(hypothesis, "target_file", "") or "").strip()
         if change_locus != "solver_design":
-            return {"allowed": True, "gate_name": "cvrp_successor33_focus"}
-        if target_file == SUCCESSOR33_TARGET_FILE:
-            gate_name = "cvrp_successor33_focus"
-            failure_code = CVRP_SUCCESSOR33_FOCUS_FAILURE
-            required_mechanism_id = SUCCESSOR33_MECHANISM_ID
-            required_target_file = SUCCESSOR33_TARGET_FILE
-            successor_label = "successor33 neighbor-list VNS filter"
+            return {"allowed": True, "gate_name": "cvrp_successor34_focus"}
+        if target_file == SUCCESSOR34_TARGET_FILE:
+            gate_name = "cvrp_successor34_focus"
+            failure_code = CVRP_SUCCESSOR34_FOCUS_FAILURE
+            required_mechanism_id = SUCCESSOR34_MECHANISM_ID
+            required_target_file = SUCCESSOR34_TARGET_FILE
+            successor_label = "successor34 frozen-safe neighbor-list VNS filter"
             required_causal_path = (
-                "neighbor-list or route-neighbor filtering/order for existing "
-                "VNS neighborhood candidate enumeration"
+                "frozen-safe customer-adjacency filtering/order for existing "
+                "VNS neighborhood candidate enumeration with deadline guards "
+                "and bounded fallback"
             )
             retry_constraint = (
                 "Redraft the CVRP solver-design hypothesis as the "
-                "successor33 neighbor-list VNS filter: declare mechanism "
-                f"`{SUCCESSOR33_MECHANISM_ID}`, keep the target file at "
-                f"`{SUCCESSOR33_TARGET_FILE}`, and describe candidate "
-                "enumeration filtering/order inside existing VNS neighborhoods. "
+                "successor34 frozen-safe neighbor-list VNS filter: declare "
+                f"mechanism `{SUCCESSOR34_MECHANISM_ID}`, keep the target "
+                f"file at `{SUCCESSOR34_TARGET_FILE}`, and describe "
+                "customer-adjacency candidate filtering/order inside existing "
+                "VNS neighborhoods plus large-instance deadline guards, "
+                "bounded fallback, and budget-stop telemetry. "
                 "Do not switch to destroy/repair selection, q scheduling, seed "
                 "selection, acceptance probability, operator-credit weighting, "
                 "embedded-VNS runtime allocation, or a new local-search move family."
@@ -175,7 +178,7 @@ class CvrpAdapter:
                 "acceptance probability, or embedded-VNS runtime allocation."
             )
         else:
-            return {"allowed": True, "gate_name": "cvrp_successor33_focus"}
+            return {"allowed": True, "gate_name": "cvrp_successor34_focus"}
 
         mechanism_ids: list[str] = []
         for change in getattr(hypothesis, "mechanism_changes", ()) or ():
@@ -455,10 +458,11 @@ class CvrpAdapter:
                 {
                     "mechanism_family": "bounded_local_search_variant",
                     "required_evidence": (
-                        "successor33 neighbor-list VNS filtering/order: "
-                        "feasible route-level objective deltas, attempted/"
-                        "accepted move counts, record_move delta, phase runtime, "
-                        "iteration count, and bounded candidate enumeration"
+                        "successor34 frozen-safe neighbor-list VNS filtering/"
+                        "order: feasible route-level objective deltas, "
+                        "attempted/accepted move counts, record_move delta, "
+                        "phase runtime, iteration count, bounded candidate "
+                        "enumeration, and budget/fallback/timeout evidence"
                     ),
                 },
                 {
@@ -488,29 +492,29 @@ class CvrpAdapter:
                 "proposal_visibility_only": True,
                 "decision_features_excluded": True,
                 "mechanism_family": "bounded_local_search_variant",
-                "mechanism_id": SUCCESSOR33_MECHANISM_ID,
-                "review_status": "successor33_ready_after_successor32_zero_effect",
+                "mechanism_id": SUCCESSOR34_MECHANISM_ID,
+                "review_status": "successor34_ready_after_successor33_frozen_unsafe",
                 "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
                 "target_surface": "solver_design",
-                "target_files": [SUCCESSOR33_TARGET_FILE],
-                "design_path": SUCCESSOR33_DESIGN_PATH,
+                "target_files": [SUCCESSOR34_TARGET_FILE],
+                "design_path": SUCCESSOR34_DESIGN_PATH,
                 "next_required_direction": NEXT_REQUIRED_DIRECTION,
                 "required_observations": [
                     (
                         "exact mechanism id "
-                        f"{SUCCESSOR33_MECHANISM_ID} before code work starts"
+                        f"{SUCCESSOR34_MECHANISM_ID} before code work starts"
                     ),
                     (
                         "existing VNS neighborhood name plus attempted and "
                         "accepted move counts"
                     ),
                     (
-                        "neighbor-list or route-neighbor candidate filtering "
-                        "scope and fallback behavior"
+                        "customer-adjacency candidate filtering scope, "
+                        "deadline guard, and bounded fallback behavior"
                     ),
                     "record_move direct effect and best-improved status under the mechanism id",
                     "phase runtime and iteration count for the filtered VNS path",
-                    "feasibility, route-count, and runtime budget evidence",
+                    "feasibility, route-count, runtime budget, and timeout evidence",
                     "CMT2/CMT4 case-level evidence or an explicit caveat",
                     "effect-vs-MDE interpretation",
                 ],
@@ -555,8 +559,8 @@ class CvrpAdapter:
                     ),
                     (
                         "do not add a new local-search move family for "
-                        "successor33; the causal path is candidate filtering "
-                        "inside existing VNS neighborhoods"
+                        "successor34; the causal path is frozen-safe candidate "
+                        "filtering inside existing VNS neighborhoods"
                     ),
                     (
                         "do not hardcode case ids, reference objective values, "
@@ -590,6 +594,7 @@ class CvrpAdapter:
                     "unchanged route_pair_overlap_removal",
                     "unchanged route_pair_overlap_removal_protected_followup",
                     "unchanged bounded_cross_route_double_bridge_polish",
+                    "unchanged neighbor_list_vns_filter without frozen-safe guards",
                     "unchanged adaptive_embedded_vns_runtime_allocation",
                     "unchanged post_repair_effect_credit_weighting",
                     "same-family scheduler q changes without explicit q-audit fields",
@@ -599,28 +604,30 @@ class CvrpAdapter:
                 {
                     "rank": 1,
                     "mechanism_family": "bounded_local_search_variant",
-                    "evidence_status": "successor33_ready_after_successor32_zero_effect",
-                    "opportunity_status": "eligible_clean_fork",
-                    "effect_status": "unknown_current_effect",
+                    "evidence_status": "successor34_ready_after_successor33_frozen_unsafe",
+                    "opportunity_status": "eligible_same_family_repair",
+                    "effect_status": "validation_positive_frozen_unsafe",
                     "summary": (
                         "Successor28/29 parked route-pair-overlap follow-ups, "
                         "successor30 parked bounded cross-route double-bridge "
                         "polish, and successor31 parked adaptive embedded-VNS "
                         "runtime allocation. Successor32 showed internal "
                         "operator-credit movement but zero objective effect. "
-                        "The next clean fork should test neighbor_list_vns_filter: "
-                        "filter/order existing VNS candidate enumeration with "
-                        "neighbor-list or route-neighbor bounds."
+                        "Successor33 neighbor_list_vns_filter then passed "
+                        "screening/validation but failed frozen on candidate "
+                        "timeouts. The next slot should repair that line with "
+                        "frozen_safe_neighbor_list_vns_filter."
                     ),
                     "recommended_action": (
                         "Target policies/baseline_modules/local_search.py and "
                         "record neighborhood name, attempted/accepted counts, "
                         "record_move delta, best-improved status, phase runtime, "
-                        "iterations, and per-case total_distance evidence."
+                        "iterations, budget/fallback/timeout counters, and "
+                        "per-case total_distance evidence."
                     ),
                     "reason_codes": [
-                        "SUCCESSOR33_NEIGHBOR_LIST_VNS_FILTER_READY",
-                        "SUCCESSOR32_ZERO_EFFECT_DEFAULT_AVOID",
+                        "SUCCESSOR34_FROZEN_SAFE_NEIGHBOR_LIST_READY",
+                        "SUCCESSOR33_VALIDATION_POSITIVE_FROZEN_UNSAFE",
                         "SUCCESSOR31_ZERO_EFFECT_DEFAULT_AVOID",
                         "ROUTE_PAIR_OVERLAP_LINE_PARKED",
                         "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
@@ -812,26 +819,29 @@ class CvrpAdapter:
                     ],
                 },
                 {
-                    "diagnostic_type": "successor33_neighbor_list_vns_filter",
+                    "diagnostic_type": "successor34_frozen_safe_neighbor_list_vns_filter",
                     "surface": "solver_design",
                     "mechanism_family": "bounded_local_search_variant",
                     "metric": "total_distance",
                     "summary": (
-                        "Successor33 should test whether filtering or ordering "
-                        "existing VNS neighborhood candidate enumeration with "
-                        "neighbor-list/route-neighbor bounds spends the same "
-                        "local-search budget on more plausible improving moves."
+                        "Successor33 proved customer-adjacency VNS filtering "
+                        "can pass screening and validation, but frozen failed "
+                        "on candidate-side timeouts. Successor34 should repair "
+                        "that path with deadline guards, bounded fallback, and "
+                        "budget-stop telemetry."
                     ),
                     "recommended_action": (
-                        "Target neighbor_list_vns_filter in "
+                        "Target frozen_safe_neighbor_list_vns_filter in "
                         "policies/baseline_modules/local_search.py and record "
                         "neighborhood name, attempted/accepted counts, "
                         "record_move delta, best-improved status, phase runtime, "
-                        "iterations, and formal per-case objective deltas."
+                        "iterations, fallback/skipped/budget-stop counters, "
+                        "and formal per-case objective deltas."
                     ),
                     "confidence": "medium",
                     "reason_codes": [
-                        "SUCCESSOR33_NEIGHBOR_LIST_VNS_FILTER_READY",
+                        "SUCCESSOR34_FROZEN_SAFE_NEIGHBOR_LIST_READY",
+                        "SUCCESSOR33_VALIDATION_POSITIVE_FROZEN_UNSAFE",
                         "BOUNDED_LOCAL_SEARCH_DIRECT_EFFECT_REQUIRED",
                     ],
                 },

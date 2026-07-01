@@ -139,6 +139,16 @@ SUCCESSOR33_DESIGN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor33-neighbor-list-vns-filter-design-20260701.md"
 )
+SUCCESSOR33_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor33-neighbor-list-vns-filter-postrun-20260701.md"
+)
+SUCCESSOR34_MECHANISM_ID = "frozen_safe_neighbor_list_vns_filter"
+SUCCESSOR34_TARGET_FILE = SUCCESSOR33_TARGET_FILE
+SUCCESSOR34_DESIGN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-design-20260701.md"
+)
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
     "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
@@ -281,7 +291,9 @@ REVIEWED_SUCCESSOR_EVIDENCE["mechanisms"] = [
         "mechanism_id": str(item["mechanism_id"]),
         "mechanism_family": str(item["mechanism_family"]),
         "checklist_status": "proven",
-        "outcome_status": REVIEWED_SUCCESSOR_OUTCOME_STATUS,
+        "outcome_status": str(
+            item.get("outcome_status") or REVIEWED_SUCCESSOR_OUTCOME_STATUS
+        ),
         "next_use_rule": (
             "Do not spend the next CVRP branch on the same "
             f"{item['path_label']} unless the hypothesis names a materially "
@@ -320,12 +332,12 @@ REVIEWED_SUCCESSOR_GUIDANCE_LINE = (
     f"`{SUCCESSOR31_MECHANISM_ID}` with runtime movement but exact zero "
     "solver effect. Successor32 then validly screened "
     f"`{SUCCESSOR32_MECHANISM_ID}` with internal operator-credit movement but "
-    "zero objective effect. The next CVRP solver slot should clean-fork to "
-    f"`{SUCCESSOR33_MECHANISM_ID}` in `{SUCCESSOR33_TARGET_FILE}`: filter "
-    "existing VNS neighborhood candidate enumeration with neighbor-list or "
-    "route-neighbor bounds, while leaving destroy/repair selection, seed "
-    "selection, acceptance probability, operator-credit weighting, embedded-VNS "
-    "runtime allocation, and generic core unchanged."
+    "zero objective effect. Successor33 then produced validation-positive "
+    f"`{SUCCESSOR33_MECHANISM_ID}` evidence but failed frozen on candidate-side "
+    "timeouts. The next CVRP solver slot should repair that same family with "
+    f"`{SUCCESSOR34_MECHANISM_ID}` in `{SUCCESSOR34_TARGET_FILE}`: preserve "
+    "customer-adjacency filtering of existing VNS neighborhoods while adding "
+    "large-instance deadline guards, bounded fallback, and module boundaries."
 )
 
 NEXT_REQUIRED_DIRECTION = (
@@ -459,16 +471,20 @@ NEXT_REQUIRED_DIRECTION = (
     f"`{SUCCESSOR32_MECHANISM_ID}` and completed valid screening with "
     "internal operator-credit movement but zero objective effect; treat "
     "unchanged post-repair effect credit weighting as reviewed/default-avoid. "
-    "The next CVRP solver slot should clean-fork to "
-    f"`{SUCCESSOR33_MECHANISM_ID}` in `{SUCCESSOR33_TARGET_FILE}`: keep "
-    "existing VNS neighborhoods and acceptance logic, but filter/order "
-    "candidate enumeration with "
-    "neighbor-list or route-neighbor bounds so the same local-search budget "
-    "is spent on plausible improving moves. "
+    "Successor33 then clean-forked to "
+    f"`{SUCCESSOR33_MECHANISM_ID}` in `{SUCCESSOR33_TARGET_FILE}`. The first "
+    "candidate was negative, but the second customer-adjacency filter passed "
+    "screening and validation with active direct telemetry before frozen "
+    "abandoned it for candidate-side timeouts. Treat unchanged successor33 as "
+    "frozen-unsafe, not zero-effect. The next CVRP solver slot should repair "
+    f"that line as `{SUCCESSOR34_MECHANISM_ID}`: preserve existing VNS "
+    "neighborhoods and customer-adjacency candidate enumeration filtering, but "
+    "add large-instance deadline guards, bounded fallback, and a modular "
+    "neighbor-filter boundary. "
     "`required_mechanism_ids` remains empty because the guidance is proposal-only "
     "and must not hard-force the Decision path; "
     "`target_intent_required_mechanism_ids` binds only the agentic "
-    "target-intent preflight to successor33. "
+    "target-intent preflight to successor34. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
     "telemetry-only q-audit repair for the missing explicit fields, or when "
@@ -513,19 +529,22 @@ CURRENT_QUESTION = (
     "follow-ups, successor30 double-bridge polish, and successor31 adaptive "
     "embedded-VNS runtime allocation plus successor32 post-repair effect "
     "credit weighting were reviewed without positive-at-MDE solver effect, "
-    f"can `{SUCCESSOR33_MECHANISM_ID}` improve total_distance by filtering "
-    "existing VNS neighborhood candidate enumeration to neighbor-list or "
-    "route-neighbor candidates, with direct local-search telemetry and "
-    "CMT2/CMT4/P-family case evidence?"
+    "and successor33 produced validation-positive but frozen-unsafe "
+    f"`{SUCCESSOR33_MECHANISM_ID}` evidence, can "
+    f"`{SUCCESSOR34_MECHANISM_ID}` preserve the customer-adjacency VNS filter "
+    "signal in existing VNS neighborhood candidate enumeration while removing "
+    "candidate-side frozen timeouts through deadline guards, bounded fallback, "
+    "direct local-search telemetry, and CMT2/CMT4/P-family case evidence?"
 )
 REQUIRED_EVIDENCE = (
     (
-        f"for successor33, live target-intent or hypothesis names "
-        f"`{SUCCESSOR33_MECHANISM_ID}` before code work starts, and explains "
-        "that the causal path is VNS candidate enumeration filtering/order "
-        "rather than a new move family, destroy/repair selection, q "
-        "scheduling, seed selection, acceptance probability, operator-credit "
-        "weighting, or embedded-VNS runtime allocation"
+        f"for successor34, live target-intent or hypothesis names "
+        f"`{SUCCESSOR34_MECHANISM_ID}` before code work starts, and explains "
+        "that the causal path is a frozen-safe repair of successor33 "
+        "customer-adjacency VNS candidate enumeration filtering/order rather "
+        "than a new move family, destroy/repair selection, q scheduling, seed "
+        "selection, acceptance probability, operator-credit weighting, or "
+        "embedded-VNS runtime allocation"
     ),
     (
         "for the next CVRP solver design, live target-intent or hypothesis "
@@ -584,7 +603,7 @@ REQUIRED_EVIDENCE = (
     (
         "do not revisit rank-gap or route-pressure acceptance gates; "
         "successor32 post-repair operator-credit weighting is now reviewed "
-        "zero-effect evidence and successor33 must keep simulated-annealing "
+        "zero-effect evidence and successor34 must keep simulated-annealing "
         "acceptance logic unchanged"
     ),
     (
@@ -649,9 +668,10 @@ REQUIRED_EVIDENCE = (
         "bounded_cross_route_double_bridge_polish after successor30 zero-effect "
         "evidence; do not continue unchanged "
         "adaptive_embedded_vns_runtime_allocation after successor31 zero-effect "
-        "evidence; the next solver research slot should clean-fork to "
-        "neighbor_list_vns_filter as a materially different CVRP-owned "
-        "bounded-local-search causal path, with "
+        "evidence; do not continue unchanged neighbor_list_vns_filter after "
+        "successor33 passed validation but failed frozen on candidate-side "
+        "timeouts. The next solver research slot should repair that path as "
+        "frozen_safe_neighbor_list_vns_filter, with "
         "scheduler_destroy_size_policy limited to telemetry-only q-audit "
         "repair or a materially different scheduler-policy causal path, "
         "post_repair_effect_credit_weighting parked as reviewed zero-effect, "
@@ -736,19 +756,22 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
     ),
     (
         "bounded_local_search_variant: require feasible route-level "
-        "objective deltas with bounded search effort. Successor33 should target "
-        f"`{SUCCESSOR33_MECHANISM_ID}` in `{SUCCESSOR33_TARGET_FILE}` by "
-        "filtering or ordering existing VNS neighborhood candidate enumeration "
-        "with neighbor-list/route-neighbor bounds, not by adding a new move "
+        "objective deltas with bounded search effort. Successor34 should "
+        f"target `{SUCCESSOR34_MECHANISM_ID}` in `{SUCCESSOR34_TARGET_FILE}` "
+        "by preserving successor33 customer-adjacency filtering for existing "
+        "VNS neighborhood candidate enumeration while adding large-instance "
+        "deadline guards and bounded fallback, not by adding a new move "
         "family. Require attempted/accepted counts, direct record_move delta, "
-        "best-improved status, phase runtime, iteration count, and per-case "
-        "total_distance/feasibility/route-count evidence; after the reviewed "
+        "best-improved status, phase runtime, iteration count, budget-stop/"
+        "fallback/skipped counters, and per-case total_distance/feasibility/"
+        "route-count evidence; after the reviewed "
         "bounded_2node_cross_exchange, intra_route_or_opt_reinsert, "
         "bounded_intra_route_3opt, bounded_ejection_chain_relocate, and "
-        "bounded_cross_route_double_bridge_polish "
-        "no-positive-at-MDE results, require a bounded-local-search causal "
+        "bounded_cross_route_double_bridge_polish plus frozen-unsafe "
+        "neighbor_list_vns_filter evidence, require a bounded-local-search causal "
         "path distinct from cross-exchange, same-route Or-opt reinsertion, "
-        "3-opt, ejection-chain relocation, and double-bridge polish"
+        "3-opt, ejection-chain relocation, double-bridge polish, and the "
+        "unchanged frozen-unsafe successor33 implementation"
     ),
     (
         "large_instance_intra_route_two_opt_seed: direct WSL external-control "
@@ -803,13 +826,17 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "negative, so that line is parked. Successor30 double-bridge polish and "
     "successor31 adaptive embedded-VNS runtime allocation both completed valid "
     "zero-effect screening. Successor32 post-repair effect credit weighting "
-    "also completed valid zero-objective-effect screening. The next CVRP "
-    "solver slot should clean-fork to "
-    f"`{SUCCESSOR33_MECHANISM_ID}` in `{SUCCESSOR33_TARGET_FILE}`: filter "
-    "existing VNS candidate enumeration with neighbor-list or route-neighbor "
-    "bounds, but keep destroy/repair selection, construction seeds, "
-    "embedded-VNS runtime allocation, operator-credit weighting, and "
-    "simulated-annealing acceptance logic unchanged. Scheduler destroy-size "
+    "also completed valid zero-objective-effect screening. Successor33 "
+    "neighbor-list VNS filtering produced positive screening and validation "
+    "evidence, then failed frozen on candidate-side timeouts. The next CVRP "
+    "solver slot should repair that path as "
+    f"`{SUCCESSOR34_MECHANISM_ID}` in `{SUCCESSOR34_TARGET_FILE}`: preserve "
+    "customer-adjacency filtering of existing VNS candidate enumeration, add "
+    "large-instance deadline guards and bounded fallback around candidate "
+    "enumeration, but keep "
+    "destroy/repair selection, construction seeds, embedded-VNS runtime "
+    "allocation, operator-credit weighting, and simulated-annealing acceptance "
+    "logic unchanged. Scheduler destroy-size "
     "policy remains allowed only as "
     "telemetry-only q-audit repair or a materially different scheduler-policy "
     "causal path; insertion-cost lookahead repair and post-repair effect "
@@ -908,7 +935,7 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [SUCCESSOR33_MECHANISM_ID],
+        "target_intent_required_mechanism_ids": [SUCCESSOR34_MECHANISM_ID],
         "reviewed_mechanism_ids": list(REVIEWED_MECHANISM_IDS),
         "suppressed_mechanism_ids": list(SUPPRESSED_MECHANISM_IDS),
         "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
@@ -935,17 +962,21 @@ def build_cvrp_legacy_research_focus(
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
     return (
         RequiredMechanism(
-            mechanism_id=SUCCESSOR33_MECHANISM_ID,
-            category="successor33_target_intent_focus",
+            mechanism_id=SUCCESSOR34_MECHANISM_ID,
+            category="successor34_target_intent_focus",
             description=(
-                "Bind only the agentic target-intent preflight to successor33: "
-                f"test neighbor-list VNS candidate filtering in "
-                f"{SUCCESSOR33_TARGET_FILE} before formal code work starts."
+                "Bind only the agentic target-intent preflight to successor34: "
+                "repair the neighbor-list VNS filter with frozen-safe deadline "
+                f"guards and bounded fallback in {SUCCESSOR34_TARGET_FILE} "
+                "before formal code work starts."
             ),
             required_observations=(
-                "target-intent mechanism_id names neighbor_list_vns_filter",
-                "formal mechanism_changes use the same successor33 mechanism id",
-                "local-search telemetry records candidate filtering objective effect",
+                "target-intent mechanism_id names frozen_safe_neighbor_list_vns_filter",
+                "formal mechanism_changes use the same successor34 mechanism id",
+                (
+                    "local-search telemetry records candidate filtering "
+                    "objective effect plus frozen-safe budget/fallback counters"
+                ),
             ),
             protected_items=PROTECTED_CASES,
             hypothesis_mechanism_binding="target_intent_required",
@@ -977,7 +1008,7 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "material causal-path difference from reviewed route-segment exchange",
                 "material causal-path difference from reviewed double-bridge polish",
                 "neighbor-list candidate filtering/order evidence when using bounded_local_search_variant",
-                "local-search attempted/accepted counts and record_move delta under the successor33 mechanism id",
+                "local-search attempted/accepted counts and record_move delta under the successor34 mechanism id",
                 "scheduler destroy-size baseline_q/adapted_q/q_delta evidence when using scheduler_destroy_size_policy",
                 "nonzero aligned candidate/champion q deltas before objective-effect interpretation",
                 "post-repair operator-credit old score and new credit when using acceptance_or_adaptive_weighting",
@@ -1048,11 +1079,14 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
 def _reviewed_successor_evidence_requirements() -> tuple[EvidenceRequirement, ...]:
     return tuple(
         EvidenceRequirement(
-            requirement_id=f"{_slug(str(item['mechanism_id']))}_reviewed_no_positive",
+            requirement_id=(
+                f"{_slug(str(item['mechanism_id']))}_reviewed_"
+                f"{'no_positive' if outcome_status == REVIEWED_SUCCESSOR_OUTCOME_STATUS else _slug(outcome_status)}"
+            ),
             category="reviewed_successor_evidence",
             description=(
                 f"{item['mechanism_id']} is reviewed CVRP successor evidence "
-                f"with outcome {REVIEWED_SUCCESSOR_OUTCOME_STATUS}; do not "
+                f"with outcome {outcome_status}; do not "
                 "repeat it as the next CVRP attempt without a materially new "
                 f"{item['causal_path_label']} causal path."
             ),
@@ -1062,15 +1096,15 @@ def _reviewed_successor_evidence_requirements() -> tuple[EvidenceRequirement, ..
             ),
             required_fields=(
                 "cvrp_successor_summary checklist_status=proven",
-                (
-                    "cvrp_successor_summary "
-                    f"outcome_status={REVIEWED_SUCCESSOR_OUTCOME_STATUS}"
-                ),
+                f"cvrp_successor_summary outcome_status={outcome_status}",
                 f"new {item['causal_path_label']} causal path if revisited",
                 "direct per-case total_distance objective-effect telemetry",
             ),
         )
         for item in REVIEWED_SUCCESSOR_MECHANISMS
+        for outcome_status in (
+            str(item.get("outcome_status") or REVIEWED_SUCCESSOR_OUTCOME_STATUS),
+        )
     )
 
 
