@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-06-30
+Last updated: 2026-07-01
 
 This file is the operational resume point, not a run log. Historical root
 chronology belongs in focused experiment reports, sparse milestones, and git
@@ -59,7 +59,9 @@ The remaining closeout gaps are:
   Successor26 first exposed a static-quality recognizer gap; successor26b then
   reran the repaired short-horizon construction seed trajectory selector path
   and completed valid screening, but both rows were below MDE and the v2 row
-  lost on CMT2/CMT4.
+  lost on CMT2/CMT4. Successor27 completed as a valid non-seed destroy/repair
+  clean fork, `route_pair_overlap_removal`; both rows were positive but below
+  MDE, and the expanded row still lost on CMT4 and P-family cases.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -229,16 +231,23 @@ CVRP:
   `-19.0`. Treat unchanged construction seed trajectory selection as
   reviewed/default-avoid. Postrun report:
   `scion/docs/experiments/v0.4/v04-cvrp-successor26b-short-horizon-seed-trajectory-selector-postrun-20260630.md`.
-- Successor27 is in flight as the next non-seed clean fork:
+- Successor27 completed as the next non-seed clean fork:
   `/home/clawd/research/scion-experiments/v04-cvrp-successor27-non-seed-clean-fork-server-2r-gpt55-20260630T151408Z-claw`.
   It launched from commit `5241eb22` on server-local `claw`, used local
   `gpt-5.5`, passed completion preflight, and forced
   `solver_design` / `modify` /
-  `policies/baseline_modules/destroy_repair.py`. Initial traces include
-  `hypothesis_target_intent`, `hypothesis`, `tool_selection`, and `code`, all
-  on `gpt-5.5`; no protocol row had completed at the first health check.
+  `policies/baseline_modules/destroy_repair.py`. It finished
+  valid/complete/postrun-ready with no quality, model, telemetry, or postrun
+  failures. The mechanism was `route_pair_overlap_removal`. Row 1 median delta
+  was `0.75`, CI `[-4.5, 12.5]`; row 2 median delta was `2.5`, CI
+  `[-7.75, 7.0]`; rows at/above MDE remained `0`. Useful gains appeared on
+  A/B/X cases, but CMT2/CMT4/P-family losses remain the follow-up blocker.
   In-flight record:
   `scion/docs/experiments/v0.4/v04-cvrp-successor27-non-seed-clean-fork-inflight-20260630.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor27-route-pair-overlap-postrun-20260701.md`.
+  Successor28 plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-plan-20260701.md`.
 - Successor22a was stopped before formal screening because the live hypothesis
   drifted to `bounded_repair_retry_on_reject`; treat it as a wrong-mechanism
   diagnostic, not solver evidence.
@@ -258,9 +267,9 @@ CVRP:
 2. Park unchanged successor23-style scheduler q scheduling, successor24-style
    insertion-cost lookahead repair, successor25 raw construction seed-baseline
    selection, and successor26b construction seed trajectory selection.
-3. Monitor the in-flight successor27 server-local run. When it completes,
-   inspect wrapper status, postrun readiness, failures, LLM trace health, and
-   effect-vs-MDE before changing guidance or launching another follow-up.
+3. Launch successor28 only as a protected same-mechanism follow-up,
+   `route_pair_overlap_removal_protected_followup`, after targeted
+   guidance/adapter tests pass. Do not broaden unchanged successor27.
 4. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 5. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
@@ -380,6 +389,10 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
   `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-inflight-20260630.md`
 - CVRP successor26 short-horizon seed trajectory selector invalid postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor26-short-horizon-seed-trajectory-selector-postrun-20260630.md`
+- CVRP successor27 route-pair overlap postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor27-route-pair-overlap-postrun-20260701.md`
+- CVRP successor28 route-pair overlap protected follow-up plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-plan-20260701.md`
 - CVRP deferred seed-post selector activation plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor21-seed-post-selector-activation-plan-20260629.md`
 - v0.4 large-file modularization plan:

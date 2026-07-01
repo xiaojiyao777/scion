@@ -307,7 +307,10 @@ class CvrpAdapter:
                     "mechanism_family": "destroy_repair_selection",
                     "required_evidence": (
                         "per-case total_distance delta tied to the changed "
-                        "repair or removal choice"
+                        "repair or removal choice; successor27 route-pair "
+                        "overlap removal is weak-positive below MDE and needs "
+                        "protected-case/loss-guard follow-up before another "
+                        "unchanged expansion"
                     ),
                 },
                 {
@@ -343,26 +346,32 @@ class CvrpAdapter:
                 "proposal_visibility_only": True,
                 "decision_features_excluded": True,
                 "mechanism_family": "destroy_repair_selection",
-                "mechanism_id": "successor27_non_seed_clean_fork",
-                "review_status": "next_non_seed_clean_fork",
+                "mechanism_id": "route_pair_overlap_removal_protected_followup",
+                "review_status": "successor27_marginal_protected_followup",
                 "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
                 "target_surface": "solver_design",
                 "target_files": [
                     "policies/baseline_modules/destroy_repair.py",
-                    "policies/baseline_modules/local_search.py",
+                    "policies/baseline_modules/scheduler.py",
                 ],
                 "next_required_direction": NEXT_REQUIRED_DIRECTION,
                 "required_observations": [
                     (
-                        "material causal-path difference from reviewed "
-                        "construction seed-baseline and seed-trajectory selectors"
+                        "same-mechanism continuity from successor27 "
+                        "route_pair_overlap_removal, or an explicit reason for "
+                        "abandoning that active marginal signal"
+                    ),
+                    (
+                        "CMT2/CMT4/P-family loss protection plan before code "
+                        "work; do not expand unchanged route_pair_overlap_removal"
                     ),
                     (
                         "per-case total_distance delta tied to the changed "
-                        "destroy/repair or bounded-local-search mechanism"
+                        "route-pair overlap destroy/repair choice"
                     ),
                     "feasibility, route-count, and runtime budget evidence",
                     "CMT2/CMT4 case-level evidence or an explicit caveat",
+                    "route-pair selection telemetry, removed-count evidence, and guarded skip counts",
                     "effect-vs-MDE interpretation",
                 ],
                 "implementation_constraints": [
@@ -388,6 +397,22 @@ class CvrpAdapter:
                         "short_horizon_seed_trajectory_selector selection"
                     ),
                     (
+                        "do not continue unchanged successor27-style "
+                        "route_pair_overlap_removal without CMT2/CMT4/P-family "
+                        "loss protection"
+                    ),
+                    (
+                        "do not hardcode case ids, reference objective values, "
+                        "seeds, or split membership when designing the "
+                        "protection guard"
+                    ),
+                    (
+                        "if the route-pair overlap operator grows beyond a "
+                        "narrow patch, put the operator in a coherent "
+                        "problem-owned module instead of adding helper sprawl "
+                        "to an oversized file"
+                    ),
+                    (
                         "keep CVRP semantics in problem-owned solver files and "
                         "generic core unchanged"
                     ),
@@ -405,6 +430,7 @@ class CvrpAdapter:
                     "unchanged cw_sweep_seed_baseline_selector",
                     "unchanged short_horizon_seed_trajectory_selector",
                     "unchanged short_horizon_seed_trajectory_selector_v2",
+                    "unchanged route_pair_overlap_removal without protected-case/loss guard",
                     "same-family scheduler q changes without explicit q-audit fields",
                 ],
             },
@@ -412,25 +438,28 @@ class CvrpAdapter:
                 {
                     "rank": 1,
                     "mechanism_family": "destroy_repair_selection",
-                    "evidence_status": "eligible_after_seed_trajectory_review",
-                    "opportunity_status": "next_non_seed_clean_fork_candidate",
-                    "effect_status": "unknown_current_effect",
+                    "evidence_status": "successor27_weak_positive_below_mde",
+                    "opportunity_status": "same_mechanism_cmt_guard_followup_candidate",
+                    "effect_status": "weak_positive_below_mde",
                     "summary": (
-                        "After successor26b closed the construction seed "
-                        "trajectory path below MDE, the next branch should "
-                        "clean-fork to a materially different destroy/repair "
-                        "or bounded-local-search causal path with per-case "
-                        "objective attribution."
+                        "Successor27 route_pair_overlap_removal is the best "
+                        "recent CVRP solver signal: both screening rows were "
+                        "positive but below the 9.9 MDE, with max median delta "
+                        "2.5 and effect/MDE 0.253. A/B/X gains coexist with "
+                        "CMT2/CMT4/P-family losses, so the next branch should "
+                        "protect the same route-pair overlap causal path "
+                        "rather than expand it unchanged."
                     ),
                     "recommended_action": (
-                        "Name the changed removal, repair, or bounded local "
-                        "search choice before code work; reject renamed "
-                        "seed-baseline, seed-trajectory, insertion-cost "
-                        "lookahead, and reviewed removal variants."
+                        "Design a guarded route-pair overlap removal follow-up "
+                        "with bounded perturbation, protected-case loss "
+                        "avoidance, and route-pair selection/effect telemetry; "
+                        "only switch to another non-seed clean fork after "
+                        "recording why this weak-positive signal is abandoned."
                     ),
                     "reason_codes": [
-                        "SUCCESSOR26B_REVIEWED_BELOW_MDE",
-                        "NON_SEED_CLEAN_FORK_REQUIRED",
+                        "SUCCESSOR27_WEAK_POSITIVE_BELOW_MDE",
+                        "CMT2_CMT4_P_LOSS_GUARD_REQUIRED",
                         "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
                     ],
                 },
@@ -598,6 +627,29 @@ class CvrpAdapter:
                         "SUCCESSOR23_REVIEWED_BELOW_MDE",
                         "QUALITY_REGRESSION_PARKED",
                         "EXPLICIT_Q_AUDIT_FIELDS_MISSING",
+                    ],
+                },
+                {
+                    "diagnostic_type": "successor27_protected_followup",
+                    "surface": "solver_design",
+                    "mechanism_family": "destroy_repair_selection",
+                    "metric": "total_distance",
+                    "summary": (
+                        "Successor27 route_pair_overlap_removal activated and "
+                        "produced weak-positive below-MDE evidence, but CMT2/"
+                        "CMT4/P-family losses make unchanged expansion the "
+                        "wrong next step."
+                    ),
+                    "recommended_action": (
+                        "Continue route-pair overlap only as a protected "
+                        "follow-up with bounded removal, loss guards, and "
+                        "route-pair selection/effect telemetry; otherwise "
+                        "explicitly abandon the signal before clean-forking."
+                    ),
+                    "confidence": "medium",
+                    "reason_codes": [
+                        "SUCCESSOR27_WEAK_POSITIVE_BELOW_MDE",
+                        "CMT2_CMT4_P_LOSS_GUARD_REQUIRED",
                     ],
                 },
                 {

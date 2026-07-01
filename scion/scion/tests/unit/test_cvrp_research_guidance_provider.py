@@ -146,9 +146,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "positive-at-MDE" in focus["current_question"]
     assert "short_horizon_seed_trajectory_selector" in focus["current_question"]
     assert "short-horizon seed trajectory selector" in focus["current_question"]
-    assert "clean-fork away from construction seed trajectory selectors" in (
-        focus["current_question"]
-    )
+    assert "successor27 route-pair overlap removal" in focus["current_question"]
+    assert "protected route-pair-overlap follow-up" in focus["current_question"]
     assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
     assert "intra_route_or_opt_reinsert" in focus["next_required_direction"]
     assert "bounded_intra_route_3opt" in focus["next_required_direction"]
@@ -204,9 +203,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "`required_mechanism_ids` remains empty" in (
         focus["next_required_direction"]
     )
-    assert "clean-fork away from construction seed trajectory selectors" in (
-        focus["next_required_direction"]
-    )
+    assert "Successor27 then clean-forked" in focus["next_required_direction"]
+    assert "route_pair_overlap_removal" in focus["next_required_direction"]
+    assert "same-mechanism protected follow-up" in focus[
+        "next_required_direction"
+    ]
     assert "telemetry-only q-audit repair" in focus["next_required_direction"]
     assert "seed-post selector repair is deferred" in (
         focus["next_required_direction"]
@@ -222,8 +223,13 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["required_evidence"]
     )
     assert any(
-        "non-seed-trajectory causal path" in item
-        and "successor26b reviewed/default-avoid evidence" in item
+        "route_pair_overlap_removal follow-up" in item
+        and "CMT2/CMT4/P-family loss guards" in item
+        for item in focus["required_evidence"]
+    )
+    assert any(
+        "active marginal-positive signal" in item
+        and "materially different non-seed causal path" in item
         for item in focus["required_evidence"]
     )
     assert any(

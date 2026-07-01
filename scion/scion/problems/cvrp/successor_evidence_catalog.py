@@ -590,6 +590,12 @@ DEFAULT_AVOID_DIRECTIONS = (
         "below-MDE with median delta -5.0 and CMT2/CMT4 losses"
     ),
     (
+        "unchanged route_pair_overlap_removal destroy/repair follow-up after "
+        "successor27 weak-positive below-MDE evidence unless the hypothesis "
+        "adds CMT2/CMT4/P-family loss protection and keeps route-pair overlap "
+        "objective-effect telemetry"
+    ),
+    (
         "unchanged seed_post_optimization_selector construction post-optimization "
         "successor after successor16 and successor17 missing-activation/"
         "inactive screening; repair activation wiring only with explicit "

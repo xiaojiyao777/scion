@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `v0.4-dev`*
-*Last updated: 2026-06-30*
+*Last updated: 2026-07-01*
 
 This is the active task definition for closing v0.4. It is not a run log.
 Historical launch/root details live in focused experiment reports, sparse
@@ -130,7 +130,14 @@ Open blockers before v0.4 closeout:
   reached screening, but `short_horizon_seed_trajectory_selector` stayed at
   median delta `0.0`, CI `[0.0, 0.0]`, and
   `short_horizon_seed_trajectory_selector_v2` stayed below MDE with median
-  delta `-5.0`, CI `[-8.0, 9.0]`, and CMT2/CMT4 losses.
+  delta `-5.0`, CI `[-8.0, 9.0]`, and CMT2/CMT4 losses. Successor27 then
+  completed on the server-local runner as a valid non-seed destroy/repair
+  clean fork, `route_pair_overlap_removal`. Both screening rows were positive
+  but below MDE: row 1 median delta `0.75`, CI `[-4.5, 12.5]`; row 2 median
+  delta `2.5`, CI `[-7.75, 7.0]`, effect/MDE `0.253`. A/B/X case medians
+  showed useful gains, but CMT2/CMT4/P-family losses remained. Treat
+  successor27 as an active marginal-positive signal, not promotion evidence and
+  not a reason to expand unchanged.
 - Several production/test files remain over the 1000-line risk threshold and
   need design-first modularization before more behavior is added there.
 - v0.5 governance ablation is preregistered as a clean experiment matrix, but
@@ -220,13 +227,32 @@ Treat unchanged construction seed trajectory selection as reviewed/default-
 avoid. The next CVRP solver slot should clean-fork to a materially different
 non-seed path, with no hard `required_mechanism_ids`.
 
-Successor27 is now in flight as that non-seed clean fork, forced to
-`solver_design` / `modify` / `policies/baseline_modules/destroy_repair.py` on
-the server-local `claw` runner:
+Successor27 completed as that non-seed clean fork, forced to `solver_design` /
+`modify` / `policies/baseline_modules/destroy_repair.py` on the server-local
+`claw` runner:
 `/home/clawd/research/scion-experiments/v04-cvrp-successor27-non-seed-clean-fork-server-2r-gpt55-20260630T151408Z-claw`.
-It launched from commit `5241eb22` with healthy `gpt-5.5` completion preflight.
-The in-flight record is
+It launched from commit `5241eb22`, passed healthy `gpt-5.5` completion
+preflight, and finished valid/complete/postrun-ready with no quality, model,
+telemetry, or postrun failures. The mechanism was
+`route_pair_overlap_removal`, a destroy/repair route-pair-overlap removal
+operator. Row 1 median delta was `0.75`, CI `[-4.5, 12.5]`; row 2 median
+delta was `2.5`, CI `[-7.75, 7.0]`; rows at/above MDE remained `0`. Positive
+case medians included A-n64 `14.5`, A-n80 `10.0`, B-n63 `4.0`, CMT3 `6.0`,
+and X-n110 `12.5`; losses included CMT2 `-3.0` in row 1, CMT4 `-16.0` in row
+2, and P-family medians down to `-14.0`. The in-flight record is
 `scion/docs/experiments/v0.4/v04-cvrp-successor27-non-seed-clean-fork-inflight-20260630.md`.
+The postrun report is
+`scion/docs/experiments/v0.4/v04-cvrp-successor27-route-pair-overlap-postrun-20260701.md`.
+The successor28 plan is
+`scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-plan-20260701.md`.
+
+The next CVRP slot should not broaden the unchanged successor27 operator. It
+should run a same-mechanism protected follow-up,
+`route_pair_overlap_removal_protected_followup`, preserving the route-pair
+overlap causal path while adding problem-general CMT2/CMT4/P-family loss guards
+and clearer route-pair selection/effect telemetry. A different non-seed clean
+fork is acceptable only if the live hypothesis explicitly records why
+successor27's active marginal-positive signal is being abandoned.
 
 Reviewed or suppressed paths include the large two-opt seed line, cross
 exchange, Or-opt reinsertion, 3-opt, ejection-chain relocation, several
@@ -269,9 +295,8 @@ from the current checkout.
 2. Park unchanged successor23-style scheduler q scheduling, successor24-style
    insertion-cost lookahead repair, successor25 construction seed-baseline
    selection, and successor26b construction seed trajectory selection.
-3. Monitor the in-flight successor27 server-local run. After it completes,
-   inspect wrapper status, postrun readiness, failures, LLM trace health, and
-   effect-vs-MDE before changing guidance or launching another follow-up.
+3. Update prepared CVRP guidance and launch successor28 only as a protected
+   route-pair-overlap follow-up after targeted guidance/adapter tests pass.
 4. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 5. Keep the v0.5 governance ablation frozen as a preregistered design; do not

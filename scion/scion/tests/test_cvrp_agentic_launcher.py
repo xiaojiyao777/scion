@@ -383,10 +383,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "destroy_repair_selection"
     )
     assert measurement["mechanism_effect_ranking"][0]["opportunity_status"] == (
-        "next_non_seed_clean_fork_candidate"
+        "same_mechanism_cmt_guard_followup_candidate"
     )
     assert measurement["mechanism_effect_ranking"][0]["evidence_status"] == (
-        "eligible_after_seed_trajectory_review"
+        "successor27_weak_positive_below_mde"
     )
     assert measurement["mechanism_effect_ranking"][2]["mechanism_family"] == (
         "construction_seed_portfolio"
@@ -415,10 +415,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
             "measurable_opportunity_classes"
         ]
     )
-    assert (
-        "clean-fork away from construction seed trajectory selectors"
-        in prepared_manifest["research_focus"]["current_question"]
-    )
+    assert "protected route-pair-overlap follow-up" in prepared_manifest[
+        "research_focus"
+    ]["current_question"]
     assert (
         "short_horizon_seed_trajectory_selector"
         in prepared_manifest["research_focus"]["current_question"]
@@ -535,10 +534,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "`required_mechanism_ids` remains empty"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
-    assert (
-        "clean-fork away from construction seed trajectory selectors"
-        in prepared_manifest["research_focus"]["next_required_direction"]
-    )
+    assert "Successor27 then clean-forked" in prepared_manifest[
+        "research_focus"
+    ]["next_required_direction"]
+    assert "route_pair_overlap_removal" in prepared_manifest[
+        "research_focus"
+    ]["next_required_direction"]
+    assert "same-mechanism protected follow-up" in prepared_manifest[
+        "research_focus"
+    ]["next_required_direction"]
     assert (
         "telemetry-only q-audit repair"
         in prepared_manifest["research_focus"]["next_required_direction"]
@@ -757,8 +761,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prepared_manifest_md
     assert "screening_headroom" in prepared_manifest_md
     assert "mechanism_effect_ranking" in prepared_manifest_md
-    assert "next_non_seed_clean_fork_candidate" in prepared_manifest_md
-    assert "successor26b validly screened" in prepared_manifest_md
+    assert "same_mechanism_cmt_guard_followup_candidate" in prepared_manifest_md
+    assert "route_pair_overlap_removal" in prepared_manifest_md
+    assert "protected follow-up" in prepared_manifest_md
     assert "eligible_only_if_materially_different_or_telemetry_audit" in prepared_manifest_md
     assert "eligible_if_materially_different" in prepared_manifest_md
     assert "reviewed_not_next_required" in prepared_manifest_md
