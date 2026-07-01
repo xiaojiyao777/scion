@@ -79,6 +79,7 @@ CVRP_ANALYSIS_INTENT = (
 CVRP_ADAPTER_OPPORTUNITY_FIELDS = (
     "screening_headroom",
     "measurable_opportunity_classes",
+    "top_opportunity_recipe",
     "mechanism_effect_ranking",
     "opportunity_diagnostics",
 )

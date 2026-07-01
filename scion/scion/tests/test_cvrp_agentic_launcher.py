@@ -387,6 +387,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "cvrp_measurement_opportunity_diagnostic.v1"
     )
     assert measurement["screening_headroom"]["case_count_gap_pct_at_least_3"] == 12
+    assert measurement["top_opportunity_recipe"]["mechanism_id"] == (
+        "post_repair_effect_credit_weighting"
+    )
+    assert measurement["top_opportunity_recipe"]["mechanism_family"] == (
+        "acceptance_or_adaptive_weighting"
+    )
+    assert measurement["top_opportunity_recipe"]["target_files"] == [
+        "policies/baseline_modules/scheduler.py"
+    ]
     assert (
         measurement["measurable_opportunity_classes"][0]["mechanism_family"]
         == "acceptance_or_adaptive_weighting"
