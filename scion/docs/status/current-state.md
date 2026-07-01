@@ -487,7 +487,11 @@ CVRP:
    `target_intent_required_mechanism_ids=["frozen_safe_neighbor_list_vns_filter"]`
    and marks unchanged successor33 as reviewed/default-avoid unless the
    proposal adds frozen-safe deadline guards, bounded fallback, and timeout
-   telemetry.
+   telemetry. The server-local `claw` successor34 run is launched at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-server-2r-gpt55-20260701T192249Z-claw`;
+   completion preflight passed, hard required mechanisms are empty, and the
+   first target-intent/formal hypotheses stayed on
+   `frozen_safe_neighbor_list_vns_filter`.
 9. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 10. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
@@ -647,6 +651,8 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
   `scion/docs/experiments/v0.4/v04-cvrp-successor33-neighbor-list-vns-filter-postrun-20260701.md`
 - CVRP successor34 frozen-safe neighbor-list VNS filter design:
   `scion/docs/experiments/v0.4/v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-design-20260701.md`
+- CVRP successor34 frozen-safe neighbor-list VNS filter in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-inflight-20260701.md`
 - CVRP deferred seed-post selector activation plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor21-seed-post-selector-activation-plan-20260629.md`
 - v0.4 large-file modularization plan:

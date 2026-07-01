@@ -528,7 +528,11 @@ from the current checkout.
    `target_intent_required_mechanism_ids=["frozen_safe_neighbor_list_vns_filter"]`
    and marks unchanged successor33 as reviewed/default-avoid unless the
    proposal adds frozen-safe deadline guards, bounded fallback, and timeout
-   telemetry.
+   telemetry. The server-local `claw` successor34 run is launched at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-server-2r-gpt55-20260701T192249Z-claw`;
+   completion preflight passed, hard required mechanisms are empty, and the
+   first target-intent/formal hypotheses stayed on
+   `frozen_safe_neighbor_list_vns_filter`.
 9. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 10. Keep the v0.5 governance ablation frozen as a preregistered design; do not
