@@ -129,6 +129,16 @@ SUCCESSOR32_DESIGN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor32-post-repair-effect-credit-weighting-design-20260701.md"
 )
+SUCCESSOR32_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor32-post-repair-effect-credit-weighting-postrun-20260701.md"
+)
+SUCCESSOR33_MECHANISM_ID = "neighbor_list_vns_filter"
+SUCCESSOR33_TARGET_FILE = "policies/baseline_modules/local_search.py"
+SUCCESSOR33_DESIGN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor33-neighbor-list-vns-filter-design-20260701.md"
+)
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
     "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
@@ -308,11 +318,14 @@ REVIEWED_SUCCESSOR_GUIDANCE_LINE = (
     f"`{SUCCESSOR30_MECHANISM_ID}` with exact zero-effect evidence, and "
     "successor31 validly screened "
     f"`{SUCCESSOR31_MECHANISM_ID}` with runtime movement but exact zero "
-    "solver effect. The next CVRP solver slot should clean-fork to "
-    f"`{SUCCESSOR32_MECHANISM_ID}` in `{SUCCESSOR32_TARGET_FILE}`: change "
-    "ALNS adaptive operator credit using post-repair pre-polish objective "
-    "effect, while leaving destroy/repair patterns, local-search moves, seed "
-    "selection, embedded-VNS runtime allocation, and generic core unchanged."
+    "solver effect. Successor32 then validly screened "
+    f"`{SUCCESSOR32_MECHANISM_ID}` with internal operator-credit movement but "
+    "zero objective effect. The next CVRP solver slot should clean-fork to "
+    f"`{SUCCESSOR33_MECHANISM_ID}` in `{SUCCESSOR33_TARGET_FILE}`: filter "
+    "existing VNS neighborhood candidate enumeration with neighbor-list or "
+    "route-neighbor bounds, while leaving destroy/repair selection, seed "
+    "selection, acceptance probability, operator-credit weighting, embedded-VNS "
+    "runtime allocation, and generic core unchanged."
 )
 
 NEXT_REQUIRED_DIRECTION = (
@@ -442,14 +455,20 @@ NEXT_REQUIRED_DIRECTION = (
     "median delta 0.0, CI [0.0, 0.0], and rows_at_or_above_mde=0. Treat "
     "unchanged route-pair-overlap, bounded cross-route double-bridge polish, "
     "and adaptive embedded-VNS runtime allocation as reviewed/default-avoid "
-    "for v0.4. The next CVRP solver slot should clean-fork to "
-    f"`{SUCCESSOR32_MECHANISM_ID}`: keep existing operators and acceptance "
-    "logic, but credit ALNS destroy/repair adaptive weights from post-repair "
-    "pre-polish objective effect with direct operator-credit telemetry. "
+    "for v0.4. Successor32 then clean-forked to "
+    f"`{SUCCESSOR32_MECHANISM_ID}` and completed valid screening with "
+    "internal operator-credit movement but zero objective effect; treat "
+    "unchanged post-repair effect credit weighting as reviewed/default-avoid. "
+    "The next CVRP solver slot should clean-fork to "
+    f"`{SUCCESSOR33_MECHANISM_ID}` in `{SUCCESSOR33_TARGET_FILE}`: keep "
+    "existing VNS neighborhoods and acceptance logic, but filter/order "
+    "candidate enumeration with "
+    "neighbor-list or route-neighbor bounds so the same local-search budget "
+    "is spent on plausible improving moves. "
     "`required_mechanism_ids` remains empty because the guidance is proposal-only "
     "and must not hard-force the Decision path; "
     "`target_intent_required_mechanism_ids` binds only the agentic "
-    "target-intent preflight to successor32. "
+    "target-intent preflight to successor33. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
     "telemetry-only q-audit repair for the missing explicit fields, or when "
@@ -466,7 +485,8 @@ NEXT_REQUIRED_DIRECTION = (
     f"{SUCCESSOR28_PROTECTED_MECHANISM_ID}, successor28 endpoint/spoke "
     "removal forks, "
     f"{SUCCESSOR30_MECHANISM_ID}, unchanged successor31 "
-    f"{SUCCESSOR31_MECHANISM_ID}, or seed_post_optimization_selector; the "
+    f"{SUCCESSOR31_MECHANISM_ID}, unchanged successor32 "
+    f"{SUCCESSOR32_MECHANISM_ID}, or seed_post_optimization_selector; the "
     "seed-post selector repair is "
     "deferred unless explicitly promoted as an activation diagnostic. "
     "revisit bounded local search or angular-sector "
@@ -491,19 +511,21 @@ CURRENT_QUESTION = (
     f"trajectory selectors `{SUCCESSOR26_MECHANISM_ID}` / "
     f"`{SUCCESSOR26_V2_MECHANISM_ID}`, successor27/29 route-pair-overlap "
     "follow-ups, successor30 double-bridge polish, and successor31 adaptive "
-    "embedded-VNS runtime allocation were reviewed without positive-at-MDE "
-    "solver effect, can `post_repair_effect_credit_weighting` improve "
-    "total_distance by crediting ALNS destroy/repair operators from "
-    "post-repair pre-polish objective effect, with direct operator-credit "
-    "telemetry and CMT2/CMT4/P-family case evidence?"
+    "embedded-VNS runtime allocation plus successor32 post-repair effect "
+    "credit weighting were reviewed without positive-at-MDE solver effect, "
+    f"can `{SUCCESSOR33_MECHANISM_ID}` improve total_distance by filtering "
+    "existing VNS neighborhood candidate enumeration to neighbor-list or "
+    "route-neighbor candidates, with direct local-search telemetry and "
+    "CMT2/CMT4/P-family case evidence?"
 )
 REQUIRED_EVIDENCE = (
     (
-        f"for successor32, live target-intent or hypothesis names "
-        f"`{SUCCESSOR32_MECHANISM_ID}` before code work starts, and explains "
-        "that the causal path is adaptive operator credit rather than "
-        "destroy/repair selection, local search, seed selection, acceptance "
-        "probability, or embedded-VNS runtime allocation"
+        f"for successor33, live target-intent or hypothesis names "
+        f"`{SUCCESSOR33_MECHANISM_ID}` before code work starts, and explains "
+        "that the causal path is VNS candidate enumeration filtering/order "
+        "rather than a new move family, destroy/repair selection, q "
+        "scheduling, seed selection, acceptance probability, operator-credit "
+        "weighting, or embedded-VNS runtime allocation"
     ),
     (
         "for the next CVRP solver design, live target-intent or hypothesis "
@@ -512,10 +534,10 @@ REQUIRED_EVIDENCE = (
         "targets a materially different non-seed causal path"
     ),
     (
-        "post-repair adaptive-credit telemetry includes operator pair, q, "
-        "current/best objective before repair, candidate objective after "
-        "repair and after polish, old coarse score, new credit, weights before/"
-        "after update, accepted/new-best counts, and direct record_move delta"
+        "neighbor-list VNS telemetry includes existing neighborhood name, "
+        "attempted/accepted counts, direct record_move delta, best-improved "
+        "status, local-search phase runtime, iteration count, and per-case "
+        "total_distance/feasibility/route-count evidence"
     ),
     (
         "live target-intent or hypothesis explicitly names a successor "
@@ -561,8 +583,9 @@ REQUIRED_EVIDENCE = (
     ),
     (
         "do not revisit rank-gap or route-pressure acceptance gates; "
-        "successor32 is eligible only as post-repair operator-credit "
-        "attribution with unchanged simulated-annealing acceptance logic"
+        "successor32 post-repair operator-credit weighting is now reviewed "
+        "zero-effect evidence and successor33 must keep simulated-annealing "
+        "acceptance logic unchanged"
     ),
     (
         "a materially different bounded local-search or destroy/repair "
@@ -627,10 +650,11 @@ REQUIRED_EVIDENCE = (
         "evidence; do not continue unchanged "
         "adaptive_embedded_vns_runtime_allocation after successor31 zero-effect "
         "evidence; the next solver research slot should clean-fork to "
-        "post_repair_effect_credit_weighting as a materially different "
-        "CVRP-owned adaptive-credit causal path, with "
+        "neighbor_list_vns_filter as a materially different CVRP-owned "
+        "bounded-local-search causal path, with "
         "scheduler_destroy_size_policy limited to telemetry-only q-audit "
         "repair or a materially different scheduler-policy causal path, "
+        "post_repair_effect_credit_weighting parked as reviewed zero-effect, "
         "destroy/repair insertion-cost lookahead parked, and "
         "seed_post_optimization_selector kept as a deferred activation "
         "diagnostic unless explicitly promoted, "
@@ -651,20 +675,20 @@ REQUIRED_EVIDENCE = (
         "no-positive-at-MDE and "
         "unchanged seed_post_optimization_selector produced repeated "
         "missing-activation inactive evidence in successor16 and successor17; "
-        "adaptive_embedded_vns_runtime_allocation was reviewed zero-effect; "
-        "revisits must name a new causal path and direct objective-effect "
-        "telemetry"
+        "adaptive_embedded_vns_runtime_allocation and "
+        "post_repair_effect_credit_weighting were reviewed zero-effect; revisits "
+        "must name a new causal path and direct objective-effect telemetry"
     ),
 )
 MEASURABLE_OPPORTUNITY_CLASSES = (
     (
-        "acceptance_or_adaptive_weighting: successor32 should target "
-        f"`{SUCCESSOR32_MECHANISM_ID}` in `{SUCCESSOR32_TARGET_FILE}`. Require "
-        "operator pair, q, current/best objective before repair, candidate "
-        "objective after repair and after polish, old coarse score, new "
-        "post-repair credit, weights before/after update, accepted/new-best "
-        "counts, and per-case total_distance evidence. Do not change "
-        "simulated-annealing acceptance probability for this mechanism."
+        "acceptance_or_adaptive_weighting: successor32 "
+        f"`{SUCCESSOR32_MECHANISM_ID}` in `{SUCCESSOR32_TARGET_FILE}` is "
+        "reviewed/default-avoid after valid screening showed internal "
+        "operator-credit movement but zero objective effect. Do not repeat "
+        "unchanged post-repair credit weighting or rank-gap/route-pressure "
+        "acceptance gates unless a future proposal names a materially new "
+        "causal path and direct objective-effect telemetry."
     ),
     (
         "construction_seed_portfolio: successor25 raw seed-baseline selection "
@@ -712,7 +736,13 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
     ),
     (
         "bounded_local_search_variant: require feasible route-level "
-        "objective deltas with bounded search effort; after the reviewed "
+        "objective deltas with bounded search effort. Successor33 should target "
+        f"`{SUCCESSOR33_MECHANISM_ID}` in `{SUCCESSOR33_TARGET_FILE}` by "
+        "filtering or ordering existing VNS neighborhood candidate enumeration "
+        "with neighbor-list/route-neighbor bounds, not by adding a new move "
+        "family. Require attempted/accepted counts, direct record_move delta, "
+        "best-improved status, phase runtime, iteration count, and per-case "
+        "total_distance/feasibility/route-count evidence; after the reviewed "
         "bounded_2node_cross_exchange, intra_route_or_opt_reinsert, "
         "bounded_intra_route_3opt, bounded_ejection_chain_relocate, and "
         "bounded_cross_route_double_bridge_polish "
@@ -772,15 +802,18 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "Successor29 forced the protected route-pair-overlap follow-up and stayed "
     "negative, so that line is parked. Successor30 double-bridge polish and "
     "successor31 adaptive embedded-VNS runtime allocation both completed valid "
-    "zero-effect screening. The next CVRP solver slot should clean-fork to "
-    f"`{SUCCESSOR32_MECHANISM_ID}` in `{SUCCESSOR32_TARGET_FILE}`: change "
-    "adaptive operator credit using post-repair pre-polish objective effect, "
-    "but keep destroy/repair selection, local-search moves, construction "
-    "seeds, embedded-VNS runtime allocation, and simulated-annealing acceptance "
-    "logic unchanged. Scheduler destroy-size policy remains allowed only as "
+    "zero-effect screening. Successor32 post-repair effect credit weighting "
+    "also completed valid zero-objective-effect screening. The next CVRP "
+    "solver slot should clean-fork to "
+    f"`{SUCCESSOR33_MECHANISM_ID}` in `{SUCCESSOR33_TARGET_FILE}`: filter "
+    "existing VNS candidate enumeration with neighbor-list or route-neighbor "
+    "bounds, but keep destroy/repair selection, construction seeds, "
+    "embedded-VNS runtime allocation, operator-credit weighting, and "
+    "simulated-annealing acceptance logic unchanged. Scheduler destroy-size "
+    "policy remains allowed only as "
     "telemetry-only q-audit repair or a materially different scheduler-policy "
-    "causal path, and insertion-cost lookahead repair is parked as reviewed "
-    "solver-negative. Use "
+    "causal path; insertion-cost lookahead repair and post-repair effect "
+    "credit weighting are parked as reviewed solver-negative. Use "
     "problem-owned evidence requirements and keep this guidance out of "
     "DecisionFeatures."
 )
@@ -875,7 +908,7 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [SUCCESSOR32_MECHANISM_ID],
+        "target_intent_required_mechanism_ids": [SUCCESSOR33_MECHANISM_ID],
         "reviewed_mechanism_ids": list(REVIEWED_MECHANISM_IDS),
         "suppressed_mechanism_ids": list(SUPPRESSED_MECHANISM_IDS),
         "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
@@ -902,17 +935,17 @@ def build_cvrp_legacy_research_focus(
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
     return (
         RequiredMechanism(
-            mechanism_id=SUCCESSOR32_MECHANISM_ID,
-            category="successor32_target_intent_focus",
+            mechanism_id=SUCCESSOR33_MECHANISM_ID,
+            category="successor33_target_intent_focus",
             description=(
-                "Bind only the agentic target-intent preflight to successor32: "
-                f"test post-repair adaptive operator credit in "
-                f"{SUCCESSOR32_TARGET_FILE} before formal code work starts."
+                "Bind only the agentic target-intent preflight to successor33: "
+                f"test neighbor-list VNS candidate filtering in "
+                f"{SUCCESSOR33_TARGET_FILE} before formal code work starts."
             ),
             required_observations=(
-                "target-intent mechanism_id names post_repair_effect_credit_weighting",
-                "formal mechanism_changes use the same successor32 mechanism id",
-                "operator-credit telemetry records post-repair pre-polish effect",
+                "target-intent mechanism_id names neighbor_list_vns_filter",
+                "formal mechanism_changes use the same successor33 mechanism id",
+                "local-search telemetry records candidate filtering objective effect",
             ),
             protected_items=PROTECTED_CASES,
             hypothesis_mechanism_binding="target_intent_required",
@@ -943,6 +976,8 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "material causal-path difference from reviewed ejection-chain relocation",
                 "material causal-path difference from reviewed route-segment exchange",
                 "material causal-path difference from reviewed double-bridge polish",
+                "neighbor-list candidate filtering/order evidence when using bounded_local_search_variant",
+                "local-search attempted/accepted counts and record_move delta under the successor33 mechanism id",
                 "scheduler destroy-size baseline_q/adapted_q/q_delta evidence when using scheduler_destroy_size_policy",
                 "nonzero aligned candidate/champion q deltas before objective-effect interpretation",
                 "post-repair operator-credit old score and new credit when using acceptance_or_adaptive_weighting",

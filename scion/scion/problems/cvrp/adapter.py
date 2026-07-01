@@ -37,9 +37,11 @@ from scion.problems.cvrp.research_guidance import (
     CASE_PROTECTION_REQUIREMENTS,
     NEXT_REQUIRED_DIRECTION,
     PROTECTED_CASES,
-    SUCCESSOR32_DESIGN_PATH,
     SUCCESSOR32_MECHANISM_ID,
     SUCCESSOR32_TARGET_FILE,
+    SUCCESSOR33_DESIGN_PATH,
+    SUCCESSOR33_MECHANISM_ID,
+    SUCCESSOR33_TARGET_FILE,
     SUCCESSOR_OPPORTUNITY_FAMILIES,
 )
 from scion.problems.cvrp.surface_policy import (
@@ -59,6 +61,9 @@ CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE = (
 )
 CVRP_SUCCESSOR32_FOCUS_FAILURE = (
     "agent_quality_blocked:cvrp_successor32_focus_mismatch"
+)
+CVRP_SUCCESSOR33_FOCUS_FAILURE = (
+    "agent_quality_blocked:cvrp_successor33_focus_mismatch"
 )
 
 
@@ -122,13 +127,55 @@ class CvrpAdapter:
         hypothesis: Any,
         step_history: Sequence[Any] | None = None,
     ) -> Mapping[str, Any]:
-        """Problem-owned successor32 proposal quality check for CVRP."""
+        """Problem-owned current successor proposal quality check for CVRP."""
 
         del branch, step_history
         change_locus = str(getattr(hypothesis, "change_locus", "") or "").strip()
         target_file = str(getattr(hypothesis, "target_file", "") or "").strip()
-        if change_locus != "solver_design" or target_file != SUCCESSOR32_TARGET_FILE:
-            return {"allowed": True, "gate_name": "cvrp_successor32_focus"}
+        if change_locus != "solver_design":
+            return {"allowed": True, "gate_name": "cvrp_successor33_focus"}
+        if target_file == SUCCESSOR33_TARGET_FILE:
+            gate_name = "cvrp_successor33_focus"
+            failure_code = CVRP_SUCCESSOR33_FOCUS_FAILURE
+            required_mechanism_id = SUCCESSOR33_MECHANISM_ID
+            required_target_file = SUCCESSOR33_TARGET_FILE
+            successor_label = "successor33 neighbor-list VNS filter"
+            required_causal_path = (
+                "neighbor-list or route-neighbor filtering/order for existing "
+                "VNS neighborhood candidate enumeration"
+            )
+            retry_constraint = (
+                "Redraft the CVRP solver-design hypothesis as the "
+                "successor33 neighbor-list VNS filter: declare mechanism "
+                f"`{SUCCESSOR33_MECHANISM_ID}`, keep the target file at "
+                f"`{SUCCESSOR33_TARGET_FILE}`, and describe candidate "
+                "enumeration filtering/order inside existing VNS neighborhoods. "
+                "Do not switch to destroy/repair selection, q scheduling, seed "
+                "selection, acceptance probability, operator-credit weighting, "
+                "embedded-VNS runtime allocation, or a new local-search move family."
+            )
+        elif target_file == SUCCESSOR32_TARGET_FILE:
+            gate_name = "cvrp_successor32_focus"
+            failure_code = CVRP_SUCCESSOR32_FOCUS_FAILURE
+            required_mechanism_id = SUCCESSOR32_MECHANISM_ID
+            required_target_file = SUCCESSOR32_TARGET_FILE
+            successor_label = "successor32 operator-credit mechanism"
+            required_causal_path = (
+                "post-repair pre-polish objective-effect credit for ALNS "
+                "destroy/repair adaptive weights"
+            )
+            retry_constraint = (
+                "Redraft the CVRP solver-design hypothesis as the "
+                "successor32 operator-credit mechanism: declare mechanism "
+                f"`{SUCCESSOR32_MECHANISM_ID}`, keep the target file at "
+                f"`{SUCCESSOR32_TARGET_FILE}`, and describe post-repair "
+                "pre-polish objective-effect credit for ALNS "
+                "destroy/repair weights. Do not switch to destroy/repair "
+                "selection, q scheduling, local search, seed selection, "
+                "acceptance probability, or embedded-VNS runtime allocation."
+            )
+        else:
+            return {"allowed": True, "gate_name": "cvrp_successor33_focus"}
 
         mechanism_ids: list[str] = []
         for change in getattr(hypothesis, "mechanism_changes", ()) or ():
@@ -154,46 +201,34 @@ class CvrpAdapter:
         if isinstance(novelty, Mapping):
             text += " " + " ".join(str(item or "") for item in novelty.values())
         normalized_text = text.lower().replace("-", "_").replace(" ", "_")
-        if SUCCESSOR32_MECHANISM_ID in mechanism_ids or (
-            SUCCESSOR32_MECHANISM_ID in normalized_text
+        if required_mechanism_id in mechanism_ids or (
+            required_mechanism_id in normalized_text
         ):
-            return {"allowed": True, "gate_name": "cvrp_successor32_focus"}
+            return {"allowed": True, "gate_name": gate_name}
 
         return {
             "allowed": False,
             "detail": (
-                f"{CVRP_SUCCESSOR32_FOCUS_FAILURE}: successor32 scheduler "
-                "proposal must test post_repair_effect_credit_weighting before "
-                "code generation; selected_mechanisms="
+                f"{failure_code}: {successor_label} proposal must test "
+                f"{required_mechanism_id} before code generation; "
+                "selected_mechanisms="
                 + ",".join(mechanism_ids or ["none"])
             ),
-            "gate_name": "cvrp_successor32_focus",
+            "gate_name": gate_name,
             "structured_rejection": {
                 "source": "cvrp_problem_adapter",
-                "gate_name": "cvrp_successor32_focus",
-                "failure_code": CVRP_SUCCESSOR32_FOCUS_FAILURE,
+                "gate_name": gate_name,
+                "failure_code": failure_code,
                 "agent_block_reason": "agent_quality_blocked",
-                "required_mechanism_id": SUCCESSOR32_MECHANISM_ID,
+                "required_mechanism_id": required_mechanism_id,
                 "selected_mechanism_ids": mechanism_ids,
                 "target_file": target_file,
-                "retry_constraint": (
-                    "Redraft the CVRP solver-design hypothesis as the "
-                    "successor32 operator-credit mechanism: declare mechanism "
-                    f"`{SUCCESSOR32_MECHANISM_ID}`, keep the target file at "
-                    f"`{SUCCESSOR32_TARGET_FILE}`, and describe post-repair "
-                    "pre-polish objective-effect credit for ALNS "
-                    "destroy/repair weights. Do not switch to destroy/repair "
-                    "selection, q scheduling, local search, seed selection, "
-                    "acceptance probability, or embedded-VNS runtime allocation."
-                ),
+                "retry_constraint": retry_constraint,
                 "repair_template": {
-                    "repair_type": "cvrp_successor32_focus",
-                    "required_mechanism_id": SUCCESSOR32_MECHANISM_ID,
-                    "required_target_file": SUCCESSOR32_TARGET_FILE,
-                    "required_causal_path": (
-                        "post-repair pre-polish objective-effect credit for "
-                        "ALNS destroy/repair adaptive weights"
-                    ),
+                    "repair_type": gate_name,
+                    "required_mechanism_id": required_mechanism_id,
+                    "required_target_file": required_target_file,
+                    "required_causal_path": required_causal_path,
                 },
                 "decision_features_excluded": True,
             },
@@ -387,11 +422,10 @@ class CvrpAdapter:
                 {
                     "mechanism_family": "acceptance_or_adaptive_weighting",
                     "required_evidence": (
-                        "post-repair operator-credit attribution with operator "
-                        "pair, q, current/best before repair, candidate after "
-                        "repair and after polish, old score, new credit, "
-                        "weights before/after update, accepted/new-best counts, "
-                        "and per-case total_distance evidence"
+                        "successor32 post-repair operator-credit weighting is "
+                        "reviewed zero-effect; repeat only with a materially "
+                        "new adaptive-weighting causal path and direct "
+                        "per-case total_distance evidence"
                     ),
                 },
                 {
@@ -421,8 +455,10 @@ class CvrpAdapter:
                 {
                     "mechanism_family": "bounded_local_search_variant",
                     "required_evidence": (
-                        "feasible route-level objective deltas with bounded "
-                        "search effort, not only activation counts"
+                        "successor33 neighbor-list VNS filtering/order: "
+                        "feasible route-level objective deltas, attempted/"
+                        "accepted move counts, record_move delta, phase runtime, "
+                        "iteration count, and bounded candidate enumeration"
                     ),
                 },
                 {
@@ -451,29 +487,29 @@ class CvrpAdapter:
                 "schema_version": "scion.cvrp_opportunity_recipe.v1",
                 "proposal_visibility_only": True,
                 "decision_features_excluded": True,
-                "mechanism_family": "acceptance_or_adaptive_weighting",
-                "mechanism_id": SUCCESSOR32_MECHANISM_ID,
-                "review_status": "successor32_ready_after_successor31_zero_effect",
+                "mechanism_family": "bounded_local_search_variant",
+                "mechanism_id": SUCCESSOR33_MECHANISM_ID,
+                "review_status": "successor33_ready_after_successor32_zero_effect",
                 "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
                 "target_surface": "solver_design",
-                "target_files": [SUCCESSOR32_TARGET_FILE],
-                "design_path": SUCCESSOR32_DESIGN_PATH,
+                "target_files": [SUCCESSOR33_TARGET_FILE],
+                "design_path": SUCCESSOR33_DESIGN_PATH,
                 "next_required_direction": NEXT_REQUIRED_DIRECTION,
                 "required_observations": [
                     (
                         "exact mechanism id "
-                        f"{SUCCESSOR32_MECHANISM_ID} before code work starts"
+                        f"{SUCCESSOR33_MECHANISM_ID} before code work starts"
                     ),
                     (
-                        "operator pair, q, current/best objective before "
-                        "repair, candidate objective after repair, and "
-                        "candidate objective after polish"
+                        "existing VNS neighborhood name plus attempted and "
+                        "accepted move counts"
                     ),
                     (
-                        "old coarse score, new post-repair credit, and "
-                        "destroy/repair weights before and after segment update"
+                        "neighbor-list or route-neighbor candidate filtering "
+                        "scope and fallback behavior"
                     ),
-                    "accepted/new-best counts and record_move direct effect under the mechanism id",
+                    "record_move direct effect and best-improved status under the mechanism id",
+                    "phase runtime and iteration count for the filtered VNS path",
                     "feasibility, route-count, and runtime budget evidence",
                     "CMT2/CMT4 case-level evidence or an explicit caveat",
                     "effect-vs-MDE interpretation",
@@ -514,20 +550,24 @@ class CvrpAdapter:
                         "embedded-VNS runtime allocation"
                     ),
                     (
-                        "do not change simulated-annealing acceptance "
-                        "probability for successor32; the causal path is "
-                        "operator-credit attribution"
+                        "do not continue unchanged successor32-style post-repair "
+                        "effect credit weighting"
+                    ),
+                    (
+                        "do not add a new local-search move family for "
+                        "successor33; the causal path is candidate filtering "
+                        "inside existing VNS neighborhoods"
                     ),
                     (
                         "do not hardcode case ids, reference objective values, "
                         "seeds, or split membership when designing the "
-                        "operator-credit attribution"
+                        "candidate filter"
                     ),
                     (
-                        "keep the scheduler change narrow; if credit-state "
-                        "bookkeeping grows beyond a few local fields, move it "
-                        "to a coherent problem-owned module rather than adding "
-                        "helper sprawl to an oversized file"
+                        "keep the local_search.py change narrow; if the "
+                        "candidate-index structure grows beyond local scope, "
+                        "keep it as a coherent problem-owned module rather "
+                        "than adding helper sprawl to an oversized file"
                     ),
                     (
                         "keep CVRP semantics in problem-owned solver files and "
@@ -551,34 +591,36 @@ class CvrpAdapter:
                     "unchanged route_pair_overlap_removal_protected_followup",
                     "unchanged bounded_cross_route_double_bridge_polish",
                     "unchanged adaptive_embedded_vns_runtime_allocation",
+                    "unchanged post_repair_effect_credit_weighting",
                     "same-family scheduler q changes without explicit q-audit fields",
                 ],
             },
             "mechanism_effect_ranking": [
                 {
                     "rank": 1,
-                    "mechanism_family": "acceptance_or_adaptive_weighting",
-                    "evidence_status": "successor32_ready_after_successor31_zero_effect",
+                    "mechanism_family": "bounded_local_search_variant",
+                    "evidence_status": "successor33_ready_after_successor32_zero_effect",
                     "opportunity_status": "eligible_clean_fork",
                     "effect_status": "unknown_current_effect",
                     "summary": (
                         "Successor28/29 parked route-pair-overlap follow-ups, "
                         "successor30 parked bounded cross-route double-bridge "
                         "polish, and successor31 parked adaptive embedded-VNS "
-                        "runtime allocation. The next clean fork should test "
-                        "post_repair_effect_credit_weighting: credit ALNS "
-                        "destroy/repair adaptive weights from post-repair "
-                        "pre-polish objective effect."
+                        "runtime allocation. Successor32 showed internal "
+                        "operator-credit movement but zero objective effect. "
+                        "The next clean fork should test neighbor_list_vns_filter: "
+                        "filter/order existing VNS candidate enumeration with "
+                        "neighbor-list or route-neighbor bounds."
                     ),
                     "recommended_action": (
-                        "Target policies/baseline_modules/scheduler.py and "
-                        "record operator pair, q, before/after repair and "
-                        "polish objectives, old score, new credit, weights "
-                        "before/after update, accepted/new-best counts, and "
-                        "per-case total_distance evidence."
+                        "Target policies/baseline_modules/local_search.py and "
+                        "record neighborhood name, attempted/accepted counts, "
+                        "record_move delta, best-improved status, phase runtime, "
+                        "iterations, and per-case total_distance evidence."
                     ),
                     "reason_codes": [
-                        "SUCCESSOR32_POST_REPAIR_CREDIT_READY",
+                        "SUCCESSOR33_NEIGHBOR_LIST_VNS_FILTER_READY",
+                        "SUCCESSOR32_ZERO_EFFECT_DEFAULT_AVOID",
                         "SUCCESSOR31_ZERO_EFFECT_DEFAULT_AVOID",
                         "ROUTE_PAIR_OVERLAP_LINE_PARKED",
                         "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
@@ -586,26 +628,23 @@ class CvrpAdapter:
                 },
                 {
                     "rank": 2,
-                    "mechanism_family": "bounded_local_search_variant",
-                    "evidence_status": "successor_required_after_reviewed_no_effect",
-                    "opportunity_status": "eligible_if_materially_different",
-                    "effect_status": "unknown_current_effect",
+                    "mechanism_family": "acceptance_or_adaptive_weighting",
+                    "evidence_status": "successor32_reviewed_zero_effect",
+                    "opportunity_status": "reviewed_default_avoid",
+                    "effect_status": "measured_no_positive_at_mde",
                     "summary": (
-                        "The large-instance two-opt seed, cross-exchange, "
-                        "Or-opt reinsertion, bounded 3-opt, ejection-chain, "
-                        "and bounded route-segment paths are all reviewed "
-                        "no-positive-at-MDE evidence. A bounded local-search "
-                        "revisit must be a different causal path."
+                        "Successor32 post_repair_effect_credit_weighting "
+                        "showed internal operator-credit movement, but valid "
+                        "screening measured zero objective effect."
                     ),
                     "recommended_action": (
-                        "Declare the bounded trigger, runtime guard, and "
-                        "direct route-level objective delta for a non-reviewed "
-                        "local-search mechanism."
+                        "Do not repeat unchanged post-repair effect credit "
+                        "weighting; revisit adaptive weighting only with a "
+                        "materially new causal path and direct objective effect."
                     ),
                     "reason_codes": [
-                        "CVRP_LARGE_TWOOPT_REVIEWED_NO_POSITIVE_AT_MDE",
-                        "BOUNDED_LOCAL_SEARCH_PRIOR_PATHS_REVIEWED_NO_EFFECT",
-                        "SUCCESSOR_CAUSAL_PATH_REQUIRED",
+                        "SUCCESSOR32_ZERO_EFFECT_DEFAULT_AVOID",
+                        "ADAPTIVE_WEIGHTING_REVIEWED_NO_OBJECTIVE_EFFECT",
                     ],
                 },
                 {
@@ -773,28 +812,48 @@ class CvrpAdapter:
                     ],
                 },
                 {
-                    "diagnostic_type": "successor32_operator_credit",
+                    "diagnostic_type": "successor33_neighbor_list_vns_filter",
+                    "surface": "solver_design",
+                    "mechanism_family": "bounded_local_search_variant",
+                    "metric": "total_distance",
+                    "summary": (
+                        "Successor33 should test whether filtering or ordering "
+                        "existing VNS neighborhood candidate enumeration with "
+                        "neighbor-list/route-neighbor bounds spends the same "
+                        "local-search budget on more plausible improving moves."
+                    ),
+                    "recommended_action": (
+                        "Target neighbor_list_vns_filter in "
+                        "policies/baseline_modules/local_search.py and record "
+                        "neighborhood name, attempted/accepted counts, "
+                        "record_move delta, best-improved status, phase runtime, "
+                        "iterations, and formal per-case objective deltas."
+                    ),
+                    "confidence": "medium",
+                    "reason_codes": [
+                        "SUCCESSOR33_NEIGHBOR_LIST_VNS_FILTER_READY",
+                        "BOUNDED_LOCAL_SEARCH_DIRECT_EFFECT_REQUIRED",
+                    ],
+                },
+                {
+                    "diagnostic_type": "successor32_operator_credit_reviewed",
                     "surface": "solver_design",
                     "mechanism_family": "acceptance_or_adaptive_weighting",
                     "metric": "total_distance",
                     "summary": (
-                        "The current scheduler records post-repair and "
-                        "post-polish candidate objective values, but operator "
-                        "weights are still credited with coarse acceptance/"
-                        "best-update constants. Successor32 should test "
-                        "post-repair effect credit as a narrower adaptive "
-                        "operator-weighting causal path."
+                        "Successor32 post_repair_effect_credit_weighting "
+                        "recorded internal operator-credit movement but stayed "
+                        "at zero objective effect in valid screening."
                     ),
                     "recommended_action": (
-                        "Target post_repair_effect_credit_weighting in "
-                        "policies/baseline_modules/scheduler.py and record "
-                        "old score, new credit, weight movement, accepted/"
-                        "new-best counts, and formal per-case objective deltas."
+                        "Do not repeat unchanged post-repair effect credit "
+                        "weighting; only revisit adaptive weighting with a "
+                        "materially new causal path and direct objective effect."
                     ),
                     "confidence": "medium",
                     "reason_codes": [
-                        "SUCCESSOR32_POST_REPAIR_CREDIT_READY",
-                        "ADAPTIVE_WEIGHTING_DIRECT_EFFECT_REQUIRED",
+                        "SUCCESSOR32_ZERO_EFFECT_DEFAULT_AVOID",
+                        "ADAPTIVE_WEIGHTING_REVIEWED_NO_OBJECTIVE_EFFECT",
                     ],
                 },
                 {

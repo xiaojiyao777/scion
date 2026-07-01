@@ -502,18 +502,20 @@ from the current checkout.
    proposal target binding works and the mechanism can activate, but it did not
    produce positive-at-MDE or case-gate objective evidence. Do not relaunch the
    unchanged operator-credit mechanism.
-8. Design successor33 as a materially different CVRP-owned causal path before
-   any new experiment. Avoid unchanged route-pair-overlap, bounded
-   double-bridge, adaptive embedded-VNS runtime allocation, post-repair effect
-   credit weighting, construction seed trajectory, scheduler q/destroy-size,
-   and insertion-cost repair variants unless the proposal names a genuinely new
-   causal path and direct objective-effect telemetry.
+8. Launch successor33 as the next materially different CVRP-owned causal path.
+   Avoid unchanged route-pair-overlap, bounded double-bridge, adaptive
+   embedded-VNS runtime allocation, post-repair effect credit weighting,
+   construction seed trajectory, scheduler q/destroy-size, and insertion-cost
+   repair variants unless the proposal names a genuinely new causal path and
+   direct objective-effect telemetry.
    The selected successor33 design is `neighbor_list_vns_filter`, a
    bounded-local-search candidate-enumeration mechanism owned by
    `policies/baseline_modules/local_search.py`; see
    `scion/docs/experiments/v0.4/v04-cvrp-successor33-neighbor-list-vns-filter-design-20260701.md`.
-   Before launch, update problem-owned CVRP guidance so target intent no longer
-   binds successor32 and instead proposes successor33.
+   Problem-owned CVRP guidance now binds target intent to successor33 through
+   `target_intent_required_mechanism_ids=["neighbor_list_vns_filter"]`, marks
+   successor32 as reviewed/default-avoid evidence, and passes the targeted
+   guidance/launcher/readiness tests.
 9. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 10. Keep the v0.5 governance ablation frozen as a preregistered design; do not

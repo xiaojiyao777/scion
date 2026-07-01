@@ -45,7 +45,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         mechanism.mechanism_id
         for mechanism in contract.required_mechanisms
         if mechanism.hypothesis_mechanism_binding == "target_intent_required"
-    ] == ["post_repair_effect_credit_weighting"]
+    ] == ["neighbor_list_vns_filter"]
     assert any(
         "total_distance delta by case and seed" in field
         for requirement in contract.evidence_requirements
@@ -77,6 +77,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert "short_horizon_seed_trajectory_selector" in rendered.text
     assert "policies/baseline_modules/destroy_repair.py" in rendered.text
     assert "policies/baseline_modules/scheduler.py" in rendered.text
+    assert "policies/baseline_modules/local_search.py" in rendered.text
     assert "policies/baseline_modules/construction.py" in rendered.text
     assert "baseline_q" in rendered.text
     assert "q_delta" in rendered.text
@@ -100,7 +101,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     )
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "post_repair_effect_credit_weighting"
+        "neighbor_list_vns_filter"
     ]
 
 
@@ -120,7 +121,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
     assert focus["target_intent_required_mechanism_ids"] == [
-        "post_repair_effect_credit_weighting"
+        "neighbor_list_vns_filter"
     ]
     assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
@@ -133,6 +134,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
+        "post_repair_effect_credit_weighting",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -170,8 +172,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "successor27/29 route-pair-overlap follow-ups" in focus[
         "current_question"
     ]
-    assert "post_repair_effect_credit_weighting" in focus["current_question"]
-    assert "post-repair pre-polish objective effect" in focus["current_question"]
+    assert "neighbor_list_vns_filter" in focus["current_question"]
+    assert "VNS neighborhood candidate enumeration" in focus["current_question"]
     assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
     assert "intra_route_or_opt_reinsert" in focus["next_required_direction"]
     assert "bounded_intra_route_3opt" in focus["next_required_direction"]
@@ -221,7 +223,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "next_required_direction"
     ]
     assert "CMT4 median -19.0" in focus["next_required_direction"]
-    assert "policies/baseline_modules/scheduler.py" in (
+    assert "policies/baseline_modules/local_search.py" in (
         focus["next_required_direction"]
     )
     assert "`required_mechanism_ids` remains empty" in (
@@ -231,8 +233,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "route_pair_overlap_removal" in focus["next_required_direction"]
     assert "Successor29 forced" in focus["next_required_direction"]
     assert "route-pair-overlap line is parked" in focus["next_required_direction"]
-    assert "post_repair_effect_credit_weighting" in focus["next_required_direction"]
-    assert "operator-credit telemetry" in focus["next_required_direction"]
+    assert "neighbor_list_vns_filter" in focus["next_required_direction"]
+    assert "candidate enumeration" in focus["next_required_direction"]
     assert "telemetry-only q-audit repair" in focus["next_required_direction"]
     assert "seed-post selector repair is deferred" in (
         focus["next_required_direction"]
@@ -248,13 +250,13 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["required_evidence"]
     )
     assert any(
-        "post_repair_effect_credit_weighting" in item
-        and "adaptive operator credit" in item
+        "neighbor_list_vns_filter" in item
+        and "VNS candidate enumeration" in item
         for item in focus["required_evidence"]
     )
     assert any(
-        "post-repair adaptive-credit telemetry" in item
-        and "old coarse score" in item
+        "neighbor-list VNS telemetry" in item
+        and "attempted/accepted counts" in item
         for item in focus["required_evidence"]
     )
     assert any(
@@ -429,6 +431,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
+        "post_repair_effect_credit_weighting",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -684,6 +687,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
+        "post_repair_effect_credit_weighting",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -701,15 +705,15 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
-            "granular_savings_seed_portfolio",
-            "exact_short_route_polish",
-            "cw_sweep_seed_baseline_selector",
+        "granular_savings_seed_portfolio",
+        "exact_short_route_polish",
+        "cw_sweep_seed_baseline_selector",
             "short_horizon_seed_trajectory_selector",
             "short_horizon_seed_trajectory_selector_v2",
         ]
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "post_repair_effect_credit_weighting"
+        "neighbor_list_vns_filter"
     ]
     assert launch_payload["suppressed_mechanism_ids"] == [
         "seed_post_optimization_selector"

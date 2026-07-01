@@ -174,6 +174,25 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "post_repair_effect_credit_weighting",
+        "mechanism_family": "acceptance_or_adaptive_weighting",
+        "path_label": "post-repair effect credit weighting path",
+        "causal_path_label": "post-repair operator-credit weighting",
+        "effect_summary": {
+            "median_delta": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "max_median_delta": 0.0,
+            "max_effect_to_mde_ratio": 0.0,
+            "internal_effect_observed": True,
+            "objective_effect_status": "zero_objective_effect",
+            "interpretation": "valid_zero_effect_solver_negative",
+            "source_root_label": "successor32",
+        },
+    },
+    {
         "mechanism_id": "angular_sector_removal",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "angular-sector removal path",
@@ -618,6 +637,11 @@ DEFAULT_AVOID_DIRECTIONS = (
         "destroy-size policy after successor23 repaired observable q deltas "
         "but stayed below-MDE, parked as quality-regression, and missed "
         "explicit baseline_q/adapted_q/q_delta runtime fields"
+    ),
+    (
+        "unchanged post_repair_effect_credit_weighting acceptance/adaptive "
+        "weighting after successor32 measured internal operator-credit "
+        "movement but zero objective effect"
     ),
     (
         "unchanged radial_string_removal destroy/repair successor after "

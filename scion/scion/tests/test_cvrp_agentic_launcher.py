@@ -133,7 +133,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for mechanism in typed_contract["required_mechanisms"]
     }
     assert "required" not in mechanism_bindings.values()
-    assert mechanism_bindings["post_repair_effect_credit_weighting"] == (
+    assert mechanism_bindings["neighbor_list_vns_filter"] == (
         "target_intent_required"
     )
     assert any(
@@ -159,6 +159,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "operator_pair_destroy_size_bands_reviewed_no_positive",
         "stagnation_adaptive_destroy_size_schedule_reviewed_no_positive",
         "adaptive_embedded_vns_runtime_allocation_reviewed_no_positive",
+        "post_repair_effect_credit_weighting_reviewed_no_positive",
         "angular_sector_removal_reviewed_no_positive",
         "radial_string_removal_reviewed_no_positive",
         "farthest_noise_related_removal_reviewed_no_positive",
@@ -176,12 +177,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "lookahead_insertion_cost_repair_reviewed_no_positive",
         "lookahead_insertion_cost_repair_v2_reviewed_no_positive",
         "savings_seed_selection_probe_reviewed_no_positive",
-            "granular_savings_seed_portfolio_reviewed_no_positive",
-            "exact_short_route_polish_reviewed_no_positive",
-            "cw_sweep_seed_baseline_selector_reviewed_no_positive",
-            "short_horizon_seed_trajectory_selector_reviewed_no_positive",
-            "short_horizon_seed_trajectory_selector_v2_reviewed_no_positive",
-        }.issubset(reviewed_requirement_ids)
+        "granular_savings_seed_portfolio_reviewed_no_positive",
+        "exact_short_route_polish_reviewed_no_positive",
+        "cw_sweep_seed_baseline_selector_reviewed_no_positive",
+        "short_horizon_seed_trajectory_selector_reviewed_no_positive",
+        "short_horizon_seed_trajectory_selector_v2_reviewed_no_positive",
+    }.issubset(reviewed_requirement_ids)
     assert any(
         block["block_id"] == "successor_portfolio_direction"
         for block in typed_contract["guidance_blocks"]
@@ -196,7 +197,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "post_repair_effect_credit_weighting"
+        "neighbor_list_vns_filter"
     ]
     assert launch_payload["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
@@ -209,6 +210,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
+        "post_repair_effect_credit_weighting",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -398,26 +400,26 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert measurement["screening_headroom"]["case_count_gap_pct_at_least_3"] == 12
     assert measurement["top_opportunity_recipe"]["mechanism_id"] == (
-        "post_repair_effect_credit_weighting"
+        "neighbor_list_vns_filter"
     )
     assert measurement["top_opportunity_recipe"]["mechanism_family"] == (
-        "acceptance_or_adaptive_weighting"
+        "bounded_local_search_variant"
     )
     assert measurement["top_opportunity_recipe"]["target_files"] == [
-        "policies/baseline_modules/scheduler.py"
+        "policies/baseline_modules/local_search.py"
     ]
     assert (
         measurement["measurable_opportunity_classes"][0]["mechanism_family"]
         == "acceptance_or_adaptive_weighting"
     )
     assert measurement["mechanism_effect_ranking"][0]["mechanism_family"] == (
-        "acceptance_or_adaptive_weighting"
+        "bounded_local_search_variant"
     )
     assert measurement["mechanism_effect_ranking"][0]["opportunity_status"] == (
         "eligible_clean_fork"
     )
     assert measurement["mechanism_effect_ranking"][0]["evidence_status"] == (
-        "successor32_ready_after_successor31_zero_effect"
+        "successor33_ready_after_successor32_zero_effect"
     )
     assert measurement["mechanism_effect_ranking"][2]["mechanism_family"] == (
         "construction_seed_portfolio"
@@ -446,7 +448,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
             "measurable_opportunity_classes"
         ]
     )
-    assert "post_repair_effect_credit_weighting" in prepared_manifest[
+    assert "neighbor_list_vns_filter" in prepared_manifest[
         "research_focus"
     ]["current_question"]
     assert (
@@ -458,7 +460,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
-        "direct operator-credit telemetry"
+        "direct local-search telemetry"
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
@@ -550,7 +552,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert (
-        "policies/baseline_modules/scheduler.py"
+        "policies/baseline_modules/local_search.py"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert (
@@ -574,7 +576,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "Successor29 forced" in prepared_manifest[
         "research_focus"
     ]["next_required_direction"]
-    assert "post_repair_effect_credit_weighting" in prepared_manifest[
+    assert "neighbor_list_vns_filter" in prepared_manifest[
         "research_focus"
     ]["next_required_direction"]
     assert (
@@ -613,6 +615,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "short_horizon_seed_trajectory_selector_v2" in prepared_manifest_md
     assert "policies/baseline_modules/destroy_repair.py" in prepared_manifest_md
     assert "policies/baseline_modules/scheduler.py" in prepared_manifest_md
+    assert "policies/baseline_modules/local_search.py" in prepared_manifest_md
     assert "policies/baseline_modules/construction.py" in prepared_manifest_md
     assert "below MDE" in prepared_manifest_md
     assert "quality regression" in prepared_manifest_md
@@ -630,7 +633,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
     assert prepared_manifest["research_focus"][
         "target_intent_required_mechanism_ids"
-    ] == ["post_repair_effect_credit_weighting"]
+    ] == ["neighbor_list_vns_filter"]
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -642,6 +645,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
+        "post_repair_effect_credit_weighting",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -704,9 +708,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         ]
     )
     assert any(
-        "acceptance_or_adaptive_weighting" in item
-        and "post_repair_effect_credit_weighting" in item
-        and "Do not change simulated-annealing acceptance probability" in item
+        "bounded_local_search_variant" in item
+        and "neighbor_list_vns_filter" in item
+        and "existing VNS neighborhood candidate enumeration" in item
         for item in prepared_manifest["research_focus"][
             "measurable_opportunity_classes"
         ]
@@ -807,11 +811,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "screening_headroom" in prepared_manifest_md
     assert "mechanism_effect_ranking" in prepared_manifest_md
     assert "eligible_clean_fork" in prepared_manifest_md
-    assert "post_repair_effect_credit_weighting" in prepared_manifest_md
+    assert "neighbor_list_vns_filter" in prepared_manifest_md
     assert "route_pair_overlap_removal" in prepared_manifest_md
     assert "route-pair-overlap line is parked" in prepared_manifest_md
     assert "eligible_only_if_materially_different_or_telemetry_audit" in prepared_manifest_md
-    assert "eligible_if_materially_different" in prepared_manifest_md
+    assert "reviewed_default_avoid" in prepared_manifest_md
     assert "reviewed_not_next_required" in prepared_manifest_md
     assert "opportunity_diagnostics" in prepared_manifest_md
     assert "route-merge absorption" in prepared_manifest_md

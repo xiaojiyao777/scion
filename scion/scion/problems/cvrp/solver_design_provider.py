@@ -325,14 +325,15 @@ class CvrpSolverDesignProvider:
             ),
             (
                 "Current CVRP target-selection guidance, proposal-only and "
-                "excluded from DecisionFeatures: successor32 should select "
-                "`policies/baseline_modules/scheduler.py` only for "
-                "`post_repair_effect_credit_weighting`. The causal path is "
-                "post-repair, pre-polish objective-effect credit for ALNS "
-                "destroy/repair adaptive weights; it is not destroy/repair "
-                "pair selection, q scheduling, local search, construction "
-                "seed selection, simulated-annealing acceptance probability, "
-                "or embedded-VNS runtime allocation."
+                "excluded from DecisionFeatures: successor33 should select "
+                "`policies/baseline_modules/local_search.py` only for "
+                "`neighbor_list_vns_filter`. The causal path is filtering or "
+                "ordering existing VNS neighborhood candidate enumeration with "
+                "neighbor-list or route-neighbor bounds; it is not a new move "
+                "family, destroy/repair pair selection, q scheduling, "
+                "construction seed selection, simulated-annealing acceptance "
+                "probability, operator-credit weighting, or embedded-VNS "
+                "runtime allocation."
             ),
             (
                 "Current route-merge branch lesson: `route_merge_repair` in "
@@ -388,26 +389,26 @@ class CvrpSolverDesignProvider:
                 "fallback activation as effect."
             ),
             (
-                "A non-scheduler target is not preferred for the current "
-                "successor32 slot unless the target-intent notes explicitly "
+                "A non-local-search target is not preferred for the current "
+                "successor33 slot unless the target-intent notes explicitly "
                 "supersede the top opportunity and explain why "
-                "`post_repair_effect_credit_weighting` is no longer the right "
+                "`neighbor_list_vns_filter` is no longer the right "
                 "next CVRP solver test. Do not default to another "
-                "destroy/repair, local-search, construction, acceptance, or "
+                "destroy/repair, scheduler, construction, acceptance, or "
                 "stable-entrypoint operator solely because it is concrete or "
                 "easy to implement."
             ),
             (
-                "If target-intent selects scheduler.py for successor32, the "
+                "If target-intent selects local_search.py for successor33, the "
                 "intent must name mechanism id "
-                "`post_repair_effect_credit_weighting` before code work starts "
-                "and must say that the credit signal comes from the repaired "
-                "candidate objective before polish. The later hypothesis and "
-                "patch must record operator pair, q, before/after repair and "
-                "polish objectives, old score, new credit, weights before and "
-                "after update, accepted/new-best counts, and `record_move` "
-                "direct effect under the same mechanism id. Do not hardcode "
-                "case ids, BKS values, seeds, or split membership."
+                "`neighbor_list_vns_filter` before code work starts and must "
+                "say that the filter constrains or orders candidate enumeration "
+                "inside existing VNS neighborhoods. The later hypothesis and "
+                "patch must record neighborhood name, attempted/accepted "
+                "counts, `record_move` delta, best-improved status, phase "
+                "runtime, iteration count, and per-case objective deltas under "
+                "the same mechanism id. Do not hardcode case ids, BKS values, "
+                "seeds, or split membership."
             ),
             (
                 "Use `context.read_active_solver_map.research_lever_digest` as "
