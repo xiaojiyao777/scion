@@ -7,7 +7,11 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 SUPPORTED_VISIBILITY_POLICIES = ("proposal_only",)
-SUPPORTED_HYPOTHESIS_MECHANISM_BINDINGS = ("required", "context_only")
+SUPPORTED_HYPOTHESIS_MECHANISM_BINDINGS = (
+    "required",
+    "context_only",
+    "target_intent_required",
+)
 
 
 class ResearchGuidanceValidationError(ValueError):

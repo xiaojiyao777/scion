@@ -447,7 +447,9 @@ NEXT_REQUIRED_DIRECTION = (
     "logic, but credit ALNS destroy/repair adaptive weights from post-repair "
     "pre-polish objective effect with direct operator-credit telemetry. "
     "`required_mechanism_ids` remains empty because the guidance is proposal-only "
-    "and must not hard-force the Decision path. "
+    "and must not hard-force the Decision path; "
+    "`target_intent_required_mechanism_ids` binds only the agentic "
+    "target-intent preflight to successor32. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
     "telemetry-only q-audit repair for the missing explicit fields, or when "
@@ -873,6 +875,7 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
+        "target_intent_required_mechanism_ids": [SUCCESSOR32_MECHANISM_ID],
         "reviewed_mechanism_ids": list(REVIEWED_MECHANISM_IDS),
         "suppressed_mechanism_ids": list(SUPPRESSED_MECHANISM_IDS),
         "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
@@ -897,7 +900,24 @@ def build_cvrp_legacy_research_focus(
 
 
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
-    return ()
+    return (
+        RequiredMechanism(
+            mechanism_id=SUCCESSOR32_MECHANISM_ID,
+            category="successor32_target_intent_focus",
+            description=(
+                "Bind only the agentic target-intent preflight to successor32: "
+                f"test post-repair adaptive operator credit in "
+                f"{SUCCESSOR32_TARGET_FILE} before formal code work starts."
+            ),
+            required_observations=(
+                "target-intent mechanism_id names post_repair_effect_credit_weighting",
+                "formal mechanism_changes use the same successor32 mechanism id",
+                "operator-credit telemetry records post-repair pre-polish effect",
+            ),
+            protected_items=PROTECTED_CASES,
+            hypothesis_mechanism_binding="target_intent_required",
+        ),
+    )
 
 
 def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:

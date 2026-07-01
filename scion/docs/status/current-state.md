@@ -93,7 +93,15 @@ The remaining closeout gaps are:
   `pair_failure_cooldown_selection`; it is not successor32 solver evidence.
   A CVRP problem-owned `cvrp_successor32_focus` hypothesis quality gate now
   blocks scheduler.py successor32 proposals unless they name the required
-  operator-credit mechanism before code generation.
+  operator-credit mechanism before code generation. The guarded-live relaunch
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor32-post-repair-effect-credit-weighting-server-guarded-live-2r-gpt55-20260701T141225Z-claw`
+  was stopped before screening after three formal quality blocks
+  (`elite_current_restart`, `repair_failure_pair_filter`,
+  `runtime_normalized_pair_credit`). It is fail-closed evidence for the guard,
+  not solver evidence. The current checkout adds a generic proposal-only
+  `target_intent_required_mechanism_ids` binding so target-intent selection
+  can be pinned to `post_repair_effect_credit_weighting` while hard
+  `required_mechanism_ids` stays empty.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -409,7 +417,8 @@ CVRP:
    opportunity and requires operator pair, q, pre-repair current/best objective,
    post-repair and post-polish candidate objective, old coarse score, new
    credit, weight movement, accepted/new-best counts, and formal per-case
-   `total_distance` evidence.
+   `total_distance` evidence. Relaunch only after the target-intent-required
+   binding repair is committed.
 8. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 9. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.

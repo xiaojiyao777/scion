@@ -504,21 +504,40 @@ def _target_intent_launch_focus_required_mechanism_lines(
     context: Mapping[str, Any],
 ) -> list[str]:
     required_ids = _launch_focus_required_mechanism_ids(context)
-    if not required_ids:
+    target_intent_required_ids = _launch_focus_target_intent_required_mechanism_ids(
+        context
+    )
+    binding_ids = required_ids or target_intent_required_ids
+    if not binding_ids:
         return []
     research_focus = _launch_focus_research_focus_payload(context)
-    rendered_ids = ", ".join(f"`{item}`" for item in required_ids)
-    lines = [
-        (
-            "Prepared launch-focus required mechanism: set `mechanism_id` "
-            f"exactly to one of required_mechanism_ids: {rendered_ids}."
-        ),
-        (
-            "Do not choose a different target-intent mechanism for this "
-            "prepared run. If another mechanism seems better, the prepared "
-            "launch research_focus must be regenerated before this preflight."
-        ),
-    ]
+    rendered_ids = ", ".join(f"`{item}`" for item in binding_ids)
+    if required_ids:
+        lines = [
+            (
+                "Prepared launch-focus required mechanism: set `mechanism_id` "
+                f"exactly to one of required_mechanism_ids: {rendered_ids}."
+            ),
+            (
+                "Do not choose a different target-intent mechanism for this "
+                "prepared run. If another mechanism seems better, the prepared "
+                "launch research_focus must be regenerated before this preflight."
+            ),
+        ]
+    else:
+        lines = [
+            (
+                "Prepared launch-focus target-intent mechanism: set "
+                "`mechanism_id` exactly to one of "
+                "target_intent_required_mechanism_ids: "
+                f"{rendered_ids}."
+            ),
+            (
+                "This binds the target-intent preflight only; "
+                "`required_mechanism_ids` remains unconfigured for the formal "
+                "required-mechanism guard."
+            ),
+        ]
     direction = str(research_focus.get("next_required_direction") or "").strip()
     if direction:
         lines.append(f"Prepared next_required_direction: {direction}")
@@ -628,6 +647,15 @@ def _prepared_successor_focus_prompt_list(value: Any) -> str:
 def _launch_focus_required_mechanism_ids(context: Mapping[str, Any]) -> list[str]:
     research_focus = _launch_focus_research_focus_payload(context)
     return _launch_focus_string_items(research_focus.get("required_mechanism_ids"))
+
+
+def _launch_focus_target_intent_required_mechanism_ids(
+    context: Mapping[str, Any],
+) -> list[str]:
+    research_focus = _launch_focus_research_focus_payload(context)
+    return _launch_focus_string_items(
+        research_focus.get("target_intent_required_mechanism_ids")
+    )
 
 
 def _launch_focus_research_focus_payload(context: Mapping[str, Any]) -> Mapping[str, Any]:

@@ -37,7 +37,15 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert contract.problem_family == "cvrp"
     assert contract.proposal_visibility_only is True
     assert contract.decision_features_excluded is True
-    assert contract.required_mechanisms == ()
+    assert not any(
+        mechanism.hypothesis_mechanism_binding == "required"
+        for mechanism in contract.required_mechanisms
+    )
+    assert [
+        mechanism.mechanism_id
+        for mechanism in contract.required_mechanisms
+        if mechanism.hypothesis_mechanism_binding == "target_intent_required"
+    ] == ["post_repair_effect_credit_weighting"]
     assert any(
         "total_distance delta by case and seed" in field
         for requirement in contract.evidence_requirements
@@ -91,6 +99,9 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         },
     )
     assert launch_payload["required_mechanism_ids"] == []
+    assert launch_payload["target_intent_required_mechanism_ids"] == [
+        "post_repair_effect_credit_weighting"
+    ]
 
 
 def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
@@ -108,6 +119,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["schema_version"] == "scion.cvrp_research_focus.v1"
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
+    assert focus["target_intent_required_mechanism_ids"] == [
+        "post_repair_effect_credit_weighting"
+    ]
     assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -694,6 +708,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
             "short_horizon_seed_trajectory_selector_v2",
         ]
     assert launch_payload["required_mechanism_ids"] == []
+    assert launch_payload["target_intent_required_mechanism_ids"] == [
+        "post_repair_effect_credit_weighting"
+    ]
     assert launch_payload["suppressed_mechanism_ids"] == [
         "seed_post_optimization_selector"
     ]

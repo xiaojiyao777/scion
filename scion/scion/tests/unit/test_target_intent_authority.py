@@ -24,15 +24,19 @@ from scion.tests.unit.agentic_session_test_support import (
 def _context(
     *,
     required_ids: list[str] | None = None,
+    target_intent_required_ids: list[str] | None = None,
     branch_hygiene: dict | None = None,
 ) -> ProposalToolContext:
     launch_research_focus = {}
-    if required_ids is not None:
+    if required_ids is not None or target_intent_required_ids is not None:
         launch_research_focus = {
             "schema_version": "scion.launch_research_focus_prompt.v1",
             "taint": "prepared_launch_research_focus",
             "research_focus": {
-                "required_mechanism_ids": list(required_ids),
+                "required_mechanism_ids": list(required_ids or []),
+                "target_intent_required_mechanism_ids": list(
+                    target_intent_required_ids or []
+                ),
                 "next_required_direction": "Prepare the next generic direction.",
             },
         }
@@ -92,6 +96,30 @@ def test_open_exploration_prepared_required_mechanism_binds() -> None:
     assert resolution.tool_context_overrides == {}
 
 
+def test_open_exploration_target_intent_required_mechanism_binds() -> None:
+    required_id = "post_repair_effect_credit_weighting"
+    resolution = resolve_target_intent_authority(
+        _intent("pair_failure_cooldown_selection"),
+        _context(target_intent_required_ids=[required_id]),
+    )
+
+    assert resolution.intent["mechanism_id"] == required_id
+    assert resolution.intent["mechanism_id_status"] == (
+        "launch_focus_target_intent_required_mechanism"
+    )
+    assert resolution.diagnostics["authority_source"] == (
+        "prepared_launch_target_intent_focus"
+    )
+    assert resolution.diagnostics[
+        "selected_target_intent_required_mechanism_id"
+    ] == required_id
+    assert resolution.diagnostics["target_intent_required_mechanism_ids"] == [
+        required_id
+    ]
+    assert "required_mechanism_ids" not in resolution.diagnostics
+    assert resolution.tool_context_overrides == {}
+
+
 def test_branch_followup_disjoint_prepared_focus_defers_to_branch_id() -> None:
     prepared_id = "prepared_generic_seed"
     branch_id = "existing_branch_mechanism"
@@ -130,6 +158,48 @@ def test_branch_followup_disjoint_prepared_focus_defers_to_branch_id() -> None:
     effective_focus = effective_context.launch_research_focus["research_focus"]
     assert effective_focus["required_mechanism_ids"] == []
     assert effective_focus["deferred_required_mechanism_ids"] == [prepared_id]
+
+
+def test_branch_followup_disjoint_target_intent_required_defers_to_branch_id() -> None:
+    prepared_id = "post_repair_effect_credit_weighting"
+    branch_id = "existing_branch_mechanism"
+    context = _context(
+        target_intent_required_ids=[prepared_id],
+        branch_hygiene={
+            "hypothesis_generation_mode": "branch_local_followup",
+            "branch_followup_policy": "branch_local_followup_or_explicit_bridge",
+            "protected_mechanism_ids": [branch_id],
+        },
+    )
+    resolution = resolve_target_intent_authority(_intent(prepared_id), context)
+
+    assert resolution.intent["mechanism_id"] == branch_id
+    assert resolution.intent["mechanism_id_status"] == (
+        "prepared_focus_deferred_for_branch_followup"
+    )
+    assert resolution.diagnostics["prepared_focus_deferred"] is True
+    assert resolution.diagnostics[
+        "prepared_target_intent_required_mechanism_ids"
+    ] == [prepared_id]
+    assert resolution.diagnostics[
+        "deferred_target_intent_required_mechanism_ids"
+    ] == [prepared_id]
+    assert "prepared_required_mechanism_ids" not in resolution.diagnostics
+
+    effective_context = tool_context_with_target_intent_authority_overrides(
+        context,
+        {
+            "intent": resolution.intent,
+            "tool_context_overrides": resolution.tool_context_overrides,
+        },
+    )
+    assert effective_context is not None
+    effective_focus = effective_context.launch_research_focus["research_focus"]
+    assert effective_focus["required_mechanism_ids"] == []
+    assert effective_focus["target_intent_required_mechanism_ids"] == []
+    assert effective_focus["deferred_target_intent_required_mechanism_ids"] == [
+        prepared_id
+    ]
 
 
 def test_branch_followup_allowed_only_authority_defers_prepared_focus() -> None:

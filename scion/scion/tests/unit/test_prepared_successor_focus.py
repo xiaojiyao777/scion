@@ -250,6 +250,28 @@ def test_required_mechanism_ids_keep_existing_branch_authority() -> None:
     )
 
 
+def test_target_intent_required_ids_do_not_disable_successor_conflict() -> None:
+    context = _tool_context(
+        launch_research_focus={
+            "research_focus": {
+                "required_mechanism_ids": [],
+                "target_intent_required_mechanism_ids": [
+                    "post_repair_effect_credit_weighting"
+                ],
+                "reviewed_mechanism_ids": [REVIEWED_ID],
+                "successor_opportunity_families": [SUCCESSOR_FAMILY],
+            },
+        }
+    )
+
+    conflict = launch_focus_prepared_successor_conflict(context)
+
+    assert conflict["active"] is True
+    assert conflict["configured"] is True
+    assert "required_mechanism_ids" not in conflict
+    assert conflict["reviewed_mechanism_ids"] == [REVIEWED_ID]
+
+
 def test_successor_focus_prompts_do_not_force_reviewed_same_mechanism() -> None:
     context = _prompt_context()
 

@@ -128,7 +128,14 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert typed_contract["problem_family"] == "cvrp"
     assert typed_contract["proposal_visibility_only"] is True
     assert typed_contract["decision_features_excluded"] is True
-    assert typed_contract["required_mechanisms"] == []
+    mechanism_bindings = {
+        mechanism["mechanism_id"]: mechanism["hypothesis_mechanism_binding"]
+        for mechanism in typed_contract["required_mechanisms"]
+    }
+    assert "required" not in mechanism_bindings.values()
+    assert mechanism_bindings["post_repair_effect_credit_weighting"] == (
+        "target_intent_required"
+    )
     assert any(
         requirement["requirement_id"] == "successor_causal_path_direct_effect"
         for requirement in typed_contract["evidence_requirements"]
@@ -188,6 +195,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         manifest=prepared_manifest,
     )
     assert launch_payload["required_mechanism_ids"] == []
+    assert launch_payload["target_intent_required_mechanism_ids"] == [
+        "post_repair_effect_credit_weighting"
+    ]
     assert launch_payload["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -618,6 +628,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
+    assert prepared_manifest["research_focus"][
+        "target_intent_required_mechanism_ids"
+    ] == ["post_repair_effect_credit_weighting"]
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",

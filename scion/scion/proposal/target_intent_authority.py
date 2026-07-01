@@ -48,12 +48,35 @@ def resolve_target_intent_authority(
     """Resolve prepared launch focus against branch-local mechanism authority."""
 
     required_ids = _launch_focus_required_mechanism_ids_from_context(tool_context)
+    target_intent_required_ids = (
+        _launch_focus_target_intent_required_mechanism_ids_from_context(tool_context)
+    )
+    binding_ids = required_ids or target_intent_required_ids
+    binding_field = (
+        "required_mechanism_ids"
+        if required_ids
+        else "target_intent_required_mechanism_ids"
+    )
+    authority_source = (
+        "prepared_launch_research_focus"
+        if required_ids
+        else "prepared_launch_target_intent_focus"
+    )
+    terminal_status = (
+        "launch_focus_required_mechanism"
+        if required_ids
+        else "launch_focus_target_intent_required_mechanism"
+    )
+    binding_description = (
+        "required mechanism" if required_ids else "target-intent mechanism"
+    )
+    binding_ids_description = "required ids" if required_ids else "target-intent ids"
     successor_conflict = launch_focus_prepared_successor_conflict(tool_context)
     updated = dict(intent)
     current_id = _clean_string(intent.get("mechanism_id"))
     original = _original_target_intent_mechanism(intent)
 
-    if not required_ids and successor_conflict.get("active"):
+    if not binding_ids and successor_conflict.get("active"):
         reviewed_ids = set(successor_conflict.get("reviewed_mechanism_ids") or ())
         suppressed_ids = set(successor_conflict.get("suppressed_mechanism_ids") or ())
         excluded_ids = reviewed_ids | suppressed_ids
@@ -83,7 +106,7 @@ def resolve_target_intent_authority(
         intent,
         tool_context,
     )
-    if not required_ids and default_avoid_match:
+    if not binding_ids and default_avoid_match:
         status = "prepared_launch_focus_default_avoid_rejects_target_intent"
         diagnostics = _default_avoid_target_intent_diagnostics(
             status=status,
@@ -100,14 +123,14 @@ def resolve_target_intent_authority(
             diagnostics=diagnostics,
         )
 
-    if not required_ids:
+    if not binding_ids:
         return TargetIntentAuthorityResolution(intent=updated)
 
     branch_authority = _branch_mechanism_authority(tool_context)
 
     if branch_authority.branch_local and branch_authority.authority_ids:
         intersecting_id = _first_in_order(
-            required_ids,
+            binding_ids,
             branch_authority.authority_ids,
         )
         if intersecting_id:
@@ -119,7 +142,7 @@ def resolve_target_intent_authority(
                 status=status,
                 action=_branch_local_followup_action(intent),
                 mechanism_sketch=(
-                    "Prepared launch-focus required mechanism also belongs to "
+                    f"Prepared launch-focus {binding_description} also belongs to "
                     f"the selected branch-local mechanism authority: {selected_id}."
                 ),
                 formal_schema_id_policy=(
@@ -130,7 +153,8 @@ def resolve_target_intent_authority(
             diagnostics = _authority_diagnostics(
                 status=status,
                 authority_source="branch_local_prepared_focus_intersection",
-                prepared_required_ids=required_ids,
+                prepared_required_ids=binding_ids,
+                binding_field=binding_field,
                 branch_authority=branch_authority,
                 selected_id=selected_id,
                 original=original,
@@ -145,6 +169,8 @@ def resolve_target_intent_authority(
             )
             updated["target_intent_authority"] = diagnostics
             updated["launch_focus_required_mechanism"] = diagnostics
+            if not required_ids:
+                updated["launch_focus_target_intent_required_mechanism"] = diagnostics
             return TargetIntentAuthorityResolution(
                 intent=updated,
                 diagnostics=diagnostics,
@@ -163,18 +189,20 @@ def resolve_target_intent_authority(
             action=_branch_local_followup_action(intent),
             mechanism_sketch=(
                 "Branch-local follow-up mechanism authority selected "
-                f"{selected_id}; prepared launch-focus required ids were "
+                f"{selected_id}; prepared launch-focus {binding_ids_description} were "
                 "deferred because they do not intersect the branch authority set."
             ),
             formal_schema_id_policy=(
                 "mechanism_id is the branch-local protected/allowed id for this "
-                "follow-up; prepared launch-focus required ids are audit-deferred"
+                f"follow-up; prepared launch-focus {binding_ids_description} "
+                "are audit-deferred"
             ),
         )
         diagnostics = _authority_diagnostics(
             status=status,
             authority_source="branch_local_mechanism_authority",
-            prepared_required_ids=required_ids,
+            prepared_required_ids=binding_ids,
+            binding_field=binding_field,
             branch_authority=branch_authority,
             selected_id=selected_id,
             original=original,
@@ -186,27 +214,31 @@ def resolve_target_intent_authority(
                 or _branch_local_followup_action(intent)
                 != _normalize_action(intent.get("action"))
             ),
-            deferred_required_ids=required_ids,
+            deferred_required_ids=binding_ids,
         )
         effective_focus = _launch_focus_with_deferred_required_ids(
             tool_context,
-            required_ids=required_ids,
+            required_ids=binding_ids,
             diagnostics=diagnostics,
+            binding_field=binding_field,
         )
         overrides = {"launch_research_focus": effective_focus} if effective_focus else {}
         updated["target_intent_authority"] = diagnostics
         updated["launch_focus_required_mechanism"] = diagnostics
+        if not required_ids:
+            updated["launch_focus_target_intent_required_mechanism"] = diagnostics
         return TargetIntentAuthorityResolution(
             intent=updated,
             diagnostics=diagnostics,
             tool_context_overrides=overrides,
         )
 
-    if current_id in required_ids:
+    if current_id in binding_ids:
         diagnostics = _authority_diagnostics(
             status="prepared_focus_already_selected",
-            authority_source="prepared_launch_research_focus",
-            prepared_required_ids=required_ids,
+            authority_source=authority_source,
+            prepared_required_ids=binding_ids,
+            binding_field=binding_field,
             branch_authority=branch_authority,
             selected_id=current_id,
             original=original,
@@ -217,30 +249,34 @@ def resolve_target_intent_authority(
         )
         updated["target_intent_authority"] = diagnostics
         updated["launch_focus_required_mechanism"] = diagnostics
+        if not required_ids:
+            updated["launch_focus_target_intent_required_mechanism"] = diagnostics
         return TargetIntentAuthorityResolution(
             intent=updated,
             diagnostics=diagnostics,
         )
 
-    selected_id = required_ids[0]
-    status = "launch_focus_required_mechanism"
+    selected_id = binding_ids[0]
+    status = terminal_status
     updated = _with_selected_mechanism(
         intent,
         selected_id,
         status=status,
         mechanism_sketch=(
-            f"Prepared launch-focus required mechanism {selected_id}; draft "
+            f"Prepared launch-focus {binding_description} {selected_id}; draft "
             "the formal hypothesis around this id."
         ),
         formal_schema_id_policy=(
-            "mechanism_id is the prepared launch-focus required id and must be "
-            "used exactly in formal mechanism_changes and expected telemetry refs"
+            f"mechanism_id is the prepared launch-focus {binding_description} "
+            "id and must be used exactly in target intent, formal "
+            "mechanism_changes, and expected telemetry refs"
         ),
     )
     diagnostics = _authority_diagnostics(
         status=status,
-        authority_source="prepared_launch_research_focus",
-        prepared_required_ids=required_ids,
+        authority_source=authority_source,
+        prepared_required_ids=binding_ids,
+        binding_field=binding_field,
         branch_authority=branch_authority,
         selected_id=selected_id,
         original=original,
@@ -251,6 +287,8 @@ def resolve_target_intent_authority(
     )
     updated["target_intent_authority"] = diagnostics
     updated["launch_focus_required_mechanism"] = diagnostics
+    if not required_ids:
+        updated["launch_focus_target_intent_required_mechanism"] = diagnostics
     return TargetIntentAuthorityResolution(intent=updated, diagnostics=diagnostics)
 
 
@@ -737,6 +775,7 @@ def _authority_diagnostics(
     status: str,
     authority_source: str,
     prepared_required_ids: list[str],
+    binding_field: str = "required_mechanism_ids",
     branch_authority: _BranchMechanismAuthority,
     selected_id: str,
     original: Mapping[str, Any],
@@ -746,6 +785,20 @@ def _authority_diagnostics(
     target_intent_updated: bool,
     deferred_required_ids: list[str] | None = None,
 ) -> dict[str, Any]:
+    target_intent_required_binding = binding_field == (
+        "target_intent_required_mechanism_ids"
+    )
+    required_ids = [] if target_intent_required_binding else prepared_required_ids
+    target_intent_required_ids = (
+        prepared_required_ids if target_intent_required_binding else []
+    )
+    deferred_ids = deferred_required_ids or []
+    deferred_required_ids_payload = (
+        [] if target_intent_required_binding else deferred_ids
+    )
+    deferred_target_intent_required_ids = (
+        deferred_ids if target_intent_required_binding else []
+    )
     return _drop_empty(
         {
             "name": "target_intent_authority",
@@ -757,9 +810,16 @@ def _authority_diagnostics(
             "prepared_focus_applied": prepared_focus_applied,
             "prepared_focus_deferred": bool(deferred_required_ids),
             "target_intent_updated": target_intent_updated,
-            "required_mechanism_ids": prepared_required_ids,
-            "prepared_required_mechanism_ids": prepared_required_ids,
-            "deferred_required_mechanism_ids": deferred_required_ids or [],
+            "required_mechanism_ids": required_ids,
+            "prepared_required_mechanism_ids": required_ids,
+            "target_intent_required_mechanism_ids": target_intent_required_ids,
+            "prepared_target_intent_required_mechanism_ids": (
+                target_intent_required_ids
+            ),
+            "deferred_required_mechanism_ids": deferred_required_ids_payload,
+            "deferred_target_intent_required_mechanism_ids": (
+                deferred_target_intent_required_ids
+            ),
             "selected_mechanism_id": selected_id,
             "original_target_intent_action": original_action,
             "selected_target_intent_action": selected_action,
@@ -767,7 +827,12 @@ def _authority_diagnostics(
                 selected_action != _normalize_action(original_action)
             ),
             "selected_required_mechanism_id": (
-                selected_id if selected_id in set(prepared_required_ids) else ""
+                selected_id if selected_id in set(required_ids) else ""
+            ),
+            "selected_target_intent_required_mechanism_id": (
+                selected_id
+                if selected_id in set(target_intent_required_ids)
+                else ""
             ),
             "selected_branch_mechanism_id": (
                 selected_id if selected_id in set(branch_authority.authority_ids) else ""
@@ -787,21 +852,45 @@ def _authority_diagnostics(
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
             "tainted": True,
-            "rule": _authority_rule(status),
+            "rule": _authority_rule(status, binding_field=binding_field),
         }
     )
 
 
-def _authority_rule(status: str) -> str:
+def _authority_rule(status: str, *, binding_field: str = "required_mechanism_ids") -> str:
+    target_binding = binding_field == "target_intent_required_mechanism_ids"
+    if status == "launch_focus_target_intent_required_mechanism":
+        return (
+            "Prepared launch research_focus "
+            "target_intent_required_mechanism_ids bind target-intent preflight "
+            "without configuring formal required_mechanism_ids."
+        )
     if status == "prepared_focus_deferred_for_branch_followup":
+        if target_binding:
+            return (
+                "Branch-local protected mechanism authority outranks prepared "
+                "launch-focus target_intent_required_mechanism_ids when the "
+                "sets are disjoint."
+            )
         return (
             "Branch-local protected mechanism authority outranks prepared "
             "launch-focus required ids when the sets are disjoint."
         )
     if status == "branch_prepared_focus_intersection":
+        if target_binding:
+            return (
+                "Prepared launch target-intent focus binds through the "
+                "intersection with branch-local protected/allowed mechanism ids."
+            )
         return (
             "Prepared launch focus binds target intent through the intersection "
             "with branch-local protected/allowed mechanism ids."
+        )
+    if target_binding:
+        return (
+            "Prepared launch research_focus target_intent_required_mechanism_ids "
+            "bind target-intent preflight without configuring formal "
+            "required_mechanism_ids."
         )
     return (
         "Prepared launch research_focus required_mechanism_ids bind target-intent "
@@ -814,6 +903,7 @@ def _launch_focus_with_deferred_required_ids(
     *,
     required_ids: list[str],
     diagnostics: Mapping[str, Any],
+    binding_field: str = "required_mechanism_ids",
 ) -> dict[str, Any]:
     focus = getattr(tool_context, "launch_research_focus", {}) or {}
     if not isinstance(focus, Mapping):
@@ -822,23 +912,48 @@ def _launch_focus_with_deferred_required_ids(
     research_focus = updated_focus.get("research_focus")
     if isinstance(research_focus, Mapping):
         updated_research_focus = dict(research_focus)
-        updated_research_focus["required_mechanism_ids"] = []
-        updated_research_focus["deferred_required_mechanism_ids"] = list(required_ids)
-        updated_research_focus["required_mechanism_authority_status"] = (
+        deferred_field = (
+            "deferred_target_intent_required_mechanism_ids"
+            if binding_field == "target_intent_required_mechanism_ids"
+            else "deferred_required_mechanism_ids"
+        )
+        status_field = (
+            "target_intent_required_mechanism_authority_status"
+            if binding_field == "target_intent_required_mechanism_ids"
+            else "required_mechanism_authority_status"
+        )
+        updated_research_focus[binding_field] = []
+        updated_research_focus[deferred_field] = list(required_ids)
+        updated_research_focus[status_field] = (
             "prepared_focus_deferred_for_branch_followup"
         )
         updated_focus["research_focus"] = updated_research_focus
     else:
-        updated_focus["required_mechanism_ids"] = []
-        updated_focus["deferred_required_mechanism_ids"] = list(required_ids)
-        updated_focus["required_mechanism_authority_status"] = (
+        deferred_field = (
+            "deferred_target_intent_required_mechanism_ids"
+            if binding_field == "target_intent_required_mechanism_ids"
+            else "deferred_required_mechanism_ids"
+        )
+        status_field = (
+            "target_intent_required_mechanism_authority_status"
+            if binding_field == "target_intent_required_mechanism_ids"
+            else "required_mechanism_authority_status"
+        )
+        updated_focus[binding_field] = []
+        updated_focus[deferred_field] = list(required_ids)
+        updated_focus[status_field] = (
             "prepared_focus_deferred_for_branch_followup"
         )
     updated_focus["target_intent_authority"] = _drop_empty(
         {
             "authority_status": diagnostics.get("authority_status"),
             "authority_source": diagnostics.get("authority_source"),
-            "prepared_required_mechanism_ids": required_ids,
+            "prepared_required_mechanism_ids": diagnostics.get(
+                "prepared_required_mechanism_ids"
+            ),
+            "prepared_target_intent_required_mechanism_ids": diagnostics.get(
+                "prepared_target_intent_required_mechanism_ids"
+            ),
             "branch_protected_mechanism_ids": diagnostics.get(
                 "branch_protected_mechanism_ids"
             ),
@@ -856,6 +971,16 @@ def _launch_focus_required_mechanism_ids_from_context(
     focus = _launch_focus_from_any_context(tool_context)
     research_focus = _launch_focus_research_focus_payload(focus)
     return list(_unique_strings(research_focus.get("required_mechanism_ids")))
+
+
+def _launch_focus_target_intent_required_mechanism_ids_from_context(
+    tool_context: ProposalToolContext,
+) -> list[str]:
+    focus = _launch_focus_from_any_context(tool_context)
+    research_focus = _launch_focus_research_focus_payload(focus)
+    return list(
+        _unique_strings(research_focus.get("target_intent_required_mechanism_ids"))
+    )
 
 
 def _launch_focus_from_any_context(

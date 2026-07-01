@@ -402,7 +402,15 @@ to `pair_failure_cooldown_selection` instead of
 pre-screen guard event, not successor32 solver evidence. A CVRP problem-owned
 `cvrp_successor32_focus` hypothesis quality gate now blocks scheduler.py
 successor32 proposals unless the formal hypothesis names the required
-operator-credit mechanism.
+operator-credit mechanism. A guarded-live relaunch at
+`/home/clawd/research/scion-experiments/v04-cvrp-successor32-post-repair-effect-credit-weighting-server-guarded-live-2r-gpt55-20260701T141225Z-claw`
+was also stopped before screening after three fail-closed quality blocks
+(`elite_current_restart`, `repair_failure_pair_filter`, and
+`runtime_normalized_pair_credit`). That root proves the formal guard catches
+drift, but it is also not solver evidence. The follow-up repair adds a generic
+proposal-only `target_intent_required_mechanism_ids` binding so successor32
+binds target intent to `post_repair_effect_credit_weighting` while leaving hard
+`required_mechanism_ids` empty for prepared-successor arbitration.
 
 Reviewed or suppressed paths include the large two-opt seed line, cross
 exchange, Or-opt reinsertion, 3-opt, ejection-chain relocation, several
@@ -467,8 +475,9 @@ from the current checkout.
    post-repair and post-polish candidate objective, old coarse score, new
    credit, weight movement, accepted/new-best counts, and formal per-case
    `total_distance` evidence. The first server-local root ended as an aborted
-   pre-screen mechanism-drift guard event; relaunch successor32 from the
-   `cvrp_successor32_focus` guard commit before analysis.
+   pre-screen mechanism-drift guard event, and the guarded-live root proved
+   fail-closed formal drift blocking with zero screened candidates. Relaunch
+   successor32 only after the target-intent-required binding commit.
 8. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 9. Keep the v0.5 governance ablation frozen as a preregistered design; do not
