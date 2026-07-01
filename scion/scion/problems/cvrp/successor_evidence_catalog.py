@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 SUCCESSOR_OPPORTUNITY_FAMILIES = (
+    "acceptance_or_adaptive_weighting",
     "scheduler_destroy_size_policy",
     "destroy_repair_selection",
     "construction_seed_portfolio",
@@ -78,6 +79,23 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "bounded_cross_route_double_bridge_polish",
+        "mechanism_family": "bounded_local_search_variant",
+        "path_label": "bounded cross-route double-bridge polish path",
+        "causal_path_label": "bounded cross-route local-search polish",
+        "effect_summary": {
+            "median_delta": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "max_median_delta": 0.0,
+            "max_effect_to_mde_ratio": 0.0,
+            "interpretation": "valid_zero_effect_solver_negative",
+            "source_root_label": "successor30",
+        },
+    },
+    {
         "mechanism_id": "operator_pair_destroy_size_bands",
         "mechanism_family": "scheduler_destroy_size_policy",
         "path_label": "operator-pair destroy-size band scheduler path",
@@ -135,6 +153,24 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
             "predecessor_source_root_label": "successor22b",
             "predecessor_q_trajectory_status": "inactive_q_trajectory_noop",
             "source_root_label": "successor23",
+        },
+    },
+    {
+        "mechanism_id": "adaptive_embedded_vns_runtime_allocation",
+        "mechanism_family": "scheduler_runtime_allocation",
+        "path_label": "adaptive embedded-VNS runtime allocation path",
+        "causal_path_label": "scheduler runtime-allocation policy",
+        "effect_summary": {
+            "median_delta": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "max_median_delta": 0.0,
+            "max_effect_to_mde_ratio": 0.0,
+            "weighted_runtime_movement_observed": True,
+            "interpretation": "valid_zero_effect_solver_negative",
+            "source_root_label": "successor31",
         },
     },
     {
@@ -292,6 +328,72 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
             "protected_case_cmt4_status": "negative",
             "protected_case_x_n110_status": "negative",
             "source_root_label": "successor14",
+        },
+    },
+    {
+        "mechanism_id": "route_pair_overlap_removal",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "route-pair overlap removal path",
+        "causal_path_label": "destroy/repair route-pair overlap removal",
+        "effect_summary": {
+            "median_delta": 2.5,
+            "ci_low": -7.75,
+            "ci_high": 7.0,
+            "rows_at_or_above_mde": 0,
+            "max_effect_to_mde_ratio": 0.253,
+            "protected_case_cmt2_median_delta": -3.0,
+            "protected_case_cmt4_median_delta": -16.0,
+            "protected_case_p_n101_median_delta": -14.0,
+            "protected_case_p_n65_median_delta": -4.5,
+            "protected_case_p_n76_median_delta": -7.5,
+            "interpretation": "weak_positive_below_mde_parked_after_followup",
+            "source_root_label": "successor27",
+            "parked_after_source_root_label": "successor29",
+        },
+    },
+    {
+        "mechanism_id": "boundary_spoke_outlier_removal",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "boundary-spoke outlier removal path",
+        "causal_path_label": "destroy/repair boundary-spoke removal",
+        "effect_summary": {
+            "median_delta": -1.5,
+            "ci_high": 0.0,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "interpretation": "negative_non_route_pair_overlap_clean_fork",
+            "source_root_label": "successor28",
+        },
+    },
+    {
+        "mechanism_id": "edge_conflict_endpoint_removal",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "edge-conflict endpoint removal path",
+        "causal_path_label": "destroy/repair edge-conflict endpoint removal",
+        "effect_summary": {
+            "median_delta": -2.5,
+            "ci_high": 0.0,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "interpretation": "negative_non_route_pair_overlap_clean_fork",
+            "source_root_label": "successor28",
+        },
+    },
+    {
+        "mechanism_id": "route_pair_overlap_removal_protected_followup",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "protected route-pair overlap removal follow-up path",
+        "causal_path_label": "destroy/repair protected route-pair overlap removal",
+        "effect_summary": {
+            "row1_median_delta": -1.75,
+            "row2_median_delta": -3.75,
+            "max_median_delta": -1.75,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "protected_case_cmt4_status": "negative",
+            "protected_case_p_family_status": "negative",
+            "interpretation": "protected_followup_negative_park_route_pair_overlap_line",
+            "source_root_label": "successor29",
         },
     },
     {
@@ -591,9 +693,28 @@ DEFAULT_AVOID_DIRECTIONS = (
     ),
     (
         "unchanged route_pair_overlap_removal destroy/repair follow-up after "
-        "successor27 weak-positive below-MDE evidence unless the hypothesis "
-        "adds CMT2/CMT4/P-family loss protection and keeps route-pair overlap "
-        "objective-effect telemetry"
+        "successor29 protected follow-up stayed negative and parked the "
+        "route-pair-overlap line for v0.4"
+    ),
+    (
+        "unchanged boundary_spoke_outlier_removal destroy/repair clean fork "
+        "after successor28 negative below-MDE evidence"
+    ),
+    (
+        "unchanged edge_conflict_endpoint_removal destroy/repair clean fork "
+        "after successor28 negative below-MDE evidence"
+    ),
+    (
+        "unchanged route_pair_overlap_removal_protected_followup after "
+        "successor29 valid negative below-MDE evidence"
+    ),
+    (
+        "unchanged bounded_cross_route_double_bridge_polish bounded-local-search "
+        "follow-up after successor30 valid zero-effect below-MDE evidence"
+    ),
+    (
+        "unchanged adaptive_embedded_vns_runtime_allocation scheduler runtime "
+        "allocation after successor31 valid zero-effect below-MDE evidence"
     ),
     (
         "unchanged seed_post_optimization_selector construction post-optimization "

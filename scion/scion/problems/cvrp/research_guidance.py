@@ -57,6 +57,16 @@ REVIEWED_SCHEDULER_DESTROY_SIZE_IDS = tuple(
     for item in REVIEWED_SUCCESSOR_MECHANISMS
     if item.get("mechanism_family") == "scheduler_destroy_size_policy"
 )
+REVIEWED_ACCEPTANCE_OR_ADAPTIVE_IDS = tuple(
+    str(item["mechanism_id"])
+    for item in REVIEWED_SUCCESSOR_MECHANISMS
+    if item.get("mechanism_family") == "acceptance_or_adaptive_weighting"
+)
+REVIEWED_SCHEDULER_RUNTIME_ALLOCATION_IDS = tuple(
+    str(item["mechanism_id"])
+    for item in REVIEWED_SUCCESSOR_MECHANISMS
+    if item.get("mechanism_family") == "scheduler_runtime_allocation"
+)
 PROTECTED_CASES = ("CMT2", "CMT4")
 SUCCESSOR24_MECHANISM_ID = "lookahead_insertion_cost_repair"
 SUCCESSOR24_V2_MECHANISM_ID = "lookahead_insertion_cost_repair_v2"
@@ -96,6 +106,28 @@ SUCCESSOR27_POSTRUN_PATH = (
 SUCCESSOR28_PLAN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor28-route-pair-overlap-protected-followup-plan-20260701.md"
+)
+SUCCESSOR29_PROTECTED_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor29-route-pair-overlap-required-followup-postrun-20260701.md"
+)
+SUCCESSOR30_MECHANISM_ID = "bounded_cross_route_double_bridge_polish"
+SUCCESSOR30_TARGET_FILE = "policies/baseline_modules/local_search.py"
+SUCCESSOR30_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor30-bounded-cross-route-double-bridge-postrun-20260701.md"
+)
+SUCCESSOR31_MECHANISM_ID = "adaptive_embedded_vns_runtime_allocation"
+SUCCESSOR31_TARGET_FILE = "policies/baseline_modules/scheduler.py"
+SUCCESSOR31_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor31-adaptive-embedded-vns-runtime-allocation-postrun-20260701.md"
+)
+SUCCESSOR32_MECHANISM_ID = "post_repair_effect_credit_weighting"
+SUCCESSOR32_TARGET_FILE = "policies/baseline_modules/scheduler.py"
+SUCCESSOR32_DESIGN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor32-post-repair-effect-credit-weighting-design-20260701.md"
 )
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
@@ -263,34 +295,24 @@ REVIEWED_SUCCESSOR_GUIDANCE_LINE = (
     f"`{', '.join(REVIEWED_CONSTRUCTION_SEED_IDS)}` belong to "
     "`construction_seed_portfolio`; "
     f"`{', '.join(REVIEWED_SCHEDULER_DESTROY_SIZE_IDS)}` belong to "
-    "`scheduler_destroy_size_policy`; all have "
-    f"`{REVIEWED_SUCCESSOR_OUTCOME_STATUS}` in `cvrp_successor_summary`; "
-    "`scheduler_destroy_size_policy` is reviewed/default-avoid after "
-    "successor23 repaired observable q deltas but stayed below-MDE; use it "
-    "only for a telemetry-only q-audit repair that emits explicit "
-    "baseline_q/adapted_q/q_delta fields, or for a materially different "
-    f"scheduler causal path owned by `{SUCCESSOR26_TARGET_FILE}`. Successor24 "
-    "then reviewed "
-    f"`{SUCCESSOR24_MECHANISM_ID}` and `{SUCCESSOR24_V2_MECHANISM_ID}` as "
-    "destroy/repair insertion-cost lookahead repairs with no positive-at-MDE "
-    "effect; v2 also had direct-effect-zero telemetry. Successor25 then "
-    f"tested `{SUCCESSOR25_MECHANISM_ID}` and is now reviewed/default-avoid: "
-    "aggregate formal rows stayed at median delta 0.0, and its few direct "
-    "construction seed gains were not preserved by downstream search. "
-    "Successor26b then validly screened "
-    f"`{SUCCESSOR26_MECHANISM_ID}` and `{SUCCESSOR26_V2_MECHANISM_ID}` after "
-    "the static recognizer repair; both stayed below MDE, with v2 showing "
-    "CMT2/CMT4 losses. Treat unchanged construction seed trajectory selection "
-    "as reviewed/default-avoid. Successor27 then clean-forked to "
-    f"`{SUCCESSOR27_MECHANISM_ID}` in `{SUCCESSOR27_TARGET_FILE}` and produced "
-    "valid weak-positive destroy/repair evidence below MDE: both rows were "
-    "positive, max median delta was 2.5, max effect/MDE was 0.253, and no row "
-    "was at or above the 9.9 MDE. Because CMT2/CMT4/P-family case medians were "
-    "negative, successor27 is not promotion evidence and should not be "
-    "expanded unchanged. The next CVRP solver slot should be a protected "
-    "same-mechanism follow-up that preserves route-pair overlap removal while "
-    "guarding CMT2/CMT4/P losses, or else explicitly records why that active "
-    "marginal signal is being abandoned."
+    "`scheduler_destroy_size_policy`; "
+    f"`{', '.join(REVIEWED_SCHEDULER_RUNTIME_ALLOCATION_IDS)}` belong to "
+    "`scheduler_runtime_allocation`; all reviewed entries have "
+    f"`{REVIEWED_SUCCESSOR_OUTCOME_STATUS}` in `cvrp_successor_summary`. "
+    "Successor28 tested boundary-spoke and edge-conflict endpoint removal "
+    "clean forks; both were negative and not true route-pair-overlap "
+    "continuations. Successor29 then forced the true "
+    f"`{SUCCESSOR28_PROTECTED_MECHANISM_ID}` follow-up and both rows stayed "
+    "negative, so the route-pair-overlap line is now parked for v0.4. "
+    "Successor30 validly screened "
+    f"`{SUCCESSOR30_MECHANISM_ID}` with exact zero-effect evidence, and "
+    "successor31 validly screened "
+    f"`{SUCCESSOR31_MECHANISM_ID}` with runtime movement but exact zero "
+    "solver effect. The next CVRP solver slot should clean-fork to "
+    f"`{SUCCESSOR32_MECHANISM_ID}` in `{SUCCESSOR32_TARGET_FILE}`: change "
+    "ALNS adaptive operator credit using post-repair pre-polish objective "
+    "effect, while leaving destroy/repair patterns, local-search moves, seed "
+    "selection, embedded-VNS runtime allocation, and generic core unchanged."
 )
 
 NEXT_REQUIRED_DIRECTION = (
@@ -404,13 +426,26 @@ NEXT_REQUIRED_DIRECTION = (
     "median -4.5. Row 2 expanded the same mechanism to median delta 2.5, "
     "CI [-7.75, 7.0], effect/MDE 0.253, with A-n64 14.5, A-n80 10.0, "
     "B-n63 4.0, CMT3 6.0, X-n110 12.5, but B-n67 -8.0, CMT4 -16.0, "
-    "P-n101 -14.0, P-n65 -4.5, and P-n76 -7.5. Treat successor27 as an "
-    "active marginal-positive route-pair-overlap signal, not as promotion "
-    "evidence and not as reviewed/default-avoid. Do not spend the next slot "
-    "on an unchanged expansion of `route_pair_overlap_removal`; the next CVRP "
-    "solver slot should be a same-mechanism protected follow-up that keeps the "
-    "route-pair overlap causal path but adds CMT2/CMT4/P-family loss guards, "
-    "bounded perturbation, and clearer route-pair selection/effect telemetry. "
+    "P-n101 -14.0, P-n65 -4.5, and P-n76 -7.5. Successor28 then tested "
+    "`boundary_spoke_outlier_removal` and `edge_conflict_endpoint_removal`, "
+    "both negative and not true route-pair-overlap continuations. Successor29 "
+    "forced `route_pair_overlap_removal_protected_followup` in both legacy and "
+    "typed launch focus; both rows completed without quality, telemetry, "
+    "model-call, or postrun failures, but row 1 median delta was -1.75 and "
+    "row 2 median delta was -3.75 with CMT4/P-family losses, so the "
+    "route-pair-overlap line is parked for v0.4. Successor30 clean-forked to "
+    f"`{SUCCESSOR30_MECHANISM_ID}` and completed valid screening, but both "
+    "rows had median delta 0.0, CI [0.0, 0.0], rows_at_or_above_mde=0, and "
+    "direct mechanism telemetry with no best delta. Successor31 clean-forked "
+    f"to `{SUCCESSOR31_MECHANISM_ID}` and recorded weighted runtime allocation "
+    "movement in both rows, but both rows remained exact zero-effect with "
+    "median delta 0.0, CI [0.0, 0.0], and rows_at_or_above_mde=0. Treat "
+    "unchanged route-pair-overlap, bounded cross-route double-bridge polish, "
+    "and adaptive embedded-VNS runtime allocation as reviewed/default-avoid "
+    "for v0.4. The next CVRP solver slot should clean-fork to "
+    f"`{SUCCESSOR32_MECHANISM_ID}`: keep existing operators and acceptance "
+    "logic, but credit ALNS destroy/repair adaptive weights from post-repair "
+    "pre-polish objective effect with direct operator-credit telemetry. "
     "`required_mechanism_ids` remains empty because the guidance is proposal-only "
     "and must not hard-force the Decision path. "
     "Use "
@@ -425,8 +460,12 @@ NEXT_REQUIRED_DIRECTION = (
     f"{SUCCESSOR24_V2_MECHANISM_ID}, unchanged successor25 "
     f"{SUCCESSOR25_MECHANISM_ID}, unchanged successor26 "
     f"{SUCCESSOR26_MECHANISM_ID}/{SUCCESSOR26_V2_MECHANISM_ID}, unchanged "
-    f"{SUCCESSOR27_MECHANISM_ID} without protected-case/loss guards, or "
-    "seed_post_optimization_selector; the seed-post selector repair is "
+    f"{SUCCESSOR27_MECHANISM_ID}, "
+    f"{SUCCESSOR28_PROTECTED_MECHANISM_ID}, successor28 endpoint/spoke "
+    "removal forks, "
+    f"{SUCCESSOR30_MECHANISM_ID}, unchanged successor31 "
+    f"{SUCCESSOR31_MECHANISM_ID}, or seed_post_optimization_selector; the "
+    "seed-post selector repair is "
     "deferred unless explicitly promoted as an activation diagnostic. "
     "revisit bounded local search or angular-sector "
     "removal only when the hypothesis names a causal path distinct from "
@@ -448,27 +487,33 @@ CURRENT_QUESTION = (
     "successor24 insertion-cost lookahead repair, successor25 raw "
     "construction seed-baseline selection, and successor26b short-horizon seed "
     f"trajectory selectors `{SUCCESSOR26_MECHANISM_ID}` / "
-    f"`{SUCCESSOR26_V2_MECHANISM_ID}`, were reviewed without positive-at-MDE "
-    "solver effect, and successor27 route-pair overlap removal produced "
-    "weak-positive below-MDE evidence with CMT2/CMT4/P-family losses, can a "
-    "protected route-pair-overlap follow-up preserve A/B/X gains while reducing "
-    "those losses with direct per-case total_distance evidence, or should "
-    "Scion explicitly abandon that marginal active signal for another non-seed "
-    "clean fork?"
+    f"`{SUCCESSOR26_V2_MECHANISM_ID}`, successor27/29 route-pair-overlap "
+    "follow-ups, successor30 double-bridge polish, and successor31 adaptive "
+    "embedded-VNS runtime allocation were reviewed without positive-at-MDE "
+    "solver effect, can `post_repair_effect_credit_weighting` improve "
+    "total_distance by crediting ALNS destroy/repair operators from "
+    "post-repair pre-polish objective effect, with direct operator-credit "
+    "telemetry and CMT2/CMT4/P-family case evidence?"
 )
 REQUIRED_EVIDENCE = (
     (
-        "for successor27 continuation, live target-intent or hypothesis names "
-        "a protected route_pair_overlap_removal follow-up before code work "
-        "starts, including CMT2/CMT4/P-family loss guards; an unchanged "
-        "route-pair overlap expansion is not enough"
+        f"for successor32, live target-intent or hypothesis names "
+        f"`{SUCCESSOR32_MECHANISM_ID}` before code work starts, and explains "
+        "that the causal path is adaptive operator credit rather than "
+        "destroy/repair selection, local search, seed selection, acceptance "
+        "probability, or embedded-VNS runtime allocation"
     ),
     (
         "for the next CVRP solver design, live target-intent or hypothesis "
-        "either continues the successor27 route-pair overlap causal path with "
-        "protection, or records why the branch deliberately abandons that "
-        "active marginal-positive signal for a materially different non-seed "
-        "causal path"
+        "records why the route-pair-overlap, bounded double-bridge, and "
+        "adaptive embedded-VNS runtime-allocation lines are parked, then "
+        "targets a materially different non-seed causal path"
+    ),
+    (
+        "post-repair adaptive-credit telemetry includes operator pair, q, "
+        "current/best objective before repair, candidate objective after "
+        "repair and after polish, old coarse score, new credit, weights before/"
+        "after update, accepted/new-best counts, and direct record_move delta"
     ),
     (
         "live target-intent or hypothesis explicitly names a successor "
@@ -495,7 +540,7 @@ REQUIRED_EVIDENCE = (
     (
         "direct activation-to-objective-effect evidence for any route-merge, "
         "construction-seed, destroy/repair, route-pair overlap, or "
-        "acceptance-weighting claim"
+        "acceptance/adaptive-weighting claim"
     ),
     (
         f"`{SUCCESSOR26_MECHANISM_ID}` or `{SUCCESSOR26_V2_MECHANISM_ID}` "
@@ -513,8 +558,9 @@ REQUIRED_EVIDENCE = (
         "implementation creates defensible direct q-decision attribution"
     ),
     (
-        "a new non-acceptance causal path before revisiting rank-gap or "
-        "route-pressure acceptance after the current-run no-effect results"
+        "do not revisit rank-gap or route-pressure acceptance gates; "
+        "successor32 is eligible only as post-repair operator-credit "
+        "attribution with unchanged simulated-annealing acceptance logic"
     ),
     (
         "a materially different bounded local-search or destroy/repair "
@@ -572,12 +618,15 @@ REQUIRED_EVIDENCE = (
         "short_horizon_seed_trajectory_selector or "
         "short_horizon_seed_trajectory_selector_v2 after successor26b measured "
         "below-MDE evidence and CMT2/CMT4 losses in v2; do not continue "
-        "unchanged route_pair_overlap_removal after successor27 weak-positive "
-        "below-MDE evidence unless the branch adds CMT2/CMT4/P-family loss "
-        "protection and records route-pair overlap objective-effect telemetry; "
-        "the next solver research slot should either protect successor27's "
-        "active marginal route-pair overlap signal or explicitly clean-fork to "
-        "another materially different CVRP-owned causal path, with "
+        "unchanged route_pair_overlap_removal or "
+        "route_pair_overlap_removal_protected_followup after successor29 "
+        "parked the route-pair-overlap line; do not continue unchanged "
+        "bounded_cross_route_double_bridge_polish after successor30 zero-effect "
+        "evidence; do not continue unchanged "
+        "adaptive_embedded_vns_runtime_allocation after successor31 zero-effect "
+        "evidence; the next solver research slot should clean-fork to "
+        "post_repair_effect_credit_weighting as a materially different "
+        "CVRP-owned adaptive-credit causal path, with "
         "scheduler_destroy_size_policy limited to telemetry-only q-audit "
         "repair or a materially different scheduler-policy causal path, "
         "destroy/repair insertion-cost lookahead parked, and "
@@ -586,7 +635,7 @@ REQUIRED_EVIDENCE = (
         "after "
         "bounded_2node_cross_exchange, intra_route_or_opt_reinsert, "
         "bounded_intra_route_3opt, bounded_ejection_chain_relocate, "
-        "bounded_route_segment_exchange, "
+        "bounded_route_segment_exchange, bounded_cross_route_double_bridge_polish, "
         "angular_sector_removal, radial_string_removal, "
         "farthest_noise_related_removal, polar_sweep_destroy_repair, "
         "route_fragment_recombination_repair, adjacency_pair_removal_repair, "
@@ -600,11 +649,21 @@ REQUIRED_EVIDENCE = (
         "no-positive-at-MDE and "
         "unchanged seed_post_optimization_selector produced repeated "
         "missing-activation inactive evidence in successor16 and successor17; "
+        "adaptive_embedded_vns_runtime_allocation was reviewed zero-effect; "
         "revisits must name a new causal path and direct objective-effect "
         "telemetry"
     ),
 )
 MEASURABLE_OPPORTUNITY_CLASSES = (
+    (
+        "acceptance_or_adaptive_weighting: successor32 should target "
+        f"`{SUCCESSOR32_MECHANISM_ID}` in `{SUCCESSOR32_TARGET_FILE}`. Require "
+        "operator pair, q, current/best objective before repair, candidate "
+        "objective after repair and after polish, old coarse score, new "
+        "post-repair credit, weights before/after update, accepted/new-best "
+        "counts, and per-case total_distance evidence. Do not change "
+        "simulated-annealing acceptance probability for this mechanism."
+    ),
     (
         "construction_seed_portfolio: successor25 raw seed-baseline selection "
         "is reviewed/default-avoid because direct seed gains were not "
@@ -632,19 +691,20 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
     ),
     (
         "destroy_repair_selection: require per-case total_distance deltas "
-        "tied to the changed repair/removal choice. Successor27 "
-        "route_pair_overlap_removal is active marginal-positive below MDE "
-        "with A/B/X gains but CMT2/CMT4/P-family losses, so the next "
-        "destroy/repair slot should be a protected route-pair-overlap "
-        "follow-up rather than an unchanged expansion unless the hypothesis "
-        "explicitly abandons that signal. After the reviewed "
+        "tied to the changed repair/removal choice. Successor29 validly "
+        "screened route_pair_overlap_removal_protected_followup and stayed "
+        "negative, so the route-pair-overlap line is parked for v0.4. After "
+        "the reviewed "
         "angular_sector_removal, radial_string_removal, and "
         "farthest_noise_related_removal, polar_sweep_destroy_repair, and "
         "route_fragment_recombination_repair, adjacency_pair_removal_repair, "
         "load_compatible_ruin_recreate, load_complement_pair_removal, "
         "route_pair_crossover_repair, timewarp_string_removal, "
         "lookahead_insertion_cost_repair, and "
-        "lookahead_insertion_cost_repair_v2 no-positive-at-MDE results, "
+        "lookahead_insertion_cost_repair_v2, boundary_spoke_outlier_removal, "
+        "edge_conflict_endpoint_removal, route_pair_overlap_removal, and "
+        "route_pair_overlap_removal_protected_followup no-positive-at-MDE "
+        "results, "
         "require a destroy/repair causal path distinct from those removal and "
         "repair paths"
     ),
@@ -652,10 +712,11 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         "bounded_local_search_variant: require feasible route-level "
         "objective deltas with bounded search effort; after the reviewed "
         "bounded_2node_cross_exchange, intra_route_or_opt_reinsert, "
-        "bounded_intra_route_3opt, and bounded_ejection_chain_relocate "
+        "bounded_intra_route_3opt, bounded_ejection_chain_relocate, and "
+        "bounded_cross_route_double_bridge_polish "
         "no-positive-at-MDE results, require a bounded-local-search causal "
         "path distinct from cross-exchange, same-route Or-opt reinsertion, "
-        "3-opt, and ejection-chain relocation"
+        "3-opt, ejection-chain relocation, and double-bridge polish"
     ),
     (
         "large_instance_intra_route_two_opt_seed: direct WSL external-control "
@@ -666,19 +727,20 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         f"{LARGE_INSTANCE_TWO_OPT_SEED_REPORT}"
     ),
     (
-        "acceptance_or_adaptive_weighting: require direct move acceptance "
-        "and downstream objective-effect telemetry; after current-run "
-        "rank-gap and route-pressure no-effect expansions, do not spend "
-        "the next CVRP branch slot here without a new non-acceptance "
-        "causal path"
+        "scheduler_runtime_allocation: successor31 "
+        f"`{SUCCESSOR31_MECHANISM_ID}` recorded weighted runtime movement but "
+        "stayed exact zero-effect; do not revisit unchanged embedded-VNS "
+        "runtime allocation unless a future proposal names a materially new "
+        "runtime causal path and direct objective-effect evidence"
     ),
 )
 SUCCESSOR_PORTFOLIO_RULE = (
     "Because large_instance_intra_route_two_opt_seed has complete checklist "
     "evidence but no positive-at-MDE outcome, and "
     "bounded_2node_cross_exchange, intra_route_or_opt_reinsert, and "
-    "bounded_intra_route_3opt plus bounded_ejection_chain_relocate and "
-    "bounded_route_segment_exchange have repeated that no-positive outcome "
+    "bounded_intra_route_3opt plus bounded_ejection_chain_relocate, "
+    "bounded_route_segment_exchange, and "
+    "bounded_cross_route_double_bridge_polish have repeated that no-positive outcome "
     "as bounded successors, and "
     "angular_sector_removal, radial_string_removal, "
     "farthest_noise_related_removal, polar_sweep_destroy_repair, and "
@@ -704,17 +766,19 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "Successor25 raw seed-baseline selection stayed below-MDE and its direct "
     "seed deltas were not preserved downstream. Successor26b validly screened "
     "short-horizon seed trajectory selection after the static recognizer "
-    "repair, but both rows stayed below-MDE and v2 lost on CMT2/CMT4. The next "
-    "CVRP solver slot after successor27 should protect the active marginal "
-    "route_pair_overlap_removal destroy/repair signal instead of expanding it "
-    "unchanged: keep route-pair overlap as the causal path, add CMT2/CMT4/P "
-    "loss guards and bounded perturbation, and preserve direct objective-effect "
-    "telemetry. A different non-seed clean fork is acceptable only if the "
-    "hypothesis records why successor27's weak-positive signal is being "
-    "abandoned. The same scheduler "
-    "family is allowed only as telemetry-only q-audit repair or a materially "
-    "different scheduler-policy causal path, and insertion-cost lookahead "
-    "repair is parked as reviewed solver-negative. Use "
+    "repair, but both rows stayed below-MDE and v2 lost on CMT2/CMT4. "
+    "Successor29 forced the protected route-pair-overlap follow-up and stayed "
+    "negative, so that line is parked. Successor30 double-bridge polish and "
+    "successor31 adaptive embedded-VNS runtime allocation both completed valid "
+    "zero-effect screening. The next CVRP solver slot should clean-fork to "
+    f"`{SUCCESSOR32_MECHANISM_ID}` in `{SUCCESSOR32_TARGET_FILE}`: change "
+    "adaptive operator credit using post-repair pre-polish objective effect, "
+    "but keep destroy/repair selection, local-search moves, construction "
+    "seeds, embedded-VNS runtime allocation, and simulated-annealing acceptance "
+    "logic unchanged. Scheduler destroy-size policy remains allowed only as "
+    "telemetry-only q-audit repair or a materially different scheduler-policy "
+    "causal path, and insertion-cost lookahead repair is parked as reviewed "
+    "solver-negative. Use "
     "problem-owned evidence requirements and keep this guidance out of "
     "DecisionFeatures."
 )
@@ -858,8 +922,11 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "material causal-path difference from reviewed 3-opt",
                 "material causal-path difference from reviewed ejection-chain relocation",
                 "material causal-path difference from reviewed route-segment exchange",
+                "material causal-path difference from reviewed double-bridge polish",
                 "scheduler destroy-size baseline_q/adapted_q/q_delta evidence when using scheduler_destroy_size_policy",
                 "nonzero aligned candidate/champion q deltas before objective-effect interpretation",
+                "post-repair operator-credit old score and new credit when using acceptance_or_adaptive_weighting",
+                "operator weights before and after segment update when using acceptance_or_adaptive_weighting",
                 "material causal-path difference from reviewed angular-sector removal",
                 "material causal-path difference from reviewed radial-string removal",
                 "material causal-path difference from reviewed farthest-noise removal",
@@ -876,6 +943,8 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                     "material causal-path difference from reviewed "
                     "load-compatible ruin/recreate"
                 ),
+                "material causal-path difference from reviewed route-pair-overlap follow-ups",
+                "material causal-path difference from reviewed adaptive embedded-VNS runtime allocation",
                 "material causal-path difference from reviewed savings seed selection",
                 "per-case total_distance delta tied to the changed mechanism",
                 "feasibility and route-count preservation or explicit caveat",

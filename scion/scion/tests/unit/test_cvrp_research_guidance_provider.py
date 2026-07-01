@@ -115,8 +115,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_intra_route_3opt",
         "bounded_ejection_chain_relocate",
         "bounded_route_segment_exchange",
+        "bounded_cross_route_double_bridge_polish",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
+        "adaptive_embedded_vns_runtime_allocation",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -127,6 +129,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "load_complement_pair_removal",
         "route_pair_crossover_repair",
         "timewarp_string_removal",
+        "route_pair_overlap_removal",
+        "boundary_spoke_outlier_removal",
+        "edge_conflict_endpoint_removal",
+        "route_pair_overlap_removal_protected_followup",
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
@@ -138,6 +144,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     ]
     assert focus["suppressed_mechanism_ids"] == ["seed_post_optimization_selector"]
     assert focus["successor_opportunity_families"] == [
+        "acceptance_or_adaptive_weighting",
         "scheduler_destroy_size_policy",
         "destroy_repair_selection",
         "construction_seed_portfolio",
@@ -146,8 +153,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "positive-at-MDE" in focus["current_question"]
     assert "short_horizon_seed_trajectory_selector" in focus["current_question"]
     assert "short-horizon seed trajectory selector" in focus["current_question"]
-    assert "successor27 route-pair overlap removal" in focus["current_question"]
-    assert "protected route-pair-overlap follow-up" in focus["current_question"]
+    assert "successor27/29 route-pair-overlap follow-ups" in focus[
+        "current_question"
+    ]
+    assert "post_repair_effect_credit_weighting" in focus["current_question"]
+    assert "post-repair pre-polish objective effect" in focus["current_question"]
     assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
     assert "intra_route_or_opt_reinsert" in focus["next_required_direction"]
     assert "bounded_intra_route_3opt" in focus["next_required_direction"]
@@ -205,9 +215,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     )
     assert "Successor27 then clean-forked" in focus["next_required_direction"]
     assert "route_pair_overlap_removal" in focus["next_required_direction"]
-    assert "same-mechanism protected follow-up" in focus[
-        "next_required_direction"
-    ]
+    assert "Successor29 forced" in focus["next_required_direction"]
+    assert "route-pair-overlap line is parked" in focus["next_required_direction"]
+    assert "post_repair_effect_credit_weighting" in focus["next_required_direction"]
+    assert "operator-credit telemetry" in focus["next_required_direction"]
     assert "telemetry-only q-audit repair" in focus["next_required_direction"]
     assert "seed-post selector repair is deferred" in (
         focus["next_required_direction"]
@@ -223,13 +234,13 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["required_evidence"]
     )
     assert any(
-        "route_pair_overlap_removal follow-up" in item
-        and "CMT2/CMT4/P-family loss guards" in item
+        "post_repair_effect_credit_weighting" in item
+        and "adaptive operator credit" in item
         for item in focus["required_evidence"]
     )
     assert any(
-        "active marginal-positive signal" in item
-        and "materially different non-seed causal path" in item
+        "post-repair adaptive-credit telemetry" in item
+        and "old coarse score" in item
         for item in focus["required_evidence"]
     )
     assert any(
@@ -359,6 +370,26 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["default_avoid_directions"]
     )
     assert any(
+        "route_pair_overlap_removal" in item
+        and "successor29 protected follow-up" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "route_pair_overlap_removal_protected_followup" in item
+        and "successor29 valid negative" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "bounded_cross_route_double_bridge_polish" in item
+        and "successor30 valid zero-effect" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "adaptive_embedded_vns_runtime_allocation" in item
+        and "successor31 valid zero-effect" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
         "seed_post_optimization_selector" in item
         and "missing-activation/inactive" in item
         for item in focus["default_avoid_directions"]
@@ -380,8 +411,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_intra_route_3opt",
         "bounded_ejection_chain_relocate",
         "bounded_route_segment_exchange",
+        "bounded_cross_route_double_bridge_polish",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
+        "adaptive_embedded_vns_runtime_allocation",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -392,6 +425,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "load_complement_pair_removal",
         "route_pair_crossover_repair",
         "timewarp_string_removal",
+        "route_pair_overlap_removal",
+        "boundary_spoke_outlier_removal",
+        "edge_conflict_endpoint_removal",
+        "route_pair_overlap_removal_protected_followup",
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
@@ -408,12 +445,18 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["bounded_ejection_chain_relocate"][
         "mechanism_family"
     ] == "bounded_local_search_variant"
+    assert mechanisms_by_id["bounded_cross_route_double_bridge_polish"][
+        "mechanism_family"
+    ] == "bounded_local_search_variant"
     assert mechanisms_by_id["operator_pair_destroy_size_bands"][
         "mechanism_family"
     ] == "scheduler_destroy_size_policy"
     assert mechanisms_by_id["stagnation_adaptive_destroy_size_schedule"][
         "mechanism_family"
     ] == "scheduler_destroy_size_policy"
+    assert mechanisms_by_id["adaptive_embedded_vns_runtime_allocation"][
+        "mechanism_family"
+    ] == "scheduler_runtime_allocation"
     assert mechanisms_by_id["farthest_noise_related_removal"][
         "mechanism_family"
     ] == "destroy_repair_selection"
@@ -436,6 +479,18 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "mechanism_family"
     ] == "destroy_repair_selection"
     assert mechanisms_by_id["timewarp_string_removal"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
+    assert mechanisms_by_id["route_pair_overlap_removal"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
+    assert mechanisms_by_id["boundary_spoke_outlier_removal"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
+    assert mechanisms_by_id["edge_conflict_endpoint_removal"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
+    assert mechanisms_by_id["route_pair_overlap_removal_protected_followup"][
         "mechanism_family"
     ] == "destroy_repair_selection"
     assert mechanisms_by_id["lookahead_insertion_cost_repair"][
@@ -495,6 +550,25 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["timewarp_string_removal"]["effect_summary"][
         "research_efficiency_median_delta"
     ] == -5.25
+    double_bridge_effect = mechanisms_by_id["bounded_cross_route_double_bridge_polish"][
+        "effect_summary"
+    ]
+    assert double_bridge_effect["median_delta"] == 0.0
+    assert double_bridge_effect["source_root_label"] == "successor30"
+    runtime_effect = mechanisms_by_id["adaptive_embedded_vns_runtime_allocation"][
+        "effect_summary"
+    ]
+    assert runtime_effect["median_delta"] == 0.0
+    assert runtime_effect["source_root_label"] == "successor31"
+    route_pair_effect = mechanisms_by_id["route_pair_overlap_removal"][
+        "effect_summary"
+    ]
+    assert route_pair_effect["max_effect_to_mde_ratio"] == 0.253
+    protected_route_pair_effect = mechanisms_by_id[
+        "route_pair_overlap_removal_protected_followup"
+    ]["effect_summary"]
+    assert protected_route_pair_effect["row2_median_delta"] == -3.75
+    assert protected_route_pair_effect["source_root_label"] == "successor29"
     lookahead_effect = mechanisms_by_id["lookahead_insertion_cost_repair"][
         "effect_summary"
     ]
@@ -592,8 +666,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_intra_route_3opt",
         "bounded_ejection_chain_relocate",
         "bounded_route_segment_exchange",
+        "bounded_cross_route_double_bridge_polish",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
+        "adaptive_embedded_vns_runtime_allocation",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -604,6 +680,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "load_complement_pair_removal",
         "route_pair_crossover_repair",
         "timewarp_string_removal",
+        "route_pair_overlap_removal",
+        "boundary_spoke_outlier_removal",
+        "edge_conflict_endpoint_removal",
+        "route_pair_overlap_removal_protected_followup",
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
@@ -618,6 +698,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "seed_post_optimization_selector"
     ]
     assert launch_payload["successor_opportunity_families"] == [
+        "acceptance_or_adaptive_weighting",
         "scheduler_destroy_size_policy",
         "destroy_repair_selection",
         "construction_seed_portfolio",

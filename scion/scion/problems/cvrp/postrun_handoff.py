@@ -31,6 +31,7 @@ CVRP_REQUIRED_MEASURABLE_OPPORTUNITY_TOKENS = (
     "bounded_local_search_variant",
     REQUIRED_MECHANISM_ID,
     "acceptance_or_adaptive_weighting",
+    "post_repair_effect_credit_weighting",
 )
 CVRP_REQUIRED_DEFAULT_AVOID_TOKENS = (
     "broad vns removal",

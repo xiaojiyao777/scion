@@ -37,6 +37,9 @@ from scion.problems.cvrp.research_guidance import (
     CASE_PROTECTION_REQUIREMENTS,
     NEXT_REQUIRED_DIRECTION,
     PROTECTED_CASES,
+    SUCCESSOR32_DESIGN_PATH,
+    SUCCESSOR32_MECHANISM_ID,
+    SUCCESSOR32_TARGET_FILE,
     SUCCESSOR_OPPORTUNITY_FAMILIES,
 )
 from scion.problems.cvrp.surface_policy import (
@@ -286,8 +289,24 @@ class CvrpAdapter:
                 "unchanged_cw_sweep_seed_baseline_selector",
                 "unchanged_short_horizon_seed_trajectory_selector",
                 "unchanged_short_horizon_seed_trajectory_selector_v2",
+                "unchanged_route_pair_overlap_removal",
+                "unchanged_route_pair_overlap_removal_protected_followup",
+                "unchanged_boundary_spoke_outlier_removal",
+                "unchanged_edge_conflict_endpoint_removal",
+                "unchanged_bounded_cross_route_double_bridge_polish",
+                "unchanged_adaptive_embedded_vns_runtime_allocation",
             ],
             "measurable_opportunity_classes": [
+                {
+                    "mechanism_family": "acceptance_or_adaptive_weighting",
+                    "required_evidence": (
+                        "post-repair operator-credit attribution with operator "
+                        "pair, q, current/best before repair, candidate after "
+                        "repair and after polish, old score, new credit, "
+                        "weights before/after update, accepted/new-best counts, "
+                        "and per-case total_distance evidence"
+                    ),
+                },
                 {
                     "mechanism_family": "construction_seed_portfolio",
                     "required_evidence": (
@@ -307,10 +326,9 @@ class CvrpAdapter:
                     "mechanism_family": "destroy_repair_selection",
                     "required_evidence": (
                         "per-case total_distance delta tied to the changed "
-                        "repair or removal choice; successor27 route-pair "
-                        "overlap removal is weak-positive below MDE and needs "
-                        "protected-case/loss-guard follow-up before another "
-                        "unchanged expansion"
+                        "repair or removal choice; successor29 parked the "
+                        "route-pair-overlap line for v0.4, so do not continue "
+                        "unchanged route-pair overlap variants"
                     ),
                 },
                 {
@@ -334,10 +352,11 @@ class CvrpAdapter:
                     ),
                 },
                 {
-                    "mechanism_family": "acceptance_or_adaptive_weighting",
+                    "mechanism_family": "scheduler_runtime_allocation",
                     "required_evidence": (
-                        "direct move acceptance and downstream objective "
-                        "effect telemetry under the formal budget"
+                        "successor31 stayed exact zero-effect despite runtime "
+                        "movement; unchanged embedded-VNS runtime allocation "
+                        "is default-avoid"
                     ),
                 },
             ],
@@ -345,33 +364,31 @@ class CvrpAdapter:
                 "schema_version": "scion.cvrp_opportunity_recipe.v1",
                 "proposal_visibility_only": True,
                 "decision_features_excluded": True,
-                "mechanism_family": "destroy_repair_selection",
-                "mechanism_id": "route_pair_overlap_removal_protected_followup",
-                "review_status": "successor27_marginal_protected_followup",
+                "mechanism_family": "acceptance_or_adaptive_weighting",
+                "mechanism_id": SUCCESSOR32_MECHANISM_ID,
+                "review_status": "successor32_ready_after_successor31_zero_effect",
                 "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
                 "target_surface": "solver_design",
-                "target_files": [
-                    "policies/baseline_modules/destroy_repair.py",
-                    "policies/baseline_modules/scheduler.py",
-                ],
+                "target_files": [SUCCESSOR32_TARGET_FILE],
+                "design_path": SUCCESSOR32_DESIGN_PATH,
                 "next_required_direction": NEXT_REQUIRED_DIRECTION,
                 "required_observations": [
                     (
-                        "same-mechanism continuity from successor27 "
-                        "route_pair_overlap_removal, or an explicit reason for "
-                        "abandoning that active marginal signal"
+                        "exact mechanism id "
+                        f"{SUCCESSOR32_MECHANISM_ID} before code work starts"
                     ),
                     (
-                        "CMT2/CMT4/P-family loss protection plan before code "
-                        "work; do not expand unchanged route_pair_overlap_removal"
+                        "operator pair, q, current/best objective before "
+                        "repair, candidate objective after repair, and "
+                        "candidate objective after polish"
                     ),
                     (
-                        "per-case total_distance delta tied to the changed "
-                        "route-pair overlap destroy/repair choice"
+                        "old coarse score, new post-repair credit, and "
+                        "destroy/repair weights before and after segment update"
                     ),
+                    "accepted/new-best counts and record_move direct effect under the mechanism id",
                     "feasibility, route-count, and runtime budget evidence",
                     "CMT2/CMT4 case-level evidence or an explicit caveat",
-                    "route-pair selection telemetry, removed-count evidence, and guarded skip counts",
                     "effect-vs-MDE interpretation",
                 ],
                 "implementation_constraints": [
@@ -398,19 +415,32 @@ class CvrpAdapter:
                     ),
                     (
                         "do not continue unchanged successor27-style "
-                        "route_pair_overlap_removal without CMT2/CMT4/P-family "
-                        "loss protection"
+                        "route_pair_overlap_removal or successor29 protected "
+                        "route-pair-overlap follow-up"
+                    ),
+                    (
+                        "do not continue unchanged successor30-style bounded "
+                        "cross-route double-bridge polish"
+                    ),
+                    (
+                        "do not continue unchanged successor31-style adaptive "
+                        "embedded-VNS runtime allocation"
+                    ),
+                    (
+                        "do not change simulated-annealing acceptance "
+                        "probability for successor32; the causal path is "
+                        "operator-credit attribution"
                     ),
                     (
                         "do not hardcode case ids, reference objective values, "
                         "seeds, or split membership when designing the "
-                        "protection guard"
+                        "operator-credit attribution"
                     ),
                     (
-                        "if the route-pair overlap operator grows beyond a "
-                        "narrow patch, put the operator in a coherent "
-                        "problem-owned module instead of adding helper sprawl "
-                        "to an oversized file"
+                        "keep the scheduler change narrow; if credit-state "
+                        "bookkeeping grows beyond a few local fields, move it "
+                        "to a coherent problem-owned module rather than adding "
+                        "helper sprawl to an oversized file"
                     ),
                     (
                         "keep CVRP semantics in problem-owned solver files and "
@@ -430,36 +460,40 @@ class CvrpAdapter:
                     "unchanged cw_sweep_seed_baseline_selector",
                     "unchanged short_horizon_seed_trajectory_selector",
                     "unchanged short_horizon_seed_trajectory_selector_v2",
-                    "unchanged route_pair_overlap_removal without protected-case/loss guard",
+                    "unchanged route_pair_overlap_removal",
+                    "unchanged route_pair_overlap_removal_protected_followup",
+                    "unchanged bounded_cross_route_double_bridge_polish",
+                    "unchanged adaptive_embedded_vns_runtime_allocation",
                     "same-family scheduler q changes without explicit q-audit fields",
                 ],
             },
             "mechanism_effect_ranking": [
                 {
                     "rank": 1,
-                    "mechanism_family": "destroy_repair_selection",
-                    "evidence_status": "successor27_weak_positive_below_mde",
-                    "opportunity_status": "same_mechanism_cmt_guard_followup_candidate",
-                    "effect_status": "weak_positive_below_mde",
+                    "mechanism_family": "acceptance_or_adaptive_weighting",
+                    "evidence_status": "successor32_ready_after_successor31_zero_effect",
+                    "opportunity_status": "eligible_clean_fork",
+                    "effect_status": "unknown_current_effect",
                     "summary": (
-                        "Successor27 route_pair_overlap_removal is the best "
-                        "recent CVRP solver signal: both screening rows were "
-                        "positive but below the 9.9 MDE, with max median delta "
-                        "2.5 and effect/MDE 0.253. A/B/X gains coexist with "
-                        "CMT2/CMT4/P-family losses, so the next branch should "
-                        "protect the same route-pair overlap causal path "
-                        "rather than expand it unchanged."
+                        "Successor28/29 parked route-pair-overlap follow-ups, "
+                        "successor30 parked bounded cross-route double-bridge "
+                        "polish, and successor31 parked adaptive embedded-VNS "
+                        "runtime allocation. The next clean fork should test "
+                        "post_repair_effect_credit_weighting: credit ALNS "
+                        "destroy/repair adaptive weights from post-repair "
+                        "pre-polish objective effect."
                     ),
                     "recommended_action": (
-                        "Design a guarded route-pair overlap removal follow-up "
-                        "with bounded perturbation, protected-case loss "
-                        "avoidance, and route-pair selection/effect telemetry; "
-                        "only switch to another non-seed clean fork after "
-                        "recording why this weak-positive signal is abandoned."
+                        "Target policies/baseline_modules/scheduler.py and "
+                        "record operator pair, q, before/after repair and "
+                        "polish objectives, old score, new credit, weights "
+                        "before/after update, accepted/new-best counts, and "
+                        "per-case total_distance evidence."
                     ),
                     "reason_codes": [
-                        "SUCCESSOR27_WEAK_POSITIVE_BELOW_MDE",
-                        "CMT2_CMT4_P_LOSS_GUARD_REQUIRED",
+                        "SUCCESSOR32_POST_REPAIR_CREDIT_READY",
+                        "SUCCESSOR31_ZERO_EFFECT_DEFAULT_AVOID",
+                        "ROUTE_PAIR_OVERLAP_LINE_PARKED",
                         "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
                     ],
                 },
@@ -630,26 +664,50 @@ class CvrpAdapter:
                     ],
                 },
                 {
-                    "diagnostic_type": "successor27_protected_followup",
+                    "diagnostic_type": "route_pair_overlap_line_parked",
                     "surface": "solver_design",
                     "mechanism_family": "destroy_repair_selection",
                     "metric": "total_distance",
                     "summary": (
-                        "Successor27 route_pair_overlap_removal activated and "
-                        "produced weak-positive below-MDE evidence, but CMT2/"
-                        "CMT4/P-family losses make unchanged expansion the "
-                        "wrong next step."
+                        "Successor27 route_pair_overlap_removal was weak "
+                        "positive below MDE, but successor29's true protected "
+                        "follow-up stayed negative with CMT4/P-family losses. "
+                        "The route-pair-overlap line is parked for v0.4."
                     ),
                     "recommended_action": (
-                        "Continue route-pair overlap only as a protected "
-                        "follow-up with bounded removal, loss guards, and "
-                        "route-pair selection/effect telemetry; otherwise "
-                        "explicitly abandon the signal before clean-forking."
+                        "Do not continue unchanged route_pair_overlap_removal "
+                        "or route_pair_overlap_removal_protected_followup in "
+                        "the next slot."
                     ),
                     "confidence": "medium",
                     "reason_codes": [
-                        "SUCCESSOR27_WEAK_POSITIVE_BELOW_MDE",
-                        "CMT2_CMT4_P_LOSS_GUARD_REQUIRED",
+                        "SUCCESSOR29_PROTECTED_FOLLOWUP_NEGATIVE",
+                        "ROUTE_PAIR_OVERLAP_LINE_PARKED",
+                    ],
+                },
+                {
+                    "diagnostic_type": "successor32_operator_credit",
+                    "surface": "solver_design",
+                    "mechanism_family": "acceptance_or_adaptive_weighting",
+                    "metric": "total_distance",
+                    "summary": (
+                        "The current scheduler records post-repair and "
+                        "post-polish candidate objective values, but operator "
+                        "weights are still credited with coarse acceptance/"
+                        "best-update constants. Successor32 should test "
+                        "post-repair effect credit as a narrower adaptive "
+                        "operator-weighting causal path."
+                    ),
+                    "recommended_action": (
+                        "Target post_repair_effect_credit_weighting in "
+                        "policies/baseline_modules/scheduler.py and record "
+                        "old score, new credit, weight movement, accepted/"
+                        "new-best counts, and formal per-case objective deltas."
+                    ),
+                    "confidence": "medium",
+                    "reason_codes": [
+                        "SUCCESSOR32_POST_REPAIR_CREDIT_READY",
+                        "ADAPTIVE_WEIGHTING_DIRECT_EFFECT_REQUIRED",
                     ],
                 },
                 {

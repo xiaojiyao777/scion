@@ -110,8 +110,33 @@ SCHEDULER_DESTROY_SIZE_POLICY_ALIASES = (
     "scheduler_policy",
 )
 
+ACCEPTANCE_OR_ADAPTIVE_WEIGHTING_ALIASES = (
+    "acceptance_or_adaptive_weighting",
+    "post_repair_effect_credit_weighting",
+    "post_repair_credit_weighting",
+    "operator_credit_weighting",
+    "operator_pair_credit_weighting",
+    "adaptive_weighting",
+    "adaptive_weights",
+    "operator_weighting",
+    "credit_weighting",
+    "rank_gap",
+    "route_pressure",
+    "acceptance",
+)
+
+SCHEDULER_RUNTIME_ALLOCATION_ALIASES = (
+    "scheduler_runtime_allocation",
+    "adaptive_embedded_vns_runtime_allocation",
+    "embedded_vns_runtime_allocation",
+    "runtime_allocation",
+    "embedded_vns_share",
+)
+
 CVRP_SUCCESSOR_FAMILY_ALIASES = {
     "scheduler_destroy_size_policy": SCHEDULER_DESTROY_SIZE_POLICY_ALIASES,
+    "acceptance_or_adaptive_weighting": ACCEPTANCE_OR_ADAPTIVE_WEIGHTING_ALIASES,
+    "scheduler_runtime_allocation": SCHEDULER_RUNTIME_ALLOCATION_ALIASES,
     "construction_seed_portfolio": CONSTRUCTION_SEED_PORTFOLIO_ALIASES,
     "bounded_local_search_variant": BOUNDED_LOCAL_SEARCH_VARIANT_ALIASES,
     "destroy_repair_selection": DESTROY_REPAIR_SELECTION_ALIASES,

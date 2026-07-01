@@ -61,7 +61,33 @@ The remaining closeout gaps are:
   and completed valid screening, but both rows were below MDE and the v2 row
   lost on CMT2/CMT4. Successor27 completed as a valid non-seed destroy/repair
   clean fork, `route_pair_overlap_removal`; both rows were positive but below
-  MDE, and the expanded row still lost on CMT4 and P-family cases.
+  MDE, and the expanded row still lost on CMT4 and P-family cases. Successor28
+  completed valid/complete/postrun-ready but tested alternative
+  destroy/repair clean forks, not a true protected route-pair-overlap
+  continuation; both rows failed screening with negative medians. Successor29
+  completed valid/complete/postrun-ready and did test the true protected
+  `route_pair_overlap_removal_protected_followup` mechanism, but both rows
+  failed screening with negative aggregate medians. Treat the route-pair-
+  overlap line as parked for v0.4. Successor30 then completed
+  valid/complete/postrun-ready on the materially different
+  `bounded_cross_route_double_bridge_polish` local-search design, but both
+  screening rows had median delta `0.0`, CI `[0.0, 0.0]`, win rate `0.0`, and
+  direct phase telemetry showed active runtime with zero objective effect.
+  Treat unchanged double-bridge polish as reviewed/default-avoid. The
+  successor31 design review then selected a different CVRP-owned runtime
+  allocation path, `adaptive_embedded_vns_runtime_allocation`. Successor31
+  completed valid/complete/postrun-ready with that required mechanism and
+  direct phase runtime telemetry, but both screening rows stayed exact
+  zero-effect: median delta `0.0`, CI high `0.0`, win rate `0.0`, and
+  `rows_at_or_above_mde=0`. Treat unchanged adaptive embedded-VNS runtime
+  allocation as reviewed/default-avoid too. Successor32 is now designed as
+  `post_repair_effect_credit_weighting`, a narrow
+  `acceptance_or_adaptive_weighting` clean fork in
+  `policies/baseline_modules/scheduler.py`. It should credit ALNS
+  destroy/repair adaptive weights from post-repair pre-polish objective effect
+  while keeping destroy/repair patterns, local-search moves, construction
+  seeds, embedded-VNS runtime allocation, simulated-annealing acceptance, and
+  generic core unchanged.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -248,15 +274,96 @@ CVRP:
   `scion/docs/experiments/v0.4/v04-cvrp-successor27-route-pair-overlap-postrun-20260701.md`.
   Successor28 plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-plan-20260701.md`.
-- Successor28 is in flight as the protected same-mechanism follow-up:
+- Successor28 completed as a server-local follow-up run:
   `/home/clawd/research/scion-experiments/v04-cvrp-successor28-route-pair-overlap-protected-followup-server-2r-gpt55-20260701T001959Z-claw`.
   It launched from commit `ed051d93` on server-local `claw`, used local
   `gpt-5.5`, passed completion preflight, and forced
   `solver_design` / `modify` /
-  `policies/baseline_modules/destroy_repair.py`. Initial traces include
-  `hypothesis_target_intent` and `hypothesis`; no protocol row had completed
-  at the first health check. In-flight record:
+  `policies/baseline_modules/destroy_repair.py`. It finished
+  valid/complete/postrun-ready with no quality, model, telemetry, or postrun
+  failures, but it did not test a true protected same-mechanism
+  `route_pair_overlap_removal` continuation. Row 1 tested
+  `boundary_spoke_outlier_removal` and failed screening with median delta
+  `-1.5`, CI `[-7.25, 13.0]`, and win rate `0.25`; CMT2 was `-5.5` and CMT4
+  was `-8.0`. Row 2 tested `edge_conflict_endpoint_removal` and failed
+  screening with median delta `-2.5`, CI `[-8.0, 2.0]`, and win rate `0.25`;
+  CMT2 was `-8.0`, CMT4 was `-12.0`, and X-n110 was `-6.0`. Treat both
+  mechanisms as reviewed/default-avoid unless a future proposal changes the
+  causal path materially. In-flight record:
   `scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-inflight-20260701.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-postrun-20260701.md`.
+- Successor29 completed as the true required route-pair-overlap follow-up:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor29-route-pair-overlap-required-followup-server-2r-gpt55-20260701T031419Z-claw`.
+  It launched from commit `9cfee8e3` on server-local `claw`, used local
+  `gpt-5.5`, passed completion preflight, and forced `solver_design` /
+  `modify` / `policies/baseline_modules/destroy_repair.py`. Unlike
+  successor28, this run root had a single-run prepared-manifest override:
+  `research_focus.required_mechanism_ids` and typed
+  `research_guidance_contract.required_mechanisms` both required
+  `route_pair_overlap_removal_protected_followup`. The run finished
+  valid/complete/postrun-ready with no quality, model, telemetry, or postrun
+  failures. The required mechanism reached formal screening, but both rows were
+  abandoned: row 1 median delta `-1.75`, CI `[-6.75, 8.5]`, win rate `0.25`;
+  row 2 median delta `-3.75`, CI `[-7.5, 12.0]`, win rate `0.25`, and
+  direct-effect-zero telemetry. CMT2 was `-10.0` in both rows, CMT4 stayed
+  negative, and `rows_at_or_above_mde=0`. Plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor29-route-pair-overlap-required-followup-plan-20260701.md`.
+  In-flight record:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor29-route-pair-overlap-required-followup-inflight-20260701.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor29-route-pair-overlap-required-followup-postrun-20260701.md`.
+- Successor30 completed as a materially different local-search follow-up:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor30-bounded-cross-route-double-bridge-server-2r-gpt55-20260701T052131Z-claw`.
+  It launched from commit `9cfee8e3` on server-local `claw`, used local
+  `gpt-5.5`, passed completion preflight, and forced `solver_design` /
+  `modify` / `policies/baseline_modules/local_search.py`. The run root
+  required `bounded_cross_route_double_bridge_polish` in both
+  `research_focus.required_mechanism_ids` and typed
+  `research_guidance_contract.required_mechanisms`. It finished
+  valid/complete/postrun-ready with `2` effective screening rows,
+  `proposal_attempts_total=3`, `proposal_quality_blocks=1`, no postrun
+  failures, and readiness passed. The quality block was a useful fail-closed
+  guard against a single-route implementation of a claimed cross-route
+  mechanism. The two formal rows both had median delta `0.0`, CI `[0.0, 0.0]`,
+  win rate `0.0`, `rows_at_or_above_mde=0`, and
+  `max_effect_to_mde_ratio=0.0`. Phase runtime telemetry was active, but
+  effect-zero diagnostics reported `candidate_present=64`,
+  `candidate_positive=0`, and `candidate_zero=64`. Treat unchanged
+  `bounded_cross_route_double_bridge_polish` as reviewed/default-avoid; its
+  `continue_explore` lifecycle decision is not solver-positive v0.4 evidence.
+  Plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor30-bounded-cross-route-double-bridge-plan-20260701.md`.
+  In-flight record:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor30-bounded-cross-route-double-bridge-inflight-20260701.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor30-bounded-cross-route-double-bridge-postrun-20260701.md`.
+- Successor31 design review is written:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor31-design-review-20260701.md`.
+  It rejects another same-mechanism local-search or destroy/repair follow-up by
+  default and recommends `adaptive_embedded_vns_runtime_allocation`, a
+  problem-owned scheduler/runtime-allocation path that changes how budget is
+  split between ALNS exploration and embedded VNS exploitation.
+- Successor31 completed on the server-local `claw` runner:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor31-adaptive-embedded-vns-runtime-allocation-server-2r-gpt55-20260701T111631Z-claw`.
+  It launched from commit `9cfee8e3`, passed live launch readiness and local
+  `gpt-5.5` completion preflight, forced `solver_design` / `modify` /
+  `policies/baseline_modules/scheduler.py`, and used a run-root-only
+  prepared-manifest override requiring
+  `adaptive_embedded_vns_runtime_allocation`. Initial target-intent/hypothesis
+  binding kept the required mechanism and target file. The campaign finished
+  valid/complete/postrun-ready with two effective screening rows, no quality
+  blocks, no model failures, no telemetry failures, and no postrun failures.
+  Both rows reached the required mechanism and observed phase runtime telemetry,
+  but objective effect stayed zero: median delta `0.0`, CI high `0.0`, win
+  rate `0.0`, `rows_at_or_above_mde=0`, and
+  `max_effect_to_mde_ratio=0.0`. Case-level medians were flat except
+  P-n101-k4 at `-0.5`; CMT2/CMT4 had no positive median. Treat unchanged
+  `adaptive_embedded_vns_runtime_allocation` as reviewed/default-avoid.
+  In-flight record:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor31-adaptive-embedded-vns-runtime-allocation-inflight-20260701.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor31-adaptive-embedded-vns-runtime-allocation-postrun-20260701.md`.
 - Successor22a was stopped before formal screening because the live hypothesis
   drifted to `bounded_repair_retry_on_reject`; treat it as a wrong-mechanism
   diagnostic, not solver evidence.
@@ -276,13 +383,31 @@ CVRP:
 2. Park unchanged successor23-style scheduler q scheduling, successor24-style
    insertion-cost lookahead repair, successor25 raw construction seed-baseline
    selection, and successor26b construction seed trajectory selection.
-3. Monitor the in-flight successor28 server-local run. After it completes,
-   inspect wrapper status, postrun readiness, failures, LLM trace health, and
-   effect-vs-MDE before changing guidance or launching another follow-up.
-4. Use the v0.4 large-file modularization plan before adding behavior to
+3. Treat successor28 as valid negative evidence for unchanged
+   `boundary_spoke_outlier_removal` and `edge_conflict_endpoint_removal`; do not
+   treat it as a completed protected `route_pair_overlap_removal` follow-up.
+4. Treat successor29 as valid negative evidence for the true protected
+   `route_pair_overlap_removal_protected_followup` follow-up. Park the
+   route-pair-overlap line for v0.4.
+5. Treat successor30 as valid zero-effect solver-negative evidence for
+   unchanged `bounded_cross_route_double_bridge_polish`. The first static
+   quality block is useful fail-closed framework evidence, but the final
+   `continue_explore` lifecycle decision is not solver-positive.
+6. Treat successor31 as valid zero-effect solver-negative evidence for
+   unchanged `adaptive_embedded_vns_runtime_allocation`. Runtime telemetry was
+   active, but it produced no objective effect and should not continue on
+   lifecycle status alone.
+7. Launch successor32 only as `post_repair_effect_credit_weighting` on
+   `policies/baseline_modules/scheduler.py`. The problem-owned guidance/catalog
+   now treats `acceptance_or_adaptive_weighting` as the top successor32
+   opportunity and requires operator pair, q, pre-repair current/best objective,
+   post-repair and post-polish candidate objective, old coarse score, new
+   credit, weight movement, accepted/new-best counts, and formal per-case
+   `total_distance` evidence.
+8. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-5. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-6. Keep status documents compact; put detailed root counters and caveats in
+9. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+10. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes
@@ -404,6 +529,28 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
   `scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-plan-20260701.md`
 - CVRP successor28 route-pair overlap protected follow-up in-flight:
   `scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-inflight-20260701.md`
+- CVRP successor28 route-pair overlap protected follow-up postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-postrun-20260701.md`
+- CVRP successor29 required route-pair overlap follow-up plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor29-route-pair-overlap-required-followup-plan-20260701.md`
+- CVRP successor29 required route-pair overlap follow-up in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor29-route-pair-overlap-required-followup-inflight-20260701.md`
+- CVRP successor29 required route-pair overlap follow-up postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor29-route-pair-overlap-required-followup-postrun-20260701.md`
+- CVRP successor30 bounded cross-route double-bridge plan:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor30-bounded-cross-route-double-bridge-plan-20260701.md`
+- CVRP successor30 bounded cross-route double-bridge in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor30-bounded-cross-route-double-bridge-inflight-20260701.md`
+- CVRP successor30 bounded cross-route double-bridge postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor30-bounded-cross-route-double-bridge-postrun-20260701.md`
+- CVRP successor31 design review:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor31-design-review-20260701.md`
+- CVRP successor31 adaptive embedded VNS runtime allocation in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor31-adaptive-embedded-vns-runtime-allocation-inflight-20260701.md`
+- CVRP successor31 adaptive embedded VNS runtime allocation postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor31-adaptive-embedded-vns-runtime-allocation-postrun-20260701.md`
+- CVRP successor32 post-repair effect credit weighting design:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-design-20260701.md`
 - CVRP deferred seed-post selector activation plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor21-seed-post-selector-activation-plan-20260629.md`
 - v0.4 large-file modularization plan:

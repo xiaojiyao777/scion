@@ -240,6 +240,39 @@ _SUCCESSOR_COMMON_OBSERVATIONS = (
 )
 
 _SUCCESSOR_REQUIREMENT_SPECS = {
+    "acceptance_or_adaptive_weighting": {
+        "requirement_id": "successor_acceptance_adaptive_weighting_direct_effect",
+        "summary": (
+            "An acceptance/adaptive-weighting successor is eligible only if it "
+            "directly changes the acceptance or operator-credit causal path "
+            "and separates its objective effect from downstream local-search "
+            "and annealing noise."
+        ),
+        "recommended_action": (
+            "For post_repair_effect_credit_weighting, record operator pair, q, "
+            "current/best objective before repair, post-repair and post-polish "
+            "candidate objective, old coarse score, new credit, weights before/"
+            "after update, accepted/new-best counts, and per-case formal "
+            "total_distance evidence."
+        ),
+        "required_observations": (
+            "material causal-path difference from reviewed rank-gap, route-pressure, and runtime-allocation variants",
+            "operator pair and q for each credited ALNS iteration",
+            "current and best objective before repair",
+            "candidate total_distance after repair and after polish",
+            "old coarse score and new post-repair credit",
+            "destroy and repair weights before and after segment update",
+            "accepted and new-best counts under the declared mechanism id",
+            "per-case total_distance delta tied to adaptive credit changes",
+            "feasibility and route-count preservation or explicit caveat",
+            "runtime budget evidence under the formal policy",
+            "CMT2/CMT4 protection plan or unresolved protected-case caveat",
+        ),
+        "reason_codes": (
+            "ADAPTIVE_WEIGHTING_DIRECT_EFFECT_REQUIRED",
+            "POST_REPAIR_CREDIT_ATTRIBUTION_REQUIRED",
+        ),
+    },
     "bounded_local_search_variant": {
         "requirement_id": "successor_bounded_local_search_direct_effect",
         "summary": (

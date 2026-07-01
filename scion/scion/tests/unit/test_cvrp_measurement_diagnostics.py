@@ -38,13 +38,13 @@ def test_cvrp_adapter_renders_proposal_only_measurement_opportunities() -> None:
         payload["default_avoid_directions"]
     )
     ranking = payload["mechanism_effect_ranking"]
-    assert ranking[0]["mechanism_family"] == "destroy_repair_selection"
-    assert ranking[0]["opportunity_status"] == (
-        "same_mechanism_cmt_guard_followup_candidate"
+    assert ranking[0]["mechanism_family"] == "acceptance_or_adaptive_weighting"
+    assert ranking[0]["opportunity_status"] == "eligible_clean_fork"
+    assert ranking[0]["evidence_status"] == (
+        "successor32_ready_after_successor31_zero_effect"
     )
-    assert ranking[0]["evidence_status"] == "successor27_weak_positive_below_mde"
-    assert "Successor27 route_pair_overlap_removal" in ranking[0]["summary"]
-    assert "protect the same route-pair overlap causal path" in ranking[0]["summary"]
+    assert "post_repair_effect_credit_weighting" in ranking[0]["summary"]
+    assert "post-repair pre-polish objective effect" in ranking[0]["summary"]
     assert ranking[1]["mechanism_family"] == "bounded_local_search_variant"
     assert ranking[1]["opportunity_status"] == "eligible_if_materially_different"
     assert ranking[2]["mechanism_family"] == "construction_seed_portfolio"
@@ -102,17 +102,17 @@ def test_context_manager_projects_cvrp_adapter_opportunities_top_level() -> None
     )
     assert payload["screening_headroom"]["case_count"] == 16
     assert payload["measurable_opportunity_classes"][0]["mechanism_family"] == (
-        "construction_seed_portfolio"
+        "acceptance_or_adaptive_weighting"
     )
     assert payload["mechanism_effect_ranking"][0]["mechanism_family"] == (
-        "destroy_repair_selection"
+        "acceptance_or_adaptive_weighting"
     )
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in compact
     assert "TRAJECTORY_DIVERGENT_LOW_SNR" in compact
     assert "mechanism_effect_ranking" in compact
-    assert "same_mechanism_cmt_guard_followup_candidate" in compact
-    assert "SUCCESSOR27_WEAK_POSITIVE_BELOW_MDE" in compact
-    assert "CMT2_CMT4_P_LOSS_GUARD_REQUIRED" in compact
+    assert "eligible_clean_fork" in compact
+    assert "SUCCESSOR32_POST_REPAIR_CREDIT_READY" in compact
+    assert "ROUTE_PAIR_OVERLAP_LINE_PARKED" in compact
     assert "eligible_only_if_materially_different_or_telemetry_audit" in compact
     assert "SUCCESSOR23_REVIEWED_BELOW_MDE" in compact
     assert "reviewed_not_next_required" in compact

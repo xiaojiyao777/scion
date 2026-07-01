@@ -37,6 +37,9 @@ _OPPORTUNITY_FAMILY_ALIASES = {
     **CVRP_SUCCESSOR_FAMILY_ALIASES,
     "acceptance_or_adaptive_weighting": (
         "acceptance_or_adaptive_weighting",
+        "post_repair_effect_credit_weighting",
+        "post_repair_credit_weighting",
+        "operator_credit_weighting",
         "adaptive_weighting",
         "adaptive_weights",
         "acceptance",

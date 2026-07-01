@@ -148,8 +148,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_intra_route_3opt_reviewed_no_positive",
         "bounded_ejection_chain_relocate_reviewed_no_positive",
         "bounded_route_segment_exchange_reviewed_no_positive",
+        "bounded_cross_route_double_bridge_polish_reviewed_no_positive",
         "operator_pair_destroy_size_bands_reviewed_no_positive",
         "stagnation_adaptive_destroy_size_schedule_reviewed_no_positive",
+        "adaptive_embedded_vns_runtime_allocation_reviewed_no_positive",
         "angular_sector_removal_reviewed_no_positive",
         "radial_string_removal_reviewed_no_positive",
         "farthest_noise_related_removal_reviewed_no_positive",
@@ -160,6 +162,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "load_complement_pair_removal_reviewed_no_positive",
         "route_pair_crossover_repair_reviewed_no_positive",
         "timewarp_string_removal_reviewed_no_positive",
+        "route_pair_overlap_removal_reviewed_no_positive",
+        "boundary_spoke_outlier_removal_reviewed_no_positive",
+        "edge_conflict_endpoint_removal_reviewed_no_positive",
+        "route_pair_overlap_removal_protected_followup_reviewed_no_positive",
         "lookahead_insertion_cost_repair_reviewed_no_positive",
         "lookahead_insertion_cost_repair_v2_reviewed_no_positive",
         "savings_seed_selection_probe_reviewed_no_positive",
@@ -189,8 +195,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_intra_route_3opt",
         "bounded_ejection_chain_relocate",
         "bounded_route_segment_exchange",
+        "bounded_cross_route_double_bridge_polish",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
+        "adaptive_embedded_vns_runtime_allocation",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -201,6 +209,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "load_complement_pair_removal",
         "route_pair_crossover_repair",
         "timewarp_string_removal",
+        "route_pair_overlap_removal",
+        "boundary_spoke_outlier_removal",
+        "edge_conflict_endpoint_removal",
+        "route_pair_overlap_removal_protected_followup",
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
@@ -377,16 +389,16 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert measurement["screening_headroom"]["case_count_gap_pct_at_least_3"] == 12
     assert (
         measurement["measurable_opportunity_classes"][0]["mechanism_family"]
-        == "construction_seed_portfolio"
+        == "acceptance_or_adaptive_weighting"
     )
     assert measurement["mechanism_effect_ranking"][0]["mechanism_family"] == (
-        "destroy_repair_selection"
+        "acceptance_or_adaptive_weighting"
     )
     assert measurement["mechanism_effect_ranking"][0]["opportunity_status"] == (
-        "same_mechanism_cmt_guard_followup_candidate"
+        "eligible_clean_fork"
     )
     assert measurement["mechanism_effect_ranking"][0]["evidence_status"] == (
-        "successor27_weak_positive_below_mde"
+        "successor32_ready_after_successor31_zero_effect"
     )
     assert measurement["mechanism_effect_ranking"][2]["mechanism_family"] == (
         "construction_seed_portfolio"
@@ -415,7 +427,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
             "measurable_opportunity_classes"
         ]
     )
-    assert "protected route-pair-overlap follow-up" in prepared_manifest[
+    assert "post_repair_effect_credit_weighting" in prepared_manifest[
         "research_focus"
     ]["current_question"]
     assert (
@@ -427,7 +439,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
-        "direct per-case total_distance evidence"
+        "direct operator-credit telemetry"
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
@@ -540,7 +552,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "route_pair_overlap_removal" in prepared_manifest[
         "research_focus"
     ]["next_required_direction"]
-    assert "same-mechanism protected follow-up" in prepared_manifest[
+    assert "Successor29 forced" in prepared_manifest[
+        "research_focus"
+    ]["next_required_direction"]
+    assert "post_repair_effect_credit_weighting" in prepared_manifest[
         "research_focus"
     ]["next_required_direction"]
     assert (
@@ -601,8 +616,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_intra_route_3opt",
         "bounded_ejection_chain_relocate",
         "bounded_route_segment_exchange",
+        "bounded_cross_route_double_bridge_polish",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
+        "adaptive_embedded_vns_runtime_allocation",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -613,6 +630,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "load_complement_pair_removal",
         "route_pair_crossover_repair",
         "timewarp_string_removal",
+        "route_pair_overlap_removal",
+        "boundary_spoke_outlier_removal",
+        "edge_conflict_endpoint_removal",
+        "route_pair_overlap_removal_protected_followup",
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
@@ -626,6 +647,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "seed_post_optimization_selector"
     ]
     assert prepared_manifest["research_focus"]["successor_opportunity_families"] == [
+        "acceptance_or_adaptive_weighting",
         "scheduler_destroy_size_policy",
         "destroy_repair_selection",
         "construction_seed_portfolio",
@@ -661,7 +683,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert any(
         "acceptance_or_adaptive_weighting" in item
-        and "new non-acceptance causal path" in item
+        and "post_repair_effect_credit_weighting" in item
+        and "Do not change simulated-annealing acceptance probability" in item
         for item in prepared_manifest["research_focus"][
             "measurable_opportunity_classes"
         ]
@@ -761,9 +784,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prepared_manifest_md
     assert "screening_headroom" in prepared_manifest_md
     assert "mechanism_effect_ranking" in prepared_manifest_md
-    assert "same_mechanism_cmt_guard_followup_candidate" in prepared_manifest_md
+    assert "eligible_clean_fork" in prepared_manifest_md
+    assert "post_repair_effect_credit_weighting" in prepared_manifest_md
     assert "route_pair_overlap_removal" in prepared_manifest_md
-    assert "protected follow-up" in prepared_manifest_md
+    assert "route-pair-overlap line is parked" in prepared_manifest_md
     assert "eligible_only_if_materially_different_or_telemetry_audit" in prepared_manifest_md
     assert "eligible_if_materially_different" in prepared_manifest_md
     assert "reviewed_not_next_required" in prepared_manifest_md
