@@ -57,6 +57,9 @@ CVRP_SOLVER_DESIGN_STATIC_QUALITY_FAILURE = (
 CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE = (
     "agent_quality_blocked:cvrp_construction_seed_direct_effect_missing"
 )
+CVRP_SUCCESSOR32_FOCUS_FAILURE = (
+    "agent_quality_blocked:cvrp_successor32_focus_mismatch"
+)
 
 
 class CvrpAdapter:
@@ -111,6 +114,90 @@ class CvrpAdapter:
         )
 
         return CvrpSolverDesignProvider()
+
+    def validate_hypothesis_quality(
+        self,
+        *,
+        branch: Any | None,
+        hypothesis: Any,
+        step_history: Sequence[Any] | None = None,
+    ) -> Mapping[str, Any]:
+        """Problem-owned successor32 proposal quality check for CVRP."""
+
+        del branch, step_history
+        change_locus = str(getattr(hypothesis, "change_locus", "") or "").strip()
+        target_file = str(getattr(hypothesis, "target_file", "") or "").strip()
+        if change_locus != "solver_design" or target_file != SUCCESSOR32_TARGET_FILE:
+            return {"allowed": True, "gate_name": "cvrp_successor32_focus"}
+
+        mechanism_ids: list[str] = []
+        for change in getattr(hypothesis, "mechanism_changes", ()) or ():
+            if isinstance(change, Mapping):
+                raw_id = change.get("id")
+            else:
+                raw_id = getattr(change, "id", "")
+            mechanism_id = str(raw_id or "").strip()
+            if mechanism_id:
+                mechanism_ids.append(mechanism_id)
+        text = " ".join(
+            str(part or "")
+            for part in (
+                getattr(hypothesis, "hypothesis_text", ""),
+                getattr(hypothesis, "target_weakness", ""),
+                getattr(hypothesis, "expected_effect", ""),
+                getattr(hypothesis, "target_runtime_effect", ""),
+                getattr(hypothesis, "complexity_claim", ""),
+                getattr(hypothesis, "runtime_budget_strategy", ""),
+            )
+        )
+        novelty = getattr(hypothesis, "novelty_signature", {}) or {}
+        if isinstance(novelty, Mapping):
+            text += " " + " ".join(str(item or "") for item in novelty.values())
+        normalized_text = text.lower().replace("-", "_").replace(" ", "_")
+        if SUCCESSOR32_MECHANISM_ID in mechanism_ids or (
+            SUCCESSOR32_MECHANISM_ID in normalized_text
+        ):
+            return {"allowed": True, "gate_name": "cvrp_successor32_focus"}
+
+        return {
+            "allowed": False,
+            "detail": (
+                f"{CVRP_SUCCESSOR32_FOCUS_FAILURE}: successor32 scheduler "
+                "proposal must test post_repair_effect_credit_weighting before "
+                "code generation; selected_mechanisms="
+                + ",".join(mechanism_ids or ["none"])
+            ),
+            "gate_name": "cvrp_successor32_focus",
+            "structured_rejection": {
+                "source": "cvrp_problem_adapter",
+                "gate_name": "cvrp_successor32_focus",
+                "failure_code": CVRP_SUCCESSOR32_FOCUS_FAILURE,
+                "agent_block_reason": "agent_quality_blocked",
+                "required_mechanism_id": SUCCESSOR32_MECHANISM_ID,
+                "selected_mechanism_ids": mechanism_ids,
+                "target_file": target_file,
+                "retry_constraint": (
+                    "Redraft the CVRP solver-design hypothesis as the "
+                    "successor32 operator-credit mechanism: declare mechanism "
+                    f"`{SUCCESSOR32_MECHANISM_ID}`, keep the target file at "
+                    f"`{SUCCESSOR32_TARGET_FILE}`, and describe post-repair "
+                    "pre-polish objective-effect credit for ALNS "
+                    "destroy/repair weights. Do not switch to destroy/repair "
+                    "selection, q scheduling, local search, seed selection, "
+                    "acceptance probability, or embedded-VNS runtime allocation."
+                ),
+                "repair_template": {
+                    "repair_type": "cvrp_successor32_focus",
+                    "required_mechanism_id": SUCCESSOR32_MECHANISM_ID,
+                    "required_target_file": SUCCESSOR32_TARGET_FILE,
+                    "required_causal_path": (
+                        "post-repair pre-polish objective-effect credit for "
+                        "ALNS destroy/repair adaptive weights"
+                    ),
+                },
+                "decision_features_excluded": True,
+            },
+        }
 
     def validate_patch_quality(
         self,

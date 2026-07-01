@@ -360,7 +360,13 @@ def test_cvrp_target_intent_guidance_prefers_pivot_after_route_merge_plateau() -
     assert "broader formal-surface activation" in rendered
     assert "same-run seed baseline" in rendered
     assert "fallback activation as effect" in rendered
-    assert "A non-scheduler target is now preferred" in rendered
+    assert "successor32 should select" in rendered
+    assert "`post_repair_effect_credit_weighting`" in rendered
+    assert "post-repair, pre-polish objective-effect credit" in rendered
+    assert "A non-scheduler target is not preferred for the current successor32 slot" in (
+        rendered
+    )
+    assert "operator pair, q, before/after repair and polish objectives" in rendered
 
 
 def test_cvrp_schema_preview_warns_reheat_broad_loop_effect_before_code(

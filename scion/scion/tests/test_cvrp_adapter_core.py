@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from scion.tests.cvrp_adapter_test_support import *
 from scion.core.models import HypothesisProposal, MechanismChange
-from scion.core.proposal_pipeline.problem_quality import validate_problem_patch_quality
+from scion.core.proposal_pipeline.problem_quality import (
+    validate_problem_hypothesis_quality,
+    validate_problem_patch_quality,
+)
 
 
 def test_cvrp_problem_spec_loads(cvrp_spec: ProblemSpecV1, cvrp_adapter: ProblemAdapter) -> None:
@@ -121,6 +124,74 @@ def test_cvrp_adapter_patch_quality_blocks_construction_seed_activation_only(
     assert "construction_seed_direct_effect_record_move" in (
         check.structured_rejection["missing_code_elements"]
     )
+
+
+def test_cvrp_adapter_hypothesis_quality_blocks_successor32_mechanism_drift(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a bounded pair-failure cooldown selector before ALNS chooses "
+            "a destroy and repair pair."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        novelty_signature={"mechanism_family": "acceptance_or_adaptive_weighting"},
+        mechanism_changes=(
+            MechanismChange(id="pair_failure_cooldown_selection", change_type="add"),
+        ),
+    )
+
+    check = validate_problem_hypothesis_quality(
+        SimpleNamespace(adapter=cvrp_adapter),
+        SimpleNamespace(branch_id="branch-1"),
+        hypothesis,
+    )
+
+    assert check.allowed is False
+    assert "cvrp_successor32_focus_mismatch" in check.detail
+    assert check.structured_rejection["gate_name"] == "cvrp_successor32_focus"
+    assert (
+        check.structured_rejection["required_mechanism_id"]
+        == "post_repair_effect_credit_weighting"
+    )
+    assert check.structured_rejection["selected_mechanism_ids"] == [
+        "pair_failure_cooldown_selection"
+    ]
+    assert check.structured_rejection["agent_block_reason"] == (
+        "agent_quality_blocked"
+    )
+
+
+def test_cvrp_adapter_hypothesis_quality_allows_successor32_focus(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Test post_repair_effect_credit_weighting by crediting ALNS "
+            "destroy/repair weights from post-repair pre-polish objective "
+            "effect."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        novelty_signature={"mechanism_family": "acceptance_or_adaptive_weighting"},
+        mechanism_changes=(
+            MechanismChange(
+                id="post_repair_effect_credit_weighting",
+                change_type="add",
+            ),
+        ),
+    )
+
+    check = validate_problem_hypothesis_quality(
+        SimpleNamespace(adapter=cvrp_adapter),
+        SimpleNamespace(branch_id="branch-1"),
+        hypothesis,
+    )
+
+    assert check.allowed is True
 
 
 @pytest.mark.parametrize(

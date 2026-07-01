@@ -87,7 +87,13 @@ The remaining closeout gaps are:
   destroy/repair adaptive weights from post-repair pre-polish objective effect
   while keeping destroy/repair patterns, local-search moves, construction
   seeds, embedded-VNS runtime allocation, simulated-annealing acceptance, and
-  generic core unchanged.
+  generic core unchanged. The first successor32 launch root
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor32-post-repair-effect-credit-weighting-server-2r-gpt55-20260701T135711Z-claw`
+  was stopped before screening because the live hypothesis drifted to
+  `pair_failure_cooldown_selection`; it is not successor32 solver evidence.
+  A CVRP problem-owned `cvrp_successor32_focus` hypothesis quality gate now
+  blocks scheduler.py successor32 proposals unless they name the required
+  operator-credit mechanism before code generation.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -551,6 +557,8 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
   `scion/docs/experiments/v0.4/v04-cvrp-successor31-adaptive-embedded-vns-runtime-allocation-postrun-20260701.md`
 - CVRP successor32 post-repair effect credit weighting design:
   `scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-design-20260701.md`
+- CVRP successor32 post-repair effect credit weighting in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-inflight-20260701.md`
 - CVRP deferred seed-post selector activation plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor21-seed-post-selector-activation-plan-20260629.md`
 - v0.4 large-file modularization plan:

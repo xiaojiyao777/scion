@@ -392,6 +392,17 @@ It selects `post_repair_effect_credit_weighting`, a narrow
 places this mechanism in the top opportunity recipe and parks unchanged
 route-pair-overlap, bounded double-bridge, and adaptive embedded-VNS runtime
 allocation follow-ups.
+The successor32 in-flight record is
+`scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-inflight-20260701.md`.
+The first successor32 run root was
+`/home/clawd/research/scion-experiments/v04-cvrp-successor32-post-repair-effect-credit-weighting-server-2r-gpt55-20260701T135711Z-claw`.
+It was stopped before any effective round because the live hypothesis drifted
+to `pair_failure_cooldown_selection` instead of
+`post_repair_effect_credit_weighting`. Treat that root as an aborted
+pre-screen guard event, not successor32 solver evidence. A CVRP problem-owned
+`cvrp_successor32_focus` hypothesis quality gate now blocks scheduler.py
+successor32 proposals unless the formal hypothesis names the required
+operator-credit mechanism.
 
 Reviewed or suppressed paths include the large two-opt seed line, cross
 exchange, Or-opt reinsertion, 3-opt, ejection-chain relocation, several
@@ -455,7 +466,9 @@ from the current checkout.
    opportunity and requires operator pair, q, pre-repair current/best objective,
    post-repair and post-polish candidate objective, old coarse score, new
    credit, weight movement, accepted/new-best counts, and formal per-case
-   `total_distance` evidence.
+   `total_distance` evidence. The first server-local root ended as an aborted
+   pre-screen mechanism-drift guard event; relaunch successor32 from the
+   `cvrp_successor32_focus` guard commit before analysis.
 8. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 9. Keep the v0.5 governance ablation frozen as a preregistered design; do not
