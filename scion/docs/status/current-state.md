@@ -458,6 +458,12 @@ CVRP:
    credit weighting, construction seed trajectory, scheduler q/destroy-size,
    and insertion-cost repair variants unless the proposal names a genuinely new
    causal path and direct objective-effect telemetry.
+   The selected successor33 design is `neighbor_list_vns_filter`, a
+   bounded-local-search candidate-enumeration mechanism owned by
+   `policies/baseline_modules/local_search.py`; see
+   `scion/docs/experiments/v0.4/v04-cvrp-successor33-neighbor-list-vns-filter-design-20260701.md`.
+   Do not launch until CVRP problem-owned guidance is updated away from the
+   successor32 target-intent binding.
 9. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 10. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
@@ -609,6 +615,8 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
   `scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-inflight-20260701.md`
 - CVRP successor32 post-repair effect credit weighting postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-postrun-20260701.md`
+- CVRP successor33 neighbor-list VNS filter design:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor33-neighbor-list-vns-filter-design-20260701.md`
 - CVRP deferred seed-post selector activation plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor21-seed-post-selector-activation-plan-20260629.md`
 - v0.4 large-file modularization plan:

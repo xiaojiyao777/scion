@@ -508,6 +508,12 @@ from the current checkout.
    credit weighting, construction seed trajectory, scheduler q/destroy-size,
    and insertion-cost repair variants unless the proposal names a genuinely new
    causal path and direct objective-effect telemetry.
+   The selected successor33 design is `neighbor_list_vns_filter`, a
+   bounded-local-search candidate-enumeration mechanism owned by
+   `policies/baseline_modules/local_search.py`; see
+   `scion/docs/experiments/v0.4/v04-cvrp-successor33-neighbor-list-vns-filter-design-20260701.md`.
+   Before launch, update problem-owned CVRP guidance so target intent no longer
+   binds successor32 and instead proposes successor33.
 9. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 10. Keep the v0.5 governance ablation frozen as a preregistered design; do not
