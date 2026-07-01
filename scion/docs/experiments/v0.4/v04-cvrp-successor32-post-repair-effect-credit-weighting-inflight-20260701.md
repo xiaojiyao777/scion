@@ -8,12 +8,18 @@ Initial run root:
 Guarded-live run root:
 `/home/clawd/research/scion-experiments/v04-cvrp-successor32-post-repair-effect-credit-weighting-server-guarded-live-2r-gpt55-20260701T141225Z-claw`
 
+Target-bound run root:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor32-post-repair-effect-credit-weighting-server-target-bound-2r-gpt55-20260701T142821Z-claw`
+
+Postrun report:
+`scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-postrun-20260701.md`
+
 Commits:
 
 - `f8ca1bc5`: exposed CVRP top opportunity in launcher payload
 - `eda5e0c0`: added CVRP `cvrp_successor32_focus` formal-hypothesis guard
-- current repair: generic `target_intent_required_mechanism_ids` binding before
-  relaunch
+- `76952d20`: generic `target_intent_required_mechanism_ids` binding before
+  target-bound relaunch
 
 Environment: server-local `claw`, local `gpt-5.5`,
 `http://127.0.0.1:8080`.
@@ -102,7 +108,7 @@ tail -80 "$RUN_ROOT/run.log"
 tail -80 "$RUN_ROOT/nohup.log"
 ```
 
-Next relaunch command:
+Target-bound relaunch command:
 
 ```bash
 /home/clawd/miniconda3/envs/claw/bin/python scion/tools/launch_cvrp_agentic_campaign.py \
@@ -117,3 +123,46 @@ Next relaunch command:
   --completion-preflight \
   --launch
 ```
+
+Target-bound completion:
+
+- `run_validity_status=valid`
+- `run_completeness_status=complete`
+- `completed_requested_rounds=true`
+- `campaign_exit_status=complete`
+- `postrun_acceptance_status=ready`
+- `effective_rounds_completed=2`
+- `formal_screened_candidates=2`
+- `protocol_evaluated_candidates=2`
+- `protocol_metric_results=2`
+- `proposal_quality_blocks=0`
+
+Target-bound mechanism binding:
+
+- both target-intent calls selected `post_repair_effect_credit_weighting`
+- both formal hypothesis bindings were `bound`
+- hard `required_mechanism_ids=[]` remained empty
+- formal target file stayed `policies/baseline_modules/scheduler.py`
+
+Target-bound result:
+
+- row 1 branch `94224fba`: `active_quality_regression`,
+  pair result `0` wins / `1` loss / `31` ties, case result all ties,
+  median delta `0.0`, CI `[0.0, 0.0]`; nonzero pair was
+  `E-n101-k14` seed `11`, `-6.0`
+- row 2 branch `32716e6f`: `clean`, pair result `1` win / `0` losses /
+  `31` ties, case result all ties, median delta `0.0`, CI `[0.0, 0.0]`;
+  nonzero pair was `X-n110-k13` seed `43`, `+70.0`
+- postrun research efficiency: `rows_at_or_above_mde=0`,
+  `max_median_delta=0.0`, `max_effect_to_mde_ratio=0.0`,
+  `interpretation=all_available_ci_high_below_mde`
+- mechanism telemetry was active and direct-effect-positive internally, but
+  objective effect was `zero_objective_effect`
+
+Interpretation:
+
+The target-intent binding fixed the successor32 control-plane problem. The
+solver result is evidence-complete but not promotion-grade. Do not expand
+unchanged `post_repair_effect_credit_weighting`; treat it as
+reviewed/default-avoid unless a future proposal names a materially different
+causal path from operator credit to final objective effect.

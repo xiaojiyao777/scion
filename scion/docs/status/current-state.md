@@ -101,7 +101,16 @@ The remaining closeout gaps are:
   not solver evidence. The current checkout adds a generic proposal-only
   `target_intent_required_mechanism_ids` binding so target-intent selection
   can be pinned to `post_repair_effect_credit_weighting` while hard
-  `required_mechanism_ids` stays empty.
+  `required_mechanism_ids` stays empty. The target-bound successor32 relaunch
+  then completed valid/complete/postrun-ready with two screened rows and no
+  quality/model/telemetry/postrun failures. Both live target-intent and formal
+  hypothesis bindings stayed on `post_repair_effect_credit_weighting`, and
+  mechanism telemetry showed activation plus internal effect, but final
+  objective evidence stayed zero at the case gate: both rows had median delta
+  `0.0`, CI `[0.0, 0.0]`, `rows_at_or_above_mde=0`, and
+  `max_effect_to_mde_ratio=0.0`. Treat unchanged post-repair effect credit
+  weighting as reviewed/default-avoid; target binding is framework-positive,
+  not solver-positive.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -378,6 +387,33 @@ CVRP:
   `scion/docs/experiments/v0.4/v04-cvrp-successor31-adaptive-embedded-vns-runtime-allocation-inflight-20260701.md`.
   Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor31-adaptive-embedded-vns-runtime-allocation-postrun-20260701.md`.
+- Successor32 completed on the server-local `claw` runner after two earlier
+  pre-screen guard roots:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor32-post-repair-effect-credit-weighting-server-target-bound-2r-gpt55-20260701T142821Z-claw`.
+  It launched from commit `76952d20`, used local `gpt-5.5`, passed completion
+  preflight, and forced `solver_design` / `modify` /
+  `policies/baseline_modules/scheduler.py`. The proposal-only
+  `target_intent_required_mechanism_ids` binding worked: both target-intent
+  calls selected `post_repair_effect_credit_weighting`, and both formal
+  hypothesis bindings were `bound` while hard `required_mechanism_ids` stayed
+  empty. The run finished valid/complete/postrun-ready with two effective
+  screening rows, no quality blocks, no model failures, no telemetry failures,
+  and no postrun failures. Row 1 branch `94224fba` was an
+  `active_quality_regression` row with pair result `0` wins / `1` loss /
+  `31` ties and median delta `0.0`; the only nonzero pair was
+  `E-n101-k14` seed `11` at `-6.0`. Row 2 branch `32716e6f` was `clean` with
+  pair result `1` win / `0` losses / `31` ties and median delta `0.0`; the
+  only nonzero pair was `X-n110-k13` seed `43` at `+70.0`. Both rows had CI
+  `[0.0, 0.0]`, case result all ties, `rows_at_or_above_mde=0`, and
+  `max_effect_to_mde_ratio=0.0`. Mechanism activation/internal effect telemetry
+  was observed, but objective effect was `zero_objective_effect`. Treat
+  unchanged `post_repair_effect_credit_weighting` as reviewed/default-avoid.
+  Design:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-design-20260701.md`.
+  In-flight record:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-inflight-20260701.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-postrun-20260701.md`.
 - Successor22a was stopped before formal screening because the live hypothesis
   drifted to `bounded_repair_retry_on_reject`; treat it as a wrong-mechanism
   diagnostic, not solver evidence.
@@ -411,18 +447,21 @@ CVRP:
    unchanged `adaptive_embedded_vns_runtime_allocation`. Runtime telemetry was
    active, but it produced no objective effect and should not continue on
    lifecycle status alone.
-7. Launch successor32 only as `post_repair_effect_credit_weighting` on
-   `policies/baseline_modules/scheduler.py`. The problem-owned guidance/catalog
-   now treats `acceptance_or_adaptive_weighting` as the top successor32
-   opportunity and requires operator pair, q, pre-repair current/best objective,
-   post-repair and post-polish candidate objective, old coarse score, new
-   credit, weight movement, accepted/new-best counts, and formal per-case
-   `total_distance` evidence. Relaunch only after the target-intent-required
-   binding repair is committed.
-8. Use the v0.4 large-file modularization plan before adding behavior to
+7. Treat successor32 as valid solver-negative evidence for unchanged
+   `post_repair_effect_credit_weighting`. The target-bound run proves the
+   proposal binding and mechanism telemetry work, but it produced no
+   positive-at-MDE or case-gate objective evidence. Do not relaunch the
+   unchanged operator-credit mechanism.
+8. Design successor33 as a materially different CVRP-owned causal path before
+   any new solver experiment. Avoid unchanged route-pair-overlap, bounded
+   double-bridge, adaptive embedded-VNS runtime allocation, post-repair effect
+   credit weighting, construction seed trajectory, scheduler q/destroy-size,
+   and insertion-cost repair variants unless the proposal names a genuinely new
+   causal path and direct objective-effect telemetry.
+9. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-9. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-10. Keep status documents compact; put detailed root counters and caveats in
+10. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+11. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes
@@ -568,6 +607,8 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
   `scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-design-20260701.md`
 - CVRP successor32 post-repair effect credit weighting in-flight:
   `scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-inflight-20260701.md`
+- CVRP successor32 post-repair effect credit weighting postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-postrun-20260701.md`
 - CVRP deferred seed-post selector activation plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor21-seed-post-selector-activation-plan-20260629.md`
 - v0.4 large-file modularization plan:

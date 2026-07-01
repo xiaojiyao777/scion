@@ -21,7 +21,7 @@ Primary sources:
 
 Current judgment after the basis audit and warehouse provenance clarification:
 v3 boundaries and the main v0.4 framework repairs are broadly aligned, but
-v0.4 is not closed. Recent successor work through successor30 leaves CVRP with
+v0.4 is not closed. Recent successor work through successor32 leaves CVRP with
 no promotion-grade solver effect.
 Successor21 tested `operator_pair_destroy_size_bands`, not the intended
 stagnation schedule, and stayed below MDE. Successor22b correctly targeted
@@ -45,12 +45,14 @@ Successor31 then tested the materially different
 completed valid/complete/postrun-ready, observed direct mechanism runtime, and
 still stayed exact zero-effect in both screening rows. Treat unchanged adaptive
 embedded-VNS runtime allocation as reviewed/default-avoid too.
-Successor32 is now designed as `post_repair_effect_credit_weighting`, an
+Successor32 then tested `post_repair_effect_credit_weighting`, an
 `acceptance_or_adaptive_weighting` clean fork owned by
-`policies/baseline_modules/scheduler.py`. It should credit ALNS destroy/repair
-adaptive weights from post-repair pre-polish objective effect while keeping
-destroy/repair patterns, local-search moves, construction seeds, embedded-VNS
-runtime allocation, simulated-annealing acceptance, and generic core unchanged.
+`policies/baseline_modules/scheduler.py`. The target-bound run completed
+valid/complete/postrun-ready and proved the new target-intent-required binding
+kept live proposals on the intended mechanism, but both screening rows had
+median delta `0.0`, CI `[0.0, 0.0]`, `rows_at_or_above_mde=0`, and no
+promotion signal. Treat unchanged post-repair operator-credit weighting as
+reviewed/default-avoid too.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -189,7 +191,19 @@ Open blockers before v0.4 closeout:
   win rate `0.0`, `rows_at_or_above_mde=0`, and
   `max_effect_to_mde_ratio=0.0`. Treat unchanged adaptive embedded-VNS runtime
   allocation as reviewed/default-avoid; runtime-share movement and
-  `continue_explore` are not solver-positive evidence.
+  `continue_explore` are not solver-positive evidence. Successor32 then forced
+  `post_repair_effect_credit_weighting` in
+  `policies/baseline_modules/scheduler.py` after adding a proposal-only
+  target-intent-required binding. The target-bound run completed
+  valid/complete/postrun-ready with no proposal-quality, model, telemetry, or
+  postrun failures, and both live hypotheses stayed on the intended mechanism.
+  The mechanism activated and emitted direct internal effect telemetry, but
+  objective evidence remained zero at the case gate: both rows had median delta
+  `0.0`, CI `[0.0, 0.0]`, `rows_at_or_above_mde=0`, and
+  `max_effect_to_mde_ratio=0.0`; pair evidence was only one small loss in row 1
+  and one seed-level win in row 2. Treat unchanged post-repair effect credit
+  weighting as reviewed/default-avoid; target binding is framework-positive,
+  not solver-positive.
 - Several production/test files remain over the 1000-line risk threshold and
   need design-first modularization before more behavior is added there.
 - v0.5 governance ablation is preregistered as a clean experiment matrix, but
@@ -394,6 +408,8 @@ route-pair-overlap, bounded double-bridge, and adaptive embedded-VNS runtime
 allocation follow-ups.
 The successor32 in-flight record is
 `scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-inflight-20260701.md`.
+The successor32 postrun report is
+`scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-postrun-20260701.md`.
 The first successor32 run root was
 `/home/clawd/research/scion-experiments/v04-cvrp-successor32-post-repair-effect-credit-weighting-server-2r-gpt55-20260701T135711Z-claw`.
 It was stopped before any effective round because the live hypothesis drifted
@@ -411,6 +427,19 @@ drift, but it is also not solver evidence. The follow-up repair adds a generic
 proposal-only `target_intent_required_mechanism_ids` binding so successor32
 binds target intent to `post_repair_effect_credit_weighting` while leaving hard
 `required_mechanism_ids` empty for prepared-successor arbitration.
+The target-bound relaunch then completed at
+`/home/clawd/research/scion-experiments/v04-cvrp-successor32-post-repair-effect-credit-weighting-server-target-bound-2r-gpt55-20260701T142821Z-claw`.
+It finished valid/complete/postrun-ready with two formal screening rows, no
+proposal-quality blocks, and `gpt-5.5` model calls all accounted. Both
+target-intent calls and both formal hypothesis bindings stayed on
+`post_repair_effect_credit_weighting`, but objective evidence stayed below
+closeout needs: both rows had median delta `0.0`, CI `[0.0, 0.0]`,
+`rows_at_or_above_mde=0`, and `max_effect_to_mde_ratio=0.0`. The clean row had
+one seed-level `X-n110-k13` win (`+70.0`) but no case-gate win; the quality
+regression row had one `E-n101-k14` loss (`-6.0`). Mechanism telemetry showed
+activation and internal effect, while postrun summarized objective effect as
+`zero_objective_effect`. Treat unchanged `post_repair_effect_credit_weighting`
+as reviewed/default-avoid.
 
 Reviewed or suppressed paths include the large two-opt seed line, cross
 exchange, Or-opt reinsertion, 3-opt, ejection-chain relocation, several
@@ -468,21 +497,22 @@ from the current checkout.
    unchanged `adaptive_embedded_vns_runtime_allocation`. The run is
    postrun-ready and activation/runtime telemetry was present, but both rows
    had median delta `0.0`, CI high `0.0`, and no positive-at-MDE evidence.
-7. Launch successor32 only as `post_repair_effect_credit_weighting` on
-   `policies/baseline_modules/scheduler.py`. The problem-owned guidance/catalog
-   now treats `acceptance_or_adaptive_weighting` as the top successor32
-   opportunity and requires operator pair, q, pre-repair current/best objective,
-   post-repair and post-polish candidate objective, old coarse score, new
-   credit, weight movement, accepted/new-best counts, and formal per-case
-   `total_distance` evidence. The first server-local root ended as an aborted
-   pre-screen mechanism-drift guard event, and the guarded-live root proved
-   fail-closed formal drift blocking with zero screened candidates. Relaunch
-   successor32 only after the target-intent-required binding commit.
-8. Use the new large-file modularization plan before further behavior changes
+7. Treat successor32 as valid solver-negative evidence for unchanged
+   `post_repair_effect_credit_weighting`. The target-bound run proves the
+   proposal target binding works and the mechanism can activate, but it did not
+   produce positive-at-MDE or case-gate objective evidence. Do not relaunch the
+   unchanged operator-credit mechanism.
+8. Design successor33 as a materially different CVRP-owned causal path before
+   any new experiment. Avoid unchanged route-pair-overlap, bounded
+   double-bridge, adaptive embedded-VNS runtime allocation, post-repair effect
+   credit weighting, construction seed trajectory, scheduler q/destroy-size,
+   and insertion-cost repair variants unless the proposal names a genuinely new
+   causal path and direct objective-effect telemetry.
+9. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-9. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+10. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-10. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+11. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence
