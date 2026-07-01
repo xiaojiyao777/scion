@@ -452,7 +452,7 @@ CVRP:
    proposal binding and mechanism telemetry work, but it produced no
    positive-at-MDE or case-gate objective evidence. Do not relaunch the
    unchanged operator-credit mechanism.
-8. Launch successor33 as the next materially different CVRP-owned causal path.
+8. Monitor successor33 as the next materially different CVRP-owned causal path.
    Avoid unchanged route-pair-overlap, bounded double-bridge, adaptive
    embedded-VNS runtime allocation, post-repair effect credit weighting,
    construction seed trajectory, scheduler q/destroy-size, and insertion-cost
@@ -465,7 +465,12 @@ CVRP:
    Problem-owned CVRP guidance now binds target intent to successor33 through
    `target_intent_required_mechanism_ids=["neighbor_list_vns_filter"]`, marks
    successor32 as reviewed/default-avoid evidence, and passes the targeted
-   guidance/launcher/readiness tests.
+   guidance/launcher/readiness tests. The server-local `claw` run is launched
+   at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor33-neighbor-list-vns-filter-server-2r-gpt55-20260701T160210Z-claw`;
+   its initial target-intent and formal hypothesis traces stayed bound to
+   `policies/baseline_modules/local_search.py` /
+   `neighbor_list_vns_filter`.
 9. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 10. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
@@ -619,6 +624,8 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
   `scion/docs/experiments/v0.4/v04-cvrp-successor32-post-repair-effect-credit-weighting-postrun-20260701.md`
 - CVRP successor33 neighbor-list VNS filter design:
   `scion/docs/experiments/v0.4/v04-cvrp-successor33-neighbor-list-vns-filter-design-20260701.md`
+- CVRP successor33 neighbor-list VNS filter in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor33-neighbor-list-vns-filter-inflight-20260701.md`
 - CVRP deferred seed-post selector activation plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor21-seed-post-selector-activation-plan-20260629.md`
 - v0.4 large-file modularization plan:
