@@ -245,6 +245,13 @@ The postrun report is
 `scion/docs/experiments/v0.4/v04-cvrp-successor27-route-pair-overlap-postrun-20260701.md`.
 The successor28 plan is
 `scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-plan-20260701.md`.
+Successor28 is now in flight on the server-local `claw` runner:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor28-route-pair-overlap-protected-followup-server-2r-gpt55-20260701T001959Z-claw`.
+It launched from commit `ed051d93` with healthy `gpt-5.5` completion preflight
+and the same forced target. Initial traces include `hypothesis_target_intent`
+and `hypothesis`; no protocol row had completed at the first health check.
+The in-flight record is
+`scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-inflight-20260701.md`.
 
 The next CVRP slot should not broaden the unchanged successor27 operator. It
 should run a same-mechanism protected follow-up,
@@ -295,8 +302,9 @@ from the current checkout.
 2. Park unchanged successor23-style scheduler q scheduling, successor24-style
    insertion-cost lookahead repair, successor25 construction seed-baseline
    selection, and successor26b construction seed trajectory selection.
-3. Update prepared CVRP guidance and launch successor28 only as a protected
-   route-pair-overlap follow-up after targeted guidance/adapter tests pass.
+3. Monitor the in-flight successor28 server-local run. After it completes,
+   inspect wrapper status, postrun readiness, failures, LLM trace health, and
+   effect-vs-MDE before changing guidance or launching another follow-up.
 4. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 5. Keep the v0.5 governance ablation frozen as a preregistered design; do not

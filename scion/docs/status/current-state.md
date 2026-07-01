@@ -248,6 +248,15 @@ CVRP:
   `scion/docs/experiments/v0.4/v04-cvrp-successor27-route-pair-overlap-postrun-20260701.md`.
   Successor28 plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-plan-20260701.md`.
+- Successor28 is in flight as the protected same-mechanism follow-up:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor28-route-pair-overlap-protected-followup-server-2r-gpt55-20260701T001959Z-claw`.
+  It launched from commit `ed051d93` on server-local `claw`, used local
+  `gpt-5.5`, passed completion preflight, and forced
+  `solver_design` / `modify` /
+  `policies/baseline_modules/destroy_repair.py`. Initial traces include
+  `hypothesis_target_intent` and `hypothesis`; no protocol row had completed
+  at the first health check. In-flight record:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-inflight-20260701.md`.
 - Successor22a was stopped before formal screening because the live hypothesis
   drifted to `bounded_repair_retry_on_reject`; treat it as a wrong-mechanism
   diagnostic, not solver evidence.
@@ -267,9 +276,9 @@ CVRP:
 2. Park unchanged successor23-style scheduler q scheduling, successor24-style
    insertion-cost lookahead repair, successor25 raw construction seed-baseline
    selection, and successor26b construction seed trajectory selection.
-3. Launch successor28 only as a protected same-mechanism follow-up,
-   `route_pair_overlap_removal_protected_followup`, after targeted
-   guidance/adapter tests pass. Do not broaden unchanged successor27.
+3. Monitor the in-flight successor28 server-local run. After it completes,
+   inspect wrapper status, postrun readiness, failures, LLM trace health, and
+   effect-vs-MDE before changing guidance or launching another follow-up.
 4. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 5. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
@@ -393,6 +402,8 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
   `scion/docs/experiments/v0.4/v04-cvrp-successor27-route-pair-overlap-postrun-20260701.md`
 - CVRP successor28 route-pair overlap protected follow-up plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-plan-20260701.md`
+- CVRP successor28 route-pair overlap protected follow-up in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor28-route-pair-overlap-protected-followup-inflight-20260701.md`
 - CVRP deferred seed-post selector activation plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor21-seed-post-selector-activation-plan-20260629.md`
 - v0.4 large-file modularization plan:
