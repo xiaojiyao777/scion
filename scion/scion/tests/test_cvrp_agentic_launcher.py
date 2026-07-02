@@ -133,7 +133,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for mechanism in typed_contract["required_mechanisms"]
     }
     assert "required" not in mechanism_bindings.values()
-    assert mechanism_bindings["frozen_safe_neighbor_list_vns_filter"] == (
+    assert mechanism_bindings["capacity_tightness_removal"] == (
         "target_intent_required"
     )
     assert any(
@@ -157,6 +157,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_route_segment_exchange_reviewed_no_positive",
         "bounded_cross_route_double_bridge_polish_reviewed_no_positive",
         "neighbor_list_vns_filter_reviewed_frozen_unsafe_validation_positive",
+        "frozen_safe_neighbor_list_vns_filter_reviewed_weak_positive_below_mde",
         "operator_pair_destroy_size_bands_reviewed_no_positive",
         "stagnation_adaptive_destroy_size_schedule_reviewed_no_positive",
         "adaptive_embedded_vns_runtime_allocation_reviewed_no_positive",
@@ -198,7 +199,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "frozen_safe_neighbor_list_vns_filter"
+        "capacity_tightness_removal"
     ]
     assert launch_payload["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
@@ -209,6 +210,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_route_segment_exchange",
         "bounded_cross_route_double_bridge_polish",
         "neighbor_list_vns_filter",
+        "frozen_safe_neighbor_list_vns_filter",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
@@ -402,26 +404,26 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert measurement["screening_headroom"]["case_count_gap_pct_at_least_3"] == 12
     assert measurement["top_opportunity_recipe"]["mechanism_id"] == (
-        "frozen_safe_neighbor_list_vns_filter"
+        "capacity_tightness_removal"
     )
     assert measurement["top_opportunity_recipe"]["mechanism_family"] == (
-        "bounded_local_search_variant"
+        "destroy_repair_selection"
     )
     assert measurement["top_opportunity_recipe"]["target_files"] == [
-        "policies/baseline_modules/local_search.py"
+        "policies/baseline_modules/destroy_repair.py"
     ]
     assert (
         measurement["measurable_opportunity_classes"][0]["mechanism_family"]
         == "acceptance_or_adaptive_weighting"
     )
     assert measurement["mechanism_effect_ranking"][0]["mechanism_family"] == (
-        "bounded_local_search_variant"
+        "destroy_repair_selection"
     )
     assert measurement["mechanism_effect_ranking"][0]["opportunity_status"] == (
-        "eligible_same_family_repair"
+        "eligible_clean_fork"
     )
     assert measurement["mechanism_effect_ranking"][0]["evidence_status"] == (
-        "successor34_ready_after_successor33_frozen_unsafe"
+        "successor35_ready_after_successor34_weak_positive_below_mde"
     )
     assert measurement["mechanism_effect_ranking"][2]["mechanism_family"] == (
         "construction_seed_portfolio"
@@ -456,6 +458,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "frozen_safe_neighbor_list_vns_filter" in prepared_manifest[
         "research_focus"
     ]["current_question"]
+    assert "capacity_tightness_removal" in prepared_manifest[
+        "research_focus"
+    ]["current_question"]
     assert (
         "short_horizon_seed_trajectory_selector"
         in prepared_manifest["research_focus"]["current_question"]
@@ -465,7 +470,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
-        "direct local-search telemetry"
+        "direct removal-choice telemetry"
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
@@ -587,6 +592,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "frozen_safe_neighbor_list_vns_filter" in prepared_manifest[
         "research_focus"
     ]["next_required_direction"]
+    assert "capacity_tightness_removal" in prepared_manifest[
+        "research_focus"
+    ]["next_required_direction"]
     assert (
         "telemetry-only q-audit repair"
         in prepared_manifest["research_focus"]["next_required_direction"]
@@ -641,7 +649,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
     assert prepared_manifest["research_focus"][
         "target_intent_required_mechanism_ids"
-    ] == ["frozen_safe_neighbor_list_vns_filter"]
+    ] == ["capacity_tightness_removal"]
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -651,6 +659,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_route_segment_exchange",
         "bounded_cross_route_double_bridge_polish",
         "neighbor_list_vns_filter",
+        "frozen_safe_neighbor_list_vns_filter",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
@@ -717,9 +726,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         ]
     )
     assert any(
-        "bounded_local_search_variant" in item
-        and "frozen_safe_neighbor_list_vns_filter" in item
-        and "existing VNS neighborhood candidate enumeration" in item
+        "destroy_repair_selection" in item
+        and "capacity_tightness_removal" in item
+        and "source route slack/load" in item
         for item in prepared_manifest["research_focus"][
             "measurable_opportunity_classes"
         ]
@@ -819,8 +828,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prepared_manifest_md
     assert "screening_headroom" in prepared_manifest_md
     assert "mechanism_effect_ranking" in prepared_manifest_md
-    assert "eligible_same_family_repair" in prepared_manifest_md
+    assert "eligible_clean_fork" in prepared_manifest_md
     assert "frozen_safe_neighbor_list_vns_filter" in prepared_manifest_md
+    assert "capacity_tightness_removal" in prepared_manifest_md
     assert "route_pair_overlap_removal" in prepared_manifest_md
     assert "route-pair-overlap line is parked" in prepared_manifest_md
     assert "eligible_only_if_materially_different_or_telemetry_audit" in prepared_manifest_md

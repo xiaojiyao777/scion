@@ -45,7 +45,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         mechanism.mechanism_id
         for mechanism in contract.required_mechanisms
         if mechanism.hypothesis_mechanism_binding == "target_intent_required"
-    ] == ["frozen_safe_neighbor_list_vns_filter"]
+    ] == ["capacity_tightness_removal"]
     assert any(
         "total_distance delta by case and seed" in field
         for requirement in contract.evidence_requirements
@@ -101,7 +101,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     )
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "frozen_safe_neighbor_list_vns_filter"
+        "capacity_tightness_removal"
     ]
 
 
@@ -121,7 +121,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
     assert focus["target_intent_required_mechanism_ids"] == [
-        "frozen_safe_neighbor_list_vns_filter"
+        "capacity_tightness_removal"
     ]
     assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
@@ -132,6 +132,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_route_segment_exchange",
         "bounded_cross_route_double_bridge_polish",
         "neighbor_list_vns_filter",
+        "frozen_safe_neighbor_list_vns_filter",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
@@ -175,7 +176,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     ]
     assert "neighbor_list_vns_filter" in focus["current_question"]
     assert "frozen_safe_neighbor_list_vns_filter" in focus["current_question"]
-    assert "VNS neighborhood candidate enumeration" in focus["current_question"]
+    assert "capacity_tightness_removal" in focus["current_question"]
+    assert "capacity-tight" in focus["current_question"]
     assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
     assert "intra_route_or_opt_reinsert" in focus["next_required_direction"]
     assert "bounded_intra_route_3opt" in focus["next_required_direction"]
@@ -225,7 +227,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "next_required_direction"
     ]
     assert "CMT4 median -19.0" in focus["next_required_direction"]
-    assert "policies/baseline_modules/local_search.py" in (
+    assert "policies/baseline_modules/destroy_repair.py" in (
         focus["next_required_direction"]
     )
     assert "`required_mechanism_ids` remains empty" in (
@@ -239,7 +241,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "frozen_safe_neighbor_list_vns_filter" in focus[
         "next_required_direction"
     ]
-    assert "candidate enumeration" in focus["next_required_direction"]
+    assert "capacity_tightness_removal" in focus["next_required_direction"]
     assert "telemetry-only q-audit repair" in focus["next_required_direction"]
     assert "seed-post selector repair is deferred" in (
         focus["next_required_direction"]
@@ -255,13 +257,13 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["required_evidence"]
     )
     assert any(
-        "frozen_safe_neighbor_list_vns_filter" in item
-        and "VNS candidate enumeration" in item
+        "capacity_tightness_removal" in item
+        and "destroy/removal selection" in item
         for item in focus["required_evidence"]
     )
     assert any(
-        "neighbor-list VNS telemetry" in item
-        and "attempted/accepted counts" in item
+        "capacity-tight removal telemetry" in item
+        and "source route load/slack" in item
         for item in focus["required_evidence"]
     )
     assert any(
@@ -434,6 +436,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_route_segment_exchange",
         "bounded_cross_route_double_bridge_polish",
         "neighbor_list_vns_filter",
+        "frozen_safe_neighbor_list_vns_filter",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
@@ -469,6 +472,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "mechanism_family"
     ] == "bounded_local_search_variant"
     assert mechanisms_by_id["bounded_cross_route_double_bridge_polish"][
+        "mechanism_family"
+    ] == "bounded_local_search_variant"
+    assert mechanisms_by_id["frozen_safe_neighbor_list_vns_filter"][
         "mechanism_family"
     ] == "bounded_local_search_variant"
     assert mechanisms_by_id["operator_pair_destroy_size_bands"][
@@ -540,16 +546,20 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["short_horizon_seed_trajectory_selector_v2"][
         "mechanism_family"
     ] == "construction_seed_portfolio"
-    non_successor33 = {
+    no_positive_mechanisms = {
         mechanism_id: item
         for mechanism_id, item in mechanisms_by_id.items()
-        if mechanism_id != "neighbor_list_vns_filter"
+        if mechanism_id
+        not in {
+            "neighbor_list_vns_filter",
+            "frozen_safe_neighbor_list_vns_filter",
+        }
     }
     assert all(
         item["checklist_status"] == "proven"
         and item["outcome_status"] == "measured_no_positive_at_mde"
         and "direct per-case objective-effect evidence" in item["next_use_rule"]
-        for item in non_successor33.values()
+        for item in no_positive_mechanisms.values()
     )
     assert mechanisms_by_id["neighbor_list_vns_filter"]["outcome_status"] == (
         "frozen_unsafe_validation_positive"
@@ -557,6 +567,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["neighbor_list_vns_filter"]["effect_summary"][
         "recommended_followup"
     ] == "frozen_safe_neighbor_list_vns_filter"
+    assert mechanisms_by_id["frozen_safe_neighbor_list_vns_filter"][
+        "outcome_status"
+    ] == "weak_positive_below_mde"
+    assert mechanisms_by_id["frozen_safe_neighbor_list_vns_filter"][
+        "effect_summary"
+    ]["recommended_followup"] == "capacity_tightness_removal"
     assert mechanisms_by_id["bounded_intra_route_3opt"]["effect_summary"][
         "protected_case_cmt2_median_delta"
     ] == -6.5
@@ -702,6 +718,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_route_segment_exchange",
         "bounded_cross_route_double_bridge_polish",
         "neighbor_list_vns_filter",
+        "frozen_safe_neighbor_list_vns_filter",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
@@ -731,7 +748,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         ]
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "frozen_safe_neighbor_list_vns_filter"
+        "capacity_tightness_removal"
     ]
     assert launch_payload["suppressed_mechanism_ids"] == [
         "seed_post_optimization_selector"

@@ -149,6 +149,16 @@ SUCCESSOR34_DESIGN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-design-20260701.md"
 )
+SUCCESSOR34_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-postrun-20260702.md"
+)
+SUCCESSOR35_MECHANISM_ID = "capacity_tightness_removal"
+SUCCESSOR35_TARGET_FILE = "policies/baseline_modules/destroy_repair.py"
+SUCCESSOR35_DESIGN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor35-capacity-tightness-removal-design-20260702.md"
+)
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
     "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
@@ -334,10 +344,13 @@ REVIEWED_SUCCESSOR_GUIDANCE_LINE = (
     f"`{SUCCESSOR32_MECHANISM_ID}` with internal operator-credit movement but "
     "zero objective effect. Successor33 then produced validation-positive "
     f"`{SUCCESSOR33_MECHANISM_ID}` evidence but failed frozen on candidate-side "
-    "timeouts. The next CVRP solver slot should repair that same family with "
-    f"`{SUCCESSOR34_MECHANISM_ID}` in `{SUCCESSOR34_TARGET_FILE}`: preserve "
-    "customer-adjacency filtering of existing VNS neighborhoods while adding "
-    "large-instance deadline guards, bounded fallback, and module boundaries."
+    "timeouts. Successor34 repaired that frozen-safety blocker with "
+    f"`{SUCCESSOR34_MECHANISM_ID}`, but stayed weak-positive below MDE and "
+    "lost CMT2. The next CVRP solver slot should clean-fork to "
+    f"`{SUCCESSOR35_MECHANISM_ID}` in `{SUCCESSOR35_TARGET_FILE}`: a "
+    "capacity-tight destroy/removal selector with direct removal-choice "
+    "objective telemetry, CMT2/CMT4 evidence, and no construction seed, local "
+    "search, scheduler-q, runtime-allocation, or acceptance-policy change."
 )
 
 NEXT_REQUIRED_DIRECTION = (
@@ -476,15 +489,15 @@ NEXT_REQUIRED_DIRECTION = (
     "candidate was negative, but the second customer-adjacency filter passed "
     "screening and validation with active direct telemetry before frozen "
     "abandoned it for candidate-side timeouts. Treat unchanged successor33 as "
-    "frozen-unsafe, not zero-effect. The next CVRP solver slot should repair "
-    f"that line as `{SUCCESSOR34_MECHANISM_ID}`: preserve existing VNS "
-    "neighborhoods and customer-adjacency candidate enumeration filtering, but "
-    "add large-instance deadline guards, bounded fallback, and a modular "
-    "neighbor-filter boundary. "
+    "frozen-unsafe, not zero-effect. Successor34 repaired the timeout blocker "
+    f"as `{SUCCESSOR34_MECHANISM_ID}`, but stayed weak-positive below MDE with "
+    "a CMT2 regression. The next CVRP solver slot should clean-fork to "
+    f"`{SUCCESSOR35_MECHANISM_ID}` in `{SUCCESSOR35_TARGET_FILE}` as a "
+    "capacity-tight destroy/removal selector. "
     "`required_mechanism_ids` remains empty because the guidance is proposal-only "
     "and must not hard-force the Decision path; "
     "`target_intent_required_mechanism_ids` binds only the agentic "
-    "target-intent preflight to successor34. "
+    "target-intent preflight to successor35. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
     "telemetry-only q-audit repair for the missing explicit fields, or when "
@@ -530,32 +543,35 @@ CURRENT_QUESTION = (
     "embedded-VNS runtime allocation plus successor32 post-repair effect "
     "credit weighting were reviewed without positive-at-MDE solver effect, "
     "and successor33 produced validation-positive but frozen-unsafe "
-    f"`{SUCCESSOR33_MECHANISM_ID}` evidence, can "
-    f"`{SUCCESSOR34_MECHANISM_ID}` preserve the customer-adjacency VNS filter "
-    "signal in existing VNS neighborhood candidate enumeration while removing "
-    "candidate-side frozen timeouts through deadline guards, bounded fallback, "
-    "direct local-search telemetry, and CMT2/CMT4/P-family case evidence?"
+    f"`{SUCCESSOR33_MECHANISM_ID}` evidence while successor34 "
+    f"`{SUCCESSOR34_MECHANISM_ID}` repaired the timeout blocker but stayed "
+    "weak-positive below MDE, can "
+    f"`{SUCCESSOR35_MECHANISM_ID}` create a stronger non-seed destroy/repair "
+    "signal by removing customers from capacity-tight routes using route "
+    "slack/load and insertion-pressure evidence, with direct removal-choice "
+    "telemetry and CMT2/CMT4 case evidence?"
 )
 REQUIRED_EVIDENCE = (
     (
-        f"for successor34, live target-intent or hypothesis names "
-        f"`{SUCCESSOR34_MECHANISM_ID}` before code work starts, and explains "
-        "that the causal path is a frozen-safe repair of successor33 "
-        "customer-adjacency VNS candidate enumeration filtering/order rather "
-        "than a new move family, destroy/repair selection, q scheduling, seed "
-        "selection, acceptance probability, operator-credit weighting, or "
-        "embedded-VNS runtime allocation"
+        f"for successor35, live target-intent or hypothesis names "
+        f"`{SUCCESSOR35_MECHANISM_ID}` before code work starts, keeps the "
+        f"target file at `{SUCCESSOR35_TARGET_FILE}`, and explains that the "
+        "causal path is capacity-tight destroy/removal selection rather than "
+        "seed selection, VNS/local-search filtering, q scheduling, acceptance "
+        "probability, operator-credit weighting, or embedded-VNS runtime "
+        "allocation"
     ),
     (
         "for the next CVRP solver design, live target-intent or hypothesis "
-        "records why the route-pair-overlap, bounded double-bridge, and "
-        "adaptive embedded-VNS runtime-allocation lines are parked, then "
-        "targets a materially different non-seed causal path"
+        "records why the route-pair-overlap, bounded double-bridge, adaptive "
+        "embedded-VNS runtime-allocation, and frozen-safe neighbor-list filter "
+        "lines are parked, then targets a materially different non-seed causal "
+        "path"
     ),
     (
-        "neighbor-list VNS telemetry includes existing neighborhood name, "
-        "attempted/accepted counts, direct record_move delta, best-improved "
-        "status, local-search phase runtime, iteration count, and per-case "
+        "capacity-tight removal telemetry includes removed customer ids or "
+        "counts, source route load/slack summaries, removal reason counters, "
+        "repair operator, accepted delta, best-improved status, and per-case "
         "total_distance/feasibility/route-count evidence"
     ),
     (
@@ -603,7 +619,7 @@ REQUIRED_EVIDENCE = (
     (
         "do not revisit rank-gap or route-pressure acceptance gates; "
         "successor32 post-repair operator-credit weighting is now reviewed "
-        "zero-effect evidence and successor34 must keep simulated-annealing "
+        "zero-effect evidence and successor35 must keep simulated-annealing "
         "acceptance logic unchanged"
     ),
     (
@@ -670,8 +686,10 @@ REQUIRED_EVIDENCE = (
         "adaptive_embedded_vns_runtime_allocation after successor31 zero-effect "
         "evidence; do not continue unchanged neighbor_list_vns_filter after "
         "successor33 passed validation but failed frozen on candidate-side "
-        "timeouts. The next solver research slot should repair that path as "
-        "frozen_safe_neighbor_list_vns_filter, with "
+        "timeouts, and do not continue unchanged "
+        "frozen_safe_neighbor_list_vns_filter after successor34 stayed "
+        "weak-positive below MDE with a CMT2 regression. The next solver "
+        "research slot should target capacity_tightness_removal, with "
         "scheduler_destroy_size_policy limited to telemetry-only q-audit "
         "repair or a materially different scheduler-policy causal path, "
         "post_repair_effect_credit_weighting parked as reviewed zero-effect, "
@@ -750,25 +768,28 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         "lookahead_insertion_cost_repair_v2, boundary_spoke_outlier_removal, "
         "edge_conflict_endpoint_removal, route_pair_overlap_removal, and "
         "route_pair_overlap_removal_protected_followup no-positive-at-MDE "
-        "results, "
+        "results, successor35 should target capacity_tightness_removal: remove "
+        "from route-capacity pressure points and record source route slack/load, "
+        "removed count, repair operator, and accepted objective effect. "
         "require a destroy/repair causal path distinct from those removal and "
         "repair paths"
     ),
     (
         "bounded_local_search_variant: require feasible route-level "
-        "objective deltas with bounded search effort. Successor34 should "
-        f"target `{SUCCESSOR34_MECHANISM_ID}` in `{SUCCESSOR34_TARGET_FILE}` "
-        "by preserving successor33 customer-adjacency filtering for existing "
-        "VNS neighborhood candidate enumeration while adding large-instance "
-        "deadline guards and bounded fallback, not by adding a new move "
-        "family. Require attempted/accepted counts, direct record_move delta, "
+        "objective deltas with bounded search effort. Successor34 "
+        f"`{SUCCESSOR34_MECHANISM_ID}` is now reviewed weak-positive below "
+        "MDE after repairing successor33's frozen timeout blocker. Do not "
+        "continue unchanged neighbor-list filtering unless a future proposal "
+        "names a materially new local-search causal path and direct effect. "
+        "Require attempted/accepted counts, direct record_move delta, "
         "best-improved status, phase runtime, iteration count, budget-stop/"
         "fallback/skipped counters, and per-case total_distance/feasibility/"
         "route-count evidence; after the reviewed "
         "bounded_2node_cross_exchange, intra_route_or_opt_reinsert, "
         "bounded_intra_route_3opt, bounded_ejection_chain_relocate, and "
         "bounded_cross_route_double_bridge_polish plus frozen-unsafe "
-        "neighbor_list_vns_filter evidence, require a bounded-local-search causal "
+        "neighbor_list_vns_filter and weak-positive-below-MDE "
+        "frozen_safe_neighbor_list_vns_filter evidence, require a bounded-local-search causal "
         "path distinct from cross-exchange, same-route Or-opt reinsertion, "
         "3-opt, ejection-chain relocation, double-bridge polish, and the "
         "unchanged frozen-unsafe successor33 implementation"
@@ -828,15 +849,16 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "zero-effect screening. Successor32 post-repair effect credit weighting "
     "also completed valid zero-objective-effect screening. Successor33 "
     "neighbor-list VNS filtering produced positive screening and validation "
-    "evidence, then failed frozen on candidate-side timeouts. The next CVRP "
-    "solver slot should repair that path as "
-    f"`{SUCCESSOR34_MECHANISM_ID}` in `{SUCCESSOR34_TARGET_FILE}`: preserve "
-    "customer-adjacency filtering of existing VNS candidate enumeration, add "
-    "large-instance deadline guards and bounded fallback around candidate "
-    "enumeration, but keep "
-    "destroy/repair selection, construction seeds, embedded-VNS runtime "
-    "allocation, operator-credit weighting, and simulated-annealing acceptance "
-    "logic unchanged. Scheduler destroy-size "
+    "evidence, then failed frozen on candidate-side timeouts. Successor34 "
+    "repaired the timeout blocker, but both screened rows stayed below MDE "
+    "(best median delta 0.25, CI high 3.25) and CMT2 remained negative. Treat "
+    "unchanged successor34 as reviewed weak-positive below MDE, not "
+    "promotion-grade evidence. The next CVRP solver slot should clean-fork to "
+    f"`{SUCCESSOR35_MECHANISM_ID}` in `{SUCCESSOR35_TARGET_FILE}`: select "
+    "removals from capacity-tight routes using route slack/load and local "
+    "insertion-pressure evidence, while keeping seed construction, VNS local "
+    "search, scheduler q, runtime allocation, operator credit, and acceptance "
+    "policy unchanged. Scheduler destroy-size "
     "policy remains allowed only as "
     "telemetry-only q-audit repair or a materially different scheduler-policy "
     "causal path; insertion-cost lookahead repair and post-repair effect "
@@ -935,7 +957,7 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [SUCCESSOR34_MECHANISM_ID],
+        "target_intent_required_mechanism_ids": [SUCCESSOR35_MECHANISM_ID],
         "reviewed_mechanism_ids": list(REVIEWED_MECHANISM_IDS),
         "suppressed_mechanism_ids": list(SUPPRESSED_MECHANISM_IDS),
         "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
@@ -962,20 +984,19 @@ def build_cvrp_legacy_research_focus(
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
     return (
         RequiredMechanism(
-            mechanism_id=SUCCESSOR34_MECHANISM_ID,
-            category="successor34_target_intent_focus",
+            mechanism_id=SUCCESSOR35_MECHANISM_ID,
+            category="successor35_target_intent_focus",
             description=(
-                "Bind only the agentic target-intent preflight to successor34: "
-                "repair the neighbor-list VNS filter with frozen-safe deadline "
-                f"guards and bounded fallback in {SUCCESSOR34_TARGET_FILE} "
-                "before formal code work starts."
+                "Bind only the agentic target-intent preflight to successor35: "
+                "test capacity-tight destroy/removal selection in "
+                f"{SUCCESSOR35_TARGET_FILE} before formal code work starts."
             ),
             required_observations=(
-                "target-intent mechanism_id names frozen_safe_neighbor_list_vns_filter",
-                "formal mechanism_changes use the same successor34 mechanism id",
+                "target-intent mechanism_id names capacity_tightness_removal",
+                "formal mechanism_changes use the same successor35 mechanism id",
                 (
-                    "local-search telemetry records candidate filtering "
-                    "objective effect plus frozen-safe budget/fallback counters"
+                    "destroy/repair telemetry records source route load/slack, "
+                    "removed count, repair operator, and objective effect"
                 ),
             ),
             protected_items=PROTECTED_CASES,
@@ -1008,7 +1029,9 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "material causal-path difference from reviewed route-segment exchange",
                 "material causal-path difference from reviewed double-bridge polish",
                 "neighbor-list candidate filtering/order evidence when using bounded_local_search_variant",
-                "local-search attempted/accepted counts and record_move delta under the successor34 mechanism id",
+                "local-search attempted/accepted counts and record_move delta when revisiting bounded_local_search_variant",
+                "capacity-tight removal source route load/slack evidence under the successor35 mechanism id",
+                "capacity-tight removal removed count, repair operator, and record_move delta under the successor35 mechanism id",
                 "scheduler destroy-size baseline_q/adapted_q/q_delta evidence when using scheduler_destroy_size_policy",
                 "nonzero aligned candidate/champion q deltas before objective-effect interpretation",
                 "post-repair operator-credit old score and new credit when using acceptance_or_adaptive_weighting",

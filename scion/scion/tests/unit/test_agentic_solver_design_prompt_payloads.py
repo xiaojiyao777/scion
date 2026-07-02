@@ -146,15 +146,15 @@ def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None
 
     assert "Solver-design target-selection guidance" in user_prompt
     assert "Current CVRP target-selection guidance" in user_prompt
-    assert "policies/baseline_modules/local_search.py" in user_prompt
-    assert "successor34 should select" in user_prompt
-    assert "`frozen_safe_neighbor_list_vns_filter`" in user_prompt
-    assert "existing VNS neighborhood candidate enumeration" in user_prompt
-    assert "destroy/repair pair selection, q scheduling" in user_prompt
-    assert "A non-local-search target is not preferred for the current successor34 slot" in (
+    assert "policies/baseline_modules/destroy_repair.py" in user_prompt
+    assert "successor35 should select" in user_prompt
+    assert "`capacity_tightness_removal`" in user_prompt
+    assert "route load/slack and insertion-pressure evidence" in user_prompt
+    assert "VNS/local-search filter, q scheduling" in user_prompt
+    assert "A non-destroy/repair target is not preferred for the current successor35 slot" in (
         user_prompt
     )
-    assert "neighborhood name, attempted/accepted counts" in user_prompt
+    assert "source route load/slack, removed count" in user_prompt
     assert "Current route-merge branch lesson" in user_prompt
     assert "`policies/baseline_modules/destroy_repair.py`" in user_prompt
     assert "`expand_screening` evidence (`10/3/19`" in user_prompt

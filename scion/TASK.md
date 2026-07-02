@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `v0.4-dev`*
-*Last updated: 2026-07-01*
+*Last updated: 2026-07-02*
 
 This is the active task definition for closing v0.4. It is not a run log.
 Historical launch/root details live in focused experiment reports, sparse
@@ -56,10 +56,13 @@ reviewed/default-avoid too.
 Successor33 then tested `neighbor_list_vns_filter` in
 `policies/baseline_modules/local_search.py`. The second customer-adjacency
 candidate passed screening and validation with active telemetry, but frozen
-abandoned it for six candidate-side large-instance timeouts. Treat successor33
-as validation-positive but frozen-unsafe, not as zero-effect and not as
-promotion-grade. The next prepared CVRP slot is successor34:
-`frozen_safe_neighbor_list_vns_filter`.
+abandoned it for six candidate-side large-instance timeouts. Successor34 then
+tested `frozen_safe_neighbor_list_vns_filter`; it completed valid/complete/
+postrun-ready and removed the frozen timeout blocker, but stayed weak-positive
+below MDE (best median `0.25`, CI high `3.25`) and CMT2 remained negative.
+Treat unchanged successor34 as reviewed/default-avoid for v0.4. The next
+prepared CVRP slot is successor35: `capacity_tightness_removal` in
+`policies/baseline_modules/destroy_repair.py`.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -216,10 +219,14 @@ Open blockers before v0.4 closeout:
   failure. Its first candidate was negative, but the second customer-adjacency
   filter passed screening (`20/6/6`, median `6.25`) and validation (`24/7/1`,
   median `7.75`) before frozen failed on six candidate-side timeouts across
-  large X cases. Treat unchanged successor33 as frozen-unsafe. The next
-  CVRP slot should test `frozen_safe_neighbor_list_vns_filter`, preserving the
-  validation-positive customer-adjacency filter while adding deadline guards,
-  bounded fallback, timeout telemetry, and a modular neighbor-filter boundary.
+  large X cases. Successor34 then tested `frozen_safe_neighbor_list_vns_filter`
+  and completed valid/complete/postrun-ready. It removed the frozen timeout
+  blocker but did not preserve enough solver signal: the best row had median
+  delta `0.25`, CI `[0.0, 3.25]`, no positive-at-MDE evidence, and CMT2 median
+  `-11.0`. Treat unchanged successor34 as reviewed weak-positive below MDE.
+  The next CVRP slot should clean-fork to `capacity_tightness_removal` in
+  `policies/baseline_modules/destroy_repair.py`, a non-seed destroy/removal
+  selection path with direct capacity-tight route evidence.
 - Several production/test files remain over the 1000-line risk threshold and
   need design-first modularization before more behavior is added there.
 - v0.5 governance ablation is preregistered as a clean experiment matrix, but
@@ -518,21 +525,17 @@ from the current checkout.
    proposal target binding works and the mechanism can activate, but it did not
    produce positive-at-MDE or case-gate objective evidence. Do not relaunch the
    unchanged operator-credit mechanism.
-8. Treat successor33 as validation-positive but frozen-unsafe evidence for
-   `neighbor_list_vns_filter`; do not rerun the unchanged implementation and
-   do not park the whole family as zero-effect. The successor34 design is
-   `frozen_safe_neighbor_list_vns_filter`, owned by
-   `policies/baseline_modules/local_search.py`, with a preferred modular
-   neighbor-filter boundary if the generated patch can add files. Problem-owned
-   CVRP guidance now binds target intent to successor34 through
-   `target_intent_required_mechanism_ids=["frozen_safe_neighbor_list_vns_filter"]`
-   and marks unchanged successor33 as reviewed/default-avoid unless the
-   proposal adds frozen-safe deadline guards, bounded fallback, and timeout
-   telemetry. The server-local `claw` successor34 run is launched at
-   `/home/clawd/research/scion-experiments/v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-server-2r-gpt55-20260701T192249Z-claw`;
-   completion preflight passed, hard required mechanisms are empty, and the
-   first target-intent/formal hypotheses stayed on
-   `frozen_safe_neighbor_list_vns_filter`.
+8. Treat successor34 as valid weak-positive below-MDE evidence for
+   `frozen_safe_neighbor_list_vns_filter`: no model/quality/telemetry/postrun
+   failure and no frozen timeout blocker, but no positive-at-MDE row and CMT2
+   remained negative. Do not continue the unchanged neighbor-list filter line
+   in the next slot. Problem-owned CVRP guidance now binds target intent to
+   successor35 through
+   `target_intent_required_mechanism_ids=["capacity_tightness_removal"]` and
+   points the next run at `policies/baseline_modules/destroy_repair.py`.
+   Successor35 should test a non-seed capacity-tight destroy/removal path with
+   source route slack/load, removed-count, repair-operator, feasibility,
+   route-count, total-distance, and CMT2/CMT4 evidence.
 9. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 10. Keep the v0.5 governance ablation frozen as a preregistered design; do not

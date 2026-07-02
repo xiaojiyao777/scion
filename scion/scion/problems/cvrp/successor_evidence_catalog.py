@@ -128,6 +128,33 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "frozen_safe_neighbor_list_vns_filter",
+        "mechanism_family": "bounded_local_search_variant",
+        "path_label": "frozen-safe neighbor-list VNS filter path",
+        "causal_path_label": "frozen-safe neighbor-list VNS candidate filtering",
+        "outcome_status": "weak_positive_below_mde",
+        "effect_summary": {
+            "row1_median_delta": 0.0,
+            "row1_ci_low": -3.0,
+            "row1_ci_high": 0.25,
+            "row2_median_delta": 0.25,
+            "row2_ci_low": 0.0,
+            "row2_ci_high": 3.25,
+            "max_median_delta": 0.25,
+            "max_effect_to_mde_ratio": 0.025253,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 1,
+            "screening_case_wins": 5,
+            "screening_case_losses": 3,
+            "screening_case_ties": 8,
+            "protected_case_cmt2_median_delta": -11.0,
+            "protected_case_cmt4_median_delta": 0.0,
+            "interpretation": "frozen_safe_but_low_snr_weak_positive_below_mde",
+            "recommended_followup": "capacity_tightness_removal",
+            "source_root_label": "successor34",
+        },
+    },
+    {
         "mechanism_id": "operator_pair_destroy_size_bands",
         "mechanism_family": "scheduler_destroy_size_policy",
         "path_label": "operator-pair destroy-size band scheduler path",
@@ -777,6 +804,11 @@ DEFAULT_AVOID_DIRECTIONS = (
         "filter after successor33 passed screening/validation but failed "
         "frozen on candidate-side timeouts; continue only with frozen-safe "
         "deadline guards and a materially repaired implementation"
+    ),
+    (
+        "unchanged frozen_safe_neighbor_list_vns_filter bounded-local-search "
+        "candidate filter after successor34 removed the frozen timeout blocker "
+        "but stayed weak-positive below MDE with a CMT2 regression"
     ),
     (
         "unchanged seed_post_optimization_selector construction post-optimization "

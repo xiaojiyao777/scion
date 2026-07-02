@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-07-01
+Last updated: 2026-07-02
 
 This file is the operational resume point, not a run log. Historical root
 chronology belongs in focused experiment reports, sparse milestones, and git
@@ -115,10 +115,12 @@ The remaining closeout gaps are:
   valid/complete/postrun-ready. The first candidate was negative, but the
   second customer-adjacency filter passed screening (`20/6/6`, median `6.25`)
   and validation (`24/7/1`, median `7.75`) with active telemetry before frozen
-  abandoned it for six candidate-side timeouts on large X cases. Treat
-  unchanged successor33 as validation-positive but frozen-unsafe. The current
-  next slot is `frozen_safe_neighbor_list_vns_filter`, not an unchanged rerun
-  and not a pivot away from the family.
+  abandoned it for six candidate-side timeouts on large X cases. Successor34
+  then tested `frozen_safe_neighbor_list_vns_filter` and completed
+  valid/complete/postrun-ready. It removed the frozen timeout blocker, but the
+  best row stayed weak-positive below MDE (median `0.25`, CI high `3.25`) and
+  CMT2 remained negative. The current next slot is
+  `capacity_tightness_removal` in `policies/baseline_modules/destroy_repair.py`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -432,13 +434,18 @@ CVRP:
   passed screening (`20/6/6`, median `6.25`) and validation (`24/7/1`, median
   `7.75`) with active mechanism telemetry. Frozen abandoned the branch for
   six candidate-side large-instance timeouts, so there was no promotion. Treat
-  successor33 as validation-positive but frozen-unsafe. Successor34 is designed
-  as `frozen_safe_neighbor_list_vns_filter`: preserve the same filter signal,
-  add deadline guards, bounded fallback, timeout telemetry, and a modular
-  neighbor-filter boundary. Postrun:
+  successor33 as validation-positive but frozen-unsafe. Successor34 then
+  tested `frozen_safe_neighbor_list_vns_filter` and completed
+  valid/complete/postrun-ready, but stayed weak-positive below MDE with CMT2
+  negative. Treat unchanged successor34 as reviewed/default-avoid for v0.4.
+  Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor33-neighbor-list-vns-filter-postrun-20260701.md`.
-  Design:
+  Successor34 design:
   `scion/docs/experiments/v0.4/v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-design-20260701.md`.
+  Successor34 postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-postrun-20260702.md`.
+  Successor35 design:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor35-capacity-tightness-removal-design-20260702.md`.
 - Successor22a was stopped before formal screening because the live hypothesis
   drifted to `bounded_repair_retry_on_reject`; treat it as a wrong-mechanism
   diagnostic, not solver evidence.
@@ -477,21 +484,17 @@ CVRP:
    proposal binding and mechanism telemetry work, but it produced no
    positive-at-MDE or case-gate objective evidence. Do not relaunch the
    unchanged operator-credit mechanism.
-8. Treat successor33 as validation-positive but frozen-unsafe evidence for
-   `neighbor_list_vns_filter`. Do not rerun the unchanged implementation, and
-   do not park the whole family as zero-effect. The successor34 design is
-   `frozen_safe_neighbor_list_vns_filter`, owned by
-   `policies/baseline_modules/local_search.py`, with a preferred modular
-   neighbor-filter boundary if the generated patch can add files. Problem-owned
-   CVRP guidance now binds target intent to successor34 through
-   `target_intent_required_mechanism_ids=["frozen_safe_neighbor_list_vns_filter"]`
-   and marks unchanged successor33 as reviewed/default-avoid unless the
-   proposal adds frozen-safe deadline guards, bounded fallback, and timeout
-   telemetry. The server-local `claw` successor34 run is launched at
-   `/home/clawd/research/scion-experiments/v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-server-2r-gpt55-20260701T192249Z-claw`;
-   completion preflight passed, hard required mechanisms are empty, and the
-   first target-intent/formal hypotheses stayed on
-   `frozen_safe_neighbor_list_vns_filter`.
+8. Treat successor34 as valid weak-positive below-MDE evidence for
+   `frozen_safe_neighbor_list_vns_filter`: no model/quality/telemetry/postrun
+   failure and no frozen timeout blocker, but no positive-at-MDE row and CMT2
+   remained negative. Do not continue the unchanged neighbor-list filter line
+   in the next slot. Problem-owned CVRP guidance now binds target intent to
+   successor35 through
+   `target_intent_required_mechanism_ids=["capacity_tightness_removal"]` and
+   points the next run at `policies/baseline_modules/destroy_repair.py`.
+   Successor35 should test a non-seed capacity-tight destroy/removal path with
+   source route slack/load, removed-count, repair-operator, feasibility,
+   route-count, total-distance, and CMT2/CMT4 evidence.
 9. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 10. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
@@ -653,6 +656,10 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
   `scion/docs/experiments/v0.4/v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-design-20260701.md`
 - CVRP successor34 frozen-safe neighbor-list VNS filter in-flight:
   `scion/docs/experiments/v0.4/v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-inflight-20260701.md`
+- CVRP successor34 frozen-safe neighbor-list VNS filter postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-postrun-20260702.md`
+- CVRP successor35 capacity-tightness removal design:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor35-capacity-tightness-removal-design-20260702.md`
 - CVRP deferred seed-post selector activation plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor21-seed-post-selector-activation-plan-20260629.md`
 - v0.4 large-file modularization plan:

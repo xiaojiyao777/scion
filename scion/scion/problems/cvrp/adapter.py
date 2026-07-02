@@ -39,9 +39,9 @@ from scion.problems.cvrp.research_guidance import (
     PROTECTED_CASES,
     SUCCESSOR32_MECHANISM_ID,
     SUCCESSOR32_TARGET_FILE,
-    SUCCESSOR34_DESIGN_PATH,
-    SUCCESSOR34_MECHANISM_ID,
-    SUCCESSOR34_TARGET_FILE,
+    SUCCESSOR35_DESIGN_PATH,
+    SUCCESSOR35_MECHANISM_ID,
+    SUCCESSOR35_TARGET_FILE,
     SUCCESSOR_OPPORTUNITY_FAMILIES,
 )
 from scion.problems.cvrp.surface_policy import (
@@ -62,8 +62,8 @@ CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE = (
 CVRP_SUCCESSOR32_FOCUS_FAILURE = (
     "agent_quality_blocked:cvrp_successor32_focus_mismatch"
 )
-CVRP_SUCCESSOR34_FOCUS_FAILURE = (
-    "agent_quality_blocked:cvrp_successor34_focus_mismatch"
+CVRP_SUCCESSOR35_FOCUS_FAILURE = (
+    "agent_quality_blocked:cvrp_successor35_focus_mismatch"
 )
 
 
@@ -133,29 +133,27 @@ class CvrpAdapter:
         change_locus = str(getattr(hypothesis, "change_locus", "") or "").strip()
         target_file = str(getattr(hypothesis, "target_file", "") or "").strip()
         if change_locus != "solver_design":
-            return {"allowed": True, "gate_name": "cvrp_successor34_focus"}
-        if target_file == SUCCESSOR34_TARGET_FILE:
-            gate_name = "cvrp_successor34_focus"
-            failure_code = CVRP_SUCCESSOR34_FOCUS_FAILURE
-            required_mechanism_id = SUCCESSOR34_MECHANISM_ID
-            required_target_file = SUCCESSOR34_TARGET_FILE
-            successor_label = "successor34 frozen-safe neighbor-list VNS filter"
+            return {"allowed": True, "gate_name": "cvrp_successor35_focus"}
+        if target_file == SUCCESSOR35_TARGET_FILE:
+            gate_name = "cvrp_successor35_focus"
+            failure_code = CVRP_SUCCESSOR35_FOCUS_FAILURE
+            required_mechanism_id = SUCCESSOR35_MECHANISM_ID
+            required_target_file = SUCCESSOR35_TARGET_FILE
+            successor_label = "successor35 capacity-tightness removal"
             required_causal_path = (
-                "frozen-safe customer-adjacency filtering/order for existing "
-                "VNS neighborhood candidate enumeration with deadline guards "
-                "and bounded fallback"
+                "capacity-tight destroy/removal selection using route slack, "
+                "route load, and insertion-pressure evidence"
             )
             retry_constraint = (
                 "Redraft the CVRP solver-design hypothesis as the "
-                "successor34 frozen-safe neighbor-list VNS filter: declare "
-                f"mechanism `{SUCCESSOR34_MECHANISM_ID}`, keep the target "
-                f"file at `{SUCCESSOR34_TARGET_FILE}`, and describe "
-                "customer-adjacency candidate filtering/order inside existing "
-                "VNS neighborhoods plus large-instance deadline guards, "
-                "bounded fallback, and budget-stop telemetry. "
-                "Do not switch to destroy/repair selection, q scheduling, seed "
-                "selection, acceptance probability, operator-credit weighting, "
-                "embedded-VNS runtime allocation, or a new local-search move family."
+                "successor35 capacity-tightness removal mechanism: declare "
+                f"mechanism `{SUCCESSOR35_MECHANISM_ID}`, keep the target "
+                f"file at `{SUCCESSOR35_TARGET_FILE}`, and describe how route "
+                "load/slack plus insertion pressure selects customers for "
+                "destroy/repair removal with direct objective telemetry. "
+                "Do not switch to seed selection, VNS/local-search filtering, "
+                "q scheduling, acceptance probability, operator-credit "
+                "weighting, or embedded-VNS runtime allocation."
             )
         elif target_file == SUCCESSOR32_TARGET_FILE:
             gate_name = "cvrp_successor32_focus"
@@ -178,7 +176,7 @@ class CvrpAdapter:
                 "acceptance probability, or embedded-VNS runtime allocation."
             )
         else:
-            return {"allowed": True, "gate_name": "cvrp_successor34_focus"}
+            return {"allowed": True, "gate_name": "cvrp_successor35_focus"}
 
         mechanism_ids: list[str] = []
         for change in getattr(hypothesis, "mechanism_changes", ()) or ():
@@ -450,19 +448,19 @@ class CvrpAdapter:
                     "mechanism_family": "destroy_repair_selection",
                     "required_evidence": (
                         "per-case total_distance delta tied to the changed "
-                        "repair or removal choice; successor29 parked the "
-                        "route-pair-overlap line for v0.4, so do not continue "
-                        "unchanged route-pair overlap variants"
+                        "repair or removal choice; successor35 should test "
+                        "capacity_tightness_removal as a non-seed clean fork, "
+                        "and successor29 parked the route-pair-overlap line "
+                        "for v0.4"
                     ),
                 },
                 {
                     "mechanism_family": "bounded_local_search_variant",
                     "required_evidence": (
-                        "successor34 frozen-safe neighbor-list VNS filtering/"
-                        "order: feasible route-level objective deltas, "
-                        "attempted/accepted move counts, record_move delta, "
-                        "phase runtime, iteration count, bounded candidate "
-                        "enumeration, and budget/fallback/timeout evidence"
+                        "successor34 frozen-safe neighbor-list VNS filtering "
+                        "is now reviewed weak-positive below MDE; revisit "
+                        "bounded local search only with a materially new "
+                        "causal path and direct per-case objective evidence"
                     ),
                 },
                 {
@@ -491,29 +489,23 @@ class CvrpAdapter:
                 "schema_version": "scion.cvrp_opportunity_recipe.v1",
                 "proposal_visibility_only": True,
                 "decision_features_excluded": True,
-                "mechanism_family": "bounded_local_search_variant",
-                "mechanism_id": SUCCESSOR34_MECHANISM_ID,
-                "review_status": "successor34_ready_after_successor33_frozen_unsafe",
+                "mechanism_family": "destroy_repair_selection",
+                "mechanism_id": SUCCESSOR35_MECHANISM_ID,
+                "review_status": "successor35_ready_after_successor34_weak_positive_below_mde",
                 "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
                 "target_surface": "solver_design",
-                "target_files": [SUCCESSOR34_TARGET_FILE],
-                "design_path": SUCCESSOR34_DESIGN_PATH,
+                "target_files": [SUCCESSOR35_TARGET_FILE],
+                "design_path": SUCCESSOR35_DESIGN_PATH,
                 "next_required_direction": NEXT_REQUIRED_DIRECTION,
                 "required_observations": [
                     (
                         "exact mechanism id "
-                        f"{SUCCESSOR34_MECHANISM_ID} before code work starts"
+                        f"{SUCCESSOR35_MECHANISM_ID} before code work starts"
                     ),
-                    (
-                        "existing VNS neighborhood name plus attempted and "
-                        "accepted move counts"
-                    ),
-                    (
-                        "customer-adjacency candidate filtering scope, "
-                        "deadline guard, and bounded fallback behavior"
-                    ),
+                    "source route capacity slack/load and removed-customer count",
+                    "repair operator used after the capacity-tight removal set",
                     "record_move direct effect and best-improved status under the mechanism id",
-                    "phase runtime and iteration count for the filtered VNS path",
+                    "phase runtime or iteration count for the destroy/repair path",
                     "feasibility, route-count, runtime budget, and timeout evidence",
                     "CMT2/CMT4 case-level evidence or an explicit caveat",
                     "effect-vs-MDE interpretation",
@@ -558,9 +550,8 @@ class CvrpAdapter:
                         "effect credit weighting"
                     ),
                     (
-                        "do not add a new local-search move family for "
-                        "successor34; the causal path is frozen-safe candidate "
-                        "filtering inside existing VNS neighborhoods"
+                        "do not continue unchanged successor34-style "
+                        "frozen-safe neighbor-list filtering"
                     ),
                     (
                         "do not hardcode case ids, reference objective values, "
@@ -568,10 +559,9 @@ class CvrpAdapter:
                         "candidate filter"
                     ),
                     (
-                        "keep the local_search.py change narrow; if the "
-                        "candidate-index structure grows beyond local scope, "
-                        "keep it as a coherent problem-owned module rather "
-                        "than adding helper sprawl to an oversized file"
+                        "keep destroy_repair.py as the integration layer; if "
+                        "capacity scoring grows, split it into a coherent "
+                        "problem-owned module instead of helper sprawl"
                     ),
                     (
                         "keep CVRP semantics in problem-owned solver files and "
@@ -595,6 +585,7 @@ class CvrpAdapter:
                     "unchanged route_pair_overlap_removal_protected_followup",
                     "unchanged bounded_cross_route_double_bridge_polish",
                     "unchanged neighbor_list_vns_filter without frozen-safe guards",
+                    "unchanged frozen_safe_neighbor_list_vns_filter",
                     "unchanged adaptive_embedded_vns_runtime_allocation",
                     "unchanged post_repair_effect_credit_weighting",
                     "same-family scheduler q changes without explicit q-audit fields",
@@ -603,10 +594,10 @@ class CvrpAdapter:
             "mechanism_effect_ranking": [
                 {
                     "rank": 1,
-                    "mechanism_family": "bounded_local_search_variant",
-                    "evidence_status": "successor34_ready_after_successor33_frozen_unsafe",
-                    "opportunity_status": "eligible_same_family_repair",
-                    "effect_status": "validation_positive_frozen_unsafe",
+                    "mechanism_family": "destroy_repair_selection",
+                    "evidence_status": "successor35_ready_after_successor34_weak_positive_below_mde",
+                    "opportunity_status": "eligible_clean_fork",
+                    "effect_status": "untested_capacity_tightness_path",
                     "summary": (
                         "Successor28/29 parked route-pair-overlap follow-ups, "
                         "successor30 parked bounded cross-route double-bridge "
@@ -615,20 +606,21 @@ class CvrpAdapter:
                         "operator-credit movement but zero objective effect. "
                         "Successor33 neighbor_list_vns_filter then passed "
                         "screening/validation but failed frozen on candidate "
-                        "timeouts. The next slot should repair that line with "
-                        "frozen_safe_neighbor_list_vns_filter."
+                        "timeouts; successor34 repaired the timeout blocker "
+                        "but stayed weak-positive below MDE and lost CMT2. "
+                        "The next slot should test capacity_tightness_removal."
                     ),
                     "recommended_action": (
-                        "Target policies/baseline_modules/local_search.py and "
-                        "record neighborhood name, attempted/accepted counts, "
-                        "record_move delta, best-improved status, phase runtime, "
-                        "iterations, budget/fallback/timeout counters, and "
-                        "per-case total_distance evidence."
+                        "Target policies/baseline_modules/destroy_repair.py "
+                        "and record source route load/slack, removed count, "
+                        "repair operator, record_move delta, best-improved "
+                        "status, phase/runtime evidence, and per-case "
+                        "total_distance evidence."
                     ),
                     "reason_codes": [
-                        "SUCCESSOR34_FROZEN_SAFE_NEIGHBOR_LIST_READY",
+                        "SUCCESSOR35_CAPACITY_TIGHTNESS_READY",
+                        "SUCCESSOR34_WEAK_POSITIVE_BELOW_MDE",
                         "SUCCESSOR33_VALIDATION_POSITIVE_FROZEN_UNSAFE",
-                        "SUCCESSOR31_ZERO_EFFECT_DEFAULT_AVOID",
                         "ROUTE_PAIR_OVERLAP_LINE_PARKED",
                         "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
                     ],
@@ -819,30 +811,50 @@ class CvrpAdapter:
                     ],
                 },
                 {
-                    "diagnostic_type": "successor34_frozen_safe_neighbor_list_vns_filter",
+                    "diagnostic_type": "successor34_frozen_safe_neighbor_list_reviewed",
                     "surface": "solver_design",
                     "mechanism_family": "bounded_local_search_variant",
                     "metric": "total_distance",
                     "summary": (
-                        "Successor33 proved customer-adjacency VNS filtering "
-                        "can pass screening and validation, but frozen failed "
-                        "on candidate-side timeouts. Successor34 should repair "
-                        "that path with deadline guards, bounded fallback, and "
-                        "budget-stop telemetry."
+                        "Successor34 repaired successor33's frozen timeout "
+                        "blocker, but the screened effect stayed weak-positive "
+                        "below MDE and CMT2 remained negative."
                     ),
                     "recommended_action": (
-                        "Target frozen_safe_neighbor_list_vns_filter in "
-                        "policies/baseline_modules/local_search.py and record "
-                        "neighborhood name, attempted/accepted counts, "
-                        "record_move delta, best-improved status, phase runtime, "
-                        "iterations, fallback/skipped/budget-stop counters, "
-                        "and formal per-case objective deltas."
+                        "Do not continue unchanged frozen_safe_neighbor_list_vns_filter "
+                        "in the next slot; only revisit bounded local search "
+                        "with a materially new causal path and direct effect."
                     ),
                     "confidence": "medium",
                     "reason_codes": [
-                        "SUCCESSOR34_FROZEN_SAFE_NEIGHBOR_LIST_READY",
-                        "SUCCESSOR33_VALIDATION_POSITIVE_FROZEN_UNSAFE",
-                        "BOUNDED_LOCAL_SEARCH_DIRECT_EFFECT_REQUIRED",
+                        "SUCCESSOR34_WEAK_POSITIVE_BELOW_MDE",
+                        "SUCCESSOR34_CMT2_NEGATIVE",
+                        "BOUNDED_LOCAL_SEARCH_REVIEWED_DEFAULT_AVOID",
+                    ],
+                },
+                {
+                    "diagnostic_type": "successor35_capacity_tightness_removal",
+                    "surface": "solver_design",
+                    "mechanism_family": "destroy_repair_selection",
+                    "metric": "total_distance",
+                    "summary": (
+                        "The next non-seed clean fork should test capacity-tight "
+                        "destroy/removal selection, distinct from route-pair "
+                        "overlap, endpoint/spoke removal, insertion-cost "
+                        "lookahead, and local-search filtering."
+                    ),
+                    "recommended_action": (
+                        "Target capacity_tightness_removal in "
+                        "policies/baseline_modules/destroy_repair.py and "
+                        "record source route slack/load, removed count, repair "
+                        "operator, direct objective delta, CMT2/CMT4 evidence, "
+                        "feasibility, route-count, and runtime status."
+                    ),
+                    "confidence": "medium",
+                    "reason_codes": [
+                        "SUCCESSOR35_CAPACITY_TIGHTNESS_READY",
+                        "DESTROY_REPAIR_DIRECT_EFFECT_REQUIRED",
+                        "NON_SEED_CLEAN_FORK",
                     ],
                 },
                 {
