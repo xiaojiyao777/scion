@@ -119,7 +119,7 @@ The remaining closeout gaps are:
   then tested `frozen_safe_neighbor_list_vns_filter` and completed
   valid/complete/postrun-ready. It removed the frozen timeout blocker, but the
   best row stayed weak-positive below MDE (median `0.25`, CI high `3.25`) and
-  CMT2 remained negative. The current next slot is
+  CMT2 remained negative. Successor35 is now running as
   `capacity_tightness_removal` in `policies/baseline_modules/destroy_repair.py`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
@@ -446,6 +446,8 @@ CVRP:
   `scion/docs/experiments/v0.4/v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-postrun-20260702.md`.
   Successor35 design:
   `scion/docs/experiments/v0.4/v04-cvrp-successor35-capacity-tightness-removal-design-20260702.md`.
+  Successor35 in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor35-capacity-tightness-removal-inflight-20260702.md`.
 - Successor22a was stopped before formal screening because the live hypothesis
   drifted to `bounded_repair_retry_on_reject`; treat it as a wrong-mechanism
   diagnostic, not solver evidence.
@@ -492,9 +494,12 @@ CVRP:
    successor35 through
    `target_intent_required_mechanism_ids=["capacity_tightness_removal"]` and
    points the next run at `policies/baseline_modules/destroy_repair.py`.
-   Successor35 should test a non-seed capacity-tight destroy/removal path with
-   source route slack/load, removed-count, repair-operator, feasibility,
-   route-count, total-distance, and CMT2/CMT4 evidence.
+   Successor35 is running server-local at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor35-capacity-tightness-removal-server-2r-gpt55-20260702T004158Z-claw`
+   from commit `81d97474`, with healthy `gpt-5.5` completion preflight and
+   forced `solver_design` / `modify` /
+   `policies/baseline_modules/destroy_repair.py`. Its target-intent and formal
+   hypothesis binding already stayed on `capacity_tightness_removal`.
 9. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 10. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
@@ -660,6 +665,8 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
   `scion/docs/experiments/v0.4/v04-cvrp-successor34-frozen-safe-neighbor-list-vns-filter-postrun-20260702.md`
 - CVRP successor35 capacity-tightness removal design:
   `scion/docs/experiments/v0.4/v04-cvrp-successor35-capacity-tightness-removal-design-20260702.md`
+- CVRP successor35 capacity-tightness removal in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor35-capacity-tightness-removal-inflight-20260702.md`
 - CVRP deferred seed-post selector activation plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor21-seed-post-selector-activation-plan-20260629.md`
 - v0.4 large-file modularization plan:

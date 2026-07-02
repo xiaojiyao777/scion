@@ -60,8 +60,8 @@ abandoned it for six candidate-side large-instance timeouts. Successor34 then
 tested `frozen_safe_neighbor_list_vns_filter`; it completed valid/complete/
 postrun-ready and removed the frozen timeout blocker, but stayed weak-positive
 below MDE (best median `0.25`, CI high `3.25`) and CMT2 remained negative.
-Treat unchanged successor34 as reviewed/default-avoid for v0.4. The next
-prepared CVRP slot is successor35: `capacity_tightness_removal` in
+Treat unchanged successor34 as reviewed/default-avoid for v0.4. Successor35 is
+now running as `capacity_tightness_removal` in
 `policies/baseline_modules/destroy_repair.py`.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
@@ -533,9 +533,12 @@ from the current checkout.
    successor35 through
    `target_intent_required_mechanism_ids=["capacity_tightness_removal"]` and
    points the next run at `policies/baseline_modules/destroy_repair.py`.
-   Successor35 should test a non-seed capacity-tight destroy/removal path with
-   source route slack/load, removed-count, repair-operator, feasibility,
-   route-count, total-distance, and CMT2/CMT4 evidence.
+   Successor35 is running server-local at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor35-capacity-tightness-removal-server-2r-gpt55-20260702T004158Z-claw`
+   from commit `81d97474`, with healthy `gpt-5.5` completion preflight and
+   forced `solver_design` / `modify` /
+   `policies/baseline_modules/destroy_repair.py`. Its target-intent and formal
+   hypothesis binding already stayed on `capacity_tightness_removal`.
 9. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 10. Keep the v0.5 governance ablation frozen as a preregistered design; do not
