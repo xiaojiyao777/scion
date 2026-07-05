@@ -33,18 +33,22 @@ from scion.problems.cvrp.preview import synthetic as _preview_synthetic
 from scion.problems.cvrp.preview.dispatch import (
     preview_research_surface_patch as _preview_research_surface_patch,
 )
+from scion.problems.cvrp.proposal_quality import (
+    CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE,
+    CVRP_SOLVER_DESIGN_STATIC_QUALITY_FAILURE,
+    CVRP_SUCCESSOR32_FOCUS_FAILURE,
+    CVRP_SUCCESSOR36_FOCUS_FAILURE,
+    CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE,
+    CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS,
+    validate_cvrp_hypothesis_quality,
+)
 from scion.problems.cvrp.research_guidance import (
     CASE_PROTECTION_REQUIREMENTS,
     NEXT_REQUIRED_DIRECTION,
     PROTECTED_CASES,
-    SUCCESSOR32_MECHANISM_ID,
-    SUCCESSOR32_TARGET_FILE,
     SUCCESSOR35_MECHANISM_ID,
     SUCCESSOR35_TARGET_FILE,
     SUCCESSOR36B_POSTRUN_PATH,
-    SUCCESSOR36_MECHANISM_ID,
-    SUCCESSOR36_TARGET_FILE,
-    SUCCESSOR36_WIRING_FILE,
     SUCCESSOR_OPPORTUNITY_FAMILIES,
 )
 from scion.problems.cvrp.surface_policy import (
@@ -55,40 +59,15 @@ from scion.problems.cvrp.surface_policy import (
     is_legacy_research_surface as _is_legacy_research_surface,
 )
 
-
-CVRP_SOLVER_DESIGN_STATIC_QUALITY_FAILURE = (
-    "agent_quality_blocked:cvrp_solver_design_static_quality"
-)
-CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE = (
-    "agent_quality_blocked:cvrp_construction_seed_direct_effect_missing"
-)
-CVRP_SUCCESSOR32_FOCUS_FAILURE = (
-    "agent_quality_blocked:cvrp_successor32_focus_mismatch"
-)
-CVRP_SUCCESSOR36_FOCUS_FAILURE = (
-    "agent_quality_blocked:cvrp_successor36_focus_mismatch"
-)
-CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE = (
-    "agent_quality_blocked:cvrp_successor37_default_avoid"
-)
-CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS = (
-    (
-        "route_angle_aware_2opt_star",
-        (
-            "successor37 valid screening abandoned this route-angle local-search "
-            "order-bias path with median delta -4.25, CI [-8.0, 0.0], and "
-            "CMT2/CMT4 losses"
-        ),
-    ),
-    (
-        "edge_frequency_penalty_repair",
-        (
-            "successor37 valid screening found only weak-positive below-MDE "
-            "evidence while direct mechanism effect was zero and CMT2/CMT4 "
-            "lost all seeds"
-        ),
-    ),
-)
+__all__ = [
+    "CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE",
+    "CVRP_SOLVER_DESIGN_STATIC_QUALITY_FAILURE",
+    "CVRP_SUCCESSOR32_FOCUS_FAILURE",
+    "CVRP_SUCCESSOR36_FOCUS_FAILURE",
+    "CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE",
+    "CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS",
+    "CvrpAdapter",
+]
 
 
 class CvrpAdapter:
@@ -154,156 +133,7 @@ class CvrpAdapter:
         """Problem-owned current successor proposal quality check for CVRP."""
 
         del branch, step_history
-        change_locus = str(getattr(hypothesis, "change_locus", "") or "").strip()
-        target_file = str(getattr(hypothesis, "target_file", "") or "").strip()
-        if change_locus != "solver_design":
-            return {"allowed": True, "gate_name": "cvrp_successor36_focus"}
-        mechanism_ids: list[str] = []
-        for change in getattr(hypothesis, "mechanism_changes", ()) or ():
-            if isinstance(change, Mapping):
-                raw_id = change.get("id")
-            else:
-                raw_id = getattr(change, "id", "")
-            mechanism_id = str(raw_id or "").strip()
-            if mechanism_id:
-                mechanism_ids.append(mechanism_id)
-        text = " ".join(
-            str(part or "")
-            for part in (
-                getattr(hypothesis, "hypothesis_text", ""),
-                getattr(hypothesis, "target_weakness", ""),
-                getattr(hypothesis, "expected_effect", ""),
-                getattr(hypothesis, "target_runtime_effect", ""),
-                getattr(hypothesis, "complexity_claim", ""),
-                getattr(hypothesis, "runtime_budget_strategy", ""),
-            )
-        )
-        novelty = getattr(hypothesis, "novelty_signature", {}) or {}
-        if isinstance(novelty, Mapping):
-            text += " " + " ".join(str(item or "") for item in novelty.values())
-        normalized_text = text.lower().replace("-", "_").replace(" ", "_")
-        for blocked_mechanism_id, evidence_reason in (
-            CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS
-        ):
-            if blocked_mechanism_id not in mechanism_ids and (
-                blocked_mechanism_id not in normalized_text
-            ):
-                continue
-            return {
-                "allowed": False,
-                "detail": (
-                    f"{CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE}: "
-                    f"{blocked_mechanism_id} is reviewed successor37 "
-                    "default-avoid evidence; selected_mechanisms="
-                    + ",".join(mechanism_ids or ["none"])
-                ),
-                "gate_name": "cvrp_successor37_default_avoid",
-                "structured_rejection": {
-                    "source": "cvrp_problem_adapter",
-                    "gate_name": "cvrp_successor37_default_avoid",
-                    "failure_code": CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE,
-                    "agent_block_reason": "agent_quality_blocked",
-                    "blocked_mechanism_id": blocked_mechanism_id,
-                    "selected_mechanism_ids": mechanism_ids,
-                    "target_file": target_file,
-                    "evidence_reason": evidence_reason,
-                    "retry_constraint": (
-                        "Redraft the CVRP solver-design hypothesis before code "
-                        "generation: do not repeat unchanged successor37 "
-                        f"`{blocked_mechanism_id}`. Name a materially different "
-                        "CVRP-owned causal path, state direct mechanism "
-                        "objective-effect evidence, and include a CMT2/CMT4 "
-                        "protection plan."
-                    ),
-                    "repair_template": {
-                        "repair_type": "cvrp_successor37_default_avoid",
-                        "blocked_mechanism_id": blocked_mechanism_id,
-                        "required_causal_path": (
-                            "materially different CVRP-owned causal path with "
-                            "direct mechanism effect and protected-case plan"
-                        ),
-                    },
-                    "decision_features_excluded": True,
-                },
-            }
-        if target_file == SUCCESSOR36_TARGET_FILE:
-            gate_name = "cvrp_successor36_focus"
-            failure_code = CVRP_SUCCESSOR36_FOCUS_FAILURE
-            required_mechanism_id = SUCCESSOR36_MECHANISM_ID
-            required_target_file = SUCCESSOR36_TARGET_FILE
-            successor_label = "successor36 seed-post selector activation repair"
-            required_causal_path = (
-                "post-construction seed selection with direct selected-seed "
-                "versus baseline objective effect before downstream ALNS/VNS"
-            )
-            retry_constraint = (
-                "Redraft the CVRP solver-design hypothesis as the "
-                "successor36 seed-post selector activation repair: declare "
-                f"mechanism `{SUCCESSOR36_MECHANISM_ID}`, keep the new target "
-                f"file at `{SUCCESSOR36_TARGET_FILE}`, and describe how a "
-                "post-construction selector compares feasible seed candidates "
-                "against the baseline before downstream ALNS/VNS. Existing "
-                f"`{SUCCESSOR36_WIRING_FILE}` edits must stay limited to "
-                "construction-boundary integration. Do not switch to "
-                "destroy/repair removal, VNS/local-search filtering, "
-                "q scheduling, acceptance probability, operator-credit "
-                "weighting, or embedded-VNS runtime allocation."
-            )
-        elif target_file == SUCCESSOR32_TARGET_FILE:
-            gate_name = "cvrp_successor32_focus"
-            failure_code = CVRP_SUCCESSOR32_FOCUS_FAILURE
-            required_mechanism_id = SUCCESSOR32_MECHANISM_ID
-            required_target_file = SUCCESSOR32_TARGET_FILE
-            successor_label = "successor32 operator-credit mechanism"
-            required_causal_path = (
-                "post-repair pre-polish objective-effect credit for ALNS "
-                "destroy/repair adaptive weights"
-            )
-            retry_constraint = (
-                "Redraft the CVRP solver-design hypothesis as the "
-                "successor32 operator-credit mechanism: declare mechanism "
-                f"`{SUCCESSOR32_MECHANISM_ID}`, keep the target file at "
-                f"`{SUCCESSOR32_TARGET_FILE}`, and describe post-repair "
-                "pre-polish objective-effect credit for ALNS "
-                "destroy/repair weights. Do not switch to destroy/repair "
-                "selection, q scheduling, local search, seed selection, "
-                "acceptance probability, or embedded-VNS runtime allocation."
-            )
-        else:
-            return {"allowed": True, "gate_name": "cvrp_successor36_focus"}
-
-        if required_mechanism_id in mechanism_ids or (
-            required_mechanism_id in normalized_text
-        ):
-            return {"allowed": True, "gate_name": gate_name}
-
-        return {
-            "allowed": False,
-            "detail": (
-                f"{failure_code}: {successor_label} proposal must test "
-                f"{required_mechanism_id} before code generation; "
-                "selected_mechanisms="
-                + ",".join(mechanism_ids or ["none"])
-            ),
-            "gate_name": gate_name,
-            "structured_rejection": {
-                "source": "cvrp_problem_adapter",
-                "gate_name": gate_name,
-                "failure_code": failure_code,
-                "agent_block_reason": "agent_quality_blocked",
-                "required_mechanism_id": required_mechanism_id,
-                "selected_mechanism_ids": mechanism_ids,
-                "target_file": target_file,
-                "retry_constraint": retry_constraint,
-                "repair_template": {
-                    "repair_type": gate_name,
-                    "required_mechanism_id": required_mechanism_id,
-                    "required_target_file": required_target_file,
-                    "required_causal_path": required_causal_path,
-                },
-                "decision_features_excluded": True,
-            },
-        }
+        return validate_cvrp_hypothesis_quality(hypothesis)
 
     def validate_patch_quality(
         self,

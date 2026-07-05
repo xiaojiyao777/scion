@@ -1,0 +1,22 @@
+"""CVRP-owned proposal quality contracts."""
+from __future__ import annotations
+
+from scion.problems.cvrp.proposal_quality.hypothesis_contract import (
+    CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE,
+    CVRP_SOLVER_DESIGN_STATIC_QUALITY_FAILURE,
+    CVRP_SUCCESSOR32_FOCUS_FAILURE,
+    CVRP_SUCCESSOR36_FOCUS_FAILURE,
+    CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE,
+    CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS,
+    validate_cvrp_hypothesis_quality,
+)
+
+__all__ = [
+    "CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE",
+    "CVRP_SOLVER_DESIGN_STATIC_QUALITY_FAILURE",
+    "CVRP_SUCCESSOR32_FOCUS_FAILURE",
+    "CVRP_SUCCESSOR36_FOCUS_FAILURE",
+    "CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE",
+    "CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS",
+    "validate_cvrp_hypothesis_quality",
+]

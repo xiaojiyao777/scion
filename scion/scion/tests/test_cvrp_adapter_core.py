@@ -241,20 +241,7 @@ def test_cvrp_adapter_hypothesis_quality_blocks_successor37_default_avoid(
 def test_cvrp_adapter_hypothesis_quality_allows_new_successor37_distinct_path(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
-    hypothesis = HypothesisProposal(
-        hypothesis_text=(
-            "Test a capacity_slack_repair_rollback mechanism with direct "
-            "repair-before and repair-after objective telemetry plus CMT2/CMT4 "
-            "guards."
-        ),
-        change_locus="solver_design",
-        action="modify",
-        target_file="policies/baseline_modules/destroy_repair.py",
-        novelty_signature={"mechanism_family": "destroy_repair_selection"},
-        mechanism_changes=(
-            MechanismChange(id="capacity_slack_repair_rollback", change_type="add"),
-        ),
-    )
+    hypothesis = _solver_design_hypothesis()
 
     check = validate_problem_hypothesis_quality(
         SimpleNamespace(adapter=cvrp_adapter),
@@ -263,6 +250,101 @@ def test_cvrp_adapter_hypothesis_quality_allows_new_successor37_distinct_path(
     )
 
     assert check.allowed is True
+
+
+def test_cvrp_hypothesis_quality_accepts_prompt_schema_material_difference(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = _solver_design_hypothesis(
+        material_difference={
+            "changed_dimensions": ["repair_acceptance_rollback_scope"],
+            "signature_digest": "cap-slack-rollback-v1",
+            "evidence_status_delta": ["direct_effect_planned"],
+        }
+    )
+
+    check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
+
+    assert check.allowed is True
+
+
+def test_cvrp_hypothesis_quality_blocks_missing_mechanism_id(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = _solver_design_hypothesis(mechanism_id="")
+
+    check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
+
+    assert check.allowed is False
+    assert check.structured_rejection["gate_name"] == (
+        "cvrp_solver_design_causal_path_contract"
+    )
+    assert "mechanism_changes.id" in check.structured_rejection["missing_fields"]
+    assert check.structured_rejection["agent_block_reason"] == (
+        "agent_quality_blocked"
+    )
+    assert check.structured_rejection["decision_features_excluded"] is True
+
+
+def test_cvrp_hypothesis_quality_blocks_missing_material_difference(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = _solver_design_hypothesis(material_difference={})
+
+    check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
+
+    assert check.allowed is False
+    assert "material_difference" in check.structured_rejection["missing_fields"]
+    assert "materially different CVRP-owned causal path" in (
+        check.structured_rejection["retry_constraint"]
+    )
+
+
+@pytest.mark.parametrize(
+    "expected_telemetry",
+    [
+        {},
+        {"activity": ["capacity_slack_repair_rollback_activation"]},
+        {"effect": ["direct_objective_delta_without_declared_id"]},
+    ],
+)
+def test_cvrp_hypothesis_quality_blocks_missing_direct_effect_telemetry(
+    cvrp_adapter: ProblemAdapter,
+    expected_telemetry: dict[str, object],
+) -> None:
+    hypothesis = _solver_design_hypothesis(expected_telemetry=expected_telemetry)
+
+    check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
+
+    assert check.allowed is False
+    assert "expected_telemetry.effect" in (
+        check.structured_rejection["missing_fields"]
+    )
+    assert "direct objective-effect telemetry" in (
+        check.structured_rejection["retry_constraint"]
+    )
+
+
+def test_cvrp_hypothesis_quality_blocks_missing_cmt_protection(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = _solver_design_hypothesis(
+        branch_lesson_usage={
+            "clean_fork_diversity_claim": {
+                "claim": "This is distinct and protects CMT2/CMT4 in prose only."
+            }
+        }
+    )
+
+    check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
+
+    assert check.allowed is False
+    assert "branch_lesson_usage.clean_fork_diversity_claim" in (
+        check.structured_rejection["missing_fields"]
+    )
+    assert "CMT2/CMT4 protected-case protection evidence" in (
+        check.structured_rejection["retry_constraint"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -288,3 +370,74 @@ def test_cvrp_legacy_policy_surface_interfaces_are_removed(
     assert "not an active CVRP research surface" in rendered
     assert "Use solver_design" in rendered
     assert "policies/baseline_algorithm.py" in rendered
+
+
+def _validate_cvrp_hypothesis_quality(
+    cvrp_adapter: ProblemAdapter,
+    hypothesis: HypothesisProposal,
+) -> object:
+    return validate_problem_hypothesis_quality(
+        SimpleNamespace(adapter=cvrp_adapter),
+        SimpleNamespace(branch_id="branch-1"),
+        hypothesis,
+    )
+
+
+def _solver_design_hypothesis(
+    *,
+    mechanism_id: str = "capacity_slack_repair_rollback",
+    material_difference: dict[str, object] | None = None,
+    expected_telemetry: dict[str, object] | None = None,
+    branch_lesson_usage: dict[str, object] | None = None,
+) -> HypothesisProposal:
+    mechanism_changes = (
+        (MechanismChange(id=mechanism_id, change_type="add"),) if mechanism_id else ()
+    )
+    return HypothesisProposal(
+        hypothesis_text=(
+            "Test a capacity_slack_repair_rollback mechanism with direct "
+            "repair-before and repair-after objective telemetry plus CMT2/CMT4 "
+            "guards."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        novelty_signature={"mechanism_family": "destroy_repair_selection"},
+        material_difference=(
+            material_difference
+            if material_difference is not None
+            else {
+                "changed_dimensions": ["repair acceptance rollback scope"],
+                "contrast": {
+                    "nearest_reviewed_mechanism": "edge_frequency_penalty_repair",
+                    "difference": "rollback on capacity slack harm, not edge memory",
+                },
+                "evidence": {
+                    "source": "successor37 direct effect and CMT2/CMT4 losses"
+                },
+            }
+        ),
+        expected_telemetry=(
+            expected_telemetry
+            if expected_telemetry is not None
+            else {
+                "effect": [
+                    "capacity_slack_repair_rollback.direct_objective_delta",
+                ]
+            }
+        ),
+        branch_lesson_usage=(
+            branch_lesson_usage
+            if branch_lesson_usage is not None
+            else {
+                "clean_fork_diversity_claim": {
+                    "protected_cases": ["CMT2", "CMT4"],
+                    "protection_plan": {
+                        "CMT2": "track rollback accepted/rejected objective deltas",
+                        "CMT4": "track rollback accepted/rejected objective deltas",
+                    },
+                }
+            }
+        ),
+        mechanism_changes=mechanism_changes,
+    )
