@@ -77,9 +77,11 @@ proposal-quality, model, telemetry, verification, or postrun failure.
 `route_angle_aware_2opt_star` was negative and abandoned; `edge_frequency_
 penalty_repair` was weak-positive below MDE, but direct-effect-zero and lost
 all CMT2/CMT4 seeds. Treat both unchanged successor37 mechanisms as
-reviewed/default-avoid. The next CVRP action is proposal-control and
-candidate-quality repair before another 2-round clean fork to a materially
-different CVRP-owned causal path.
+reviewed/default-avoid. The proposal-control repair has now been designed and
+implemented as a CVRP-owned causal-path hypothesis-quality contract before
+successor38. The current successor38 retry root is running a 2-round
+server-local clean fork after that repair; analyze it before launching any
+longer or concurrent CVRP run.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -594,9 +596,12 @@ from the current checkout.
    `edge_frequency_penalty_repair` is reviewed weak-positive below MDE but
    direct-effect-zero with CMT2/CMT4 all-seed losses. Do not long-run or repeat
    unchanged successor37 mechanisms.
-12. Repair proposal-control/candidate-quality before the next CVRP experiment:
-   target-intent and hypothesis must hard-commit to material causal-path
-   difference, direct mechanism-effect evidence, and CMT2/CMT4 protection.
+12. Successor38 proposal-control repair is implemented from the design in
+   `scion/docs/experiments/v0.4/v04-cvrp-successor38-proposal-quality-contract-design-20260705.md`.
+   Monitor and analyze the retry root
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor38-proposal-quality-contract-cleanfork-server-retry-2r-gpt55-20260705T153833Z-claw`
+   before any longer or concurrent CVRP experiment. The first successor38 root
+   is feedback-shape evidence only, not solver evidence.
 13. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 14. Keep the v0.5 governance ablation frozen as a preregistered design; do not
