@@ -266,6 +266,10 @@ The next CVRP direction is not another unchanged construction seed selector:
 clean-fork to a materially different CVRP-owned causal path, with direct
 activation-to-objective evidence and CMT2/CMT4 protection or an explicit
 unresolved caveat.
+Successor37 is now running this clean-fork slot without force-target args at
+`/home/clawd/research/scion-experiments/v04-cvrp-successor37-cleanfork-material-causal-path-server-2r-gpt55-20260705T133809Z-claw`
+from commit `289aaa8a`; its in-flight record is
+`scion/docs/experiments/v0.4/v04-cvrp-successor37-cleanfork-material-causal-path-inflight-20260705.md`.
 
 Legacy direction details below are retained as reviewed-history context.
 
@@ -577,11 +581,14 @@ from the current checkout.
    `rows_at_or_above_mde=0`, and CMT2 regressed. The next slot should not use
    `target_intent_required_mechanism_ids` or force `seed_selector.py`; it
    should clean-fork to a materially different CVRP-owned causal path.
-11. Use the new large-file modularization plan before further behavior changes
+11. Successor37 is running that clean-fork slot on the server-local `claw`
+   runner from commit `289aaa8a`, with no force target arguments and completion
+   preflight enabled.
+12. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-12. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+13. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-13. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+14. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence

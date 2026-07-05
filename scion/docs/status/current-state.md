@@ -476,6 +476,8 @@ CVRP:
   `scion/docs/experiments/v0.4/v04-cvrp-successor36b-seed-post-selector-static-smoke-repair-inflight-20260705.md`.
   Successor36b postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor36b-seed-post-selector-static-smoke-repair-postrun-20260705.md`.
+  Successor37 in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor37-cleanfork-material-causal-path-inflight-20260705.md`.
 - Successor22a was stopped before formal screening because the live hypothesis
   drifted to `bounded_repair_retry_on_reject`; treat it as a wrong-mechanism
   diagnostic, not solver evidence.
@@ -484,7 +486,8 @@ CVRP:
   successor36 showed a static-quality recognizer boundary gap, and successor36b
   completed valid active screening but stayed zero aggregate / no-positive-at-
   MDE with CMT2 regression. The current CVRP slot should not force
-  `seed_selector.py`.
+  `seed_selector.py`. Successor37 is running a no-force clean-fork slot from
+  commit `289aaa8a`.
 - Use problem-owned successor review evidence, row-local `mechanism_family`,
   direct `mechanism_evidence.primary_mechanism`, and phase telemetry as the
   current source of truth.
@@ -542,10 +545,14 @@ CVRP:
    from commit `9fc23c86`; it is valid active solver-negative evidence, so the
    next slot should not use `target_intent_required_mechanism_ids` or force
    `seed_selector.py`.
-11. Use the v0.4 large-file modularization plan before adding behavior to
+11. Successor37 is running on the server-local `claw` runner at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor37-cleanfork-material-causal-path-server-2r-gpt55-20260705T133809Z-claw`
+   from commit `289aaa8a`, with no force target arguments and completion
+   preflight enabled.
+12. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-12. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-13. Keep status documents compact; put detailed root counters and caveats in
+13. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+14. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes
