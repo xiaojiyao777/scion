@@ -271,6 +271,10 @@ The next CVRP direction is successor36b: relaunch the same
 record direct pre-ALNS/VNS selected-seed-versus-baseline objective telemetry.
 The design is
 `scion/docs/experiments/v0.4/v04-cvrp-successor36-seed-post-optimization-selector-activation-design-20260705.md`.
+Successor36b is now running on the server-local `claw` runner at
+`/home/clawd/research/scion-experiments/v04-cvrp-successor36b-seed-post-selector-static-smoke-repair-server-2r-gpt55-20260705T104029Z-claw`
+from commit `9fc23c86`; its in-flight record is
+`scion/docs/experiments/v0.4/v04-cvrp-successor36b-seed-post-selector-static-smoke-repair-inflight-20260705.md`.
 
 Legacy direction details below are retained as reviewed-history context.
 
@@ -581,10 +585,11 @@ from the current checkout.
    generated `seed_selector.py` candidates contained direct same-mechanism
    `record_move(..., delta=...)` telemetry. The current checkout repairs the
    recognizer by including `policies/baseline_modules/seed_selector.py` in
-   construction-seed direct-effect paths. Relaunch successor36b with
+   construction-seed direct-effect paths. Successor36b is now running with
    `target_intent_required_mechanism_ids=["seed_post_optimization_selector"]`,
    `--force-surface solver_design`, `--force-action create_new`, and
-   `--force-target-file policies/baseline_modules/seed_selector.py`.
+   `--force-target-file policies/baseline_modules/seed_selector.py` at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor36b-seed-post-selector-static-smoke-repair-server-2r-gpt55-20260705T104029Z-claw`.
 11. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 12. Keep the v0.5 governance ablation frozen as a preregistered design; do not
