@@ -131,9 +131,12 @@ The remaining closeout gaps are:
   after three repeated static-quality blocks. Trace audit showed generated
   `seed_selector.py` candidates contained direct `record_move(..., delta=...)`
   telemetry; the CVRP static recognizer had not included `seed_selector.py` in
-  construction-seed direct-effect paths. The current checkout repairs that
-  problem-owned recognizer boundary; successor36b is running the same design
-  from clean commit `9fc23c86`.
+  construction-seed direct-effect paths. Successor36b reran after the
+  recognizer repair from clean commit `9fc23c86` and completed
+  valid/complete/postrun-ready with active direct telemetry, but both rows had
+  zero aggregate medians, no positive row at MDE, and CMT2 regressed. Treat
+  unchanged seed-post selector variants as reviewed/default-avoid; next
+  clean-fork to a materially different CVRP-owned causal path.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -471,14 +474,17 @@ CVRP:
   `scion/docs/experiments/v0.4/v04-cvrp-successor36-seed-post-optimization-selector-quality-block-postrun-20260705.md`.
   Successor36b in-flight:
   `scion/docs/experiments/v0.4/v04-cvrp-successor36b-seed-post-selector-static-smoke-repair-inflight-20260705.md`.
+  Successor36b postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor36b-seed-post-selector-static-smoke-repair-postrun-20260705.md`.
 - Successor22a was stopped before formal screening because the live hypothesis
   drifted to `bounded_repair_retry_on_reject`; treat it as a wrong-mechanism
   diagnostic, not solver evidence.
-- The `seed_post_optimization_selector` repair plan remains the current CVRP
-  slot. Successor16/17 showed missing activation rather than evidence-complete
-  negative solver effect, and successor36 showed a static-quality recognizer
-  boundary gap rather than solver evidence. Successor36b is running after the
-  recognizer repair with direct pre-ALNS/VNS objective attribution unchanged.
+- The `seed_post_optimization_selector` repair plan is now reviewed/default-
+  avoid for unchanged variants. Successor16/17 showed missing activation,
+  successor36 showed a static-quality recognizer boundary gap, and successor36b
+  completed valid active screening but stayed zero aggregate / no-positive-at-
+  MDE with CMT2 regression. The current CVRP slot should not force
+  `seed_selector.py`.
 - Use problem-owned successor review evidence, row-local `mechanism_family`,
   direct `mechanism_evidence.primary_mechanism`, and phase telemetry as the
   current source of truth.
@@ -529,11 +535,13 @@ CVRP:
    `cvrp_construction_seed_direct_effect_missing` blocks. The current checkout
    includes the repair: `seed_selector.py` is now part of CVRP construction
    seed direct-effect static smoke paths, with tests covering activation-only
-   rejection and alias-based direct-effect acceptance. Successor36b is running
+   rejection and alias-based direct-effect acceptance. Successor36b completed
    the same forced `solver_design` / `create_new` /
    `policies/baseline_modules/seed_selector.py` design at
    `/home/clawd/research/scion-experiments/v04-cvrp-successor36b-seed-post-selector-static-smoke-repair-server-2r-gpt55-20260705T104029Z-claw`
-   from commit `9fc23c86`.
+   from commit `9fc23c86`; it is valid active solver-negative evidence, so the
+   next slot should not use `target_intent_required_mechanism_ids` or force
+   `seed_selector.py`.
 11. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 12. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.

@@ -649,6 +649,35 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
             "source_root_label": "successor26b",
         },
     },
+    {
+        "mechanism_id": "seed_post_optimization_selector",
+        "mechanism_family": "construction_seed_portfolio",
+        "path_label": "seed-post optimization selector activation repair path",
+        "causal_path_label": "post-construction seed micro-polish selector",
+        "effect_summary": {
+            "row1_median_delta": 0.0,
+            "row1_ci_low": 0.0,
+            "row1_ci_high": 0.0,
+            "row2_median_delta": 0.0,
+            "row2_ci_low": 0.0,
+            "row2_ci_high": 0.0,
+            "max_effect_to_mde_ratio": 0.0,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "screening_pair_wins": 7,
+            "screening_pair_losses": 7,
+            "screening_pair_ties": 98,
+            "screening_pairs": 112,
+            "case_median_win_count": 0,
+            "case_median_loss_count": 1,
+            "case_median_tie_count": 27,
+            "protected_case_cmt2_median_delta": -4.5,
+            "protected_case_cmt4_median_delta": 0.0,
+            "telemetry_status": "activation_observed_direct_effect_observed",
+            "interpretation": "all_available_ci_high_below_mde",
+            "source_root_label": "successor36b",
+        },
+    },
 )
 
 DEFAULT_AVOID_DIRECTIONS = (
@@ -830,9 +859,8 @@ DEFAULT_AVOID_DIRECTIONS = (
     ),
     (
         "unchanged seed_post_optimization_selector construction post-optimization "
-        "successor after successor16 and successor17 missing-activation/"
-        "inactive screening; repair activation wiring only with explicit "
-        "mechanism evidence"
+        "selector after successor36b valid active no-positive-at-MDE evidence "
+        "with zero aggregate medians and CMT2 regression"
     ),
     (
         "ec052599-style weak_positive continuation when declared primary "

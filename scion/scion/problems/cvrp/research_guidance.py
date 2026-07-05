@@ -170,6 +170,10 @@ SUCCESSOR36_DESIGN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor36-seed-post-optimization-selector-activation-design-20260705.md"
 )
+SUCCESSOR36B_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor36b-seed-post-selector-static-smoke-repair-postrun-20260705.md"
+)
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
     "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
@@ -360,10 +364,14 @@ REVIEWED_SUCCESSOR_GUIDANCE_LINE = (
     "lost CMT2. Successor35 then validly screened "
     f"`{SUCCESSOR35_MECHANISM_ID}` with active telemetry, but both rows were "
     "loss-heavy below MDE and CMT2 stayed negative, so unchanged "
-    "capacity-tight removal is parked. The next CVRP solver slot should "
-    f"promote `{SUCCESSOR36_MECHANISM_ID}` activation repair in "
-    f"`{SUCCESSOR36_TARGET_FILE}`, with only minimal scheduler construction "
-    "wiring and direct pre-ALNS/VNS selected-seed-versus-baseline telemetry."
+    "capacity-tight removal is parked. Successor36 then exposed a static "
+    "recognizer-boundary bug for "
+    f"`{SUCCESSOR36_TARGET_FILE}`, and successor36b repaired that boundary "
+    f"and validly screened `{SUCCESSOR36_MECHANISM_ID}` with active direct "
+    "telemetry, but both rows had zero aggregate medians, no positive row at "
+    "MDE, and CMT2 regressed. Treat unchanged seed-post selector variants as "
+    "reviewed/default-avoid; the next CVRP solver slot should clean-fork to a "
+    "materially different CVRP-owned causal path."
 )
 
 NEXT_REQUIRED_DIRECTION = (
@@ -507,13 +515,17 @@ NEXT_REQUIRED_DIRECTION = (
     "a CMT2 regression. Successor35 then clean-forked to "
     f"`{SUCCESSOR35_MECHANISM_ID}` in `{SUCCESSOR35_TARGET_FILE}` and "
     "completed valid screening with active telemetry but loss-heavy aggregate "
-    "evidence and negative CMT2. The next CVRP solver slot should promote "
-    f"`{SUCCESSOR36_MECHANISM_ID}` activation repair in "
-    f"`{SUCCESSOR36_TARGET_FILE}`. "
+    "evidence and negative CMT2. Successor36 was a recognizer-boundary "
+    "quality block, and successor36b then completed a valid active "
+    f"`{SUCCESSOR36_MECHANISM_ID}` screening in `{SUCCESSOR36_TARGET_FILE}` "
+    "with zero aggregate medians, no positive row at MDE, and CMT2 "
+    "regression. The next CVRP solver slot should not repeat unchanged "
+    "seed-post selector variants; clean-fork to a materially different "
+    "CVRP-owned causal path. "
     "`required_mechanism_ids` remains empty because the guidance is proposal-only "
     "and must not hard-force the Decision path; "
-    "`target_intent_required_mechanism_ids` binds only the agentic "
-    "target-intent preflight to successor36. "
+    "`target_intent_required_mechanism_ids` is empty because successor36b "
+    "closed the temporary seed-post target-intent binding. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
     "telemetry-only q-audit repair for the missing explicit fields, or when "
@@ -531,10 +543,12 @@ NEXT_REQUIRED_DIRECTION = (
     "removal forks, "
     f"{SUCCESSOR30_MECHANISM_ID}, unchanged successor31 "
     f"{SUCCESSOR31_MECHANISM_ID}, unchanged successor32 "
-    f"{SUCCESSOR32_MECHANISM_ID}, or unchanged "
-    f"{SUCCESSOR35_MECHANISM_ID}. The seed-post selector repair is now "
-    "explicitly promoted as successor36 activation repair; do not repeat it "
-    "without direct pre-ALNS/VNS objective telemetry. "
+    f"{SUCCESSOR32_MECHANISM_ID}, unchanged "
+    f"{SUCCESSOR35_MECHANISM_ID}, or unchanged "
+    f"{SUCCESSOR36_MECHANISM_ID}. Future construction-seed revisits must be "
+    "materially distinct from raw baseline, short-horizon trajectory, and "
+    "post-construction micro-polish selector paths, with direct pre-ALNS/VNS "
+    "objective telemetry. "
     "revisit bounded local search or angular-sector "
     "removal only when the hypothesis names a causal path distinct from "
     "cross-exchange, intra-route Or-opt reinsertion, 3-opt, ejection-chain "
@@ -564,32 +578,30 @@ CURRENT_QUESTION = (
     f"`{SUCCESSOR34_MECHANISM_ID}` repaired the timeout blocker but stayed "
     "weak-positive below MDE, and successor35 "
     f"`{SUCCESSOR35_MECHANISM_ID}` activated but was loss-heavy below MDE, "
-    f"can `{SUCCESSOR36_MECHANISM_ID}` repair the prior missing activation "
-    "failure by selecting a better post-construction seed before ALNS/VNS, "
-    "with direct selected-seed-versus-baseline telemetry and CMT2/CMT4 case "
-    "evidence?"
+    f"and successor36b validly activated `{SUCCESSOR36_MECHANISM_ID}` but "
+    "remained zero-effect at aggregate level with CMT2 regression, what "
+    "materially different CVRP-owned causal path can still produce direct "
+    "objective movement without repeating reviewed/default-avoid branches?"
 )
 REQUIRED_EVIDENCE = (
     (
-        f"for successor36, live target-intent or hypothesis names "
-        f"`{SUCCESSOR36_MECHANISM_ID}` before code work starts, uses "
-        f"`{SUCCESSOR36_TARGET_FILE}` as a new module target, limits "
-        f"`{SUCCESSOR36_WIRING_FILE}` edits to construction-boundary wiring, "
-        "and explains that the causal path is post-construction seed "
-        "selection before downstream ALNS/VNS"
+        "for the next clean fork, live target-intent or hypothesis names a "
+        "materially different CVRP-owned causal path before code work starts "
+        "and explains why it is distinct from reviewed raw seed-baseline, "
+        "short-horizon seed-trajectory, and post-construction seed micro-polish "
+        "selector paths"
     ),
     (
         "for the next CVRP solver design, live target-intent or hypothesis "
         "records why the route-pair-overlap, bounded double-bridge, adaptive "
         "embedded-VNS runtime-allocation, frozen-safe neighbor-list filter, "
         "and capacity-tight removal lines are parked, then targets the "
-        "seed-post activation repair rather than another unchanged reviewed "
-        "mechanism"
+        "new causal path rather than another unchanged reviewed mechanism"
     ),
     (
-        "seed-post selector telemetry includes activation, phase runtime, "
-        "selected-seed-versus-baseline total_distance delta before downstream "
-        "ALNS/VNS, accepted flag, best-improved status, and per-case "
+        "any construction-seed revisit includes activation, phase runtime, "
+        "same-run baseline comparison or same-mechanism accepted delta before "
+        "downstream ALNS/VNS, accepted flag, best-improved status, and per-case "
         "total_distance/feasibility/route-count evidence"
     ),
     (
@@ -637,8 +649,9 @@ REQUIRED_EVIDENCE = (
     (
         "do not revisit rank-gap or route-pressure acceptance gates; "
         "successor32 post-repair operator-credit weighting is now reviewed "
-        "zero-effect evidence and successor36 must keep simulated-annealing "
-        "acceptance logic unchanged"
+        "zero-effect evidence and future clean forks must keep "
+        "simulated-annealing acceptance logic unchanged unless the proposal "
+        "names a materially new acceptance causal path"
     ),
     (
         "a materially different bounded local-search or destroy/repair "
@@ -708,14 +721,17 @@ REQUIRED_EVIDENCE = (
         "frozen_safe_neighbor_list_vns_filter after successor34 stayed "
         "weak-positive below MDE with a CMT2 regression; do not continue "
         "unchanged capacity_tightness_removal after successor35 valid active "
-        "loss-heavy evidence. The next solver research slot should target "
-        "seed_post_optimization_selector activation repair, with "
+        "loss-heavy evidence; do not continue unchanged "
+        "seed_post_optimization_selector after successor36b valid active "
+        "zero-aggregate evidence and CMT2 regression. The next solver research "
+        "slot should clean-fork to a materially different CVRP-owned causal "
+        "path, with "
         "scheduler_destroy_size_policy limited to telemetry-only q-audit "
         "repair or a materially different scheduler-policy causal path, "
         "post_repair_effect_credit_weighting parked as reviewed zero-effect, "
-        "destroy/repair insertion-cost lookahead parked, and "
-        "seed_post_optimization_selector required to emit direct pre-ALNS/VNS "
-        "selected-seed-versus-baseline objective telemetry, "
+        "destroy/repair insertion-cost lookahead parked, and construction-seed "
+        "revisits required to avoid raw baseline, short-horizon trajectory, and "
+        "post-construction micro-polish selector repeats, "
         "after "
         "bounded_2node_cross_exchange, intra_route_or_opt_reinsert, "
         "bounded_intra_route_3opt, bounded_ejection_chain_relocate, "
@@ -729,10 +745,8 @@ REQUIRED_EVIDENCE = (
         "lookahead_insertion_cost_repair_v2, and "
         "savings_seed_selection_probe plus granular_savings_seed_portfolio, "
         "exact_short_route_polish, short_horizon_seed_trajectory_selector, "
-        "and short_horizon_seed_trajectory_selector_v2 were reviewed "
-        "no-positive-at-MDE and "
-        "unchanged seed_post_optimization_selector produced repeated "
-        "missing-activation inactive evidence in successor16 and successor17; "
+        "short_horizon_seed_trajectory_selector_v2, and "
+        "seed_post_optimization_selector were reviewed no-positive-at-MDE; "
         "adaptive_embedded_vns_runtime_allocation and "
         "post_repair_effect_credit_weighting were reviewed zero-effect; revisits "
         "must name a new causal path and direct objective-effect telemetry"
@@ -757,13 +771,14 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         "seed trajectory selectors. Successor18b moved "
         "granular_savings_seed_portfolio to reviewed below-MDE evidence and "
         "exact_short_route_polish to reviewed loss-heavy evidence, so do not "
-        "continue unchanged variants. The current successor36 slot explicitly "
-        "promotes seed_post_optimization_selector activation repair, but only "
-        "with a new module boundary and explicit pre-ALNS/VNS "
-        "selected-seed-versus-baseline objective telemetry; after reviewed "
+        "continue unchanged variants. Successor36b validly activated "
+        "seed_post_optimization_selector in a new module boundary with direct "
+        "pre-ALNS/VNS selected-seed-versus-baseline telemetry, but aggregate "
+        "medians stayed zero and CMT2 regressed. After reviewed "
         "savings_seed_selection_probe no-positive-at-MDE evidence, require any "
-        "new construction path to be causally distinct from seed-baseline and "
-        "seed-trajectory selection"
+        "new construction path to be causally distinct from seed-baseline, "
+        "seed-trajectory selection, and post-construction seed micro-polish "
+        "selection"
     ),
     (
         "scheduler_destroy_size_policy: successor23 repaired observable "
@@ -849,12 +864,14 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "granular_savings_seed_portfolio, exact_short_route_polish, and "
     "cw_sweep_seed_baseline_selector plus short_horizon_seed_trajectory_selector "
     "and short_horizon_seed_trajectory_selector_v2 have repeated it as "
-    "construction successors, and operator_pair_destroy_size_bands plus "
+    "construction successors, seed_post_optimization_selector has now "
+    "repeated it as a post-construction seed selector, and "
+    "operator_pair_destroy_size_bands plus "
     "stagnation_adaptive_destroy_size_schedule have repeated it as scheduler "
     "destroy-size successors. "
-    "seed_post_optimization_selector is twice-inactive missing-activation "
-    "evidence and is now explicitly promoted as successor36 activation "
-    "repair, not as unchanged repetition. "
+    "seed_post_optimization_selector moved from prior missing-activation "
+    "evidence to successor36b valid active no-positive-at-MDE evidence and is "
+    "now reviewed/default-avoid as unchanged repetition. "
     "Successor23 repaired observable stagnation_adaptive_destroy_size_schedule "
     "q deltas but stayed below-MDE, parked as quality regression, and missed "
     "explicit baseline_q/adapted_q/q_delta fields. Successor24 activated "
@@ -876,12 +893,12 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "unchanged successor34 as reviewed weak-positive below MDE, not "
     "promotion-grade evidence. Successor35 capacity-tight removal then "
     "completed valid active screening but was loss-heavy below MDE with CMT2 "
-    "negative, so unchanged capacity_tightness_removal is parked. The next "
-    "CVRP solver slot should target "
-    f"`{SUCCESSOR36_MECHANISM_ID}` in `{SUCCESSOR36_TARGET_FILE}` as a "
-    "post-construction seed selector activation repair, with direct "
-    "pre-ALNS/VNS selected-seed-versus-baseline objective telemetry and only "
-    "minimal scheduler construction-boundary wiring. Scheduler destroy-size "
+    "negative, so unchanged capacity_tightness_removal is parked. Successor36b "
+    f"then completed valid active `{SUCCESSOR36_MECHANISM_ID}` screening in "
+    f"`{SUCCESSOR36_TARGET_FILE}`, but aggregate medians stayed zero and CMT2 "
+    "regressed, so unchanged seed-post selector variants are parked. The next "
+    "CVRP solver slot should clean-fork to a materially different CVRP-owned "
+    "causal path. Scheduler destroy-size "
     "policy remains allowed only as "
     "telemetry-only q-audit repair or a materially different scheduler-policy "
     "causal path; insertion-cost lookahead repair and post-repair effect "
@@ -980,7 +997,7 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [SUCCESSOR36_MECHANISM_ID],
+        "target_intent_required_mechanism_ids": [],
         "reviewed_mechanism_ids": list(REVIEWED_MECHANISM_IDS),
         "suppressed_mechanism_ids": list(SUPPRESSED_MECHANISM_IDS),
         "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
@@ -1005,27 +1022,7 @@ def build_cvrp_legacy_research_focus(
 
 
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
-    return (
-        RequiredMechanism(
-            mechanism_id=SUCCESSOR36_MECHANISM_ID,
-            category="successor36_target_intent_focus",
-            description=(
-                "Bind only the agentic target-intent preflight to successor36: "
-                "repair seed-post selector activation in "
-                f"{SUCCESSOR36_TARGET_FILE} before formal code work starts."
-            ),
-            required_observations=(
-                "target-intent mechanism_id names seed_post_optimization_selector",
-                "formal mechanism_changes use the same successor36 mechanism id",
-                (
-                    "construction-boundary telemetry records selected seed "
-                    "versus baseline objective effect before downstream ALNS/VNS"
-                ),
-            ),
-            protected_items=PROTECTED_CASES,
-            hypothesis_mechanism_binding="target_intent_required",
-        ),
-    )
+    return ()
 
 
 def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
@@ -1053,8 +1050,8 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "material causal-path difference from reviewed double-bridge polish",
                 "neighbor-list candidate filtering/order evidence when using bounded_local_search_variant",
                 "local-search attempted/accepted counts and record_move delta when revisiting bounded_local_search_variant",
-                "seed-post selector activation evidence under the successor36 mechanism id",
-                "selected-seed-versus-baseline record_move delta before downstream ALNS/VNS under the successor36 mechanism id",
+                "material causal-path difference from reviewed seed-post selector micro-polish",
+                "same-run baseline or same-mechanism direct objective delta before downstream ALNS/VNS when revisiting construction seeds",
                 "scheduler destroy-size baseline_q/adapted_q/q_delta evidence when using scheduler_destroy_size_policy",
                 "nonzero aligned candidate/champion q deltas before objective-effect interpretation",
                 "post-repair operator-credit old score and new credit when using acceptance_or_adaptive_weighting",

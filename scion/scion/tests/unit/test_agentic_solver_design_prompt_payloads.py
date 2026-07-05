@@ -147,14 +147,12 @@ def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None
     assert "Solver-design target-selection guidance" in user_prompt
     assert "Current CVRP target-selection guidance" in user_prompt
     assert "policies/baseline_modules/seed_selector.py" in user_prompt
-    assert "successor36 should select" in user_prompt
+    assert "successor36b completed" in user_prompt
     assert "`seed_post_optimization_selector`" in user_prompt
-    assert "selected-seed-versus-baseline objective effect" in user_prompt
-    assert "VNS/local-search filtering, q scheduling" in user_prompt
-    assert "A target other than seed_selector.py is not preferred for the current successor36 slot" in (
-        user_prompt
-    )
-    assert "Scheduler.py edits must be minimal integration changes" in user_prompt
+    assert "Do not prefer another unchanged seed_selector.py" in user_prompt
+    assert "materially different from successor36b" in user_prompt
+    assert "Scheduler.py edits" in user_prompt
+    assert "minimal integration changes" in user_prompt
     assert "Current route-merge branch lesson" in user_prompt
     assert "`policies/baseline_modules/destroy_repair.py`" in user_prompt
     assert "`expand_screening` evidence (`10/3/19`" in user_prompt

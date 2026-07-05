@@ -4384,6 +4384,7 @@ def _cvrp_research_focus() -> dict[str, object]:
             "bounded_local_search_variant",
             "large_instance_intra_route_two_opt_seed",
             "acceptance_or_adaptive_weighting",
+            "post_repair_effect_credit_weighting",
         ],
         "default_avoid_directions": [
             "unchanged broad VNS removal",

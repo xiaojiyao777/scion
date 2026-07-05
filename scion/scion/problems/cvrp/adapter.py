@@ -41,7 +41,7 @@ from scion.problems.cvrp.research_guidance import (
     SUCCESSOR32_TARGET_FILE,
     SUCCESSOR35_MECHANISM_ID,
     SUCCESSOR35_TARGET_FILE,
-    SUCCESSOR36_DESIGN_PATH,
+    SUCCESSOR36B_POSTRUN_PATH,
     SUCCESSOR36_MECHANISM_ID,
     SUCCESSOR36_TARGET_FILE,
     SUCCESSOR36_WIRING_FILE,
@@ -494,23 +494,27 @@ class CvrpAdapter:
                 "schema_version": "scion.cvrp_opportunity_recipe.v1",
                 "proposal_visibility_only": True,
                 "decision_features_excluded": True,
-                "mechanism_family": "construction_seed_portfolio",
-                "mechanism_id": SUCCESSOR36_MECHANISM_ID,
-                "review_status": "successor36_seed_post_activation_repair_ready",
+                "mechanism_family": "clean_cvrp_solver_fork",
+                "mechanism_id": "materially_distinct_cvrp_owned_causal_path",
+                "review_status": "successor36b_seed_post_reviewed_default_avoid",
                 "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
                 "target_surface": "solver_design",
-                "target_files": [SUCCESSOR36_TARGET_FILE, SUCCESSOR36_WIRING_FILE],
-                "design_path": SUCCESSOR36_DESIGN_PATH,
+                "target_files": [
+                    "policies/baseline_modules/destroy_repair.py",
+                    "policies/baseline_modules/local_search.py",
+                    "policies/baseline_modules/construction.py",
+                    "policies/baseline_modules/scheduler.py",
+                ],
+                "design_path": SUCCESSOR36B_POSTRUN_PATH,
                 "next_required_direction": NEXT_REQUIRED_DIRECTION,
                 "required_observations": [
                     (
-                        "exact mechanism id "
-                        f"{SUCCESSOR36_MECHANISM_ID} before code work starts"
+                        "materially distinct CVRP-owned causal path before "
+                        "code work starts"
                     ),
-                    "new seed_selector.py module boundary",
-                    "minimal scheduler construction-boundary wiring",
-                    "selected-seed-versus-baseline record_move delta before downstream ALNS/VNS",
-                    "phase runtime or iteration count for the seed selector path",
+                    "explicit difference from reviewed route-pair-overlap, neighbor-list filter, capacity-tight removal, and seed selector paths",
+                    "direct activation-to-objective record_move delta on the changed mechanism path",
+                    "phase runtime or iteration count for the changed path",
                     "feasibility, route-count, runtime budget, and timeout evidence",
                     "CMT2/CMT4 case-level evidence or an explicit caveat",
                     "effect-vs-MDE interpretation",
@@ -563,18 +567,14 @@ class CvrpAdapter:
                         "capacity_tightness_removal"
                     ),
                     (
-                        "do not repeat seed_post_optimization_selector without "
-                        "activation and direct pre-ALNS/VNS objective telemetry"
+                        "do not repeat unchanged seed_post_optimization_selector "
+                        "after successor36b active zero-aggregate evidence and "
+                        "CMT2 regression"
                     ),
                     (
                         "do not hardcode case ids, reference objective values, "
-                        "seeds, or split membership when designing the "
-                        "seed selector"
-                    ),
-                    (
-                        "keep scheduler.py as integration wiring only; put "
-                        "selector behavior in seed_selector.py instead of "
-                        "adding helper sprawl"
+                        "seeds, or split membership when designing the next "
+                        "solver path"
                     ),
                     (
                         "keep CVRP semantics in problem-owned solver files and "
@@ -608,10 +608,10 @@ class CvrpAdapter:
             "mechanism_effect_ranking": [
                 {
                     "rank": 1,
-                    "mechanism_family": "construction_seed_portfolio",
-                    "evidence_status": "successor36_seed_post_activation_repair_ready",
-                    "opportunity_status": "eligible_same_family_repair",
-                    "effect_status": "missing_activation_repair",
+                    "mechanism_family": "clean_cvrp_solver_fork",
+                    "evidence_status": "successor36b_seed_post_reviewed_default_avoid",
+                    "opportunity_status": "open_materially_distinct_path_required",
+                    "effect_status": "prior_lines_reviewed_no_positive_at_mde",
                     "summary": (
                         "Successor28/29 parked route-pair-overlap follow-ups, "
                         "successor30 parked bounded cross-route double-bridge "
@@ -623,23 +623,24 @@ class CvrpAdapter:
                         "timeouts; successor34 repaired the timeout blocker "
                         "but stayed weak-positive below MDE and lost CMT2. "
                         "Successor35 capacity_tightness_removal activated but "
-                        "was loss-heavy below MDE. The next slot should repair "
-                        "seed_post_optimization_selector activation with direct "
-                        "pre-ALNS/VNS seed-vs-baseline objective telemetry."
+                        "was loss-heavy below MDE. Successor36b then validly "
+                        "activated seed_post_optimization_selector, but aggregate "
+                        "medians stayed zero and CMT2 regressed. The next slot "
+                        "should clean-fork to a materially different CVRP-owned "
+                        "causal path."
                     ),
                     "recommended_action": (
-                        "Create policies/baseline_modules/seed_selector.py, "
-                        "wire it minimally from scheduler.py at the construction "
-                        "boundary, and record selected-seed-versus-baseline "
-                        "record_move delta before downstream ALNS/VNS."
+                        "Select the target file from the mechanism owner and "
+                        "record direct activation-to-objective evidence on the "
+                        "changed path, with CMT2/CMT4 evidence or an explicit "
+                        "unresolved caveat."
                     ),
                     "reason_codes": [
-                        "SUCCESSOR36_SEED_POST_ACTIVATION_REPAIR_READY",
+                        "SUCCESSOR36B_SEED_POST_REVIEWED_DEFAULT_AVOID",
                         "SUCCESSOR35_LOSS_HEAVY_REVIEWED",
                         "SUCCESSOR34_WEAK_POSITIVE_BELOW_MDE",
                         "SUCCESSOR33_VALIDATION_POSITIVE_FROZEN_UNSAFE",
-                        "SEED_POST_PRIOR_MISSING_ACTIVATION",
-                        "DIRECT_PRE_ALNS_SEED_EFFECT_REQUIRED",
+                        "MATERIAL_CVRP_CAUSAL_PATH_REQUIRED",
                     ],
                 },
                 {
@@ -872,27 +873,26 @@ class CvrpAdapter:
                     ],
                 },
                 {
-                    "diagnostic_type": "successor36_seed_post_activation_repair",
+                    "diagnostic_type": "successor36b_seed_post_reviewed_default_avoid",
                     "surface": "solver_design",
                     "mechanism_family": "construction_seed_portfolio",
                     "metric": "total_distance",
                     "summary": (
-                        "Seed_post_optimization_selector is not evidence-complete "
-                        "negative; prior rows missed activation. Successor36 "
-                        "should repair activation with a new seed_selector.py "
-                        "module and direct seed-vs-baseline telemetry."
+                        "Seed_post_optimization_selector is now evidence-complete "
+                        "as successor36b valid active no-positive-at-MDE evidence: "
+                        "both aggregate medians were zero and CMT2 regressed."
                     ),
                     "recommended_action": (
-                        "Target seed_post_optimization_selector through "
-                        "policies/baseline_modules/seed_selector.py, with "
-                        "minimal scheduler.py wiring and record_move delta "
-                        "before downstream ALNS/VNS."
+                        "Do not continue unchanged seed_post_optimization_selector; "
+                        "future construction-seed work must be materially distinct "
+                        "from raw baseline, short-horizon trajectory, and "
+                        "post-construction micro-polish selector paths."
                     ),
                     "confidence": "medium",
                     "reason_codes": [
-                        "SUCCESSOR36_SEED_POST_ACTIVATION_REPAIR_READY",
-                        "SEED_POST_PRIOR_MISSING_ACTIVATION",
-                        "DIRECT_PRE_ALNS_SEED_EFFECT_REQUIRED",
+                        "SUCCESSOR36B_SEED_POST_REVIEWED_DEFAULT_AVOID",
+                        "ZERO_AGGREGATE_MEDIANS",
+                        "CMT2_REGRESSION",
                     ],
                 },
                 {

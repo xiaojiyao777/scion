@@ -360,14 +360,13 @@ def test_cvrp_target_intent_guidance_prefers_pivot_after_route_merge_plateau() -
     assert "broader formal-surface activation" in rendered
     assert "same-run seed baseline" in rendered
     assert "fallback activation as effect" in rendered
-    assert "successor36 should select" in rendered
+    assert "successor36b completed" in rendered
     assert "`seed_post_optimization_selector`" in rendered
     assert "`policies/baseline_modules/seed_selector.py`" in rendered
-    assert "selected-seed-versus-baseline objective effect" in rendered
-    assert "A target other than seed_selector.py is not preferred for the current successor36 slot" in (
-        rendered
-    )
-    assert "Scheduler.py edits must be minimal integration changes" in rendered
+    assert "Do not prefer another unchanged seed_selector.py" in rendered
+    assert "materially different from successor36b" in rendered
+    assert "Scheduler.py edits" in rendered
+    assert "minimal integration changes" in rendered
 
 
 def test_cvrp_schema_preview_warns_reheat_broad_loop_effect_before_code(

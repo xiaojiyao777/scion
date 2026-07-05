@@ -133,9 +133,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for mechanism in typed_contract["required_mechanisms"]
     }
     assert "required" not in mechanism_bindings.values()
-    assert mechanism_bindings["seed_post_optimization_selector"] == (
-        "target_intent_required"
-    )
+    assert "target_intent_required" not in mechanism_bindings.values()
     assert any(
         requirement["requirement_id"] == "successor_causal_path_direct_effect"
         for requirement in typed_contract["evidence_requirements"]
@@ -199,9 +197,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         manifest=prepared_manifest,
     )
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "seed_post_optimization_selector"
-    ]
+    assert launch_payload["target_intent_required_mechanism_ids"] == []
     assert launch_payload["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -239,6 +235,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "cw_sweep_seed_baseline_selector",
         "short_horizon_seed_trajectory_selector",
         "short_horizon_seed_trajectory_selector_v2",
+        "seed_post_optimization_selector",
     ]
     assert launch_payload["suppressed_mechanism_ids"] == []
     assert prepared_manifest["research_focus"]["scope"] == (
@@ -346,7 +343,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert any(
         "seed_post_optimization_selector" in item
-        and "missing-activation/inactive" in item
+        and "successor36b valid active no-positive-at-MDE" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
@@ -404,13 +401,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert measurement["screening_headroom"]["case_count_gap_pct_at_least_3"] == 12
     assert measurement["top_opportunity_recipe"]["mechanism_id"] == (
-        "seed_post_optimization_selector"
+        "materially_distinct_cvrp_owned_causal_path"
     )
     assert measurement["top_opportunity_recipe"]["mechanism_family"] == (
-        "construction_seed_portfolio"
+        "clean_cvrp_solver_fork"
     )
     assert measurement["top_opportunity_recipe"]["target_files"] == [
-        "policies/baseline_modules/seed_selector.py",
+        "policies/baseline_modules/destroy_repair.py",
+        "policies/baseline_modules/local_search.py",
+        "policies/baseline_modules/construction.py",
         "policies/baseline_modules/scheduler.py",
     ]
     assert (
@@ -418,13 +417,13 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         == "acceptance_or_adaptive_weighting"
     )
     assert measurement["mechanism_effect_ranking"][0]["mechanism_family"] == (
-        "construction_seed_portfolio"
+        "clean_cvrp_solver_fork"
     )
     assert measurement["mechanism_effect_ranking"][0]["opportunity_status"] == (
-        "eligible_same_family_repair"
+        "open_materially_distinct_path_required"
     )
     assert measurement["mechanism_effect_ranking"][0]["evidence_status"] == (
-        "successor36_seed_post_activation_repair_ready"
+        "successor36b_seed_post_reviewed_default_avoid"
     )
     assert measurement["mechanism_effect_ranking"][2]["mechanism_family"] == (
         "construction_seed_portfolio"
@@ -471,7 +470,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
-        "direct selected-seed-versus-baseline telemetry"
+        "materially different CVRP-owned causal path"
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
@@ -600,10 +599,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "telemetry-only q-audit repair"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
-    assert (
-        "seed-post selector repair is now"
-        in prepared_manifest["research_focus"]["next_required_direction"]
-    )
+    assert "successor36b" in prepared_manifest["research_focus"][
+        "next_required_direction"
+    ]
     assert (
         "causal path distinct from cross-exchange, intra-route"
         in prepared_manifest["research_focus"]["next_required_direction"]
@@ -651,7 +649,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
     assert prepared_manifest["research_focus"][
         "target_intent_required_mechanism_ids"
-    ] == ["seed_post_optimization_selector"]
+    ] == []
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -689,6 +687,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "cw_sweep_seed_baseline_selector",
         "short_horizon_seed_trajectory_selector",
         "short_horizon_seed_trajectory_selector_v2",
+        "seed_post_optimization_selector",
     ]
     assert prepared_manifest["research_focus"]["suppressed_mechanism_ids"] == []
     assert prepared_manifest["research_focus"]["successor_opportunity_families"] == [
@@ -829,7 +828,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prepared_manifest_md
     assert "screening_headroom" in prepared_manifest_md
     assert "mechanism_effect_ranking" in prepared_manifest_md
-    assert "eligible_same_family_repair" in prepared_manifest_md
+    assert "open_materially_distinct_path_required" in prepared_manifest_md
     assert "frozen_safe_neighbor_list_vns_filter" in prepared_manifest_md
     assert "capacity_tightness_removal" in prepared_manifest_md
     assert "route_pair_overlap_removal" in prepared_manifest_md

@@ -38,10 +38,10 @@ def test_cvrp_adapter_renders_proposal_only_measurement_opportunities() -> None:
         payload["default_avoid_directions"]
     )
     ranking = payload["mechanism_effect_ranking"]
-    assert ranking[0]["mechanism_family"] == "construction_seed_portfolio"
-    assert ranking[0]["opportunity_status"] == "eligible_same_family_repair"
+    assert ranking[0]["mechanism_family"] == "clean_cvrp_solver_fork"
+    assert ranking[0]["opportunity_status"] == "open_materially_distinct_path_required"
     assert ranking[0]["evidence_status"] == (
-        "successor36_seed_post_activation_repair_ready"
+        "successor36b_seed_post_reviewed_default_avoid"
     )
     assert "seed_post_optimization_selector" in ranking[0]["summary"]
     assert "capacity_tightness_removal" in ranking[0]["summary"]
@@ -69,7 +69,7 @@ def test_cvrp_adapter_renders_proposal_only_measurement_opportunities() -> None:
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in reason_codes
     assert "CONSTRUCTION_SEED_NEEDS_DIRECT_EFFECT" in reason_codes
     assert "BUDGET_EXHAUSTING_RUNTIME_REPORT_ONLY" in reason_codes
-    assert "SUCCESSOR36_SEED_POST_ACTIVATION_REPAIR_READY" in rendered
+    assert "SUCCESSOR36B_SEED_POST_REVIEWED_DEFAULT_AVOID" in rendered
     assert "SUCCESSOR35_LOSS_HEAVY_REVIEWED" in rendered
     assert "SUCCESSOR34_WEAK_POSITIVE_BELOW_MDE" in rendered
     assert "holdout" not in rendered.lower()
@@ -107,13 +107,13 @@ def test_context_manager_projects_cvrp_adapter_opportunities_top_level() -> None
         "acceptance_or_adaptive_weighting"
     )
     assert payload["mechanism_effect_ranking"][0]["mechanism_family"] == (
-        "construction_seed_portfolio"
+        "clean_cvrp_solver_fork"
     )
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in compact
     assert "TRAJECTORY_DIVERGENT_LOW_SNR" in compact
     assert "mechanism_effect_ranking" in compact
-    assert "eligible_same_family_repair" in compact
-    assert "SUCCESSOR36_SEED_POST_ACTIVATION_REPAIR_READY" in compact
+    assert "open_materially_distinct_path_required" in compact
+    assert "SUCCESSOR36B_SEED_POST_REVIEWED_DEFAULT_AVOID" in compact
     assert "SUCCESSOR35_LOSS_HEAVY_REVIEWED" in compact
     assert "SUCCESSOR34_WEAK_POSITIVE_BELOW_MDE" in compact
     assert "ROUTE_PAIR_OVERLAP_LINE_PARKED" in compact

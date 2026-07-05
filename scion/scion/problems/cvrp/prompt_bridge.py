@@ -351,6 +351,8 @@ def cvrp_problem_measurement_diagnostics_prompt_summary(
             "preferred_if_seed_effect_is_isolated" in rendered_prompt
             or "eligible_clean_fork" in rendered_prompt
             or "eligible_same_family_repair" in rendered_prompt
+            or "open_materially_distinct_path_required" in rendered_prompt
+            or "successor36b_seed_post_reviewed_default_avoid" in rendered_prompt
             or "eligible_if_materially_different" in rendered_prompt
             or "lower_after_reviewed_3opt_no_effect" in rendered_prompt
         ),
