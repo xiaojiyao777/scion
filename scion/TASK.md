@@ -71,8 +71,15 @@ telemetry, but the recognizer had not yet included `seed_selector.py`.
 Successor36b reran after the recognizer repair and completed valid/complete/
 postrun-ready with active direct telemetry, but both screening rows had zero
 aggregate medians, no positive row at MDE, and CMT2 regressed. Treat unchanged
-seed-post selector variants as reviewed/default-avoid. The next CVRP action is
-a clean fork to a materially different CVRP-owned causal path.
+seed-post selector variants as reviewed/default-avoid. Successor37 then ran
+the no-force clean-fork slot and completed valid/complete/postrun-ready with no
+proposal-quality, model, telemetry, verification, or postrun failure.
+`route_angle_aware_2opt_star` was negative and abandoned; `edge_frequency_
+penalty_repair` was weak-positive below MDE, but direct-effect-zero and lost
+all CMT2/CMT4 seeds. Treat both unchanged successor37 mechanisms as
+reviewed/default-avoid. The next CVRP action is proposal-control and
+candidate-quality repair before another 2-round clean fork to a materially
+different CVRP-owned causal path.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -253,23 +260,24 @@ Open blockers before v0.4 closeout:
 ## Current CVRP Direction
 
 Do not repeat unchanged reviewed paths. The latest CVRP invocation is
-successor36b: a server-local `seed_post_optimization_selector` activation
-repair constrained to `solver_design` / `create_new` /
-`policies/baseline_modules/seed_selector.py`. It completed valid/complete/
-postrun-ready and proved the recognizer repair, but both rows had
-`median_delta=0.0`, `rows_at_or_above_mde=0`, `positive_rows=0`, and CMT2
-regressed in row 2. The run root is
-`/home/clawd/research/scion-experiments/v04-cvrp-successor36b-seed-post-selector-static-smoke-repair-server-2r-gpt55-20260705T104029Z-claw`
-from commit `9fc23c86`; the postrun report is
-`scion/docs/experiments/v0.4/v04-cvrp-successor36b-seed-post-selector-static-smoke-repair-postrun-20260705.md`.
-The next CVRP direction is not another unchanged construction seed selector:
-clean-fork to a materially different CVRP-owned causal path, with direct
-activation-to-objective evidence and CMT2/CMT4 protection or an explicit
-unresolved caveat.
-Successor37 is now running this clean-fork slot without force-target args at
+successor37: a server-local no-force clean fork after successor36b closed the
+temporary seed-post target binding. It completed valid/complete/postrun-ready
+with two screening rows and no model/tool/proposal/verification/postrun
+failure. The run root is
 `/home/clawd/research/scion-experiments/v04-cvrp-successor37-cleanfork-material-causal-path-server-2r-gpt55-20260705T133809Z-claw`
-from commit `289aaa8a`; its in-flight record is
-`scion/docs/experiments/v0.4/v04-cvrp-successor37-cleanfork-material-causal-path-inflight-20260705.md`.
+from experiment commit `289aaa8a`; reports are
+`scion/docs/experiments/v0.4/v04-cvrp-successor37-cleanfork-material-causal-path-postrun-20260705.md`
+and
+`scion/docs/experiments/v0.4/v04-cvrp-successor37-llm-mechanism-quality-root-cause-audit-20260705.md`.
+`route_angle_aware_2opt_star` screened negative (`median_delta=-4.25`, CI
+`[-8.0, 0.0]`) and should not be repeated. `edge_frequency_penalty_repair`
+screened weak-positive (`median_delta=2.5`, CI `[-7.5, 19.5]`) but had zero
+direct mechanism effect and all CMT2/CMT4 seeds lost, so it should not be
+long-run or repeated unchanged. The next CVRP direction is not a same-mechanism
+protected follow-up by default; repair target-intent/hypothesis quality so the
+next 2-round server-local clean fork commits to a materially different
+CVRP-owned causal path, direct mechanism-effect evidence, and CMT2/CMT4
+protection before code generation.
 
 Legacy direction details below are retained as reviewed-history context.
 
@@ -580,15 +588,20 @@ from the current checkout.
    and direct telemetry were visible, but aggregate medians were zero,
    `rows_at_or_above_mde=0`, and CMT2 regressed. The next slot should not use
    `target_intent_required_mechanism_ids` or force `seed_selector.py`; it
-   should clean-fork to a materially different CVRP-owned causal path.
-11. Successor37 is running that clean-fork slot on the server-local `claw`
-   runner from commit `289aaa8a`, with no force target arguments and completion
-   preflight enabled.
-12. Use the new large-file modularization plan before further behavior changes
+   should not repeat unchanged construction seed selector variants.
+11. Treat successor37 as valid solver-negative/candidate-quality evidence:
+   `route_angle_aware_2opt_star` is reviewed negative default-avoid, and
+   `edge_frequency_penalty_repair` is reviewed weak-positive below MDE but
+   direct-effect-zero with CMT2/CMT4 all-seed losses. Do not long-run or repeat
+   unchanged successor37 mechanisms.
+12. Repair proposal-control/candidate-quality before the next CVRP experiment:
+   target-intent and hypothesis must hard-commit to material causal-path
+   difference, direct mechanism-effect evidence, and CMT2/CMT4 protection.
+13. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-13. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+14. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-14. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+15. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence

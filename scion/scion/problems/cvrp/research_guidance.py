@@ -174,6 +174,12 @@ SUCCESSOR36B_POSTRUN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor36b-seed-post-selector-static-smoke-repair-postrun-20260705.md"
 )
+SUCCESSOR37_ROUTE_ANGLE_MECHANISM_ID = "route_angle_aware_2opt_star"
+SUCCESSOR37_EDGE_FREQUENCY_MECHANISM_ID = "edge_frequency_penalty_repair"
+SUCCESSOR37_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor37-cleanfork-material-causal-path-postrun-20260705.md"
+)
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
     "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
@@ -370,8 +376,14 @@ REVIEWED_SUCCESSOR_GUIDANCE_LINE = (
     f"and validly screened `{SUCCESSOR36_MECHANISM_ID}` with active direct "
     "telemetry, but both rows had zero aggregate medians, no positive row at "
     "MDE, and CMT2 regressed. Treat unchanged seed-post selector variants as "
-    "reviewed/default-avoid; the next CVRP solver slot should clean-fork to a "
-    "materially different CVRP-owned causal path."
+    "reviewed/default-avoid. Successor37 then removed the temporary target "
+    "binding and clean-forked twice: "
+    f"`{SUCCESSOR37_ROUTE_ANGLE_MECHANISM_ID}` was negative and abandoned, "
+    f"while `{SUCCESSOR37_EDGE_FREQUENCY_MECHANISM_ID}` was weak-positive below "
+    "MDE but direct-effect-zero and lost all CMT2/CMT4 seeds. Treat both "
+    "unchanged successor37 mechanisms as reviewed/default-avoid; the next CVRP "
+    "slot should repair proposal-control/candidate-quality before another "
+    "2-round clean fork to a materially different CVRP-owned causal path."
 )
 
 NEXT_REQUIRED_DIRECTION = (
@@ -519,9 +531,16 @@ NEXT_REQUIRED_DIRECTION = (
     "quality block, and successor36b then completed a valid active "
     f"`{SUCCESSOR36_MECHANISM_ID}` screening in `{SUCCESSOR36_TARGET_FILE}` "
     "with zero aggregate medians, no positive row at MDE, and CMT2 "
-    "regression. The next CVRP solver slot should not repeat unchanged "
-    "seed-post selector variants; clean-fork to a materially different "
-    "CVRP-owned causal path. "
+    "regression. Successor37 then clean-forked without a hard target binding: "
+    f"`{SUCCESSOR37_ROUTE_ANGLE_MECHANISM_ID}` in local_search.py activated "
+    "but screened negative (median -4.25, CI [-8.0, 0.0]), and "
+    f"`{SUCCESSOR37_EDGE_FREQUENCY_MECHANISM_ID}` in destroy_repair.py screened "
+    "weak-positive (median 2.5, CI [-7.5, 19.5]) but direct mechanism effect "
+    "was zero and CMT2/CMT4 lost all seeds. This is proposal-control and "
+    "candidate-quality evidence, not a long-round signal. The next CVRP solver "
+    "slot should not repeat unchanged seed-post selector or successor37 variants; "
+    "first require a materially different CVRP-owned causal path with direct "
+    "mechanism-effect and CMT2/CMT4 protection commitments. "
     "`required_mechanism_ids` remains empty because the guidance is proposal-only "
     "and must not hard-force the Decision path; "
     "`target_intent_required_mechanism_ids` is empty because successor36b "
@@ -545,7 +564,9 @@ NEXT_REQUIRED_DIRECTION = (
     f"{SUCCESSOR31_MECHANISM_ID}, unchanged successor32 "
     f"{SUCCESSOR32_MECHANISM_ID}, unchanged "
     f"{SUCCESSOR35_MECHANISM_ID}, or unchanged "
-    f"{SUCCESSOR36_MECHANISM_ID}. Future construction-seed revisits must be "
+    f"{SUCCESSOR36_MECHANISM_ID}, unchanged "
+    f"{SUCCESSOR37_ROUTE_ANGLE_MECHANISM_ID}, or unchanged "
+    f"{SUCCESSOR37_EDGE_FREQUENCY_MECHANISM_ID}. Future construction-seed revisits must be "
     "materially distinct from raw baseline, short-horizon trajectory, and "
     "post-construction micro-polish selector paths, with direct pre-ALNS/VNS "
     "objective telemetry. "
@@ -580,8 +601,10 @@ CURRENT_QUESTION = (
     f"`{SUCCESSOR35_MECHANISM_ID}` activated but was loss-heavy below MDE, "
     f"and successor36b validly activated `{SUCCESSOR36_MECHANISM_ID}` but "
     "remained zero-effect at aggregate level with CMT2 regression, what "
-    "materially different CVRP-owned causal path can still produce direct "
-    "objective movement without repeating reviewed/default-avoid branches?"
+    "and successor37 clean forks either went negative or stayed weak-positive "
+    "below MDE with direct-effect-zero/CMT losses, what materially different "
+    "CVRP-owned causal path can still produce direct objective movement without "
+    "repeating reviewed/default-avoid branches?"
 )
 REQUIRED_EVIDENCE = (
     (
@@ -595,8 +618,15 @@ REQUIRED_EVIDENCE = (
         "for the next CVRP solver design, live target-intent or hypothesis "
         "records why the route-pair-overlap, bounded double-bridge, adaptive "
         "embedded-VNS runtime-allocation, frozen-safe neighbor-list filter, "
-        "and capacity-tight removal lines are parked, then targets the "
+        "capacity-tight removal, seed-post selector, route-angle 2-opt-star, "
+        "and edge-frequency repair-scoring lines are parked, then targets the "
         "new causal path rather than another unchanged reviewed mechanism"
+    ),
+    (
+        "live target-intent and hypothesis must commit to direct mechanism "
+        "objective-effect evidence and CMT2/CMT4 protection before code work; "
+        "do not rely on downstream ALNS/VNS absorption to justify a weak "
+        "successor37-style mechanism"
     ),
     (
         "any construction-seed revisit includes activation, phase runtime, "
@@ -896,8 +926,14 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "negative, so unchanged capacity_tightness_removal is parked. Successor36b "
     f"then completed valid active `{SUCCESSOR36_MECHANISM_ID}` screening in "
     f"`{SUCCESSOR36_TARGET_FILE}`, but aggregate medians stayed zero and CMT2 "
-    "regressed, so unchanged seed-post selector variants are parked. The next "
-    "CVRP solver slot should clean-fork to a materially different CVRP-owned "
+    "regressed, so unchanged seed-post selector variants are parked. Successor37 "
+    "then showed the remaining blocker is proposal-control/candidate-quality: "
+    f"`{SUCCESSOR37_ROUTE_ANGLE_MECHANISM_ID}` was a negative local-search "
+    "order-bias candidate, and "
+    f"`{SUCCESSOR37_EDGE_FREQUENCY_MECHANISM_ID}` was weak-positive below MDE "
+    "but direct-effect-zero with CMT2/CMT4 all-seed losses. The next CVRP "
+    "solver slot should repair target-intent/hypothesis quality constraints "
+    "before spending another branch on a materially different CVRP-owned "
     "causal path. Scheduler destroy-size "
     "policy remains allowed only as "
     "telemetry-only q-audit repair or a materially different scheduler-policy "
@@ -1048,6 +1084,7 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "material causal-path difference from reviewed ejection-chain relocation",
                 "material causal-path difference from reviewed route-segment exchange",
                 "material causal-path difference from reviewed double-bridge polish",
+                "material causal-path difference from reviewed route-angle 2-opt-star",
                 "neighbor-list candidate filtering/order evidence when using bounded_local_search_variant",
                 "local-search attempted/accepted counts and record_move delta when revisiting bounded_local_search_variant",
                 "material causal-path difference from reviewed seed-post selector micro-polish",
@@ -1073,6 +1110,7 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                     "load-compatible ruin/recreate"
                 ),
                 "material causal-path difference from reviewed route-pair-overlap follow-ups",
+                "material causal-path difference from reviewed edge-frequency repair scoring",
                 "material causal-path difference from reviewed adaptive embedded-VNS runtime allocation",
                 "material causal-path difference from reviewed savings seed selection",
                 "per-case total_distance delta tied to the changed mechanism",

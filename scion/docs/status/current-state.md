@@ -135,8 +135,12 @@ The remaining closeout gaps are:
   recognizer repair from clean commit `9fc23c86` and completed
   valid/complete/postrun-ready with active direct telemetry, but both rows had
   zero aggregate medians, no positive row at MDE, and CMT2 regressed. Treat
-  unchanged seed-post selector variants as reviewed/default-avoid; next
-  clean-fork to a materially different CVRP-owned causal path.
+  unchanged seed-post selector variants as reviewed/default-avoid. Successor37
+  completed the next no-force clean fork but did not produce promotion-grade
+  solver evidence: route-angle local search was negative, and edge-frequency
+  repair scoring was weak-positive below MDE but direct-effect-zero with
+  CMT2/CMT4 all-seed losses. The current blocker is proposal-control and
+  candidate-quality, not WSL/model availability or a finished-run gate issue.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -486,8 +490,9 @@ CVRP:
   successor36 showed a static-quality recognizer boundary gap, and successor36b
   completed valid active screening but stayed zero aggregate / no-positive-at-
   MDE with CMT2 regression. The current CVRP slot should not force
-  `seed_selector.py`. Successor37 is running a no-force clean-fork slot from
-  commit `289aaa8a`.
+  `seed_selector.py`. Successor37 completed a no-force clean-fork slot from
+  commit `289aaa8a`; treat unchanged `route_angle_aware_2opt_star` and
+  `edge_frequency_penalty_repair` as reviewed/default-avoid.
 - Use problem-owned successor review evidence, row-local `mechanism_family`,
   direct `mechanism_evidence.primary_mechanism`, and phase telemetry as the
   current source of truth.
@@ -545,14 +550,21 @@ CVRP:
    from commit `9fc23c86`; it is valid active solver-negative evidence, so the
    next slot should not use `target_intent_required_mechanism_ids` or force
    `seed_selector.py`.
-11. Successor37 is running on the server-local `claw` runner at
+11. Treat successor37 as valid solver-negative/candidate-quality evidence. The
+   server-local `claw` root is
    `/home/clawd/research/scion-experiments/v04-cvrp-successor37-cleanfork-material-causal-path-server-2r-gpt55-20260705T133809Z-claw`
-   from commit `289aaa8a`, with no force target arguments and completion
-   preflight enabled.
-12. Use the v0.4 large-file modularization plan before adding behavior to
+   from experiment commit `289aaa8a`; the run completed
+   valid/complete/postrun-ready. Do not long-run or repeat unchanged
+   `route_angle_aware_2opt_star`; it screened negative. Do not repeat unchanged
+   `edge_frequency_penalty_repair`; it was weak-positive below MDE,
+   direct-effect-zero, and CMT2/CMT4 unsafe.
+12. Before the next CVRP experiment, repair proposal-control/candidate-quality:
+   target-intent and hypothesis must hard-commit to material causal-path
+   difference, direct mechanism-effect evidence, and CMT2/CMT4 protection.
+13. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-13. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-14. Keep status documents compact; put detailed root counters and caveats in
+14. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+15. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes

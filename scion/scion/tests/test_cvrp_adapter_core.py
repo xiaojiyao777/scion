@@ -195,6 +195,77 @@ def test_cvrp_adapter_hypothesis_quality_allows_successor32_focus(
 
 
 @pytest.mark.parametrize(
+    ("mechanism_id", "target_file"),
+    [
+        ("route_angle_aware_2opt_star", "policies/baseline_modules/local_search.py"),
+        ("edge_frequency_penalty_repair", "policies/baseline_modules/destroy_repair.py"),
+    ],
+)
+def test_cvrp_adapter_hypothesis_quality_blocks_successor37_default_avoid(
+    cvrp_adapter: ProblemAdapter,
+    mechanism_id: str,
+    target_file: str,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            f"Repeat {mechanism_id} as a CVRP solver-design mechanism after "
+            "successor37."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file=target_file,
+        novelty_signature={"mechanism_family": "clean_cvrp_solver_fork"},
+        mechanism_changes=(MechanismChange(id=mechanism_id, change_type="add"),),
+    )
+
+    check = validate_problem_hypothesis_quality(
+        SimpleNamespace(adapter=cvrp_adapter),
+        SimpleNamespace(branch_id="branch-1"),
+        hypothesis,
+    )
+
+    assert check.allowed is False
+    assert "cvrp_successor37_default_avoid" in check.detail
+    assert check.structured_rejection["gate_name"] == (
+        "cvrp_successor37_default_avoid"
+    )
+    assert check.structured_rejection["blocked_mechanism_id"] == mechanism_id
+    assert check.structured_rejection["agent_block_reason"] == (
+        "agent_quality_blocked"
+    )
+    assert "CMT2/CMT4 protection plan" in check.structured_rejection[
+        "retry_constraint"
+    ]
+
+
+def test_cvrp_adapter_hypothesis_quality_allows_new_successor37_distinct_path(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Test a capacity_slack_repair_rollback mechanism with direct "
+            "repair-before and repair-after objective telemetry plus CMT2/CMT4 "
+            "guards."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        novelty_signature={"mechanism_family": "destroy_repair_selection"},
+        mechanism_changes=(
+            MechanismChange(id="capacity_slack_repair_rollback", change_type="add"),
+        ),
+    )
+
+    check = validate_problem_hypothesis_quality(
+        SimpleNamespace(adapter=cvrp_adapter),
+        SimpleNamespace(branch_id="branch-1"),
+        hypothesis,
+    )
+
+    assert check.allowed is True
+
+
+@pytest.mark.parametrize(
     "surface_name",
     [
         "construction_policy",

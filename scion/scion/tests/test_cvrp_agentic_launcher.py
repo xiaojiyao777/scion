@@ -156,6 +156,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_cross_route_double_bridge_polish_reviewed_no_positive",
         "neighbor_list_vns_filter_reviewed_frozen_unsafe_validation_positive",
         "frozen_safe_neighbor_list_vns_filter_reviewed_weak_positive_below_mde",
+        "route_angle_aware_2opt_star_reviewed_no_positive",
         "operator_pair_destroy_size_bands_reviewed_no_positive",
         "stagnation_adaptive_destroy_size_schedule_reviewed_no_positive",
         "adaptive_embedded_vns_runtime_allocation_reviewed_no_positive",
@@ -175,6 +176,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "edge_conflict_endpoint_removal_reviewed_no_positive",
         "route_pair_overlap_removal_protected_followup_reviewed_no_positive",
         "capacity_tightness_removal_reviewed_no_positive",
+        "edge_frequency_penalty_repair_reviewed_weak_positive_below_mde_direct_no_effect",
         "lookahead_insertion_cost_repair_reviewed_no_positive",
         "lookahead_insertion_cost_repair_v2_reviewed_no_positive",
         "savings_seed_selection_probe_reviewed_no_positive",
@@ -208,6 +210,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_cross_route_double_bridge_polish",
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
+        "route_angle_aware_2opt_star",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
@@ -227,6 +230,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "edge_conflict_endpoint_removal",
         "route_pair_overlap_removal_protected_followup",
         "capacity_tightness_removal",
+        "edge_frequency_penalty_repair",
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
@@ -344,6 +348,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert any(
         "seed_post_optimization_selector" in item
         and "successor36b valid active no-positive-at-MDE" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "route_angle_aware_2opt_star" in item and "successor37 valid negative" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "edge_frequency_penalty_repair" in item
+        and "direct mechanism effect zero" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
@@ -660,6 +673,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_cross_route_double_bridge_polish",
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
+        "route_angle_aware_2opt_star",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
@@ -679,6 +693,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "edge_conflict_endpoint_removal",
         "route_pair_overlap_removal_protected_followup",
         "capacity_tightness_removal",
+        "edge_frequency_penalty_repair",
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",

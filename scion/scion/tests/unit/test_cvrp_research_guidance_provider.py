@@ -129,6 +129,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_cross_route_double_bridge_polish",
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
+        "route_angle_aware_2opt_star",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
@@ -148,6 +149,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "edge_conflict_endpoint_removal",
         "route_pair_overlap_removal_protected_followup",
         "capacity_tightness_removal",
+        "edge_frequency_penalty_repair",
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
@@ -176,6 +178,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "frozen_safe_neighbor_list_vns_filter" in focus["current_question"]
     assert "capacity_tightness_removal" in focus["current_question"]
     assert "seed_post_optimization_selector" in focus["current_question"]
+    assert "successor37" in focus["current_question"]
     assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
     assert "intra_route_or_opt_reinsert" in focus["next_required_direction"]
     assert "bounded_intra_route_3opt" in focus["next_required_direction"]
@@ -242,7 +245,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "capacity_tightness_removal" in focus["next_required_direction"]
     assert "telemetry-only q-audit repair" in focus["next_required_direction"]
     assert "successor36b" in focus["next_required_direction"]
-    assert "clean-fork to a materially different" in focus[
+    assert "proposal-control and candidate-quality evidence" in focus[
+        "next_required_direction"
+    ]
+    assert "materially different CVRP-owned causal path" in focus[
         "next_required_direction"
     ]
     assert "Successor18b" in focus["next_required_direction"]
@@ -421,6 +427,15 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         and "successor36b valid active no-positive-at-MDE" in item
         for item in focus["default_avoid_directions"]
     )
+    assert any(
+        "route_angle_aware_2opt_star" in item and "successor37 valid negative" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "edge_frequency_penalty_repair" in item
+        and "direct mechanism effect zero" in item
+        for item in focus["default_avoid_directions"]
+    )
     assert not any(
         item.strip().lower() == "avoid bounded_local_search_variant"
         for item in focus["default_avoid_directions"]
@@ -441,6 +456,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_cross_route_double_bridge_polish",
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
+        "route_angle_aware_2opt_star",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
@@ -460,6 +476,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "edge_conflict_endpoint_removal",
         "route_pair_overlap_removal_protected_followup",
         "capacity_tightness_removal",
+        "edge_frequency_penalty_repair",
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
@@ -469,6 +486,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "short_horizon_seed_trajectory_selector",
         "short_horizon_seed_trajectory_selector_v2",
         "seed_post_optimization_selector",
+        "route_angle_aware_2opt_star",
+        "edge_frequency_penalty_repair",
     }
     assert "seed_post_optimization_selector" in mechanisms_by_id
     assert mechanisms_by_id["capacity_tightness_removal"][
@@ -484,6 +503,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "mechanism_family"
     ] == "bounded_local_search_variant"
     assert mechanisms_by_id["frozen_safe_neighbor_list_vns_filter"][
+        "mechanism_family"
+    ] == "bounded_local_search_variant"
+    assert mechanisms_by_id["route_angle_aware_2opt_star"][
         "mechanism_family"
     ] == "bounded_local_search_variant"
     assert mechanisms_by_id["operator_pair_destroy_size_bands"][
@@ -531,6 +553,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["route_pair_overlap_removal_protected_followup"][
         "mechanism_family"
     ] == "destroy_repair_selection"
+    assert mechanisms_by_id["edge_frequency_penalty_repair"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
     assert mechanisms_by_id["lookahead_insertion_cost_repair"][
         "mechanism_family"
     ] == "destroy_repair_selection"
@@ -562,6 +587,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         not in {
             "neighbor_list_vns_filter",
             "frozen_safe_neighbor_list_vns_filter",
+            "edge_frequency_penalty_repair",
         }
     }
     assert all(
@@ -579,6 +605,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["frozen_safe_neighbor_list_vns_filter"][
         "outcome_status"
     ] == "weak_positive_below_mde"
+    assert mechanisms_by_id["edge_frequency_penalty_repair"]["outcome_status"] == (
+        "weak_positive_below_mde_direct_no_effect"
+    )
     assert mechanisms_by_id["frozen_safe_neighbor_list_vns_filter"][
         "effect_summary"
     ]["recommended_followup"] == "capacity_tightness_removal"
@@ -728,6 +757,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_cross_route_double_bridge_polish",
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
+        "route_angle_aware_2opt_star",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
@@ -747,6 +777,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "edge_conflict_endpoint_removal",
         "route_pair_overlap_removal_protected_followup",
         "capacity_tightness_removal",
+        "edge_frequency_penalty_repair",
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",

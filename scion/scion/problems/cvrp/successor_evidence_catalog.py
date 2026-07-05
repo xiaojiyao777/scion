@@ -145,6 +145,30 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "route_angle_aware_2opt_star",
+        "mechanism_family": "bounded_local_search_variant",
+        "path_label": "route-angle-aware 2-opt-star path",
+        "causal_path_label": "bounded geometric route-pair 2-opt-star local search",
+        "effect_summary": {
+            "median_delta": -4.25,
+            "ci_low": -8.0,
+            "ci_high": 0.0,
+            "effect_to_mde_ratio": -0.429293,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "screening_pairs": 32,
+            "screening_pair_wins": 8,
+            "screening_pair_losses": 15,
+            "screening_pair_ties": 9,
+            "screening_case_win_rate": 0.125,
+            "protected_case_cmt2_median_delta": -13.5,
+            "protected_case_cmt4_median_delta": -9.0,
+            "telemetry_status": "activation_observed_direct_effect_observed",
+            "interpretation": "negative_bounded_local_search_order_bias",
+            "source_root_label": "successor37",
+        },
+    },
+    {
         "mechanism_id": "operator_pair_destroy_size_bands",
         "mechanism_family": "scheduler_destroy_size_policy",
         "path_label": "operator-pair destroy-size band scheduler path",
@@ -485,6 +509,37 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
             "protected_case_cmt4_status": "mixed_after_negative_first_row",
             "interpretation": "mechanism_active_loss_heavy_no_positive_at_mde",
             "source_root_label": "successor35",
+        },
+    },
+    {
+        "mechanism_id": "edge_frequency_penalty_repair",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "edge-frequency penalty repair path",
+        "causal_path_label": "destroy/repair edge-frequency repair scoring",
+        "outcome_status": "weak_positive_below_mde_direct_no_effect",
+        "effect_summary": {
+            "median_delta": 2.5,
+            "ci_low": -7.5,
+            "ci_high": 19.5,
+            "effect_to_mde_ratio": 0.252525,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 1,
+            "screening_pairs": 32,
+            "screening_pair_wins": 13,
+            "screening_pair_losses": 14,
+            "screening_pair_ties": 5,
+            "screening_case_win_rate": 0.5,
+            "protected_case_cmt2_median_delta": -7.5,
+            "protected_case_cmt2_pair_losses": 4,
+            "protected_case_cmt4_median_delta": -15.0,
+            "protected_case_cmt4_pair_losses": 4,
+            "protected_case_x_n110_median_delta": 24.0,
+            "telemetry_status": "activation_observed_runtime_observed_effect_zero",
+            "direct_effect_candidate_present": 60,
+            "direct_effect_candidate_positive": 0,
+            "direct_effect_candidate_zero": 60,
+            "interpretation": "weak_positive_below_mde_but_direct_no_effect_and_cmt_losses",
+            "source_root_label": "successor37",
         },
     },
     {
@@ -861,6 +916,16 @@ DEFAULT_AVOID_DIRECTIONS = (
         "unchanged seed_post_optimization_selector construction post-optimization "
         "selector after successor36b valid active no-positive-at-MDE evidence "
         "with zero aggregate medians and CMT2 regression"
+    ),
+    (
+        "unchanged route_angle_aware_2opt_star bounded-local-search route-angle "
+        "2-opt-star after successor37 valid negative screening with median "
+        "delta -4.25, CMT2/CMT4 losses, and no positive-at-MDE row"
+    ),
+    (
+        "unchanged edge_frequency_penalty_repair destroy/repair repair-scoring "
+        "path after successor37 weak-positive below-MDE evidence with direct "
+        "mechanism effect zero and CMT2/CMT4 all-seed losses"
     ),
     (
         "ec052599-style weak_positive continuation when declared primary "
