@@ -952,6 +952,43 @@ def test_cvrp_smoke_provider_rejects_construction_seed_activation_only() -> None
     assert "savings_seed_selection_probe" in issue
 
 
+def test_cvrp_smoke_provider_rejects_seed_selector_activation_only() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a construction seed selector module that chooses a post-"
+            "optimized seed before ALNS/VNS."
+        ),
+        change_locus="solver_design",
+        action="create",
+        target_file="policies/baseline_modules/seed_selector.py",
+        novelty_signature={"mechanism_family": "construction_seed_portfolio"},
+        mechanism_changes=(SimpleNamespace(id="seed_post_optimization_selector"),),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/seed_selector.py",
+        action="create",
+        code_content=(
+            "_MECHANISM = 'seed_post_optimization_selector'\n"
+            "def _select_seed(solution, context):\n"
+            "    context.record_iteration(_MECHANISM, 1)\n"
+            "    context.record_phase(_MECHANISM, 0.1)\n"
+            "    return solution\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is not None
+    assert "construction seed activation-only" in issue
+    assert "seed_post_optimization_selector" in issue
+
+
 def test_cvrp_smoke_provider_allows_construction_seed_direct_effect() -> None:
     provider = CvrpAdapter(
         load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
@@ -981,6 +1018,43 @@ def test_cvrp_smoke_provider_allows_construction_seed_direct_effect() -> None:
             "        context.record_move('savings_seed_selection_probe', "
             "attempted=1, accepted=accepted, delta=delta, "
             "best_improved=accepted)\n"
+            "    return candidate if accepted else baseline\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is None
+
+
+def test_cvrp_smoke_provider_allows_seed_selector_direct_effect_alias() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a construction seed selector module that compares the selected "
+            "post-optimized seed against the same-run baseline seed."
+        ),
+        change_locus="solver_design",
+        action="create",
+        target_file="policies/baseline_modules/seed_selector.py",
+        novelty_signature={"mechanism_family": "construction_seed_portfolio"},
+        mechanism_changes=(SimpleNamespace(id="seed_post_optimization_selector"),),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/seed_selector.py",
+        action="create",
+        code_content=(
+            "_MECHANISM = 'seed_post_optimization_selector'\n"
+            "def _select_seed(baseline, candidate, context):\n"
+            "    delta = baseline.distance - candidate.distance\n"
+            "    accepted = delta > 0\n"
+            "    context.record_move(_MECHANISM, attempted=1, "
+            "accepted=accepted, delta=delta, best_improved=accepted)\n"
             "    return candidate if accepted else baseline\n"
         ),
     )

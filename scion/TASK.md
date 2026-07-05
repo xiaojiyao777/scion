@@ -64,10 +64,16 @@ Treat unchanged successor34 as reviewed/default-avoid for v0.4. Successor35 is
 now complete: `capacity_tightness_removal` activated, but both screening rows
 were solver-negative (`median_delta=-6.0` and `-3.5`, `rows_at_or_above_mde=0`)
 with CMT2 negative in both rows. Treat unchanged capacity-tight removal as
-reviewed/default-avoid. The next CVRP slot is successor36:
+reviewed/default-avoid. Successor36 then launched the promoted
 `seed_post_optimization_selector` activation repair, owned by a new
 `policies/baseline_modules/seed_selector.py` module plus minimal scheduler
-construction-boundary wiring.
+construction-boundary wiring, but ended with no effective protocol rows after
+three identical static-quality blocks. Trace audit showed generated
+`seed_selector.py` candidates did include direct `record_move(..., delta=...)`
+telemetry; the recognizer had not yet included `seed_selector.py` in
+construction-seed direct-effect paths. The current checkout repairs that
+problem-owned static smoke boundary, and the next CVRP action is a clean
+successor36b relaunch.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -247,16 +253,19 @@ Open blockers before v0.4 closeout:
 
 ## Current CVRP Direction
 
-Do not repeat unchanged reviewed paths. The latest completed CVRP attempt is
-successor35: a server-local `capacity_tightness_removal` clean fork constrained
-to `solver_design` / `modify` /
-`policies/baseline_modules/destroy_repair.py`. It completed
-valid/complete/postrun-ready, but both screening rows were loss-heavy below MDE
-(`median_delta=-6.0` and `-3.5`; `rows_at_or_above_mde=0`) with CMT2 negative.
-The postrun report is
-`scion/docs/experiments/v0.4/v04-cvrp-successor35-capacity-tightness-removal-postrun-20260705.md`.
-The next CVRP direction is successor36:
-`seed_post_optimization_selector` activation repair. Use
+Do not repeat unchanged reviewed paths. The latest CVRP invocation is
+successor36: a server-local `seed_post_optimization_selector` activation
+repair constrained to `solver_design` / `create_new` /
+`policies/baseline_modules/seed_selector.py`. It is not solver evidence: the
+run ended `invalid_no_effective_rounds` after three repeated
+`cvrp_construction_seed_direct_effect_missing` static-quality blocks before
+screening. Trace audit showed the generated module did contain same-mechanism
+direct `record_move(..., delta=...)` telemetry; the static recognizer was
+missing `seed_selector.py` from construction-seed direct-effect paths. The
+postrun report is
+`scion/docs/experiments/v0.4/v04-cvrp-successor36-seed-post-optimization-selector-quality-block-postrun-20260705.md`.
+The next CVRP direction is successor36b: relaunch the same
+`seed_post_optimization_selector` design after the recognizer repair. Use
 `policies/baseline_modules/seed_selector.py` as the primary new module,
 `policies/baseline_modules/scheduler.py` only for minimal integration, and
 record direct pre-ALNS/VNS selected-seed-versus-baseline objective telemetry.
@@ -566,15 +575,16 @@ from the current checkout.
    present, but both rows failed screening with negative aggregate medians,
    `rows_at_or_above_mde=0`, and CMT2 negative. Do not expand the unchanged
    capacity-tight removal line.
-10. Continue TASK.md through successor36:
+10. Treat the successor36 clean root as a static-quality recognizer boundary
+   gap, not solver evidence: it ended with zero protocol rows after three
+   repeated `cvrp_construction_seed_direct_effect_missing` blocks even though
+   generated `seed_selector.py` candidates contained direct same-mechanism
+   `record_move(..., delta=...)` telemetry. The current checkout repairs the
+   recognizer by including `policies/baseline_modules/seed_selector.py` in
+   construction-seed direct-effect paths. Relaunch successor36b with
    `target_intent_required_mechanism_ids=["seed_post_optimization_selector"]`,
    `--force-surface solver_design`, `--force-action create_new`, and
-   `--force-target-file policies/baseline_modules/seed_selector.py`. Keep
-   scheduler changes to minimal construction-boundary wiring and require direct
-   pre-ALNS/VNS selected-seed-versus-baseline objective telemetry. The clean
-   server-local run is in flight at
-   `/home/clawd/research/scion-experiments/v04-cvrp-successor36-seed-post-optimization-selector-activation-server-clean-2r-gpt55-20260705T081741Z-claw`
-   from commit `2ad08e52`.
+   `--force-target-file policies/baseline_modules/seed_selector.py`.
 11. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 12. Keep the v0.5 governance ablation frozen as a preregistered design; do not

@@ -380,6 +380,7 @@ def _is_construction_seed_patch_path(path: str) -> bool:
         normalized = str(path or "")
     return normalized in {
         "policies/baseline_modules/construction.py",
+        "policies/baseline_modules/seed_selector.py",
         "policies/baseline_modules/scheduler.py",
         "policies/baseline_algorithm.py",
     }
