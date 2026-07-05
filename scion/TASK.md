@@ -571,7 +571,10 @@ from the current checkout.
    `--force-surface solver_design`, `--force-action create_new`, and
    `--force-target-file policies/baseline_modules/seed_selector.py`. Keep
    scheduler changes to minimal construction-boundary wiring and require direct
-   pre-ALNS/VNS selected-seed-versus-baseline objective telemetry.
+   pre-ALNS/VNS selected-seed-versus-baseline objective telemetry. The clean
+   server-local run is in flight at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor36-seed-post-optimization-selector-activation-server-clean-2r-gpt55-20260705T081741Z-claw`
+   from commit `2ad08e52`.
 11. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 12. Keep the v0.5 governance ablation frozen as a preregistered design; do not

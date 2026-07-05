@@ -459,6 +459,8 @@ CVRP:
   `scion/docs/experiments/v0.4/v04-cvrp-successor35-capacity-tightness-removal-postrun-20260705.md`.
   Successor36 design:
   `scion/docs/experiments/v0.4/v04-cvrp-successor36-seed-post-optimization-selector-activation-design-20260705.md`.
+  Successor36 in-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor36-seed-post-optimization-selector-activation-inflight-20260705.md`.
 - Successor22a was stopped before formal screening because the live hypothesis
   drifted to `bounded_repair_retry_on_reject`; treat it as a wrong-mechanism
   diagnostic, not solver evidence.
@@ -510,10 +512,12 @@ CVRP:
    completed valid/complete/postrun-ready with active mechanism telemetry, but
    row medians were negative and CMT2 stayed negative. Do not expand the
    unchanged capacity-tight removal line.
-10. Launch successor36 as `seed_post_optimization_selector` activation repair:
-   force `solver_design` / `create_new` /
-   `policies/baseline_modules/seed_selector.py`, keep scheduler edits to
-   minimal construction-boundary integration, and require direct pre-ALNS/VNS
+10. Successor36 is running as `seed_post_optimization_selector` activation
+   repair at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor36-seed-post-optimization-selector-activation-server-clean-2r-gpt55-20260705T081741Z-claw`
+   from commit `2ad08e52`. It is forced to `solver_design` / `create_new` /
+   `policies/baseline_modules/seed_selector.py`; scheduler edits must stay
+   minimal construction-boundary integration, with direct pre-ALNS/VNS
    selected-seed-versus-baseline objective telemetry.
 11. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
