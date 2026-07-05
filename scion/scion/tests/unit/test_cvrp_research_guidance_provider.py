@@ -45,7 +45,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         mechanism.mechanism_id
         for mechanism in contract.required_mechanisms
         if mechanism.hypothesis_mechanism_binding == "target_intent_required"
-    ] == ["capacity_tightness_removal"]
+    ] == ["seed_post_optimization_selector"]
     assert any(
         "total_distance delta by case and seed" in field
         for requirement in contract.evidence_requirements
@@ -101,7 +101,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     )
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "capacity_tightness_removal"
+        "seed_post_optimization_selector"
     ]
 
 
@@ -121,7 +121,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
     assert focus["target_intent_required_mechanism_ids"] == [
-        "capacity_tightness_removal"
+        "seed_post_optimization_selector"
     ]
     assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
@@ -151,6 +151,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "boundary_spoke_outlier_removal",
         "edge_conflict_endpoint_removal",
         "route_pair_overlap_removal_protected_followup",
+        "capacity_tightness_removal",
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
@@ -160,7 +161,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "short_horizon_seed_trajectory_selector",
         "short_horizon_seed_trajectory_selector_v2",
     ]
-    assert focus["suppressed_mechanism_ids"] == ["seed_post_optimization_selector"]
+    assert focus["suppressed_mechanism_ids"] == []
     assert focus["successor_opportunity_families"] == [
         "acceptance_or_adaptive_weighting",
         "scheduler_destroy_size_policy",
@@ -177,7 +178,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "neighbor_list_vns_filter" in focus["current_question"]
     assert "frozen_safe_neighbor_list_vns_filter" in focus["current_question"]
     assert "capacity_tightness_removal" in focus["current_question"]
-    assert "capacity-tight" in focus["current_question"]
+    assert "seed_post_optimization_selector" in focus["current_question"]
     assert "bounded_2node_cross_exchange" in focus["next_required_direction"]
     assert "intra_route_or_opt_reinsert" in focus["next_required_direction"]
     assert "bounded_intra_route_3opt" in focus["next_required_direction"]
@@ -243,7 +244,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     ]
     assert "capacity_tightness_removal" in focus["next_required_direction"]
     assert "telemetry-only q-audit repair" in focus["next_required_direction"]
-    assert "seed-post selector repair is deferred" in (
+    assert "seed-post selector repair is now" in (
         focus["next_required_direction"]
     )
     assert "Successor18b" in focus["next_required_direction"]
@@ -257,13 +258,13 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["required_evidence"]
     )
     assert any(
-        "capacity_tightness_removal" in item
-        and "destroy/removal selection" in item
+        "seed_post_optimization_selector" in item
+        and "new module target" in item
         for item in focus["required_evidence"]
     )
     assert any(
-        "capacity-tight removal telemetry" in item
-        and "source route load/slack" in item
+        "seed-post selector telemetry" in item
+        and "selected-seed-versus-baseline" in item
         for item in focus["required_evidence"]
     )
     assert any(
@@ -403,6 +404,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["default_avoid_directions"]
     )
     assert any(
+        "capacity_tightness_removal" in item
+        and "successor35 valid active loss-heavy evidence" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
         "bounded_cross_route_double_bridge_polish" in item
         and "successor30 valid zero-effect" in item
         for item in focus["default_avoid_directions"]
@@ -455,6 +461,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "boundary_spoke_outlier_removal",
         "edge_conflict_endpoint_removal",
         "route_pair_overlap_removal_protected_followup",
+        "capacity_tightness_removal",
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
@@ -465,6 +472,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "short_horizon_seed_trajectory_selector_v2",
     }
     assert "seed_post_optimization_selector" not in mechanisms_by_id
+    assert mechanisms_by_id["capacity_tightness_removal"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
     assert mechanisms_by_id["bounded_intra_route_3opt"][
         "mechanism_family"
     ] == "bounded_local_search_variant"
@@ -737,6 +747,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "boundary_spoke_outlier_removal",
         "edge_conflict_endpoint_removal",
         "route_pair_overlap_removal_protected_followup",
+        "capacity_tightness_removal",
         "lookahead_insertion_cost_repair",
         "lookahead_insertion_cost_repair_v2",
         "savings_seed_selection_probe",
@@ -748,11 +759,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         ]
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "capacity_tightness_removal"
-    ]
-    assert launch_payload["suppressed_mechanism_ids"] == [
         "seed_post_optimization_selector"
     ]
+    assert launch_payload["suppressed_mechanism_ids"] == []
     assert launch_payload["successor_opportunity_families"] == [
         "acceptance_or_adaptive_weighting",
         "scheduler_destroy_size_policy",

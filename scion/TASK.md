@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `v0.4-dev`*
-*Last updated: 2026-07-02*
+*Last updated: 2026-07-05*
 
 This is the active task definition for closing v0.4. It is not a run log.
 Historical launch/root details live in focused experiment reports, sparse
@@ -21,7 +21,7 @@ Primary sources:
 
 Current judgment after the basis audit and warehouse provenance clarification:
 v3 boundaries and the main v0.4 framework repairs are broadly aligned, but
-v0.4 is not closed. Recent successor work through successor32 leaves CVRP with
+v0.4 is not closed. Recent successor work through successor35 leaves CVRP with
 no promotion-grade solver effect.
 Successor21 tested `operator_pair_destroy_size_bands`, not the intended
 stagnation schedule, and stayed below MDE. Successor22b correctly targeted
@@ -61,8 +61,13 @@ tested `frozen_safe_neighbor_list_vns_filter`; it completed valid/complete/
 postrun-ready and removed the frozen timeout blocker, but stayed weak-positive
 below MDE (best median `0.25`, CI high `3.25`) and CMT2 remained negative.
 Treat unchanged successor34 as reviewed/default-avoid for v0.4. Successor35 is
-now running as `capacity_tightness_removal` in
-`policies/baseline_modules/destroy_repair.py`.
+now complete: `capacity_tightness_removal` activated, but both screening rows
+were solver-negative (`median_delta=-6.0` and `-3.5`, `rows_at_or_above_mde=0`)
+with CMT2 negative in both rows. Treat unchanged capacity-tight removal as
+reviewed/default-avoid. The next CVRP slot is successor36:
+`seed_post_optimization_selector` activation repair, owned by a new
+`policies/baseline_modules/seed_selector.py` module plus minimal scheduler
+construction-boundary wiring.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -224,9 +229,17 @@ Open blockers before v0.4 closeout:
   blocker but did not preserve enough solver signal: the best row had median
   delta `0.25`, CI `[0.0, 3.25]`, no positive-at-MDE evidence, and CMT2 median
   `-11.0`. Treat unchanged successor34 as reviewed weak-positive below MDE.
-  The next CVRP slot should clean-fork to `capacity_tightness_removal` in
-  `policies/baseline_modules/destroy_repair.py`, a non-seed destroy/removal
-  selection path with direct capacity-tight route evidence.
+  Successor35 then clean-forked to `capacity_tightness_removal` in
+  `policies/baseline_modules/destroy_repair.py` and completed
+  valid/complete/postrun-ready with no proposal-quality, model, telemetry, or
+  postrun failures. It was mechanism-active but solver-negative: row medians
+  were `-6.0` and `-3.5`, `rows_at_or_above_mde=0`, win rate `0.125` in both
+  rows, and CMT2 stayed negative. Treat unchanged capacity-tight removal as
+  reviewed/default-avoid. The next CVRP slot should promote the deferred
+  `seed_post_optimization_selector` activation repair to successor36, using a
+  coherent new `policies/baseline_modules/seed_selector.py` module plus minimal
+  scheduler construction-boundary wiring and direct pre-ALNS/VNS
+  selected-seed-versus-baseline telemetry.
 - Several production/test files remain over the 1000-line risk threshold and
   need design-first modularization before more behavior is added there.
 - v0.5 governance ablation is preregistered as a clean experiment matrix, but
@@ -235,6 +248,24 @@ Open blockers before v0.4 closeout:
 ## Current CVRP Direction
 
 Do not repeat unchanged reviewed paths. The latest completed CVRP attempt is
+successor35: a server-local `capacity_tightness_removal` clean fork constrained
+to `solver_design` / `modify` /
+`policies/baseline_modules/destroy_repair.py`. It completed
+valid/complete/postrun-ready, but both screening rows were loss-heavy below MDE
+(`median_delta=-6.0` and `-3.5`; `rows_at_or_above_mde=0`) with CMT2 negative.
+The postrun report is
+`scion/docs/experiments/v0.4/v04-cvrp-successor35-capacity-tightness-removal-postrun-20260705.md`.
+The next CVRP direction is successor36:
+`seed_post_optimization_selector` activation repair. Use
+`policies/baseline_modules/seed_selector.py` as the primary new module,
+`policies/baseline_modules/scheduler.py` only for minimal integration, and
+record direct pre-ALNS/VNS selected-seed-versus-baseline objective telemetry.
+The design is
+`scion/docs/experiments/v0.4/v04-cvrp-successor36-seed-post-optimization-selector-activation-design-20260705.md`.
+
+Legacy direction details below are retained as reviewed-history context.
+
+The latest completed CVRP attempt is
 successor22b: a WSL scheduler destroy-size clean fork constrained to
 `solver_design` / `modify` / `policies/baseline_modules/scheduler.py`. It
 correctly targeted and recorded `stagnation_adaptive_destroy_size_schedule`,
@@ -529,21 +560,23 @@ from the current checkout.
    `frozen_safe_neighbor_list_vns_filter`: no model/quality/telemetry/postrun
    failure and no frozen timeout blocker, but no positive-at-MDE row and CMT2
    remained negative. Do not continue the unchanged neighbor-list filter line
-   in the next slot. Problem-owned CVRP guidance now binds target intent to
-   successor35 through
-   `target_intent_required_mechanism_ids=["capacity_tightness_removal"]` and
-   points the next run at `policies/baseline_modules/destroy_repair.py`.
-   Successor35 is running server-local at
-   `/home/clawd/research/scion-experiments/v04-cvrp-successor35-capacity-tightness-removal-server-2r-gpt55-20260702T004158Z-claw`
-   from commit `81d97474`, with healthy `gpt-5.5` completion preflight and
-   forced `solver_design` / `modify` /
-   `policies/baseline_modules/destroy_repair.py`. Its target-intent and formal
-   hypothesis binding already stayed on `capacity_tightness_removal`.
-9. Use the new large-file modularization plan before further behavior changes
+   in the next slot.
+9. Treat successor35 as valid solver-negative evidence for unchanged
+   `capacity_tightness_removal`: mechanism activation and direct telemetry were
+   present, but both rows failed screening with negative aggregate medians,
+   `rows_at_or_above_mde=0`, and CMT2 negative. Do not expand the unchanged
+   capacity-tight removal line.
+10. Continue TASK.md through successor36:
+   `target_intent_required_mechanism_ids=["seed_post_optimization_selector"]`,
+   `--force-surface solver_design`, `--force-action create_new`, and
+   `--force-target-file policies/baseline_modules/seed_selector.py`. Keep
+   scheduler changes to minimal construction-boundary wiring and require direct
+   pre-ALNS/VNS selected-seed-versus-baseline objective telemetry.
+11. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-10. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+12. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-11. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+13. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence

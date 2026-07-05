@@ -39,9 +39,12 @@ from scion.problems.cvrp.research_guidance import (
     PROTECTED_CASES,
     SUCCESSOR32_MECHANISM_ID,
     SUCCESSOR32_TARGET_FILE,
-    SUCCESSOR35_DESIGN_PATH,
     SUCCESSOR35_MECHANISM_ID,
     SUCCESSOR35_TARGET_FILE,
+    SUCCESSOR36_DESIGN_PATH,
+    SUCCESSOR36_MECHANISM_ID,
+    SUCCESSOR36_TARGET_FILE,
+    SUCCESSOR36_WIRING_FILE,
     SUCCESSOR_OPPORTUNITY_FAMILIES,
 )
 from scion.problems.cvrp.surface_policy import (
@@ -62,8 +65,8 @@ CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE = (
 CVRP_SUCCESSOR32_FOCUS_FAILURE = (
     "agent_quality_blocked:cvrp_successor32_focus_mismatch"
 )
-CVRP_SUCCESSOR35_FOCUS_FAILURE = (
-    "agent_quality_blocked:cvrp_successor35_focus_mismatch"
+CVRP_SUCCESSOR36_FOCUS_FAILURE = (
+    "agent_quality_blocked:cvrp_successor36_focus_mismatch"
 )
 
 
@@ -133,25 +136,27 @@ class CvrpAdapter:
         change_locus = str(getattr(hypothesis, "change_locus", "") or "").strip()
         target_file = str(getattr(hypothesis, "target_file", "") or "").strip()
         if change_locus != "solver_design":
-            return {"allowed": True, "gate_name": "cvrp_successor35_focus"}
-        if target_file == SUCCESSOR35_TARGET_FILE:
-            gate_name = "cvrp_successor35_focus"
-            failure_code = CVRP_SUCCESSOR35_FOCUS_FAILURE
-            required_mechanism_id = SUCCESSOR35_MECHANISM_ID
-            required_target_file = SUCCESSOR35_TARGET_FILE
-            successor_label = "successor35 capacity-tightness removal"
+            return {"allowed": True, "gate_name": "cvrp_successor36_focus"}
+        if target_file == SUCCESSOR36_TARGET_FILE:
+            gate_name = "cvrp_successor36_focus"
+            failure_code = CVRP_SUCCESSOR36_FOCUS_FAILURE
+            required_mechanism_id = SUCCESSOR36_MECHANISM_ID
+            required_target_file = SUCCESSOR36_TARGET_FILE
+            successor_label = "successor36 seed-post selector activation repair"
             required_causal_path = (
-                "capacity-tight destroy/removal selection using route slack, "
-                "route load, and insertion-pressure evidence"
+                "post-construction seed selection with direct selected-seed "
+                "versus baseline objective effect before downstream ALNS/VNS"
             )
             retry_constraint = (
                 "Redraft the CVRP solver-design hypothesis as the "
-                "successor35 capacity-tightness removal mechanism: declare "
-                f"mechanism `{SUCCESSOR35_MECHANISM_ID}`, keep the target "
-                f"file at `{SUCCESSOR35_TARGET_FILE}`, and describe how route "
-                "load/slack plus insertion pressure selects customers for "
-                "destroy/repair removal with direct objective telemetry. "
-                "Do not switch to seed selection, VNS/local-search filtering, "
+                "successor36 seed-post selector activation repair: declare "
+                f"mechanism `{SUCCESSOR36_MECHANISM_ID}`, keep the new target "
+                f"file at `{SUCCESSOR36_TARGET_FILE}`, and describe how a "
+                "post-construction selector compares feasible seed candidates "
+                "against the baseline before downstream ALNS/VNS. Existing "
+                f"`{SUCCESSOR36_WIRING_FILE}` edits must stay limited to "
+                "construction-boundary integration. Do not switch to "
+                "destroy/repair removal, VNS/local-search filtering, "
                 "q scheduling, acceptance probability, operator-credit "
                 "weighting, or embedded-VNS runtime allocation."
             )
@@ -176,7 +181,7 @@ class CvrpAdapter:
                 "acceptance probability, or embedded-VNS runtime allocation."
             )
         else:
-            return {"allowed": True, "gate_name": "cvrp_successor35_focus"}
+            return {"allowed": True, "gate_name": "cvrp_successor36_focus"}
 
         mechanism_ids: list[str] = []
         for change in getattr(hypothesis, "mechanism_changes", ()) or ():
@@ -448,8 +453,8 @@ class CvrpAdapter:
                     "mechanism_family": "destroy_repair_selection",
                     "required_evidence": (
                         "per-case total_distance delta tied to the changed "
-                        "repair or removal choice; successor35 should test "
-                        "capacity_tightness_removal as a non-seed clean fork, "
+                        "repair or removal choice; successor35 capacity-tight "
+                        "removal is now reviewed active loss-heavy evidence, "
                         "and successor29 parked the route-pair-overlap line "
                         "for v0.4"
                     ),
@@ -489,23 +494,23 @@ class CvrpAdapter:
                 "schema_version": "scion.cvrp_opportunity_recipe.v1",
                 "proposal_visibility_only": True,
                 "decision_features_excluded": True,
-                "mechanism_family": "destroy_repair_selection",
-                "mechanism_id": SUCCESSOR35_MECHANISM_ID,
-                "review_status": "successor35_ready_after_successor34_weak_positive_below_mde",
+                "mechanism_family": "construction_seed_portfolio",
+                "mechanism_id": SUCCESSOR36_MECHANISM_ID,
+                "review_status": "successor36_seed_post_activation_repair_ready",
                 "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
                 "target_surface": "solver_design",
-                "target_files": [SUCCESSOR35_TARGET_FILE],
-                "design_path": SUCCESSOR35_DESIGN_PATH,
+                "target_files": [SUCCESSOR36_TARGET_FILE, SUCCESSOR36_WIRING_FILE],
+                "design_path": SUCCESSOR36_DESIGN_PATH,
                 "next_required_direction": NEXT_REQUIRED_DIRECTION,
                 "required_observations": [
                     (
                         "exact mechanism id "
-                        f"{SUCCESSOR35_MECHANISM_ID} before code work starts"
+                        f"{SUCCESSOR36_MECHANISM_ID} before code work starts"
                     ),
-                    "source route capacity slack/load and removed-customer count",
-                    "repair operator used after the capacity-tight removal set",
-                    "record_move direct effect and best-improved status under the mechanism id",
-                    "phase runtime or iteration count for the destroy/repair path",
+                    "new seed_selector.py module boundary",
+                    "minimal scheduler construction-boundary wiring",
+                    "selected-seed-versus-baseline record_move delta before downstream ALNS/VNS",
+                    "phase runtime or iteration count for the seed selector path",
                     "feasibility, route-count, runtime budget, and timeout evidence",
                     "CMT2/CMT4 case-level evidence or an explicit caveat",
                     "effect-vs-MDE interpretation",
@@ -554,14 +559,22 @@ class CvrpAdapter:
                         "frozen-safe neighbor-list filtering"
                     ),
                     (
-                        "do not hardcode case ids, reference objective values, "
-                        "seeds, or split membership when designing the "
-                        "candidate filter"
+                        "do not continue unchanged successor35-style "
+                        "capacity_tightness_removal"
                     ),
                     (
-                        "keep destroy_repair.py as the integration layer; if "
-                        "capacity scoring grows, split it into a coherent "
-                        "problem-owned module instead of helper sprawl"
+                        "do not repeat seed_post_optimization_selector without "
+                        "activation and direct pre-ALNS/VNS objective telemetry"
+                    ),
+                    (
+                        "do not hardcode case ids, reference objective values, "
+                        "seeds, or split membership when designing the "
+                        "seed selector"
+                    ),
+                    (
+                        "keep scheduler.py as integration wiring only; put "
+                        "selector behavior in seed_selector.py instead of "
+                        "adding helper sprawl"
                     ),
                     (
                         "keep CVRP semantics in problem-owned solver files and "
@@ -586,6 +599,7 @@ class CvrpAdapter:
                     "unchanged bounded_cross_route_double_bridge_polish",
                     "unchanged neighbor_list_vns_filter without frozen-safe guards",
                     "unchanged frozen_safe_neighbor_list_vns_filter",
+                    "unchanged capacity_tightness_removal",
                     "unchanged adaptive_embedded_vns_runtime_allocation",
                     "unchanged post_repair_effect_credit_weighting",
                     "same-family scheduler q changes without explicit q-audit fields",
@@ -594,10 +608,10 @@ class CvrpAdapter:
             "mechanism_effect_ranking": [
                 {
                     "rank": 1,
-                    "mechanism_family": "destroy_repair_selection",
-                    "evidence_status": "successor35_ready_after_successor34_weak_positive_below_mde",
-                    "opportunity_status": "eligible_clean_fork",
-                    "effect_status": "untested_capacity_tightness_path",
+                    "mechanism_family": "construction_seed_portfolio",
+                    "evidence_status": "successor36_seed_post_activation_repair_ready",
+                    "opportunity_status": "eligible_same_family_repair",
+                    "effect_status": "missing_activation_repair",
                     "summary": (
                         "Successor28/29 parked route-pair-overlap follow-ups, "
                         "successor30 parked bounded cross-route double-bridge "
@@ -608,21 +622,24 @@ class CvrpAdapter:
                         "screening/validation but failed frozen on candidate "
                         "timeouts; successor34 repaired the timeout blocker "
                         "but stayed weak-positive below MDE and lost CMT2. "
-                        "The next slot should test capacity_tightness_removal."
+                        "Successor35 capacity_tightness_removal activated but "
+                        "was loss-heavy below MDE. The next slot should repair "
+                        "seed_post_optimization_selector activation with direct "
+                        "pre-ALNS/VNS seed-vs-baseline objective telemetry."
                     ),
                     "recommended_action": (
-                        "Target policies/baseline_modules/destroy_repair.py "
-                        "and record source route load/slack, removed count, "
-                        "repair operator, record_move delta, best-improved "
-                        "status, phase/runtime evidence, and per-case "
-                        "total_distance evidence."
+                        "Create policies/baseline_modules/seed_selector.py, "
+                        "wire it minimally from scheduler.py at the construction "
+                        "boundary, and record selected-seed-versus-baseline "
+                        "record_move delta before downstream ALNS/VNS."
                     ),
                     "reason_codes": [
-                        "SUCCESSOR35_CAPACITY_TIGHTNESS_READY",
+                        "SUCCESSOR36_SEED_POST_ACTIVATION_REPAIR_READY",
+                        "SUCCESSOR35_LOSS_HEAVY_REVIEWED",
                         "SUCCESSOR34_WEAK_POSITIVE_BELOW_MDE",
                         "SUCCESSOR33_VALIDATION_POSITIVE_FROZEN_UNSAFE",
-                        "ROUTE_PAIR_OVERLAP_LINE_PARKED",
-                        "DIRECT_OBJECTIVE_EFFECT_REQUIRED",
+                        "SEED_POST_PRIOR_MISSING_ACTIVATION",
+                        "DIRECT_PRE_ALNS_SEED_EFFECT_REQUIRED",
                     ],
                 },
                 {
@@ -833,28 +850,49 @@ class CvrpAdapter:
                     ],
                 },
                 {
-                    "diagnostic_type": "successor35_capacity_tightness_removal",
+                    "diagnostic_type": "successor35_capacity_tightness_reviewed",
                     "surface": "solver_design",
                     "mechanism_family": "destroy_repair_selection",
                     "metric": "total_distance",
                     "summary": (
-                        "The next non-seed clean fork should test capacity-tight "
-                        "destroy/removal selection, distinct from route-pair "
-                        "overlap, endpoint/spoke removal, insertion-cost "
-                        "lookahead, and local-search filtering."
+                        "Successor35 capacity_tightness_removal activated and "
+                        "recorded direct telemetry, but both screening rows "
+                        "were loss-heavy below MDE and CMT2 stayed negative."
                     ),
                     "recommended_action": (
-                        "Target capacity_tightness_removal in "
-                        "policies/baseline_modules/destroy_repair.py and "
-                        "record source route slack/load, removed count, repair "
-                        "operator, direct objective delta, CMT2/CMT4 evidence, "
-                        "feasibility, route-count, and runtime status."
+                        "Do not continue unchanged capacity_tightness_removal "
+                        "in the next slot; use this as reviewed/default-avoid "
+                        "destroy/repair evidence."
                     ),
                     "confidence": "medium",
                     "reason_codes": [
-                        "SUCCESSOR35_CAPACITY_TIGHTNESS_READY",
-                        "DESTROY_REPAIR_DIRECT_EFFECT_REQUIRED",
-                        "NON_SEED_CLEAN_FORK",
+                        "SUCCESSOR35_LOSS_HEAVY_REVIEWED",
+                        "CAPACITY_TIGHTNESS_REMOVAL_DEFAULT_AVOID",
+                        "CMT2_NEGATIVE_BOTH_ROWS",
+                    ],
+                },
+                {
+                    "diagnostic_type": "successor36_seed_post_activation_repair",
+                    "surface": "solver_design",
+                    "mechanism_family": "construction_seed_portfolio",
+                    "metric": "total_distance",
+                    "summary": (
+                        "Seed_post_optimization_selector is not evidence-complete "
+                        "negative; prior rows missed activation. Successor36 "
+                        "should repair activation with a new seed_selector.py "
+                        "module and direct seed-vs-baseline telemetry."
+                    ),
+                    "recommended_action": (
+                        "Target seed_post_optimization_selector through "
+                        "policies/baseline_modules/seed_selector.py, with "
+                        "minimal scheduler.py wiring and record_move delta "
+                        "before downstream ALNS/VNS."
+                    ),
+                    "confidence": "medium",
+                    "reason_codes": [
+                        "SUCCESSOR36_SEED_POST_ACTIVATION_REPAIR_READY",
+                        "SEED_POST_PRIOR_MISSING_ACTIVATION",
+                        "DIRECT_PRE_ALNS_SEED_EFFECT_REQUIRED",
                     ],
                 },
                 {

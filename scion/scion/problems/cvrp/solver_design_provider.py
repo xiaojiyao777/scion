@@ -64,6 +64,17 @@ class CvrpSolverDesignProvider:
                 "through scheduler.py only by importing the exact new symbol from "
                 ".construction and calling it inside _ALNSVNSSolver methods."
             )
+        if normalized == "policies/baseline_modules/seed_selector.py":
+            return (
+                "Target-specific rule for seed_selector.py: implement a cohesive "
+                "post-construction seed selector module. Keep scheduler.py as "
+                "minimal construction-boundary integration through typed "
+                "additional_changes. Record seed_post_optimization_selector "
+                "activation, phase runtime, and selected-seed-versus-baseline "
+                "record_move delta before downstream ALNS/VNS. Do not move "
+                "ALNS/VNS, q scheduling, acceptance, destroy/repair selection, "
+                "or operator-credit policy into this module."
+            )
         if normalized == "policies/baseline_modules/local_search.py":
             return (
                 "Target-specific rule for local_search.py: integrate new moves "
@@ -325,14 +336,15 @@ class CvrpSolverDesignProvider:
             ),
             (
                 "Current CVRP target-selection guidance, proposal-only and "
-                "excluded from DecisionFeatures: successor35 should select "
-                "`policies/baseline_modules/destroy_repair.py` for "
-                "`capacity_tightness_removal`. The causal path is selecting "
-                "removed customers from capacity-tight routes using route "
-                "load/slack and insertion-pressure evidence; it is not a seed "
-                "selection, VNS/local-search filter, q scheduling, simulated-"
-                "annealing acceptance probability, operator-credit weighting, "
-                "or embedded-VNS runtime allocation."
+                "excluded from DecisionFeatures: successor36 should select "
+                "`policies/baseline_modules/seed_selector.py` with action "
+                "`create_new` for `seed_post_optimization_selector`. The causal "
+                "path is choosing a better feasible post-construction seed "
+                "before downstream ALNS/VNS and recording selected-seed-versus-"
+                "baseline objective effect; it is not destroy/repair removal, "
+                "VNS/local-search filtering, q scheduling, simulated-annealing "
+                "acceptance probability, operator-credit weighting, or "
+                "embedded-VNS runtime allocation."
             ),
             (
                 "Current route-merge branch lesson: `route_merge_repair` in "
@@ -388,25 +400,26 @@ class CvrpSolverDesignProvider:
                 "fallback activation as effect."
             ),
             (
-                "A non-destroy/repair target is not preferred for the current "
-                "successor35 slot unless the target-intent notes explicitly "
-                "supersede the top opportunity and explain why "
-                "`capacity_tightness_removal` is no longer the right next CVRP "
-                "solver test. Do not default to local search, scheduler, "
-                "construction, acceptance, or stable-entrypoint operators "
-                "solely because they are concrete or easy to implement."
+                "A target other than seed_selector.py is not preferred for the "
+                "current successor36 slot unless the target-intent notes "
+                "explicitly supersede the top opportunity and explain why "
+                "`seed_post_optimization_selector` activation repair is no "
+                "longer the right next CVRP solver test. Do not default to "
+                "destroy/repair, local search, scheduler, construction, "
+                "acceptance, or stable-entrypoint operators solely because they "
+                "are concrete or easy to implement."
             ),
             (
-                "If target-intent selects destroy_repair.py for successor35, "
-                "the intent must name mechanism id "
-                "`capacity_tightness_removal` before code work starts and must "
-                "say how route load/slack and insertion pressure select the "
-                "removed set. The later hypothesis and patch must record "
-                "source route load/slack, removed count, repair operator, "
-                "`record_move` delta, best-improved status, phase/runtime "
-                "evidence, and per-case objective deltas under the same "
-                "mechanism id. Do not hardcode case ids, BKS values, seeds, "
-                "or split membership."
+                "If target-intent selects seed_selector.py for successor36, the "
+                "intent must name mechanism id `seed_post_optimization_selector` "
+                "before code work starts and must say how feasible seed "
+                "candidates are compared against the baseline before downstream "
+                "ALNS/VNS. The later hypothesis and patch must record "
+                "activation, phase runtime, `record_move` selected-seed-versus-"
+                "baseline delta, accepted flag, best-improved status, and "
+                "per-case objective deltas under the same mechanism id. "
+                "Scheduler.py edits must be minimal integration changes. Do not "
+                "hardcode case ids, BKS values, seeds, or split membership."
             ),
             (
                 "Use `context.read_active_solver_map.research_lever_digest` as "

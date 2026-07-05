@@ -10,17 +10,7 @@ SUCCESSOR_OPPORTUNITY_FAMILIES = (
     "bounded_local_search_variant",
 )
 REVIEWED_SUCCESSOR_OUTCOME_STATUS = "measured_no_positive_at_mde"
-SUPPRESSED_SUCCESSOR_MECHANISMS = (
-    {
-        "mechanism_id": "seed_post_optimization_selector",
-        "mechanism_family": "construction_seed_portfolio",
-        "reason": (
-            "successor16 and successor17 both reached formal screening but "
-            "reported missing activation/not_evaluated telemetry for the "
-            "declared primary mechanism"
-        ),
-    },
-)
+SUPPRESSED_SUCCESSOR_MECHANISMS = ()
 REVIEWED_SUCCESSOR_MECHANISMS = (
     {
         "mechanism_id": "bounded_2node_cross_exchange",
@@ -475,6 +465,29 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "capacity_tightness_removal",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "capacity-tightness removal path",
+        "causal_path_label": "destroy/repair capacity-tight removal selection",
+        "effect_summary": {
+            "row1_median_delta": -6.0,
+            "row1_ci_low": -8.25,
+            "row1_ci_high": 0.0,
+            "row2_median_delta": -3.5,
+            "row2_ci_low": -6.0,
+            "row2_ci_high": 0.5,
+            "max_median_delta": -3.5,
+            "max_effect_to_mde_ratio": -0.353535,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "win_rate": 0.125,
+            "protected_case_cmt2_status": "negative_both_rows",
+            "protected_case_cmt4_status": "mixed_after_negative_first_row",
+            "interpretation": "mechanism_active_loss_heavy_no_positive_at_mde",
+            "source_root_label": "successor35",
+        },
+    },
+    {
         "mechanism_id": "lookahead_insertion_cost_repair",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "lookahead insertion-cost repair path",
@@ -790,6 +803,11 @@ DEFAULT_AVOID_DIRECTIONS = (
     (
         "unchanged route_pair_overlap_removal_protected_followup after "
         "successor29 valid negative below-MDE evidence"
+    ),
+    (
+        "unchanged capacity_tightness_removal destroy/repair clean fork after "
+        "successor35 valid active loss-heavy evidence with negative aggregate "
+        "medians and CMT2 losses"
     ),
     (
         "unchanged bounded_cross_route_double_bridge_polish bounded-local-search "
