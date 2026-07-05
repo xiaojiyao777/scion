@@ -315,7 +315,12 @@ def _causal_path_rejection(
                 "generation: name a materially different CVRP-owned causal "
                 "path, include direct objective-effect telemetry whose effect "
                 "path or text contains the declared mechanism id, and provide "
-                "structured CMT2/CMT4 protected-case protection evidence."
+                "structured CMT2/CMT4 protected-case protection evidence. "
+                "Use this exact shape in branch_lesson_usage: "
+                "clean_fork_diversity_claim.protected_cases=['CMT2','CMT4'] "
+                "and clean_fork_diversity_claim.protection_plan with separate "
+                "CMT2 and CMT4 entries. Do not put CMT2/CMT4 only in prose, "
+                "material_difference, or contrast_dimensions."
             ),
             "repair_template": {
                 "repair_type": _CAUSAL_PATH_GATE,
@@ -325,8 +330,24 @@ def _causal_path_rejection(
                     "material_difference.contrast",
                     "material_difference.evidence",
                     "expected_telemetry.effect",
-                    "branch_lesson_usage.clean_fork_diversity_claim",
+                    (
+                        "branch_lesson_usage.clean_fork_diversity_claim."
+                        "protected_cases"
+                    ),
+                    (
+                        "branch_lesson_usage.clean_fork_diversity_claim."
+                        "protection_plan"
+                    ),
                 ],
+                "example_branch_lesson_usage": {
+                    "clean_fork_diversity_claim": {
+                        "protected_cases": ["CMT2", "CMT4"],
+                        "protection_plan": {
+                            "CMT2": "case-specific protection or caveat token",
+                            "CMT4": "case-specific protection or caveat token",
+                        },
+                    }
+                },
                 "required_causal_path": (
                     "materially different CVRP-owned causal path with direct "
                     "objective-effect telemetry and CMT2/CMT4 protection"

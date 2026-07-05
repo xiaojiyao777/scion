@@ -345,6 +345,18 @@ def test_cvrp_hypothesis_quality_blocks_missing_cmt_protection(
     assert "CMT2/CMT4 protected-case protection evidence" in (
         check.structured_rejection["retry_constraint"]
     )
+    assert "clean_fork_diversity_claim.protected_cases" in (
+        check.structured_rejection["retry_constraint"]
+    )
+    assert "clean_fork_diversity_claim.protection_plan" in (
+        check.structured_rejection["retry_constraint"]
+    )
+    assert (
+        check.structured_rejection["repair_template"]["example_branch_lesson_usage"][
+            "clean_fork_diversity_claim"
+        ]["protected_cases"]
+        == ["CMT2", "CMT4"]
+    )
 
 
 @pytest.mark.parametrize(
