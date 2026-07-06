@@ -370,6 +370,37 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "elite_route_memory_repair",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "elite complete-route memory repair path",
+        "causal_path_label": "bounded complete-route memory repair",
+        "outcome_status": "marginal_below_mde_protected_case_unsafe",
+        "effect_summary": {
+            "row1_median_delta": 0.0,
+            "row1_ci_low": -7.5,
+            "row1_ci_high": 3.75,
+            "row1_pair_wins": 24,
+            "row1_pair_losses": 22,
+            "row1_pair_ties": 2,
+            "row2_median_delta": 0.0,
+            "row2_ci_low": -6.0,
+            "row2_ci_high": 2.0,
+            "row2_pair_wins": 29,
+            "row2_pair_losses": 28,
+            "row2_pair_ties": 7,
+            "max_median_delta": 0.0,
+            "rows_at_or_above_mde": 0,
+            "protected_case_cmt2_median_delta": -8.0,
+            "protected_case_cmt4_median_delta": -10.5,
+            "negative_case_p_n101_median_delta": -9.0,
+            "negative_case_x_n110_median_delta": -6.0,
+            "telemetry_status": "activation_observed_direct_effect_observed",
+            "mechanism_contract_status": "observed_positive_effect_below_mde",
+            "interpretation": "active_marginal_below_mde_protected_case_unsafe",
+            "source_root_label": "successor42b",
+        },
+    },
+    {
         "mechanism_id": "angular_sector_removal",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "angular-sector removal path",
@@ -1046,6 +1077,11 @@ DEFAULT_AVOID_DIRECTIONS = (
         "unchanged bounded_dual_repair_selector destroy/repair repair-choice "
         "selector after successor39 activated but stayed weak-positive below "
         "MDE with CI highs below the 9.9 MDE and CMT4/B/P losses"
+    ),
+    (
+        "unchanged elite_route_memory_repair destroy/repair complete-route "
+        "memory path after successor42b activated with direct telemetry but "
+        "stayed marginal below MDE and failed CMT2/CMT4 protection"
     ),
     (
         "ec052599-style weak_positive continuation when declared primary "

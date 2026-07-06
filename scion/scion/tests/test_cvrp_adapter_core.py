@@ -284,6 +284,7 @@ def test_cvrp_adapter_hypothesis_quality_blocks_reviewed_successor40_repeat(
         ("radial_2opt_star_relink", "policies/baseline_modules/local_search.py"),
         ("bounded_dual_repair_selector", "policies/baseline_modules/scheduler.py"),
         ("route_skeleton_regret_repair", "policies/baseline_modules/scheduler.py"),
+        ("elite_route_memory_repair", "policies/baseline_modules/route_memory.py"),
     ],
 )
 def test_cvrp_adapter_hypothesis_quality_blocks_reviewed_default_avoid(

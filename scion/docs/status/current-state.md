@@ -226,14 +226,24 @@ The remaining closeout gaps are:
   `material_difference.changed_dimensions` / `contrast` / `evidence` shape was
   not prominent in fresh clean-fork hypothesis prompts. The CVRP-owned solver
   design prompt contract has now been repaired on commit `ff2258f3` without
-  moving CVRP semantics into generic scheduler/decision code. Successor42b is
-  running as the short server-local retry:
+  moving CVRP semantics into generic scheduler/decision code. Successor42b then
+  completed as the short server-local retry:
   `/home/clawd/research/scion-experiments/v04-cvrp-successor42b-cleanfork-prompt-contract-retry-server-claw-2r-gpt55-2r-gpt55-20260706T092004Z-claw`
   with local `gpt-5.5`, `--rounds 2`, `--completion-preflight`, full proposal
-  context, and resume-from successor41b. Early checks show the exact schema now
-  appears in the prompt, the first hypothesis passed the causal-path gate as
-  `elite_route_memory_repair`, and formal screening is running with configured
-  CMT2/CMT4 priority-case coverage recorded in raw metrics.
+  context, and resume-from successor41b. It was valid/complete/postrun-ready
+  with two effective screening rows. The exact schema appeared in the prompt,
+  the first hypothesis passed the causal-path gate as
+  `elite_route_memory_repair`, and CMT2/CMT4 priority-case coverage appeared in
+  effective priority ids. The framework repair is accepted. Solver evidence is
+  not: row 1 was marginal with median delta `0.0`, CI `[-7.5, 3.75]`, and
+  CMT2/CMT4 losses; row 2 expanded to 64 pairs and stayed marginal with median
+  delta `0.0`, CI `[-6.0, 2.0]`, pair W/L/T `29/28/7`, and case losses on
+  P-n101, CMT2, CMT4, and X-n110. The mechanism had direct telemetry, but the
+  direct signal did not produce promotion-grade or protected-case-safe
+  evidence. Treat unchanged `elite_route_memory_repair` and same-mechanism
+  template/count tuning as reviewed/default-avoid for v0.4. The postrun report
+  is
+  `scion/docs/experiments/v0.4/v04-cvrp-successor42b-cleanfork-prompt-contract-retry-postrun-20260706.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -697,15 +707,17 @@ CVRP:
    `route_skeleton_regret_repair` as diagnostic-exhausted
    reviewed/default-avoid evidence; do not long-run, threshold-tune, rerun, or
    continue the same mechanism as an optimization candidate in v0.4.
-   Successor42 is now running at
-   `/home/clawd/research/scion-experiments/v04-cvrp-successor42-cleanfork-protected-schema-repair-server-claw-2r-gpt55-2r-gpt55-20260706T091154Z-claw`;
-   after completion, analyze whether the repaired schema/protected-case context
-   produced a materially different problem-owned causal path and whether CMT2
-   and CMT4 appear in `effective_priority_case_ids`.
-16. Use the v0.4 large-file modularization plan before adding behavior to
+16. Treat successor42/42b as a successful framework repair and a failed solver
+   line. The schema/protected-case prompt and protocol repair worked, but
+   `elite_route_memory_repair` stayed marginal below MDE and failed CMT2/CMT4
+   protection. Do not long-run or same-mechanism tune it; the next CVRP slot
+   must clean-fork to a materially different problem-owned causal path while
+   keeping the exact material-difference prompt contract and CMT2/CMT4
+   priority coverage.
+17. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-17. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-18. Keep status documents compact; put detailed root counters and caveats in
+18. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+19. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes

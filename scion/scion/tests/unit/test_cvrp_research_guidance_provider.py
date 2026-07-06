@@ -140,6 +140,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
         "bounded_dual_repair_selector",
+        "elite_route_memory_repair",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -523,6 +524,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
         "bounded_dual_repair_selector",
+        "elite_route_memory_repair",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -606,6 +608,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["timewarp_string_removal"][
         "mechanism_family"
     ] == "destroy_repair_selection"
+    assert mechanisms_by_id["elite_route_memory_repair"][
+        "mechanism_family"
+    ] == "destroy_repair_selection"
     assert mechanisms_by_id["route_pair_overlap_removal"][
         "mechanism_family"
     ] == "destroy_repair_selection"
@@ -654,6 +659,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
             "frozen_safe_neighbor_list_vns_filter",
             "edge_frequency_penalty_repair",
             "bounded_dual_repair_selector",
+            "elite_route_memory_repair",
         }
     }
     assert all(
@@ -683,6 +689,16 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert bounded_dual_effect["row2_median_delta"] == 0.75
     assert bounded_dual_effect["max_effect_to_mde_ratio"] == 0.075758
     assert bounded_dual_effect["source_root_label"] == "successor39"
+    assert mechanisms_by_id["elite_route_memory_repair"]["outcome_status"] == (
+        "marginal_below_mde_protected_case_unsafe"
+    )
+    elite_memory_effect = mechanisms_by_id["elite_route_memory_repair"][
+        "effect_summary"
+    ]
+    assert elite_memory_effect["row2_median_delta"] == 0.0
+    assert elite_memory_effect["protected_case_cmt2_median_delta"] == -8.0
+    assert elite_memory_effect["protected_case_cmt4_median_delta"] == -10.5
+    assert elite_memory_effect["source_root_label"] == "successor42b"
     radial_relink_effect = mechanisms_by_id["radial_2opt_star_relink"][
         "effect_summary"
     ]
@@ -850,6 +866,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
         "bounded_dual_repair_selector",
+        "elite_route_memory_repair",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",

@@ -63,6 +63,14 @@ CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS = (
             "P/B/E loss-prone and did not force CMT2 coverage"
         ),
     ),
+    (
+        "elite_route_memory_repair",
+        (
+            "successor42b valid screening activated complete-route memory "
+            "repair with direct telemetry but stayed marginal below MDE and "
+            "failed CMT2/CMT4 protected-case evidence"
+        ),
+    ),
 )
 CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE = CVRP_REVIEWED_DEFAULT_AVOID_FAILURE
 CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS = CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS

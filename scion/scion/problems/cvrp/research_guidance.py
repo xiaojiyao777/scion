@@ -251,6 +251,19 @@ SUCCESSOR41_TARGET_INTENT_RULE = (
     "CMT2/CMT4 protected-case coverage, then clean-fork to a materially "
     "different CVRP-owned causal path."
 )
+SUCCESSOR42_MECHANISM_ID = "elite_route_memory_repair"
+SUCCESSOR42_TARGET_FILE = "policies/baseline_modules/route_memory.py"
+SUCCESSOR42B_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor42b-cleanfork-prompt-contract-retry-postrun-20260706.md"
+)
+SUCCESSOR42B_REVIEWED_RULE = (
+    f"Successor42b `{SUCCESSOR42_MECHANISM_ID}` is valid framework-positive "
+    "but solver-negative evidence. The prompt-contract and CMT2/CMT4 priority "
+    "coverage repairs worked, and the mechanism had direct telemetry, but both "
+    "rows stayed marginal below MDE and CMT2/CMT4 were case-level losses. Do "
+    "not long-run or same-mechanism tune complete-route memory repair in v0.4."
+)
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
     "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
@@ -737,6 +750,9 @@ CURRENT_QUESTION = (
     "guarded follow-up mostly became no-op, and successor41/41b "
     f"`{SUCCESSOR41_MECHANISM_ID}` activated but stayed below MDE with "
     "persistent P/B/E-family losses and a CMT2 measurement-coverage caveat, "
+    "and successor42b "
+    f"`{SUCCESSOR42_MECHANISM_ID}` activated with direct telemetry but stayed "
+    "marginal below MDE and failed CMT2/CMT4 protection, "
     "what materially different CVRP-owned causal path can still produce direct "
     "objective movement without repeating reviewed/default-avoid branches? The "
     "next prepared slot is no longer target-intent-bound to route-skeleton "
@@ -750,6 +766,12 @@ REQUIRED_EVIDENCE = (
         "successor41 and successor41b valid below-MDE evidence; do not long-run, "
         "threshold-tune, or continue same-mechanism route-skeleton repair as an "
         "optimization candidate"
+    ),
+    (
+        f"`{SUCCESSOR42_MECHANISM_ID}` is reviewed/default-avoid after "
+        "successor42b valid marginal below-MDE evidence with CMT2/CMT4 "
+        "case-level losses; do not long-run or same-mechanism tune complete "
+        "route-memory repair"
     ),
     (
         "before the next CVRP hypothesis, use exact material_difference schema "
@@ -1140,7 +1162,9 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "two-for-one exchange variants are reviewed/default-avoid. Successor41/41b "
     f"`{SUCCESSOR41_MECHANISM_ID}` is also reviewed/default-avoid after valid "
     "below-MDE route-skeleton evidence with persistent P/B/E-family losses and "
-    "a CMT2 measurement-coverage caveat. The next CVRP solver slot should "
+    "a CMT2 measurement-coverage caveat. Successor42b "
+    f"`{SUCCESSOR42_MECHANISM_ID}` is reviewed/default-avoid after active "
+    "marginal below-MDE evidence with CMT2/CMT4 losses. The next CVRP solver slot should "
     "clean-fork to a materially different CVRP-owned causal path after the "
     "exact material_difference schema and CMT2/CMT4 case-coverage requirements "
     "are satisfied. "
@@ -1283,6 +1307,15 @@ def build_cvrp_legacy_research_focus(
                 "same-mechanism threshold/gating variants after successor40 "
                 "valid below-MDE evidence."
             ),
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        },
+        "successor42b_reviewed_evidence": {
+            "mechanism_id": SUCCESSOR42_MECHANISM_ID,
+            "mechanism_family": "destroy_repair_selection",
+            "target_file": SUCCESSOR42_TARGET_FILE,
+            "postrun_path": SUCCESSOR42B_POSTRUN_PATH,
+            "reviewed_rule": SUCCESSOR42B_REVIEWED_RULE,
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
