@@ -285,6 +285,24 @@ The remaining closeout gaps are:
   on commit `f8383943`. Completion preflight passed and
   target-intent/hypothesis/code traces bound to successor43b; trace audit found
   no context-truncation cause for the weak result.
+- Successor44 repaired the selector telemetry hygiene lesson and tested the
+  materially different `post_vns_best_anchor_acceptance_guard` acceptance-policy
+  path. The first root
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor44-post-vns-best-anchor-acceptance-guard-server-claw-2r-gpt55-2r-gpt55-20260706T154957Z-claw`
+  stopped before solver evidence because hypotheses missed effect telemetry or
+  generated scheduler-owned effect records. The retry root
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor44b-post-vns-best-anchor-acceptance-guard-retry-server-claw-2r-gpt55-2r-gpt55-20260706T160018Z-claw`
+  launched from commit `89055c89` with local `gpt-5.5`, passed completion
+  preflight, and completed screening plus validation before manual stop.
+  Screening was `32/32` valid, W/L/T `19/6/7`, median delta `+4.5`; validation
+  was `32/32` valid, W/L/T `15/3/14`, median delta `0.0`, mean `+21.40625`.
+  Treat it as weak-positive diagnostic evidence for conservative post-VNS
+  acceptance filtering, not as promotion-grade or long-run evidence. Mechanism
+  activation was observed but direct mechanism effect telemetry stayed zero. The
+  automatic same-mechanism telemetry-credit follow-up was stopped because it
+  credited ordinary ALNS/VNS best/current improvements to the acceptance guard.
+  Any follow-up must redesign acceptance-policy attribution first, otherwise
+  clean-fork to a different CVRP-owned causal path.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -759,14 +777,15 @@ CVRP:
    protected follow-up repaired much of the RNG and selected-operator
    attribution contract, but both rows stayed below MDE and CMT2/CMT4/B
    remained unsafe. Do not long-run, threshold-tune, or continue the
-   destroy-shadow selector line. Design successor44 as a materially different
-   CVRP-owned causal path before launching another experiment, and keep the
-   two-row 43b result framed as noisy screening evidence for non-promotion, not
-   a precise effect-size estimate.
-18. Use the v0.4 large-file modularization plan before adding behavior to
+   destroy-shadow selector line.
+18. Treat successor44 as weak-positive diagnostic evidence, not a long-run or
+   promotion candidate. Do not continue the generated telemetry-credit repair;
+   redesign acceptance-policy attribution first or clean-fork to a materially
+   different CVRP-owned path.
+19. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-19. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-20. Keep status documents compact; put detailed root counters and caveats in
+20. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+21. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes

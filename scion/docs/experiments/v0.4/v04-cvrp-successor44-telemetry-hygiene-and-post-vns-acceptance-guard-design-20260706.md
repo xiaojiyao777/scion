@@ -129,6 +129,50 @@ This root is not solver evidence. The design repair is to make acceptance.py
 ownership explicit before relaunch: effect telemetry for successor44 belongs in
 an acceptance guard helper, while scheduler.py remains minimal post-VNS wiring.
 
+## Retry Result
+
+Retry root:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor44b-post-vns-best-anchor-acceptance-guard-retry-server-claw-2r-gpt55-2r-gpt55-20260706T160018Z-claw`
+
+The retry launched from commit `89055c89` on the server-local `claw` runner with
+local `gpt-5.5`, completion preflight, measurement governance on, full proposal
+context, and `target_intent_required_mechanism_ids` bound to
+`post_vns_best_anchor_acceptance_guard`. The first measured candidate obeyed the
+ownership repair: the guard helper and mechanism-specific `record_move` call were
+in `acceptance.py`, while `scheduler.py` only passed post-polish
+candidate/current/best state into the helper.
+
+Screening completed `32/32` valid pairs with zero failed pairs. Pair W/L/T was
+`19/6/7`, median delta was `+4.5`, mean delta was `+8.5625`, and runtime median
+ratio was `0.9965462561150238`. CMT2 was positive on the case gate
+(`3/1/0`, median `+14.5`); CMT4 was neutral/mixed (`1/1/2`, median `0.0`).
+
+Validation completed `32/32` valid pairs with zero failed pairs. Pair W/L/T was
+`15/3/14`, median delta was `0.0`, mean delta was `+21.40625`, and runtime
+median ratio was `0.9981695640393877`. Positive validation signal concentrated
+on A-n60 and P-n70, while X-n120 had large positive outliers and two losses.
+
+Mechanism activation was observed, but the measured candidate's mechanism effect
+telemetry stayed zero: `post_vns_best_anchor_acceptance_guard` iterations were
+present in all 32 candidate runs, runtime was positive in 11/32 screening runs,
+and `phase_improvement_counts` plus `phase_best_delta` were zero in all
+screening runs. The mechanism is therefore best interpreted as acceptance-policy
+trajectory filtering, not as a direct constructive move or local-search
+improvement operator.
+
+The campaign was manually stopped after validation. The automatic diagnostic
+follow-up generated a same-mechanism telemetry-credit patch that routed ordinary
+best/current improving candidates through the guard and credited their deltas to
+`post_vns_best_anchor_acceptance_guard`. That patch would conflate ALNS/VNS
+improvements with acceptance-guard effect and should not be used as solver
+evidence.
+
+Conclusion: successor44b is weak-positive diagnostic evidence for a conservative
+post-VNS acceptance policy, not promotion-grade evidence and not a long-run
+candidate as implemented. Do not continue the generated telemetry-credit repair.
+Any follow-up must first redesign the effect attribution contract for acceptance
+policies, or clean-fork to a materially different CVRP-owned mechanism.
+
 ## Acceptance Criteria
 
 - Typed and legacy CVRP research guidance expose the selector telemetry hygiene

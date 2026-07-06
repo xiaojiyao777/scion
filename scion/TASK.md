@@ -238,6 +238,26 @@ it as solver evidence. The valid successor43b screening root is the fresh
 server-local root
 `/home/clawd/research/scion-experiments/v04-cvrp-successor43b-destroy-shadow-protected-followup-fresh-server-claw-2r-gpt55-2r-gpt55-20260706T133531Z-claw`
 on commit `f8383943`.
+Successor44 is now complete as diagnostic evidence, not a promotion candidate.
+The design repaired selector telemetry hygiene and preregistered the materially
+different `post_vns_best_anchor_acceptance_guard` acceptance-policy path. The
+first root
+`/home/clawd/research/scion-experiments/v04-cvrp-successor44-post-vns-best-anchor-acceptance-guard-server-claw-2r-gpt55-2r-gpt55-20260706T154957Z-claw`
+was stopped before solver evidence after repeated quality blocks and
+scheduler-owned effect telemetry rejections. The retry root
+`/home/clawd/research/scion-experiments/v04-cvrp-successor44b-post-vns-best-anchor-acceptance-guard-retry-server-claw-2r-gpt55-2r-gpt55-20260706T160018Z-claw`
+launched from commit `89055c89` with local `gpt-5.5`, passed completion preflight,
+and completed screening plus validation before being manually stopped. Screening
+was `32/32` valid, W/L/T `19/6/7`, median delta `+4.5`; validation was `32/32`
+valid, W/L/T `15/3/14`, median delta `0.0`, mean `+21.40625`. Mechanism
+activation was observed, but first-candidate mechanism effect telemetry stayed
+zero, so the result is best interpreted as conservative acceptance-policy
+trajectory filtering. The automatic same-mechanism diagnostic follow-up was
+stopped because it credited ordinary ALNS/VNS best/current improvements to the
+acceptance guard, which would pollute mechanism attribution. Do not long-run or
+continue that telemetry-credit repair. Any successor44 follow-up must first
+redesign acceptance-policy effect attribution, otherwise clean-fork to a
+materially different CVRP-owned causal path.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -786,15 +806,18 @@ from the current checkout.
    protected follow-up repaired much of the RNG and selected-operator
    attribution contract, but both rows stayed below MDE and CMT2/CMT4/B
    remained unsafe. Do not long-run, threshold-tune, or continue the
-   destroy-shadow selector line. Design successor44 as a materially different
-   CVRP-owned causal path before launching another experiment, and keep the
-   two-row 43b result framed as noisy screening evidence for non-promotion, not
-   a precise effect-size estimate.
-18. Use the new large-file modularization plan before further behavior changes
+   destroy-shadow selector line.
+18. Treat successor44 as weak-positive diagnostic evidence for conservative
+   post-VNS acceptance filtering, not promotion-grade evidence. Screening was
+   positive but validation median was `0.0`; mechanism effect telemetry was zero,
+   and the generated telemetry-credit follow-up misattributed ALNS/VNS
+   improvements to the guard. Do not long-run unchanged successor44 or continue
+   that repair without a redesigned acceptance-policy attribution contract.
+19. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-19. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+20. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-20. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+21. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence
