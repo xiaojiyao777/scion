@@ -88,6 +88,12 @@ and `mechanism_contract_status=observed_no_effect`. Treat unchanged
 same-branch follow up despite weak pair-level lifecycle noise. The next CVRP
 slot should clean-fork to a materially different problem-owned causal path with
 direct accepted-move/objective-effect evidence and CMT2/CMT4 protection.
+Successor39 is now preregistered as `bounded_dual_repair_selector` in
+`policies/baseline_modules/scheduler.py`: a proposal-only target-intent-bound
+ALNS repair-choice experiment that compares the selected repair against one
+bounded alternate repair before VNS, while leaving construction, destroy
+operators, local search, acceptance, adaptive scoring, and embedded-VNS runtime
+allocation unchanged.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.

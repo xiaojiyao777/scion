@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from scion.problems.cvrp.research_guidance import (
     CvrpResearchGuidanceProvider,
+    SUCCESSOR39_MECHANISM_ID,
     build_cvrp_legacy_research_focus,
     build_cvrp_research_guidance_contract,
 )
@@ -45,7 +46,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         mechanism.mechanism_id
         for mechanism in contract.required_mechanisms
         if mechanism.hypothesis_mechanism_binding == "target_intent_required"
-    ] == []
+    ] == [SUCCESSOR39_MECHANISM_ID]
     assert any(
         "total_distance delta by case and seed" in field
         for requirement in contract.evidence_requirements
@@ -100,7 +101,9 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         },
     )
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == []
+    assert launch_payload["target_intent_required_mechanism_ids"] == [
+        SUCCESSOR39_MECHANISM_ID
+    ]
 
 
 def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
@@ -118,7 +121,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["schema_version"] == "scion.cvrp_research_focus.v1"
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
-    assert focus["target_intent_required_mechanism_ids"] == []
+    assert focus["target_intent_required_mechanism_ids"] == [SUCCESSOR39_MECHANISM_ID]
     assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -809,7 +812,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "seed_post_optimization_selector",
     ]
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == []
+    assert launch_payload["target_intent_required_mechanism_ids"] == [
+        SUCCESSOR39_MECHANISM_ID
+    ]
     assert launch_payload["suppressed_mechanism_ids"] == []
     assert launch_payload["successor_opportunity_families"] == [
         "acceptance_or_adaptive_weighting",

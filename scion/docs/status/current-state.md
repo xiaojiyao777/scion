@@ -147,7 +147,12 @@ The remaining closeout gaps are:
   mechanism moves, zero direct mechanism best delta, all case gates tied, and
   `mechanism_contract_status=observed_no_effect`. Treat unchanged
   `radial_2opt_star_relink` as reviewed/default-avoid; do not long-run or
-  same-branch follow up despite weak pair-level lifecycle noise.
+  same-branch follow up despite weak pair-level lifecycle noise. Successor39 is
+  now designed and target-intent-bound as `bounded_dual_repair_selector` in
+  `policies/baseline_modules/scheduler.py`: compare the default repair against
+  one bounded alternate repair before VNS, keep formal
+  `required_mechanism_ids` empty, and require direct pre-VNS selector telemetry
+  plus CMT2/CMT4 protection evidence before any long-run decision.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.

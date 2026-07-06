@@ -186,6 +186,24 @@ SUCCESSOR38_POSTRUN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor38-proposal-quality-contract-postrun-20260706.md"
 )
+SUCCESSOR39_MECHANISM_ID = "bounded_dual_repair_selector"
+SUCCESSOR39_TARGET_FILE = "policies/baseline_modules/scheduler.py"
+SUCCESSOR39_DESIGN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor39-bounded-dual-repair-selector-design-20260706.md"
+)
+SUCCESSOR39_TARGET_INTENT_RULE = (
+    f"Successor39 is preregistered as `{SUCCESSOR39_MECHANISM_ID}` in "
+    f"`{SUCCESSOR39_TARGET_FILE}`. It is a proposal-only target-intent "
+    "binding for a bounded ALNS repair-choice selector: after destroy, compare "
+    "the normally selected repair against one bounded alternate repair on a "
+    "copied post-destroy candidate, select the feasible lower-distance "
+    "pre-VNS candidate, and leave acceptance, adaptive weight scoring, "
+    "construction, destroy operators, local-search operators, and embedded-VNS "
+    "runtime allocation unchanged. Record direct pre-VNS selector objective "
+    "effect and CMT2/CMT4 protection evidence; see "
+    f"`{SUCCESSOR39_DESIGN_PATH}`."
+)
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
     "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
@@ -562,8 +580,10 @@ NEXT_REQUIRED_DIRECTION = (
     "protection commitments. "
     "`required_mechanism_ids` remains empty because the guidance is proposal-only "
     "and must not hard-force the Decision path; "
-    "`target_intent_required_mechanism_ids` is empty because successor36b "
-    "closed the temporary seed-post target-intent binding. "
+    "`target_intent_required_mechanism_ids` now contains "
+    f"`{SUCCESSOR39_MECHANISM_ID}` because successor39 is a proposal-only "
+    "target-intent binding; this does not configure the formal required "
+    "mechanism guard. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
     "telemetry-only q-audit repair for the missing explicit fields, or when "
@@ -626,9 +646,30 @@ CURRENT_QUESTION = (
     f"`{SUCCESSOR38_MECHANISM_ID}` was active-no-effect despite passing the "
     "new causal-path quality contract, what materially different "
     "CVRP-owned causal path can still produce direct objective movement without "
-    "repeating reviewed/default-avoid branches?"
+    "repeating reviewed/default-avoid branches? The next prepared slot is "
+    f"target-intent-bound to `{SUCCESSOR39_MECHANISM_ID}` so the live "
+    "hypothesis must test bounded dual repair choice before VNS rather than "
+    "another local-search, seed, acceptance-weight, or removal variant."
 )
 REQUIRED_EVIDENCE = (
+    (
+        f"successor39 live target-intent and hypothesis must set mechanism_id "
+        f"to `{SUCCESSOR39_MECHANISM_ID}`, target `{SUCCESSOR39_TARGET_FILE}`, "
+        "and explain the bounded dual repair selector before code work starts"
+    ),
+    (
+        "successor39 direct telemetry must compare default repair versus one "
+        "bounded alternate repair before embedded VNS or size70 polish: "
+        "default repair operator/distance, alternate repair operator/distance, "
+        "selected repair operator, accepted selector flag, pre-VNS delta, "
+        "feasibility, route count, and record_move under the declared mechanism"
+    ),
+    (
+        "successor39 must keep simulated-annealing acceptance, adaptive weight "
+        "scoring, construction, destroy operators, local-search operators, and "
+        "embedded-VNS runtime allocation unchanged unless the prepared guidance "
+        "is regenerated"
+    ),
     (
         "for the next clean fork, live target-intent or hypothesis names a "
         "materially different CVRP-owned causal path before code work starts "
@@ -848,7 +889,10 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
     ),
     (
         "destroy_repair_selection: require per-case total_distance deltas "
-        "tied to the changed repair/removal choice. Successor29 validly "
+        "tied to the changed repair/removal choice. Current successor39 "
+        f"`{SUCCESSOR39_MECHANISM_ID}` targets bounded dual repair choice in "
+        f"`{SUCCESSOR39_TARGET_FILE}` before VNS, not another removal rule or "
+        "adaptive-weight update. Successor29 validly "
         "screened route_pair_overlap_removal_protected_followup and stayed "
         "negative, so the route-pair-overlap line is parked for v0.4. After "
         "the reviewed "
@@ -970,7 +1014,9 @@ SUCCESSOR_PORTFOLIO_RULE = (
     f"`{SUCCESSOR38_MECHANISM_ID}` was active-no-effect with zero accepted "
     "mechanism moves and observed_no_effect status. The next CVRP solver slot "
     "should spend a branch only on a materially different CVRP-owned causal "
-    "path. Scheduler destroy-size "
+    "path; the current prepared slot is target-intent-bound to "
+    f"`{SUCCESSOR39_MECHANISM_ID}` as bounded dual repair choice before VNS. "
+    "Scheduler destroy-size "
     "policy remains allowed only as "
     "telemetry-only q-audit repair or a materially different scheduler-policy "
     "causal path; insertion-cost lookahead repair and post-repair effect "
@@ -1069,9 +1115,18 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [],
+        "target_intent_required_mechanism_ids": [SUCCESSOR39_MECHANISM_ID],
         "reviewed_mechanism_ids": list(REVIEWED_MECHANISM_IDS),
         "suppressed_mechanism_ids": list(SUPPRESSED_MECHANISM_IDS),
+        "successor39_target_intent": {
+            "mechanism_id": SUCCESSOR39_MECHANISM_ID,
+            "mechanism_family": "destroy_repair_selection",
+            "target_file": SUCCESSOR39_TARGET_FILE,
+            "design_path": SUCCESSOR39_DESIGN_PATH,
+            "rule": SUCCESSOR39_TARGET_INTENT_RULE,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        },
         "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
         "reviewed_successor_evidence": deepcopy(REVIEWED_SUCCESSOR_EVIDENCE),
         "current_question": CURRENT_QUESTION,
@@ -1094,7 +1149,23 @@ def build_cvrp_legacy_research_focus(
 
 
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
-    return ()
+    return (
+        RequiredMechanism(
+            mechanism_id=SUCCESSOR39_MECHANISM_ID,
+            category="successor39_target_intent",
+            description=SUCCESSOR39_TARGET_INTENT_RULE,
+            required_observations=(
+                "live target-intent mechanism_id matches successor39",
+                f"target_file={SUCCESSOR39_TARGET_FILE}",
+                "default and alternate repair distances recorded before VNS",
+                "selected repair operator and accepted selector flag recorded",
+                "record_move delta emitted under the successor39 mechanism id",
+                "CMT2/CMT4 protection evidence or explicit split caveat",
+            ),
+            protected_items=PROTECTED_CASES,
+            hypothesis_mechanism_binding="target_intent_required",
+        ),
+    )
 
 
 def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
@@ -1152,6 +1223,27 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "per-case total_distance delta tied to the changed mechanism",
                 "feasibility and route-count preservation or explicit caveat",
                 "runtime budget evidence under the formal policy",
+            ),
+        ),
+        EvidenceRequirement(
+            requirement_id="successor39_bounded_dual_repair_selector",
+            category="target_intent_required_mechanism_evidence",
+            description=SUCCESSOR39_TARGET_INTENT_RULE,
+            mechanism_ids=(
+                SUCCESSOR39_MECHANISM_ID,
+                "destroy_repair_selection",
+                SUCCESSOR39_TARGET_FILE,
+            ),
+            protected_items=PROTECTED_CASES,
+            required_fields=(
+                "default repair operator and pre-VNS distance",
+                "alternate repair operator and pre-VNS distance",
+                "selected repair operator",
+                "accepted selector flag",
+                "record_move under bounded_dual_repair_selector",
+                "pre-VNS objective delta before embedded VNS or size70 polish",
+                "candidate feasibility and route-count preservation",
+                "CMT2/CMT4 case-level total_distance deltas or split caveat",
             ),
         ),
         *_reviewed_successor_evidence_requirements(),
@@ -1252,6 +1344,8 @@ def _continuity_requirements() -> tuple[ContinuityRequirement, ...]:
     resume = RESUME_CONTINUITY_REQUIREMENTS
     related_ids = (
         *SUCCESSOR_OPPORTUNITY_FAMILIES,
+        SUCCESSOR39_MECHANISM_ID,
+        SUCCESSOR39_TARGET_FILE,
         REQUIRED_MECHANISM_ID,
         *(str(item["mechanism_id"]) for item in REVIEWED_SUCCESSOR_MECHANISMS),
         "bounded_local_search_variant",
@@ -1282,6 +1376,7 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
             category="proposal_focus",
             title="Successor portfolio direction",
             lines=(
+                SUCCESSOR39_TARGET_INTENT_RULE,
                 NEXT_REQUIRED_DIRECTION,
                 CURRENT_QUESTION,
                 SUCCESSOR_PORTFOLIO_RULE,
