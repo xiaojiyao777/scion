@@ -216,6 +216,14 @@ The remaining closeout gaps are:
   priority cases, and raw metrics record configured/requested/effective
   priority-case coverage. This is a research-entry/protocol repair, not a
   solver mechanism.
+  Successor42 is now running as a short server-local clean-fork validation:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor42-cleanfork-protected-schema-repair-server-claw-2r-gpt55-2r-gpt55-20260706T091154Z-claw`
+  on launcher commit `bb65bd47`, local `gpt-5.5`, `--rounds 2`,
+  `--completion-preflight`, full proposal context, and resume-from
+  successor41b. Early run log shows the causal-path quality gate rejected a
+  first hypothesis that missed exact `material_difference` and clean-fork
+  diversity evidence, which is expected repair behavior rather than an
+  infra/model failure.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -678,10 +686,12 @@ CVRP:
 15. Treat successor41b as complete, valid, and below MDE. Park
    `route_skeleton_regret_repair` as diagnostic-exhausted
    reviewed/default-avoid evidence; do not long-run, threshold-tune, rerun, or
-   continue the same mechanism as an optimization candidate in v0.4. The next
-   CVRP step is successor42: validate the schema/protected-case repair, then
-   launch a short clean-fork run to a materially different problem-owned causal
-   path.
+   continue the same mechanism as an optimization candidate in v0.4.
+   Successor42 is now running at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor42-cleanfork-protected-schema-repair-server-claw-2r-gpt55-2r-gpt55-20260706T091154Z-claw`;
+   after completion, analyze whether the repaired schema/protected-case context
+   produced a materially different problem-owned causal path and whether CMT2
+   and CMT4 appear in `effective_priority_case_ids`.
 16. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 17. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
