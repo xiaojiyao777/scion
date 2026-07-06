@@ -166,13 +166,24 @@ generic protocol selection now supports configured screening
 `priority_case_ids`, CVRP formal screening declares CMT2/CMT4 as those priority
 cases, and raw metrics record configured/requested/effective priority-case
 coverage. This is a research-entry/protocol repair, not a solver mechanism.
-Successor42 is now running as a short server-local clean-fork validation:
+The first successor42 validation root
 `/home/clawd/research/scion-experiments/v04-cvrp-successor42-cleanfork-protected-schema-repair-server-claw-2r-gpt55-2r-gpt55-20260706T091154Z-claw`
-on launcher commit `bb65bd47`, local `gpt-5.5`, `--rounds 2`,
-`--completion-preflight`, full proposal context, and resume-from successor41b.
-Early run log shows the causal-path quality gate rejected a first hypothesis
-that missed exact `material_difference` and clean-fork diversity evidence,
-which is expected repair behavior rather than an infra/model failure.
+on launcher commit `bb65bd47` completed invalid with zero effective protocol
+rows after the CVRP causal-path quality gate repeatedly blocked hypotheses
+that missed the exact `material_difference` and clean-fork diversity evidence
+schema. Trace audit showed this was a prompt-contract assembly gap, not a
+model, protocol-selection, or measurement failure: the exact
+`material_difference.changed_dimensions` / `contrast` / `evidence` shape was
+not prominent in fresh clean-fork hypothesis prompts. The CVRP-owned solver
+design prompt contract has now been repaired on commit `ff2258f3` without
+moving CVRP semantics into generic scheduler/decision code. Successor42b is
+running as the short server-local retry:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor42b-cleanfork-prompt-contract-retry-server-claw-2r-gpt55-2r-gpt55-20260706T092004Z-claw`
+with local `gpt-5.5`, `--rounds 2`, `--completion-preflight`, full proposal
+context, and resume-from successor41b. Early checks show the exact schema now
+appears in the prompt, the first hypothesis passed the causal-path gate as
+`elite_route_memory_repair`, and formal screening is running with configured
+CMT2/CMT4 priority-case coverage recorded in raw metrics.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
