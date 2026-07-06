@@ -92,6 +92,27 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
                     "required_mechanism_ids": [
                         "large_instance_intra_route_two_opt_seed",
                     ],
+                    "target_intent_required_mechanism_ids": [
+                        "bounded_dual_repair_selector",
+                    ],
+                    "successor39_target_intent": {
+                        "mechanism_id": "bounded_dual_repair_selector",
+                        "mechanism_family": "destroy_repair_selection",
+                        "target_file": "policies/baseline_modules/alns.py",
+                    },
+                    "required_evidence": [
+                        "default repair operator and pre-VNS distance",
+                        "alternate repair operator and pre-VNS distance",
+                        "selected repair operator",
+                        "accepted selector flag",
+                        "record_move under bounded_dual_repair_selector",
+                        "pre-VNS objective delta before embedded VNS",
+                        "candidate feasibility and route-count preservation",
+                        (
+                            "CMT2/CMT4 case-level total_distance deltas or "
+                            "split caveat"
+                        ),
+                    ],
                     "current_question": (
                         "Select a materially different CVRP solver-design mechanism."
                     ),
@@ -232,6 +253,67 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
     assert "two_opt_intra" in prompt_text
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prompt_text
     assert "DecisionFeatures" in prompt_text
+    assert "## Prepared Research Obligations" in prompt_text
+    assert "default repair operator and pre-VNS distance" in prompt_text
+
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Select between default and alternate bounded repair.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/alns.py",
+        predicted_direction="improve",
+        target_objectives=["total_distance"],
+        protected_objectives=["fleet_violation"],
+        mechanism_changes=(
+            MechanismChange(
+                id="bounded_dual_repair_selector",
+                change_type="modify",
+            ),
+        ),
+    )
+    code_ctx = ContextManager(adapter=CvrpAdapter(spec_v1)).build_code_context(
+        branch,
+        hypothesis,
+        champion,
+        legacy,
+    )
+    assert code_ctx["launch_research_focus"]["target_intent_required_mechanism_ids"] == [
+        "bounded_dual_repair_selector"
+    ]
+
+    code_blocks, code_user_prompt = _split_code_context(code_ctx)
+    code_prompt_text = (
+        "\n".join(block["text"] for block in code_blocks) + code_user_prompt
+    )
+
+    assert "## Prepared Research Obligations" in code_prompt_text
+    assert "Code-generation must implement or preserve" in code_prompt_text
+    assert "bounded_dual_repair_selector" in code_prompt_text
+    assert "default repair operator and pre-VNS distance" in code_prompt_text
+    assert "alternate repair operator and pre-VNS distance" in code_prompt_text
+    assert "CMT2/CMT4 case-level total_distance deltas or split caveat" in (
+        code_prompt_text
+    )
+    assert "together with the Prepared Research Obligations section above" in (
+        code_prompt_text
+    )
+    code_manifest = build_api_visible_prompt_manifest(
+        session_id="session-cvrp-prepared-obligations-code",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context=code_ctx,
+        observations=[],
+        call_index=2,
+        system_blocks=code_blocks,
+        user_prompt=code_user_prompt,
+    )
+    assert "prepared_research_obligations" in code_manifest["section_names"]
+    assert code_manifest["section_statuses"]["prepared_research_obligations"][
+        "status"
+    ] == "included"
+    assert code_manifest["section_statuses"]["prepared_research_obligations"][
+        "block_family"
+    ] == "research_signal"
 
 
 def test_cvrp_solver_design_hypothesis_keeps_active_file_guidance() -> None:
@@ -343,8 +425,8 @@ def test_cvrp_code_context_relays_opportunity_commitment_from_mechanism_changes(
     )
     hypothesis = HypothesisProposal(
         hypothesis_text=(
-            "Refine the large-instance intra-route two-opt seed with a "
-            "deadline-aware bounded pass."
+            "Clean-fork to a materially distinct CVRP-owned causal path with "
+            "deadline-aware evidence."
         ),
         change_locus="solver_design",
         action="modify",
@@ -354,7 +436,7 @@ def test_cvrp_code_context_relays_opportunity_commitment_from_mechanism_changes(
         protected_objectives=("fleet_violation",),
         mechanism_changes=(
             MechanismChange(
-                id="large_instance_intra_route_two_opt_seed",
+                id="clean_cvrp_solver_fork",
                 change_type="modify",
             ),
         ),
@@ -389,7 +471,7 @@ def test_cvrp_code_context_relays_opportunity_commitment_from_mechanism_changes(
     ] == "included"
     commitment_summary = manifest["opportunity_evidence_commitment_summary"]
     assert commitment_summary["selected_mechanism_ids"] == [
-        "large_instance_intra_route_two_opt_seed"
+        "clean_cvrp_solver_fork"
     ]
     assert commitment_summary["requirement_ids"] == [
         "large_instance_two_opt_objective_runtime_requirement",

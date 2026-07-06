@@ -487,18 +487,17 @@ def _solver_design_target_prompt_grounding_feedback(
     target_context = dict(target_context or {})
     coverage_status = str(target_context.get("coverage_status") or "").strip()
     retry_constraint = (
-        "Use the newly visible full context.read_algorithm_file content "
-        f"for {target_file}. Redraft the same target/mechanism only after "
-        "checking that file; do not proceed from a read receipt or "
-        "post-hoc grounding observation."
+        "Use newly visible full context.read_algorithm_file content, or a full "
+        f"context.read_algorithm_slice for the selected target symbol in {target_file}. "
+        "Redraft the same target/mechanism only after checking sufficient "
+        "source; do not proceed from a read receipt, truncated file preview, "
+        "or post-hoc grounding observation."
     )
     if coverage_status == "truncated":
-        retry_constraint = (
-            "Use the newly visible truncated context.read_algorithm_file "
-            f"context for {target_file}, including its digest and line coverage. "
-            "Acknowledge the visible line range and avoid claims that require "
-            "unseen source; request a narrower symbol/slice later only if the "
-            "visible target context is insufficient."
+        retry_constraint += (
+            " The latest file context was truncated, so it is diagnostic only; "
+            "request full file content or a full symbol/slice before binding "
+            "a modify/remove target."
         )
     return _drop_empty_dict(
         {
@@ -684,19 +683,7 @@ def _observations_include_bounded_target_file_context(
         observations,
         target_read_args,
     )
-    if not target_context:
-        return False
-    if target_context.get("coverage_status") == "full":
-        return True
-    if target_context.get("coverage_status") != "truncated":
-        return False
-    return bool(
-        target_context.get("content_digest")
-        and target_context.get("line_start") == 1
-        and target_context.get("line_end")
-        and target_context.get("covered_line_count")
-        and target_context.get("total_line_count")
-    )
+    return target_context.get("coverage_status") == "full"
 
 
 def _observations_include_full_target_slice_context(

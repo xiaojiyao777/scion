@@ -179,6 +179,7 @@ def _section_block_family(name: str) -> str:
         "branch_direction",
         "objective_opportunity_profile",
         "opportunity_evidence_commitment",
+        "prepared_research_obligations",
         "problem_measurement_diagnostics",
         "problem_opportunity_summary",
         "exploration_coverage",

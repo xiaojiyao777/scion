@@ -159,8 +159,17 @@ The remaining closeout gaps are:
   successor39 mechanism; do not treat it as solver evidence. The guard is now
   retargeted, and the clean retry root
   `/home/clawd/research/scion-experiments/v04-cvrp-successor39-bounded-dual-repair-selector-server-retry-2r-gpt55-20260706T004158Z-claw`
-  is running from commit `74ffcdc9` with local `gpt-5.5` and completion
-  preflight healthy.
+  completed valid/complete/postrun-ready with local `gpt-5.5`, four normal
+  model calls, two screening rows, and no promotion. Row 1 had median delta
+  `0.0`, CI `[-3.5, 6.5]`; row 2 had median delta `0.75`, CI
+  `[-6.25, 6.5]`; both CI highs were below the 9.9 MDE. Treat unchanged
+  `bounded_dual_repair_selector` as reviewed below-MDE evidence, not a long-run
+  candidate. The successor39 trace audit exposed prompt/context degradation:
+  prepared evidence obligations reached hypothesis context but were compressed
+  before code generation. The current checkout now renders those obligations
+  as a dedicated `Prepared Research Obligations` section in target-intent,
+  hypothesis, and code prompts, and no longer accepts truncated target-file
+  previews as sufficient solver-design grounding.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -188,6 +197,13 @@ The remaining closeout gaps are:
   field-driven: reviewed or suppressed branch-local mechanism ids can be
   superseded for prepared runs, but mixed branches with non-excluded mechanisms
   remain schedulable under proposal guards.
+- Prepared launch research obligations now reach target-intent, hypothesis,
+  and code prompts as a first-class proposal-only section. Code generation no
+  longer treats a compressed hypothesis brief as the only source of truth when
+  prepared evidence obligations exist.
+- Solver-design target grounding requires full target-file content or a full
+  target slice. Truncated file previews remain diagnostic only and are not
+  sufficient for modify/remove target binding.
 - Resume launches quarantine copied terminal artifacts under
   `run_root/resume_snapshot/`; current-run canonical files must represent the
   current execution.
@@ -600,10 +616,16 @@ CVRP:
    `observed_no_effect` mechanism contract status. Do not long-run or repeat
    unchanged `radial_2opt_star_relink`; the next slot must clean-fork to a
    materially different CVRP-owned causal path.
-13. Use the v0.4 large-file modularization plan before adding behavior to
+13. Treat successor39 as valid current-run but solver-negative below-MDE
+   evidence for unchanged `bounded_dual_repair_selector`. It activated and
+   showed local positive selector telemetry, but both screening rows stayed
+   below MDE and CMT4/B/P-family losses remain. Do not long-run or extend the
+   unchanged mechanism; use the prompt/context repair before the next CVRP
+   design.
+14. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-14. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-15. Keep status documents compact; put detailed root counters and caveats in
+15. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+16. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes

@@ -1117,6 +1117,7 @@ class ContextManager:
         import_whitelist = "\n".join(
             f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
         )
+        launch_research_focus = _build_launch_research_focus() or ""
 
         ctx: Dict[str, Any] = {
             "problem_summary": problem_summary,
@@ -1136,6 +1137,7 @@ class ContextManager:
             "champion_operators_code": champion_operators_code,
             "reference_operators": reference_operators,
             "operator_interface_spec": operator_interface_spec,
+            "launch_research_focus": launch_research_focus,
             "research_surface_name": hypothesis.change_locus,
             "research_surface_kind": getattr(surface, "kind", "operator"),
             "import_whitelist": import_whitelist,

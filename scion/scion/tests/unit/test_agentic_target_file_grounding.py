@@ -1549,7 +1549,37 @@ def test_algorithm_slice_receipt_is_not_sufficient_target_file_grounding() -> No
     )
 
 
-def test_truncated_algorithm_file_grounding_carries_digest_and_line_coverage() -> None:
+def test_full_algorithm_slice_is_sufficient_target_file_grounding() -> None:
+    target_args = {
+        "surface": "solver_design",
+        "file_path": "policies/baseline_modules/local_search.py",
+        "max_chars": 24000,
+    }
+    slice_observation = ProposalObservation(
+        observation_id="slice-full-1",
+        session_id="session",
+        tool_name="context.read_algorithm_slice",
+        tool_call_id="tool-1",
+        observation_type="algorithm_slice",
+        summary="full slice",
+        structured_payload={
+            "file_path": "policies/baseline_modules/local_search.py",
+            "slice_id": "local_search.two_opt_star",
+            "coverage_status": "full",
+            "content": "def _two_opt_star(solution, rng):\n    return solution\n",
+            "content_digest": "digest",
+            "line_start": 10,
+            "line_end": 80,
+        },
+    )
+
+    assert _observations_include_sufficient_target_context(
+        [slice_observation],
+        target_args,
+    )
+
+
+def test_truncated_algorithm_file_grounding_is_not_sufficient() -> None:
     target_args = {
         "surface": "solver_design",
         "file_path": "policies/baseline_modules/large.py",
@@ -1577,7 +1607,7 @@ def test_truncated_algorithm_file_grounding_carries_digest_and_line_coverage() -
         },
     )
 
-    assert _observations_include_sufficient_target_context(
+    assert not _observations_include_sufficient_target_context(
         [file_observation],
         target_args,
     )

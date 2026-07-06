@@ -99,7 +99,16 @@ was stopped after a stale successor32 scheduler guard blocked the correct
 successor39 mechanism; it is not solver evidence. The guard was retargeted to
 successor39 and the clean retry root
 `/home/clawd/research/scion-experiments/v04-cvrp-successor39-bounded-dual-repair-selector-server-retry-2r-gpt55-20260706T004158Z-claw`
-is running from commit `74ffcdc9`.
+completed valid/complete/postrun-ready with local `gpt-5.5`, four normal model
+calls, two screening rows, and no promotion. Row 1 had median delta `0.0`, CI
+`[-3.5, 6.5]`; row 2 had median delta `0.75`, CI `[-6.25, 6.5]`; both CI highs
+were below the 9.9 MDE. Treat unchanged `bounded_dual_repair_selector` as
+reviewed below-MDE evidence, not a long-run candidate. The successor39 trace
+audit exposed a prompt/context quality issue: prepared evidence obligations
+were visible in broad focus context but were compressed before code generation.
+The current checkout now preserves those obligations as a dedicated
+`Prepared Research Obligations` prompt section and rejects truncated
+target-file previews as sufficient solver-design grounding.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -164,6 +173,12 @@ Accepted framework evidence:
 - CVRP can now execute evidence-backed continuation, MDE-aware rejection,
   branch parking, reviewed/default-avoid successor guidance, suppression of
   inactive mechanisms, and clean-fork behavior.
+- Prepared launch research obligations now flow through target-intent,
+  hypothesis, and code prompts as a first-class proposal-only contract rather
+  than being left to compressed hypothesis summaries.
+- Solver-design target grounding no longer accepts truncated file previews as
+  sufficient source for modify/remove binding; full file content or a full
+  target slice is required.
 - Warehouse v2 positive-control evidence supports restored effective research
   and plateau-review readiness for v0.4 framework purposes.
 - Postrun/readiness work has moved toward typed ports and problem-owned review
@@ -621,11 +636,17 @@ from the current checkout.
    `observed_no_effect` mechanism contract status. Do not long-run or repeat
    unchanged `radial_2opt_star_relink`; the next slot must clean-fork to a
    materially different CVRP-owned causal path.
-13. Use the new large-file modularization plan before further behavior changes
+13. Treat successor39 as valid current-run but solver-negative below-MDE
+   evidence for unchanged `bounded_dual_repair_selector`. It activated and
+   showed local positive selector telemetry, but both screening rows stayed
+   below MDE and CMT4/B/P-family losses remain. Do not long-run or extend the
+   unchanged mechanism; use the prompt/context repair before the next CVRP
+   design.
+14. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-14. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+15. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-15. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+16. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence

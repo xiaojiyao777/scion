@@ -12,6 +12,7 @@ from .prompt_common import (
     _DefaultDict,
     _agentic_research_context_block,
 )
+from .prepared_obligations import prepared_research_obligations_section
 from .solver_design_prompts import (
     _solver_design_hypothesis_guidance,
     _solver_design_target_intent_guidance,
@@ -105,6 +106,9 @@ def _split_hypothesis_context(
     )
     if successor_conflict_prompt:
         branch_context_parts.append(successor_conflict_prompt)
+    prepared_obligations = prepared_research_obligations_section(context)
+    if prepared_obligations:
+        branch_context_parts.append(prepared_obligations)
     if same_mechanism_constraints:
         branch_context_parts.append(same_mechanism_constraints)
 
@@ -345,6 +349,9 @@ def _split_hypothesis_target_intent_context(
     )
     if successor_conflict_prompt:
         branch_context_parts.append(successor_conflict_prompt)
+    prepared_obligations = prepared_research_obligations_section(context)
+    if prepared_obligations:
+        branch_context_parts.append(prepared_obligations)
     if same_mechanism_constraints:
         branch_context_parts.append(same_mechanism_constraints)
     for key, title in (

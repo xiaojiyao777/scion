@@ -10,6 +10,10 @@ from typing import Any, Dict
 from scion.opportunity import compact_opportunity_evidence_commitment
 from scion.proposal.edit_protocol import build_patch_edit_source_manifest
 
+from .prepared_obligations import (
+    prepared_research_obligations_payload,
+    prepared_research_obligations_section,
+)
 from .prompt_common import (
     _CACHE_5M,
     _DefaultDict,
@@ -121,6 +125,12 @@ def _split_code_context(
             D["opportunity_evidence_commitment"]
         )
     )
+    prepared_obligations_section = prepared_research_obligations_section(
+        context,
+        code_phase=True,
+    )
+    if prepared_obligations_section:
+        prepared_obligations_section = f"{prepared_obligations_section}\n\n"
     solver_design_api_manifest_section = (
         f"## Solver-Design Module API Manifest\n{solver_design_api_manifest}\n\n"
         if solver_design_api_manifest
@@ -305,6 +315,7 @@ def _split_code_context(
         f"{prior_failure_section}"
         f"{previous_patch_section}"
         f"{telemetry_identity_retry_section}"
+        f"{prepared_obligations_section}"
         f"## Hypothesis to Implement\n{_code_implementation_brief(D)}\n\n"
         f"## Hypothesis Detail Audit\n{_code_hypothesis_detail(D, is_solver_design_surface)}\n\n"
         f"{opportunity_evidence_commitment_section}"
@@ -568,10 +579,21 @@ def _code_implementation_brief(context: Dict[str, Any]) -> str:
                 "risk_to_higher_priority": context.get("risk_to_higher_priority"),
             }
         )
+    if prepared_research_obligations_payload(context):
+        source_rule = (
+            "Use this short structured implementation brief together with the "
+            "Prepared Research Obligations section above as the source of truth "
+            "for target_file, mechanism ids, telemetry, risk, no-op behavior, "
+            "and prepared evidence obligations."
+        )
+    else:
+        source_rule = (
+            "Use this short structured implementation brief as the complete "
+            "source of truth for target_file, mechanism ids, telemetry, risk, "
+            "and no-op behavior."
+        )
     return (
-        "Use this short structured implementation brief as the complete "
-        "source of truth for target_file, mechanism ids, telemetry, risk, and "
-        "no-op behavior. The detail-audit section below is explanatory only.\n"
+        f"{source_rule} The detail-audit section below is explanatory only.\n"
         f"{_bounded_json(payload, 12000)}"
     )
 

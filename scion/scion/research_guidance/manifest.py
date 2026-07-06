@@ -225,6 +225,7 @@ def launch_research_guidance_payload(
     legacy_focus = manifest.get("research_focus")
     if not isinstance(legacy_focus, Mapping):
         legacy_focus = {}
+    contract_payload = research_guidance_contract_to_dict(contract)
     expected_paths = expected_research_guidance_rendered_paths(contract)
     return {
         "schema_version": RESEARCH_GUIDANCE_PROMPT_SCHEMA,
@@ -258,6 +259,29 @@ def launch_research_guidance_payload(
         ),
         "next_required_direction": _string(
             legacy_focus.get("next_required_direction")
+        ),
+        "required_evidence": [
+            item["description"]
+            for item in contract_payload.get("evidence_requirements", ())
+            if isinstance(item, Mapping) and _string(item.get("description"))
+        ],
+        "evidence_requirements": contract_payload.get("evidence_requirements", []),
+        "required_mechanism_contracts": contract_payload.get(
+            "required_mechanisms",
+            [],
+        ),
+        "target_intent_contracts": {
+            str(key): _json_safe(value)
+            for key, value in legacy_focus.items()
+            if isinstance(key, str)
+            and key.endswith("_target_intent")
+            and value not in ("", None, [], {}, ())
+        },
+        "case_protection_requirements": _json_safe(
+            legacy_focus.get("case_protection_requirements")
+        ),
+        "resume_continuity_requirements": _json_safe(
+            legacy_focus.get("resume_continuity_requirements")
         ),
         "required_mechanism_ids": [
             mechanism.mechanism_id
