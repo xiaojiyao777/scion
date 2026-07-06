@@ -129,15 +129,24 @@ evidence, not long-run candidates. The postrun report is
 `scion/docs/experiments/v0.4/v04-cvrp-successor40-bounded-two-for-one-exchange-postrun-20260706.md`.
 CVRP research guidance now exposes successor40 as reviewed/default-avoid
 evidence, and the hypothesis-quality default-avoid gate blocks unchanged
-`bounded_two_for_one_exchange` repeats. Successor41 is now preregistered as
-`route_skeleton_regret_repair` at the ALNS repair boundary: a proposal-only
-target-intent clean fork that compares the normal repaired candidate against
-one bounded route-skeleton-biased regret repair candidate before VNS/polish.
-The design is
-`scion/docs/experiments/v0.4/v04-cvrp-successor41-route-skeleton-regret-repair-design-20260706.md`;
-`target_intent_required_mechanism_ids` now contains
-`route_skeleton_regret_repair` while formal `required_mechanism_ids` remains
-empty.
+`bounded_two_for_one_exchange` repeats. Successor41 is now complete. The
+server-local target-intent-bound run
+`/home/clawd/research/scion-experiments/v04-cvrp-successor41-route-skeleton-regret-repair-server-claw-2r-gpt55-20260706T053608Z-claw`
+completed valid/complete/postrun-ready with local `gpt-5.5`, two effective
+screening rows, and no promotion. Candidate 1 activated
+`route_skeleton_regret_repair` but was negative: median delta `-6.0`, pair
+W/L/T `6/19/7`, with CMT2 `0/4/0` and CMT4 `1/3/0`. Candidate 2 added a
+guarded same-mechanism variant and improved to marginal but still below
+promotion: median delta `0.0`, pair W/L/T `13/14/5`, case winners A/B, case
+losses P/CMT4, and CMT4 median `-16.0`. Treat successor41 as valid active
+marginal evidence, not a long-run candidate. Do not rerun the unchanged
+scheduler helper implementation. The postrun report is
+`scion/docs/experiments/v0.4/v04-cvrp-successor41-route-skeleton-regret-repair-postrun-20260706.md`.
+One same-mechanism diagnostic follow-up is allowed only as successor41b:
+design-first, modularized out of scheduler helper sprawl, with explicit
+P/CMT4 protection and structured default-vs-skeleton telemetry. The 41b design
+is
+`scion/docs/experiments/v0.4/v04-cvrp-successor41b-route-skeleton-diagnostic-design-20260706.md`.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -681,12 +690,14 @@ from the current checkout.
    telemetry and CMT2/CMT4 protection. The CVRP guidance/prompt payload has
    already been updated so successor40 is reviewed/default-avoid rather than a
    live target-intent-required mechanism.
-15. Launch successor41 as the next small server-local CVRP experiment:
-   `route_skeleton_regret_repair` at the scheduler repair boundary, with
-   optional small repair implementation in `destroy_repair.py`. Require live
-   target-intent/hypothesis to preserve the route-skeleton-biased regret repair
-   comparison semantics, direct pre-VNS objective telemetry, route-count/
-   feasibility preservation, bounded effort, and CMT2/CMT4 protection.
+15. Treat successor41 as valid active marginal evidence, not a long-run
+   candidate. The only allowed same-mechanism continuation is successor41b, a
+   design-first diagnostic follow-up that keeps mechanism id
+   `route_skeleton_regret_repair`, moves nontrivial skeleton behavior into a
+   coherent CVRP module boundary, fixes telemetry semantics, and adds
+   structural P/CMT4 protection without hardcoded case ids. If 41b cannot
+   explain those losses, park the route-skeleton line for v0.4 and clean-fork
+   to a different problem-owned causal path.
 16. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 17. Keep the v0.5 governance ablation frozen as a preregistered design; do not

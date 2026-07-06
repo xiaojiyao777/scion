@@ -178,6 +178,15 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "policies/baseline_modules/destroy_repair.py" in (
         focus["successor41_target_intent"]["target_files"]
     )
+    assert focus["successor41_target_intent"]["status"] == (
+        "active_marginal_followup_only"
+    )
+    assert focus["successor41_target_intent"]["followup_design_path"].endswith(
+        "v04-cvrp-successor41b-route-skeleton-diagnostic-design-20260706.md"
+    )
+    assert "unchanged_scheduler_helper_rerun" in (
+        focus["successor41_target_intent"]["blocked_actions"]
+    )
     assert focus["successor40_reviewed_evidence"]["mechanism_id"] == (
         SUCCESSOR40_MECHANISM_ID
     )

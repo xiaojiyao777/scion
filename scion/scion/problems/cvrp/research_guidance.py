@@ -221,24 +221,38 @@ SUCCESSOR41_DESIGN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor41-route-skeleton-regret-repair-design-20260706.md"
 )
+SUCCESSOR41_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor41-route-skeleton-regret-repair-postrun-20260706.md"
+)
+SUCCESSOR41B_DESIGN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor41b-route-skeleton-diagnostic-design-20260706.md"
+)
 SUCCESSOR41_TARGET_INTENT_RULE = (
-    f"Successor41 is preregistered as `{SUCCESSOR41_MECHANISM_ID}` at the "
-    "ALNS repair boundary. It is a proposal-only target-intent binding for a "
-    "route-skeleton-biased regret repair clean fork: after destroy, compare "
-    "the normal repaired candidate with one bounded skeleton-biased regret "
-    "repair candidate built from the same post-destroy state, and select the "
-    "skeleton candidate only when it is feasible, route-count compliant, and "
-    "strictly lower distance before embedded VNS or size70 polish. Target "
-    f"`{SUCCESSOR41_TARGET_FILE}` for the repair-boundary comparison and use "
-    f"`{SUCCESSOR41_SECONDARY_TARGET_FILE}` only for a small repair operator "
-    "implementation if needed. Keep destroy choice, construction seeds, "
-    "local-search moves, simulated-annealing acceptance, adaptive weights, "
-    "and embedded-VNS runtime allocation unchanged. Record direct pre-VNS "
-    "repair objective effect under the declared mechanism id, including "
-    "attempted/accepted counts, default and skeleton repair distances, "
-    "selected repair label, feasibility, route count, bounded effort, and "
-    "CMT2/CMT4 protection evidence; see "
-    f"`{SUCCESSOR41_DESIGN_PATH}`."
+    f"Successor41 `{SUCCESSOR41_MECHANISM_ID}` completed valid screening as "
+    "active marginal evidence, not a long-run candidate. Candidate 1 was "
+    "negative (pair W/L/T 6/19/7, median delta -6.0, CMT2 0/4/0, CMT4 "
+    "1/3/0); candidate 2 was marginal (13/14/5, median 0.0) with A/B case "
+    "wins but P and CMT4 case losses. Do not rerun the unchanged scheduler "
+    "helper implementation; see "
+    f"`{SUCCESSOR41_POSTRUN_PATH}`. The only allowed same-mechanism "
+    "continuation is successor41b: keep mechanism id "
+    f"`{SUCCESSOR41_MECHANISM_ID}`, target the ALNS repair boundary, and "
+    "redesign the implementation before code work so nontrivial route-skeleton "
+    "repair behavior lives in a coherent CVRP module instead of private helper "
+    f"growth inside `{SUCCESSOR41_TARGET_FILE}`. Scheduler wiring should be "
+    "narrow; if a new module is created it should expose a typed "
+    "default-vs-skeleton comparison result and preserve destroy choice, "
+    "construction seeds, local-search moves, simulated-annealing acceptance, "
+    "adaptive weights, and embedded-VNS runtime allocation. Successor41b must "
+    "record attempted/accepted counts, default and skeleton repair distances, "
+    "distance margin, selected repair label, feasibility, route count, bounded "
+    "effort, no-op reason, truthful best-improved semantics, and structural "
+    "P/CMT4 protection without hardcoded case ids. Do not long-run unless this "
+    "diagnostic follow-up first repairs P/CMT4 losses and improves on the "
+    "13/14/5 marginal row; see "
+    f"`{SUCCESSOR41B_DESIGN_PATH}`."
 )
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
@@ -631,13 +645,19 @@ NEXT_REQUIRED_DIRECTION = (
     "unchanged bounded two-for-one route-set exchange and same-mechanism "
     "threshold/gating variants as reviewed/default-avoid, not long-run "
     "candidates; see "
-    f"`{SUCCESSOR40_POSTRUN_PATH}`. "
+    f"`{SUCCESSOR40_POSTRUN_PATH}`. Successor41 then target-intent-bound "
+    f"`{SUCCESSOR41_MECHANISM_ID}` in `{SUCCESSOR41_TARGET_FILE}` and "
+    "completed valid screening with one negative row (pair W/L/T 6/19/7, "
+    "median -6.0, CMT2 0/4/0, CMT4 1/3/0) and one active-marginal guarded "
+    "row (13/14/5, median 0.0, A/B case wins, P/CMT4 losses). Treat "
+    "successor41 as valid active marginal evidence, not a long-run candidate; "
+    f"see `{SUCCESSOR41_POSTRUN_PATH}`. "
     "`required_mechanism_ids` remains empty because the guidance is proposal-only "
     "and must not hard-force the Decision path; "
     "`target_intent_required_mechanism_ids` now contains "
-    f"`{SUCCESSOR41_MECHANISM_ID}` because successor41 is the live "
-    "proposal-only target-intent binding; this does not configure the formal "
-    "required mechanism guard. "
+    f"`{SUCCESSOR41_MECHANISM_ID}` only for the successor41b same-mechanism "
+    "diagnostic follow-up; this does not configure the formal required "
+    "mechanism guard. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
     "telemetry-only q-audit repair for the missing explicit fields, or when "
@@ -676,9 +696,10 @@ NEXT_REQUIRED_DIRECTION = (
     "load-complement pair removal, route-pair crossover repair, timewarp "
     "string removal, insertion-cost lookahead repair, savings seed selection, "
     "and seed trajectory selection and carries direct per-case "
-    "objective-effect evidence. The next prepared attempt is "
-    f"`{SUCCESSOR41_MECHANISM_ID}`: a route-skeleton-biased regret repair "
-    "candidate comparison at the repair boundary, not another unchanged "
+    "objective-effect evidence. The next prepared attempt remains "
+    f"`{SUCCESSOR41_MECHANISM_ID}` only as successor41b diagnostics: a "
+    "modular route-skeleton repair follow-up with truthful structured telemetry "
+    "and P/CMT4 protection, not an unchanged scheduler helper rerun, "
     "two-for-one route-set exchange, threshold/gating variant, repair-operator "
     "selector, removal targeting rule, seed selector, local-search move, "
     "acceptance-weight, or runtime-allocation change."
@@ -709,36 +730,50 @@ CURRENT_QUESTION = (
     f"`{SUCCESSOR39_MECHANISM_ID}` activated but stayed below MDE with CMT4 "
     "and B/P losses, and successor40 "
     f"`{SUCCESSOR40_MECHANISM_ID}` activated but stayed below MDE while the "
-    "guarded follow-up mostly became no-op, what materially different "
+    "guarded follow-up mostly became no-op, and successor41 "
+    f"`{SUCCESSOR41_MECHANISM_ID}` produced one negative row and one active "
+    "marginal row with A/B wins but P/CMT4 losses, what materially different "
     "CVRP-owned causal path can still produce direct objective movement "
     "without repeating reviewed/default-avoid branches? The next prepared "
-    "slot is target-intent-bound; live target-intent or hypothesis must target "
-    f"`{SUCCESSOR41_MECHANISM_ID}` before code work: a bounded "
-    "route-skeleton-biased regret repair comparison after destroy and before "
-    "VNS/polish, not a two-for-one route-set exchange, repair selector, "
-    "route-segment swap, seed selector, acceptance-weight, runtime-allocation, "
-    "or removal variant."
+    "slot remains target-intent-bound only for successor41b diagnostics: live "
+    "target-intent or hypothesis must keep "
+    f"`{SUCCESSOR41_MECHANISM_ID}` but redesign the same-mechanism follow-up "
+    "as a modular route-skeleton repair diagnostic with structural P/CMT4 "
+    "protection. If it cannot explain those losses, park route-skeleton repair "
+    "and clean-fork to a different problem-owned causal path."
 )
 REQUIRED_EVIDENCE = (
     (
-        f"successor41 live target-intent and hypothesis must set mechanism_id "
-        f"to `{SUCCESSOR41_MECHANISM_ID}`, target the repair boundary in "
-        f"`{SUCCESSOR41_TARGET_FILE}` with optional small repair implementation "
-        f"in `{SUCCESSOR41_SECONDARY_TARGET_FILE}`, and explain the bounded "
-        "route-skeleton-biased regret repair comparison before code work starts"
+        f"successor41b live target-intent and hypothesis must keep mechanism_id "
+        f"`{SUCCESSOR41_MECHANISM_ID}`, target the repair boundary in "
+        f"`{SUCCESSOR41_TARGET_FILE}`, and explain how the same-mechanism "
+        "diagnostic differs from the unchanged successor41 scheduler helper "
+        "implementation before code work starts"
     ),
     (
-        "successor41 direct telemetry must record attempted skeleton-repair "
+        "successor41b implementation must be design-first and modular: keep "
+        "scheduler wiring narrow, move nontrivial route-skeleton comparison "
+        "behavior into a coherent CVRP-owned module when it exceeds a small "
+        "local patch, and avoid adding another private-helper cluster"
+    ),
+    (
+        "successor41b direct telemetry must record attempted skeleton-repair "
         "comparison count, accepted skeleton count, default repair distance, "
-        "skeleton repair distance, selected repair label, pre-VNS objective "
-        "delta, feasibility, route count, bounded effort, and record_move under "
+        "skeleton repair distance, distance margin, selected repair label, "
+        "pre-VNS objective delta, feasibility, route count, bounded effort, "
+        "no-op reason, truthful best-improved semantics, and record_move under "
         "the declared mechanism"
     ),
     (
-        "successor41 must keep destroy operator choice, construction seeds, "
+        "successor41b must keep destroy operator choice, construction seeds, "
         "local-search moves, simulated-annealing acceptance, adaptive weight "
         "scoring, embedded-VNS runtime allocation, and reviewed repair/removal "
         "mechanisms unchanged unless the prepared guidance is regenerated"
+    ),
+    (
+        "successor41b must address successor41 P-n65-k10 and CMT4 losses by "
+        "structural no-op, margin, or continuity protection without hardcoded "
+        "case ids, BKS values, seeds, or split membership"
     ),
     (
         f"successor40 `{SUCCESSOR40_MECHANISM_ID}` is reviewed/default-avoid "
@@ -968,12 +1003,16 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         f"`{SUCCESSOR39_MECHANISM_ID}` validly targeted bounded dual repair "
         "choice before VNS, activated, and stayed below MDE with CMT4/B/P "
         "losses; treat unchanged bounded dual repair choice as reviewed/"
-        "default-avoid rather than the current prepared slot. Current "
-        f"successor41 `{SUCCESSOR41_MECHANISM_ID}` targets route-skeleton-biased "
-        "regret repair at the scheduler repair boundary, with direct pre-VNS "
-        "repair objective-effect telemetry; it must not change destroy choice, "
-        "acceptance, adaptive weights, construction seeds, local-search moves, "
-        "or embedded-VNS runtime allocation. Successor29 validly "
+        "default-avoid rather than the current prepared slot. Successor41 "
+        f"`{SUCCESSOR41_MECHANISM_ID}` validly tested route-skeleton-biased "
+        "regret repair at the scheduler repair boundary, but produced one "
+        "negative row and one active-marginal row with P/CMT4 losses. Do not "
+        "long-run or rerun the unchanged scheduler helper implementation. The "
+        "only allowed same-mechanism follow-up is successor41b: modularize the "
+        "nontrivial skeleton comparison, keep destroy choice, acceptance, "
+        "adaptive weights, construction seeds, local-search moves, and "
+        "embedded-VNS runtime allocation unchanged, and add truthful structured "
+        "telemetry plus P/CMT4 protection. Successor29 validly "
         "screened route_pair_overlap_removal_protected_followup and stayed "
         "negative, so the route-pair-overlap line is parked for v0.4. After "
         "the reviewed "
@@ -1222,6 +1261,13 @@ def build_cvrp_legacy_research_focus(
                 SUCCESSOR41_SECONDARY_TARGET_FILE,
             ],
             "design_path": SUCCESSOR41_DESIGN_PATH,
+            "postrun_path": SUCCESSOR41_POSTRUN_PATH,
+            "followup_design_path": SUCCESSOR41B_DESIGN_PATH,
+            "status": "active_marginal_followup_only",
+            "blocked_actions": [
+                "long_run",
+                "unchanged_scheduler_helper_rerun",
+            ],
             "rule": SUCCESSOR41_TARGET_INTENT_RULE,
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
@@ -1268,13 +1314,16 @@ def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
             category="successor41_target_intent",
             description=SUCCESSOR41_TARGET_INTENT_RULE,
             required_observations=(
-                "live target-intent mechanism_id matches successor41",
+                "live target-intent mechanism_id matches successor41b follow-up",
                 f"target_file={SUCCESSOR41_TARGET_FILE}",
                 f"optional_secondary_target_file={SUCCESSOR41_SECONDARY_TARGET_FILE}",
-                "route-skeleton-biased regret repair contrast recorded",
+                "route-skeleton diagnostic follow-up is not an unchanged rerun",
+                "nontrivial skeleton behavior uses a coherent module boundary",
                 "default and skeleton repair candidates compared pre-VNS",
                 "record_move delta emitted under the successor41 mechanism id",
+                "truthful attempted and best-improved telemetry semantics",
                 "route count and feasibility preservation recorded",
+                "P/CMT4 structural protection evidence without hardcoded cases",
                 "CMT2/CMT4 protection evidence or explicit split caveat",
             ),
             protected_items=PROTECTED_CASES,
@@ -1354,15 +1403,20 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
             ),
             protected_items=PROTECTED_CASES,
             required_fields=(
+                "successor41b is not an unchanged scheduler helper rerun",
+                "coherent route-skeleton repair module boundary or explicit small-patch justification",
                 "route-skeleton-biased regret repair attempted count",
                 "accepted skeleton repair count",
                 "default repair distance before VNS",
                 "skeleton repair distance before VNS",
+                "distance margin over default repair",
                 "selected repair label",
                 "record_move under route_skeleton_regret_repair",
-                "pre-VNS objective delta and best_improved status",
+                "truthful attempted and best_improved status",
+                "pre-VNS objective delta",
                 "candidate feasibility and route-count compliance",
-                "bounded repair effort and budget-stop counters",
+                "bounded repair effort, no-op reason, and budget-stop counters",
+                "P/CMT4 structural protection evidence without hardcoded case ids",
                 "CMT2/CMT4 case-level total_distance deltas or split caveat",
             ),
         ),
