@@ -113,15 +113,31 @@ successor36/39 file-level focus gate has been removed from the CVRP hypothesis
 quality contract; current target binding now comes from prepared
 `target_intent_required_mechanism_ids`, while reviewed/default-avoid and
 causal-path gates still block repeated weak mechanisms. Successor40 is now
-preregistered as `bounded_two_for_one_exchange` in
-`policies/baseline_modules/local_search.py`: a proposal-only target-intent
-clean fork for a bounded 2-for-1 / 1-for-2 two-route customer-set exchange,
-explicitly distinct from reviewed segment swap, customer swap, Or-opt
-relocation, tail exchange, 3-opt, ejection-chain, double-bridge, destroy/repair
-selection, construction seed, acceptance-weighting, and runtime-allocation
-lines. The design is
-`scion/docs/experiments/v0.4/v04-cvrp-successor40-bounded-two-for-one-exchange-design-20260706.md`;
-the next small server-local CVRP launch should target that mechanism.
+complete. The server-local target-intent-bound run
+`/home/clawd/research/scion-experiments/v04-cvrp-successor40-bounded-two-for-one-exchange-server-2r-gpt55-20260706T035458Z-claw`
+completed valid/complete/postrun-ready with local `gpt-5.5`, two effective
+screening rows, and no promotion. Row 1 added
+`bounded_two_for_one_exchange` in `policies/baseline_modules/local_search.py`
+and had median delta `0.0`, CI `[-6.0, 1.0]`, pair W/L/T `9/12/11`, and
+case W/L/T `1/1/6`; A-n64 was positive but CMT2 and X regressed. Row 2 refined
+the same mechanism with load-imbalance and margin gating, reduced runtime and
+many losses into ties, but still had median delta `0.0`, CI `[-2.0, 0.0]`,
+pair W/L/T `4/8/20`, case W/L/T `1/2/5`, and residual B/CMT2 losses. Both CI
+highs were below the 9.9 MDE. Treat unchanged `bounded_two_for_one_exchange`
+and guarded same-mechanism threshold/gating follow-ups as reviewed below-MDE
+evidence, not long-run candidates. The postrun report is
+`scion/docs/experiments/v0.4/v04-cvrp-successor40-bounded-two-for-one-exchange-postrun-20260706.md`.
+CVRP research guidance now exposes successor40 as reviewed/default-avoid
+evidence, and the hypothesis-quality default-avoid gate blocks unchanged
+`bounded_two_for_one_exchange` repeats. Successor41 is now preregistered as
+`route_skeleton_regret_repair` at the ALNS repair boundary: a proposal-only
+target-intent clean fork that compares the normal repaired candidate against
+one bounded route-skeleton-biased regret repair candidate before VNS/polish.
+The design is
+`scion/docs/experiments/v0.4/v04-cvrp-successor41-route-skeleton-regret-repair-design-20260706.md`;
+`target_intent_required_mechanism_ids` now contains
+`route_skeleton_regret_repair` while formal `required_mechanism_ids` remains
+empty.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -655,17 +671,27 @@ from the current checkout.
    below MDE and CMT4/B/P-family losses remain. Do not long-run or extend the
    unchanged mechanism; use the prompt/context repair before the next CVRP
    design.
-14. Launch successor40 as the next small server-local CVRP experiment:
-   `bounded_two_for_one_exchange` in `policies/baseline_modules/local_search.py`.
-   Require live target-intent/hypothesis to preserve the 2-for-1 / 1-for-2
-   customer-set exchange semantics, direct accepted-move objective telemetry,
-   bounded effort, route-count/feasibility preservation, and CMT2/CMT4
-   protection.
-15. Use the new large-file modularization plan before further behavior changes
+14. Treat successor40 as valid current-run but solver-negative below-MDE
+   evidence for `bounded_two_for_one_exchange`. The added local-search operator
+   activated and produced direct objective telemetry, but row 1 was mixed and
+   loss-prone while the guarded follow-up mostly collapsed to ties with
+   residual B/CMT2 losses. Do not long-run or extend unchanged two-for-one
+   exchange gating variants; the next CVRP slot should clean-fork to a
+   materially different CVRP-owned causal path with direct objective-effect
+   telemetry and CMT2/CMT4 protection. The CVRP guidance/prompt payload has
+   already been updated so successor40 is reviewed/default-avoid rather than a
+   live target-intent-required mechanism.
+15. Launch successor41 as the next small server-local CVRP experiment:
+   `route_skeleton_regret_repair` at the scheduler repair boundary, with
+   optional small repair implementation in `destroy_repair.py`. Require live
+   target-intent/hypothesis to preserve the route-skeleton-biased regret repair
+   comparison semantics, direct pre-VNS objective telemetry, route-count/
+   feasibility preservation, bounded effort, and CMT2/CMT4 protection.
+16. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-16. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+17. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-17. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+18. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence

@@ -173,13 +173,26 @@ The remaining closeout gaps are:
   file-level focus gate has been removed from the CVRP hypothesis quality
   contract; current target binding now comes from prepared
   `target_intent_required_mechanism_ids`, while reviewed/default-avoid and
-  causal-path gates still block repeated weak mechanisms. Successor40 is now
-  preregistered as `bounded_two_for_one_exchange` in
-  `policies/baseline_modules/local_search.py`: a proposal-only target-intent
-  clean fork for a bounded 2-for-1 / 1-for-2 two-route customer-set exchange.
-  The design is
-  `scion/docs/experiments/v0.4/v04-cvrp-successor40-bounded-two-for-one-exchange-design-20260706.md`;
-  the next small server-local CVRP launch should target that mechanism.
+  causal-path gates still block repeated weak mechanisms. Successor40 then
+  completed valid/complete/postrun-ready on
+  `bounded_two_for_one_exchange` in
+  `policies/baseline_modules/local_search.py`. The first row had direct
+  mechanism activation and A-n64 gains but stayed mixed below MDE with CMT2/X
+  losses; the guarded same-mechanism follow-up reduced runtime and many losses
+  into ties but still had median delta `0.0`, CI `[-2.0, 0.0]`, and residual
+  B/CMT2 losses. Treat unchanged two-for-one exchange and threshold/gating
+  variants as reviewed below-MDE evidence. The postrun report is
+  `scion/docs/experiments/v0.4/v04-cvrp-successor40-bounded-two-for-one-exchange-postrun-20260706.md`.
+  CVRP research guidance has been updated so unchanged
+  `bounded_two_for_one_exchange` repeats are blocked as reviewed/default-avoid.
+  Successor41 is now preregistered as `route_skeleton_regret_repair`, a
+  proposal-only target-intent clean fork at the scheduler repair boundary. It
+  compares the normal repaired candidate against one bounded route-skeleton-
+  biased regret repair candidate before VNS/polish; formal
+  `required_mechanism_ids` remains empty while
+  `target_intent_required_mechanism_ids` contains
+  `route_skeleton_regret_repair`. The design is
+  `scion/docs/experiments/v0.4/v04-cvrp-successor41-route-skeleton-regret-repair-design-20260706.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -632,16 +645,22 @@ CVRP:
    below MDE and CMT4/B/P-family losses remain. Do not long-run or extend the
    unchanged mechanism; use the prompt/context repair before the next CVRP
    design.
-14. Launch successor40 as the next small server-local CVRP experiment:
-   `bounded_two_for_one_exchange` in `policies/baseline_modules/local_search.py`.
-   Require live target-intent/hypothesis to preserve the 2-for-1 / 1-for-2
-   customer-set exchange semantics, direct accepted-move objective telemetry,
-   bounded effort, route-count/feasibility preservation, and CMT2/CMT4
-   protection.
-15. Use the v0.4 large-file modularization plan before adding behavior to
+14. Treat successor40 as valid current-run but solver-negative below-MDE
+   evidence for `bounded_two_for_one_exchange`. Do not long-run or extend
+   unchanged two-for-one exchange gating variants; the next CVRP slot should
+   clean-fork to a materially different problem-owned causal path with direct
+   objective-effect telemetry and CMT2/CMT4 protection. The CVRP guidance and
+   prompt payload already park successor40 as reviewed/default-avoid rather
+   than a live target-intent-required mechanism.
+15. Launch successor41 as the next small server-local CVRP experiment:
+   `route_skeleton_regret_repair` at the scheduler repair boundary, with
+   optional small repair implementation in `destroy_repair.py`. Require direct
+   pre-VNS objective telemetry, route-count/feasibility preservation, bounded
+   effort, and CMT2/CMT4 protection.
+16. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-16. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-17. Keep status documents compact; put detailed root counters and caveats in
+17. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+18. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes

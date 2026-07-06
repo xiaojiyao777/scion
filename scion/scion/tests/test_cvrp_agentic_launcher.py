@@ -133,9 +133,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for mechanism in typed_contract["required_mechanisms"]
     }
     assert "required" not in mechanism_bindings.values()
-    assert mechanism_bindings["bounded_dual_repair_selector"] == (
-        "target_intent_required"
-    )
+    assert mechanism_bindings == {
+        "route_skeleton_regret_repair": "target_intent_required"
+    }
     assert any(
         requirement["requirement_id"] == "successor_causal_path_direct_effect"
         for requirement in typed_contract["evidence_requirements"]
@@ -156,6 +156,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_ejection_chain_relocate_reviewed_no_positive",
         "bounded_route_segment_exchange_reviewed_no_positive",
         "bounded_cross_route_double_bridge_polish_reviewed_no_positive",
+        "bounded_two_for_one_exchange_reviewed_no_positive",
         "neighbor_list_vns_filter_reviewed_frozen_unsafe_validation_positive",
         "frozen_safe_neighbor_list_vns_filter_reviewed_weak_positive_below_mde",
         "route_angle_aware_2opt_star_reviewed_no_positive",
@@ -203,7 +204,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "bounded_dual_repair_selector"
+        "route_skeleton_regret_repair"
     ]
     assert launch_payload["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
@@ -213,6 +214,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_ejection_chain_relocate",
         "bounded_route_segment_exchange",
         "bounded_cross_route_double_bridge_polish",
+        "bounded_two_for_one_exchange",
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
         "route_angle_aware_2opt_star",
@@ -221,6 +223,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
+        "bounded_dual_repair_selector",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -666,6 +669,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "q_delta" in prepared_manifest_md
     assert "seed_post_optimization_selector" in prepared_manifest_md
     assert "savings_seed_selection_probe" in prepared_manifest_md
+    assert "route_skeleton_regret_repair" in prepared_manifest_md
     assert (
         "telemetry-only q-audit repair"
         in prepared_manifest["research_focus"]["next_required_direction"]
@@ -673,7 +677,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
     assert prepared_manifest["research_focus"][
         "target_intent_required_mechanism_ids"
-    ] == ["bounded_dual_repair_selector"]
+    ] == ["route_skeleton_regret_repair"]
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -682,6 +686,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_ejection_chain_relocate",
         "bounded_route_segment_exchange",
         "bounded_cross_route_double_bridge_polish",
+        "bounded_two_for_one_exchange",
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
         "route_angle_aware_2opt_star",
@@ -690,6 +695,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
+        "bounded_dual_repair_selector",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",

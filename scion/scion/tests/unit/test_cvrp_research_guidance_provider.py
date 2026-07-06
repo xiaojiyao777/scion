@@ -3,6 +3,7 @@ from __future__ import annotations
 from scion.problems.cvrp.research_guidance import (
     CvrpResearchGuidanceProvider,
     SUCCESSOR40_MECHANISM_ID,
+    SUCCESSOR41_MECHANISM_ID,
     build_cvrp_legacy_research_focus,
     build_cvrp_research_guidance_contract,
 )
@@ -46,7 +47,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         mechanism.mechanism_id
         for mechanism in contract.required_mechanisms
         if mechanism.hypothesis_mechanism_binding == "target_intent_required"
-    ] == [SUCCESSOR40_MECHANISM_ID]
+    ] == [SUCCESSOR41_MECHANISM_ID]
     assert any(
         "total_distance delta by case and seed" in field
         for requirement in contract.evidence_requirements
@@ -88,6 +89,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert "angular_sector_removal" in rendered.text
     assert "bounded_local_search_variant" in rendered.text
     assert "destroy_repair_selection" in rendered.text
+    assert "route_skeleton_regret_repair" in rendered.text
     assert "measured_no_positive_at_mde" in rendered.text
     assert "no-positive-at-MDE" in rendered.text
     assert "CMT2/CMT4 case protection" in rendered.text
@@ -102,7 +104,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     )
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR40_MECHANISM_ID
+        SUCCESSOR41_MECHANISM_ID
     ]
 
 
@@ -121,7 +123,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["schema_version"] == "scion.cvrp_research_focus.v1"
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
-    assert focus["target_intent_required_mechanism_ids"] == [SUCCESSOR40_MECHANISM_ID]
+    assert focus["target_intent_required_mechanism_ids"] == [SUCCESSOR41_MECHANISM_ID]
     assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -130,6 +132,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_ejection_chain_relocate",
         "bounded_route_segment_exchange",
         "bounded_cross_route_double_bridge_polish",
+        "bounded_two_for_one_exchange",
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
         "route_angle_aware_2opt_star",
@@ -166,10 +169,19 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "seed_post_optimization_selector",
     ]
     assert focus["suppressed_mechanism_ids"] == []
-    assert focus["successor40_target_intent"]["mechanism_id"] == (
+    assert focus["successor41_target_intent"]["mechanism_id"] == (
+        SUCCESSOR41_MECHANISM_ID
+    )
+    assert focus["successor41_target_intent"]["target_file"] == (
+        "policies/baseline_modules/scheduler.py"
+    )
+    assert "policies/baseline_modules/destroy_repair.py" in (
+        focus["successor41_target_intent"]["target_files"]
+    )
+    assert focus["successor40_reviewed_evidence"]["mechanism_id"] == (
         SUCCESSOR40_MECHANISM_ID
     )
-    assert focus["successor40_target_intent"]["target_file"] == (
+    assert focus["successor40_reviewed_evidence"]["target_file"] == (
         "policies/baseline_modules/local_search.py"
     )
     assert focus["successor_opportunity_families"] == [
@@ -312,6 +324,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     )
     assert any(
         "bounded_route_segment_exchange" in item and "below-MDE" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "bounded_two_for_one_exchange" in item and "successor40" in item
         for item in focus["default_avoid_directions"]
     )
     assert any(
@@ -477,6 +493,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_ejection_chain_relocate",
         "bounded_route_segment_exchange",
         "bounded_cross_route_double_bridge_polish",
+        "bounded_two_for_one_exchange",
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
         "route_angle_aware_2opt_star",
@@ -796,10 +813,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
         "bounded_intra_route_3opt",
-        "bounded_ejection_chain_relocate",
-        "bounded_route_segment_exchange",
-        "bounded_cross_route_double_bridge_polish",
-        "neighbor_list_vns_filter",
+            "bounded_ejection_chain_relocate",
+            "bounded_route_segment_exchange",
+            "bounded_cross_route_double_bridge_polish",
+            "bounded_two_for_one_exchange",
+            "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
         "route_angle_aware_2opt_star",
         "radial_2opt_star_relink",
@@ -836,7 +854,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     ]
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR40_MECHANISM_ID
+        SUCCESSOR41_MECHANISM_ID
     ]
     assert launch_payload["suppressed_mechanism_ids"] == []
     assert launch_payload["successor_opportunity_families"] == [

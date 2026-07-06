@@ -86,6 +86,42 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "bounded_two_for_one_exchange",
+        "mechanism_family": "bounded_local_search_variant",
+        "path_label": "bounded two-for-one customer-set exchange path",
+        "causal_path_label": "bounded 2-for-1 / 1-for-2 route-set local search",
+        "effect_summary": {
+            "row1_median_delta": 0.0,
+            "row1_ci_low": -6.0,
+            "row1_ci_high": 1.0,
+            "row1_pair_wins": 9,
+            "row1_pair_losses": 12,
+            "row1_pair_ties": 11,
+            "row1_case_wins": 1,
+            "row1_case_losses": 1,
+            "row1_case_ties": 6,
+            "row2_median_delta": 0.0,
+            "row2_ci_low": -2.0,
+            "row2_ci_high": 0.0,
+            "row2_pair_wins": 4,
+            "row2_pair_losses": 8,
+            "row2_pair_ties": 20,
+            "row2_case_wins": 1,
+            "row2_case_losses": 2,
+            "row2_case_ties": 5,
+            "max_median_delta": 0.0,
+            "max_effect_to_mde_ratio": 0.0,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "protected_case_cmt2_row1_median_delta": -7.5,
+            "protected_case_cmt2_row2_median_delta": -2.0,
+            "protected_case_cmt4_row1_median_delta": 0.0,
+            "protected_case_cmt4_row2_median_delta": 0.0,
+            "interpretation": "valid_active_below_mde_loss_prone_then_guarded_noop",
+            "source_root_label": "successor40",
+        },
+    },
+    {
         "mechanism_id": "neighbor_list_vns_filter",
         "mechanism_family": "bounded_local_search_variant",
         "path_label": "neighbor-list VNS filter path",
@@ -964,6 +1000,12 @@ DEFAULT_AVOID_DIRECTIONS = (
     (
         "unchanged bounded_cross_route_double_bridge_polish bounded-local-search "
         "follow-up after successor30 valid zero-effect below-MDE evidence"
+    ),
+    (
+        "unchanged bounded_two_for_one_exchange bounded-local-search "
+        "two-route set exchange or same-mechanism threshold/gating follow-up "
+        "after successor40 valid below-MDE evidence with B/CMT2/P losses and "
+        "no positive-at-MDE row"
     ),
     (
         "unchanged adaptive_embedded_vns_runtime_allocation scheduler runtime "

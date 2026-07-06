@@ -510,6 +510,12 @@ def test_hypothesis_prompt_requires_branch_lesson_usage_when_context_visible():
             "operator_categories": "search_surface",
             "available_actions": "modify",
             "targetable_files": "surfaces/search.py",
+            "material_difference_requirement": {
+                "schema_version": "proposal_material_difference_requirement.v1",
+                "required": True,
+                "required_for": "clean_fork_new_branch",
+                "required_output_field": "material_difference",
+            },
             "branch_lesson_usage_requirement": {
                 "schema_version": "branch_lesson_usage_requirement.v1",
                 "required": True,
@@ -534,10 +540,13 @@ def test_hypothesis_prompt_requires_branch_lesson_usage_when_context_visible():
     assert "proposal-only" in rendered_system
     assert "lesson:abc123" in rendered_system
     assert "branch_lesson_usage" in user_prompt
+    assert "material_difference={changed_dimensions" in user_prompt
     assert "borrowed_lessons" in user_prompt
     assert "avoided_lessons" in user_prompt
     assert "contrasted_lessons" in user_prompt
     assert "changed generic contrast dimensions" in user_prompt
+    assert "clean_fork_diversity_claim" in user_prompt
+    assert "protected_cases:['CMT2','CMT4']" in user_prompt
 
 
 def test_valid_hypothesis_modify_action():

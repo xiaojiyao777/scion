@@ -210,7 +210,7 @@ def test_cvrp_adapter_hypothesis_quality_blocks_reviewed_successor39_repeat(
     )
 
 
-def test_cvrp_adapter_hypothesis_quality_allows_successor40_focus(
+def test_cvrp_adapter_hypothesis_quality_blocks_reviewed_successor40_repeat(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     hypothesis = HypothesisProposal(
@@ -265,7 +265,15 @@ def test_cvrp_adapter_hypothesis_quality_allows_successor40_focus(
         hypothesis,
     )
 
-    assert check.allowed is True
+    assert check.allowed is False
+    assert "cvrp_reviewed_default_avoid" in check.detail
+    assert check.structured_rejection["gate_name"] == (
+        "cvrp_reviewed_default_avoid"
+    )
+    assert (
+        check.structured_rejection["blocked_mechanism_id"]
+        == "bounded_two_for_one_exchange"
+    )
 
 
 @pytest.mark.parametrize(

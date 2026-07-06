@@ -92,20 +92,19 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
                     "required_mechanism_ids": [
                         "large_instance_intra_route_two_opt_seed",
                     ],
-                    "target_intent_required_mechanism_ids": [
-                        "bounded_two_for_one_exchange",
-                    ],
-                    "successor40_target_intent": {
+                    "target_intent_required_mechanism_ids": [],
+                    "successor40_reviewed_evidence": {
                         "mechanism_id": "bounded_two_for_one_exchange",
                         "mechanism_family": "bounded_local_search_variant",
                         "target_file": "policies/baseline_modules/local_search.py",
+                        "reviewed_rule": (
+                            "Do not continue unchanged two-for-one exchange "
+                            "or threshold/gating variants."
+                        ),
                     },
                     "required_evidence": [
-                        "2-for-1 / 1-for-2 exchange attempted count",
-                        "accepted exchange count",
-                        "record_move under bounded_two_for_one_exchange",
-                        "accepted objective delta and best_improved status",
-                        "candidate feasibility and route-count preservation",
+                        "material causal-path difference from reviewed bounded_two_for_one_exchange",
+                        "direct mechanism objective-effect evidence",
                         (
                             "CMT2/CMT4 case-level total_distance deltas or "
                             "split caveat"
@@ -252,10 +251,12 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prompt_text
     assert "DecisionFeatures" in prompt_text
     assert "## Prepared Research Obligations" in prompt_text
-    assert "2-for-1 / 1-for-2 exchange attempted count" in prompt_text
+    assert "material causal-path difference from reviewed bounded_two_for_one_exchange" in (
+        prompt_text
+    )
 
     hypothesis = HypothesisProposal(
-        hypothesis_text="Test a bounded 2-for-1 / 1-for-2 local-search exchange.",
+        hypothesis_text="Test a route load-slack rebalancing local-search path.",
         change_locus="solver_design",
         action="modify",
         target_file="policies/baseline_modules/local_search.py",
@@ -264,7 +265,7 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
         protected_objectives=["fleet_violation"],
         mechanism_changes=(
             MechanismChange(
-                id="bounded_two_for_one_exchange",
+                id="route_load_slack_rebalance_search",
                 change_type="modify",
             ),
         ),
@@ -275,9 +276,7 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
         champion,
         legacy,
     )
-    assert code_ctx["launch_research_focus"]["target_intent_required_mechanism_ids"] == [
-        "bounded_two_for_one_exchange"
-    ]
+    assert code_ctx["launch_research_focus"]["target_intent_required_mechanism_ids"] == []
 
     code_blocks, code_user_prompt = _split_code_context(code_ctx)
     code_prompt_text = (
@@ -287,8 +286,11 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
     assert "## Prepared Research Obligations" in code_prompt_text
     assert "Code-generation must implement or preserve" in code_prompt_text
     assert "bounded_two_for_one_exchange" in code_prompt_text
-    assert "2-for-1 / 1-for-2 exchange attempted count" in code_prompt_text
-    assert "accepted objective delta and best_improved status" in code_prompt_text
+    assert "route_load_slack_rebalance_search" in code_prompt_text
+    assert "material causal-path difference from reviewed bounded_two_for_one_exchange" in (
+        code_prompt_text
+    )
+    assert "direct mechanism objective-effect evidence" in code_prompt_text
     assert "CMT2/CMT4 case-level total_distance deltas or split caveat" in (
         code_prompt_text
     )

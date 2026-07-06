@@ -47,6 +47,14 @@ CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS = (
             "stayed weak-positive below MDE with CMT4/B/P losses"
         ),
     ),
+    (
+        "bounded_two_for_one_exchange",
+        (
+            "successor40 valid screening activated the two-route set exchange "
+            "but both rows stayed below MDE; the guarded follow-up reduced "
+            "losses mostly by becoming no-op while B/CMT2/P losses remained"
+        ),
+    ),
 )
 CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE = CVRP_REVIEWED_DEFAULT_AVOID_FAILURE
 CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS = CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS

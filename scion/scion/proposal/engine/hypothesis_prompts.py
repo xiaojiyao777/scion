@@ -1369,6 +1369,12 @@ def _material_difference_requirement_task_lines(
             "hypothesis prose, or descriptive-only fields such as "
             "`differs_from` or `effect_path`."
         ),
+        (
+            "Use this exact JSON-like shape when material difference is "
+            "required: material_difference={changed_dimensions:[...], "
+            "contrast:{nearest_reviewed_mechanisms:[...], difference:'...'}, "
+            "evidence:{source:'...'}}."
+        ),
     ]
 
 
@@ -1426,6 +1432,13 @@ def _branch_lesson_usage_requirement_task_lines(
             "objects; do not include raw lesson text, rationale, reasoning, "
             "trace, prompt, transcript, observation, or problem-specific "
             "semantics."
+        ),
+        (
+            "Use this exact JSON-like shape for protected clean forks when "
+            "CMT2/CMT4 protection is required: "
+            "branch_lesson_usage={clean_fork_diversity_claim:"
+            "{protected_cases:['CMT2','CMT4'], protection_plan:"
+            "{CMT2:'...', CMT4:'...'}}}."
         ),
         (
             "When leaving a no-effect or weak-positive branch via a clean fork, "
