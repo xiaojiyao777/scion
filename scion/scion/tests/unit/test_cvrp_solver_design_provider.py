@@ -259,6 +259,23 @@ def test_cvrp_hypothesis_guidance_defaults_policy_telemetry_to_indirect_evidence
     assert "do not claim ordinary ALNS best-improvement bookkeeping" in rendered
 
 
+def test_cvrp_hypothesis_guidance_exposes_causal_path_contract_shape() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_prompt_provider()
+
+    rendered = "\n".join(provider.solver_design_hypothesis_guidance({}))
+
+    assert "`material_difference.changed_dimensions`" in rendered
+    assert "`material_difference.contrast`" in rendered
+    assert "`material_difference.evidence`" in rendered
+    assert "material_difference={changed_dimensions" in rendered
+    assert "do not use aliases" in rendered
+    assert "branch_lesson_usage.clean_fork_diversity_claim" in rendered
+    assert "priority_case_ids" in rendered
+    assert "effective_priority_case_ids" in rendered
+
+
 def test_cvrp_hypothesis_guidance_exposes_share70_tail_diagnostic_lessons() -> None:
     provider = CvrpAdapter(
         load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")

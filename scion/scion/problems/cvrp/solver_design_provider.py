@@ -89,6 +89,30 @@ class CvrpSolverDesignProvider:
             "For `solver_design`, choose the target file by mechanism ownership, "
             "not by convenience.",
             (
+                "Current CVRP solver-design causal-path contract: every formal "
+                "hypothesis must include "
+                "`material_difference.changed_dimensions`, "
+                "`material_difference.contrast`, and "
+                "`material_difference.evidence` before code generation. Use "
+                "the exact shape "
+                "material_difference={changed_dimensions:[...], "
+                "contrast:{nearest_reviewed_mechanisms:[...], "
+                "difference:'...'}, evidence:[...]}; do not use aliases such "
+                "as new_dimensions, old_signature, selection_gate, "
+                "module_boundary, contrasts, or protected_loss_plan."
+            ),
+            (
+                "For protected clean forks, put CMT2/CMT4 protection in "
+                "`branch_lesson_usage.clean_fork_diversity_claim`, not only in "
+                "prose or material_difference: "
+                "branch_lesson_usage={clean_fork_diversity_claim:"
+                "{protected_cases:['CMT2','CMT4'], protection_plan:"
+                "{CMT2:'...', CMT4:'...'}}}. CVRP formal screening already "
+                "declares CMT2/CMT4 as priority_case_ids; postrun analysis "
+                "should expect them in effective_priority_case_ids unless the "
+                "split changes."
+            ),
+            (
                 "For `solver_design` expected_telemetry, use the selected surface "
                 "evidence contract categories only: activity, activation, effect, "
                 "and budget. Runtime field names from the adapter belong inside "

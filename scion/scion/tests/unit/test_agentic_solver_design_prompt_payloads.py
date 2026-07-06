@@ -91,6 +91,12 @@ def test_solver_design_hypothesis_prompt_resolves_provider_from_ref() -> None:
     assert "materially different from floor, hard-cap, repair-rescue" in user_prompt
     assert "record direct effect telemetry with `context.record_move`" in user_prompt
     assert "activation/runtime counters alone leave effect attribution missing" in user_prompt
+    assert "`material_difference.changed_dimensions`" in user_prompt
+    assert "`material_difference.contrast`" in user_prompt
+    assert "`material_difference.evidence`" in user_prompt
+    assert "branch_lesson_usage.clean_fork_diversity_claim" in user_prompt
+    assert "priority_case_ids" in user_prompt
+    assert "effective_priority_case_ids" in user_prompt
     assert "Current CVRP route-merge lesson" in user_prompt
     assert "post-share70 target-selection run first selected `destroy_repair.py`" in user_prompt
     assert "pair W/L/T `10/3/19`" in user_prompt
