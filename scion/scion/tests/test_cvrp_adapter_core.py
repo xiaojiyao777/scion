@@ -283,6 +283,7 @@ def test_cvrp_adapter_hypothesis_quality_blocks_reviewed_successor40_repeat(
         ("edge_frequency_penalty_repair", "policies/baseline_modules/destroy_repair.py"),
         ("radial_2opt_star_relink", "policies/baseline_modules/local_search.py"),
         ("bounded_dual_repair_selector", "policies/baseline_modules/scheduler.py"),
+        ("route_skeleton_regret_repair", "policies/baseline_modules/scheduler.py"),
     ],
 )
 def test_cvrp_adapter_hypothesis_quality_blocks_reviewed_default_avoid(
@@ -382,6 +383,15 @@ def test_cvrp_hypothesis_quality_blocks_missing_material_difference(
     assert "materially different CVRP-owned causal path" in (
         check.structured_rejection["retry_constraint"]
     )
+    assert "changed_dimensions=[...], contrast={...}, evidence=[...]" in (
+        check.structured_rejection["retry_constraint"]
+    )
+    assert "do not use aliases such as new_dimensions" in (
+        check.structured_rejection["retry_constraint"]
+    )
+    assert check.structured_rejection["repair_template"][
+        "example_material_difference"
+    ]["changed_dimensions"] == ["mechanism_family", "effect_path"]
 
 
 @pytest.mark.parametrize(

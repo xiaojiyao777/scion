@@ -185,18 +185,31 @@ The remaining closeout gaps are:
   `scion/docs/experiments/v0.4/v04-cvrp-successor40-bounded-two-for-one-exchange-postrun-20260706.md`.
   CVRP research guidance has been updated so unchanged
   `bounded_two_for_one_exchange` repeats are blocked as reviewed/default-avoid.
-  Successor41 then completed valid/complete/postrun-ready on
+  Successor41 completed valid/complete/postrun-ready on
   `route_skeleton_regret_repair`. The first candidate was solver-negative
   (`6/19/7`, median `-6.0`, CMT2 `0/4/0`, CMT4 `1/3/0`). The second guarded
   same-mechanism candidate was active marginal (`13/14/5`, median `0.0`) with
   A/B case wins but P/CMT4 case losses. Do not long-run or rerun the unchanged
   scheduler helper implementation. The postrun report is
   `scion/docs/experiments/v0.4/v04-cvrp-successor41-route-skeleton-regret-repair-postrun-20260706.md`.
-  One same-mechanism diagnostic follow-up is allowed only as successor41b:
-  design-first, modularized out of scheduler helper sprawl, with explicit
-  P/CMT4 protection and structured default-vs-skeleton telemetry. The design
-  is
-  `scion/docs/experiments/v0.4/v04-cvrp-successor41b-route-skeleton-diagnostic-design-20260706.md`.
+  Successor41b is now complete. The server-local diagnostic run
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor41b-route-skeleton-diagnostic-server-claw-2r-gpt55-20260706T065434Z-claw`
+  completed valid/complete/postrun-ready with local `gpt-5.5`, two effective
+  screening rows, and normal model/tool accounting. Both rows screened 48/48
+  pairs with zero failed pairs but stayed below MDE: row 1 had `17/17/14`,
+  median `0.0`, mean `-0.12`; row 2 had `12/15/21`, median `0.0`, mean
+  `0.56`. P/B/E-family losses remained. CMT2 was present in the split manifest
+  but was not forced into the measured case set, so the next formal screening
+  must force CMT2/CMT4 protected-case coverage or record an explicit
+  measurement caveat. Treat `route_skeleton_regret_repair` as
+  diagnostic-exhausted reviewed/default-avoid evidence; do not long-run,
+  threshold-tune, rerun, or continue the same mechanism as a v0.4 optimization
+  candidate. The postrun report is
+  `scion/docs/experiments/v0.4/v04-cvrp-successor41b-route-skeleton-diagnostic-postrun-20260706.md`.
+  The next CVRP slot should keep the causal-path gate, make the exact
+  `material_difference.changed_dimensions` / `contrast` / `evidence` schema
+  prominent, and then clean-fork to a materially different CVRP-owned causal
+  path.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -656,14 +669,12 @@ CVRP:
    objective-effect telemetry and CMT2/CMT4 protection. The CVRP guidance and
    prompt payload already park successor40 as reviewed/default-avoid rather
    than a live target-intent-required mechanism.
-15. Treat successor41 as valid active marginal evidence, not a long-run
-   candidate. The only allowed same-mechanism continuation is successor41b, a
-   design-first diagnostic follow-up that keeps mechanism id
-   `route_skeleton_regret_repair`, moves nontrivial skeleton behavior into a
-   coherent CVRP module boundary, fixes telemetry semantics, and adds
-   structural P/CMT4 protection without hardcoded case ids. If 41b cannot
-   explain those losses, park the route-skeleton line for v0.4 and clean-fork
-   to a different problem-owned causal path.
+15. Treat successor41b as complete, valid, and below MDE. Park
+   `route_skeleton_regret_repair` as diagnostic-exhausted
+   reviewed/default-avoid evidence; do not long-run, threshold-tune, rerun, or
+   continue the same mechanism as an optimization candidate in v0.4. The next
+   CVRP step is schema/protected-case repair followed by a clean fork to a
+   materially different problem-owned causal path.
 16. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 17. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.

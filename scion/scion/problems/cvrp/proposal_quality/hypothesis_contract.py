@@ -55,6 +55,14 @@ CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS = (
             "losses mostly by becoming no-op while B/CMT2/P losses remained"
         ),
     ),
+    (
+        "route_skeleton_regret_repair",
+        (
+            "successor41 and successor41b valid screenings activated "
+            "route-skeleton repair but stayed below MDE; successor41b remained "
+            "P/B/E loss-prone and did not force CMT2 coverage"
+        ),
+    ),
 )
 CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE = CVRP_REVIEWED_DEFAULT_AVOID_FAILURE
 CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS = CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS
@@ -232,6 +240,10 @@ def _causal_path_rejection(
                 "path, include direct objective-effect telemetry whose effect "
                 "path or text contains the declared mechanism id, and provide "
                 "structured CMT2/CMT4 protected-case protection evidence. "
+                "Use this exact material_difference shape: "
+                "changed_dimensions=[...], contrast={...}, evidence=[...]; "
+                "do not use aliases such as new_dimensions, old_signature, "
+                "selection_gate, module_boundary, or protected_loss_plan. "
                 "Use this exact shape in branch_lesson_usage: "
                 "clean_fork_diversity_claim.protected_cases=['CMT2','CMT4'] "
                 "and clean_fork_diversity_claim.protection_plan with separate "
@@ -263,6 +275,16 @@ def _causal_path_rejection(
                             "CMT4": "case-specific protection or caveat token",
                         },
                     }
+                },
+                "example_material_difference": {
+                    "changed_dimensions": ["mechanism_family", "effect_path"],
+                    "contrast": {
+                        "nearest_reviewed_mechanism": "reviewed mechanism id",
+                        "difference": "specific structural difference",
+                    },
+                    "evidence": [
+                        "direct mechanism telemetry to collect before objective claims"
+                    ],
                 },
                 "required_causal_path": (
                     "materially different CVRP-owned causal path with direct "

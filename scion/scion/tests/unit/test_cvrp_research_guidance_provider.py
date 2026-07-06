@@ -47,7 +47,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         mechanism.mechanism_id
         for mechanism in contract.required_mechanisms
         if mechanism.hypothesis_mechanism_binding == "target_intent_required"
-    ] == [SUCCESSOR41_MECHANISM_ID]
+    ] == []
     assert any(
         "total_distance delta by case and seed" in field
         for requirement in contract.evidence_requirements
@@ -103,9 +103,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         },
     )
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR41_MECHANISM_ID
-    ]
+    assert launch_payload["target_intent_required_mechanism_ids"] == []
 
 
 def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
@@ -123,7 +121,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["schema_version"] == "scion.cvrp_research_focus.v1"
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
-    assert focus["target_intent_required_mechanism_ids"] == [SUCCESSOR41_MECHANISM_ID]
+    assert focus["target_intent_required_mechanism_ids"] == []
     assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -167,6 +165,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "short_horizon_seed_trajectory_selector",
         "short_horizon_seed_trajectory_selector_v2",
         "seed_post_optimization_selector",
+        "route_skeleton_regret_repair",
     ]
     assert focus["suppressed_mechanism_ids"] == []
     assert focus["successor41_target_intent"]["mechanism_id"] == (
@@ -179,12 +178,18 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         focus["successor41_target_intent"]["target_files"]
     )
     assert focus["successor41_target_intent"]["status"] == (
-        "active_marginal_followup_only"
+        "diagnostic_exhausted_below_mde"
     )
     assert focus["successor41_target_intent"]["followup_design_path"].endswith(
         "v04-cvrp-successor41b-route-skeleton-diagnostic-design-20260706.md"
     )
+    assert focus["successor41_target_intent"]["followup_postrun_path"].endswith(
+        "v04-cvrp-successor41b-route-skeleton-diagnostic-postrun-20260706.md"
+    )
     assert "unchanged_scheduler_helper_rerun" in (
+        focus["successor41_target_intent"]["blocked_actions"]
+    )
+    assert "same_mechanism_optimization_followup" in (
         focus["successor41_target_intent"]["blocked_actions"]
     )
     assert focus["successor40_reviewed_evidence"]["mechanism_id"] == (
@@ -263,7 +268,13 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "policies/baseline_modules/destroy_repair.py" in (
         focus["next_required_direction"]
     )
-    assert "`required_mechanism_ids` remains empty" in (
+    assert (
+        "`required_mechanism_ids` and `target_intent_required_mechanism_ids` "
+        "are now empty"
+    ) in (
+        focus["next_required_direction"]
+    )
+    assert "clean fork rather than another route-skeleton continuation" in (
         focus["next_required_direction"]
     )
     assert "Successor27 then clean-forked" in focus["next_required_direction"]
@@ -860,11 +871,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "short_horizon_seed_trajectory_selector",
         "short_horizon_seed_trajectory_selector_v2",
         "seed_post_optimization_selector",
+        "route_skeleton_regret_repair",
     ]
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR41_MECHANISM_ID
-    ]
+    assert launch_payload["target_intent_required_mechanism_ids"] == []
     assert launch_payload["suppressed_mechanism_ids"] == []
     assert launch_payload["successor_opportunity_families"] == [
         "acceptance_or_adaptive_weighting",
