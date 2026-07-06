@@ -265,6 +265,16 @@ The remaining closeout gaps are:
   repair selector, route memory, route skeleton, local-search move, seed
   selector, acceptance change, or runtime-allocation change. Design:
   `scion/docs/experiments/v0.4/v04-cvrp-successor43b-destroy-shadow-protected-followup-design-20260706.md`.
+  The first successor43b resume launch
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor43b-destroy-shadow-protected-followup-server-claw-2r-gpt55-2r-gpt55-20260706T133342Z-claw`
+  is invalid with zero experiments because inherited campaign branches filled
+  all three active slots and stopped at `scheduler_active_slot_blocked`; it is
+  not solver evidence. The active successor43b screening run is the fresh
+  server-local root
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor43b-destroy-shadow-protected-followup-fresh-server-claw-2r-gpt55-2r-gpt55-20260706T133531Z-claw`
+  on commit `f8383943`. Completion preflight passed, model calls are local
+  `gpt-5.5`, target-intent/hypothesis/code traces bind successor43b, and the
+  first screening row is in progress.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -735,10 +745,12 @@ CVRP:
    must clean-fork to a materially different problem-owned causal path while
    keeping the exact material-difference prompt contract and CMT2/CMT4
    priority coverage.
-17. Launch successor43 as a two-round server-local CVRP screening run. The
-   intended mechanism is `bounded_destroy_operator_shadow_selector`, with a new
-   focused destroy-operator selector module, minimal scheduler wiring, direct
-   pre-VNS default-versus-alternate telemetry, and no generic Scion changes.
+17. Monitor the active successor43b fresh screening run. Analyze it only after
+   the row completes: verify all 48 screening pairs, CMT2/CMT4 coverage,
+   B/P-family behavior, runtime evidence, and whether successor43b actually
+   repaired RNG isolation, selected destroy attribution, and default/alternate
+   diagnostics. Treat the invalid resume launch as an active-slot launch
+   blocker, not solver evidence.
 18. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 19. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
