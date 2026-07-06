@@ -93,7 +93,13 @@ Successor39 is now preregistered as `bounded_dual_repair_selector` in
 ALNS repair-choice experiment that compares the selected repair against one
 bounded alternate repair before VNS, while leaving construction, destroy
 operators, local search, acceptance, adaptive scoring, and embedded-VNS runtime
-allocation unchanged.
+allocation unchanged. The first successor39 launch root
+`/home/clawd/research/scion-experiments/v04-cvrp-successor39-bounded-dual-repair-selector-server-2r-gpt55-20260706T003754Z-claw`
+was stopped after a stale successor32 scheduler guard blocked the correct
+successor39 mechanism; it is not solver evidence. The guard was retargeted to
+successor39 and the clean retry root
+`/home/clawd/research/scion-experiments/v04-cvrp-successor39-bounded-dual-repair-selector-server-retry-2r-gpt55-20260706T004158Z-claw`
+is running from commit `74ffcdc9`.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.

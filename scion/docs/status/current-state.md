@@ -152,7 +152,15 @@ The remaining closeout gaps are:
   `policies/baseline_modules/scheduler.py`: compare the default repair against
   one bounded alternate repair before VNS, keep formal
   `required_mechanism_ids` empty, and require direct pre-VNS selector telemetry
-  plus CMT2/CMT4 protection evidence before any long-run decision.
+  plus CMT2/CMT4 protection evidence before any long-run decision. The first
+  successor39 launch root
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor39-bounded-dual-repair-selector-server-2r-gpt55-20260706T003754Z-claw`
+  was stopped after a stale successor32 scheduler guard blocked the correct
+  successor39 mechanism; do not treat it as solver evidence. The guard is now
+  retargeted, and the clean retry root
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor39-bounded-dual-repair-selector-server-retry-2r-gpt55-20260706T004158Z-claw`
+  is running from commit `74ffcdc9` with local `gpt-5.5` and completion
+  preflight healthy.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
