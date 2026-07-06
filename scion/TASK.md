@@ -193,15 +193,31 @@ direct signal did not produce promotion-grade or protected-case-safe evidence.
 Treat unchanged `elite_route_memory_repair` and same-mechanism template/count
 tuning as reviewed/default-avoid for v0.4. The postrun report is
 `scion/docs/experiments/v0.4/v04-cvrp-successor42b-cleanfork-prompt-contract-retry-postrun-20260706.md`.
-Successor43 is now preregistered as
-`bounded_destroy_operator_shadow_selector`: a CVRP-owned destroy-choice shadow
-selector in a new `policies/baseline_modules/destroy_operator_selector.py`
-module with minimal `scheduler.py` wiring. It keeps formal
-`required_mechanism_ids` empty while binding target-intent preflight through
-`target_intent_required_mechanism_ids`, preserves the repaired exact
-`material_difference` schema and CMT2/CMT4 priority coverage, and is ready for
-a two-round server-local screening launch. The design is
-`scion/docs/experiments/v0.4/v04-cvrp-successor43-bounded-destroy-operator-shadow-selector-design-20260706.md`.
+Successor43 is now complete. The server-local target-intent-bound run
+`/home/clawd/research/scion-experiments/v04-cvrp-successor43-bounded-destroy-operator-shadow-selector-server-claw-2r-gpt55-2r-gpt55-20260706T114850Z-claw`
+completed valid/complete/postrun-ready with local `gpt-5.5`, two effective
+screening rows, and no quality/model/telemetry/verification/postrun failure.
+The raw `bounded_destroy_operator_shadow_selector` mechanism strongly activated
+with direct pre-VNS selector telemetry, but stayed marginal below MDE and was
+protected-case unsafe. Row 1 screened 48/48 pairs with W/L/T `28/15/5`,
+median delta `2.25`, CI `[-2.25, 8.25]`; row 2 expanded to 64/64 pairs with
+W/L/T `33/22/9`, median delta `2.25`, CI `[-3.5, 8.0]`. CMT2 stayed negative,
+CMT4 was mixed/negative, and B/P-family cases were systematically loss-prone.
+Trace audit found design-contract gaps rather than context failure: shadow
+trials reused main RNG, selected alternate destroy operators were not returned
+for scheduler attribution, adaptive weights/traces credited the default
+destroy, and diagnostics did not fully expose default-versus-alternate state.
+Treat unchanged successor43 raw shadow selection as reviewed/default-avoid.
+The postrun report is
+`scion/docs/experiments/v0.4/v04-cvrp-successor43-bounded-destroy-operator-shadow-selector-postrun-20260706.md`.
+Successor43b is now preregistered as the only allowed protected follow-up:
+`bounded_destroy_operator_shadow_selector_protected_followup`, still owned by
+`policies/baseline_modules/destroy_operator_selector.py` with minimal
+`scheduler.py` wiring. It must repair RNG isolation, selected-operator
+attribution, and default/alternate diagnostics without adding a new removal,
+repair selector, route memory, route skeleton, local search, seed selector,
+acceptance change, or runtime-allocation change. The design is
+`scion/docs/experiments/v0.4/v04-cvrp-successor43b-destroy-shadow-protected-followup-design-20260706.md`.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.

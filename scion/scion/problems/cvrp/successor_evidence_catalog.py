@@ -401,6 +401,52 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "bounded_destroy_operator_shadow_selector",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "bounded destroy-operator shadow selector path",
+        "causal_path_label": "bounded ALNS destroy-choice shadow selector",
+        "outcome_status": "marginal_below_mde_protected_case_unsafe",
+        "effect_summary": {
+            "row1_median_delta": 2.25,
+            "row1_ci_low": -2.25,
+            "row1_ci_high": 8.25,
+            "row1_pair_wins": 28,
+            "row1_pair_losses": 15,
+            "row1_pair_ties": 5,
+            "row2_median_delta": 2.25,
+            "row2_ci_low": -3.5,
+            "row2_ci_high": 8.0,
+            "row2_pair_wins": 33,
+            "row2_pair_losses": 22,
+            "row2_pair_ties": 9,
+            "max_median_delta": 2.25,
+            "rows_at_or_above_mde": 0,
+            "protected_case_cmt2_median_delta": -5.5,
+            "protected_case_cmt4_median_delta": 0.0,
+            "negative_case_b_n63_median_delta": -7.5,
+            "negative_case_b_n67_median_delta": -14.0,
+            "negative_case_p_n65_median_delta": -3.5,
+            "negative_case_p_n101_median_delta": -4.5,
+            "telemetry_status": "activation_observed_pre_vns_selector_effect_observed",
+            "mechanism_contract_status": "observed_positive_effect_below_mde",
+            "interpretation": (
+                "active_marginal_below_mde_with_pre_vns_trajectory_drift_and_"
+                "protected_case_unsafe"
+            ),
+            "known_design_gaps": (
+                "shadow_rng_not_isolated",
+                "selected_destroy_operator_not_returned_to_scheduler",
+                "adaptive_weight_and_trace_attribution_uses_default_operator",
+                "missing_default_vs_alternate_diagnostics",
+                "pre_vns_selection_not_post_vns_safe",
+            ),
+            "recommended_followup": (
+                "bounded_destroy_operator_shadow_selector_protected_followup"
+            ),
+            "source_root_label": "successor43",
+        },
+    },
+    {
         "mechanism_id": "angular_sector_removal",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "angular-sector removal path",

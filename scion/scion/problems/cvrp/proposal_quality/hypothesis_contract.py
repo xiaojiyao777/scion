@@ -71,6 +71,16 @@ CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS = (
             "failed CMT2/CMT4 protected-case evidence"
         ),
     ),
+    (
+        "bounded_destroy_operator_shadow_selector",
+        (
+            "successor43 valid screening activated the raw destroy-choice "
+            "shadow selector and stayed marginal below MDE, but failed CMT2 "
+            "and B/P protection; the generated implementation also did not "
+            "isolate shadow RNG or attribute selected alternate destroy "
+            "operators back to scheduler weights and traces"
+        ),
+    ),
 )
 CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE = CVRP_REVIEWED_DEFAULT_AVOID_FAILURE
 CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS = CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS

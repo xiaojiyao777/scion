@@ -244,14 +244,27 @@ The remaining closeout gaps are:
   template/count tuning as reviewed/default-avoid for v0.4. The postrun report
   is
   `scion/docs/experiments/v0.4/v04-cvrp-successor42b-cleanfork-prompt-contract-retry-postrun-20260706.md`.
-  Successor43 is now designed and target-intent-bound as
-  `bounded_destroy_operator_shadow_selector`: a new CVRP-owned destroy-choice
-  shadow selector module with minimal scheduler wiring. It keeps hard
-  `required_mechanism_ids` empty, binds target-intent preflight through
-  `target_intent_required_mechanism_ids`, preserves the exact material
-  difference schema and CMT2/CMT4 priority-case coverage, and is ready for a
-  two-round server-local launch. Design:
-  `scion/docs/experiments/v0.4/v04-cvrp-successor43-bounded-destroy-operator-shadow-selector-design-20260706.md`.
+  Successor43 then completed valid/complete/postrun-ready on local `gpt-5.5`
+  with two effective screening rows and no proposal/model/telemetry/postrun
+  failure. The raw `bounded_destroy_operator_shadow_selector` mechanism
+  strongly activated with direct pre-VNS selector telemetry, but stayed
+  marginal below MDE and protected-case unsafe. Row 1 screened 48/48 pairs
+  with W/L/T `28/15/5`, median delta `2.25`, CI `[-2.25, 8.25]`; row 2
+  expanded to 64/64 pairs with W/L/T `33/22/9`, median delta `2.25`, CI
+  `[-3.5, 8.0]`. CMT2 remained negative, CMT4 mixed/negative, and B/P-family
+  cases were systematically loss-prone. Trace audit found RNG, selected
+  destroy-operator attribution, and diagnostics gaps rather than a prompt
+  context failure. Treat unchanged raw destroy-shadow selection as
+  reviewed/default-avoid. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor43-bounded-destroy-operator-shadow-selector-postrun-20260706.md`.
+  Successor43b is now the only allowed same-line protected follow-up:
+  `bounded_destroy_operator_shadow_selector_protected_followup`, still owned by
+  `policies/baseline_modules/destroy_operator_selector.py` with minimal
+  `scheduler.py` wiring. It must repair RNG isolation, selected-operator
+  attribution, and default/alternate diagnostics without adding a new removal,
+  repair selector, route memory, route skeleton, local-search move, seed
+  selector, acceptance change, or runtime-allocation change. Design:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor43b-destroy-shadow-protected-followup-design-20260706.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
