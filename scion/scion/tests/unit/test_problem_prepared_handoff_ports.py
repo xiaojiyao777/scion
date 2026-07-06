@@ -17,10 +17,15 @@ def test_cvrp_prepared_handoff_port_builds_legacy_checks_and_phase4(
 ) -> None:
     split_path = tmp_path / "split.yaml"
     split_path.write_text("screening:\n  - CMT2\n  - CMT4\n", encoding="utf-8")
+    protocol_path = tmp_path / "protocol.yaml"
+    protocol_path.write_text(
+        "screening:\n  priority_case_ids:\n    - CMT2\n    - CMT4\n",
+        encoding="utf-8",
+    )
     manifest = {
         "problem_family": "cvrp",
         "decision_features_excluded": True,
-        "config": {"split": str(split_path)},
+        "config": {"protocol": str(protocol_path), "split": str(split_path)},
         "research_focus": build_cvrp_legacy_research_focus(
             measurement_opportunity_diagnostics=_measurement(
                 reason_codes=[
@@ -47,6 +52,9 @@ def test_cvrp_prepared_handoff_port_builds_legacy_checks_and_phase4(
 
     assert checks["cvrp_measurement_handoff_present"]["passed"] is True
     assert checks["cvrp_protected_cases_in_split"]["passed"] is True
+    assert (
+        checks["cvrp_protected_cases_in_priority_selection"]["passed"] is True
+    )
     assert checks["cvrp_large_twoopt_bounded_constraints_present"]["passed"] is True
     assert phase4["cvrp_large_twoopt_seed_handoff"]["available"] is True
     assert phase4["cvrp_cmt_case_protection_handoff"]["available"] is True

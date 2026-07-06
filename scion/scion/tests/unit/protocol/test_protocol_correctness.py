@@ -479,6 +479,77 @@ def test_priority_cases_are_retained_by_unique_basename(
     assert "cvrplib/CMT/CMT2.vrp" in selected
 
 
+def test_configured_screening_priority_cases_are_retained_for_create_new(
+    tmp_path,
+):
+    config = ProtocolConfig(
+        version="test",
+        screening=ScreeningConfig(
+            n_cases_modify=8,
+            n_cases_create=12,
+            n_seeds=2,
+            expand_to_modify=12,
+            expand_to_create=16,
+            priority_case_ids=("CMT2.vrp", "CMT4.vrp"),
+        ),
+    )
+    manifest = SplitManifest(
+        version="test",
+        screening=[
+            "cvrplib/A/A-n64-k9.vrp",
+            "cvrplib/A/A-n80-k10.vrp",
+            "cvrplib/B/B-n63-k10.vrp",
+            "cvrplib/B/B-n67-k10.vrp",
+            "cvrplib/E/E-n101-k14.vrp",
+            "cvrplib/E/E-n101-k8.vrp",
+            "cvrplib/P/P-n65-k10.vrp",
+            "cvrplib/P/P-n76-k4.vrp",
+            "cvrplib/P/P-n101-k4.vrp",
+            "cvrplib/CMT/CMT2.vrp",
+            "cvrplib/CMT/CMT3.vrp",
+            "cvrplib/CMT/CMT4.vrp",
+            "cvrplib/M/M-n151-k12.vrp",
+            "cvrplib/M/M-n200-k17.vrp",
+            "cvrplib/tai/tai150c.vrp",
+            "cvrplib/X/X-n110-k13.vrp",
+        ],
+    )
+
+    selected = select_cases(
+        config=config,
+        split_manager=SplitManager(manifest),
+        stage=ExperimentStage.SCREENING,
+        hypothesis_action="create_new",
+        expand_round=0,
+    )
+
+    assert len(selected) == 12
+    assert "cvrplib/CMT/CMT2.vrp" in selected
+    assert "cvrplib/CMT/CMT4.vrp" in selected
+
+    runner = MagicMock()
+    runner.run_solver.return_value = _win_result()
+    ledger = SeedLedgerConfig(version="test", screening=[10], validation=[], frozen=[])
+    proto = _make_proto(runner, config, manifest, ledger, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "create_new",
+        priority_case_ids=("P-n101-k4.vrp",),
+    )
+    metrics = json.loads(Path(result.raw_metrics_ref).read_text(encoding="utf-8"))
+
+    assert metrics["configured_priority_case_ids"] == ["CMT2.vrp", "CMT4.vrp"]
+    assert metrics["requested_priority_case_ids"] == ["P-n101-k4.vrp"]
+    assert metrics["effective_priority_case_ids"] == [
+        "cvrplib/CMT/CMT2.vrp",
+        "cvrplib/CMT/CMT4.vrp",
+        "cvrplib/P/P-n101-k4.vrp",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # T5: screening/validation/frozen select case counts from config
 # ---------------------------------------------------------------------------

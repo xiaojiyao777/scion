@@ -320,6 +320,11 @@ CASE_PROTECTION_REQUIREMENTS = {
             "available in the selected split."
         ),
         (
+            "Current CVRP formal screening declares CMT2 and CMT4 as protocol "
+            "priority_case_ids, so postrun analysis should expect both in "
+            "effective_priority_case_ids unless the split changes."
+        ),
+        (
             "A materially different problem-owned solver mechanism must still "
             "explain how it avoids repeating the CMT2/CMT4 losses or record "
             "that the protected cases remain an unresolved caveat."

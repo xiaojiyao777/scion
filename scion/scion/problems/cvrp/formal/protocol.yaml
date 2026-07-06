@@ -5,6 +5,9 @@ screening:
   n_seeds: 4
   expand_to_modify: 12
   expand_to_create: 16
+  priority_case_ids:
+  - cvrplib/CMT/CMT2.vrp
+  - cvrplib/CMT/CMT4.vrp
 validation:
   n_cases: 8
   n_seeds: 4

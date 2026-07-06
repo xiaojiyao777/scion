@@ -69,6 +69,7 @@ from .runtime_observation import (
     _record_runtime_sample,
     _runtime_fields,
 )
+from .selection import configured_priority_case_ids, resolve_priority_case_ids
 from .surface_runtime import (
     _record_surface_runtime_sample,
     _surface_runtime_summary_template,
@@ -115,6 +116,21 @@ def run_experiment(
         hypothesis_action,
         expand_round if expand else 0,
         priority_case_ids=requested_priority_case_ids,
+    )
+    configured_priority_cases = configured_priority_case_ids(
+        config=protocol.config,
+        stage=stage,
+    )
+    effective_priority_case_ids = tuple(
+        case
+        for case in resolve_priority_case_ids(
+            all_cases=protocol.split_manager.get_cases(stage),
+            priority_case_ids=(
+                *configured_priority_cases,
+                *requested_priority_case_ids,
+            ),
+        )
+        if case in cases
     )
     seeds = protocol._select_seeds(stage)
     total_pairs = len(cases) * len(seeds)
@@ -239,6 +255,12 @@ def run_experiment(
                     "objective_semantics": objective_semantics,
                     "requested_priority_case_ids": list(
                         requested_priority_case_ids
+                    ),
+                    "configured_priority_case_ids": list(
+                        configured_priority_cases
+                    ),
+                    "effective_priority_case_ids": list(
+                        effective_priority_case_ids
                     ),
                     "case_ids": cases,
                     "time_limit_policy": protocol.time_limit_policy_summary(

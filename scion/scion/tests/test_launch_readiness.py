@@ -94,6 +94,12 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
         "CMT4": ["screening"],
     }
     assert split_check["detail"]["required_stage"] == "screening"
+    priority_check = problem_specific["detail"]["checks"][
+        "cvrp_protected_cases_in_priority_selection"
+    ]
+    assert priority_check["passed"] is True
+    assert priority_check["detail"]["present_priority_cases"] == ["CMT2", "CMT4"]
+    assert priority_check["detail"]["required_stage"] == "screening"
     assert (
         report["checks"]["prepared_handoff_rebuild_declared_outputs_present"][
             "status"
@@ -3892,6 +3898,19 @@ def _write_prepared_root(
     config_dir.mkdir()
     for name in ("problem.yaml", "protocol.yaml", "split.yaml", "seeds.yaml"):
         (config_dir / name).write_text("ok: true\n", encoding="utf-8")
+    (config_dir / "protocol.yaml").write_text(
+        "\n".join(
+            [
+                "version: fixture",
+                "screening:",
+                "  priority_case_ids:",
+                "  - cvrplib/CMT/CMT2.vrp",
+                "  - cvrplib/CMT/CMT4.vrp",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     (config_dir / "split.yaml").write_text(
         "\n".join(
             [

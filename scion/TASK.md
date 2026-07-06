@@ -160,6 +160,12 @@ The next CVRP slot must keep the causal-path gate, surface the exact
 `material_difference.changed_dimensions` / `contrast` / `evidence` schema, and
 force CMT2/CMT4 protected-case coverage or record an explicit measurement
 caveat before clean-forking to a materially different CVRP-owned causal path.
+The successor42 prelaunch repair design is
+`scion/docs/experiments/v0.4/v04-cvrp-successor42-protected-case-schema-repair-design-20260706.md`:
+generic protocol selection now supports configured screening
+`priority_case_ids`, CVRP formal screening declares CMT2/CMT4 as those priority
+cases, and raw metrics record configured/requested/effective priority-case
+coverage. This is a research-entry/protocol repair, not a solver mechanism.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -707,8 +713,9 @@ from the current checkout.
    `route_skeleton_regret_repair` as diagnostic-exhausted
    reviewed/default-avoid evidence; do not long-run, threshold-tune, rerun, or
    continue the same mechanism as an optimization candidate in v0.4. The next
-   CVRP work is schema/protected-case repair followed by a clean fork to a
-   materially different problem-owned causal path.
+   CVRP work is successor42: validate the schema/protected-case repair, then
+   launch a short clean-fork run to a materially different problem-owned causal
+   path.
 16. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 17. Keep the v0.5 governance ablation frozen as a preregistered design; do not

@@ -810,6 +810,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     case_protection = focus["case_protection_requirements"]
     assert case_protection["protected_cases"] == ["CMT2", "CMT4"]
     assert any("CMT2/CMT4" in item for item in case_protection["rules"])
+    assert any(
+        "priority_case_ids" in item and "effective_priority_case_ids" in item
+        for item in case_protection["rules"]
+    )
 
     resume_continuity = focus["resume_continuity_requirements"]
     assert "prepared_research_focus" in resume_continuity["fallback_sources"]

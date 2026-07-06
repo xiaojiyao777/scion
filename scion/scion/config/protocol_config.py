@@ -50,6 +50,9 @@ class ScreeningConfig(BaseModel):
     expand_to_create: int = Field(gt=0, default=16)
     """expand 时 create 操作的 case 数量。"""
 
+    priority_case_ids: tuple[str, ...] = ()
+    """Stage-local case ids retained during deterministic screening selection."""
+
 
 class ValidationConfig(BaseModel):
     """Validation 阶段配置。"""

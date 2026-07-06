@@ -186,6 +186,31 @@ def _case_basename(case_id: str) -> str:
     return str(case_id).replace("\\", "/").rstrip("/").split("/")[-1]
 
 
+def configured_priority_case_ids(
+    *,
+    config: Any,
+    stage: ExperimentStage,
+) -> tuple[str, ...]:
+    """Return stage-local configured case priorities, if the protocol declares any."""
+
+    stage_config = getattr(config, stage.value, None)
+    return tuple(
+        str(case_id).strip()
+        for case_id in getattr(stage_config, "priority_case_ids", ()) or ()
+        if str(case_id).strip()
+    )
+
+
+def resolve_priority_case_ids(
+    *,
+    all_cases: Sequence[str],
+    priority_case_ids: Sequence[str] = (),
+) -> tuple[str, ...]:
+    """Resolve requested priority ids against stage cases using protocol matching."""
+
+    return tuple(_resolve_priority_cases(all_cases, priority_case_ids))
+
+
 def select_cases(
     *,
     config,
@@ -197,6 +222,10 @@ def select_cases(
 ) -> List[str]:
     """Select deterministic protocol cases for a stage/action pair."""
     all_cases = split_manager.get_cases(stage)
+    effective_priority_case_ids = (
+        *configured_priority_case_ids(config=config, stage=stage),
+        *tuple(priority_case_ids or ()),
+    )
 
     if stage == ExperimentStage.SCREENING:
         if expand_round > 0:
@@ -222,7 +251,7 @@ def select_cases(
     else:
         return all_cases
 
-    return _select_cases_with_priorities(all_cases, n, priority_case_ids)
+    return _select_cases_with_priorities(all_cases, n, effective_priority_case_ids)
 
 
 def select_seeds(*, seed_ledger: SeedLedger, stage: ExperimentStage) -> List[int]:

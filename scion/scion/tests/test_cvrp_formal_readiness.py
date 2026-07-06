@@ -15,8 +15,11 @@ from scion.cli.commands.data_roots import (
     with_declared_problem_data_roots,
 )
 from scion.config.problem import ProblemSpec, ProtocolConfig, SeedLedgerConfig, SplitManifest
+from scion.core.models import ExperimentStage
+from scion.protocol.experiment import SplitManager
 from scion.protocol.experiment.selection import (
     resolve_case_path_details,
+    select_cases,
     validate_case_path_resolution,
 )
 from scion.problems.cvrp.evidence import load_cvrp_case_manifest
@@ -166,6 +169,27 @@ def test_formal_protocol_cmt4_screening_budget_caveat_is_problem_owned() -> None
         case_path="cvrplib/A/A-n32-k5.vrp",
         fallback_time_limit_sec=10,
     ) == 30
+
+
+def test_formal_screening_selection_retains_cmt2_and_cmt4_priorities() -> None:
+    protocol = ProtocolConfig.from_yaml(FORMAL_DIR / "protocol.yaml")
+    split = SplitManifest.from_yaml(FORMAL_DIR / "split_manifest.yaml")
+
+    selected = select_cases(
+        config=protocol,
+        split_manager=SplitManager(split),
+        stage=ExperimentStage.SCREENING,
+        hypothesis_action="create_new",
+        expand_round=0,
+    )
+
+    assert len(selected) == protocol.screening.n_cases_create
+    assert protocol.screening.priority_case_ids == (
+        "cvrplib/CMT/CMT2.vrp",
+        "cvrplib/CMT/CMT4.vrp",
+    )
+    assert "cvrplib/CMT/CMT2.vrp" in selected
+    assert "cvrplib/CMT/CMT4.vrp" in selected
 
 
 def test_formal_cases_are_reference_clean_and_screening_has_gap_headroom() -> None:

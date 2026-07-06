@@ -804,6 +804,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert case_protection["decision_features_excluded"] is True
     assert case_protection["protected_cases"] == ["CMT2", "CMT4"]
     assert any("CMT2/CMT4" in item for item in case_protection["rules"])
+    assert any(
+        "priority_case_ids" in item and "effective_priority_case_ids" in item
+        for item in case_protection["rules"]
+    )
     resume_continuity = prepared_manifest["research_focus"][
         "resume_continuity_requirements"
     ]
@@ -1166,6 +1170,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         cvrp_checks["cvrp_protected_cases_in_split"]["detail"]["required_stage"]
         == "screening"
     )
+    assert (
+        cvrp_checks["cvrp_protected_cases_in_priority_selection"]["passed"] is True
+    )
+    priority_detail = cvrp_checks[
+        "cvrp_protected_cases_in_priority_selection"
+    ]["detail"]
+    assert priority_detail["present_priority_cases"] == ["CMT2", "CMT4"]
+    assert priority_detail["missing_priority_cases"] == []
+    assert priority_detail["required_stage"] == "screening"
     assert cvrp_checks["cvrp_handoff_decision_boundary_present"]["passed"] is True
     assert any(
         "Decision input" in item
