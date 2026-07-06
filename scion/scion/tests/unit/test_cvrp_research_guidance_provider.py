@@ -49,7 +49,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         mechanism.mechanism_id
         for mechanism in contract.required_mechanisms
         if mechanism.hypothesis_mechanism_binding == "target_intent_required"
-    ] == [SUCCESSOR43B_MECHANISM_ID]
+    ] == []
     assert any(
         "total_distance delta by case and seed" in field
         for requirement in contract.evidence_requirements
@@ -109,9 +109,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         },
     )
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR43B_MECHANISM_ID
-    ]
+    assert launch_payload["target_intent_required_mechanism_ids"] == []
 
 
 def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
@@ -129,9 +127,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["schema_version"] == "scion.cvrp_research_focus.v1"
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
-    assert focus["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR43B_MECHANISM_ID
-    ]
+    assert focus["target_intent_required_mechanism_ids"] == []
     assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -152,6 +148,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_dual_repair_selector",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
+        "bounded_destroy_operator_shadow_selector_protected_followup",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -222,17 +219,17 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["successor43_reviewed_evidence"]["status"] == (
         "reviewed_marginal_below_mde_protected_case_unsafe"
     )
-    assert focus["successor43b_target_intent"]["mechanism_id"] == (
+    assert focus["successor43b_reviewed_evidence"]["mechanism_id"] == (
         SUCCESSOR43B_MECHANISM_ID
     )
-    assert focus["successor43b_target_intent"]["target_file"] == (
+    assert focus["successor43b_reviewed_evidence"]["target_file"] == (
         "policies/baseline_modules/destroy_operator_selector.py"
     )
     assert "policies/baseline_modules/scheduler.py" in (
-        focus["successor43b_target_intent"]["target_files"]
+        focus["successor43b_reviewed_evidence"]["target_files"]
     )
-    assert focus["successor43b_target_intent"]["status"] == (
-        "preregistered_protected_followup_ready_for_server_local_screening"
+    assert focus["successor43b_reviewed_evidence"]["status"] == (
+        "reviewed_below_mde_protected_case_unsafe"
     )
     assert focus["successor_opportunity_families"] == [
         "acceptance_or_adaptive_weighting",
@@ -305,11 +302,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         focus["next_required_direction"]
     )
     assert (
-        "Hard `required_mechanism_ids` remain empty"
-    ) in (
-        focus["next_required_direction"]
-    )
-    assert "one narrow protected follow-up" in (
+        "Hard `required_mechanism_ids` and "
+        "`target_intent_required_mechanism_ids` now remain empty"
+    ) in focus["next_required_direction"]
+    assert "must not bind another destroy-shadow selector follow-up" in (
         focus["next_required_direction"]
     )
     assert "Successor27 then clean-forked" in focus["next_required_direction"]
@@ -560,6 +556,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_dual_repair_selector",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
+        "bounded_destroy_operator_shadow_selector_protected_followup",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -696,6 +693,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
             "bounded_dual_repair_selector",
             "elite_route_memory_repair",
             "bounded_destroy_operator_shadow_selector",
+            "bounded_destroy_operator_shadow_selector_protected_followup",
         }
     }
     assert all(
@@ -747,6 +745,19 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_destroy_operator_shadow_selector_protected_followup"
     )
     assert destroy_shadow_effect["source_root_label"] == "successor43"
+    assert mechanisms_by_id[
+        "bounded_destroy_operator_shadow_selector_protected_followup"
+    ]["outcome_status"] == "below_mde_protected_case_unsafe"
+    protected_destroy_shadow_effect = mechanisms_by_id[
+        "bounded_destroy_operator_shadow_selector_protected_followup"
+    ]["effect_summary"]
+    assert protected_destroy_shadow_effect["combined_pair_wins"] == 42
+    assert protected_destroy_shadow_effect["combined_pair_losses"] == 49
+    assert protected_destroy_shadow_effect["protected_case_cmt2_delta_sum"] == -74
+    assert protected_destroy_shadow_effect["recommended_followup"] == (
+        "none_park_destroy_shadow_line_v04"
+    )
+    assert protected_destroy_shadow_effect["source_root_label"] == "successor43b"
     radial_relink_effect = mechanisms_by_id["radial_2opt_star_relink"][
         "effect_summary"
     ]
@@ -916,6 +927,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_dual_repair_selector",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
+        "bounded_destroy_operator_shadow_selector_protected_followup",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -944,9 +956,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "route_skeleton_regret_repair",
     ]
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR43B_MECHANISM_ID
-    ]
+    assert launch_payload["target_intent_required_mechanism_ids"] == []
     assert launch_payload["suppressed_mechanism_ids"] == []
     assert launch_payload["successor_opportunity_families"] == [
         "acceptance_or_adaptive_weighting",

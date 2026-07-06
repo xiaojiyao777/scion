@@ -447,6 +447,65 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "bounded_destroy_operator_shadow_selector_protected_followup",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "protected bounded destroy-operator shadow selector path",
+        "causal_path_label": "protected bounded ALNS destroy-choice shadow selector",
+        "outcome_status": "below_mde_protected_case_unsafe",
+        "effect_summary": {
+            "row1_median_delta": -1.0,
+            "row1_ci_low": -6.0,
+            "row1_ci_high": 1.5,
+            "row1_pair_wins": 19,
+            "row1_pair_losses": 27,
+            "row1_pair_ties": 2,
+            "row1_case_wins": 2,
+            "row1_case_losses": 4,
+            "row1_case_ties": 6,
+            "row2_median_delta": 2.0,
+            "row2_ci_low": -3.25,
+            "row2_ci_high": 5.5,
+            "row2_pair_wins": 23,
+            "row2_pair_losses": 22,
+            "row2_pair_ties": 3,
+            "row2_case_wins": 5,
+            "row2_case_losses": 3,
+            "row2_case_ties": 4,
+            "combined_pair_wins": 42,
+            "combined_pair_losses": 49,
+            "combined_pair_ties": 5,
+            "combined_pair_delta_sum": -86,
+            "combined_pair_median_delta": -1.0,
+            "rows_at_or_above_mde": 0,
+            "max_effect_to_mde_ratio": 0.20202,
+            "protected_case_cmt2_pair_wins": 1,
+            "protected_case_cmt2_pair_losses": 7,
+            "protected_case_cmt2_pair_ties": 0,
+            "protected_case_cmt2_delta_sum": -74,
+            "protected_case_cmt4_pair_wins": 2,
+            "protected_case_cmt4_pair_losses": 6,
+            "protected_case_cmt4_pair_ties": 0,
+            "protected_case_cmt4_delta_sum": -110,
+            "negative_case_b_n67_pair_wins": 2,
+            "negative_case_b_n67_pair_losses": 6,
+            "negative_case_b_n67_pair_ties": 0,
+            "negative_case_b_n67_delta_sum": -75,
+            "telemetry_status": "activation_observed_local_selector_effect_not_preserved",
+            "mechanism_contract_status": "observed_positive_effect_below_mde",
+            "interpretation": (
+                "valid_below_mde_low_snr_with_local_selector_effect_not_"
+                "preserved_downstream_and_protected_case_unsafe"
+            ),
+            "known_design_gaps": (
+                "default_alternate_diagnostics_incomplete",
+                "selector_reason_not_recorded_in_alns_trace",
+                "pre_vns_local_delta_can_overstate_final_trajectory_effect",
+            ),
+            "recommended_followup": "none_park_destroy_shadow_line_v04",
+            "source_root_label": "successor43b",
+        },
+    },
+    {
         "mechanism_id": "angular_sector_removal",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "angular-sector removal path",
@@ -1128,6 +1187,12 @@ DEFAULT_AVOID_DIRECTIONS = (
         "unchanged elite_route_memory_repair destroy/repair complete-route "
         "memory path after successor42b activated with direct telemetry but "
         "stayed marginal below MDE and failed CMT2/CMT4 protection"
+    ),
+    (
+        "unchanged bounded_destroy_operator_shadow_selector_protected_followup "
+        "destroy-choice shadow selector after successor43b valid screening "
+        "stayed below MDE, remained CMT2/CMT4/B unsafe, and showed local "
+        "pre-VNS selector gains did not preserve final trajectory quality"
     ),
     (
         "ec052599-style weak_positive continuation when declared primary "

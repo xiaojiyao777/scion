@@ -81,6 +81,15 @@ CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS = (
             "operators back to scheduler weights and traces"
         ),
     ),
+    (
+        "bounded_destroy_operator_shadow_selector_protected_followup",
+        (
+            "successor43b valid screening repaired much of the RNG and "
+            "selected-operator attribution contract, but still stayed below "
+            "MDE, remained unsafe on CMT2/CMT4/B, and showed local pre-VNS "
+            "selector gains did not reliably preserve final trajectory quality"
+        ),
+    ),
 )
 CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE = CVRP_REVIEWED_DEFAULT_AVOID_FAILURE
 CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS = CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS

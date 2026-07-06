@@ -257,24 +257,34 @@ The remaining closeout gaps are:
   context failure. Treat unchanged raw destroy-shadow selection as
   reviewed/default-avoid. Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor43-bounded-destroy-operator-shadow-selector-postrun-20260706.md`.
-  Successor43b is now the only allowed same-line protected follow-up:
+  Successor43b completed the only allowed same-line protected follow-up:
   `bounded_destroy_operator_shadow_selector_protected_followup`, still owned by
   `policies/baseline_modules/destroy_operator_selector.py` with minimal
-  `scheduler.py` wiring. It must repair RNG isolation, selected-operator
-  attribution, and default/alternate diagnostics without adding a new removal,
-  repair selector, route memory, route skeleton, local-search move, seed
-  selector, acceptance change, or runtime-allocation change. Design:
-  `scion/docs/experiments/v0.4/v04-cvrp-successor43b-destroy-shadow-protected-followup-design-20260706.md`.
+  `scheduler.py` wiring. It repaired much of the successor43 mechanism
+  contract without adding a new removal, repair selector, route memory, route
+  skeleton, local-search move, seed selector, acceptance change, or
+  runtime-allocation change: alternate shadow RNG was isolated and the selected
+  destroy index/name was wired back into scheduler attribution. The solver
+  result still failed: the fresh server-local run completed
+  valid/complete/postrun-ready with local `gpt-5.5`, two effective screening
+  rows, and no proposal/model/telemetry/verification/postrun failure, but row 1
+  was negative (case W/L/T `2/4/6`, pair `19/27/2`, median `-1.0`, CI
+  `[-6.0, 1.5]`) and row 2 was only low-SNR marginal below MDE (case `5/3/4`,
+  pair `23/22/3`, median `2.0`, CI `[-3.25, 5.5]`). Combined pair evidence was
+  `42/49/5`, median about `-1.0`, delta sum `-86`; CMT2/CMT4/B remained
+  unsafe. Treat successor43b as reviewed/default-avoid optimization evidence,
+  not a long-run or same-mechanism follow-up candidate. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor43b-destroy-shadow-protected-followup-postrun-20260706.md`.
   The first successor43b resume launch
   `/home/clawd/research/scion-experiments/v04-cvrp-successor43b-destroy-shadow-protected-followup-server-claw-2r-gpt55-2r-gpt55-20260706T133342Z-claw`
   is invalid with zero experiments because inherited campaign branches filled
   all three active slots and stopped at `scheduler_active_slot_blocked`; it is
-  not solver evidence. The active successor43b screening run is the fresh
+  not solver evidence. The valid successor43b screening run is the fresh
   server-local root
   `/home/clawd/research/scion-experiments/v04-cvrp-successor43b-destroy-shadow-protected-followup-fresh-server-claw-2r-gpt55-2r-gpt55-20260706T133531Z-claw`
-  on commit `f8383943`. Completion preflight passed, model calls are local
-  `gpt-5.5`, target-intent/hypothesis/code traces bind successor43b, and the
-  first screening row is in progress.
+  on commit `f8383943`. Completion preflight passed and
+  target-intent/hypothesis/code traces bound to successor43b; trace audit found
+  no context-truncation cause for the weak result.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -745,12 +755,14 @@ CVRP:
    must clean-fork to a materially different problem-owned causal path while
    keeping the exact material-difference prompt contract and CMT2/CMT4
    priority coverage.
-17. Monitor the active successor43b fresh screening run. Analyze it only after
-   the row completes: verify all 48 screening pairs, CMT2/CMT4 coverage,
-   B/P-family behavior, runtime evidence, and whether successor43b actually
-   repaired RNG isolation, selected destroy attribution, and default/alternate
-   diagnostics. Treat the invalid resume launch as an active-slot launch
-   blocker, not solver evidence.
+17. Treat successor43b as complete, valid, and reviewed/default-avoid. Its
+   protected follow-up repaired much of the RNG and selected-operator
+   attribution contract, but both rows stayed below MDE and CMT2/CMT4/B
+   remained unsafe. Do not long-run, threshold-tune, or continue the
+   destroy-shadow selector line. Design successor44 as a materially different
+   CVRP-owned causal path before launching another experiment, and keep the
+   two-row 43b result framed as noisy screening evidence for non-promotion, not
+   a precise effect-size estimate.
 18. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 19. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.

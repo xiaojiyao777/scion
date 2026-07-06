@@ -295,24 +295,26 @@ SUCCESSOR43B_DESIGN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor43b-destroy-shadow-protected-followup-design-20260706.md"
 )
-SUCCESSOR43B_TARGET_INTENT_RULE = (
-    f"Successor43b is preregistered as `{SUCCESSOR43B_MECHANISM_ID}` in "
-    f"`{SUCCESSOR43B_TARGET_FILE}` with minimal wiring from "
-    f"`{SUCCESSOR43B_WIRING_FILE}`. It is the only allowed same-line "
-    "protected follow-up to successor43. Keep the CVRP-owned ALNS "
-    "destroy-choice shadow-selector causal path, but repair the mechanism "
-    "contract before another screening: isolate or restore RNG state for all "
-    "shadow trials so rejected/no-op trials do not perturb the default "
-    "trajectory; return the effective selected destroy index/name to scheduler "
-    "so adaptive weights, traces, and best-update attribution match the actual "
-    "candidate; record default/alternate pre-VNS distance, route count, "
-    "feasibility, selected flag, reject reason, and budget-skip diagnostics; "
-    "and state that pre-VNS local selector deltas are candidate-filter "
-    "evidence, not final trajectory proof. Do not add a new destroy removal "
-    "criterion, repair-side selector, route memory, route skeleton repair, "
-    "local-search move, seed selector, acceptance change, generic scheduler "
-    "exception, or embedded-VNS runtime allocation change. Carry CMT2/CMT4 "
-    f"priority coverage; see `{SUCCESSOR43B_DESIGN_PATH}`."
+SUCCESSOR43B_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor43b-destroy-shadow-protected-followup-postrun-20260706.md"
+)
+SUCCESSOR43B_REVIEWED_RULE = (
+    f"Successor43b `{SUCCESSOR43B_MECHANISM_ID}` completed the only allowed "
+    "protected same-line follow-up to successor43. It repaired much of the "
+    "CVRP-owned destroy-shadow selector contract: RNG state was isolated for "
+    "the alternate shadow trial and the selected destroy index/name was wired "
+    "back into scheduler attribution. The run was valid/complete/postrun-ready "
+    "with local gpt-5.5 and no proposal/model/telemetry/verification failure, "
+    "but both rows stayed below the 9.9 MDE, aggregate pair evidence was "
+    "42/49/5 with median delta -1.0, CMT2/CMT4/B remained unsafe, and local "
+    "pre-VNS selector gains did not preserve final trajectory quality. Treat "
+    "this as reviewed/default-avoid optimization evidence. Do not long-run, "
+    "threshold-tune, or continue unchanged destroy-shadow selection in v0.4. "
+    "A future telemetry hygiene repair may reuse the lesson that pre-VNS "
+    "selector deltas must not be recorded as final best-improvement proof, but "
+    f"the next solver slot must clean-fork to a materially different CVRP-owned "
+    f"causal path. See `{SUCCESSOR43B_POSTRUN_PATH}`."
 )
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
@@ -721,11 +723,13 @@ NEXT_REQUIRED_DIRECTION = (
     "and did not repair the objective-effect problem. Successor43 then "
     f"target-intent-bound `{SUCCESSOR43_MECHANISM_ID}` and produced active "
     "marginal evidence, but stayed below MDE with CMT2/B/P losses and exposed "
-    "RNG/attribution/post-VNS trajectory-safety gaps. Hard "
-    "`required_mechanism_ids` remain empty, but the next prepared target-intent "
-    f"slot may bind `{SUCCESSOR43B_MECHANISM_ID}` through "
-    "`target_intent_required_mechanism_ids` as one narrow protected follow-up "
-    "rather than a raw shadow rerun or another route-skeleton continuation. "
+    "RNG/attribution/post-VNS trajectory-safety gaps. Successor43b then "
+    "completed the only protected same-line follow-up and repaired much of the "
+    "RNG/selected-operator attribution contract, but still stayed below MDE "
+    "with aggregate pair W/L/T 42/49/5, CMT2/CMT4/B losses, and only local "
+    "pre-VNS selector gains. Hard `required_mechanism_ids` and "
+    "`target_intent_required_mechanism_ids` now remain empty; the next prepared "
+    "slot must not bind another destroy-shadow selector follow-up. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
     "telemetry-only q-audit repair for the missing explicit fields, or when "
@@ -752,7 +756,8 @@ NEXT_REQUIRED_DIRECTION = (
     f"{SUCCESSOR39_MECHANISM_ID}, or unchanged "
     f"{SUCCESSOR40_MECHANISM_ID}, or unchanged "
     f"{SUCCESSOR41_MECHANISM_ID}, or unchanged "
-    f"{SUCCESSOR43_MECHANISM_ID}. Future construction-seed revisits must be "
+    f"{SUCCESSOR43_MECHANISM_ID}, or unchanged "
+    f"{SUCCESSOR43B_MECHANISM_ID}. Future construction-seed revisits must be "
     "materially distinct from raw baseline, short-horizon trajectory, and "
     "post-construction micro-polish selector paths, with direct pre-ALNS/VNS "
     "objective telemetry. "
@@ -811,6 +816,9 @@ CURRENT_QUESTION = (
     f"and successor43 `{SUCCESSOR43_MECHANISM_ID}` activated as a pre-VNS "
     "destroy-choice shadow selector but stayed marginal below MDE with CMT2 "
     "and B/P losses plus RNG/attribution/trajectory-safety gaps, "
+    f"and successor43b `{SUCCESSOR43B_MECHANISM_ID}` repaired much of that "
+    "contract but still stayed below MDE with CMT2/CMT4/B losses and local "
+    "selector gains that did not preserve final trajectory quality, "
     "what materially different CVRP-owned causal path can still produce direct "
     "objective movement without repeating reviewed/default-avoid branches? The "
     "next prepared slot is no longer target-intent-bound to route-skeleton "
@@ -836,6 +844,13 @@ REQUIRED_EVIDENCE = (
         "successor43 valid active marginal evidence stayed below MDE with "
         "CMT2/B/P losses and trace-audited RNG/attribution/diagnostic gaps; "
         "do not long-run, threshold-tune, or rerun raw destroy shadow selection"
+    ),
+    (
+        f"`{SUCCESSOR43B_MECHANISM_ID}` is reviewed/default-avoid after "
+        "successor43b valid protected follow-up evidence stayed below MDE, "
+        "remained unsafe on CMT2/CMT4/B, and showed local pre-VNS selector "
+        "effect did not preserve final trajectory quality; do not long-run, "
+        "threshold-tune, or continue the destroy-shadow selector line"
     ),
     (
         "before the next CVRP hypothesis, use exact material_difference schema "
@@ -1094,11 +1109,12 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         f"`{SUCCESSOR43_MECHANISM_ID}` validly targeted a pre-VNS destroy "
         "choice shadow selector, activated in all screened pairs, and stayed "
         "marginal below MDE with CMT2/B/P losses plus RNG/selected-operator "
-        "attribution gaps; only "
-        f"`{SUCCESSOR43B_MECHANISM_ID}` may revisit that line, and only as a "
-        "protected follow-up that repairs RNG isolation, scheduler "
-        "attribution, and diagnostics without adding a new removal or repair "
-        "selector. Successor29 validly "
+        "attribution gaps. Successor43b "
+        f"`{SUCCESSOR43B_MECHANISM_ID}` completed the protected follow-up and "
+        "repaired much of the RNG isolation and scheduler attribution problem, "
+        "but stayed below MDE with CMT2/CMT4/B losses and local selector gains "
+        "that did not survive downstream search; park the destroy-shadow line "
+        "instead of repeating another same-mechanism follow-up. Successor29 validly "
         "screened route_pair_overlap_removal_protected_followup and stayed "
         "negative, so the route-pair-overlap line is parked for v0.4. After "
         "the reviewed "
@@ -1236,7 +1252,11 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "below-MDE route-skeleton evidence with persistent P/B/E-family losses and "
     "a CMT2 measurement-coverage caveat. Successor42b "
     f"`{SUCCESSOR42_MECHANISM_ID}` is reviewed/default-avoid after active "
-    "marginal below-MDE evidence with CMT2/CMT4 losses. The next CVRP solver slot should "
+    "marginal below-MDE evidence with CMT2/CMT4 losses. Successor43 "
+    f"`{SUCCESSOR43_MECHANISM_ID}` and successor43b "
+    f"`{SUCCESSOR43B_MECHANISM_ID}` are both reviewed/default-avoid after "
+    "the protected follow-up failed to produce positive-at-MDE or protected-"
+    "case-safe final objective evidence. The next CVRP solver slot should "
     "clean-fork to a materially different CVRP-owned causal path after the "
     "exact material_difference schema and CMT2/CMT4 case-coverage requirements "
     "are satisfied. "
@@ -1339,7 +1359,7 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [SUCCESSOR43B_MECHANISM_ID],
+        "target_intent_required_mechanism_ids": [],
         "reviewed_mechanism_ids": [
             *list(REVIEWED_MECHANISM_IDS),
             SUCCESSOR41_MECHANISM_ID,
@@ -1413,7 +1433,7 @@ def build_cvrp_legacy_research_focus(
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
-        "successor43b_target_intent": {
+        "successor43b_reviewed_evidence": {
             "mechanism_id": SUCCESSOR43B_MECHANISM_ID,
             "mechanism_family": "destroy_repair_selection",
             "target_file": SUCCESSOR43B_TARGET_FILE,
@@ -1422,23 +1442,20 @@ def build_cvrp_legacy_research_focus(
                 SUCCESSOR43B_WIRING_FILE,
             ],
             "design_path": SUCCESSOR43B_DESIGN_PATH,
-            "status": "preregistered_protected_followup_ready_for_server_local_screening",
+            "postrun_path": SUCCESSOR43B_POSTRUN_PATH,
+            "status": "reviewed_below_mde_protected_case_unsafe",
             "blocked_actions": [
-                "raw_successor43_rerun",
-                "same_mechanism_threshold_tuning_without_contract_repair",
-                "route_memory_or_route_skeleton_reuse",
-                "repair_side_selector_reuse",
-                "new_removal_criterion",
-                "local_search_or_seed_selector_rewrite",
+                "long_run",
+                "same_mechanism_threshold_tuning",
+                "same_mechanism_optimization_followup",
+                "another_destroy_shadow_selector_followup",
             ],
-            "required_contract_repairs": [
-                "shadow_rng_isolation_or_restore",
-                "selected_destroy_index_name_returned_to_scheduler",
-                "adaptive_weight_trace_attribution_matches_selected_destroy",
-                "default_alternate_pre_vns_diagnostics",
-                "pre_vns_delta_not_claimed_as_final_trajectory_proof",
+            "carried_lessons": [
+                "pre_vns_selector_delta_is_not_final_trajectory_proof",
+                "default_alternate_diagnostics_should_be_explicit",
+                "selected_operator_attribution_must_match_scheduler_trace",
             ],
-            "rule": SUCCESSOR43B_TARGET_INTENT_RULE,
+            "reviewed_rule": SUCCESSOR43B_REVIEWED_RULE,
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
@@ -1464,29 +1481,7 @@ def build_cvrp_legacy_research_focus(
 
 
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
-    return (
-        RequiredMechanism(
-            mechanism_id=SUCCESSOR43B_MECHANISM_ID,
-            category="destroy_repair_selection",
-            description=SUCCESSOR43B_TARGET_INTENT_RULE,
-            required_observations=(
-                (
-                    "target-intent and formal hypothesis use "
-                    "bounded_destroy_operator_shadow_selector_protected_followup"
-                ),
-                "material_difference.changed_dimensions/contrast/evidence schema is present",
-                "shadow RNG is isolated or restored before returning to scheduler",
-                "pre-VNS default destroy+repair distance",
-                "pre-VNS alternate destroy+same-repair distance",
-                "selected destroy index/name returned for adaptive weight and trace attribution",
-                "selected route count, feasibility, reject reason, and budget-skip status",
-                "record_move delta for bounded_destroy_operator_shadow_selector_protected_followup",
-                "CMT2/CMT4 priority-case coverage or explicit measurement caveat",
-            ),
-            protected_items=PROTECTED_CASES,
-            hypothesis_mechanism_binding="target_intent_required",
-        ),
-    )
+    return ()
 
 
 def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
@@ -1725,7 +1720,7 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
             category="proposal_focus",
             title="Successor portfolio direction",
             lines=(
-                SUCCESSOR43B_TARGET_INTENT_RULE,
+                SUCCESSOR43B_REVIEWED_RULE,
                 SUCCESSOR43_REVIEWED_RULE,
                 SUCCESSOR41_TARGET_INTENT_RULE,
                 NEXT_REQUIRED_DIRECTION,
