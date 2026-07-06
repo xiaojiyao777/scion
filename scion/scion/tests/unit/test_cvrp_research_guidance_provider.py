@@ -110,6 +110,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert SELECTOR_TELEMETRY_HYGIENE_LESSON in rendered.text
     assert "pre_vns_local_delta" in rendered.text
     assert "post_downstream_or_final_total_distance_delta" in rendered.text
+    assert "`scheduler.py` must not call" in rendered.text
     assert "measured_no_positive_at_mde" in rendered.text
     assert "no-positive-at-MDE" in rendered.text
     assert "CMT2/CMT4 case protection" in rendered.text
@@ -264,6 +265,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["successor44_target_intent"]["required_mechanism_binding"] == (
         "target_intent_required"
     )
+    assert "scheduler.py` may only pass" in focus["successor44_target_intent"][
+        "rule"
+    ]
     assert SELECTOR_TELEMETRY_HYGIENE_LESSON in (
         focus["successor44_target_intent"]["carried_lessons"]
     )

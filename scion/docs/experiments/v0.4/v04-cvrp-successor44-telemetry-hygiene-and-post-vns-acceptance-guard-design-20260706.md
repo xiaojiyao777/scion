@@ -85,6 +85,9 @@ Required telemetry:
 
 - activation/decision counters and phase runtime under
   `post_vns_best_anchor_acceptance_guard`;
+- mechanism-specific `record_move` effect telemetry, if used, must be recorded
+  inside an `acceptance.py` guard helper tied to the final post-VNS allow/reject
+  decision;
 - per-iteration trace evidence showing whether the original SA acceptance would
   have accepted, whether the guard allowed/rejected, and the candidate/current/
   best distance relationship at that post-VNS boundary;
@@ -94,6 +97,8 @@ Required telemetry:
 Forbidden telemetry interpretation:
 
 - do not record positive `record_move` deltas for rejected worse candidates;
+- do not record `post_vns_best_anchor_acceptance_guard` effect telemetry from
+  `scheduler.py` broad-loop bookkeeping;
 - do not use ordinary ALNS best-improvement bookkeeping as direct mechanism
   effect;
 - do not treat pre-VNS selector/filter local deltas as final solver proof.
@@ -101,6 +106,28 @@ Forbidden telemetry interpretation:
 `record_move(..., delta=..., best_improved=...)` is acceptable only when the
 guard directly caused or preserved an accepted/current/best trajectory outcome
 that can be attributed to the mechanism at the final acceptance boundary.
+`scheduler.py` may pass post-polish candidate/current/best data into the
+acceptance helper and consume its guarded allow/reject result, but the helper in
+`acceptance.py` owns the mechanism telemetry.
+
+## First Launch Finding
+
+Fresh root:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor44-post-vns-best-anchor-acceptance-guard-server-claw-2r-gpt55-2r-gpt55-20260706T154957Z-claw`
+
+The first launch used local `gpt-5.5`, passed completion preflight, and bound
+target intent to `post_vns_best_anchor_acceptance_guard`. It was manually
+stopped before solver evidence after repeated proposal/code quality blocks:
+
+- hypotheses alternated between missing `expected_telemetry.effect` and
+  declaring broad `phase_best_delta`/`improvement_counts` effect fields;
+- generated code then recorded the acceptance mechanism's effect telemetry from
+  `scheduler.py`, triggering the existing broad-loop acceptance static smoke
+  rejection.
+
+This root is not solver evidence. The design repair is to make acceptance.py
+ownership explicit before relaunch: effect telemetry for successor44 belongs in
+an acceptance guard helper, while scheduler.py remains minimal post-VNS wiring.
 
 ## Acceptance Criteria
 
@@ -110,6 +137,9 @@ that can be attributed to the mechanism at the final acceptance boundary.
   `target_intent_required_mechanism_ids`.
 - Static smoke rejects selector modules that record pre-VNS selector effect
   telemetry as direct final effect.
+- Successor44 prompt guidance says scheduler.py must not record
+  `post_vns_best_anchor_acceptance_guard` effect telemetry; acceptance.py owns
+  the guard helper and mechanism-specific effect record.
 - Existing CVRP solver-design and launcher tests pass.
 - Launch a fresh two-round server-local `claw` experiment with local `gpt-5.5`,
   completion preflight, and full prepared context before considering any

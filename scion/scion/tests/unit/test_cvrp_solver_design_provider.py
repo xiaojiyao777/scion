@@ -145,6 +145,7 @@ def test_cvrp_prompt_provider_owns_solver_design_specific_terms() -> None:
     assert "Route-cap fallback use" in rendered
     assert "pre-VNS local delta is diagnostic evidence only" in rendered
     assert "post-downstream accepted/current/best trajectory evidence" in rendered
+    assert "scheduler.py must not directly record effect telemetry" in rendered
     assert "Do not add new calls to `context.record_best_update`" in rendered
 
 
@@ -159,6 +160,7 @@ def test_cvrp_acceptance_target_api_guidance_names_post_vns_guard_boundary() -> 
 
     assert "post-repair/post-VNS decision wiring" in rendered
     assert "final accepted/current/best trajectory boundary" in rendered
+    assert "scheduler.py must not call `context.record_move`" in rendered
     assert "Do not reimplement rank-gap" in rendered
 
 

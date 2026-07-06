@@ -349,7 +349,13 @@ SUCCESSOR44_TARGET_INTENT_RULE = (
     "runtime-allocation variant. Record activation/decision/phase telemetry "
     "under the mechanism id, final per-case total_distance/feasibility/"
     "route-count and CMT2/CMT4 evidence, and do not record positive "
-    "`record_move` deltas for rejected worse candidates. See "
+    "`record_move` deltas for rejected worse candidates. Implementation shape: "
+    "put the guard decision helper and any mechanism-specific `record_move` "
+    "effect telemetry in `acceptance.py`; `scheduler.py` may only pass the "
+    "post-polish candidate/current/best data to that helper and consume the "
+    "guarded allow/reject result. `scheduler.py` must not call "
+    "`context.record_move` for this mechanism or record its effect telemetry "
+    "from the scheduler broad loop. See "
     f"`{SUCCESSOR44_DESIGN_PATH}`."
 )
 
@@ -1689,6 +1695,8 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "post-VNS candidate/current/best distance relationship",
                 "original simulated-annealing accept decision",
                 "guard allow/reject decision",
+                "mechanism-specific record_move effect telemetry lives in acceptance.py",
+                "scheduler.py performs only minimal post-VNS guard wiring",
                 "no positive record_move delta for rejected worse candidates",
                 "final per-case total_distance deltas",
                 "feasibility and route-count preservation or explicit caveat",

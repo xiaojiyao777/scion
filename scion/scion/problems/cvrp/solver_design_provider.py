@@ -90,7 +90,12 @@ class CvrpSolverDesignProvider:
                 "acceptance guard, preserve new-best and current-improving "
                 "candidates, guard only worse simulated-annealing accepts, and "
                 "tie effect claims to the final accepted/current/best "
-                "trajectory boundary. Do not reimplement rank-gap, "
+                "trajectory boundary. Put the guard helper and any "
+                "mechanism-specific `context.record_move(...)` effect telemetry "
+                "in acceptance.py. Scheduler.py may pass candidate/current/best "
+                "distances and consume the returned allow/reject decision, but "
+                "scheduler.py must not call `context.record_move` for this "
+                "acceptance mechanism. Do not reimplement rank-gap, "
                 "route-pressure, or post-repair operator-credit weighting."
             )
         return ""
@@ -153,6 +158,16 @@ class CvrpSolverDesignProvider:
                 "context-record counter and phase runtime, and declare "
                 "delta-valued effect fields only when the mechanism records a "
                 "directly attributable accepted or improving decision."
+            ),
+            (
+                "For `post_vns_best_anchor_acceptance_guard`, if the hypothesis "
+                "declares effect fields such as "
+                "`solver_algorithm_phase_best_delta.post_vns_best_anchor_acceptance_guard`, "
+                "the corresponding `context.record_move` call must live in an "
+                "acceptance.py guard helper tied to the final post-VNS "
+                "allow/reject decision. Scheduler.py integration may call that "
+                "helper, but must not record this mechanism's effect telemetry "
+                "from ordinary ALNS loop bookkeeping."
             ),
             (
                 "For selector/filter or shadow-selection mechanisms, separate "
@@ -898,6 +913,13 @@ class CvrpSolverDesignProvider:
                 "when that mechanism directly caused an accepted or improving "
                 "candidate; ordinary scheduler best-improvement bookkeeping is "
                 "not causal acceptance effect evidence."
+            ),
+            (
+                "For `post_vns_best_anchor_acceptance_guard`, implement the "
+                "guard and mechanism-specific `record_move` effect telemetry in "
+                "acceptance.py. Scheduler.py wiring may call the helper after "
+                "repair/VNS and before current-state commit, but scheduler.py "
+                "must not directly record effect telemetry for this mechanism."
             ),
             (
                 "For selector/filter or shadow-selection code, pre-VNS local "
