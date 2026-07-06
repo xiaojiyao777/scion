@@ -157,6 +157,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "neighbor_list_vns_filter_reviewed_frozen_unsafe_validation_positive",
         "frozen_safe_neighbor_list_vns_filter_reviewed_weak_positive_below_mde",
         "route_angle_aware_2opt_star_reviewed_no_positive",
+        "radial_2opt_star_relink_reviewed_no_positive",
         "operator_pair_destroy_size_bands_reviewed_no_positive",
         "stagnation_adaptive_destroy_size_schedule_reviewed_no_positive",
         "adaptive_embedded_vns_runtime_allocation_reviewed_no_positive",
@@ -211,6 +212,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
         "route_angle_aware_2opt_star",
+        "radial_2opt_star_relink",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
@@ -352,6 +354,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert any(
         "route_angle_aware_2opt_star" in item and "successor37 valid negative" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert any(
+        "radial_2opt_star_relink" in item
+        and "successor38 valid active no-effect" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
@@ -674,6 +681,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
         "route_angle_aware_2opt_star",
+        "radial_2opt_star_relink",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `v0.4-dev`*
-*Last updated: 2026-07-05*
+*Last updated: 2026-07-06*
 
 This is the active task definition for closing v0.4. It is not a run log.
 Historical launch/root details live in focused experiment reports, sparse
@@ -79,9 +79,15 @@ penalty_repair` was weak-positive below MDE, but direct-effect-zero and lost
 all CMT2/CMT4 seeds. Treat both unchanged successor37 mechanisms as
 reviewed/default-avoid. The proposal-control repair has now been designed and
 implemented as a CVRP-owned causal-path hypothesis-quality contract before
-successor38. The current successor38 retry root is running a 2-round
-server-local clean fork after that repair; analyze it before launching any
-longer or concurrent CVRP run.
+successor38. Successor38 completed valid/complete/postrun-ready: the contract
+blocked the first weak causal-path hypothesis before code generation, but the
+accepted `radial_2opt_star_relink` candidate was active-no-effect, with zero
+accepted mechanism moves, zero direct mechanism best delta, all case gates tied,
+and `mechanism_contract_status=observed_no_effect`. Treat unchanged
+`radial_2opt_star_relink` as reviewed/default-avoid and do not long-run or
+same-branch follow up despite weak pair-level lifecycle noise. The next CVRP
+slot should clean-fork to a materially different problem-owned causal path with
+direct accepted-move/objective-effect evidence and CMT2/CMT4 protection.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -596,12 +602,13 @@ from the current checkout.
    `edge_frequency_penalty_repair` is reviewed weak-positive below MDE but
    direct-effect-zero with CMT2/CMT4 all-seed losses. Do not long-run or repeat
    unchanged successor37 mechanisms.
-12. Successor38 proposal-control repair is implemented from the design in
-   `scion/docs/experiments/v0.4/v04-cvrp-successor38-proposal-quality-contract-design-20260705.md`.
-   Monitor and analyze the retry root
-   `/home/clawd/research/scion-experiments/v04-cvrp-successor38-proposal-quality-contract-cleanfork-server-retry-2r-gpt55-20260705T153833Z-claw`
-   before any longer or concurrent CVRP experiment. The first successor38 root
-   is feedback-shape evidence only, not solver evidence.
+12. Treat successor38 as proposal-control positive but solver-negative. The
+   causal-path contract blocked the first weak hypothesis, but the accepted
+   `radial_2opt_star_relink` candidate produced zero accepted mechanism moves,
+   zero direct mechanism best delta, all case gates tied, and
+   `observed_no_effect` mechanism contract status. Do not long-run or repeat
+   unchanged `radial_2opt_star_relink`; the next slot must clean-fork to a
+   materially different CVRP-owned causal path.
 13. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 14. Keep the v0.5 governance ablation frozen as a preregistered design; do not

@@ -169,6 +169,43 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "radial_2opt_star_relink",
+        "mechanism_family": "bounded_local_search_variant",
+        "path_label": "radial 2-opt-star relink path",
+        "causal_path_label": "bounded radial route-pair 2-opt-star relink",
+        "effect_summary": {
+            "row1_median_delta": 0.0,
+            "row1_ci_low": 0.0,
+            "row1_ci_high": 0.0,
+            "row1_pair_wins": 1,
+            "row1_pair_losses": 1,
+            "row1_pair_ties": 30,
+            "row2_median_delta": 0.0,
+            "row2_ci_low": 0.0,
+            "row2_ci_high": 0.0,
+            "row2_pair_wins": 1,
+            "row2_pair_losses": 0,
+            "row2_pair_ties": 47,
+            "screening_case_wins": 0,
+            "screening_case_losses": 0,
+            "screening_case_ties": 20,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "max_median_delta": 0.0,
+            "max_effect_to_mde_ratio": 0.0,
+            "protected_case_cmt2_row1_status": "one_seed_loss",
+            "protected_case_cmt2_row2_status": "one_seed_win",
+            "protected_case_cmt4_median_delta": 0.0,
+            "telemetry_status": "activation_observed_runtime_observed_effect_zero",
+            "direct_effect_candidate_present": 160,
+            "direct_effect_candidate_positive": 0,
+            "direct_effect_candidate_zero": 160,
+            "mechanism_contract_status": "observed_no_effect",
+            "interpretation": "valid_active_no_effect_solver_negative",
+            "source_root_label": "successor38",
+        },
+    },
+    {
         "mechanism_id": "operator_pair_destroy_size_bands",
         "mechanism_family": "scheduler_destroy_size_policy",
         "path_label": "operator-pair destroy-size band scheduler path",
@@ -921,6 +958,11 @@ DEFAULT_AVOID_DIRECTIONS = (
         "unchanged route_angle_aware_2opt_star bounded-local-search route-angle "
         "2-opt-star after successor37 valid negative screening with median "
         "delta -4.25, CMT2/CMT4 losses, and no positive-at-MDE row"
+    ),
+    (
+        "unchanged radial_2opt_star_relink bounded-local-search radial "
+        "2-opt-star after successor38 valid active no-effect screening with "
+        "zero accepted mechanism moves and observed_no_effect contract status"
     ),
     (
         "unchanged edge_frequency_penalty_repair destroy/repair repair-scoring "

@@ -72,6 +72,12 @@ def test_cvrp_adapter_renders_proposal_only_measurement_opportunities() -> None:
     assert "SUCCESSOR36B_SEED_POST_REVIEWED_DEFAULT_AVOID" in rendered
     assert "SUCCESSOR35_LOSS_HEAVY_REVIEWED" in rendered
     assert "SUCCESSOR34_WEAK_POSITIVE_BELOW_MDE" in rendered
+    assert "radial_2opt_star_relink" in (
+        payload["top_opportunity_recipe"]["next_required_direction"]
+    )
+    assert "screened as active-no-effect" in (
+        payload["top_opportunity_recipe"]["next_required_direction"]
+    )
     assert "holdout" not in rendered.lower()
     assert "bks" not in rendered.lower()
 

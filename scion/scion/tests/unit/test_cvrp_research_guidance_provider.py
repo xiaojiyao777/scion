@@ -130,6 +130,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
         "route_angle_aware_2opt_star",
+        "radial_2opt_star_relink",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
@@ -245,7 +246,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "capacity_tightness_removal" in focus["next_required_direction"]
     assert "telemetry-only q-audit repair" in focus["next_required_direction"]
     assert "successor36b" in focus["next_required_direction"]
-    assert "proposal-control and candidate-quality evidence" in focus[
+    assert "proposal-control evidence plus solver-negative" in focus[
+        "next_required_direction"
+    ]
+    assert "observed_no_effect mechanism contract status" in focus[
         "next_required_direction"
     ]
     assert "materially different CVRP-owned causal path" in focus[
@@ -432,6 +436,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["default_avoid_directions"]
     )
     assert any(
+        "radial_2opt_star_relink" in item
+        and "successor38 valid active no-effect" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
         "edge_frequency_penalty_repair" in item
         and "direct mechanism effect zero" in item
         for item in focus["default_avoid_directions"]
@@ -457,6 +466,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
         "route_angle_aware_2opt_star",
+        "radial_2opt_star_relink",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
@@ -506,6 +516,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "mechanism_family"
     ] == "bounded_local_search_variant"
     assert mechanisms_by_id["route_angle_aware_2opt_star"][
+        "mechanism_family"
+    ] == "bounded_local_search_variant"
+    assert mechanisms_by_id["radial_2opt_star_relink"][
         "mechanism_family"
     ] == "bounded_local_search_variant"
     assert mechanisms_by_id["operator_pair_destroy_size_bands"][
@@ -608,6 +621,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["edge_frequency_penalty_repair"]["outcome_status"] == (
         "weak_positive_below_mde_direct_no_effect"
     )
+    radial_relink_effect = mechanisms_by_id["radial_2opt_star_relink"][
+        "effect_summary"
+    ]
+    assert radial_relink_effect["mechanism_contract_status"] == "observed_no_effect"
+    assert radial_relink_effect["direct_effect_candidate_positive"] == 0
+    assert radial_relink_effect["source_root_label"] == "successor38"
     assert mechanisms_by_id["frozen_safe_neighbor_list_vns_filter"][
         "effect_summary"
     ]["recommended_followup"] == "capacity_tightness_removal"
@@ -758,6 +777,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
         "route_angle_aware_2opt_star",
+        "radial_2opt_star_relink",
         "operator_pair_destroy_size_bands",
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",

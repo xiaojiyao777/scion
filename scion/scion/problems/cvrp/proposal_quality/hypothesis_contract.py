@@ -23,13 +23,13 @@ CVRP_SUCCESSOR32_FOCUS_FAILURE = (
 CVRP_SUCCESSOR36_FOCUS_FAILURE = (
     "agent_quality_blocked:cvrp_successor36_focus_mismatch"
 )
-CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE = (
-    "agent_quality_blocked:cvrp_successor37_default_avoid"
+CVRP_REVIEWED_DEFAULT_AVOID_FAILURE = (
+    "agent_quality_blocked:cvrp_reviewed_default_avoid"
 )
 CVRP_SOLVER_DESIGN_CAUSAL_PATH_FAILURE = (
     "agent_quality_blocked:cvrp_solver_design_causal_path_contract"
 )
-CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS = (
+CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS = (
     (
         "route_angle_aware_2opt_star",
         (
@@ -46,7 +46,17 @@ CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS = (
             "lost all seeds"
         ),
     ),
+    (
+        "radial_2opt_star_relink",
+        (
+            "successor38 valid screening found active runtime but zero accepted "
+            "radial relink moves, zero direct mechanism effect, and all case "
+            "gates tied"
+        ),
+    ),
 )
+CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE = CVRP_REVIEWED_DEFAULT_AVOID_FAILURE
+CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS = CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS
 
 _CAUSAL_PATH_GATE = "cvrp_solver_design_causal_path_contract"
 _MATERIAL_DIFFERENCE_DIMENSION_KEYS = (
@@ -110,7 +120,7 @@ def validate_cvrp_hypothesis_quality(hypothesis: Any) -> Mapping[str, Any]:
         return {"allowed": True, "gate_name": _CAUSAL_PATH_GATE}
 
     mechanism_ids = _mechanism_ids(hypothesis)
-    default_avoid = _successor37_default_avoid_rejection(
+    default_avoid = _reviewed_default_avoid_rejection(
         mechanism_ids=mechanism_ids,
         target_file=target_file,
     )
@@ -135,27 +145,27 @@ def validate_cvrp_hypothesis_quality(hypothesis: Any) -> Mapping[str, Any]:
     return {"allowed": True, "gate_name": _CAUSAL_PATH_GATE}
 
 
-def _successor37_default_avoid_rejection(
+def _reviewed_default_avoid_rejection(
     *, mechanism_ids: list[str], target_file: str
 ) -> Mapping[str, Any] | None:
     for blocked_mechanism_id, evidence_reason in (
-        CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS
+        CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS
     ):
         if blocked_mechanism_id not in mechanism_ids:
             continue
         return {
             "allowed": False,
             "detail": (
-                f"{CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE}: "
-                f"{blocked_mechanism_id} is reviewed successor37 "
+                f"{CVRP_REVIEWED_DEFAULT_AVOID_FAILURE}: "
+                f"{blocked_mechanism_id} is reviewed "
                 "default-avoid evidence; selected_mechanisms="
                 + ",".join(mechanism_ids or ["none"])
             ),
-            "gate_name": "cvrp_successor37_default_avoid",
+            "gate_name": "cvrp_reviewed_default_avoid",
             "structured_rejection": {
                 "source": "cvrp_problem_adapter",
-                "gate_name": "cvrp_successor37_default_avoid",
-                "failure_code": CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE,
+                "gate_name": "cvrp_reviewed_default_avoid",
+                "failure_code": CVRP_REVIEWED_DEFAULT_AVOID_FAILURE,
                 "agent_block_reason": "agent_quality_blocked",
                 "blocked_mechanism_id": blocked_mechanism_id,
                 "selected_mechanism_ids": mechanism_ids,
@@ -163,14 +173,14 @@ def _successor37_default_avoid_rejection(
                 "evidence_reason": evidence_reason,
                 "retry_constraint": (
                     "Redraft the CVRP solver-design hypothesis before code "
-                    "generation: do not repeat unchanged successor37 "
+                    "generation: do not repeat unchanged reviewed "
                     f"`{blocked_mechanism_id}`. Name a materially different "
                     "CVRP-owned causal path, state direct mechanism "
                     "objective-effect evidence, and include CMT2/CMT4 "
                     "protection plan with protected-case protection evidence."
                 ),
                 "repair_template": {
-                    "repair_type": "cvrp_successor37_default_avoid",
+                    "repair_type": "cvrp_reviewed_default_avoid",
                     "blocked_mechanism_id": blocked_mechanism_id,
                     "required_causal_path": (
                         "materially different CVRP-owned causal path with "

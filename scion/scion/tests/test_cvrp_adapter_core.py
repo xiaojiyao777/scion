@@ -199,9 +199,10 @@ def test_cvrp_adapter_hypothesis_quality_allows_successor32_focus(
     [
         ("route_angle_aware_2opt_star", "policies/baseline_modules/local_search.py"),
         ("edge_frequency_penalty_repair", "policies/baseline_modules/destroy_repair.py"),
+        ("radial_2opt_star_relink", "policies/baseline_modules/local_search.py"),
     ],
 )
-def test_cvrp_adapter_hypothesis_quality_blocks_successor37_default_avoid(
+def test_cvrp_adapter_hypothesis_quality_blocks_reviewed_default_avoid(
     cvrp_adapter: ProblemAdapter,
     mechanism_id: str,
     target_file: str,
@@ -209,7 +210,7 @@ def test_cvrp_adapter_hypothesis_quality_blocks_successor37_default_avoid(
     hypothesis = HypothesisProposal(
         hypothesis_text=(
             f"Repeat {mechanism_id} as a CVRP solver-design mechanism after "
-            "successor37."
+            "review."
         ),
         change_locus="solver_design",
         action="modify",
@@ -225,9 +226,9 @@ def test_cvrp_adapter_hypothesis_quality_blocks_successor37_default_avoid(
     )
 
     assert check.allowed is False
-    assert "cvrp_successor37_default_avoid" in check.detail
+    assert "cvrp_reviewed_default_avoid" in check.detail
     assert check.structured_rejection["gate_name"] == (
-        "cvrp_successor37_default_avoid"
+        "cvrp_reviewed_default_avoid"
     )
     assert check.structured_rejection["blocked_mechanism_id"] == mechanism_id
     assert check.structured_rejection["agent_block_reason"] == (
