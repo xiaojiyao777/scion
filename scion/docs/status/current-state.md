@@ -244,6 +244,14 @@ The remaining closeout gaps are:
   template/count tuning as reviewed/default-avoid for v0.4. The postrun report
   is
   `scion/docs/experiments/v0.4/v04-cvrp-successor42b-cleanfork-prompt-contract-retry-postrun-20260706.md`.
+  Successor43 is now designed and target-intent-bound as
+  `bounded_destroy_operator_shadow_selector`: a new CVRP-owned destroy-choice
+  shadow selector module with minimal scheduler wiring. It keeps hard
+  `required_mechanism_ids` empty, binds target-intent preflight through
+  `target_intent_required_mechanism_ids`, preserves the exact material
+  difference schema and CMT2/CMT4 priority-case coverage, and is ready for a
+  two-round server-local launch. Design:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor43-bounded-destroy-operator-shadow-selector-design-20260706.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -714,10 +722,14 @@ CVRP:
    must clean-fork to a materially different problem-owned causal path while
    keeping the exact material-difference prompt contract and CMT2/CMT4
    priority coverage.
-17. Use the v0.4 large-file modularization plan before adding behavior to
+17. Launch successor43 as a two-round server-local CVRP screening run. The
+   intended mechanism is `bounded_destroy_operator_shadow_selector`, with a new
+   focused destroy-operator selector module, minimal scheduler wiring, direct
+   pre-VNS default-versus-alternate telemetry, and no generic Scion changes.
+18. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-18. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-19. Keep status documents compact; put detailed root counters and caveats in
+19. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+20. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes

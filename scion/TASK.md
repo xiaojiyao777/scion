@@ -193,6 +193,15 @@ direct signal did not produce promotion-grade or protected-case-safe evidence.
 Treat unchanged `elite_route_memory_repair` and same-mechanism template/count
 tuning as reviewed/default-avoid for v0.4. The postrun report is
 `scion/docs/experiments/v0.4/v04-cvrp-successor42b-cleanfork-prompt-contract-retry-postrun-20260706.md`.
+Successor43 is now preregistered as
+`bounded_destroy_operator_shadow_selector`: a CVRP-owned destroy-choice shadow
+selector in a new `policies/baseline_modules/destroy_operator_selector.py`
+module with minimal `scheduler.py` wiring. It keeps formal
+`required_mechanism_ids` empty while binding target-intent preflight through
+`target_intent_required_mechanism_ids`, preserves the repaired exact
+`material_difference` schema and CMT2/CMT4 priority coverage, and is ready for
+a two-round server-local screening launch. The design is
+`scion/docs/experiments/v0.4/v04-cvrp-successor43-bounded-destroy-operator-shadow-selector-design-20260706.md`.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -747,11 +756,16 @@ from the current checkout.
    must clean-fork to a materially different problem-owned causal path while
    keeping the exact material-difference prompt contract and CMT2/CMT4
    priority coverage.
-17. Use the new large-file modularization plan before further behavior changes
+17. Launch successor43 as the next two-round server-local CVRP screening run:
+   `bounded_destroy_operator_shadow_selector` must compare an existing
+   alternate destroy operator against the default destroy side before VNS,
+   produce direct pre-VNS selector telemetry, and leave generic Scion and
+   non-target CVRP solver behavior unchanged.
+18. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-18. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+19. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-19. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+20. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence

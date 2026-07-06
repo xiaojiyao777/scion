@@ -264,6 +264,29 @@ SUCCESSOR42B_REVIEWED_RULE = (
     "rows stayed marginal below MDE and CMT2/CMT4 were case-level losses. Do "
     "not long-run or same-mechanism tune complete-route memory repair in v0.4."
 )
+SUCCESSOR43_MECHANISM_ID = "bounded_destroy_operator_shadow_selector"
+SUCCESSOR43_TARGET_FILE = "policies/baseline_modules/destroy_operator_selector.py"
+SUCCESSOR43_WIRING_FILE = "policies/baseline_modules/scheduler.py"
+SUCCESSOR43_DESIGN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor43-bounded-destroy-operator-shadow-selector-design-20260706.md"
+)
+SUCCESSOR43_TARGET_INTENT_RULE = (
+    f"Successor43 is preregistered as `{SUCCESSOR43_MECHANISM_ID}` in "
+    f"`{SUCCESSOR43_TARGET_FILE}` with minimal wiring from "
+    f"`{SUCCESSOR43_WIRING_FILE}`. It is a proposal-only target-intent "
+    "binding for a CVRP-owned ALNS destroy-choice shadow selector: keep the "
+    "adaptive-weight default destroy/repair/q as the baseline candidate, "
+    "optionally compare one alternate existing destroy operator with the same "
+    "repair and q on a copied current solution before VNS, and select the "
+    "feasible no-route-count-regression lower-distance pre-VNS candidate. "
+    "Do not add a new removal heuristic, complete-route memory, route-skeleton "
+    "repair, repair-side selector, local-search move, seed selector, "
+    "acceptance change, adaptive scoring change, or embedded-VNS runtime "
+    "allocation change. Record direct pre-VNS default-versus-alternate "
+    "objective telemetry under the mechanism id and carry CMT2/CMT4 priority "
+    f"coverage; see `{SUCCESSOR43_DESIGN_PATH}`."
+)
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
     "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
@@ -668,9 +691,10 @@ NEXT_REQUIRED_DIRECTION = (
     "successor41 as valid active marginal evidence, not a long-run candidate; "
     f"see `{SUCCESSOR41_POSTRUN_PATH}`. "
     "Successor41b completed the only allowed same-mechanism diagnostic follow-up "
-    "and did not repair the objective-effect problem. `required_mechanism_ids` "
-    "and `target_intent_required_mechanism_ids` are now empty because the next "
-    "optimization candidate must be a clean fork rather than another "
+    "and did not repair the objective-effect problem. Hard "
+    "`required_mechanism_ids` remain empty, but the next prepared target-intent "
+    f"slot may bind `{SUCCESSOR43_MECHANISM_ID}` through "
+    "`target_intent_required_mechanism_ids` as a clean fork rather than another "
     "route-skeleton continuation. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
@@ -1267,7 +1291,7 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [],
+        "target_intent_required_mechanism_ids": [SUCCESSOR43_MECHANISM_ID],
         "reviewed_mechanism_ids": [
             *list(REVIEWED_MECHANISM_IDS),
             SUCCESSOR41_MECHANISM_ID,
@@ -1319,6 +1343,27 @@ def build_cvrp_legacy_research_focus(
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
+        "successor43_target_intent": {
+            "mechanism_id": SUCCESSOR43_MECHANISM_ID,
+            "mechanism_family": "destroy_repair_selection",
+            "target_file": SUCCESSOR43_TARGET_FILE,
+            "target_files": [
+                SUCCESSOR43_TARGET_FILE,
+                SUCCESSOR43_WIRING_FILE,
+            ],
+            "design_path": SUCCESSOR43_DESIGN_PATH,
+            "status": "preregistered_ready_for_server_local_screening",
+            "blocked_actions": [
+                "same_mechanism_threshold_tuning_before_screening",
+                "route_memory_or_route_skeleton_reuse",
+                "repair_side_selector_reuse",
+                "new_removal_criterion",
+                "local_search_or_seed_selector_rewrite",
+            ],
+            "rule": SUCCESSOR43_TARGET_INTENT_RULE,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        },
         "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
         "reviewed_successor_evidence": deepcopy(REVIEWED_SUCCESSOR_EVIDENCE),
         "current_question": CURRENT_QUESTION,
@@ -1341,7 +1386,24 @@ def build_cvrp_legacy_research_focus(
 
 
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
-    return ()
+    return (
+        RequiredMechanism(
+            mechanism_id=SUCCESSOR43_MECHANISM_ID,
+            category="destroy_repair_selection",
+            description=SUCCESSOR43_TARGET_INTENT_RULE,
+            required_observations=(
+                "target-intent and formal hypothesis use bounded_destroy_operator_shadow_selector",
+                "material_difference.changed_dimensions/contrast/evidence schema is present",
+                "pre-VNS default destroy+repair distance",
+                "pre-VNS alternate destroy+same-repair distance",
+                "selected destroy label, selected route count, feasibility, and budget-skip status",
+                "record_move delta for bounded_destroy_operator_shadow_selector",
+                "CMT2/CMT4 priority-case coverage or explicit measurement caveat",
+            ),
+            protected_items=PROTECTED_CASES,
+            hypothesis_mechanism_binding="target_intent_required",
+        ),
+    )
 
 
 def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
@@ -1578,6 +1640,7 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
             category="proposal_focus",
             title="Successor portfolio direction",
             lines=(
+                SUCCESSOR43_TARGET_INTENT_RULE,
                 SUCCESSOR41_TARGET_INTENT_RULE,
                 NEXT_REQUIRED_DIRECTION,
                 CURRENT_QUESTION,
