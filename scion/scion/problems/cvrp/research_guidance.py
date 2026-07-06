@@ -316,6 +316,42 @@ SUCCESSOR43B_REVIEWED_RULE = (
     f"the next solver slot must clean-fork to a materially different CVRP-owned "
     f"causal path. See `{SUCCESSOR43B_POSTRUN_PATH}`."
 )
+SELECTOR_TELEMETRY_HYGIENE_LESSON = (
+    "pre_vns_selector_delta_is_not_final_trajectory_proof"
+)
+SELECTOR_TELEMETRY_HYGIENE_RULE = (
+    "Selector/filter telemetry hygiene: pre-VNS selector local deltas are "
+    "candidate-filter diagnostics only. They must not be claimed as final "
+    "trajectory or promotion-grade objective-effect proof. If a selector or "
+    "shadow/filter mechanism declares effect evidence, separate "
+    "`pre_vns_local_delta` from `post_downstream_or_final_total_distance_delta` "
+    "and tie final objective claims to accepted/current/best trajectory "
+    "evidence after downstream repair/VNS/acceptance."
+)
+SUCCESSOR44_MECHANISM_ID = "post_vns_best_anchor_acceptance_guard"
+SUCCESSOR44_TARGET_FILE = "policies/baseline_modules/acceptance.py"
+SUCCESSOR44_WIRING_FILE = "policies/baseline_modules/scheduler.py"
+SUCCESSOR44_DESIGN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor44-telemetry-hygiene-and-post-vns-acceptance-guard-design-20260706.md"
+)
+SUCCESSOR44_TARGET_INTENT_RULE = (
+    f"Successor44 is preregistered as `{SUCCESSOR44_MECHANISM_ID}` in "
+    f"`{SUCCESSOR44_TARGET_FILE}` with minimal `{SUCCESSOR44_WIRING_FILE}` "
+    "integration. It is a proposal-only target-intent binding for a materially "
+    "different post-VNS acceptance/commit-boundary causal path: preserve new "
+    "best and current-improving candidates, then guard worse candidates that "
+    "simulated annealing would otherwise accept by anchoring the final "
+    "post-repair/post-VNS decision to current/best trajectory state and "
+    "route-count feasibility. It is not another destroy-shadow selector, "
+    "rank-gap/route-pressure acceptance gate, operator-credit weighting, "
+    "route memory, route skeleton, seed selector, local-search move, or "
+    "runtime-allocation variant. Record activation/decision/phase telemetry "
+    "under the mechanism id, final per-case total_distance/feasibility/"
+    "route-count and CMT2/CMT4 evidence, and do not record positive "
+    "`record_move` deltas for rejected worse candidates. See "
+    f"`{SUCCESSOR44_DESIGN_PATH}`."
+)
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
     "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
@@ -727,9 +763,10 @@ NEXT_REQUIRED_DIRECTION = (
     "completed the only protected same-line follow-up and repaired much of the "
     "RNG/selected-operator attribution contract, but still stayed below MDE "
     "with aggregate pair W/L/T 42/49/5, CMT2/CMT4/B losses, and only local "
-    "pre-VNS selector gains. Hard `required_mechanism_ids` and "
-    "`target_intent_required_mechanism_ids` now remain empty; the next prepared "
-    "slot must not bind another destroy-shadow selector follow-up. "
+    "pre-VNS selector gains. Hard `required_mechanism_ids` remains empty, but "
+    f"`target_intent_required_mechanism_ids` now binds successor44 "
+    f"`{SUCCESSOR44_MECHANISM_ID}`; the next prepared slot must not bind "
+    "another destroy-shadow selector follow-up. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
     "telemetry-only q-audit repair for the missing explicit fields, or when "
@@ -820,11 +857,11 @@ CURRENT_QUESTION = (
     "contract but still stayed below MDE with CMT2/CMT4/B losses and local "
     "selector gains that did not preserve final trajectory quality, "
     "what materially different CVRP-owned causal path can still produce direct "
-    "objective movement without repeating reviewed/default-avoid branches? The "
-    "next prepared slot is no longer target-intent-bound to route-skeleton "
-    "repair. It should first satisfy the exact material_difference schema and "
-    "CMT2/CMT4 protected-case coverage requirement, then clean-fork to a "
-    "different problem-owned causal path."
+    "objective movement without repeating reviewed/default-avoid branches? "
+    f"The next prepared slot is target-intent-bound to successor44 "
+    f"`{SUCCESSOR44_MECHANISM_ID}`: a post-VNS acceptance/commit-boundary "
+    "guard that must satisfy the exact material_difference schema and "
+    "CMT2/CMT4 protected-case coverage requirement before code work."
 )
 REQUIRED_EVIDENCE = (
     (
@@ -851,6 +888,21 @@ REQUIRED_EVIDENCE = (
         "remained unsafe on CMT2/CMT4/B, and showed local pre-VNS selector "
         "effect did not preserve final trajectory quality; do not long-run, "
         "threshold-tune, or continue the destroy-shadow selector line"
+    ),
+    (
+        f"{SELECTOR_TELEMETRY_HYGIENE_LESSON}: selector/filter and destroy/"
+        "repair-choice mechanisms may use pre_vns_local_delta as diagnostic "
+        "evidence only; final trajectory claims require "
+        "post_downstream_or_final_total_distance_delta, feasibility, route-count, "
+        "and accepted/current/best attribution after downstream repair/VNS/"
+        "acceptance"
+    ),
+    (
+        f"successor44 `{SUCCESSOR44_MECHANISM_ID}` is the current proposal-only "
+        "target-intent mechanism; it must work at the post-VNS acceptance/"
+        "commit boundary and must contrast with successor32 operator-credit "
+        "weighting, old rank-gap/route-pressure acceptance gates, and "
+        "successor39/43/43b pre-VNS selector paths"
     ),
     (
         "before the next CVRP hypothesis, use exact material_difference schema "
@@ -948,9 +1000,10 @@ REQUIRED_EVIDENCE = (
     (
         "do not revisit rank-gap or route-pressure acceptance gates; "
         "successor32 post-repair operator-credit weighting is now reviewed "
-        "zero-effect evidence and future clean forks must keep "
-        "simulated-annealing acceptance logic unchanged unless the proposal "
-        "names a materially new acceptance causal path"
+        f"zero-effect evidence; successor44 `{SUCCESSOR44_MECHANISM_ID}` may "
+        "touch simulated-annealing acceptance only as a materially new "
+        "post-VNS accepted/current/best trajectory guard with explicit contrast "
+        "against those reviewed acceptance/adaptive-weighting paths"
     ),
     (
         "a materially different bounded local-search or destroy/repair "
@@ -1062,8 +1115,10 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         "reviewed/default-avoid after valid screening showed internal "
         "operator-credit movement but zero objective effect. Do not repeat "
         "unchanged post-repair credit weighting or rank-gap/route-pressure "
-        "acceptance gates unless a future proposal names a materially new "
-        "causal path and direct objective-effect telemetry."
+        f"acceptance gates. Successor44 `{SUCCESSOR44_MECHANISM_ID}` is "
+        "allowed only as a materially new post-VNS acceptance/commit-boundary "
+        "guard with final accepted/current/best trajectory evidence, not a "
+        "pre-VNS selector or broad-loop best-improvement telemetry claim."
     ),
     (
         "construction_seed_portfolio: successor25 raw seed-baseline selection "
@@ -1359,7 +1414,7 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [],
+        "target_intent_required_mechanism_ids": [SUCCESSOR44_MECHANISM_ID],
         "reviewed_mechanism_ids": [
             *list(REVIEWED_MECHANISM_IDS),
             SUCCESSOR41_MECHANISM_ID,
@@ -1451,11 +1506,38 @@ def build_cvrp_legacy_research_focus(
                 "another_destroy_shadow_selector_followup",
             ],
             "carried_lessons": [
-                "pre_vns_selector_delta_is_not_final_trajectory_proof",
+                SELECTOR_TELEMETRY_HYGIENE_LESSON,
                 "default_alternate_diagnostics_should_be_explicit",
                 "selected_operator_attribution_must_match_scheduler_trace",
             ],
             "reviewed_rule": SUCCESSOR43B_REVIEWED_RULE,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        },
+        "successor44_target_intent": {
+            "mechanism_id": SUCCESSOR44_MECHANISM_ID,
+            "mechanism_family": "acceptance_or_adaptive_weighting",
+            "target_file": SUCCESSOR44_TARGET_FILE,
+            "target_files": [
+                SUCCESSOR44_TARGET_FILE,
+                SUCCESSOR44_WIRING_FILE,
+            ],
+            "design_path": SUCCESSOR44_DESIGN_PATH,
+            "status": "preregistered_post_vns_acceptance_guard_ready_for_server_local_screening",
+            "required_mechanism_binding": "target_intent_required",
+            "blocked_actions": [
+                "destroy_shadow_selector_followup",
+                "rank_gap_acceptance_gate_repeat",
+                "route_pressure_acceptance_gate_repeat",
+                "operator_credit_weighting_repeat",
+                "pre_vns_selector_local_delta_as_final_effect",
+            ],
+            "carried_lessons": [
+                SELECTOR_TELEMETRY_HYGIENE_LESSON,
+                "final_effect_must_be_post_downstream_or_accepted_trajectory",
+                "do_not_record_positive_delta_for_rejected_worse_candidates",
+            ],
+            "rule": SUCCESSOR44_TARGET_INTENT_RULE,
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
@@ -1481,7 +1563,22 @@ def build_cvrp_legacy_research_focus(
 
 
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
-    return ()
+    return (
+        RequiredMechanism(
+            mechanism_id=SUCCESSOR44_MECHANISM_ID,
+            category="acceptance_or_adaptive_weighting",
+            description=SUCCESSOR44_TARGET_INTENT_RULE,
+            required_observations=(
+                "post_vns_acceptance_guard_activation",
+                "guard_allowed_or_rejected_original_sa_acceptance",
+                "post_downstream_or_final_total_distance_delta",
+                "feasibility_and_route_count_preservation",
+                "CMT2_CMT4_case_level_results",
+            ),
+            protected_items=PROTECTED_CASES,
+            hypothesis_mechanism_binding="target_intent_required",
+        ),
+    )
 
 
 def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
@@ -1517,6 +1614,14 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "nonzero aligned candidate/champion q deltas before objective-effect interpretation",
                 "post-repair operator-credit old score and new credit when using acceptance_or_adaptive_weighting",
                 "operator weights before and after segment update when using acceptance_or_adaptive_weighting",
+                (
+                    "post-VNS accepted/current/best trajectory attribution "
+                    f"when using {SUCCESSOR44_MECHANISM_ID}"
+                ),
+                (
+                    "selector/filter mechanisms separate pre_vns_local_delta "
+                    "from post_downstream_or_final_total_distance_delta"
+                ),
                 "material causal-path difference from reviewed angular-sector removal",
                 "material causal-path difference from reviewed radial-string removal",
                 "material causal-path difference from reviewed farthest-noise removal",
@@ -1541,6 +1646,53 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "per-case total_distance delta tied to the changed mechanism",
                 "feasibility and route-count preservation or explicit caveat",
                 "runtime budget evidence under the formal policy",
+            ),
+        ),
+        EvidenceRequirement(
+            requirement_id="selector_telemetry_hygiene",
+            category="telemetry_hygiene",
+            description=SELECTOR_TELEMETRY_HYGIENE_RULE,
+            mechanism_ids=(
+                SUCCESSOR39_MECHANISM_ID,
+                SUCCESSOR43_MECHANISM_ID,
+                SUCCESSOR43B_MECHANISM_ID,
+                "destroy_repair_selection",
+                "selector",
+                "filter",
+                "shadow_selector",
+            ),
+            protected_items=PROTECTED_CASES,
+            required_fields=(
+                SELECTOR_TELEMETRY_HYGIENE_LESSON,
+                "pre_vns_local_delta labelled as diagnostic evidence only",
+                "post_downstream_or_final_total_distance_delta for final claims",
+                "accepted/current/best trajectory attribution for effect claims",
+                "CMT2/CMT4 case-level total_distance deltas or split caveat",
+            ),
+        ),
+        EvidenceRequirement(
+            requirement_id="successor44_post_vns_acceptance_guard",
+            category="successor_solver_opportunity_evidence",
+            description=SUCCESSOR44_TARGET_INTENT_RULE,
+            mechanism_ids=(
+                SUCCESSOR44_MECHANISM_ID,
+                "acceptance_or_adaptive_weighting",
+                SUCCESSOR44_TARGET_FILE,
+                SUCCESSOR44_WIRING_FILE,
+            ),
+            protected_items=PROTECTED_CASES,
+            required_fields=(
+                "proposal-only target_intent_required mechanism binding",
+                "material contrast against successor32 operator-credit weighting",
+                "material contrast against rank-gap and route-pressure acceptance gates",
+                "material contrast against successor39/43/43b pre-VNS selector paths",
+                "post-VNS candidate/current/best distance relationship",
+                "original simulated-annealing accept decision",
+                "guard allow/reject decision",
+                "no positive record_move delta for rejected worse candidates",
+                "final per-case total_distance deltas",
+                "feasibility and route-count preservation or explicit caveat",
+                "CMT2/CMT4 case-level total_distance deltas or split caveat",
             ),
         ),
         EvidenceRequirement(
@@ -1690,6 +1842,9 @@ def _continuity_requirements() -> tuple[ContinuityRequirement, ...]:
         SUCCESSOR40_TARGET_FILE,
         SUCCESSOR43B_MECHANISM_ID,
         SUCCESSOR43B_TARGET_FILE,
+        SUCCESSOR44_MECHANISM_ID,
+        SUCCESSOR44_TARGET_FILE,
+        SUCCESSOR44_WIRING_FILE,
         REQUIRED_MECHANISM_ID,
         *(str(item["mechanism_id"]) for item in REVIEWED_SUCCESSOR_MECHANISMS),
         "bounded_local_search_variant",
@@ -1720,6 +1875,7 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
             category="proposal_focus",
             title="Successor portfolio direction",
             lines=(
+                SUCCESSOR44_TARGET_INTENT_RULE,
                 SUCCESSOR43B_REVIEWED_RULE,
                 SUCCESSOR43_REVIEWED_RULE,
                 SUCCESSOR41_TARGET_INTENT_RULE,
@@ -1758,6 +1914,7 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
             lines=(
                 ROUTE_MERGE_EXCEPTION_RULE,
                 CONSTRUCTION_SEED_RULE,
+                SELECTOR_TELEMETRY_HYGIENE_RULE,
                 MISSING_PRIMARY_TELEMETRY_RULE,
             ),
         ),

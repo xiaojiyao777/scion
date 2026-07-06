@@ -21,6 +21,7 @@ def static_smoke_issue(
         _unknown_context_helper_issue(changes)
         or _double_bridge_semantic_drift_issue(text, changes)
         or _destroy_effect_attribution_issue(hypothesis, changes)
+        or _selector_filter_effect_attribution_issue(hypothesis, changes)
         or _acceptance_effect_attribution_issue(hypothesis, changes)
         or _construction_seed_effect_attribution_issue(hypothesis, changes)
     )
@@ -115,6 +116,49 @@ def _acceptance_effect_attribution_issue(
             "the scheduler loop, but effect telemetry must be tied to the "
             "acceptance decision or a directly attributable accepted move, not "
             "to ordinary ALNS best-improvement bookkeeping."
+        )
+    return None
+
+
+def _selector_filter_effect_attribution_issue(
+    hypothesis: HypothesisProposal | None,
+    changes: dict[str, str],
+) -> str | None:
+    selector_code_parts: list[str] = []
+    for path, code in changes.items():
+        try:
+            normalized = normalize_relative_patch_path(path)
+        except ValueError:
+            normalized = str(path or "")
+        if normalized in {
+            "policies/baseline_modules/destroy_operator_selector.py",
+            "policies/baseline_modules/repair_operator_selector.py",
+        } or (
+            normalized.startswith("policies/baseline_modules/")
+            and normalized.endswith("_selector.py")
+            and not normalized.endswith("seed_selector.py")
+        ):
+            selector_code_parts.append(code)
+    if not selector_code_parts:
+        return None
+
+    selector_code = "\n".join(selector_code_parts)
+    for mechanism in _mechanism_ids(hypothesis):
+        mechanism_text = _normalize(mechanism)
+        if not _has_any(mechanism_text, (" selector ", " filter ", " shadow ")):
+            continue
+        if not _records_move_effect(selector_code, mechanism):
+            continue
+        return (
+            "solver_design static smoke rejected selector local-delta "
+            "effect overclaim: "
+            f"`{mechanism}` records delta/best_improved telemetry inside a "
+            "pre-VNS selector module. Selector/filter modules may record "
+            "activation, budget, and default-vs-alternate diagnostics, but "
+            "pre-VNS local deltas are not final trajectory proof. Record final "
+            "effect only after downstream repair/VNS/acceptance produces a "
+            "directly attributable accepted/current/best trajectory effect, "
+            "or keep the local delta as diagnostic evidence."
         )
     return None
 

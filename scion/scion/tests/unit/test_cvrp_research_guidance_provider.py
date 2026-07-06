@@ -6,6 +6,8 @@ from scion.problems.cvrp.research_guidance import (
     SUCCESSOR41_MECHANISM_ID,
     SUCCESSOR43B_MECHANISM_ID,
     SUCCESSOR43_MECHANISM_ID,
+    SUCCESSOR44_MECHANISM_ID,
+    SELECTOR_TELEMETRY_HYGIENE_LESSON,
     build_cvrp_legacy_research_focus,
     build_cvrp_research_guidance_contract,
 )
@@ -49,7 +51,15 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         mechanism.mechanism_id
         for mechanism in contract.required_mechanisms
         if mechanism.hypothesis_mechanism_binding == "target_intent_required"
-    ] == []
+    ] == [SUCCESSOR44_MECHANISM_ID]
+    assert any(
+        requirement.requirement_id == "selector_telemetry_hygiene"
+        for requirement in contract.evidence_requirements
+    )
+    assert any(
+        requirement.requirement_id == "successor44_post_vns_acceptance_guard"
+        for requirement in contract.evidence_requirements
+    )
     assert any(
         "total_distance delta by case and seed" in field
         for requirement in contract.evidence_requirements
@@ -96,6 +106,10 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert "bounded_destroy_operator_shadow_selector_protected_followup" in (
         rendered.text
     )
+    assert SUCCESSOR44_MECHANISM_ID in rendered.text
+    assert SELECTOR_TELEMETRY_HYGIENE_LESSON in rendered.text
+    assert "pre_vns_local_delta" in rendered.text
+    assert "post_downstream_or_final_total_distance_delta" in rendered.text
     assert "measured_no_positive_at_mde" in rendered.text
     assert "no-positive-at-MDE" in rendered.text
     assert "CMT2/CMT4 case protection" in rendered.text
@@ -109,7 +123,9 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         },
     )
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == []
+    assert launch_payload["target_intent_required_mechanism_ids"] == [
+        SUCCESSOR44_MECHANISM_ID
+    ]
 
 
 def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
@@ -127,7 +143,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["schema_version"] == "scion.cvrp_research_focus.v1"
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
-    assert focus["target_intent_required_mechanism_ids"] == []
+    assert focus["target_intent_required_mechanism_ids"] == [
+        SUCCESSOR44_MECHANISM_ID
+    ]
     assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -231,6 +249,24 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["successor43b_reviewed_evidence"]["status"] == (
         "reviewed_below_mde_protected_case_unsafe"
     )
+    assert SELECTOR_TELEMETRY_HYGIENE_LESSON in (
+        focus["successor43b_reviewed_evidence"]["carried_lessons"]
+    )
+    assert focus["successor44_target_intent"]["mechanism_id"] == (
+        SUCCESSOR44_MECHANISM_ID
+    )
+    assert focus["successor44_target_intent"]["target_file"] == (
+        "policies/baseline_modules/acceptance.py"
+    )
+    assert "policies/baseline_modules/scheduler.py" in (
+        focus["successor44_target_intent"]["target_files"]
+    )
+    assert focus["successor44_target_intent"]["required_mechanism_binding"] == (
+        "target_intent_required"
+    )
+    assert SELECTOR_TELEMETRY_HYGIENE_LESSON in (
+        focus["successor44_target_intent"]["carried_lessons"]
+    )
     assert focus["successor_opportunity_families"] == [
         "acceptance_or_adaptive_weighting",
         "scheduler_destroy_size_policy",
@@ -302,9 +338,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         focus["next_required_direction"]
     )
     assert (
-        "Hard `required_mechanism_ids` and "
-        "`target_intent_required_mechanism_ids` now remain empty"
+        "Hard `required_mechanism_ids` remains empty"
     ) in focus["next_required_direction"]
+    assert SUCCESSOR44_MECHANISM_ID in focus["next_required_direction"]
     assert "must not bind another destroy-shadow selector follow-up" in (
         focus["next_required_direction"]
     )
@@ -956,7 +992,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "route_skeleton_regret_repair",
     ]
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == []
+    assert launch_payload["target_intent_required_mechanism_ids"] == [
+        SUCCESSOR44_MECHANISM_ID
+    ]
     assert launch_payload["suppressed_mechanism_ids"] == []
     assert launch_payload["successor_opportunity_families"] == [
         "acceptance_or_adaptive_weighting",

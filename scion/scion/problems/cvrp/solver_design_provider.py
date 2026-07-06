@@ -82,6 +82,17 @@ class CvrpSolverDesignProvider:
                 "path. Scheduler.py should keep calling _vns(candidate, "
                 "_default_vns_operators(), ...)."
             )
+        if normalized == "policies/baseline_modules/acceptance.py":
+            return (
+                "Target-specific rule for acceptance.py: keep acceptance logic "
+                "inside this module and use scheduler.py only for minimal "
+                "post-repair/post-VNS decision wiring. For a post-VNS "
+                "acceptance guard, preserve new-best and current-improving "
+                "candidates, guard only worse simulated-annealing accepts, and "
+                "tie effect claims to the final accepted/current/best "
+                "trajectory boundary. Do not reimplement rank-gap, "
+                "route-pressure, or post-repair operator-credit weighting."
+            )
         return ""
 
     def solver_design_hypothesis_guidance(self, context: Any) -> Sequence[str]:
@@ -142,6 +153,17 @@ class CvrpSolverDesignProvider:
                 "context-record counter and phase runtime, and declare "
                 "delta-valued effect fields only when the mechanism records a "
                 "directly attributable accepted or improving decision."
+            ),
+            (
+                "For selector/filter or shadow-selection mechanisms, separate "
+                "pre_vns_local_delta from "
+                "post_downstream_or_final_total_distance_delta. Pre-VNS local "
+                "candidate deltas are diagnostic selector evidence only; do "
+                "not declare `solver_algorithm_phase_best_delta.<mechanism>` "
+                "or `solver_algorithm_phase_improvement_counts.<mechanism>` as "
+                "final trajectory proof unless the mechanism records the "
+                "accepted/current/best effect after downstream repair, VNS, "
+                "and acceptance."
             ),
             (
                 "If the hypothesis modifies an existing ALNS/VNS phase rather "
@@ -876,6 +898,14 @@ class CvrpSolverDesignProvider:
                 "when that mechanism directly caused an accepted or improving "
                 "candidate; ordinary scheduler best-improvement bookkeeping is "
                 "not causal acceptance effect evidence."
+            ),
+            (
+                "For selector/filter or shadow-selection code, pre-VNS local "
+                "delta is diagnostic evidence only. Use activation/decision "
+                "counters for selector diagnostics, and reserve "
+                "`record_move(..., delta=..., best_improved=...)` final effect "
+                "claims for post-downstream accepted/current/best trajectory "
+                "evidence under the declared mechanism id."
             ),
             (
                 "Candidate-facing CVRP telemetry helpers are "

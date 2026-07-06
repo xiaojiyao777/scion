@@ -501,6 +501,10 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
                 "selector_reason_not_recorded_in_alns_trace",
                 "pre_vns_local_delta_can_overstate_final_trajectory_effect",
             ),
+            "telemetry_hygiene_lessons": (
+                "pre_vns_selector_delta_is_not_final_trajectory_proof",
+                "local_selector_delta_requires_post_downstream_final_evidence",
+            ),
             "recommended_followup": "none_park_destroy_shadow_line_v04",
             "source_root_label": "successor43b",
         },

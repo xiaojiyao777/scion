@@ -275,7 +275,10 @@ def _causal_path_rejection(
                 "clean_fork_diversity_claim.protected_cases=['CMT2','CMT4'] "
                 "and clean_fork_diversity_claim.protection_plan with separate "
                 "CMT2 and CMT4 entries. Do not put CMT2/CMT4 only in prose, "
-                "material_difference, or contrast_dimensions."
+                "material_difference, or contrast_dimensions. For selector, "
+                "shadow, or filter mechanisms, separate pre_vns_local_delta "
+                "diagnostics from post_downstream_or_final_total_distance_delta "
+                "before claiming final objective effect."
             ),
             "repair_template": {
                 "repair_type": _CAUSAL_PATH_GATE,

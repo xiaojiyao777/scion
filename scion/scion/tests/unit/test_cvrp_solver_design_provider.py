@@ -143,7 +143,23 @@ def test_cvrp_prompt_provider_owns_solver_design_specific_terms() -> None:
     assert "For construction seed/portfolio mechanisms" in rendered
     assert "same-run baseline seed/portfolio" in rendered
     assert "Route-cap fallback use" in rendered
+    assert "pre-VNS local delta is diagnostic evidence only" in rendered
+    assert "post-downstream accepted/current/best trajectory evidence" in rendered
     assert "Do not add new calls to `context.record_best_update`" in rendered
+
+
+def test_cvrp_acceptance_target_api_guidance_names_post_vns_guard_boundary() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_prompt_provider()
+
+    rendered = provider.solver_design_target_api_guidance(
+        "policies/baseline_modules/acceptance.py"
+    )
+
+    assert "post-repair/post-VNS decision wiring" in rendered
+    assert "final accepted/current/best trajectory boundary" in rendered
+    assert "Do not reimplement rank-gap" in rendered
 
 
 def test_cvrp_active_subject_code_constraints_are_provider_owned() -> None:
@@ -834,6 +850,46 @@ def test_cvrp_smoke_provider_rejects_destroy_effect_via_local_alias() -> None:
 
     assert issue is not None
     assert "non-causal destroy telemetry" in issue
+
+
+def test_cvrp_smoke_provider_rejects_selector_local_delta_effect_overclaim() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a pre-VNS destroy shadow selector that compares the default "
+            "destroy candidate with one alternate candidate before repair/VNS."
+        ),
+        change_locus="solver_design",
+        action="create",
+        target_file="policies/baseline_modules/destroy_operator_selector.py",
+        mechanism_changes=(
+            SimpleNamespace(id="bounded_destroy_operator_shadow_selector"),
+        ),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/destroy_operator_selector.py",
+        action="create",
+        code_content=(
+            "MECHANISM_ID = 'bounded_destroy_operator_shadow_selector'\n"
+            "def choose_destroy(default_candidate, alternate_candidate, context):\n"
+            "    delta = default_candidate.distance - alternate_candidate.distance\n"
+            "    accepted = delta > 0\n"
+            "    context.record_move(MECHANISM_ID, attempted=1, accepted=accepted, "
+            "delta=delta, best_improved=accepted)\n"
+            "    return alternate_candidate if accepted else default_candidate\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is not None
+    assert "selector local-delta effect overclaim" in issue
+    assert "pre-VNS selector module" in issue
 
 
 def test_cvrp_smoke_provider_allows_acceptance_decision_counters() -> None:
