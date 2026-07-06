@@ -126,18 +126,39 @@ def test_cvrp_adapter_patch_quality_blocks_construction_seed_activation_only(
     )
 
 
-def test_cvrp_adapter_hypothesis_quality_blocks_successor39_mechanism_drift(
+def test_cvrp_adapter_hypothesis_quality_no_longer_uses_stale_scheduler_focus(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(
             "Add a bounded pair-failure cooldown selector before ALNS chooses "
-            "a destroy and repair pair."
+            "a destroy and repair pair with direct objective-effect telemetry "
+            "and CMT2/CMT4 protection."
         ),
         change_locus="solver_design",
         action="modify",
         target_file="policies/baseline_modules/scheduler.py",
         novelty_signature={"mechanism_family": "acceptance_or_adaptive_weighting"},
+        material_difference={
+            "changed_dimensions": ["operator-pair cooldown state"],
+            "contrast": {
+                "nearest_reviewed_mechanism": "post_repair_effect_credit_weighting",
+                "difference": "cooldown rejects repeated failed pairs, not score credit",
+            },
+            "evidence": {"source": "successor32 zero objective effect"},
+        },
+        expected_telemetry={
+            "effect": ["pair_failure_cooldown_selection.direct_objective_delta"]
+        },
+        branch_lesson_usage={
+            "clean_fork_diversity_claim": {
+                "protected_cases": ["CMT2", "CMT4"],
+                "protection_plan": {
+                    "CMT2": "report cooldown accepted/rejected deltas",
+                    "CMT4": "report cooldown accepted/rejected deltas",
+                },
+            }
+        },
         mechanism_changes=(
             MechanismChange(id="pair_failure_cooldown_selection", change_type="add"),
         ),
@@ -149,22 +170,10 @@ def test_cvrp_adapter_hypothesis_quality_blocks_successor39_mechanism_drift(
         hypothesis,
     )
 
-    assert check.allowed is False
-    assert "cvrp_successor39_focus_mismatch" in check.detail
-    assert check.structured_rejection["gate_name"] == "cvrp_successor39_focus"
-    assert (
-        check.structured_rejection["required_mechanism_id"]
-        == "bounded_dual_repair_selector"
-    )
-    assert check.structured_rejection["selected_mechanism_ids"] == [
-        "pair_failure_cooldown_selection"
-    ]
-    assert check.structured_rejection["agent_block_reason"] == (
-        "agent_quality_blocked"
-    )
+    assert check.allowed is True
 
 
-def test_cvrp_adapter_hypothesis_quality_allows_successor39_focus(
+def test_cvrp_adapter_hypothesis_quality_blocks_reviewed_successor39_repeat(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     hypothesis = HypothesisProposal(
@@ -190,6 +199,72 @@ def test_cvrp_adapter_hypothesis_quality_allows_successor39_focus(
         hypothesis,
     )
 
+    assert check.allowed is False
+    assert "cvrp_reviewed_default_avoid" in check.detail
+    assert check.structured_rejection["gate_name"] == (
+        "cvrp_reviewed_default_avoid"
+    )
+    assert (
+        check.structured_rejection["blocked_mechanism_id"]
+        == "bounded_dual_repair_selector"
+    )
+
+
+def test_cvrp_adapter_hypothesis_quality_allows_successor40_focus(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Test bounded_two_for_one_exchange as a two-route unordered "
+            "customer-set exchange: one route gives two individual customers "
+            "and the other gives one, or reverse. This is not segment swap, "
+            "_swap, Or-opt relocation, _two_opt_star tail exchange, "
+            "double-bridge, ejection-chain, destroy/repair selection, or "
+            "acceptance weighting."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        novelty_signature={"mechanism_family": "bounded_local_search_variant"},
+        material_difference={
+            "changed_dimensions": ["two-route unordered 2v1 customer-set exchange"],
+            "contrast": {
+                "nearest_reviewed_mechanisms": [
+                    "bounded_2node_cross_exchange",
+                    "bounded_route_segment_exchange",
+                    "bounded_cross_route_double_bridge_polish",
+                ],
+                "difference": (
+                    "2-for-1 / 1-for-2 non-contiguous customer-set exchange "
+                    "with preserved route count, not 1-for-1 swap, contiguous "
+                    "segment swap, tail exchange, or cyclic bridge"
+                ),
+            },
+            "evidence": {"source": "direct accepted two-route delta planned"},
+        },
+        expected_telemetry={
+            "effect": ["bounded_two_for_one_exchange.accepted_objective_delta"]
+        },
+        branch_lesson_usage={
+            "clean_fork_diversity_claim": {
+                "protected_cases": ["CMT2", "CMT4"],
+                "protection_plan": {
+                    "CMT2": "report accepted 2v1 exchange deltas and route count",
+                    "CMT4": "report accepted 2v1 exchange deltas and route count",
+                },
+            }
+        },
+        mechanism_changes=(
+            MechanismChange(id="bounded_two_for_one_exchange", change_type="add"),
+        ),
+    )
+
+    check = validate_problem_hypothesis_quality(
+        SimpleNamespace(adapter=cvrp_adapter),
+        SimpleNamespace(branch_id="branch-1"),
+        hypothesis,
+    )
+
     assert check.allowed is True
 
 
@@ -199,6 +274,7 @@ def test_cvrp_adapter_hypothesis_quality_allows_successor39_focus(
         ("route_angle_aware_2opt_star", "policies/baseline_modules/local_search.py"),
         ("edge_frequency_penalty_repair", "policies/baseline_modules/destroy_repair.py"),
         ("radial_2opt_star_relink", "policies/baseline_modules/local_search.py"),
+        ("bounded_dual_repair_selector", "policies/baseline_modules/scheduler.py"),
     ],
 )
 def test_cvrp_adapter_hypothesis_quality_blocks_reviewed_default_avoid(

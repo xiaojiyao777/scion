@@ -93,20 +93,18 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
                         "large_instance_intra_route_two_opt_seed",
                     ],
                     "target_intent_required_mechanism_ids": [
-                        "bounded_dual_repair_selector",
+                        "bounded_two_for_one_exchange",
                     ],
-                    "successor39_target_intent": {
-                        "mechanism_id": "bounded_dual_repair_selector",
-                        "mechanism_family": "destroy_repair_selection",
-                        "target_file": "policies/baseline_modules/alns.py",
+                    "successor40_target_intent": {
+                        "mechanism_id": "bounded_two_for_one_exchange",
+                        "mechanism_family": "bounded_local_search_variant",
+                        "target_file": "policies/baseline_modules/local_search.py",
                     },
                     "required_evidence": [
-                        "default repair operator and pre-VNS distance",
-                        "alternate repair operator and pre-VNS distance",
-                        "selected repair operator",
-                        "accepted selector flag",
-                        "record_move under bounded_dual_repair_selector",
-                        "pre-VNS objective delta before embedded VNS",
+                        "2-for-1 / 1-for-2 exchange attempted count",
+                        "accepted exchange count",
+                        "record_move under bounded_two_for_one_exchange",
+                        "accepted objective delta and best_improved status",
                         "candidate feasibility and route-count preservation",
                         (
                             "CMT2/CMT4 case-level total_distance deltas or "
@@ -254,19 +252,19 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prompt_text
     assert "DecisionFeatures" in prompt_text
     assert "## Prepared Research Obligations" in prompt_text
-    assert "default repair operator and pre-VNS distance" in prompt_text
+    assert "2-for-1 / 1-for-2 exchange attempted count" in prompt_text
 
     hypothesis = HypothesisProposal(
-        hypothesis_text="Select between default and alternate bounded repair.",
+        hypothesis_text="Test a bounded 2-for-1 / 1-for-2 local-search exchange.",
         change_locus="solver_design",
         action="modify",
-        target_file="policies/baseline_modules/alns.py",
+        target_file="policies/baseline_modules/local_search.py",
         predicted_direction="improve",
         target_objectives=["total_distance"],
         protected_objectives=["fleet_violation"],
         mechanism_changes=(
             MechanismChange(
-                id="bounded_dual_repair_selector",
+                id="bounded_two_for_one_exchange",
                 change_type="modify",
             ),
         ),
@@ -278,7 +276,7 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
         legacy,
     )
     assert code_ctx["launch_research_focus"]["target_intent_required_mechanism_ids"] == [
-        "bounded_dual_repair_selector"
+        "bounded_two_for_one_exchange"
     ]
 
     code_blocks, code_user_prompt = _split_code_context(code_ctx)
@@ -288,9 +286,9 @@ def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
 
     assert "## Prepared Research Obligations" in code_prompt_text
     assert "Code-generation must implement or preserve" in code_prompt_text
-    assert "bounded_dual_repair_selector" in code_prompt_text
-    assert "default repair operator and pre-VNS distance" in code_prompt_text
-    assert "alternate repair operator and pre-VNS distance" in code_prompt_text
+    assert "bounded_two_for_one_exchange" in code_prompt_text
+    assert "2-for-1 / 1-for-2 exchange attempted count" in code_prompt_text
+    assert "accepted objective delta and best_improved status" in code_prompt_text
     assert "CMT2/CMT4 case-level total_distance deltas or split caveat" in (
         code_prompt_text
     )

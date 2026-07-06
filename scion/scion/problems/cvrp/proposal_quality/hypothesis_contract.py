@@ -3,25 +3,11 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from scion.problems.cvrp.research_guidance import (
-    SUCCESSOR36_MECHANISM_ID,
-    SUCCESSOR36_TARGET_FILE,
-    SUCCESSOR36_WIRING_FILE,
-    SUCCESSOR39_MECHANISM_ID,
-    SUCCESSOR39_TARGET_FILE,
-)
-
 CVRP_SOLVER_DESIGN_STATIC_QUALITY_FAILURE = (
     "agent_quality_blocked:cvrp_solver_design_static_quality"
 )
 CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE = (
     "agent_quality_blocked:cvrp_construction_seed_direct_effect_missing"
-)
-CVRP_SUCCESSOR39_FOCUS_FAILURE = (
-    "agent_quality_blocked:cvrp_successor39_focus_mismatch"
-)
-CVRP_SUCCESSOR36_FOCUS_FAILURE = (
-    "agent_quality_blocked:cvrp_successor36_focus_mismatch"
 )
 CVRP_REVIEWED_DEFAULT_AVOID_FAILURE = (
     "agent_quality_blocked:cvrp_reviewed_default_avoid"
@@ -52,6 +38,13 @@ CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS = (
             "successor38 valid screening found active runtime but zero accepted "
             "radial relink moves, zero direct mechanism effect, and all case "
             "gates tied"
+        ),
+    ),
+    (
+        "bounded_dual_repair_selector",
+        (
+            "successor39 valid screening activated the repair selector but "
+            "stayed weak-positive below MDE with CMT4/B/P losses"
         ),
     ),
 )
@@ -127,14 +120,6 @@ def validate_cvrp_hypothesis_quality(hypothesis: Any) -> Mapping[str, Any]:
     if default_avoid is not None:
         return default_avoid
 
-    forced_focus = _forced_successor_focus_rejection(
-        hypothesis=hypothesis,
-        mechanism_ids=mechanism_ids,
-        target_file=target_file,
-    )
-    if forced_focus is not None:
-        return forced_focus
-
     missing = _causal_path_missing_fields(hypothesis, mechanism_ids=mechanism_ids)
     if missing:
         return _causal_path_rejection(
@@ -191,92 +176,6 @@ def _reviewed_default_avoid_rejection(
             },
         }
     return None
-
-
-def _forced_successor_focus_rejection(
-    *, hypothesis: Any, mechanism_ids: list[str], target_file: str
-) -> Mapping[str, Any] | None:
-    normalized_text = _normalized_text(
-        _proposal_text(hypothesis, include_material_fields=False)
-    )
-    if target_file == SUCCESSOR36_TARGET_FILE:
-        gate_name = "cvrp_successor36_focus"
-        failure_code = CVRP_SUCCESSOR36_FOCUS_FAILURE
-        required_mechanism_id = SUCCESSOR36_MECHANISM_ID
-        required_target_file = SUCCESSOR36_TARGET_FILE
-        successor_label = "successor36 seed-post selector activation repair"
-        required_causal_path = (
-            "post-construction seed selection with direct selected-seed "
-            "versus baseline objective effect before downstream ALNS/VNS"
-        )
-        retry_constraint = (
-            "Redraft the CVRP solver-design hypothesis as the "
-            "successor36 seed-post selector activation repair: declare "
-            f"mechanism `{SUCCESSOR36_MECHANISM_ID}`, keep the new target "
-            f"file at `{SUCCESSOR36_TARGET_FILE}`, and describe how a "
-            "post-construction selector compares feasible seed candidates "
-            "against the baseline before downstream ALNS/VNS. Existing "
-            f"`{SUCCESSOR36_WIRING_FILE}` edits must stay limited to "
-            "construction-boundary integration. Do not switch to "
-            "destroy/repair removal, VNS/local-search filtering, "
-            "q scheduling, acceptance probability, operator-credit "
-            "weighting, or embedded-VNS runtime allocation."
-        )
-    elif target_file == SUCCESSOR39_TARGET_FILE:
-        gate_name = "cvrp_successor39_focus"
-        failure_code = CVRP_SUCCESSOR39_FOCUS_FAILURE
-        required_mechanism_id = SUCCESSOR39_MECHANISM_ID
-        required_target_file = SUCCESSOR39_TARGET_FILE
-        successor_label = "successor39 bounded dual repair selector"
-        required_causal_path = (
-            "bounded ALNS repair-choice selection before embedded VNS"
-        )
-        retry_constraint = (
-            "Redraft the CVRP solver-design hypothesis as the "
-            "successor39 bounded dual repair selector: declare mechanism "
-            f"`{SUCCESSOR39_MECHANISM_ID}`, keep the target file at "
-            f"`{SUCCESSOR39_TARGET_FILE}`, compare the normally selected "
-            "repair against one bounded alternate repair on a copied "
-            "post-destroy candidate before embedded VNS, and keep acceptance, "
-            "adaptive weight scoring, construction, destroy operators, local "
-            "search, and embedded-VNS runtime allocation unchanged."
-        )
-    else:
-        return None
-
-    if (
-        required_mechanism_id in mechanism_ids
-        or required_mechanism_id in normalized_text
-    ):
-        return {"allowed": True, "gate_name": gate_name}
-
-    return {
-        "allowed": False,
-        "detail": (
-            f"{failure_code}: {successor_label} proposal must test "
-            f"{required_mechanism_id} before code generation; "
-            "selected_mechanisms="
-            + ",".join(mechanism_ids or ["none"])
-        ),
-        "gate_name": gate_name,
-        "structured_rejection": {
-            "source": "cvrp_problem_adapter",
-            "gate_name": gate_name,
-            "failure_code": failure_code,
-            "agent_block_reason": "agent_quality_blocked",
-            "required_mechanism_id": required_mechanism_id,
-            "selected_mechanism_ids": mechanism_ids,
-            "target_file": target_file,
-            "retry_constraint": retry_constraint,
-            "repair_template": {
-                "repair_type": gate_name,
-                "required_mechanism_id": required_mechanism_id,
-                "required_target_file": required_target_file,
-                "required_causal_path": required_causal_path,
-            },
-            "decision_features_excluded": True,
-        },
-    }
 
 
 def _causal_path_missing_fields(

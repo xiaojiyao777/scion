@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from scion.problems.cvrp.research_guidance import (
     CvrpResearchGuidanceProvider,
-    SUCCESSOR39_MECHANISM_ID,
+    SUCCESSOR40_MECHANISM_ID,
     build_cvrp_legacy_research_focus,
     build_cvrp_research_guidance_contract,
 )
@@ -46,7 +46,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         mechanism.mechanism_id
         for mechanism in contract.required_mechanisms
         if mechanism.hypothesis_mechanism_binding == "target_intent_required"
-    ] == [SUCCESSOR39_MECHANISM_ID]
+    ] == [SUCCESSOR40_MECHANISM_ID]
     assert any(
         "total_distance delta by case and seed" in field
         for requirement in contract.evidence_requirements
@@ -102,7 +102,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     )
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR39_MECHANISM_ID
+        SUCCESSOR40_MECHANISM_ID
     ]
 
 
@@ -121,7 +121,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["schema_version"] == "scion.cvrp_research_focus.v1"
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
-    assert focus["target_intent_required_mechanism_ids"] == [SUCCESSOR39_MECHANISM_ID]
+    assert focus["target_intent_required_mechanism_ids"] == [SUCCESSOR40_MECHANISM_ID]
     assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -138,6 +138,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
+        "bounded_dual_repair_selector",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -165,6 +166,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "seed_post_optimization_selector",
     ]
     assert focus["suppressed_mechanism_ids"] == []
+    assert focus["successor40_target_intent"]["mechanism_id"] == (
+        SUCCESSOR40_MECHANISM_ID
+    )
+    assert focus["successor40_target_intent"]["target_file"] == (
+        "policies/baseline_modules/local_search.py"
+    )
     assert focus["successor_opportunity_families"] == [
         "acceptance_or_adaptive_weighting",
         "scheduler_destroy_size_policy",
@@ -448,6 +455,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         and "direct mechanism effect zero" in item
         for item in focus["default_avoid_directions"]
     )
+    assert any(
+        "bounded_dual_repair_selector" in item and "successor39" in item
+        for item in focus["default_avoid_directions"]
+    )
     assert not any(
         item.strip().lower() == "avoid bounded_local_search_variant"
         for item in focus["default_avoid_directions"]
@@ -474,6 +485,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
+        "bounded_dual_repair_selector",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -604,6 +616,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
             "neighbor_list_vns_filter",
             "frozen_safe_neighbor_list_vns_filter",
             "edge_frequency_penalty_repair",
+            "bounded_dual_repair_selector",
         }
     }
     assert all(
@@ -624,6 +637,15 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["edge_frequency_penalty_repair"]["outcome_status"] == (
         "weak_positive_below_mde_direct_no_effect"
     )
+    assert mechanisms_by_id["bounded_dual_repair_selector"]["outcome_status"] == (
+        "weak_positive_below_mde"
+    )
+    bounded_dual_effect = mechanisms_by_id["bounded_dual_repair_selector"][
+        "effect_summary"
+    ]
+    assert bounded_dual_effect["row2_median_delta"] == 0.75
+    assert bounded_dual_effect["max_effect_to_mde_ratio"] == 0.075758
+    assert bounded_dual_effect["source_root_label"] == "successor39"
     radial_relink_effect = mechanisms_by_id["radial_2opt_star_relink"][
         "effect_summary"
     ]
@@ -785,6 +807,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
+        "bounded_dual_repair_selector",
         "angular_sector_removal",
         "radial_string_removal",
         "farthest_noise_related_removal",
@@ -813,7 +836,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     ]
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR39_MECHANISM_ID
+        SUCCESSOR40_MECHANISM_ID
     ]
     assert launch_payload["suppressed_mechanism_ids"] == []
     assert launch_payload["successor_opportunity_families"] == [

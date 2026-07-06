@@ -108,7 +108,20 @@ audit exposed a prompt/context quality issue: prepared evidence obligations
 were visible in broad focus context but were compressed before code generation.
 The current checkout now preserves those obligations as a dedicated
 `Prepared Research Obligations` prompt section and rejects truncated
-target-file previews as sufficient solver-design grounding.
+target-file previews as sufficient solver-design grounding. The stale
+successor36/39 file-level focus gate has been removed from the CVRP hypothesis
+quality contract; current target binding now comes from prepared
+`target_intent_required_mechanism_ids`, while reviewed/default-avoid and
+causal-path gates still block repeated weak mechanisms. Successor40 is now
+preregistered as `bounded_two_for_one_exchange` in
+`policies/baseline_modules/local_search.py`: a proposal-only target-intent
+clean fork for a bounded 2-for-1 / 1-for-2 two-route customer-set exchange,
+explicitly distinct from reviewed segment swap, customer swap, Or-opt
+relocation, tail exchange, 3-opt, ejection-chain, double-bridge, destroy/repair
+selection, construction seed, acceptance-weighting, and runtime-allocation
+lines. The design is
+`scion/docs/experiments/v0.4/v04-cvrp-successor40-bounded-two-for-one-exchange-design-20260706.md`;
+the next small server-local CVRP launch should target that mechanism.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -642,11 +655,17 @@ from the current checkout.
    below MDE and CMT4/B/P-family losses remain. Do not long-run or extend the
    unchanged mechanism; use the prompt/context repair before the next CVRP
    design.
-14. Use the new large-file modularization plan before further behavior changes
+14. Launch successor40 as the next small server-local CVRP experiment:
+   `bounded_two_for_one_exchange` in `policies/baseline_modules/local_search.py`.
+   Require live target-intent/hypothesis to preserve the 2-for-1 / 1-for-2
+   customer-set exchange semantics, direct accepted-move objective telemetry,
+   bounded effort, route-count/feasibility preservation, and CMT2/CMT4
+   protection.
+15. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-15. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+16. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-16. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+17. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence

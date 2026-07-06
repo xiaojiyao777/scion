@@ -303,6 +303,37 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "bounded_dual_repair_selector",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "bounded dual repair selector path",
+        "causal_path_label": "bounded ALNS repair-choice selector",
+        "outcome_status": "weak_positive_below_mde",
+        "effect_summary": {
+            "row1_median_delta": 0.0,
+            "row1_ci_low": -3.5,
+            "row1_ci_high": 6.5,
+            "row2_median_delta": 0.75,
+            "row2_ci_low": -6.25,
+            "row2_ci_high": 6.5,
+            "max_median_delta": 0.75,
+            "max_effect_to_mde_ratio": 0.075758,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 1,
+            "screening_case_wins": 8,
+            "screening_case_losses": 5,
+            "screening_case_ties": 7,
+            "screening_pair_wins": 41,
+            "screening_pair_losses": 33,
+            "screening_pair_ties": 6,
+            "protected_case_cmt2_row2_median_delta": 5.5,
+            "protected_case_cmt4_row2_median_delta": -4.0,
+            "telemetry_status": "activation_observed_local_selector_effect_observed",
+            "mechanism_contract_status": "observed_positive_effect_below_mde",
+            "interpretation": "local_selector_signal_below_mde_not_promotion",
+            "source_root_label": "successor39",
+        },
+    },
+    {
         "mechanism_id": "angular_sector_removal",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "angular-sector removal path",
@@ -968,6 +999,11 @@ DEFAULT_AVOID_DIRECTIONS = (
         "unchanged edge_frequency_penalty_repair destroy/repair repair-scoring "
         "path after successor37 weak-positive below-MDE evidence with direct "
         "mechanism effect zero and CMT2/CMT4 all-seed losses"
+    ),
+    (
+        "unchanged bounded_dual_repair_selector destroy/repair repair-choice "
+        "selector after successor39 activated but stayed weak-positive below "
+        "MDE with CI highs below the 9.9 MDE and CMT4/B/P losses"
     ),
     (
         "ec052599-style weak_positive continuation when declared primary "

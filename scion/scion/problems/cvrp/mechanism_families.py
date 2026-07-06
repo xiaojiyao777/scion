@@ -63,6 +63,8 @@ BOUNDED_LOCAL_SEARCH_VARIANT_ALIASES = (
     "three_opt",
     "segment_swap",
     "route_pair_exchange",
+    "bounded_two_for_one_exchange",
+    "two_for_one_exchange",
     "two_opt_intra_bounded",
 )
 
@@ -84,6 +86,8 @@ DESTROY_REPAIR_SELECTION_ALIASES = (
     "load_compatible_ruin",
     "capacity_tightness_removal",
     "capacity_tightness",
+    "bounded_dual_repair_selector",
+    "dual_repair_selector",
     "removal",
     "repair",
     "lookahead_insertion_cost_repair",

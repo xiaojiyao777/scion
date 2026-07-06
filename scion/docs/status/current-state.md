@@ -169,7 +169,17 @@ The remaining closeout gaps are:
   before code generation. The current checkout now renders those obligations
   as a dedicated `Prepared Research Obligations` section in target-intent,
   hypothesis, and code prompts, and no longer accepts truncated target-file
-  previews as sufficient solver-design grounding.
+  previews as sufficient solver-design grounding. The stale successor36/39
+  file-level focus gate has been removed from the CVRP hypothesis quality
+  contract; current target binding now comes from prepared
+  `target_intent_required_mechanism_ids`, while reviewed/default-avoid and
+  causal-path gates still block repeated weak mechanisms. Successor40 is now
+  preregistered as `bounded_two_for_one_exchange` in
+  `policies/baseline_modules/local_search.py`: a proposal-only target-intent
+  clean fork for a bounded 2-for-1 / 1-for-2 two-route customer-set exchange.
+  The design is
+  `scion/docs/experiments/v0.4/v04-cvrp-successor40-bounded-two-for-one-exchange-design-20260706.md`;
+  the next small server-local CVRP launch should target that mechanism.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -622,10 +632,16 @@ CVRP:
    below MDE and CMT4/B/P-family losses remain. Do not long-run or extend the
    unchanged mechanism; use the prompt/context repair before the next CVRP
    design.
-14. Use the v0.4 large-file modularization plan before adding behavior to
+14. Launch successor40 as the next small server-local CVRP experiment:
+   `bounded_two_for_one_exchange` in `policies/baseline_modules/local_search.py`.
+   Require live target-intent/hypothesis to preserve the 2-for-1 / 1-for-2
+   customer-set exchange semantics, direct accepted-move objective telemetry,
+   bounded effort, route-count/feasibility preservation, and CMT2/CMT4
+   protection.
+15. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-15. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-16. Keep status documents compact; put detailed root counters and caveats in
+16. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+17. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes
