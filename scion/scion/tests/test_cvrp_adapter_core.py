@@ -126,7 +126,7 @@ def test_cvrp_adapter_patch_quality_blocks_construction_seed_activation_only(
     )
 
 
-def test_cvrp_adapter_hypothesis_quality_blocks_successor32_mechanism_drift(
+def test_cvrp_adapter_hypothesis_quality_blocks_successor39_mechanism_drift(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     hypothesis = HypothesisProposal(
@@ -150,11 +150,11 @@ def test_cvrp_adapter_hypothesis_quality_blocks_successor32_mechanism_drift(
     )
 
     assert check.allowed is False
-    assert "cvrp_successor32_focus_mismatch" in check.detail
-    assert check.structured_rejection["gate_name"] == "cvrp_successor32_focus"
+    assert "cvrp_successor39_focus_mismatch" in check.detail
+    assert check.structured_rejection["gate_name"] == "cvrp_successor39_focus"
     assert (
         check.structured_rejection["required_mechanism_id"]
-        == "post_repair_effect_credit_weighting"
+        == "bounded_dual_repair_selector"
     )
     assert check.structured_rejection["selected_mechanism_ids"] == [
         "pair_failure_cooldown_selection"
@@ -164,22 +164,21 @@ def test_cvrp_adapter_hypothesis_quality_blocks_successor32_mechanism_drift(
     )
 
 
-def test_cvrp_adapter_hypothesis_quality_allows_successor32_focus(
+def test_cvrp_adapter_hypothesis_quality_allows_successor39_focus(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(
-            "Test post_repair_effect_credit_weighting by crediting ALNS "
-            "destroy/repair weights from post-repair pre-polish objective "
-            "effect."
+            "Test bounded_dual_repair_selector by comparing the selected ALNS "
+            "repair against one bounded alternate repair before embedded VNS."
         ),
         change_locus="solver_design",
         action="modify",
         target_file="policies/baseline_modules/scheduler.py",
-        novelty_signature={"mechanism_family": "acceptance_or_adaptive_weighting"},
+        novelty_signature={"mechanism_family": "destroy_repair_selection"},
         mechanism_changes=(
             MechanismChange(
-                id="post_repair_effect_credit_weighting",
+                id="bounded_dual_repair_selector",
                 change_type="add",
             ),
         ),

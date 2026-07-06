@@ -4,11 +4,11 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from scion.problems.cvrp.research_guidance import (
-    SUCCESSOR32_MECHANISM_ID,
-    SUCCESSOR32_TARGET_FILE,
     SUCCESSOR36_MECHANISM_ID,
     SUCCESSOR36_TARGET_FILE,
     SUCCESSOR36_WIRING_FILE,
+    SUCCESSOR39_MECHANISM_ID,
+    SUCCESSOR39_TARGET_FILE,
 )
 
 CVRP_SOLVER_DESIGN_STATIC_QUALITY_FAILURE = (
@@ -17,8 +17,8 @@ CVRP_SOLVER_DESIGN_STATIC_QUALITY_FAILURE = (
 CVRP_CONSTRUCTION_SEED_DIRECT_EFFECT_FAILURE = (
     "agent_quality_blocked:cvrp_construction_seed_direct_effect_missing"
 )
-CVRP_SUCCESSOR32_FOCUS_FAILURE = (
-    "agent_quality_blocked:cvrp_successor32_focus_mismatch"
+CVRP_SUCCESSOR39_FOCUS_FAILURE = (
+    "agent_quality_blocked:cvrp_successor39_focus_mismatch"
 )
 CVRP_SUCCESSOR36_FOCUS_FAILURE = (
     "agent_quality_blocked:cvrp_successor36_focus_mismatch"
@@ -222,25 +222,24 @@ def _forced_successor_focus_rejection(
             "q scheduling, acceptance probability, operator-credit "
             "weighting, or embedded-VNS runtime allocation."
         )
-    elif target_file == SUCCESSOR32_TARGET_FILE:
-        gate_name = "cvrp_successor32_focus"
-        failure_code = CVRP_SUCCESSOR32_FOCUS_FAILURE
-        required_mechanism_id = SUCCESSOR32_MECHANISM_ID
-        required_target_file = SUCCESSOR32_TARGET_FILE
-        successor_label = "successor32 operator-credit mechanism"
+    elif target_file == SUCCESSOR39_TARGET_FILE:
+        gate_name = "cvrp_successor39_focus"
+        failure_code = CVRP_SUCCESSOR39_FOCUS_FAILURE
+        required_mechanism_id = SUCCESSOR39_MECHANISM_ID
+        required_target_file = SUCCESSOR39_TARGET_FILE
+        successor_label = "successor39 bounded dual repair selector"
         required_causal_path = (
-            "post-repair pre-polish objective-effect credit for ALNS "
-            "destroy/repair adaptive weights"
+            "bounded ALNS repair-choice selection before embedded VNS"
         )
         retry_constraint = (
             "Redraft the CVRP solver-design hypothesis as the "
-            "successor32 operator-credit mechanism: declare mechanism "
-            f"`{SUCCESSOR32_MECHANISM_ID}`, keep the target file at "
-            f"`{SUCCESSOR32_TARGET_FILE}`, and describe post-repair "
-            "pre-polish objective-effect credit for ALNS "
-            "destroy/repair weights. Do not switch to destroy/repair "
-            "selection, q scheduling, local search, seed selection, "
-            "acceptance probability, or embedded-VNS runtime allocation."
+            "successor39 bounded dual repair selector: declare mechanism "
+            f"`{SUCCESSOR39_MECHANISM_ID}`, keep the target file at "
+            f"`{SUCCESSOR39_TARGET_FILE}`, compare the normally selected "
+            "repair against one bounded alternate repair on a copied "
+            "post-destroy candidate before embedded VNS, and keep acceptance, "
+            "adaptive weight scoring, construction, destroy operators, local "
+            "search, and embedded-VNS runtime allocation unchanged."
         )
     else:
         return None
