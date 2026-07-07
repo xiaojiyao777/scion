@@ -400,6 +400,31 @@ SUCCESSOR45_REVIEWED_RULE = (
     "pre-VNS tournament deltas as promotion-grade final objective evidence. "
     f"See `{SUCCESSOR45_DESIGN_PATH}` and `{SUCCESSOR45_POSTRUN_PATH}`."
 )
+SUCCESSOR46_MECHANISM_ID = "best_solution_ruin_recreate_intensification"
+SUCCESSOR46_TARGET_FILE = "policies/baseline_modules/best_solution_intensification.py"
+SUCCESSOR46_WIRING_FILE = "policies/baseline_modules/scheduler.py"
+SUCCESSOR46_DESIGN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor46-best-solution-ruin-recreate-intensification-design-20260707.md"
+)
+SUCCESSOR46_TARGET_INTENT_RULE = (
+    f"Successor46 is preregistered as `{SUCCESSOR46_MECHANISM_ID}` in a new "
+    f"CVRP-owned module `{SUCCESSOR46_TARGET_FILE}` with only minimal "
+    f"`{SUCCESSOR46_WIRING_FILE}` orchestration. It is a materially different "
+    "clean fork from the reviewed selector, repair-placement, removal, local "
+    "search, seed, acceptance, and runtime-allocation lines: after the ALNS "
+    "loop has a global-best incumbent and a bounded stagnation trigger fires, "
+    "start from a copy of the current global best, run one bounded ruin/"
+    "recreate intensification attempt plus downstream VNS under the remaining "
+    "time budget, and accept the mechanism effect only when the post-VNS "
+    "candidate strictly improves the global best total_distance while "
+    "preserving feasibility and route count. Do not claim pre-VNS local "
+    "repair deltas as solver evidence; required evidence is final "
+    "best-solution total_distance delta, accepted/new-best attribution, "
+    "attempted/accepted counts, runtime budget fields, RNG or trajectory "
+    "isolation for rejected attempts, and CMT2/CMT4 case-level protection. "
+    f"See `{SUCCESSOR46_DESIGN_PATH}`."
+)
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
     "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
@@ -819,10 +844,13 @@ NEXT_REQUIRED_DIRECTION = (
     f"bound `{SUCCESSOR45_MECHANISM_ID}` and observed local repair-placement "
     "effect, but final objective evidence regressed below MDE and failed "
     "CMT2/CMT4 protection; unchanged repair-placement tournaments are now "
-    "reviewed/default-avoid too. The next prepared slot has no hard or "
-    "target-intent-required mechanism binding and must not bind another "
-    "destroy-shadow selector follow-up, unchanged acceptance guard, or "
-    "unchanged repair-placement tournament. "
+    "reviewed/default-avoid too. The next prepared slot keeps hard "
+    "`required_mechanism_ids` empty but is target-intent-bound to successor46 "
+    f"`{SUCCESSOR46_MECHANISM_ID}`: a global-best ruin/recreate "
+    "intensification clean fork. It must not bind another destroy-shadow "
+    "selector follow-up, unchanged acceptance guard, unchanged repair-placement "
+    "tournament, or pre-VNS selector/repair diagnostic as final solver "
+    "evidence. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
     "telemetry-only q-audit repair for the missing explicit fields, or when "
@@ -869,12 +897,13 @@ NEXT_REQUIRED_DIRECTION = (
     "candidate, keep the causal-path gate but make the exact "
     "material_difference schema prominent, and ensure CMT2/CMT4 protected "
     "cases are either forced into formal screening or recorded as an explicit "
-    "measurement caveat. The next prepared attempt should clean-fork to a "
-    "materially different CVRP-owned causal path, not an unchanged scheduler "
-    "helper rerun, route-skeleton threshold/gating variant, two-for-one route-set "
-    "exchange, repair-operator selector, repair-placement tournament, removal "
-    "targeting rule, seed selector, local-search move, acceptance-weight, or "
-    "runtime-allocation change."
+    "measurement caveat. The next prepared attempt should implement "
+    f"`{SUCCESSOR46_MECHANISM_ID}` as a materially different CVRP-owned "
+    "causal path, not an unchanged scheduler helper rerun, route-skeleton "
+    "threshold/gating variant, two-for-one route-set exchange, repair-operator "
+    "selector, repair-placement tournament, removal targeting rule, seed "
+    "selector, local-search move, acceptance-weight, or runtime-allocation "
+    "change."
 )
 CURRENT_QUESTION = (
     "After both the large-instance intra-route two-opt checklist and the "
@@ -920,13 +949,15 @@ CURRENT_QUESTION = (
     f"and successor45 `{SUCCESSOR45_MECHANISM_ID}` observed local pre-VNS "
     "repair-placement effect but regressed at the final objective gate and "
     "failed CMT2/CMT4 protection, "
-    "what materially different CVRP-owned causal path can still produce direct "
-    "objective movement without repeating reviewed/default-avoid branches? "
-    "The next prepared slot should not be target-intent-bound until the new "
-    "successor design is explicit. It must satisfy the exact "
-    "material_difference schema, separate local/pre-VNS diagnostics from final "
-    "protocol outcome, and carry CMT2/CMT4 protected-case coverage before code "
-    "work."
+    f"does successor46 `{SUCCESSOR46_MECHANISM_ID}` as a materially different "
+    "CVRP-owned causal path produce direct final global-best objective "
+    "movement by starting from the incumbent best and running bounded "
+    "ruin/recreate intensification after stagnation, without repeating "
+    "reviewed/default-avoid branches? The prepared slot is now "
+    "target-intent-bound to this design, must satisfy the exact "
+    "material_difference schema, must separate local/pre-VNS diagnostics from "
+    "final protocol outcome, and must carry CMT2/CMT4 protected-case coverage "
+    "before code work."
 )
 REQUIRED_EVIDENCE = (
     (
@@ -973,6 +1004,14 @@ REQUIRED_EVIDENCE = (
         "failed final objective and CMT2/CMT4 protection; do not long-run, "
         "threshold-tune, or continue unchanged repair-placement tournament "
         "variants"
+    ),
+    (
+        f"successor46 `{SUCCESSOR46_MECHANISM_ID}` is the live target-intent "
+        "mechanism: implement it as a CVRP-owned best-solution ruin/recreate "
+        "intensification module with minimal scheduler wiring, final "
+        "post-VNS global-best total_distance effect evidence, attempted/"
+        "accepted/new-best attribution, runtime budget fields, rejected-attempt "
+        "RNG or trajectory isolation, and CMT2/CMT4 protected-case evidence"
     ),
     (
         "before the next CVRP hypothesis, use exact material_difference schema "
@@ -1261,7 +1300,11 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         "final objective quality and failed CMT2/CMT4 protection. Require a "
         "destroy/repair causal path distinct from the reviewed removal, repair, "
         "selector, shadow, memory, skeleton, and repair-placement tournament "
-        "paths before revisiting this family"
+        "paths before revisiting this family. The live successor46 target is "
+        f"`{SUCCESSOR46_MECHANISM_ID}`: a best-incumbent ruin/recreate "
+        "intensification path whose evidence must be final best-solution "
+        "movement after downstream VNS, not a pre-VNS selector or repair "
+        "diagnostic"
     ),
     (
         "bounded_local_search_variant: require feasible route-level "
@@ -1493,7 +1536,7 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [],
+        "target_intent_required_mechanism_ids": [SUCCESSOR46_MECHANISM_ID],
         "reviewed_mechanism_ids": [
             *list(REVIEWED_MECHANISM_IDS),
             SUCCESSOR41_MECHANISM_ID,
@@ -1657,6 +1700,42 @@ def build_cvrp_legacy_research_focus(
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
+        "successor46_target_intent": {
+            "mechanism_id": SUCCESSOR46_MECHANISM_ID,
+            "mechanism_family": "destroy_repair_selection",
+            "target_file": SUCCESSOR46_TARGET_FILE,
+            "target_files": [
+                SUCCESSOR46_TARGET_FILE,
+                SUCCESSOR46_WIRING_FILE,
+            ],
+            "design_path": SUCCESSOR46_DESIGN_PATH,
+            "status": "live_target_intent",
+            "required_mechanism_binding": "target_intent_required",
+            "material_difference": {
+                "changed_dimensions": [
+                    "start from current global-best incumbent",
+                    "run bounded ruin/recreate after stagnation",
+                    "evaluate only post-VNS global-best improvement",
+                    "isolate rejected-attempt RNG or trajectory effects",
+                ],
+                "contrast": (
+                    "not a pre-VNS destroy selector, repair selector, "
+                    "repair-placement tournament, removal rule, local-search "
+                    "move, seed selector, acceptance guard, or runtime-allocation "
+                    "variant"
+                ),
+                "evidence": [
+                    "final best total_distance delta",
+                    "attempted/accepted/new-best attribution",
+                    "runtime budget fields",
+                    "feasibility and route-count preservation",
+                    "CMT2/CMT4 protected-case deltas or explicit split caveat",
+                ],
+            },
+            "rule": SUCCESSOR46_TARGET_INTENT_RULE,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        },
         "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
         "reviewed_successor_evidence": deepcopy(REVIEWED_SUCCESSOR_EVIDENCE),
         "current_question": CURRENT_QUESTION,
@@ -1679,7 +1758,26 @@ def build_cvrp_legacy_research_focus(
 
 
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
-    return ()
+    return (
+        RequiredMechanism(
+            mechanism_id=SUCCESSOR46_MECHANISM_ID,
+            category="destroy_repair_selection",
+            description=SUCCESSOR46_TARGET_INTENT_RULE,
+            required_observations=(
+                "target file remains CVRP-owned",
+                "minimal scheduler wiring only",
+                "bounded stagnation trigger from current global-best incumbent",
+                "post-VNS global-best total_distance delta",
+                "attempted/accepted/new-best attribution",
+                "runtime budget fields",
+                "feasibility and route-count preservation",
+                "RNG or trajectory isolation for rejected attempts",
+                "CMT2/CMT4 case-level total_distance deltas or split caveat",
+            ),
+            protected_items=PROTECTED_CASES,
+            hypothesis_mechanism_binding="target_intent_required",
+        ),
+    )
 
 
 def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
@@ -1724,6 +1822,15 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 (
                     "selector/filter mechanisms separate pre_vns_local_delta "
                     "from post_downstream_or_final_total_distance_delta"
+                ),
+                (
+                    "best-solution intensification mechanisms report final "
+                    "post-VNS global-best total_distance delta, not pre-VNS "
+                    "local repair diagnostics"
+                ),
+                (
+                    "RNG or trajectory isolation evidence for rejected "
+                    f"{SUCCESSOR46_MECHANISM_ID} attempts"
                 ),
                 "material causal-path difference from reviewed angular-sector removal",
                 "material causal-path difference from reviewed radial-string removal",
@@ -1823,6 +1930,37 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "final per-case total_distance deltas",
                 "feasibility and route-count preservation or explicit caveat",
                 "CMT2/CMT4 case-level total_distance deltas or split caveat",
+            ),
+        ),
+        EvidenceRequirement(
+            requirement_id=(
+                "successor46_best_solution_ruin_recreate_intensification"
+            ),
+            category="target_intent_destroy_repair_selection_evidence",
+            description=SUCCESSOR46_TARGET_INTENT_RULE,
+            mechanism_ids=(
+                SUCCESSOR46_MECHANISM_ID,
+                "destroy_repair_selection",
+                SUCCESSOR46_TARGET_FILE,
+                SUCCESSOR46_WIRING_FILE,
+            ),
+            protected_items=PROTECTED_CASES,
+            required_fields=(
+                "successor46 design path cited before code",
+                "exact material_difference keys changed_dimensions contrast evidence",
+                "new CVRP-owned module boundary",
+                "minimal scheduler wiring only",
+                "stagnation trigger and remaining-time guard",
+                "start solution is a copy of current global best",
+                "bounded ruin/recreate attempt count",
+                "downstream VNS completed or explicitly budget-stopped",
+                "final post-VNS global-best total_distance delta",
+                "attempted accepted rejected and new-best attribution",
+                "feasibility preservation",
+                "route-count preservation or explicit caveat",
+                "RNG or trajectory isolation for rejected attempts",
+                "CMT2/CMT4 case-level total_distance deltas or split caveat",
+                "no pre-VNS repair delta claimed as promotion-grade evidence",
             ),
         ),
         EvidenceRequirement(
@@ -1978,6 +2116,9 @@ def _continuity_requirements() -> tuple[ContinuityRequirement, ...]:
         SUCCESSOR45_MECHANISM_ID,
         SUCCESSOR45_TARGET_FILE,
         SUCCESSOR45_WIRING_FILE,
+        SUCCESSOR46_MECHANISM_ID,
+        SUCCESSOR46_TARGET_FILE,
+        SUCCESSOR46_WIRING_FILE,
         REQUIRED_MECHANISM_ID,
         *(str(item["mechanism_id"]) for item in REVIEWED_SUCCESSOR_MECHANISMS),
         "bounded_local_search_variant",
@@ -2008,6 +2149,7 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
             category="proposal_focus",
             title="Successor portfolio direction",
             lines=(
+                SUCCESSOR46_TARGET_INTENT_RULE,
                 SUCCESSOR45_REVIEWED_RULE,
                 SUCCESSOR44D_REVIEWED_RULE,
                 SUCCESSOR43B_REVIEWED_RULE,

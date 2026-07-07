@@ -346,6 +346,20 @@ The remaining closeout gaps are:
   truncation failure; the main lesson is that local same-removed-set repair
   gains did not preserve final ALNS/VNS trajectory quality. Do not long-run,
   threshold-tune, or continue unchanged repair-placement tournament variants.
+- Successor46 is now designed and target-intent-bound as
+  `best_solution_ruin_recreate_intensification`. It is a CVRP-owned
+  best-incumbent ruin/recreate intensification path in
+  `policies/baseline_modules/best_solution_intensification.py` with minimal
+  scheduler wiring. It starts from a copy of the global best after bounded
+  stagnation, runs one bounded ruin/recreate plus downstream VNS attempt under
+  remaining budget, and accepts effect only for final post-VNS global-best
+  `total_distance` improvement with feasibility and route-count preservation.
+  Required evidence includes attempted/accepted/new-best attribution, runtime
+  budget fields, rejected-attempt RNG or trajectory isolation, and CMT2/CMT4
+  case protection. Design:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-design-20260707.md`.
+  Next action is a short server-local `claw` / local `gpt-5.5` screening from
+  successor45; treat a two-round result as noisy screening only.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.

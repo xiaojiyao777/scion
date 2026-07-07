@@ -133,7 +133,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for mechanism in typed_contract["required_mechanisms"]
     }
     assert "required" not in mechanism_bindings.values()
-    assert mechanism_bindings == {}
+    assert mechanism_bindings == {
+        "best_solution_ruin_recreate_intensification": "target_intent_required",
+    }
     assert any(
         requirement["requirement_id"] == "successor_causal_path_direct_effect"
         for requirement in typed_contract["evidence_requirements"]
@@ -149,6 +151,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert any(
         requirement["requirement_id"]
         == "successor45_bounded_repair_placement_tournament"
+        for requirement in typed_contract["evidence_requirements"]
+    )
+    assert any(
+        requirement["requirement_id"]
+        == "successor46_best_solution_ruin_recreate_intensification"
         for requirement in typed_contract["evidence_requirements"]
     )
     assert any(
@@ -226,7 +233,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         manifest=prepared_manifest,
     )
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == []
+    assert launch_payload["target_intent_required_mechanism_ids"] == [
+        "best_solution_ruin_recreate_intensification",
+    ]
     assert launch_payload["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -709,6 +718,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "route_skeleton_regret_repair" in prepared_manifest_md
     assert "post_vns_best_anchor_acceptance_guard" in prepared_manifest_md
     assert "bounded_repair_placement_tournament" in prepared_manifest_md
+    assert "best_solution_ruin_recreate_intensification" in prepared_manifest_md
+    assert prepared_manifest["research_focus"]["successor46_target_intent"][
+        "target_file"
+    ] == (
+        "policies/baseline_modules/best_solution_intensification.py"
+    )
     assert "pre_vns_selector_delta_is_not_final_trajectory_proof" in (
         prepared_manifest_md
     )
@@ -720,7 +735,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
     assert prepared_manifest["research_focus"][
         "target_intent_required_mechanism_ids"
-    ] == []
+    ] == [
+        "best_solution_ruin_recreate_intensification",
+    ]
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",

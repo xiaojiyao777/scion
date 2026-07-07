@@ -495,6 +495,20 @@ final ALNS/VNS trajectory quality. Do not long-run, threshold-tune, or continue
 unchanged repair-placement tournament variants. The postrun report is
 `scion/docs/experiments/v0.4/v04-cvrp-successor45-repair-placement-tournament-postrun-20260707.md`.
 
+Successor46 is now designed and target-intent-bound as
+`best_solution_ruin_recreate_intensification`. This is a CVRP-owned
+best-incumbent ruin/recreate intensification path in a new module boundary,
+`policies/baseline_modules/best_solution_intensification.py`, with minimal
+`policies/baseline_modules/scheduler.py` wiring. It must start from a copy of
+the current global best after bounded stagnation, run one bounded ruin/recreate
+plus downstream VNS attempt under the remaining time budget, and count effect
+only when the post-VNS candidate strictly improves final global-best
+`total_distance` while preserving feasibility and route count. It must not
+claim pre-VNS repair/selector deltas as promotion evidence. The design is
+`scion/docs/experiments/v0.4/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-design-20260707.md`.
+Next validation is a short server-local `claw` / local `gpt-5.5` screening
+from successor45 evidence; treat two-round results as noisy screening only.
+
 Legacy direction details below are retained as reviewed-history context.
 
 The latest completed CVRP attempt is
@@ -860,11 +874,17 @@ from the current checkout.
    failed CMT2/CMT4 protection. Do not long-run, threshold-tune, or continue
    unchanged repair-placement tournament variants; the next CVRP slot should
    clean-fork to a materially different problem-owned causal path.
-20. Use the new large-file modularization plan before further behavior changes
+20. Validate successor46 `best_solution_ruin_recreate_intensification` as the
+   live target-intent-bound clean fork. Required evidence is final post-VNS
+   global-best `total_distance` movement, attempted/accepted/new-best
+   attribution, runtime budget fields, feasibility/route-count preservation,
+   rejected-attempt RNG or trajectory isolation, and CMT2/CMT4 protection.
+   Treat the first two-round run as noisy screening, not long-run evidence.
+21. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-21. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+22. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-22. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+23. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence
