@@ -331,16 +331,21 @@ The remaining closeout gaps are:
   define explicit guard allow/reject trajectory evidence for one narrow
   acceptance-policy follow-up or clean-fork to a materially different
   CVRP-owned path.
-- Successor45 is now the active CVRP-owned clean fork:
-  `bounded_repair_placement_tournament` at the destroy/repair placement
-  boundary. The guidance repair in commit `a0df42bf` treats successor44d as
-  reviewed/default-avoid and proposal-targets successor45, without changing
-  generic campaign, protocol, or DecisionFeatures boundaries. The short
-  server-local run was launched with local `gpt-5.5`, healthy completion
-  preflight, and resume-from successor44d:
+- Successor45 is now complete and reviewed/default-avoid:
+  `bounded_repair_placement_tournament` was a CVRP-owned clean fork at the
+  destroy/repair placement boundary. The short server-local run launched from
+  commit `a0df42bf` with local `gpt-5.5`, healthy completion preflight, and
+  resume-from successor44d:
   `/home/clawd/research/scion-experiments/v04-cvrp-successor45-repair-placement-tournament-server-claw-2r-gpt55-2r-gpt55-20260707T091750Z-claw`.
-  It is screening only; wait for postrun before interpreting the noisy
-  two-round signal.
+  It finished valid/complete/postrun-ready with no quality/model/telemetry/
+  postrun failure and one formal candidate. The mechanism activated and showed
+  local pre-VNS repair-placement effect, but final objective evidence was
+  quality-regression below MDE: expanded median delta `-2.75`, CI
+  `[-6.5, 3.25]`, case-gate W/L/T `5/4/3`, CMT2 `-3.5`, CMT4 `-7.0`, and
+  P-family/CMT3 losses. Trace audit found no target-binding or code-prompt
+  truncation failure; the main lesson is that local same-removed-set repair
+  gains did not preserve final ALNS/VNS trajectory quality. Do not long-run,
+  threshold-tune, or continue unchanged repair-placement tournament variants.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -821,10 +826,12 @@ CVRP:
    The contract now stays `policy_outcome_observed` without generic
    `record_move(delta=...)` repair advice. Do not long-run unchanged
    successor44d.
-19. Track successor45 `bounded_repair_placement_tournament` as the active
-   design-first CVRP-owned clean fork. The server-local 2-round screening run
-   is in progress from commit `a0df42bf`; analyze only after completion and
-   treat any 2-round signal as noisy until postrun evidence is available.
+19. Treat successor45 `bounded_repair_placement_tournament` as complete,
+   valid, and reviewed/default-avoid. It produced local pre-VNS repair-
+   placement effect, but final objective evidence regressed below MDE and
+   failed CMT2/CMT4 protection. Do not long-run, threshold-tune, or continue
+   unchanged repair-placement tournament variants; the next CVRP slot should
+   clean-fork to a materially different problem-owned causal path.
 20. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 21. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.

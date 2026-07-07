@@ -52,7 +52,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         mechanism.mechanism_id
         for mechanism in contract.required_mechanisms
         if mechanism.hypothesis_mechanism_binding == "target_intent_required"
-    ] == [SUCCESSOR45_MECHANISM_ID]
+    ] == []
     assert any(
         requirement.requirement_id == "selector_telemetry_hygiene"
         for requirement in contract.evidence_requirements
@@ -131,9 +131,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         },
     )
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR45_MECHANISM_ID
-    ]
+    assert launch_payload["target_intent_required_mechanism_ids"] == []
 
 
 def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
@@ -151,9 +149,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["schema_version"] == "scion.cvrp_research_focus.v1"
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
-    assert focus["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR45_MECHANISM_ID
-    ]
+    assert focus["target_intent_required_mechanism_ids"] == []
     assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -172,6 +168,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
         "post_vns_best_anchor_acceptance_guard",
+        "bounded_repair_placement_tournament",
         "bounded_dual_repair_selector",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
@@ -281,20 +278,20 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert SELECTOR_TELEMETRY_HYGIENE_LESSON in (
         focus["successor44d_reviewed_evidence"]["carried_lessons"]
     )
-    assert focus["successor45_target_intent"]["mechanism_id"] == (
+    assert focus["successor45_reviewed_evidence"]["mechanism_id"] == (
         SUCCESSOR45_MECHANISM_ID
     )
-    assert focus["successor45_target_intent"]["target_file"] == (
+    assert focus["successor45_reviewed_evidence"]["target_file"] == (
         "policies/baseline_modules/destroy_repair.py"
     )
     assert "policies/baseline_modules/scheduler.py" in (
-        focus["successor45_target_intent"]["target_files"]
+        focus["successor45_reviewed_evidence"]["target_files"]
     )
-    assert focus["successor45_target_intent"]["required_mechanism_binding"] == (
-        "target_intent_required"
+    assert focus["successor45_reviewed_evidence"]["required_mechanism_binding"] == (
+        "none"
     )
-    assert "same removed-customer set" in focus["successor45_target_intent"][
-        "rule"
+    assert "same-removed-set" in focus["successor45_reviewed_evidence"][
+        "reviewed_rule"
     ]
     assert focus["successor_opportunity_families"] == [
         "acceptance_or_adaptive_weighting",
@@ -619,6 +616,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
         "post_vns_best_anchor_acceptance_guard",
+        "bounded_repair_placement_tournament",
         "bounded_dual_repair_selector",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
@@ -757,6 +755,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
             "frozen_safe_neighbor_list_vns_filter",
                 "edge_frequency_penalty_repair",
                 "post_vns_best_anchor_acceptance_guard",
+                "bounded_repair_placement_tournament",
                 "bounded_dual_repair_selector",
             "elite_route_memory_repair",
             "bounded_destroy_operator_shadow_selector",
@@ -790,6 +789,16 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert bounded_dual_effect["row2_median_delta"] == 0.75
     assert bounded_dual_effect["max_effect_to_mde_ratio"] == 0.075758
     assert bounded_dual_effect["source_root_label"] == "successor39"
+    assert mechanisms_by_id["bounded_repair_placement_tournament"][
+        "outcome_status"
+    ] == "quality_regression_local_effect_not_preserved"
+    repair_tournament_effect = mechanisms_by_id[
+        "bounded_repair_placement_tournament"
+    ]["effect_summary"]
+    assert repair_tournament_effect["expanded_median_delta"] == -2.75
+    assert repair_tournament_effect["protected_case_cmt2_median_delta"] == -3.5
+    assert repair_tournament_effect["protected_case_cmt4_median_delta"] == -7.0
+    assert repair_tournament_effect["source_root_label"] == "successor45"
     assert mechanisms_by_id["elite_route_memory_repair"]["outcome_status"] == (
         "marginal_below_mde_protected_case_unsafe"
     )
@@ -992,6 +1001,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
         "post_vns_best_anchor_acceptance_guard",
+        "bounded_repair_placement_tournament",
         "bounded_dual_repair_selector",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
@@ -1024,9 +1034,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "route_skeleton_regret_repair",
     ]
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR45_MECHANISM_ID
-    ]
+    assert launch_payload["target_intent_required_mechanism_ids"] == []
     assert launch_payload["suppressed_mechanism_ids"] == []
     assert launch_payload["successor_opportunity_families"] == [
         "acceptance_or_adaptive_weighting",

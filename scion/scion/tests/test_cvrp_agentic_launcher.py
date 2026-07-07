@@ -133,9 +133,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for mechanism in typed_contract["required_mechanisms"]
     }
     assert "required" not in mechanism_bindings.values()
-    assert mechanism_bindings == {
-        "bounded_repair_placement_tournament": "target_intent_required"
-    }
+    assert mechanism_bindings == {}
     assert any(
         requirement["requirement_id"] == "successor_causal_path_direct_effect"
         for requirement in typed_contract["evidence_requirements"]
@@ -182,6 +180,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
             "post_vns_best_anchor_acceptance_guard_reviewed_"
             "weak_positive_below_mde_policy_hygiene_repaired"
         ),
+        (
+            "bounded_repair_placement_tournament_reviewed_"
+            "quality_regression_local_effect_not_preserved"
+        ),
         "bounded_dual_repair_selector_reviewed_weak_positive_below_mde",
         "elite_route_memory_repair_reviewed_marginal_below_mde_protected_case_unsafe",
         "bounded_destroy_operator_shadow_selector_reviewed_marginal_below_mde_protected_case_unsafe",
@@ -224,9 +226,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         manifest=prepared_manifest,
     )
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "bounded_repair_placement_tournament"
-    ]
+    assert launch_payload["target_intent_required_mechanism_ids"] == []
     assert launch_payload["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -245,6 +245,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
         "post_vns_best_anchor_acceptance_guard",
+        "bounded_repair_placement_tournament",
         "bounded_dual_repair_selector",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
@@ -719,7 +720,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
     assert prepared_manifest["research_focus"][
         "target_intent_required_mechanism_ids"
-    ] == ["bounded_repair_placement_tournament"]
+    ] == []
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -738,6 +739,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
         "post_vns_best_anchor_acceptance_guard",
+        "bounded_repair_placement_tournament",
         "bounded_dual_repair_selector",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",

@@ -371,6 +371,49 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "bounded_repair_placement_tournament",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "bounded repair-placement tournament path",
+        "causal_path_label": "same-removed-set repair placement tournament",
+        "outcome_status": "quality_regression_local_effect_not_preserved",
+        "effect_summary": {
+            "screening_pair_wins": 40,
+            "screening_pair_losses": 31,
+            "screening_pair_ties": 9,
+            "screening_case_wins": 8,
+            "screening_case_losses": 4,
+            "screening_case_ties": 8,
+            "expanded_median_delta": -2.75,
+            "expanded_ci_low": -6.5,
+            "expanded_ci_high": 3.25,
+            "expanded_case_gate_wins": 5,
+            "expanded_case_gate_losses": 4,
+            "expanded_case_gate_ties": 3,
+            "rows_at_or_above_mde": 0,
+            "mechanism_contract_status": "observed_positive_effect",
+            "telemetry_status": "activation_observed_local_repair_effect_observed",
+            "protected_case_cmt2_median_delta": -3.5,
+            "protected_case_cmt4_median_delta": -7.0,
+            "negative_case_cmt3_median_delta": -6.0,
+            "negative_case_p_n101_median_delta": -12.0,
+            "negative_case_p_n76_median_delta": -8.5,
+            "runtime_confidence": "low_cached_champion",
+            "runtime_model": "budget_exhausting",
+            "known_design_gaps": (
+                "alternate_repair_reuses_main_rng_stream",
+                "pre_vns_repair_delta_not_final_trajectory_safe",
+                "no_case_structure_gate_for_CMT_or_P_family_losses",
+            ),
+            "interpretation": (
+                "valid local repair-placement effect, but not promotion-grade; "
+                "local pre-VNS gains did not preserve final total_distance and "
+                "CMT2/CMT4 protection failed"
+            ),
+            "recommended_followup": "none_clean_fork_materially_different_path",
+            "source_root_label": "successor45",
+        },
+    },
+    {
         "mechanism_id": "bounded_dual_repair_selector",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "bounded dual repair selector path",
@@ -1222,6 +1265,12 @@ DEFAULT_AVOID_DIRECTIONS = (
         "unchanged bounded_dual_repair_selector destroy/repair repair-choice "
         "selector after successor39 activated but stayed weak-positive below "
         "MDE with CI highs below the 9.9 MDE and CMT4/B/P losses"
+    ),
+    (
+        "unchanged bounded_repair_placement_tournament destroy/repair "
+        "placement tournament after successor45 valid screening observed local "
+        "repair effect but stayed quality-regression below MDE and failed "
+        "CMT2/CMT4 protection"
     ),
     (
         "unchanged elite_route_memory_repair destroy/repair complete-route "

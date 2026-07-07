@@ -99,6 +99,16 @@ CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS = (
             "successor44 acceptance-guard repeats are not long-run candidates"
         ),
     ),
+    (
+        "bounded_repair_placement_tournament",
+        (
+            "successor45 valid screening observed local repair-placement "
+            "effect, but final objective evidence stayed quality-regression "
+            "below MDE, CMT2/CMT4 protection failed, and the alternate repair "
+            "tournament can overstate pre-VNS gains that do not preserve final "
+            "trajectory quality"
+        ),
+    ),
 )
 CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE = CVRP_REVIEWED_DEFAULT_AVOID_FAILURE
 CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS = CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS

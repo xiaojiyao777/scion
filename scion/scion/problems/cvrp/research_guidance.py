@@ -361,6 +361,10 @@ SUCCESSOR45_DESIGN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor45-repair-placement-tournament-design-20260707.md"
 )
+SUCCESSOR45_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor45-repair-placement-tournament-postrun-20260707.md"
+)
 SUCCESSOR45_TARGET_INTENT_RULE = (
     f"Successor45 is preregistered as `{SUCCESSOR45_MECHANISM_ID}` in "
     f"`{SUCCESSOR45_TARGET_FILE}` with only minimal `{SUCCESSOR45_WIRING_FILE}` "
@@ -379,6 +383,22 @@ SUCCESSOR45_TARGET_INTENT_RULE = (
     "final trajectory claims, and report formal per-case total_distance, "
     "feasibility, route-count, and CMT2/CMT4 evidence. See "
     f"`{SUCCESSOR45_DESIGN_PATH}`."
+)
+SUCCESSOR45_REVIEWED_RULE = (
+    f"Successor45 `{SUCCESSOR45_MECHANISM_ID}` is reviewed/default-avoid "
+    "solver evidence, not the live target. The run was valid/complete/"
+    "postrun-ready and observed activation plus local pre-VNS repair-placement "
+    "effect, but final objective evidence stayed quality-regression below MDE: "
+    "the expanded screen had median delta -2.75, CI [-6.5, 3.25], case-gate "
+    "W/L/T 5/4/3, CMT2 median -3.5, CMT4 median -7.0, and P-family/CMT3 "
+    "losses. Trace audit found no target-binding or code-prompt truncation "
+    "failure; the main design lesson is that same-removed-set pre-VNS repair "
+    "gains did not reliably preserve final ALNS/VNS trajectory quality. Do "
+    "not long-run, threshold-tune, or continue unchanged repair-placement "
+    "tournament variants in v0.4. A future destroy/repair revisit must name a "
+    "materially different CVRP-owned causal path and must not rely on local "
+    "pre-VNS tournament deltas as promotion-grade final objective evidence. "
+    f"See `{SUCCESSOR45_DESIGN_PATH}` and `{SUCCESSOR45_POSTRUN_PATH}`."
 )
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
@@ -795,10 +815,14 @@ NEXT_REQUIRED_DIRECTION = (
     "Successor44d then repaired policy-effect warning hygiene for "
     f"`{SUCCESSOR44_MECHANISM_ID}`, but its expanded evidence stayed "
     "weak-positive below MDE with B-family regressions, so unchanged "
-    "successor44 is reviewed/default-avoid. "
-    f"`target_intent_required_mechanism_ids` now binds successor45 "
-    f"`{SUCCESSOR45_MECHANISM_ID}`; the next prepared slot must not bind "
-    "another destroy-shadow selector follow-up or unchanged acceptance guard. "
+    "successor44 is reviewed/default-avoid. Successor45 then target-intent-"
+    f"bound `{SUCCESSOR45_MECHANISM_ID}` and observed local repair-placement "
+    "effect, but final objective evidence regressed below MDE and failed "
+    "CMT2/CMT4 protection; unchanged repair-placement tournaments are now "
+    "reviewed/default-avoid too. The next prepared slot has no hard or "
+    "target-intent-required mechanism binding and must not bind another "
+    "destroy-shadow selector follow-up, unchanged acceptance guard, or "
+    "unchanged repair-placement tournament. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
     "telemetry-only q-audit repair for the missing explicit fields, or when "
@@ -845,12 +869,12 @@ NEXT_REQUIRED_DIRECTION = (
     "candidate, keep the causal-path gate but make the exact "
     "material_difference schema prominent, and ensure CMT2/CMT4 protected "
     "cases are either forced into formal screening or recorded as an explicit "
-    "measurement caveat. The next prepared attempt should clean-fork to "
-    f"successor45 `{SUCCESSOR45_MECHANISM_ID}` as a materially different "
-    "CVRP-owned repair-placement causal path, not an unchanged scheduler "
+    "measurement caveat. The next prepared attempt should clean-fork to a "
+    "materially different CVRP-owned causal path, not an unchanged scheduler "
     "helper rerun, route-skeleton threshold/gating variant, two-for-one route-set "
-    "exchange, repair-operator selector, removal targeting rule, seed selector, "
-    "local-search move, acceptance-weight, or runtime-allocation change."
+    "exchange, repair-operator selector, repair-placement tournament, removal "
+    "targeting rule, seed selector, local-search move, acceptance-weight, or "
+    "runtime-allocation change."
 )
 CURRENT_QUESTION = (
     "After both the large-instance intra-route two-opt checklist and the "
@@ -893,14 +917,16 @@ CURRENT_QUESTION = (
     f"and successor44d `{SUCCESSOR44_MECHANISM_ID}` repaired policy-effect "
     "warning hygiene but remained weak-positive below MDE with B-family "
     "regressions, "
+    f"and successor45 `{SUCCESSOR45_MECHANISM_ID}` observed local pre-VNS "
+    "repair-placement effect but regressed at the final objective gate and "
+    "failed CMT2/CMT4 protection, "
     "what materially different CVRP-owned causal path can still produce direct "
     "objective movement without repeating reviewed/default-avoid branches? "
-    f"The next prepared slot is target-intent-bound to successor45 "
-    f"`{SUCCESSOR45_MECHANISM_ID}`: a bounded repair-placement tournament "
-    "that compares completed repair candidates for the same removed-customer "
-    "set before VNS, must satisfy the exact material_difference schema, must "
-    "separate pre-VNS repair delta from final protocol outcome, and must carry "
-    "CMT2/CMT4 protected-case coverage before code work."
+    "The next prepared slot should not be target-intent-bound until the new "
+    "successor design is explicit. It must satisfy the exact "
+    "material_difference schema, separate local/pre-VNS diagnostics from final "
+    "protocol outcome, and carry CMT2/CMT4 protected-case coverage before code "
+    "work."
 )
 REQUIRED_EVIDENCE = (
     (
@@ -942,12 +968,11 @@ REQUIRED_EVIDENCE = (
         "long-run, threshold-tune, or repeat unchanged acceptance guard logic"
     ),
     (
-        f"successor45 `{SUCCESSOR45_MECHANISM_ID}` is the current proposal-only "
-        "target-intent mechanism; it must compare completed repair placements "
-        "for the same removed-customer set, must separate pre-VNS repair delta "
-        "from final protocol outcome, and must contrast with successor24 "
-        "lookahead insertion, successor39 repair selection, successor43/43b "
-        "destroy shadow selection, route memory, and route skeleton repair"
+        f"successor45 `{SUCCESSOR45_MECHANISM_ID}` is reviewed/default-avoid "
+        "after valid screening observed local repair-placement effect but "
+        "failed final objective and CMT2/CMT4 protection; do not long-run, "
+        "threshold-tune, or continue unchanged repair-placement tournament "
+        "variants"
     ),
     (
         "before the next CVRP hypothesis, use exact material_difference schema "
@@ -1231,11 +1256,12 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         "route_pair_overlap_removal_protected_followup, and "
         "capacity_tightness_removal no-positive-at-MDE or loss-heavy results, "
         "do not continue unchanged destroy/repair removal in the next slot. "
-        f"The current prepared slot is successor45 `{SUCCESSOR45_MECHANISM_ID}`: "
-        "a bounded repair-placement tournament for the same removed-customer "
-        "set, with pre-VNS repair delta separated from final protocol outcome. "
-        "Require a destroy/repair causal path distinct from the reviewed "
-        "removal and repair paths before revisiting this family"
+        f"Successor45 `{SUCCESSOR45_MECHANISM_ID}` is now reviewed/default-avoid "
+        "after local same-removed-set repair-placement gains failed to preserve "
+        "final objective quality and failed CMT2/CMT4 protection. Require a "
+        "destroy/repair causal path distinct from the reviewed removal, repair, "
+        "selector, shadow, memory, skeleton, and repair-placement tournament "
+        "paths before revisiting this family"
     ),
     (
         "bounded_local_search_variant: require feasible route-level "
@@ -1361,8 +1387,11 @@ SUCCESSOR_PORTFOLIO_RULE = (
     f"`{SUCCESSOR43_MECHANISM_ID}` and successor43b "
     f"`{SUCCESSOR43B_MECHANISM_ID}` are both reviewed/default-avoid after "
     "the protected follow-up failed to produce positive-at-MDE or protected-"
-    "case-safe final objective evidence. The next CVRP solver slot should "
-    "clean-fork to a materially different CVRP-owned causal path after the "
+    "case-safe final objective evidence. Successor45 "
+    f"`{SUCCESSOR45_MECHANISM_ID}` is reviewed/default-avoid after local "
+    "repair-placement gains failed to preserve final objective quality and "
+    "CMT2/CMT4 protection. The next CVRP solver slot should clean-fork to a "
+    "materially different CVRP-owned causal path after the "
     "exact material_difference schema and CMT2/CMT4 case-coverage requirements "
     "are satisfied. "
     "Scheduler destroy-size "
@@ -1464,7 +1493,7 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [SUCCESSOR45_MECHANISM_ID],
+        "target_intent_required_mechanism_ids": [],
         "reviewed_mechanism_ids": [
             *list(REVIEWED_MECHANISM_IDS),
             SUCCESSOR41_MECHANISM_ID,
@@ -1594,7 +1623,7 @@ def build_cvrp_legacy_research_focus(
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
-        "successor45_target_intent": {
+        "successor45_reviewed_evidence": {
             "mechanism_id": SUCCESSOR45_MECHANISM_ID,
             "mechanism_family": "destroy_repair_selection",
             "target_file": SUCCESSOR45_TARGET_FILE,
@@ -1603,9 +1632,14 @@ def build_cvrp_legacy_research_focus(
                 SUCCESSOR45_WIRING_FILE,
             ],
             "design_path": SUCCESSOR45_DESIGN_PATH,
-            "status": "preregistered_repair_placement_tournament_ready_for_server_local_screening",
-            "required_mechanism_binding": "target_intent_required",
+            "postrun_path": SUCCESSOR45_POSTRUN_PATH,
+            "status": "reviewed_quality_regression_local_effect_not_preserved",
+            "required_mechanism_binding": "none",
             "blocked_actions": [
+                "long_run",
+                "same_mechanism_threshold_tuning",
+                "same_mechanism_optimization_followup",
+                "unchanged_repair_placement_tournament_repeat",
                 "repair_operator_selector_repeat",
                 "destroy_shadow_selector_followup",
                 "lookahead_insertion_repeat",
@@ -1617,8 +1651,9 @@ def build_cvrp_legacy_research_focus(
                 SELECTOR_TELEMETRY_HYGIENE_LESSON,
                 "pre_vns_repair_delta_is_not_final_protocol_outcome",
                 "same_removed_customer_set_baseline_vs_alternate_repair",
+                "alternate_repair_should_not_consume_main_rng_when_rejected",
             ],
-            "rule": SUCCESSOR45_TARGET_INTENT_RULE,
+            "reviewed_rule": SUCCESSOR45_REVIEWED_RULE,
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
@@ -1644,24 +1679,7 @@ def build_cvrp_legacy_research_focus(
 
 
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
-    return (
-        RequiredMechanism(
-            mechanism_id=SUCCESSOR45_MECHANISM_ID,
-            category="destroy_repair_selection",
-            description=SUCCESSOR45_TARGET_INTENT_RULE,
-            required_observations=(
-                "repair_placement_tournament_activation",
-                "same_removed_set_baseline_repair_distance",
-                "alternate_repair_distance",
-                "pre_vns_repair_delta",
-                "post_downstream_or_final_total_distance_delta",
-                "feasibility_and_route_count_preservation",
-                "CMT2_CMT4_case_level_results",
-            ),
-            protected_items=PROTECTED_CASES,
-            hypothesis_mechanism_binding="target_intent_required",
-        ),
-    )
+    return ()
 
 
 def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
@@ -1700,7 +1718,8 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 (
                     "same removed-customer set baseline repair distance, "
                     "alternate repair distance, and pre-VNS repair delta "
-                    f"when using {SUCCESSOR45_MECHANISM_ID}"
+                    "when using a future repair-placement mechanism distinct "
+                    f"from reviewed {SUCCESSOR45_MECHANISM_ID}"
                 ),
                 (
                     "selector/filter mechanisms separate pre_vns_local_delta "
@@ -1741,10 +1760,12 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 SUCCESSOR39_MECHANISM_ID,
                 SUCCESSOR43_MECHANISM_ID,
                 SUCCESSOR43B_MECHANISM_ID,
+                SUCCESSOR45_MECHANISM_ID,
                 "destroy_repair_selection",
                 "selector",
                 "filter",
                 "shadow_selector",
+                "repair_placement_tournament",
             ),
             protected_items=PROTECTED_CASES,
             required_fields=(
@@ -1776,8 +1797,8 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
         ),
         EvidenceRequirement(
             requirement_id="successor45_bounded_repair_placement_tournament",
-            category="successor_solver_opportunity_evidence",
-            description=SUCCESSOR45_TARGET_INTENT_RULE,
+            category="reviewed_destroy_repair_selection_evidence",
+            description=SUCCESSOR45_REVIEWED_RULE,
             mechanism_ids=(
                 SUCCESSOR45_MECHANISM_ID,
                 "destroy_repair_selection",
@@ -1786,7 +1807,9 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
             ),
             protected_items=PROTECTED_CASES,
             required_fields=(
-                "proposal-only target_intent_required mechanism binding",
+                "successor45 postrun cited before any repair-placement revisit",
+                "no unchanged bounded_repair_placement_tournament long-run",
+                "no same-mechanism threshold or gating follow-up",
                 "material contrast against successor24 lookahead insertion",
                 "material contrast against successor39 repair selector",
                 "material contrast against successor43/43b destroy shadow selectors",
@@ -1795,8 +1818,7 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "baseline repaired candidate total_distance before VNS",
                 "alternate repaired candidate total_distance before VNS",
                 "strict feasible route-count-safe replacement condition",
-                "mechanism-specific activation/activity telemetry under the tournament id",
-                "record_move direct repair-placement delta under the tournament id",
+                "future repair-placement variants must isolate alternate RNG or caveat stochastic trajectory drift",
                 "pre-VNS repair delta labelled separately from final trajectory claims",
                 "final per-case total_distance deltas",
                 "feasibility and route-count preservation or explicit caveat",
@@ -1986,7 +2008,7 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
             category="proposal_focus",
             title="Successor portfolio direction",
             lines=(
-                SUCCESSOR45_TARGET_INTENT_RULE,
+                SUCCESSOR45_REVIEWED_RULE,
                 SUCCESSOR44D_REVIEWED_RULE,
                 SUCCESSOR43B_REVIEWED_RULE,
                 SUCCESSOR43_REVIEWED_RULE,
