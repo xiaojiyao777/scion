@@ -468,18 +468,24 @@ Open blockers before v0.4 closeout:
 
 ## Current CVRP Direction
 
-Do not repeat unchanged reviewed paths. The latest CVRP invocation is
-successor44d: the CVRP-owned policy-effect warning hygiene repair for
+Do not repeat unchanged reviewed paths. The latest completed CVRP invocation
+is successor44d: the CVRP-owned policy-effect warning hygiene repair for
 `post_vns_best_anchor_acceptance_guard` completed valid/complete and verified
 that no-direct-effect acceptance-policy evidence is summarized as
 `policy_outcome_observed`, not as a generic direct-effect repair obligation.
 It also produced weak-positive screening evidence, but not promotion evidence:
 the expanded row was `48/48` valid with W/L/T `27/14/7`, raw pair median
 `+3.0`, branch CI `[0.0, 7.25]`, `runtime_confidence=low_cached_champion`,
-CMT4 neutral, and B-family regressions. The next CVRP direction is not a long
-run. Design one explicit successor44 follow-up with guard allow/reject
-trajectory evidence and a narrower causal claim, or clean-fork to a materially
-different CVRP-owned causal path.
+CMT4 neutral, and B-family regressions. Do not long-run unchanged successor44d.
+
+The current CVRP slot is successor45, `bounded_repair_placement_tournament`.
+It is a CVRP-owned clean fork in the destroy/repair placement boundary, not a
+new VRP solver. Guidance now treats successor44d as reviewed/default-avoid and
+target-intent-binds successor45 as a proposal-only mechanism. The short
+server-local run was launched from commit `a0df42bf` with local `gpt-5.5`,
+completion preflight healthy, and resume-from successor44d:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor45-repair-placement-tournament-server-claw-2r-gpt55-2r-gpt55-20260707T091750Z-claw`.
+Treat it as noisy screening only until postrun analysis is complete.
 
 Legacy direction details below are retained as reviewed-history context.
 
@@ -839,15 +845,17 @@ from the current checkout.
    weak-positive screening evidence, not promotion-grade evidence. The contract
    now stays `policy_outcome_observed` with no direct-effect repair follow-up,
    and the candidate did not add fake `record_move(delta=...)` telemetry. Do
-   not long-run unchanged successor44d. The next CVRP step must be design-first:
-   either one explicit acceptance-policy follow-up with guard allow/reject
-   trajectory evidence and a narrower causal claim, or a materially different
-   CVRP-owned clean fork.
-19. Use the new large-file modularization plan before further behavior changes
+   not long-run unchanged successor44d.
+19. Successor45 `bounded_repair_placement_tournament` is now the active
+   design-first CVRP-owned clean fork. Its 2-round server-local screening run
+   is in progress from launcher commit `a0df42bf`; analyze only after the run
+   completes and treat any 2-round signal as noisy until supported by postrun
+   evidence.
+20. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-20. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+21. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-21. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+22. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence

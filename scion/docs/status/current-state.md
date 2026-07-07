@@ -331,6 +331,16 @@ The remaining closeout gaps are:
   define explicit guard allow/reject trajectory evidence for one narrow
   acceptance-policy follow-up or clean-fork to a materially different
   CVRP-owned path.
+- Successor45 is now the active CVRP-owned clean fork:
+  `bounded_repair_placement_tournament` at the destroy/repair placement
+  boundary. The guidance repair in commit `a0df42bf` treats successor44d as
+  reviewed/default-avoid and proposal-targets successor45, without changing
+  generic campaign, protocol, or DecisionFeatures boundaries. The short
+  server-local run was launched with local `gpt-5.5`, healthy completion
+  preflight, and resume-from successor44d:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor45-repair-placement-tournament-server-claw-2r-gpt55-2r-gpt55-20260707T091750Z-claw`.
+  It is screening only; wait for postrun before interpreting the noisy
+  two-round signal.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -810,13 +820,15 @@ CVRP:
    weak-positive screening evidence, not a long-run or promotion candidate.
    The contract now stays `policy_outcome_observed` without generic
    `record_move(delta=...)` repair advice. Do not long-run unchanged
-   successor44d; next work must be design-first, either a narrow
-   acceptance-policy follow-up with explicit guard allow/reject trajectory
-   evidence or a materially different CVRP-owned clean fork.
-19. Use the v0.4 large-file modularization plan before adding behavior to
+   successor44d.
+19. Track successor45 `bounded_repair_placement_tournament` as the active
+   design-first CVRP-owned clean fork. The server-local 2-round screening run
+   is in progress from commit `a0df42bf`; analyze only after completion and
+   treat any 2-round signal as noisy until postrun evidence is available.
+20. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-20. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-21. Keep status documents compact; put detailed root counters and caveats in
+21. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+22. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes
