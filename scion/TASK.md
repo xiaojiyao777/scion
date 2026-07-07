@@ -506,8 +506,11 @@ only when the post-VNS candidate strictly improves final global-best
 `total_distance` while preserving feasibility and route count. It must not
 claim pre-VNS repair/selector deltas as promotion evidence. The design is
 `scion/docs/experiments/v0.4/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-design-20260707.md`.
-Next validation is a short server-local `claw` / local `gpt-5.5` screening
-from successor45 evidence; treat two-round results as noisy screening only.
+The short server-local validation run launched from commit `593d4320` with
+local `gpt-5.5`, healthy completion preflight, and resume-from successor45:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-server-claw-2r-gpt55-2r-gpt55-20260707T115720Z-claw`.
+It is a two-round screening run, PID `1704245`; treat results as noisy
+screening only.
 
 Legacy direction details below are retained as reviewed-history context.
 
@@ -874,12 +877,14 @@ from the current checkout.
    failed CMT2/CMT4 protection. Do not long-run, threshold-tune, or continue
    unchanged repair-placement tournament variants; the next CVRP slot should
    clean-fork to a materially different problem-owned causal path.
-20. Validate successor46 `best_solution_ruin_recreate_intensification` as the
+20. Monitor successor46 `best_solution_ruin_recreate_intensification` as the
    live target-intent-bound clean fork. Required evidence is final post-VNS
    global-best `total_distance` movement, attempted/accepted/new-best
    attribution, runtime budget fields, feasibility/route-count preservation,
    rejected-attempt RNG or trajectory isolation, and CMT2/CMT4 protection.
-   Treat the first two-round run as noisy screening, not long-run evidence.
+   The server-local `claw` run is in flight at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-server-claw-2r-gpt55-2r-gpt55-20260707T115720Z-claw`;
+   treat the first two-round result as noisy screening, not long-run evidence.
 21. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 22. Keep the v0.5 governance ablation frozen as a preregistered design; do not

@@ -358,8 +358,11 @@ The remaining closeout gaps are:
   budget fields, rejected-attempt RNG or trajectory isolation, and CMT2/CMT4
   case protection. Design:
   `scion/docs/experiments/v0.4/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-design-20260707.md`.
-  Next action is a short server-local `claw` / local `gpt-5.5` screening from
-  successor45; treat a two-round result as noisy screening only.
+  The short server-local validation run launched from commit `593d4320` with
+  local `gpt-5.5`, healthy completion preflight, and resume-from successor45:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-server-claw-2r-gpt55-2r-gpt55-20260707T115720Z-claw`.
+  It is currently running as PID `1704245`; treat the two-round result as noisy
+  screening only.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
