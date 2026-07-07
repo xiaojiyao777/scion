@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-07-06
+Last updated: 2026-07-07
 
 This file is the operational resume point, not a run log. Historical root
 chronology belongs in focused experiment reports, sparse milestones, and git
@@ -303,6 +303,22 @@ The remaining closeout gaps are:
   credited ordinary ALNS/VNS best/current improvements to the acceptance guard.
   Any follow-up must redesign acceptance-policy attribution first, otherwise
   clean-fork to a different CVRP-owned causal path.
+- Successor44c implemented the attribution-contract repair in commit `2bcf831a`
+  and completed a valid two-row server-local screen:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor44c-attribution-contract-repair-server-claw-2r-gpt55-20260707T051421Z-claw`.
+  It used local `gpt-5.5`, passed completion preflight, made 7 LLM calls, had
+  zero proposal-quality blocks, zero telemetry failures, and one formal
+  candidate. The two screening rows are the original and expanded screen for
+  that same candidate: `32/32` valid with W/L/T `17/9/6` and raw pair median
+  `+4.5`, then `48/48` valid with W/L/T `28/15/5` and raw pair median `+1.5`.
+  Postrun max median was `+7.5` below MDE `9.9`; no row promoted. Attribution
+  repair succeeded because the candidate used activation/activity telemetry and
+  did not fake successor44 direct-effect `record_move` deltas. The remaining
+  issue is guidance hygiene: generic missing-effect repair advice and branch
+  summary still point same-mechanism follow-up toward adding
+  `record_move(delta=...)`. Do not long-run unchanged successor44c; first fix
+  the CVRP-owned summary/guidance interpretation for policy mechanisms or
+  clean-fork.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -778,10 +794,12 @@ CVRP:
    attribution contract, but both rows stayed below MDE and CMT2/CMT4/B
    remained unsafe. Do not long-run, threshold-tune, or continue the
    destroy-shadow selector line.
-18. Treat successor44 as weak-positive diagnostic evidence, not a long-run or
-   promotion candidate. Do not continue the generated telemetry-credit repair;
-   redesign acceptance-policy attribution first or clean-fork to a materially
-   different CVRP-owned path.
+18. Treat successor44c as weak-positive diagnostic evidence and a successful
+   attribution-contract repair, not a long-run or promotion candidate. Do not
+   continue any generated telemetry-credit repair; first fix the CVRP-owned
+   summary/guidance interpretation that still suggests generic
+   `record_move(delta=...)` effect telemetry for this policy mechanism, or
+   clean-fork to a materially different CVRP-owned path.
 19. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 20. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
