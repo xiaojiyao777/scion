@@ -339,6 +339,38 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "post_vns_best_anchor_acceptance_guard",
+        "mechanism_family": "acceptance_or_adaptive_weighting",
+        "path_label": "post-VNS best-anchor acceptance guard path",
+        "causal_path_label": "post-VNS acceptance policy outcome guard",
+        "outcome_status": "weak_positive_below_mde_policy_hygiene_repaired",
+        "effect_summary": {
+            "screening_32_pair_wins": 14,
+            "screening_32_pair_losses": 7,
+            "screening_32_pair_ties": 11,
+            "screening_32_median_delta": 0.0,
+            "expanded_48_pair_wins": 27,
+            "expanded_48_pair_losses": 14,
+            "expanded_48_pair_ties": 7,
+            "expanded_48_median_delta": 3.0,
+            "expanded_48_mean_delta": 4.770833,
+            "expanded_48_ci_low": 0.0,
+            "expanded_48_ci_high": 7.25,
+            "rows_at_or_above_mde": 0,
+            "protected_case_cmt2_median_delta": 4.5,
+            "protected_case_cmt4_median_delta": 0.0,
+            "negative_case_b_n63_median_delta": -3.0,
+            "negative_case_b_n67_median_delta": -16.5,
+            "telemetry_status": "policy_outcome_observed",
+            "mechanism_contract_status": "policy_outcome_observed",
+            "interpretation": (
+                "valid weak-positive below-MDE policy outcome evidence; "
+                "telemetry hygiene repaired but not promotion-grade"
+            ),
+            "source_root_label": "successor44d",
+        },
+    },
+    {
         "mechanism_id": "bounded_dual_repair_selector",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "bounded dual repair selector path",
@@ -997,6 +1029,10 @@ DEFAULT_AVOID_DIRECTIONS = (
     (
         "route-pressure acceptance/adaptive-weighting variants without a new "
         "non-acceptance causal path or direct objective-effect telemetry"
+    ),
+    (
+        "unchanged post_vns_best_anchor_acceptance_guard after successor44d "
+        "weak-positive below-MDE policy-hygiene evidence"
     ),
     "unchanged bounded_interroute_2opt_bridge local-search bridge",
     "high-asymmetric-promise bounded_interroute_2opt_bridge refinement",

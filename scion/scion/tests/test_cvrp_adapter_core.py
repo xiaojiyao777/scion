@@ -420,7 +420,7 @@ def test_cvrp_hypothesis_quality_blocks_missing_direct_effect_telemetry(
     )
 
 
-def test_cvrp_hypothesis_quality_allows_successor44_policy_telemetry(
+def test_cvrp_hypothesis_quality_blocks_reviewed_successor44_policy_repeat(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     mechanism_id = "post_vns_best_anchor_acceptance_guard"
@@ -470,10 +470,18 @@ def test_cvrp_hypothesis_quality_allows_successor44_policy_telemetry(
 
     check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
 
-    assert check.allowed is True
+    assert check.allowed is False
+    assert check.structured_rejection["gate_name"] == "cvrp_reviewed_default_avoid"
+    assert (
+        check.structured_rejection["blocked_mechanism_id"]
+        == "post_vns_best_anchor_acceptance_guard"
+    )
+    assert "successor44d repaired policy-effect warning hygiene" in (
+        check.structured_rejection["evidence_reason"]
+    )
 
 
-def test_cvrp_hypothesis_quality_blocks_successor44_without_policy_telemetry(
+def test_cvrp_hypothesis_quality_blocks_successor44_before_policy_telemetry_check(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     hypothesis = _solver_design_hypothesis(
@@ -484,11 +492,10 @@ def test_cvrp_hypothesis_quality_blocks_successor44_without_policy_telemetry(
     check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
 
     assert check.allowed is False
-    assert "expected_telemetry.activation_or_activity" in (
-        check.structured_rejection["missing_fields"]
-    )
-    assert "do not fabricate broad-loop best_delta" in (
-        check.structured_rejection["retry_constraint"]
+    assert check.structured_rejection["gate_name"] == "cvrp_reviewed_default_avoid"
+    assert (
+        check.structured_rejection["blocked_mechanism_id"]
+        == "post_vns_best_anchor_acceptance_guard"
     )
 
 

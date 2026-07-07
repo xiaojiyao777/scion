@@ -335,32 +335,50 @@ SUCCESSOR44_DESIGN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor44-telemetry-hygiene-and-post-vns-acceptance-guard-design-20260706.md"
 )
-SUCCESSOR44_TARGET_INTENT_RULE = (
-    f"Successor44 is preregistered as `{SUCCESSOR44_MECHANISM_ID}` in "
-    f"`{SUCCESSOR44_TARGET_FILE}` with minimal `{SUCCESSOR44_WIRING_FILE}` "
-    "integration. It is a proposal-only target-intent binding for a materially "
-    "different post-VNS acceptance/commit-boundary causal path: preserve new "
-    "best and current-improving candidates, then guard worse candidates that "
-    "simulated annealing would otherwise accept by anchoring the final "
-    "post-repair/post-VNS decision to current/best trajectory state and "
-    "route-count feasibility. It is not another destroy-shadow selector, "
-    "rank-gap/route-pressure acceptance gate, operator-credit weighting, "
-    "route memory, route skeleton, seed selector, local-search move, or "
-    "runtime-allocation variant. Record activation/decision/phase telemetry "
-    "under the mechanism id, final per-case total_distance/feasibility/"
-    "route-count and CMT2/CMT4 evidence, and do not claim ordinary "
-    "ALNS/VNS current-improving or new-best bookkeeping as mechanism effect "
-    "telemetry. Implementation shape: put the guard decision helper and "
-    "mechanism-specific activation/activity/budget telemetry in "
-    "`acceptance.py`; `scheduler.py` may only pass the "
-    "post-polish candidate/current/best data to that helper and consume the "
-    "guarded allow/reject result. `scheduler.py` must not call "
-    "`context.record_move` for this mechanism or record effect telemetry from "
-    "the scheduler broad loop. Direct objective evidence for successor44 comes "
-    "from formal per-case total_distance comparisons and guard allow/reject "
-    "trajectory evidence, not from positive `record_move` deltas for rejected "
-    "worse candidates or ordinary downstream improvements. See "
-    f"`{SUCCESSOR44_DESIGN_PATH}`."
+SUCCESSOR44D_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor44d-policy-effect-warning-hygiene-postrun-20260707.md"
+)
+SUCCESSOR44D_REVIEWED_RULE = (
+    f"Successor44d `{SUCCESSOR44_MECHANISM_ID}` is reviewed/default-avoid "
+    "solver evidence, not the live target. The CVRP-owned policy-effect "
+    "warning hygiene repair worked: policy outcome evidence is observed and "
+    "the generated patch did not add fake direct-effect `record_move` deltas. "
+    "Solver evidence remained weak-positive below MDE: the expanded 48/48 "
+    "screen had median delta 3.0, CI [0.0, 7.25], CMT2 weak-positive, CMT4 "
+    "neutral, and B-family regressions. Do not long-run, threshold-tune, or "
+    "repeat unchanged `post_vns_best_anchor_acceptance_guard`. A future "
+    "acceptance-policy revisit must use a new mechanism id with a new "
+    "material-difference claim and must preserve the successor44 telemetry "
+    "lesson: do not claim ordinary ALNS/VNS current-improving or new-best "
+    "bookkeeping as mechanism effect telemetry. See "
+    f"`{SUCCESSOR44_DESIGN_PATH}` and `{SUCCESSOR44D_POSTRUN_PATH}`."
+)
+SUCCESSOR45_MECHANISM_ID = "bounded_repair_placement_tournament"
+SUCCESSOR45_TARGET_FILE = "policies/baseline_modules/destroy_repair.py"
+SUCCESSOR45_WIRING_FILE = "policies/baseline_modules/scheduler.py"
+SUCCESSOR45_DESIGN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor45-repair-placement-tournament-design-20260707.md"
+)
+SUCCESSOR45_TARGET_INTENT_RULE = (
+    f"Successor45 is preregistered as `{SUCCESSOR45_MECHANISM_ID}` in "
+    f"`{SUCCESSOR45_TARGET_FILE}` with only minimal `{SUCCESSOR45_WIRING_FILE}` "
+    "operator registration or trace wiring. It is a proposal-only "
+    "target-intent binding for a materially different destroy/repair causal "
+    "path: after one destroy step creates a removed-customer set, compare the "
+    "normally selected repaired candidate against one bounded alternate "
+    "placement candidate for that same removed-customer set, and only replace the "
+    "repair result when the alternate is feasible, route-count safe, and "
+    "strictly better in post-repair total distance before VNS. It is not a "
+    "destroy-shadow selector, repair-operator selector, route-memory repair, "
+    "route-skeleton repair, insertion-lookahead scoring rule, removal "
+    "targeting rule, seed selector, local-search move, acceptance gate, or "
+    "runtime-allocation variant. Record direct repair-placement effect under "
+    "the mechanism id, keep pre-VNS repair delta separate from downstream "
+    "final trajectory claims, and report formal per-case total_distance, "
+    "feasibility, route-count, and CMT2/CMT4 evidence. See "
+    f"`{SUCCESSOR45_DESIGN_PATH}`."
 )
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
@@ -773,10 +791,14 @@ NEXT_REQUIRED_DIRECTION = (
     "completed the only protected same-line follow-up and repaired much of the "
     "RNG/selected-operator attribution contract, but still stayed below MDE "
     "with aggregate pair W/L/T 42/49/5, CMT2/CMT4/B losses, and only local "
-    "pre-VNS selector gains. Hard `required_mechanism_ids` remains empty, but "
-    f"`target_intent_required_mechanism_ids` now binds successor44 "
-    f"`{SUCCESSOR44_MECHANISM_ID}`; the next prepared slot must not bind "
-    "another destroy-shadow selector follow-up. "
+    "pre-VNS selector gains. Hard `required_mechanism_ids` remains empty. "
+    "Successor44d then repaired policy-effect warning hygiene for "
+    f"`{SUCCESSOR44_MECHANISM_ID}`, but its expanded evidence stayed "
+    "weak-positive below MDE with B-family regressions, so unchanged "
+    "successor44 is reviewed/default-avoid. "
+    f"`target_intent_required_mechanism_ids` now binds successor45 "
+    f"`{SUCCESSOR45_MECHANISM_ID}`; the next prepared slot must not bind "
+    "another destroy-shadow selector follow-up or unchanged acceptance guard. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
     "telemetry-only q-audit repair for the missing explicit fields, or when "
@@ -804,7 +826,8 @@ NEXT_REQUIRED_DIRECTION = (
     f"{SUCCESSOR40_MECHANISM_ID}, or unchanged "
     f"{SUCCESSOR41_MECHANISM_ID}, or unchanged "
     f"{SUCCESSOR43_MECHANISM_ID}, or unchanged "
-    f"{SUCCESSOR43B_MECHANISM_ID}. Future construction-seed revisits must be "
+    f"{SUCCESSOR43B_MECHANISM_ID}, or unchanged "
+    f"{SUCCESSOR44_MECHANISM_ID}. Future construction-seed revisits must be "
     "materially distinct from raw baseline, short-horizon trajectory, and "
     "post-construction micro-polish selector paths, with direct pre-ALNS/VNS "
     "objective telemetry. "
@@ -822,8 +845,9 @@ NEXT_REQUIRED_DIRECTION = (
     "candidate, keep the causal-path gate but make the exact "
     "material_difference schema prominent, and ensure CMT2/CMT4 protected "
     "cases are either forced into formal screening or recorded as an explicit "
-    "measurement caveat. The next prepared attempt should clean-fork to a "
-    "materially different CVRP-owned causal path, not an unchanged scheduler "
+    "measurement caveat. The next prepared attempt should clean-fork to "
+    f"successor45 `{SUCCESSOR45_MECHANISM_ID}` as a materially different "
+    "CVRP-owned repair-placement causal path, not an unchanged scheduler "
     "helper rerun, route-skeleton threshold/gating variant, two-for-one route-set "
     "exchange, repair-operator selector, removal targeting rule, seed selector, "
     "local-search move, acceptance-weight, or runtime-allocation change."
@@ -866,12 +890,17 @@ CURRENT_QUESTION = (
     f"and successor43b `{SUCCESSOR43B_MECHANISM_ID}` repaired much of that "
     "contract but still stayed below MDE with CMT2/CMT4/B losses and local "
     "selector gains that did not preserve final trajectory quality, "
+    f"and successor44d `{SUCCESSOR44_MECHANISM_ID}` repaired policy-effect "
+    "warning hygiene but remained weak-positive below MDE with B-family "
+    "regressions, "
     "what materially different CVRP-owned causal path can still produce direct "
     "objective movement without repeating reviewed/default-avoid branches? "
-    f"The next prepared slot is target-intent-bound to successor44 "
-    f"`{SUCCESSOR44_MECHANISM_ID}`: a post-VNS acceptance/commit-boundary "
-    "guard that must satisfy the exact material_difference schema and "
-    "CMT2/CMT4 protected-case coverage requirement before code work."
+    f"The next prepared slot is target-intent-bound to successor45 "
+    f"`{SUCCESSOR45_MECHANISM_ID}`: a bounded repair-placement tournament "
+    "that compares completed repair candidates for the same removed-customer "
+    "set before VNS, must satisfy the exact material_difference schema, must "
+    "separate pre-VNS repair delta from final protocol outcome, and must carry "
+    "CMT2/CMT4 protected-case coverage before code work."
 )
 REQUIRED_EVIDENCE = (
     (
@@ -908,11 +937,17 @@ REQUIRED_EVIDENCE = (
         "acceptance"
     ),
     (
-        f"successor44 `{SUCCESSOR44_MECHANISM_ID}` is the current proposal-only "
-        "target-intent mechanism; it must work at the post-VNS acceptance/"
-        "commit boundary and must contrast with successor32 operator-credit "
-        "weighting, old rank-gap/route-pressure acceptance gates, and "
-        "successor39/43/43b pre-VNS selector paths"
+        f"successor44d `{SUCCESSOR44_MECHANISM_ID}` is reviewed/default-avoid "
+        "after weak-positive below-MDE policy outcome evidence; do not "
+        "long-run, threshold-tune, or repeat unchanged acceptance guard logic"
+    ),
+    (
+        f"successor45 `{SUCCESSOR45_MECHANISM_ID}` is the current proposal-only "
+        "target-intent mechanism; it must compare completed repair placements "
+        "for the same removed-customer set, must separate pre-VNS repair delta "
+        "from final protocol outcome, and must contrast with successor24 "
+        "lookahead insertion, successor39 repair selection, successor43/43b "
+        "destroy shadow selection, route memory, and route skeleton repair"
     ),
     (
         "before the next CVRP hypothesis, use exact material_difference schema "
@@ -930,7 +965,8 @@ REQUIRED_EVIDENCE = (
         "materially different CVRP-owned causal path before code work starts "
         "and explain why it is distinct from reviewed route-skeleton repair, "
         "two-for-one exchange, bounded dual repair selection, construction seed "
-        "selectors, local-search variants, and reviewed destroy/repair removals"
+        "selectors, local-search variants, reviewed destroy/repair removals, "
+        "and unchanged acceptance-policy guard variants"
     ),
     (
         f"successor40 `{SUCCESSOR40_MECHANISM_ID}` is reviewed/default-avoid "
@@ -1010,10 +1046,11 @@ REQUIRED_EVIDENCE = (
     (
         "do not revisit rank-gap or route-pressure acceptance gates; "
         "successor32 post-repair operator-credit weighting is now reviewed "
-        f"zero-effect evidence; successor44 `{SUCCESSOR44_MECHANISM_ID}` may "
-        "touch simulated-annealing acceptance only as a materially new "
-        "post-VNS accepted/current/best trajectory guard with explicit contrast "
-        "against those reviewed acceptance/adaptive-weighting paths"
+        f"zero-effect evidence; successor44d `{SUCCESSOR44_MECHANISM_ID}` is "
+        "now reviewed weak-positive below-MDE policy outcome evidence, so any "
+        "future simulated-annealing acceptance revisit needs a new mechanism "
+        "id and explicit contrast against those reviewed acceptance/adaptive-"
+        "weighting paths"
     ),
     (
         "a materially different bounded local-search or destroy/repair "
@@ -1125,10 +1162,10 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         "reviewed/default-avoid after valid screening showed internal "
         "operator-credit movement but zero objective effect. Do not repeat "
         "unchanged post-repair credit weighting or rank-gap/route-pressure "
-        f"acceptance gates. Successor44 `{SUCCESSOR44_MECHANISM_ID}` is "
-        "allowed only as a materially new post-VNS acceptance/commit-boundary "
-        "guard with final accepted/current/best trajectory evidence, not a "
-        "pre-VNS selector or broad-loop best-improvement telemetry claim."
+        f"acceptance gates. Successor44d `{SUCCESSOR44_MECHANISM_ID}` is now "
+        "reviewed/default-avoid after weak-positive below-MDE policy outcome "
+        "evidence; future acceptance-policy revisits need a new mechanism id "
+        "and a new material-difference claim."
     ),
     (
         "construction_seed_portfolio: successor25 raw seed-baseline selection "
@@ -1194,8 +1231,11 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         "route_pair_overlap_removal_protected_followup, and "
         "capacity_tightness_removal no-positive-at-MDE or loss-heavy results, "
         "do not continue unchanged destroy/repair removal in the next slot. "
-        "require a destroy/repair causal path distinct from those removal and "
-        "repair paths before revisiting this family"
+        f"The current prepared slot is successor45 `{SUCCESSOR45_MECHANISM_ID}`: "
+        "a bounded repair-placement tournament for the same removed-customer "
+        "set, with pre-VNS repair delta separated from final protocol outcome. "
+        "Require a destroy/repair causal path distinct from the reviewed "
+        "removal and repair paths before revisiting this family"
     ),
     (
         "bounded_local_search_variant: require feasible route-level "
@@ -1424,7 +1464,7 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [SUCCESSOR44_MECHANISM_ID],
+        "target_intent_required_mechanism_ids": [SUCCESSOR45_MECHANISM_ID],
         "reviewed_mechanism_ids": [
             *list(REVIEWED_MECHANISM_IDS),
             SUCCESSOR41_MECHANISM_ID,
@@ -1524,7 +1564,7 @@ def build_cvrp_legacy_research_focus(
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
-        "successor44_target_intent": {
+        "successor44d_reviewed_evidence": {
             "mechanism_id": SUCCESSOR44_MECHANISM_ID,
             "mechanism_family": "acceptance_or_adaptive_weighting",
             "target_file": SUCCESSOR44_TARGET_FILE,
@@ -1533,10 +1573,13 @@ def build_cvrp_legacy_research_focus(
                 SUCCESSOR44_WIRING_FILE,
             ],
             "design_path": SUCCESSOR44_DESIGN_PATH,
-            "status": "preregistered_post_vns_acceptance_guard_ready_for_server_local_screening",
-            "required_mechanism_binding": "target_intent_required",
+            "postrun_path": SUCCESSOR44D_POSTRUN_PATH,
+            "status": "reviewed_weak_positive_below_mde_policy_hygiene_repaired",
+            "required_mechanism_binding": "none",
             "blocked_actions": [
-                "destroy_shadow_selector_followup",
+                "long_run",
+                "same_mechanism_threshold_tuning",
+                "unchanged_acceptance_guard_repeat",
                 "rank_gap_acceptance_gate_repeat",
                 "route_pressure_acceptance_gate_repeat",
                 "operator_credit_weighting_repeat",
@@ -1547,7 +1590,35 @@ def build_cvrp_legacy_research_focus(
                 "final_effect_must_be_post_downstream_or_accepted_trajectory",
                 "do_not_record_positive_delta_for_rejected_worse_candidates",
             ],
-            "rule": SUCCESSOR44_TARGET_INTENT_RULE,
+            "reviewed_rule": SUCCESSOR44D_REVIEWED_RULE,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        },
+        "successor45_target_intent": {
+            "mechanism_id": SUCCESSOR45_MECHANISM_ID,
+            "mechanism_family": "destroy_repair_selection",
+            "target_file": SUCCESSOR45_TARGET_FILE,
+            "target_files": [
+                SUCCESSOR45_TARGET_FILE,
+                SUCCESSOR45_WIRING_FILE,
+            ],
+            "design_path": SUCCESSOR45_DESIGN_PATH,
+            "status": "preregistered_repair_placement_tournament_ready_for_server_local_screening",
+            "required_mechanism_binding": "target_intent_required",
+            "blocked_actions": [
+                "repair_operator_selector_repeat",
+                "destroy_shadow_selector_followup",
+                "lookahead_insertion_repeat",
+                "route_memory_repair_repeat",
+                "route_skeleton_repair_repeat",
+                "pre_vns_local_delta_as_final_effect",
+            ],
+            "carried_lessons": [
+                SELECTOR_TELEMETRY_HYGIENE_LESSON,
+                "pre_vns_repair_delta_is_not_final_protocol_outcome",
+                "same_removed_customer_set_baseline_vs_alternate_repair",
+            ],
+            "rule": SUCCESSOR45_TARGET_INTENT_RULE,
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
@@ -1575,12 +1646,14 @@ def build_cvrp_legacy_research_focus(
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
     return (
         RequiredMechanism(
-            mechanism_id=SUCCESSOR44_MECHANISM_ID,
-            category="acceptance_or_adaptive_weighting",
-            description=SUCCESSOR44_TARGET_INTENT_RULE,
+            mechanism_id=SUCCESSOR45_MECHANISM_ID,
+            category="destroy_repair_selection",
+            description=SUCCESSOR45_TARGET_INTENT_RULE,
             required_observations=(
-                "post_vns_acceptance_guard_activation",
-                "guard_allowed_or_rejected_original_sa_acceptance",
+                "repair_placement_tournament_activation",
+                "same_removed_set_baseline_repair_distance",
+                "alternate_repair_distance",
+                "pre_vns_repair_delta",
                 "post_downstream_or_final_total_distance_delta",
                 "feasibility_and_route_count_preservation",
                 "CMT2_CMT4_case_level_results",
@@ -1625,9 +1698,9 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "post-repair operator-credit old score and new credit when using acceptance_or_adaptive_weighting",
                 "operator weights before and after segment update when using acceptance_or_adaptive_weighting",
                 (
-                    "post-VNS guard allow/reject trajectory attribution and "
-                    "formal per-case total_distance evidence "
-                    f"when using {SUCCESSOR44_MECHANISM_ID}"
+                    "same removed-customer set baseline repair distance, "
+                    "alternate repair distance, and pre-VNS repair delta "
+                    f"when using {SUCCESSOR45_MECHANISM_ID}"
                 ),
                 (
                     "selector/filter mechanisms separate pre_vns_local_delta "
@@ -1653,6 +1726,7 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "material causal-path difference from reviewed edge-frequency repair scoring",
                 "material causal-path difference from reviewed bounded dual repair selector",
                 "material causal-path difference from reviewed adaptive embedded-VNS runtime allocation",
+                "material causal-path difference from reviewed successor44 acceptance guard",
                 "material causal-path difference from reviewed savings seed selection",
                 "per-case total_distance delta tied to the changed mechanism",
                 "feasibility and route-count preservation or explicit caveat",
@@ -1682,9 +1756,9 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
             ),
         ),
         EvidenceRequirement(
-            requirement_id="successor44_post_vns_acceptance_guard",
-            category="successor_solver_opportunity_evidence",
-            description=SUCCESSOR44_TARGET_INTENT_RULE,
+            requirement_id="successor44d_reviewed_policy_evidence",
+            category="reviewed_acceptance_policy_evidence",
+            description=SUCCESSOR44D_REVIEWED_RULE,
             mechanism_ids=(
                 SUCCESSOR44_MECHANISM_ID,
                 "acceptance_or_adaptive_weighting",
@@ -1693,17 +1767,37 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
             ),
             protected_items=PROTECTED_CASES,
             required_fields=(
+                "successor44d postrun cited before any acceptance-policy revisit",
+                "no unchanged post_vns_best_anchor_acceptance_guard long-run",
+                "new mechanism id required for future acceptance-policy revisit",
+                "no fake direct-effect record_move delta for policy outcome evidence",
+                "formal per-case total_distance remains the solver evidence source",
+            ),
+        ),
+        EvidenceRequirement(
+            requirement_id="successor45_bounded_repair_placement_tournament",
+            category="successor_solver_opportunity_evidence",
+            description=SUCCESSOR45_TARGET_INTENT_RULE,
+            mechanism_ids=(
+                SUCCESSOR45_MECHANISM_ID,
+                "destroy_repair_selection",
+                SUCCESSOR45_TARGET_FILE,
+                SUCCESSOR45_WIRING_FILE,
+            ),
+            protected_items=PROTECTED_CASES,
+            required_fields=(
                 "proposal-only target_intent_required mechanism binding",
-                "material contrast against successor32 operator-credit weighting",
-                "material contrast against rank-gap and route-pressure acceptance gates",
-                "material contrast against successor39/43/43b pre-VNS selector paths",
-                "post-VNS candidate/current/best distance relationship",
-                "original simulated-annealing accept decision",
-                "guard allow/reject decision",
-                "mechanism-specific activation/activity/budget telemetry under the guard id",
-                "scheduler.py performs only minimal post-VNS guard wiring",
-                "no positive record_move delta for rejected worse candidates",
-                "no ordinary current-improving or new-best candidate delta credited to the guard",
+                "material contrast against successor24 lookahead insertion",
+                "material contrast against successor39 repair selector",
+                "material contrast against successor43/43b destroy shadow selectors",
+                "material contrast against route-memory and route-skeleton repair",
+                "same removed-customer set for baseline and alternate repair",
+                "baseline repaired candidate total_distance before VNS",
+                "alternate repaired candidate total_distance before VNS",
+                "strict feasible route-count-safe replacement condition",
+                "mechanism-specific activation/activity telemetry under the tournament id",
+                "record_move direct repair-placement delta under the tournament id",
+                "pre-VNS repair delta labelled separately from final trajectory claims",
                 "final per-case total_distance deltas",
                 "feasibility and route-count preservation or explicit caveat",
                 "CMT2/CMT4 case-level total_distance deltas or split caveat",
@@ -1859,6 +1953,9 @@ def _continuity_requirements() -> tuple[ContinuityRequirement, ...]:
         SUCCESSOR44_MECHANISM_ID,
         SUCCESSOR44_TARGET_FILE,
         SUCCESSOR44_WIRING_FILE,
+        SUCCESSOR45_MECHANISM_ID,
+        SUCCESSOR45_TARGET_FILE,
+        SUCCESSOR45_WIRING_FILE,
         REQUIRED_MECHANISM_ID,
         *(str(item["mechanism_id"]) for item in REVIEWED_SUCCESSOR_MECHANISMS),
         "bounded_local_search_variant",
@@ -1889,7 +1986,8 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
             category="proposal_focus",
             title="Successor portfolio direction",
             lines=(
-                SUCCESSOR44_TARGET_INTENT_RULE,
+                SUCCESSOR45_TARGET_INTENT_RULE,
+                SUCCESSOR44D_REVIEWED_RULE,
                 SUCCESSOR43B_REVIEWED_RULE,
                 SUCCESSOR43_REVIEWED_RULE,
                 SUCCESSOR41_TARGET_INTENT_RULE,

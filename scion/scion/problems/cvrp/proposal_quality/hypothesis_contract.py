@@ -90,6 +90,15 @@ CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS = (
             "selector gains did not reliably preserve final trajectory quality"
         ),
     ),
+    (
+        "post_vns_best_anchor_acceptance_guard",
+        (
+            "successor44d repaired policy-effect warning hygiene and observed "
+            "policy outcome evidence, but the expanded screen stayed "
+            "weak-positive below MDE and B-family losses remained; unchanged "
+            "successor44 acceptance-guard repeats are not long-run candidates"
+        ),
+    ),
 )
 CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE = CVRP_REVIEWED_DEFAULT_AVOID_FAILURE
 CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS = CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS
