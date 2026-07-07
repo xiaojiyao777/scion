@@ -348,14 +348,18 @@ SUCCESSOR44_TARGET_INTENT_RULE = (
     "route memory, route skeleton, seed selector, local-search move, or "
     "runtime-allocation variant. Record activation/decision/phase telemetry "
     "under the mechanism id, final per-case total_distance/feasibility/"
-    "route-count and CMT2/CMT4 evidence, and do not record positive "
-    "`record_move` deltas for rejected worse candidates. Implementation shape: "
-    "put the guard decision helper and any mechanism-specific `record_move` "
-    "effect telemetry in `acceptance.py`; `scheduler.py` may only pass the "
+    "route-count and CMT2/CMT4 evidence, and do not claim ordinary "
+    "ALNS/VNS current-improving or new-best bookkeeping as mechanism effect "
+    "telemetry. Implementation shape: put the guard decision helper and "
+    "mechanism-specific activation/activity/budget telemetry in "
+    "`acceptance.py`; `scheduler.py` may only pass the "
     "post-polish candidate/current/best data to that helper and consume the "
     "guarded allow/reject result. `scheduler.py` must not call "
-    "`context.record_move` for this mechanism or record its effect telemetry "
-    "from the scheduler broad loop. See "
+    "`context.record_move` for this mechanism or record effect telemetry from "
+    "the scheduler broad loop. Direct objective evidence for successor44 comes "
+    "from formal per-case total_distance comparisons and guard allow/reject "
+    "trajectory evidence, not from positive `record_move` deltas for rejected "
+    "worse candidates or ordinary downstream improvements. See "
     f"`{SUCCESSOR44_DESIGN_PATH}`."
 )
 
@@ -1621,7 +1625,8 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "post-repair operator-credit old score and new credit when using acceptance_or_adaptive_weighting",
                 "operator weights before and after segment update when using acceptance_or_adaptive_weighting",
                 (
-                    "post-VNS accepted/current/best trajectory attribution "
+                    "post-VNS guard allow/reject trajectory attribution and "
+                    "formal per-case total_distance evidence "
                     f"when using {SUCCESSOR44_MECHANISM_ID}"
                 ),
                 (
@@ -1695,9 +1700,10 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "post-VNS candidate/current/best distance relationship",
                 "original simulated-annealing accept decision",
                 "guard allow/reject decision",
-                "mechanism-specific record_move effect telemetry lives in acceptance.py",
+                "mechanism-specific activation/activity/budget telemetry under the guard id",
                 "scheduler.py performs only minimal post-VNS guard wiring",
                 "no positive record_move delta for rejected worse candidates",
+                "no ordinary current-improving or new-best candidate delta credited to the guard",
                 "final per-case total_distance deltas",
                 "feasibility and route-count preservation or explicit caveat",
                 "CMT2/CMT4 case-level total_distance deltas or split caveat",

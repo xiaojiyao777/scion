@@ -420,6 +420,78 @@ def test_cvrp_hypothesis_quality_blocks_missing_direct_effect_telemetry(
     )
 
 
+def test_cvrp_hypothesis_quality_allows_successor44_policy_telemetry(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    mechanism_id = "post_vns_best_anchor_acceptance_guard"
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Test a post-VNS acceptance guard that records guard allow/reject "
+            "decisions and uses formal total_distance results for objective "
+            "evidence."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/acceptance.py",
+        novelty_signature={"mechanism_family": "acceptance_or_adaptive_weighting"},
+        material_difference={
+            "changed_dimensions": ["post-VNS acceptance commit boundary"],
+            "contrast": {
+                "nearest_reviewed_mechanism": "post_repair_effect_credit_weighting",
+                "difference": "guard post-VNS worse SA accepts, not operator credit",
+            },
+            "evidence": ["guard allow/reject plus formal per-case total_distance"],
+        },
+        expected_telemetry={
+            "activation": [
+                (
+                    "solver_algorithm_context_records."
+                    "post_vns_best_anchor_acceptance_guard_iterations"
+                )
+            ],
+            "budget": [
+                (
+                    "solver_algorithm_phase_runtime_ms."
+                    "post_vns_best_anchor_acceptance_guard"
+                )
+            ],
+        },
+        branch_lesson_usage={
+            "clean_fork_diversity_claim": {
+                "protected_cases": ["CMT2", "CMT4"],
+                "protection_plan": {
+                    "CMT2": "report guard allow/reject and total_distance",
+                    "CMT4": "report guard allow/reject and total_distance",
+                },
+            }
+        },
+        mechanism_changes=(MechanismChange(id=mechanism_id, change_type="add"),),
+    )
+
+    check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
+
+    assert check.allowed is True
+
+
+def test_cvrp_hypothesis_quality_blocks_successor44_without_policy_telemetry(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = _solver_design_hypothesis(
+        mechanism_id="post_vns_best_anchor_acceptance_guard",
+        expected_telemetry={},
+    )
+
+    check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
+
+    assert check.allowed is False
+    assert "expected_telemetry.activation_or_activity" in (
+        check.structured_rejection["missing_fields"]
+    )
+    assert "do not fabricate broad-loop best_delta" in (
+        check.structured_rejection["retry_constraint"]
+    )
+
+
 def test_cvrp_hypothesis_quality_blocks_missing_cmt_protection(
     cvrp_adapter: ProblemAdapter,
 ) -> None:

@@ -159,9 +159,10 @@ def test_cvrp_acceptance_target_api_guidance_names_post_vns_guard_boundary() -> 
     )
 
     assert "post-repair/post-VNS decision wiring" in rendered
-    assert "final accepted/current/best trajectory boundary" in rendered
+    assert "formal per-case total_distance outcomes" in rendered
+    assert "guard allow/reject trajectory evidence" in rendered
     assert "scheduler.py must not call `context.record_move`" in rendered
-    assert "Do not reimplement rank-gap" in rendered
+    assert "Do not credit ordinary current-improving" in rendered
 
 
 def test_cvrp_active_subject_code_constraints_are_provider_owned() -> None:
@@ -985,6 +986,80 @@ def test_cvrp_smoke_provider_rejects_acceptance_broad_loop_effect() -> None:
 
     assert issue is not None
     assert "broad-loop acceptance telemetry" in issue
+
+
+def test_cvrp_smoke_provider_rejects_successor44_ordinary_improver_credit() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    mechanism_id = "post_vns_best_anchor_acceptance_guard"
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a post-VNS best-anchor acceptance guard with activation "
+            "telemetry and formal total_distance evidence."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/acceptance.py",
+        mechanism_changes=(SimpleNamespace(id=mechanism_id),),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/acceptance.py",
+        action="modify",
+        code_content=(
+            "_POST_VNS_GUARD = 'post_vns_best_anchor_acceptance_guard'\n"
+            "def _guard(original_accept, candidate_cost, current_cost, best_cost, context):\n"
+            "    candidate_improves_best = candidate_cost < best_cost\n"
+            "    candidate_improves_current = candidate_cost < current_cost\n"
+            "    best_delta = max(0.0, best_cost - candidate_cost)\n"
+            "    current_delta = max(0.0, current_cost - candidate_cost)\n"
+            "    delta = best_delta or current_delta\n"
+            "    context.record_move(_POST_VNS_GUARD, attempted=1, accepted=1, "
+            "delta=delta, best_improved=candidate_improves_best)\n"
+            "    return original_accept or candidate_improves_current\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is not None
+    assert "non-causal successor44 effect attribution" in issue
+    assert "ordinary candidate_improves_best/current" in issue
+
+
+def test_cvrp_smoke_provider_allows_successor44_guard_counters() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    mechanism_id = "post_vns_best_anchor_acceptance_guard"
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Add a post-VNS acceptance guard with decision counters.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/acceptance.py",
+        mechanism_changes=(SimpleNamespace(id=mechanism_id),),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/acceptance.py",
+        action="modify",
+        code_content=(
+            "_POST_VNS_GUARD = 'post_vns_best_anchor_acceptance_guard'\n"
+            "def _guard(original_accept, context):\n"
+            "    context.record_iteration(_POST_VNS_GUARD, 1)\n"
+            "    context.record_phase(_POST_VNS_GUARD, 0.1)\n"
+            "    return original_accept\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is None
 
 
 def test_cvrp_smoke_provider_rejects_construction_seed_activation_only() -> None:

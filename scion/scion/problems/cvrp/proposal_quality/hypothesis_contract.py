@@ -129,6 +129,12 @@ _EFFECT_TELEMETRY_KEYS = (
     "mechanism_effect",
     "direct_objective_effect",
 )
+_POLICY_TELEMETRY_KEYS = (
+    "activity",
+    "activation",
+    "budget",
+)
+_SUCCESSOR44_MECHANISM_ID = "post_vns_best_anchor_acceptance_guard"
 _PROTECTION_ROOT_KEYS = (
     "clean_fork_diversity_claim",
     "cvrp_clean_fork_diversity_claim",
@@ -229,8 +235,15 @@ def _causal_path_missing_fields(
         missing.append("mechanism_changes.id")
     if not _material_difference_satisfied(_value(hypothesis, "material_difference")):
         missing.append("material_difference")
-    if not _effect_telemetry_satisfied(
-        _value(hypothesis, "expected_telemetry"),
+    expected_telemetry = _value(hypothesis, "expected_telemetry")
+    if _successor44_policy_telemetry_contract(mechanism_ids):
+        if not _successor44_policy_telemetry_satisfied(
+            expected_telemetry,
+            mechanism_ids=mechanism_ids,
+        ):
+            missing.append("expected_telemetry.activation_or_activity")
+    elif not _effect_telemetry_satisfied(
+        expected_telemetry,
         mechanism_ids=mechanism_ids,
     ):
         missing.append("expected_telemetry.effect")
@@ -242,6 +255,36 @@ def _causal_path_missing_fields(
 def _causal_path_rejection(
     *, missing_fields: list[str], mechanism_ids: list[str], target_file: str
 ) -> Mapping[str, Any]:
+    successor44_policy = _successor44_policy_telemetry_contract(mechanism_ids)
+    telemetry_retry_constraint = (
+        (
+            "For post_vns_best_anchor_acceptance_guard, do not fabricate "
+            "broad-loop best_delta/improvement_counts effect telemetry. Use "
+            "expected_telemetry activation/activity/budget under the declared "
+            "mechanism id, record guard allow/reject trajectory evidence, and "
+            "tie objective evidence to formal per-case total_distance outcomes. "
+        )
+        if successor44_policy
+        else (
+            "include direct objective-effect telemetry whose effect path or "
+            "text contains the declared mechanism id, "
+        )
+    )
+    telemetry_required_field = (
+        "expected_telemetry.activation_or_activity"
+        if successor44_policy
+        else "expected_telemetry.effect"
+    )
+    required_causal_path = (
+        "materially different CVRP-owned post-VNS acceptance policy with "
+        "mechanism activation/activity telemetry, guard decision evidence, "
+        "formal per-case total_distance evidence, and CMT2/CMT4 protection"
+        if successor44_policy
+        else (
+            "materially different CVRP-owned causal path with direct "
+            "objective-effect telemetry and CMT2/CMT4 protection"
+        )
+    )
     return {
         "allowed": False,
         "detail": (
@@ -264,8 +307,7 @@ def _causal_path_rejection(
             "retry_constraint": (
                 "Redraft the CVRP solver-design hypothesis before code "
                 "generation: name a materially different CVRP-owned causal "
-                "path, include direct objective-effect telemetry whose effect "
-                "path or text contains the declared mechanism id, and provide "
+                f"path, {telemetry_retry_constraint}and provide "
                 "structured CMT2/CMT4 protected-case protection evidence. "
                 "Use this exact material_difference shape: "
                 "changed_dimensions=[...], contrast={...}, evidence=[...]; "
@@ -287,7 +329,7 @@ def _causal_path_rejection(
                     "material_difference.changed_dimensions",
                     "material_difference.contrast",
                     "material_difference.evidence",
-                    "expected_telemetry.effect",
+                    telemetry_required_field,
                     (
                         "branch_lesson_usage.clean_fork_diversity_claim."
                         "protected_cases"
@@ -316,10 +358,7 @@ def _causal_path_rejection(
                         "direct mechanism telemetry to collect before objective claims"
                     ],
                 },
-                "required_causal_path": (
-                    "materially different CVRP-owned causal path with direct "
-                    "objective-effect telemetry and CMT2/CMT4 protection"
-                ),
+                "required_causal_path": required_causal_path,
             },
             "decision_features_excluded": True,
         },
@@ -358,6 +397,22 @@ def _effect_telemetry_satisfied(value: Any, *, mechanism_ids: list[str]) -> bool
         return False
     effect_text = _normalized_text(" ".join(_flatten_strings(effect_payloads)))
     return any(_normalized_text(mechanism_id) in effect_text for mechanism_id in mechanism_ids)
+
+
+def _successor44_policy_telemetry_contract(mechanism_ids: list[str]) -> bool:
+    return _SUCCESSOR44_MECHANISM_ID in mechanism_ids
+
+
+def _successor44_policy_telemetry_satisfied(
+    value: Any, *, mechanism_ids: list[str]
+) -> bool:
+    if not isinstance(value, Mapping) or not mechanism_ids:
+        return False
+    payloads = [value[key] for key in _POLICY_TELEMETRY_KEYS if key in value]
+    if not payloads or not any(_nonempty(payload) for payload in payloads):
+        return False
+    telemetry_text = _normalized_text(" ".join(_flatten_strings(payloads)))
+    return any(_normalized_text(mechanism_id) in telemetry_text for mechanism_id in mechanism_ids)
 
 
 def _cmt_protection_satisfied(value: Any) -> bool:

@@ -9,6 +9,8 @@ from typing import Any
 from scion.core.models import HypothesisProposal, PatchProposal, patch_file_changes
 from scion.core.paths import normalize_relative_patch_path
 
+_SUCCESSOR44_MECHANISM_ID = "post_vns_best_anchor_acceptance_guard"
+
 
 def static_smoke_issue(
     *,
@@ -102,21 +104,32 @@ def _acceptance_effect_attribution_issue(
     changes: dict[str, str],
 ) -> str | None:
     scheduler_code = changes.get("policies/baseline_modules/scheduler.py", "")
-    if not scheduler_code:
+    acceptance_code = changes.get("policies/baseline_modules/acceptance.py", "")
+    if not scheduler_code and not acceptance_code:
         return None
     for mechanism in _mechanism_ids(hypothesis):
         if not _is_acceptance_or_temperature_mechanism(mechanism):
             continue
-        if not _records_move_effect(scheduler_code, mechanism):
-            continue
-        return (
-            "solver_design static smoke rejected broad-loop acceptance telemetry: "
-            f"`{mechanism}` records effect telemetry from scheduler.py. "
-            "Acceptance/temperature mechanisms may record activation/budget in "
-            "the scheduler loop, but effect telemetry must be tied to the "
-            "acceptance decision or a directly attributable accepted move, not "
-            "to ordinary ALNS best-improvement bookkeeping."
-        )
+        if scheduler_code and _records_move_effect(scheduler_code, mechanism):
+            return (
+                "solver_design static smoke rejected broad-loop acceptance telemetry: "
+                f"`{mechanism}` records effect telemetry from scheduler.py. "
+                "Acceptance/temperature mechanisms may record activation/budget in "
+                "the scheduler loop, but effect telemetry must be tied to the "
+                "acceptance decision or a directly attributable accepted move, not "
+                "to ordinary ALNS best-improvement bookkeeping."
+            )
+        if _successor44_credits_ordinary_improver(acceptance_code, mechanism):
+            return (
+                "solver_design static smoke rejected non-causal successor44 "
+                "effect attribution: post_vns_best_anchor_acceptance_guard "
+                "records record_move delta/best_improved telemetry from "
+                "ordinary candidate_improves_best/current or best/current-cost "
+                "ALNS/VNS bookkeeping. Successor44 may record guard activation, "
+                "budget, and allow/reject decisions, but final objective evidence "
+                "must come from formal per-case total_distance outcomes rather "
+                "than crediting ordinary downstream improvements to the guard."
+            )
     return None
 
 
@@ -275,6 +288,28 @@ def _records_move_effect_via_local_alias(code: str, mechanism: str) -> bool:
         return False
 
     return isinstance(tree, ast.Module) and visit_block(tree.body)
+
+
+def _successor44_credits_ordinary_improver(code: str, mechanism: str) -> bool:
+    if mechanism != _SUCCESSOR44_MECHANISM_ID:
+        return False
+    if not code or not _records_move_effect(code, mechanism):
+        return False
+    normalized = _normalize(code)
+    return _has_any(
+        normalized,
+        (
+            " candidate improves best ",
+            " candidate improves current ",
+            " improves best ",
+            " improves current ",
+            " best cost candidate cost ",
+            " current cost candidate cost ",
+            " best delta ",
+            " current delta ",
+            " new best ",
+        ),
+    )
 
 
 def _call_name(node: ast.Call) -> str | None:
