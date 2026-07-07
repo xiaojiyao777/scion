@@ -123,6 +123,13 @@ class CvrpAdapter:
 
         return CvrpSolverDesignProvider()
 
+    def mechanism_evidence_policy_provider(self) -> Any:
+        from scion.problems.cvrp.mechanism_evidence_policy import (
+            CvrpMechanismEvidencePolicyProvider,
+        )
+
+        return CvrpMechanismEvidencePolicyProvider()
+
     def validate_hypothesis_quality(
         self,
         *,

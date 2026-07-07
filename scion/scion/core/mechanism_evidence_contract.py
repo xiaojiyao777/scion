@@ -9,6 +9,7 @@ from scion.runtime.telemetry_guard.summary_signals import (
     ACTIVATED_NO_POSITIVE_EFFECT,
     EVALUATED_NO_EFFECT,
     NOT_EVALUATED_OR_TRIGGERED,
+    POLICY_OUTCOME_OBSERVED,
     RUNTIME_BUDGET_ZERO_OR_SUBMS,
     WIRING_SUSPECT,
 )
@@ -31,7 +32,9 @@ _FOLLOWUP_DIAGNOSTIC_KINDS = frozenset(
         ACTIVATED_NO_POSITIVE_EFFECT,
     }
 )
-_NO_REPAIR_DIAGNOSTIC_KINDS = frozenset({EVALUATED_NO_EFFECT})
+_NO_REPAIR_DIAGNOSTIC_KINDS = frozenset(
+    {EVALUATED_NO_EFFECT, POLICY_OUTCOME_OBSERVED}
+)
 _POSITIVE_EFFECT_STATUSES = frozenset(
     {
         "positive",
@@ -40,6 +43,7 @@ _POSITIVE_EFFECT_STATUSES = frozenset(
         "case_level_positive_signal",
         "objective_positive",
         "positive_objective_effect",
+        POLICY_OUTCOME_OBSERVED,
     }
 )
 
@@ -275,6 +279,8 @@ def _diagnostic_followup_required(item: Mapping[str, Any]) -> bool:
 
 
 def _primary_status(*, diagnostic_kind: str, effect_status: str) -> str:
+    if diagnostic_kind == POLICY_OUTCOME_OBSERVED:
+        return POLICY_OUTCOME_OBSERVED
     if diagnostic_kind == NOT_EVALUATED_OR_TRIGGERED:
         return DECLARED_NOT_TRIGGERED
     if diagnostic_kind in {WIRING_SUSPECT, RUNTIME_BUDGET_ZERO_OR_SUBMS}:
@@ -283,6 +289,8 @@ def _primary_status(*, diagnostic_kind: str, effect_status: str) -> str:
         return EFFECT_ATTRIBUTION_MISSING
     if diagnostic_kind == EVALUATED_NO_EFFECT:
         return OBSERVED_NO_EFFECT
+    if effect_status == POLICY_OUTCOME_OBSERVED:
+        return POLICY_OUTCOME_OBSERVED
     if effect_status in _POSITIVE_EFFECT_STATUSES:
         return OBSERVED_POSITIVE_EFFECT
     return UNKNOWN
@@ -315,6 +323,8 @@ def _reason_codes(
         codes.append("MECHANISM_CONTRACT_EVALUATED_NO_EFFECT")
     elif primary_status == OBSERVED_POSITIVE_EFFECT:
         codes.append("MECHANISM_CONTRACT_POSITIVE_EFFECT")
+    elif primary_status == POLICY_OUTCOME_OBSERVED:
+        codes.append("MECHANISM_CONTRACT_POLICY_OUTCOME_OBSERVED")
     else:
         codes.append("MECHANISM_CONTRACT_UNKNOWN")
     codes.append(
@@ -352,6 +362,7 @@ __all__ = [
     "MechanismEvidenceContract",
     "OBSERVED_NO_EFFECT",
     "OBSERVED_POSITIVE_EFFECT",
+    "POLICY_OUTCOME_OBSERVED",
     "SCHEMA_VERSION",
     "UNKNOWN",
     "mechanism_contract_followup_required",

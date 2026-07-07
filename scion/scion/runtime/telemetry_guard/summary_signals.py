@@ -3,6 +3,7 @@ from __future__ import annotations
 
 MECHANISM_EXECUTED_NO_IMPROVEMENT = "mechanism_executed_no_improvement"
 EFFECT_ATTRIBUTION_MISSING = "effect_attribution_missing"
+POLICY_OUTCOME_OBSERVED = "policy_outcome_observed"
 ACTIVATION_MISSING_OR_WIRING_SUSPECT = "activation_missing_or_wiring_suspect"
 NOT_EVALUATED_OR_TRIGGERED = "not_evaluated/not_triggered"
 EVALUATED_NO_EFFECT = "evaluated_no_effect"

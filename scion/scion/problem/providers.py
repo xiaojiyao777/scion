@@ -155,6 +155,18 @@ class ActiveSubjectCodeConstraintProvider(Protocol):
         """Return provider-owned code-stage object-model/API constraints."""
 
 
+class MechanismEvidencePolicyProvider(Protocol):
+    """Optional problem-owned mechanism evidence interpretation policy."""
+
+    def apply_mechanism_evidence_policy(
+        self,
+        summary: Mapping[str, Any],
+        *,
+        context: Mapping[str, Any],
+    ) -> Mapping[str, Any] | None:
+        """Return a rewritten telemetry summary, or ``None`` to keep it."""
+
+
 def resolve_active_solver_map_provider(
     *,
     problem_spec: Any = None,
@@ -458,6 +470,20 @@ def resolve_solver_design_smoke_provider(
     )
 
 
+def resolve_mechanism_evidence_policy_provider(
+    *,
+    problem_spec: Any = None,
+    adapter: Any = None,
+) -> Any | None:
+    """Return an optional problem-owned mechanism evidence policy provider."""
+
+    return _resolve_provider(
+        problem_spec=problem_spec,
+        adapter=adapter,
+        factory_names=("mechanism_evidence_policy_provider",),
+    )
+
+
 def _resolve_provider(
     *,
     problem_spec: Any = None,
@@ -742,6 +768,7 @@ __all__ = [
     "ActiveSubjectPolicyProvider",
     "ActiveSubjectTaxonomyProvider",
     "ActiveSolverDesignProvider",
+    "MechanismEvidencePolicyProvider",
     "ProblemProviderError",
     "SolverDesignPromptProvider",
     "SolverDesignSmokeProvider",
@@ -752,6 +779,7 @@ __all__ = [
     "resolve_active_solver_map_provider",
     "resolve_active_subject_policy_provider",
     "resolve_active_solver_design_provider",
+    "resolve_mechanism_evidence_policy_provider",
     "resolve_solver_design_prompt_provider",
     "resolve_solver_design_smoke_provider",
 ]

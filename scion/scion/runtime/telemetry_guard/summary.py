@@ -48,6 +48,9 @@ from scion.runtime.telemetry_guard.summary_signals import (
     ACTIVATION_MISSING_OR_WIRING_SUSPECT,
     RUNTIME_BUDGET_ZERO_OR_SUBMS,
 )
+from scion.runtime.telemetry_guard.summary_policy import (
+    apply_problem_mechanism_evidence_policy,
+)
 from scion.runtime.telemetry_guard.utils import _field
 
 
@@ -331,7 +334,7 @@ def build_telemetry_guard_summary(
             zero_activity_issue_code=_zero_activity_issue_code,
         )
 
-    return {
+    summary = {
         "schema": "scion.telemetry_guard.v1",
         "selected_surface": surface_name or None,
         "passed": not failures,
@@ -358,6 +361,17 @@ def build_telemetry_guard_summary(
         "warnings": warnings,
         "failures": failures,
     }
+    return apply_problem_mechanism_evidence_policy(
+        summary,
+        problem_spec=problem_spec,
+        context={
+            "selected_surface": surface_name or None,
+            "effect_observation_required": bool(effect_observation_required),
+            "declared_mechanisms": list(mechanisms),
+            "candidate_runs": len(candidate_runtimes),
+            "champion_runs": len(champion_runtimes),
+        },
+    )
 
 
 def _zero_activity_issue_code(category: str, summary: Mapping[str, Any]) -> str:
