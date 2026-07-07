@@ -414,6 +414,50 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "best_solution_ruin_recreate_intensification",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "best-solution ruin/recreate intensification path",
+        "causal_path_label": "best-incumbent ruin/recreate intensification",
+        "outcome_status": "activation_sparse_observed_no_effect",
+        "effect_summary": {
+            "row1_median_delta": 0.0,
+            "row1_ci_low": 0.0,
+            "row1_ci_high": 0.0,
+            "row1_activation_status": "missing_activation",
+            "row2_median_delta": 0.0,
+            "row2_ci_low": 0.0,
+            "row2_ci_high": 0.0,
+            "row2_activation_status": "activation_observed",
+            "screening_pair_wins": 4,
+            "screening_pair_losses": 4,
+            "screening_pair_ties": 104,
+            "screening_case_wins": 0,
+            "screening_case_losses": 0,
+            "screening_case_ties": 28,
+            "max_median_delta": 0.0,
+            "max_effect_to_mde_ratio": 0.0,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "mechanism_contract_status": "observed_no_effect",
+            "telemetry_status": "activation_sparse_runtime_observed_effect_zero",
+            "mechanism_runtime_weighted_sum_ms": 62,
+            "known_design_gaps": (
+                "rejected_attempt_rng_not_isolated",
+                "stagnation_trigger_too_sparse_for_screening",
+                "outcome_telemetry_does_not_separate_reject_causes",
+                "protected_cases_covered_by_protocol_not_mechanism_activation",
+            ),
+            "interpretation": (
+                "valid screening with correct target binding, but sparse "
+                "activation and zero final best-solution objective effect"
+            ),
+            "recommended_followup": (
+                "best_solution_ruin_recreate_intensification_activation_repair"
+            ),
+            "source_root_label": "successor46",
+        },
+    },
+    {
         "mechanism_id": "bounded_dual_repair_selector",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "bounded dual repair selector path",
@@ -1271,6 +1315,12 @@ DEFAULT_AVOID_DIRECTIONS = (
         "placement tournament after successor45 valid screening observed local "
         "repair effect but stayed quality-regression below MDE and failed "
         "CMT2/CMT4 protection"
+    ),
+    (
+        "unchanged best_solution_ruin_recreate_intensification best-solution "
+        "ruin/recreate path after successor46 valid screening had sparse "
+        "activation, zero final best-solution objective effect, and no "
+        "rejected-attempt RNG isolation"
     ),
     (
         "unchanged elite_route_memory_repair destroy/repair complete-route "

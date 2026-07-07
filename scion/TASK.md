@@ -495,22 +495,37 @@ final ALNS/VNS trajectory quality. Do not long-run, threshold-tune, or continue
 unchanged repair-placement tournament variants. The postrun report is
 `scion/docs/experiments/v0.4/v04-cvrp-successor45-repair-placement-tournament-postrun-20260707.md`.
 
-Successor46 is now designed and target-intent-bound as
-`best_solution_ruin_recreate_intensification`. This is a CVRP-owned
-best-incumbent ruin/recreate intensification path in a new module boundary,
-`policies/baseline_modules/best_solution_intensification.py`, with minimal
-`policies/baseline_modules/scheduler.py` wiring. It must start from a copy of
-the current global best after bounded stagnation, run one bounded ruin/recreate
-plus downstream VNS attempt under the remaining time budget, and count effect
-only when the post-VNS candidate strictly improves final global-best
-`total_distance` while preserving feasibility and route count. It must not
-claim pre-VNS repair/selector deltas as promotion evidence. The design is
-`scion/docs/experiments/v0.4/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-design-20260707.md`.
-The short server-local validation run launched from commit `593d4320` with
-local `gpt-5.5`, healthy completion preflight, and resume-from successor45:
+Successor46 is now complete and reviewed/default-avoid as unchanged solver
+evidence. The target-intent-bound server-local run launched from commit
+`593d4320` with local `gpt-5.5`, healthy completion preflight, and resume-from
+successor45:
 `/home/clawd/research/scion-experiments/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-server-claw-2r-gpt55-2r-gpt55-20260707T115720Z-claw`.
-It is a two-round screening run, PID `1704245`; treat results as noisy
-screening only.
+It finished valid/complete/postrun-ready with two screening rows, no
+quality/model/postrun failure, and all eight current-run LLM calls on
+`gpt-5.5`. Target intent, formal hypothesis, and code stayed bound to
+`best_solution_ruin_recreate_intensification`, but final objective evidence was
+zero: both rows had median delta `0.0`, CI `[0.0, 0.0]`, case-gate W/L/T
+`0/0/28`, pair W/L/T `4/4/104`, and `rows_at_or_above_mde=0`. Row 1 did not
+activate the mechanism; row 2 observed only sparse runtime (`62 ms`) and zero
+final best-solution effect. Trace audit found no provider, target binding, or
+code-context failure. The generated implementation failed the intended contract
+by consuming the main RNG on rejected attempts, triggering too rarely, and not
+separating rejected/budget/infeasible/no-improvement outcomes. Do not long-run,
+threshold-tune, or repeat unchanged successor46. Postrun report:
+`scion/docs/experiments/v0.4/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-postrun-20260707.md`.
+
+Successor46b is now designed as the only allowed same-line contract repair:
+`best_solution_ruin_recreate_intensification_activation_repair`. It keeps the
+same CVRP-owned best-incumbent ruin/recreate boundary in
+`policies/baseline_modules/best_solution_intensification.py` with minimal
+`policies/baseline_modules/scheduler.py` wiring, but the required evidence is
+narrower and stricter: rejected-attempt RNG isolation or restore, observable
+bounded stagnation activation, separated attempted/accepted/rejected/budget
+outcome telemetry, final post-VNS global-best `total_distance` delta, and
+CMT2/CMT4 mechanism-level activation or explicit caveat. If this short repair
+still produces zero final objective effect, park the best-solution
+ruin/recreate line for v0.4. Design:
+`scion/docs/experiments/v0.4/v04-cvrp-successor46b-best-solution-activation-contract-repair-design-20260707.md`.
 
 Legacy direction details below are retained as reviewed-history context.
 
@@ -877,19 +892,21 @@ from the current checkout.
    failed CMT2/CMT4 protection. Do not long-run, threshold-tune, or continue
    unchanged repair-placement tournament variants; the next CVRP slot should
    clean-fork to a materially different problem-owned causal path.
-20. Monitor successor46 `best_solution_ruin_recreate_intensification` as the
-   live target-intent-bound clean fork. Required evidence is final post-VNS
-   global-best `total_distance` movement, attempted/accepted/new-best
-   attribution, runtime budget fields, feasibility/route-count preservation,
-   rejected-attempt RNG or trajectory isolation, and CMT2/CMT4 protection.
-   The server-local `claw` run is in flight at
-   `/home/clawd/research/scion-experiments/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-server-claw-2r-gpt55-2r-gpt55-20260707T115720Z-claw`;
-   treat the first two-round result as noisy screening, not long-run evidence.
-21. Use the new large-file modularization plan before further behavior changes
+20. Treat successor46 `best_solution_ruin_recreate_intensification` as
+   complete, valid, and reviewed/default-avoid. It target-bound correctly but
+   activated sparsely and produced zero final best-solution objective effect.
+   Do not long-run or repeat unchanged best-solution ruin/recreate.
+21. Launch successor46b
+   `best_solution_ruin_recreate_intensification_activation_repair` as the only
+   narrow same-line contract repair. It must isolate rejected-attempt RNG,
+   make activation observable, separate reject/budget outcomes, and prove final
+   post-VNS global-best movement with CMT2/CMT4 mechanism-level evidence or an
+   explicit caveat. If it remains zero-effect, park the line.
+22. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-22. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+23. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-23. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+24. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence

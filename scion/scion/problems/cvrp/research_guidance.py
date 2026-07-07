@@ -407,6 +407,10 @@ SUCCESSOR46_DESIGN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor46-best-solution-ruin-recreate-intensification-design-20260707.md"
 )
+SUCCESSOR46_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor46-best-solution-ruin-recreate-intensification-postrun-20260707.md"
+)
 SUCCESSOR46_TARGET_INTENT_RULE = (
     f"Successor46 is preregistered as `{SUCCESSOR46_MECHANISM_ID}` in a new "
     f"CVRP-owned module `{SUCCESSOR46_TARGET_FILE}` with only minimal "
@@ -424,6 +428,51 @@ SUCCESSOR46_TARGET_INTENT_RULE = (
     "attempted/accepted counts, runtime budget fields, RNG or trajectory "
     "isolation for rejected attempts, and CMT2/CMT4 case-level protection. "
     f"See `{SUCCESSOR46_DESIGN_PATH}`."
+)
+SUCCESSOR46_REVIEWED_RULE = (
+    f"Successor46 `{SUCCESSOR46_MECHANISM_ID}` is reviewed/default-avoid as an "
+    "unchanged solver candidate. The run completed valid/complete/"
+    "postrun-ready with local gpt-5.5 and correct target binding, but both "
+    "screening rows had median delta 0.0, CI [0.0, 0.0], no case-gate wins, "
+    "and no row at or above MDE. Row 1 did not activate the mechanism; row 2 "
+    "observed only sparse runtime (62 ms) and zero final best-solution effect. "
+    "Trace audit found no provider, target-intent, or code-context failure; "
+    "the generated implementation failed the intended contract by consuming "
+    "the main RNG on rejected attempts, triggering too rarely, and not "
+    "separating rejected/budget/infeasible/no-improvement outcomes. Do not "
+    "long-run, threshold-tune, or repeat unchanged best-solution ruin/"
+    "recreate intensification. Only one narrow successor46b contract repair "
+    "may revisit this line; if that repair remains zero-effect, park the "
+    f"line for v0.4. See `{SUCCESSOR46_DESIGN_PATH}` and "
+    f"`{SUCCESSOR46_POSTRUN_PATH}`."
+)
+SUCCESSOR46B_MECHANISM_ID = (
+    "best_solution_ruin_recreate_intensification_activation_repair"
+)
+SUCCESSOR46B_TARGET_FILE = SUCCESSOR46_TARGET_FILE
+SUCCESSOR46B_WIRING_FILE = SUCCESSOR46_WIRING_FILE
+SUCCESSOR46B_DESIGN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor46b-best-solution-activation-contract-repair-design-20260707.md"
+)
+SUCCESSOR46B_TARGET_INTENT_RULE = (
+    f"Successor46b is preregistered as `{SUCCESSOR46B_MECHANISM_ID}` in "
+    f"`{SUCCESSOR46B_TARGET_FILE}` with only minimal "
+    f"`{SUCCESSOR46B_WIRING_FILE}` orchestration. This is the only allowed "
+    "same-line follow-up to successor46 and is a contract/activation repair, "
+    "not a broad optimization or threshold-tuning pass. It must preserve the "
+    "best-incumbent ruin/recreate causal path while repairing the design "
+    "contract that successor46 failed to satisfy: rejected attempts must use a "
+    "child RNG or restore the main RNG state; the bounded stagnation trigger "
+    "must be observable in short screening without hardcoding cases or seeds; "
+    "outcome telemetry must distinguish attempted, accepted, "
+    "rejected_no_improvement, rejected_infeasible, rejected_route_count, and "
+    "budget_stopped; effect evidence must be final post-VNS global-best "
+    "total_distance delta with accepted/new-best attribution; and CMT2/CMT4 "
+    "must show mechanism-level activation evidence or an explicit caveat. Do "
+    "not claim pre-VNS repair diagnostics as final solver evidence. If this "
+    "repair still shows zero final objective effect, park best-solution "
+    f"ruin/recreate for v0.4. See `{SUCCESSOR46B_DESIGN_PATH}`."
 )
 
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
@@ -639,7 +688,10 @@ REVIEWED_SUCCESSOR_GUIDANCE_LINE = (
     "tied. Treat unchanged successor38 as reviewed/default-avoid; the next "
     "CVRP slot should clean-fork to a materially different CVRP-owned causal "
     "path rather than continue a weak-positive branch whose mechanism contract "
-    "says observed_no_effect."
+    "says observed_no_effect. Successor46 is now also reviewed/default-avoid "
+    "as unchanged best-solution ruin/recreate evidence after valid screening "
+    "showed sparse activation and observed_no_effect; only successor46b may "
+    "revisit that line as a narrow contract repair."
 )
 
 NEXT_REQUIRED_DIRECTION = (
@@ -844,13 +896,16 @@ NEXT_REQUIRED_DIRECTION = (
     f"bound `{SUCCESSOR45_MECHANISM_ID}` and observed local repair-placement "
     "effect, but final objective evidence regressed below MDE and failed "
     "CMT2/CMT4 protection; unchanged repair-placement tournaments are now "
-    "reviewed/default-avoid too. The next prepared slot keeps hard "
-    "`required_mechanism_ids` empty but is target-intent-bound to successor46 "
-    f"`{SUCCESSOR46_MECHANISM_ID}`: a global-best ruin/recreate "
-    "intensification clean fork. It must not bind another destroy-shadow "
+    "reviewed/default-avoid too. Successor46 then target-intent-bound "
+    f"`{SUCCESSOR46_MECHANISM_ID}` as a global-best ruin/recreate "
+    "intensification clean fork, but completed valid screening with sparse "
+    "activation and zero final best-solution effect. The next prepared slot "
+    "keeps hard `required_mechanism_ids` empty and is target-intent-bound to "
+    f"successor46b `{SUCCESSOR46B_MECHANISM_ID}` as the only allowed "
+    "contract/activation repair. It must not bind another destroy-shadow "
     "selector follow-up, unchanged acceptance guard, unchanged repair-placement "
-    "tournament, or pre-VNS selector/repair diagnostic as final solver "
-    "evidence. "
+    "tournament, unchanged successor46 rerun, or pre-VNS selector/repair "
+    "diagnostic as final solver evidence. "
     "Use "
     "`scheduler_destroy_size_policy` only when explicitly scoped as a "
     "telemetry-only q-audit repair for the missing explicit fields, or when "
@@ -879,7 +934,8 @@ NEXT_REQUIRED_DIRECTION = (
     f"{SUCCESSOR41_MECHANISM_ID}, or unchanged "
     f"{SUCCESSOR43_MECHANISM_ID}, or unchanged "
     f"{SUCCESSOR43B_MECHANISM_ID}, or unchanged "
-    f"{SUCCESSOR44_MECHANISM_ID}. Future construction-seed revisits must be "
+    f"{SUCCESSOR44_MECHANISM_ID}, or unchanged "
+    f"{SUCCESSOR46_MECHANISM_ID}. Future construction-seed revisits must be "
     "materially distinct from raw baseline, short-horizon trajectory, and "
     "post-construction micro-polish selector paths, with direct pre-ALNS/VNS "
     "objective telemetry. "
@@ -898,12 +954,12 @@ NEXT_REQUIRED_DIRECTION = (
     "material_difference schema prominent, and ensure CMT2/CMT4 protected "
     "cases are either forced into formal screening or recorded as an explicit "
     "measurement caveat. The next prepared attempt should implement "
-    f"`{SUCCESSOR46_MECHANISM_ID}` as a materially different CVRP-owned "
-    "causal path, not an unchanged scheduler helper rerun, route-skeleton "
-    "threshold/gating variant, two-for-one route-set exchange, repair-operator "
-    "selector, repair-placement tournament, removal targeting rule, seed "
-    "selector, local-search move, acceptance-weight, or runtime-allocation "
-    "change."
+    f"`{SUCCESSOR46B_MECHANISM_ID}` as the bounded successor46 contract repair, "
+    "not an unchanged scheduler helper rerun, route-skeleton threshold/gating "
+    "variant, two-for-one route-set exchange, repair-operator selector, "
+    "repair-placement tournament, removal targeting rule, seed selector, "
+    "local-search move, acceptance-weight, runtime-allocation change, or "
+    "unchanged best-solution ruin/recreate rerun."
 )
 CURRENT_QUESTION = (
     "After both the large-instance intra-route two-opt checklist and the "
@@ -949,15 +1005,17 @@ CURRENT_QUESTION = (
     f"and successor45 `{SUCCESSOR45_MECHANISM_ID}` observed local pre-VNS "
     "repair-placement effect but regressed at the final objective gate and "
     "failed CMT2/CMT4 protection, "
-    f"does successor46 `{SUCCESSOR46_MECHANISM_ID}` as a materially different "
-    "CVRP-owned causal path produce direct final global-best objective "
-    "movement by starting from the incumbent best and running bounded "
-    "ruin/recreate intensification after stagnation, without repeating "
-    "reviewed/default-avoid branches? The prepared slot is now "
-    "target-intent-bound to this design, must satisfy the exact "
-    "material_difference schema, must separate local/pre-VNS diagnostics from "
-    "final protocol outcome, and must carry CMT2/CMT4 protected-case coverage "
-    "before code work."
+    f"and successor46 `{SUCCESSOR46_MECHANISM_ID}` target-bound correctly but "
+    "activated sparsely and produced zero final best-solution objective effect, "
+    f"does successor46b `{SUCCESSOR46B_MECHANISM_ID}` repair the best-solution "
+    "ruin/recreate contract by isolating rejected-attempt RNG, making bounded "
+    "stagnation activation observable, separating reject/budget outcome "
+    "telemetry, and still requiring final post-VNS global-best objective "
+    "movement without repeating reviewed/default-avoid branches? The prepared "
+    "slot is now target-intent-bound to this contract repair, must satisfy the "
+    "exact material_difference schema, must separate local/pre-VNS diagnostics "
+    "from final protocol outcome, and must carry CMT2/CMT4 mechanism-level "
+    "activation evidence or an explicit caveat before code work."
 )
 REQUIRED_EVIDENCE = (
     (
@@ -1006,12 +1064,19 @@ REQUIRED_EVIDENCE = (
         "variants"
     ),
     (
-        f"successor46 `{SUCCESSOR46_MECHANISM_ID}` is the live target-intent "
-        "mechanism: implement it as a CVRP-owned best-solution ruin/recreate "
-        "intensification module with minimal scheduler wiring, final "
+        f"successor46 `{SUCCESSOR46_MECHANISM_ID}` is reviewed/default-avoid "
+        "after valid screening showed sparse activation, zero final "
+        "best-solution effect, and rejected-attempt RNG leakage; do not "
+        "long-run or repeat unchanged best-solution ruin/recreate"
+    ),
+    (
+        f"successor46b `{SUCCESSOR46B_MECHANISM_ID}` is the live target-intent "
+        "mechanism: implement it as the only CVRP-owned best-solution "
+        "ruin/recreate contract repair with minimal scheduler wiring, final "
         "post-VNS global-best total_distance effect evidence, attempted/"
-        "accepted/new-best attribution, runtime budget fields, rejected-attempt "
-        "RNG or trajectory isolation, and CMT2/CMT4 protected-case evidence"
+        "accepted/rejected/budget-stopped/new-best attribution, rejected-attempt "
+        "RNG isolation, and CMT2/CMT4 mechanism-level activation evidence or "
+        "an explicit caveat"
     ),
     (
         "before the next CVRP hypothesis, use exact material_difference schema "
@@ -1300,11 +1365,15 @@ MEASURABLE_OPPORTUNITY_CLASSES = (
         "final objective quality and failed CMT2/CMT4 protection. Require a "
         "destroy/repair causal path distinct from the reviewed removal, repair, "
         "selector, shadow, memory, skeleton, and repair-placement tournament "
-        "paths before revisiting this family. The live successor46 target is "
-        f"`{SUCCESSOR46_MECHANISM_ID}`: a best-incumbent ruin/recreate "
-        "intensification path whose evidence must be final best-solution "
-        "movement after downstream VNS, not a pre-VNS selector or repair "
-        "diagnostic"
+        "paths before revisiting this family. Successor46 "
+        f"`{SUCCESSOR46_MECHANISM_ID}` is now reviewed/default-avoid as an "
+        "unchanged best-incumbent ruin/recreate candidate: it target-bound "
+        "correctly but activated sparsely and had zero final best-solution "
+        "effect. The live successor46b target is "
+        f"`{SUCCESSOR46B_MECHANISM_ID}`: the only allowed same-line "
+        "contract repair, requiring rejected-attempt RNG isolation, observable "
+        "activation, separated reject/budget telemetry, and final post-VNS "
+        "best-solution movement after downstream VNS."
     ),
     (
         "bounded_local_search_variant: require feasible route-level "
@@ -1433,10 +1502,15 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "case-safe final objective evidence. Successor45 "
     f"`{SUCCESSOR45_MECHANISM_ID}` is reviewed/default-avoid after local "
     "repair-placement gains failed to preserve final objective quality and "
-    "CMT2/CMT4 protection. The next CVRP solver slot should clean-fork to a "
-    "materially different CVRP-owned causal path after the "
-    "exact material_difference schema and CMT2/CMT4 case-coverage requirements "
-    "are satisfied. "
+    "CMT2/CMT4 protection. Successor46 "
+    f"`{SUCCESSOR46_MECHANISM_ID}` is reviewed/default-avoid as an unchanged "
+    "best-solution ruin/recreate candidate after valid screening showed sparse "
+    "activation and zero final best-solution effect. The next CVRP solver slot "
+    "is the single allowed successor46b contract repair "
+    f"`{SUCCESSOR46B_MECHANISM_ID}`; if it still shows zero final objective "
+    "effect, park best-solution ruin/recreate and clean-fork to a materially "
+    "different CVRP-owned causal path after the exact material_difference "
+    "schema and CMT2/CMT4 case-coverage requirements are satisfied. "
     "Scheduler destroy-size "
     "policy remains allowed only as "
     "telemetry-only q-audit repair or a materially different scheduler-policy "
@@ -1536,7 +1610,7 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [SUCCESSOR46_MECHANISM_ID],
+        "target_intent_required_mechanism_ids": [SUCCESSOR46B_MECHANISM_ID],
         "reviewed_mechanism_ids": [
             *list(REVIEWED_MECHANISM_IDS),
             SUCCESSOR41_MECHANISM_ID,
@@ -1700,7 +1774,7 @@ def build_cvrp_legacy_research_focus(
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
-        "successor46_target_intent": {
+        "successor46_reviewed_evidence": {
             "mechanism_id": SUCCESSOR46_MECHANISM_ID,
             "mechanism_family": "destroy_repair_selection",
             "target_file": SUCCESSOR46_TARGET_FILE,
@@ -1709,30 +1783,60 @@ def build_cvrp_legacy_research_focus(
                 SUCCESSOR46_WIRING_FILE,
             ],
             "design_path": SUCCESSOR46_DESIGN_PATH,
-            "status": "live_target_intent",
+            "postrun_path": SUCCESSOR46_POSTRUN_PATH,
+            "status": "reviewed_activation_sparse_observed_no_effect",
+            "required_mechanism_binding": "none",
+            "blocked_actions": [
+                "long_run",
+                "same_mechanism_threshold_tuning",
+                "unchanged_best_solution_ruin_recreate_repeat",
+                "same_mechanism_without_rng_isolation",
+                "same_mechanism_without_outcome_cause_telemetry",
+            ],
+            "carried_lessons": [
+                "rejected_attempt_rng_must_be_isolated_or_restored",
+                "stagnation_trigger_must_be_observable_in_short_screening",
+                "outcome_telemetry_must_separate_reject_causes",
+                "protected_cases_need_mechanism_level_activation_or_caveat",
+            ],
+            "reviewed_rule": SUCCESSOR46_REVIEWED_RULE,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        },
+        "successor46b_target_intent": {
+            "mechanism_id": SUCCESSOR46B_MECHANISM_ID,
+            "mechanism_family": "destroy_repair_selection",
+            "target_file": SUCCESSOR46B_TARGET_FILE,
+            "target_files": [
+                SUCCESSOR46B_TARGET_FILE,
+                SUCCESSOR46B_WIRING_FILE,
+            ],
+            "design_path": SUCCESSOR46B_DESIGN_PATH,
+            "status": "live_target_intent_contract_repair",
             "required_mechanism_binding": "target_intent_required",
             "material_difference": {
                 "changed_dimensions": [
-                    "start from current global-best incumbent",
-                    "run bounded ruin/recreate after stagnation",
-                    "evaluate only post-VNS global-best improvement",
-                    "isolate rejected-attempt RNG or trajectory effects",
+                    "preserve current global-best incumbent start point",
+                    "repair rejected-attempt RNG isolation",
+                    "repair activation density enough for short screening",
+                    "separate rejected and budget-stopped outcome telemetry",
+                    "require mechanism-level CMT2/CMT4 activation or caveat",
                 ],
                 "contrast": (
-                    "not a pre-VNS destroy selector, repair selector, "
-                    "repair-placement tournament, removal rule, local-search "
-                    "move, seed selector, acceptance guard, or runtime-allocation "
-                    "variant"
+                    "not an unchanged successor46 rerun, pre-VNS destroy "
+                    "selector, repair selector, repair-placement tournament, "
+                    "removal rule, local-search move, seed selector, "
+                    "acceptance guard, or runtime-allocation variant"
                 ),
                 "evidence": [
-                    "final best total_distance delta",
-                    "attempted/accepted/new-best attribution",
-                    "runtime budget fields",
+                    "final post-VNS best total_distance delta",
+                    "attempted/accepted/rejected/budget-stopped attribution",
+                    "rejected-attempt RNG isolation evidence",
                     "feasibility and route-count preservation",
-                    "CMT2/CMT4 protected-case deltas or explicit split caveat",
+                    "CMT2/CMT4 mechanism activation or explicit caveat",
                 ],
             },
-            "rule": SUCCESSOR46_TARGET_INTENT_RULE,
+            "rule": SUCCESSOR46B_TARGET_INTENT_RULE,
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
@@ -1760,19 +1864,19 @@ def build_cvrp_legacy_research_focus(
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
     return (
         RequiredMechanism(
-            mechanism_id=SUCCESSOR46_MECHANISM_ID,
+            mechanism_id=SUCCESSOR46B_MECHANISM_ID,
             category="destroy_repair_selection",
-            description=SUCCESSOR46_TARGET_INTENT_RULE,
+            description=SUCCESSOR46B_TARGET_INTENT_RULE,
             required_observations=(
                 "target file remains CVRP-owned",
                 "minimal scheduler wiring only",
-                "bounded stagnation trigger from current global-best incumbent",
+                "bounded observable stagnation trigger from current global-best incumbent",
                 "post-VNS global-best total_distance delta",
-                "attempted/accepted/new-best attribution",
-                "runtime budget fields",
+                "attempted/accepted/rejected/budget-stopped attribution",
+                "runtime budget and budget-stopped fields",
                 "feasibility and route-count preservation",
-                "RNG or trajectory isolation for rejected attempts",
-                "CMT2/CMT4 case-level total_distance deltas or split caveat",
+                "RNG isolation or RNG state restoration for rejected attempts",
+                "CMT2/CMT4 mechanism-level activation or explicit caveat",
             ),
             protected_items=PROTECTED_CASES,
             hypothesis_mechanism_binding="target_intent_required",
@@ -1830,7 +1934,11 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 ),
                 (
                     "RNG or trajectory isolation evidence for rejected "
-                    f"{SUCCESSOR46_MECHANISM_ID} attempts"
+                    f"{SUCCESSOR46B_MECHANISM_ID} attempts"
+                ),
+                (
+                    "mechanism-level CMT2/CMT4 activation evidence or explicit "
+                    "caveat for best-solution intensification repairs"
                 ),
                 "material causal-path difference from reviewed angular-sector removal",
                 "material causal-path difference from reviewed radial-string removal",
@@ -1936,8 +2044,8 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
             requirement_id=(
                 "successor46_best_solution_ruin_recreate_intensification"
             ),
-            category="target_intent_destroy_repair_selection_evidence",
-            description=SUCCESSOR46_TARGET_INTENT_RULE,
+            category="reviewed_destroy_repair_selection_evidence",
+            description=SUCCESSOR46_REVIEWED_RULE,
             mechanism_ids=(
                 SUCCESSOR46_MECHANISM_ID,
                 "destroy_repair_selection",
@@ -1946,20 +2054,44 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
             ),
             protected_items=PROTECTED_CASES,
             required_fields=(
-                "successor46 design path cited before code",
+                "successor46 postrun cited before any same-line follow-up",
+                "no unchanged best_solution_ruin_recreate_intensification long-run",
+                "no same-mechanism threshold tuning without contract repair",
+                "main RNG consumed by rejected attempts is carried as a design gap",
+                "sparse activation is carried as a design gap",
+                "outcome reject causes must be separated before another run",
+                "mechanism-level CMT2/CMT4 activation or caveat required",
+            ),
+        ),
+        EvidenceRequirement(
+            requirement_id=(
+                "successor46b_best_solution_activation_contract_repair"
+            ),
+            category="target_intent_destroy_repair_selection_evidence",
+            description=SUCCESSOR46B_TARGET_INTENT_RULE,
+            mechanism_ids=(
+                SUCCESSOR46B_MECHANISM_ID,
+                "destroy_repair_selection",
+                SUCCESSOR46B_TARGET_FILE,
+                SUCCESSOR46B_WIRING_FILE,
+            ),
+            protected_items=PROTECTED_CASES,
+            required_fields=(
+                "successor46b design path cited before code",
                 "exact material_difference keys changed_dimensions contrast evidence",
-                "new CVRP-owned module boundary",
+                "new CVRP-owned module boundary or same module create-new boundary",
                 "minimal scheduler wiring only",
-                "stagnation trigger and remaining-time guard",
+                "observable stagnation trigger and remaining-time guard",
                 "start solution is a copy of current global best",
                 "bounded ruin/recreate attempt count",
+                "child RNG or save/restore main RNG on rejected attempts",
                 "downstream VNS completed or explicitly budget-stopped",
                 "final post-VNS global-best total_distance delta",
-                "attempted accepted rejected and new-best attribution",
+                "attempted accepted rejected_no_improvement rejected_infeasible "
+                "rejected_route_count budget_stopped and new-best attribution",
                 "feasibility preservation",
                 "route-count preservation or explicit caveat",
-                "RNG or trajectory isolation for rejected attempts",
-                "CMT2/CMT4 case-level total_distance deltas or split caveat",
+                "CMT2/CMT4 mechanism-level activation or explicit caveat",
                 "no pre-VNS repair delta claimed as promotion-grade evidence",
             ),
         ),
@@ -2119,6 +2251,9 @@ def _continuity_requirements() -> tuple[ContinuityRequirement, ...]:
         SUCCESSOR46_MECHANISM_ID,
         SUCCESSOR46_TARGET_FILE,
         SUCCESSOR46_WIRING_FILE,
+        SUCCESSOR46B_MECHANISM_ID,
+        SUCCESSOR46B_TARGET_FILE,
+        SUCCESSOR46B_WIRING_FILE,
         REQUIRED_MECHANISM_ID,
         *(str(item["mechanism_id"]) for item in REVIEWED_SUCCESSOR_MECHANISMS),
         "bounded_local_search_variant",
@@ -2149,7 +2284,8 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
             category="proposal_focus",
             title="Successor portfolio direction",
             lines=(
-                SUCCESSOR46_TARGET_INTENT_RULE,
+                SUCCESSOR46B_TARGET_INTENT_RULE,
+                SUCCESSOR46_REVIEWED_RULE,
                 SUCCESSOR45_REVIEWED_RULE,
                 SUCCESSOR44D_REVIEWED_RULE,
                 SUCCESSOR43B_REVIEWED_RULE,

@@ -346,23 +346,28 @@ The remaining closeout gaps are:
   truncation failure; the main lesson is that local same-removed-set repair
   gains did not preserve final ALNS/VNS trajectory quality. Do not long-run,
   threshold-tune, or continue unchanged repair-placement tournament variants.
-- Successor46 is now designed and target-intent-bound as
-  `best_solution_ruin_recreate_intensification`. It is a CVRP-owned
-  best-incumbent ruin/recreate intensification path in
-  `policies/baseline_modules/best_solution_intensification.py` with minimal
-  scheduler wiring. It starts from a copy of the global best after bounded
-  stagnation, runs one bounded ruin/recreate plus downstream VNS attempt under
-  remaining budget, and accepts effect only for final post-VNS global-best
-  `total_distance` improvement with feasibility and route-count preservation.
-  Required evidence includes attempted/accepted/new-best attribution, runtime
-  budget fields, rejected-attempt RNG or trajectory isolation, and CMT2/CMT4
-  case protection. Design:
-  `scion/docs/experiments/v0.4/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-design-20260707.md`.
-  The short server-local validation run launched from commit `593d4320` with
-  local `gpt-5.5`, healthy completion preflight, and resume-from successor45:
+- Successor46 is complete and reviewed/default-avoid:
+  `best_solution_ruin_recreate_intensification` target-bound correctly and the
+  server-local `claw` run finished valid/complete/postrun-ready with local
+  `gpt-5.5`:
   `/home/clawd/research/scion-experiments/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-server-claw-2r-gpt55-2r-gpt55-20260707T115720Z-claw`.
-  It is currently running as PID `1704245`; treat the two-round result as noisy
-  screening only.
+  It had two screening rows, no quality/model/postrun failure, and all eight
+  current-run LLM calls were normal. Solver evidence stayed zero: both rows had
+  median delta `0.0`, CI `[0.0, 0.0]`, case W/L/T `0/0/28`, pair W/L/T
+  `4/4/104`, and `rows_at_or_above_mde=0`. Row 1 did not activate; row 2 only
+  observed sparse mechanism runtime (`62 ms`) with zero final best-solution
+  effect. Do not long-run, threshold-tune, or repeat unchanged successor46.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-postrun-20260707.md`.
+- Successor46b is designed as the only allowed same-line contract repair:
+  `best_solution_ruin_recreate_intensification_activation_repair`. It keeps the
+  CVRP-owned `best_solution_intensification.py` module boundary with minimal
+  scheduler wiring, but must repair rejected-attempt RNG isolation, activation
+  observability, separated reject/budget outcome telemetry, final post-VNS
+  global-best objective attribution, and CMT2/CMT4 mechanism-level activation
+  evidence or caveat. If it remains zero-effect, park best-solution
+  ruin/recreate for v0.4. Design:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor46b-best-solution-activation-contract-repair-design-20260707.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -849,10 +854,20 @@ CVRP:
    failed CMT2/CMT4 protection. Do not long-run, threshold-tune, or continue
    unchanged repair-placement tournament variants; the next CVRP slot should
    clean-fork to a materially different problem-owned causal path.
-20. Use the v0.4 large-file modularization plan before adding behavior to
+20. Treat successor46 `best_solution_ruin_recreate_intensification` as
+   complete, valid, and reviewed/default-avoid. It target-bound correctly but
+   activated sparsely and produced zero final best-solution objective effect.
+   Do not long-run or repeat unchanged best-solution ruin/recreate.
+21. Launch successor46b
+   `best_solution_ruin_recreate_intensification_activation_repair` as the only
+   narrow same-line contract repair. It must isolate rejected-attempt RNG,
+   make activation observable, separate reject/budget outcomes, and prove final
+   post-VNS global-best movement with CMT2/CMT4 mechanism-level evidence or an
+   explicit caveat. If it remains zero-effect, park the line.
+22. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-21. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-22. Keep status documents compact; put detailed root counters and caveats in
+23. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+24. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes
