@@ -526,6 +526,11 @@ CMT2/CMT4 mechanism-level activation or explicit caveat. If this short repair
 still produces zero final objective effect, park the best-solution
 ruin/recreate line for v0.4. Design:
 `scion/docs/experiments/v0.4/v04-cvrp-successor46b-best-solution-activation-contract-repair-design-20260707.md`.
+The short server-local validation run launched from commit `1f121f3b` with
+local `gpt-5.5`, completion preflight `ok: true`, and resume-from successor46:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor46b-best-solution-activation-contract-repair-server-claw-2r-gpt55-2r-gpt55-20260707T150022Z-claw`.
+Initial PID is `1714735`. In-flight record:
+`scion/docs/experiments/v0.4/v04-cvrp-successor46b-best-solution-activation-contract-repair-inflight-20260707.md`.
 
 Legacy direction details below are retained as reviewed-history context.
 
@@ -896,12 +901,15 @@ from the current checkout.
    complete, valid, and reviewed/default-avoid. It target-bound correctly but
    activated sparsely and produced zero final best-solution objective effect.
    Do not long-run or repeat unchanged best-solution ruin/recreate.
-21. Launch successor46b
+21. Monitor successor46b
    `best_solution_ruin_recreate_intensification_activation_repair` as the only
-   narrow same-line contract repair. It must isolate rejected-attempt RNG,
-   make activation observable, separate reject/budget outcomes, and prove final
-   post-VNS global-best movement with CMT2/CMT4 mechanism-level evidence or an
-   explicit caveat. If it remains zero-effect, park the line.
+   narrow same-line contract repair. It is running on the server-local `claw`
+   runner at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor46b-best-solution-activation-contract-repair-server-claw-2r-gpt55-2r-gpt55-20260707T150022Z-claw`.
+   Required evidence: rejected-attempt RNG isolation, observable activation,
+   separated reject/budget outcomes, final post-VNS global-best movement, and
+   CMT2/CMT4 mechanism-level evidence or explicit caveat. If it remains
+   zero-effect, park the line.
 22. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 23. Keep the v0.5 governance ablation frozen as a preregistered design; do not
