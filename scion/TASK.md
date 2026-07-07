@@ -267,13 +267,22 @@ the expanded row was `48/48` valid, W/L/T `28/15/5`, raw pair median `+1.5`.
 Postrun max median was `+7.5` against MDE `9.9`, so no row was positive at MDE.
 The attribution repair worked: activation/activity telemetry was observed and
 the candidate did not add fake successor44 direct-effect `record_move` deltas.
-The remaining blocker is research guidance hygiene: generic non-blocking
-missing-effect repair advice still recommends adding
-`context.record_move('post_vns_best_anchor_acceptance_guard', ...)`, and the
-branch summary still marks same-mechanism follow-up required. Do not long-run
-unchanged successor44c. First fix the CVRP-owned summary/guidance interpretation
-for policy mechanisms, then either run one narrow protected acceptance-policy
-follow-up or clean-fork.
+Successor44d then implemented the CVRP-owned policy-effect warning hygiene
+repair in commit `150ab7de` and completed a valid two-row server-local screen:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor44d-policy-effect-warning-hygiene-server-claw-2r-gpt55-20260707T070106Z-claw`.
+The repair worked: both screening rows kept
+`mechanism_contract_status=policy_outcome_observed`, no repair ids, no
+telemetry warnings/failures, and no generic `record_move(delta=...)` repair
+advice. The generated successor44d patch also did not add fake direct-effect
+telemetry; it only added guard `record_iteration`/`record_phase` evidence.
+Solver evidence stayed weak-positive screening only. The original row was
+`32/32` valid, W/L/T `14/7/11`, raw pair median `0.0`; the expanded row was
+`48/48` valid, W/L/T `27/14/7`, raw pair median `+3.0`, branch CI `[0.0, 7.25]`,
+and `runtime_confidence=low_cached_champion`. CMT2 was mildly positive, CMT4
+neutral, and B-family cases regressed. Do not long-run unchanged successor44d.
+The next CVRP slot should be design-first: either design one explicit
+successor44 follow-up with guard allow/reject trajectory evidence and a
+narrower causal claim, or clean-fork to a materially different CVRP-owned path.
 v0.5 governance ablation is preregistered but must not start during v0.4, and
 future code work must follow the design-first modularization plan rather than
 add helper/projection growth.
@@ -460,18 +469,17 @@ Open blockers before v0.4 closeout:
 ## Current CVRP Direction
 
 Do not repeat unchanged reviewed paths. The latest CVRP invocation is
-successor44c: the attribution-contract repair for
-`post_vns_best_anchor_acceptance_guard` completed valid/complete/postrun-ready
-and verified that acceptance-policy evidence can be represented without fake
-direct-effect telemetry. It remained below MDE and CMT4/P-family unsafe. The
-next CVRP direction is not a long run. First design and implement a CVRP-owned
-summary/guidance hygiene repair so policy mechanisms with
-`effect_observation_required=false` are not converted into generic
-`record_move(delta=...)` repair advice. After that, either run one narrow
-protected successor44 follow-up with explicit allow/reject trajectory evidence,
-or clean-fork to a materially different CVRP-owned causal path. Treat the
-successor44c two-row evidence as noisy screening evidence for attribution
-repair plus non-promotion, not a precise effect-size estimate.
+successor44d: the CVRP-owned policy-effect warning hygiene repair for
+`post_vns_best_anchor_acceptance_guard` completed valid/complete and verified
+that no-direct-effect acceptance-policy evidence is summarized as
+`policy_outcome_observed`, not as a generic direct-effect repair obligation.
+It also produced weak-positive screening evidence, but not promotion evidence:
+the expanded row was `48/48` valid with W/L/T `27/14/7`, raw pair median
+`+3.0`, branch CI `[0.0, 7.25]`, `runtime_confidence=low_cached_champion`,
+CMT4 neutral, and B-family regressions. The next CVRP direction is not a long
+run. Design one explicit successor44 follow-up with guard allow/reject
+trajectory evidence and a narrower causal claim, or clean-fork to a materially
+different CVRP-owned causal path.
 
 Legacy direction details below are retained as reviewed-history context.
 
@@ -827,13 +835,14 @@ from the current checkout.
    attribution contract, but both rows stayed below MDE and CMT2/CMT4/B
    remained unsafe. Do not long-run, threshold-tune, or continue the
    destroy-shadow selector line.
-18. Treat successor44c as weak-positive diagnostic evidence for conservative
-   post-VNS acceptance filtering and as a successful attribution-contract repair,
-   not promotion-grade evidence. The two screening rows were valid and positive
-   but below MDE, with CMT4 still negative. Do not long-run unchanged
-   successor44c. Before any same-mechanism follow-up, fix the CVRP-owned
-   summary/guidance path that still turns no-direct-effect policy evidence into
-   generic `record_move(delta=...)` repair advice.
+18. Treat successor44d as a successful policy-effect warning hygiene repair and
+   weak-positive screening evidence, not promotion-grade evidence. The contract
+   now stays `policy_outcome_observed` with no direct-effect repair follow-up,
+   and the candidate did not add fake `record_move(delta=...)` telemetry. Do
+   not long-run unchanged successor44d. The next CVRP step must be design-first:
+   either one explicit acceptance-policy follow-up with guard allow/reject
+   trajectory evidence and a narrower causal claim, or a materially different
+   CVRP-owned clean fork.
 19. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 20. Keep the v0.5 governance ablation frozen as a preregistered design; do not
