@@ -636,6 +636,18 @@ and generalized contract-repair / metadata-preflight / telemetry-wrapper /
 hook-gate candidates from occupying a CVRP solver-design slot. Postrun:
 `scion/docs/experiments/v0.4/v04-cvrp-successor50-material-difference-contract-repair-postrun-20260708.md`.
 
+Successor51 is now in flight from committed repair `7dfbd1b0` on the
+server-local `claw` runner:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor51-repaired-slot-cleanfork-server-claw-2r-gpt55-2r-gpt55-20260708T135236Z-claw`.
+It uses `--rounds 2`, `--completion-preflight`, full proposal context, and
+`--force-surface solver_design`, with no forced mechanism/file binding. Launch
+readiness passed with local `gpt-5.5` chat completion HTTP 200, git runtime
+guard commit/worktree consistency, CMT2/CMT4 protected-case readiness, and
+successor50 reviewed evidence visible in the prepared manifest. Treat this as
+the next materially different CVRP-owned solver clean-fork attempt unless the
+run itself proves another quality/routing failure. Await completion before
+interpreting solver evidence.
+
 Legacy direction details below are retained as reviewed-history context.
 
 The latest completed CVRP attempt is

@@ -463,6 +463,17 @@ The remaining closeout gaps are:
   preflight, telemetry wrapper, hook gate, and no-op hook validation from
   occupying a CVRP solver-design clean-fork slot. Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor50-material-difference-contract-repair-postrun-20260708.md`.
+- Successor51 is now in flight from committed repair `7dfbd1b0` on the
+  server-local `claw` runner:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor51-repaired-slot-cleanfork-server-claw-2r-gpt55-2r-gpt55-20260708T135236Z-claw`.
+  It uses `--rounds 2`, `--completion-preflight`, full proposal context, and
+  `--force-surface solver_design`, with no forced mechanism/file binding.
+  Launch readiness passed with local `gpt-5.5` chat completion HTTP 200, git
+  runtime guard commit/worktree consistency, CMT2/CMT4 protected-case
+  readiness, and successor50 reviewed evidence visible in the prepared
+  manifest. Runtime check after launch showed `run_status.status=running`,
+  healthy pre-campaign completion preflight, and an active campaign Python
+  process. Await completion before interpreting solver evidence.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
