@@ -400,6 +400,12 @@ The remaining closeout gaps are:
   exact-cover candidate count, accepted set-partition delta, separated
   reject/budget counts, and CMT2/CMT4 priority-case safety. Design:
   `scion/docs/experiments/v0.4/v04-cvrp-successor48-route-pool-set-partition-recombination-design-20260708.md`.
+  The short server-local validation run launched from commit `eba0c565` with
+  local `gpt-5.5`, completion preflight `ok: true`, and resume-from
+  successor47:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor48-route-pool-set-partition-recombination-server-claw-2r-gpt55-2r-gpt55-20260708T060446Z-claw`.
+  Initial PID is `1742335`. In-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor48-route-pool-set-partition-recombination-inflight-20260708.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -902,12 +908,14 @@ CVRP:
    model/context behavior was normal, but direct split-reconstruction effect
    was nearly absent and CMT2/CMT4 were unsafe. Do not long-run or continue
    unchanged contiguous giant-tour split variants.
-23. Use successor48
-   `bounded_route_pool_set_partition_recombination` as the next live CVRP
-   target-intent-bound short screening run. It must stay problem-owned in
-   `route_pool_recombination.py`, use minimal scheduler wiring, and prove
-   route-pool source counts, exact-cover candidates, accepted final-distance
-   delta, separated reject/budget counts, and CMT2/CMT4 safety.
+23. Monitor successor48
+   `bounded_route_pool_set_partition_recombination`, now running on the
+   server-local `claw` runner at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor48-route-pool-set-partition-recombination-server-claw-2r-gpt55-2r-gpt55-20260708T060446Z-claw`.
+   It must stay problem-owned in `route_pool_recombination.py`, use minimal
+   scheduler wiring, and prove route-pool source counts, exact-cover
+   candidates, accepted final-distance delta, separated reject/budget counts,
+   and CMT2/CMT4 safety.
 24. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 25. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
