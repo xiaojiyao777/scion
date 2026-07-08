@@ -252,6 +252,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "short_horizon_seed_trajectory_selector_v2",
         "seed_post_optimization_selector",
         "route_skeleton_regret_repair",
+        "bounded_route_pool_set_partition_recombination",
         "route_first_heuristic",
     ]
     assert focus["suppressed_mechanism_ids"] == []
@@ -392,23 +393,30 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "objective evidence stayed marginal" in focus["successor47_reviewed_evidence"][
         "reviewed_rule"
     ]
-    assert focus["successor48_target_intent"]["mechanism_id"] == (
+    assert focus["successor48_reviewed_evidence"]["mechanism_id"] == (
         SUCCESSOR48_MECHANISM_ID
     )
-    assert focus["successor48_target_intent"]["target_file"] == (
+    assert focus["successor48_reviewed_evidence"]["target_file"] == (
         "policies/baseline_modules/route_pool_recombination.py"
     )
     assert "policies/baseline_modules/scheduler.py" in (
-        focus["successor48_target_intent"]["target_files"]
+        focus["successor48_reviewed_evidence"]["target_files"]
     )
-    assert focus["successor48_target_intent"]["required_mechanism_binding"] == (
+    assert focus["successor48_reviewed_evidence"]["required_mechanism_binding"] == (
         "none"
     )
-    assert focus["successor48_target_intent"]["status"] == (
-        "inflight_existing_run_not_next_binding"
+    assert focus["successor48_reviewed_evidence"]["status"] == (
+        "reviewed_no_positive_at_mde_same_line_repeated"
     )
-    assert "accepted set-partition total_distance delta" in (
-        focus["successor48_target_intent"]["material_difference"]["evidence"]
+    assert (
+        "scion/docs/experiments/v0.4/"
+        "v04-cvrp-successor49-repaired-context-route-pool-repeat-postrun-20260708.md"
+    ) in focus["successor48_reviewed_evidence"]["postrun_paths"]
+    assert "same_mechanism_beam_or_pool_tuning" in (
+        focus["successor48_reviewed_evidence"]["blocked_actions"]
+    )
+    assert "successor49 confirmed" in (
+        focus["successor48_reviewed_evidence"]["reviewed_rule"]
     )
     assert focus["route_first_comparison_target_intent"]["mechanism_id"] == (
         ROUTE_FIRST_COMPARISON_MECHANISM_ID
@@ -528,7 +536,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert SUCCESSOR46B_MECHANISM_ID in focus["next_required_direction"]
     assert SUCCESSOR47_MECHANISM_ID in focus["next_required_direction"]
     assert ROUTE_FIRST_COMPARISON_MECHANISM_ID in focus["next_required_direction"]
-    assert "route-pool successor48 continuation" in focus["next_required_direction"]
+    assert "route-pool successor48/successor49 continuation" in (
+        focus["next_required_direction"]
+    )
     assert "Successor18b" in focus["next_required_direction"]
     assert "distinct from cross-exchange, intra-route Or-opt reinsertion" in (
         focus["next_required_direction"]
@@ -1202,6 +1212,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "short_horizon_seed_trajectory_selector_v2",
         "seed_post_optimization_selector",
         "route_skeleton_regret_repair",
+        "bounded_route_pool_set_partition_recombination",
         "route_first_heuristic",
     ]
     assert launch_payload["required_mechanism_ids"] == []

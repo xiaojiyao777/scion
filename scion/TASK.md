@@ -587,6 +587,30 @@ attempted/accepted/rejected/budget evidence, and post-downstream/final
 guidance/contracts and preserve v3 generic core boundaries. Postrun:
 `scion/docs/experiments/v0.4/v04-cvrp-route-first-comparison-postrun-20260708.md`.
 
+Successor49 then validated the repaired CVRP-owned solver-design context but
+also repeated the weak route-pool mechanism:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor49-repaired-context-open-cleanfork-server-claw-2r-gpt55-2r-gpt55-20260708T094104Z-claw`.
+It completed valid/complete/postrun-ready on the server-local `claw` runner
+from commit `bd664202`, with six successful local `gpt-5.5` traces, one
+proposal-quality block, and two effective screening rows. The first same-
+mechanism hypothesis was correctly blocked by the
+`cvrp_solver_design_causal_path_contract` for missing clean-fork diversity and
+algorithmic-intervention sufficiency; the redraft passed but generated the same
+bounded route-pool set-partition recombination module plus minimal scheduler
+wiring. Prompt manifests showed the material-difference requirement visible and
+zero truncated sections, so this was not a model or context-truncation failure.
+Solver evidence stayed no-effect: row 1 had case W/L/T `0/0/12`, pair W/L/T
+`3/0/45`, median `0.0`, CI `[0.0, 0.0]`; row 2 had case W/L/T `0/0/16`, pair
+W/L/T `4/0/60`, median `0.0`, CI `[0.0, 0.0]`; postrun aggregate pair W/L/T was
+`7/0/105` with zero promotions and `telemetry_effect_zero`. Treat successor49
+as contract-positive but solver-negative, and as evidence that successor48/49
+route-pool recombination was not closed strongly enough in live CVRP guidance.
+The current checkout now closes `bounded_route_pool_set_partition_recombination`
+as reviewed/default-avoid in CVRP guidance and the CVRP hypothesis contract. Do
+not long-run, threshold-tune, beam/pool tune, or continue the unchanged
+route-pool exact-cover line. Postrun:
+`scion/docs/experiments/v0.4/v04-cvrp-successor49-repaired-context-route-pool-repeat-postrun-20260708.md`.
+
 Legacy direction details below are retained as reviewed-history context.
 
 The latest completed CVRP attempt is
@@ -968,15 +992,22 @@ from the current checkout.
    model/context behavior was normal, but direct split-reconstruction effect
    was nearly absent and CMT2/CMT4 were unsafe. Do not long-run or continue
    unchanged contiguous giant-tour split variants.
-23. Treat successor48 `bounded_route_pool_set_partition_recombination` as
-   complete, valid, and reviewed/default-avoid. It finished on the
+23. Treat successor48 and successor49
+   `bounded_route_pool_set_partition_recombination` as complete, valid, and
+   reviewed/default-avoid. Successor48 finished on the
    server-local `claw` runner at
    `/home/clawd/research/scion-experiments/v04-cvrp-successor48-route-pool-set-partition-recombination-server-claw-2r-gpt55-2r-gpt55-20260708T060446Z-claw`.
    It activated but stayed exact-zero at the protocol row level, with
    tie-dominated evidence and no promotion signal. The trace audit found no
    fatal model/context/boundary failure; the candidate implementation was
-   overly conservative and under-attributed. Do not long-run, threshold-tune,
-   or continue unchanged route-pool exact-cover recombination variants.
+   overly conservative and under-attributed. Successor49 then confirmed the
+   repaired context blocked the first weak hypothesis but still allowed the
+   same route-pool line after redrafting:
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor49-repaired-context-open-cleanfork-server-claw-2r-gpt55-2r-gpt55-20260708T094104Z-claw`.
+   It also stayed no-effect with row medians `0.0`, CI `[0.0, 0.0]`, aggregate
+   pair W/L/T `7/0/105`, zero promotions, and `telemetry_effect_zero`. Do not
+   long-run, threshold-tune, beam/pool tune, or continue unchanged route-pool
+   exact-cover recombination variants.
 24. Treat the route-first comparison object as complete, valid, and
    reviewed/default-avoid for unchanged `route_first_heuristic`. The
    default-off variant is implemented under `policies/baseline_modules/`,
@@ -992,14 +1023,17 @@ from the current checkout.
    confirmed `route_first_heuristic` ran; the solver family was simply worse
    than the current ALNS+VNS champion on the measured surface. Postrun:
    `scion/docs/experiments/v0.4/v04-cvrp-route-first-comparison-postrun-20260708.md`.
-25. Treat the CVRP-owned contract/context repair as implemented in the current
-   checkout: `route_first_heuristic` is now the aligned reviewed/default-avoid
-   mechanism id, prepared target-intent binding is empty, material-difference
-   requirements are prompt-visible first-class records, and solver-design
-   hypotheses must pass algorithmic-intervention sufficiency before code
-   generation. Use this repaired context for the next materially different
-   CVRP-owned clean fork; do not move CVRP/VRP semantics into generic
-   DecisionFeatures, protocol, scheduler, or postrun code.
+25. Treat the CVRP-owned contract/context and route-pool closure repair as
+   implemented in the current checkout: `route_first_heuristic` is now the
+   aligned reviewed/default-avoid mechanism id, prepared target-intent binding
+   is empty, material-difference requirements are prompt-visible first-class
+   records, solver-design hypotheses must pass algorithmic-intervention
+   sufficiency before code generation, and
+   `bounded_route_pool_set_partition_recombination` is reviewed/default-avoid
+   rather than live target-intent guidance. Use this repaired context for the
+   next materially different CVRP-owned clean fork; do not move CVRP/VRP
+   semantics into generic DecisionFeatures, protocol, scheduler, or postrun
+   code.
 26. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 27. Keep the v0.5 governance ablation frozen as a preregistered design; do not

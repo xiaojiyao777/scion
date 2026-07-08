@@ -110,6 +110,16 @@ CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS = (
         ),
     ),
     (
+        "bounded_route_pool_set_partition_recombination",
+        (
+            "successor48 and successor49 activated bounded whole-route "
+            "route-pool set-partition recombination, but the measured effect "
+            "stayed zero or below MDE; same-mechanism repeats keep returning "
+            "to a conservative no-op whole-route pool rather than a materially "
+            "different CVRP causal path"
+        ),
+    ),
+    (
         "route_first_heuristic",
         (
             "the route-first comparison activated normally but both screened "

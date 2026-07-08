@@ -312,6 +312,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "short_horizon_seed_trajectory_selector_v2",
         "seed_post_optimization_selector",
         "route_skeleton_regret_repair",
+        "bounded_route_pool_set_partition_recombination",
         "route_first_heuristic",
     ]
     assert launch_payload["suppressed_mechanism_ids"] == []
@@ -755,11 +756,17 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["research_focus"]["successor47_reviewed_evidence"][
         "mechanism_id"
     ] == "bounded_giant_tour_split_recombination"
-    assert prepared_manifest["research_focus"]["successor48_target_intent"][
+    assert prepared_manifest["research_focus"]["successor48_reviewed_evidence"][
         "target_file"
     ] == (
         "policies/baseline_modules/route_pool_recombination.py"
     )
+    assert (
+        "scion/docs/experiments/v0.4/"
+        "v04-cvrp-successor49-repaired-context-route-pool-repeat-postrun-20260708.md"
+    ) in prepared_manifest["research_focus"]["successor48_reviewed_evidence"][
+        "postrun_paths"
+    ]
     assert prepared_manifest["research_focus"][
         "route_first_comparison_target_intent"
     ]["target_file"] == (
@@ -829,6 +836,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "short_horizon_seed_trajectory_selector_v2",
         "seed_post_optimization_selector",
         "route_skeleton_regret_repair",
+        "bounded_route_pool_set_partition_recombination",
         "route_first_heuristic",
     ]
     assert prepared_manifest["research_focus"]["suppressed_mechanism_ids"] == []

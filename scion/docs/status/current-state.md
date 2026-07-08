@@ -426,6 +426,21 @@ The remaining closeout gaps are:
   stays problem-owned and does not move CVRP semantics into generic Scion core.
   Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-route-first-comparison-postrun-20260708.md`.
+- Successor49 completed the repaired-context validation run on the server-local
+  `claw` runner:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor49-repaired-context-open-cleanfork-server-claw-2r-gpt55-2r-gpt55-20260708T094104Z-claw`.
+  It completed valid/complete/postrun-ready from commit `bd664202`, with six
+  successful local `gpt-5.5` traces and no evidence of material prompt
+  truncation. The first same-route-pool hypothesis was correctly blocked by the
+  CVRP solver-design causal-path contract, but the redraft still generated
+  `bounded_route_pool_set_partition_recombination`. The solver result stayed
+  no-effect: row medians `0.0`, CI `[0.0, 0.0]`, aggregate pair W/L/T
+  `7/0/105`, zero promotions, and `telemetry_effect_zero`. Treat successor49 as
+  contract-positive but solver-negative. The current checkout now closes the
+  successor48/49 route-pool line as reviewed/default-avoid in CVRP guidance and
+  the CVRP hypothesis contract; next CVRP work must be a materially different
+  CVRP-owned clean fork. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor49-repaired-context-route-pool-repeat-postrun-20260708.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -928,25 +943,32 @@ CVRP:
    model/context behavior was normal, but direct split-reconstruction effect
    was nearly absent and CMT2/CMT4 were unsafe. Do not long-run or continue
    unchanged contiguous giant-tour split variants.
-23. Treat successor48 `bounded_route_pool_set_partition_recombination` as
-   complete, valid, and reviewed/default-avoid. It finished on the
+23. Treat successor48 and successor49
+   `bounded_route_pool_set_partition_recombination` as complete, valid, and
+   reviewed/default-avoid. Successor48 finished on the
    server-local `claw` runner at
    `/home/clawd/research/scion-experiments/v04-cvrp-successor48-route-pool-set-partition-recombination-server-claw-2r-gpt55-2r-gpt55-20260708T060446Z-claw`.
-   It activated but stayed exact-zero at the protocol row level; do not
-   long-run, threshold-tune, or continue unchanged route-pool exact-cover
-   recombination variants.
+   It activated but stayed exact-zero at the protocol row level. Successor49
+   then confirmed the repaired context blocked the first weak hypothesis but
+   still redrafted back to the same route-pool line at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor49-repaired-context-open-cleanfork-server-claw-2r-gpt55-2r-gpt55-20260708T094104Z-claw`.
+   Do not long-run, threshold-tune, beam/pool tune, or continue unchanged
+   route-pool exact-cover recombination variants.
 24. Treat the route-first comparison as complete, valid, and solver-negative:
    `/home/clawd/research/scion-experiments/v04-cvrp-route-first-comparison-server-claw-2r-gpt55-2r-gpt55-20260708T082843Z-claw`.
    The unchanged `route_first_heuristic` family ran but lost every measured
    case and pair against ALNS+VNS; do not long-run or repeat the same config
    flip. Postrun:
    `scion/docs/experiments/v0.4/v04-cvrp-route-first-comparison-postrun-20260708.md`.
-25. Before starting another CVRP solver-design line, complete the CVRP-owned
-   contract/context repair: align route-first mechanism identity with runtime
-   `route_first_heuristic`, expose material-difference and target-intent
-   requirements as non-truncated prompt contract sections, and add
-   algorithmic-intervention sufficiency checks while preserving v3 generic-core
-   boundaries.
+25. Treat the CVRP-owned contract/context and route-pool closure repair as
+   implemented in the current checkout: route-first mechanism identity is
+   aligned with runtime `route_first_heuristic`, material-difference and
+   target-intent requirements are non-truncated prompt contract sections,
+   algorithmic-intervention sufficiency checks run before code generation, and
+   `bounded_route_pool_set_partition_recombination` is reviewed/default-avoid
+   rather than live target-intent guidance. Preserve v3 generic-core boundaries
+   and use the repaired context only for a materially different CVRP-owned clean
+   fork.
 26. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 27. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.

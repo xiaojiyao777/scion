@@ -503,6 +503,26 @@ def test_cvrp_hypothesis_quality_blocks_successor44_before_policy_telemetry_chec
     )
 
 
+def test_cvrp_hypothesis_quality_blocks_reviewed_route_pool_recombination(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = _solver_design_hypothesis(
+        mechanism_id="bounded_route_pool_set_partition_recombination",
+    )
+
+    check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
+
+    assert check.allowed is False
+    assert check.structured_rejection["gate_name"] == "cvrp_reviewed_default_avoid"
+    assert (
+        check.structured_rejection["blocked_mechanism_id"]
+        == "bounded_route_pool_set_partition_recombination"
+    )
+    assert "successor48 and successor49 activated" in (
+        check.structured_rejection["evidence_reason"]
+    )
+
+
 def test_cvrp_hypothesis_quality_blocks_missing_cmt_protection(
     cvrp_adapter: ProblemAdapter,
 ) -> None:

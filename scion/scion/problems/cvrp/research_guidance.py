@@ -611,26 +611,35 @@ SUCCESSOR48_DESIGN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor48-route-pool-set-partition-recombination-design-20260708.md"
 )
-SUCCESSOR48_TARGET_INTENT_RULE = (
-    f"Successor48 is preregistered as `{SUCCESSOR48_MECHANISM_ID}` in "
-    f"`{SUCCESSOR48_TARGET_FILE}` with only minimal "
-    f"`{SUCCESSOR48_WIRING_FILE}` orchestration. It is a materially different "
-    "CVRP-owned recombination path from successor47: build a small ephemeral "
-    "pool of complete feasible routes from the current run's incumbent/current "
-    "search trajectory, then solve a bounded set-partitioning/beam-selection "
-    "subproblem over whole routes to choose a feasible route set that covers "
-    "every customer exactly once, preserves max_routes, and strictly improves "
-    "final total_distance. This is not persistent elite route memory, route "
-    "skeleton biasing, route-fragment recombination repair, route-pair "
-    "crossover, giant-tour contiguous split DP, construction seed selection, "
-    "destroy/repair selector tuning, acceptance guard, runtime allocation, or "
-    "reviewed local-search swap/or-opt/3-opt/ejection-chain/two-for-one "
-    "moves. Required evidence: route-pool size and source counts, exact-cover "
-    "candidate count, attempted/accepted/rejected_no_cover/"
-    "rejected_infeasible/rejected_route_count/rejected_no_improvement/"
-    "budget_stopped attribution, accepted set-partition total_distance delta, "
-    "feasibility and route-count preservation, phase runtime, and CMT2/CMT4 "
-    f"priority-case outcome evidence. See `{SUCCESSOR48_DESIGN_PATH}`."
+SUCCESSOR48_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor48-route-pool-set-partition-recombination-postrun-20260708.md"
+)
+SUCCESSOR49_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor49-repaired-context-route-pool-repeat-postrun-20260708.md"
+)
+SUCCESSOR48_REVIEWED_RULE = (
+    f"Successor48 `{SUCCESSOR48_MECHANISM_ID}` is reviewed/default-avoid after "
+    "valid route-pool set-partition evidence, and successor49 confirmed the "
+    "repaired context/contract still let the agent return to the same weak "
+    "mechanism when the route-pool line was not closed strongly enough. "
+    "Successor48 completed valid/complete/postrun-ready with normal local "
+    "gpt-5.5 calls and CMT2/CMT4 priority coverage, but aggregate case W/L/T "
+    "was 0/1/23, pair W/L/T was 10/10/76, both row medians were 0.0, CI highs "
+    "were 0.0, and no row reached MDE. Successor49 then reran after the "
+    "CVRP-owned context/contract repair: the first same-mechanism hypothesis "
+    "was blocked for missing clean-fork diversity and algorithmic-intervention "
+    "sufficiency; the redrafted candidate passed, generated the same "
+    "route-pool module plus minimal scheduler wiring, and screened weak/no-"
+    "effect with case W/L/T 0/0/16, pair W/L/T 4/0/60, median delta 0.0, "
+    "CI [0.0, 0.0], mechanism contract status observed_no_effect, and "
+    "telemetry_effect_zero. Treat unchanged route-pool exact-cover "
+    "recombination as reviewed/default-avoid: no long-run, no threshold/beam/"
+    "pool tuning, no successor48/49 same-mechanism continuation, and no "
+    "telemetry-hygiene-only follow-up. The next CVRP slot must name a "
+    "materially different CVRP-owned causal path. See "
+    f"`{SUCCESSOR48_POSTRUN_PATH}` and `{SUCCESSOR49_POSTRUN_PATH}`."
 )
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
     "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
@@ -1094,7 +1103,8 @@ NEXT_REQUIRED_DIRECTION = (
     f"{SUCCESSOR44_MECHANISM_ID}, or unchanged "
     f"{SUCCESSOR46_MECHANISM_ID}, or unchanged "
     f"{SUCCESSOR46B_MECHANISM_ID}, or unchanged "
-    f"{SUCCESSOR47_MECHANISM_ID}. Future construction-seed revisits must be "
+    f"{SUCCESSOR47_MECHANISM_ID}, or unchanged "
+    f"{SUCCESSOR48_MECHANISM_ID}. Future construction-seed revisits must be "
     "materially distinct from raw baseline, short-horizon trajectory, and "
     "post-construction micro-polish selector paths, with direct pre-ALNS/VNS "
     "objective telemetry. "
@@ -1121,7 +1131,7 @@ NEXT_REQUIRED_DIRECTION = (
     "rather than an unchanged scheduler helper rerun, route-skeleton "
     "threshold/gating variant, route-memory repair, route-fragment repair, "
     "route-pair crossover, giant-tour contiguous split, route-pool "
-    "successor48 continuation, two-for-one route-set exchange, repair-"
+    "successor48/successor49 continuation, two-for-one route-set exchange, repair-"
     "operator selector, repair-placement tournament, removal targeting rule, "
     "seed selector, local-search move, acceptance-weight, runtime-allocation "
     "change, unchanged best-solution ruin/recreate rerun, unchanged "
@@ -1695,13 +1705,14 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "CMT2/CMT4 protection. Successor46 "
     f"`{SUCCESSOR46_MECHANISM_ID}` is reviewed/default-avoid as an unchanged "
     "best-solution ruin/recreate candidate after valid screening showed sparse "
-    "activation and zero final best-solution effect. The next CVRP solver slot "
-    "is the single allowed successor46b contract repair "
-    f"`{SUCCESSOR46B_MECHANISM_ID}`; if it still shows zero final objective "
-    "effect, park best-solution ruin/recreate and clean-fork to a materially "
-    "different CVRP-owned causal path after the exact material_difference "
-    "schema and CMT2/CMT4 case-coverage requirements are satisfied. "
-    "Scheduler destroy-size "
+    "activation and zero final best-solution effect. Successor46b "
+    f"`{SUCCESSOR46B_MECHANISM_ID}`, successor47 "
+    f"`{SUCCESSOR47_MECHANISM_ID}`, and successor48/49 route-pool "
+    f"`{SUCCESSOR48_MECHANISM_ID}` are now also reviewed/default-avoid after "
+    "valid below-MDE or no-effect evidence. The next CVRP solver slot must "
+    "clean-fork to a materially different CVRP-owned causal path after the "
+    "exact material_difference schema and CMT2/CMT4 case-coverage "
+    "requirements are satisfied. Scheduler destroy-size "
     "policy remains allowed only as "
     "telemetry-only q-audit repair or a materially different scheduler-policy "
     "causal path; insertion-cost lookahead repair and post-repair effect "
@@ -1804,6 +1815,7 @@ def build_cvrp_legacy_research_focus(
         "reviewed_mechanism_ids": [
             *list(REVIEWED_MECHANISM_IDS),
             SUCCESSOR41_MECHANISM_ID,
+            SUCCESSOR48_MECHANISM_ID,
             ROUTE_FIRST_COMPARISON_MECHANISM_ID,
         ],
         "suppressed_mechanism_ids": list(SUPPRESSED_MECHANISM_IDS),
@@ -2058,7 +2070,7 @@ def build_cvrp_legacy_research_focus(
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
-        "successor48_target_intent": {
+        "successor48_reviewed_evidence": {
             "mechanism_id": SUCCESSOR48_MECHANISM_ID,
             "mechanism_family": "bounded_local_search_variant",
             "target_file": SUCCESSOR48_TARGET_FILE,
@@ -2067,33 +2079,28 @@ def build_cvrp_legacy_research_focus(
                 SUCCESSOR48_WIRING_FILE,
             ],
             "design_path": SUCCESSOR48_DESIGN_PATH,
-            "status": "inflight_existing_run_not_next_binding",
+            "postrun_path": SUCCESSOR48_POSTRUN_PATH,
+            "postrun_paths": [
+                SUCCESSOR48_POSTRUN_PATH,
+                SUCCESSOR49_POSTRUN_PATH,
+            ],
+            "status": "reviewed_no_positive_at_mde_same_line_repeated",
             "required_mechanism_binding": "none",
-            "material_difference": {
-                "changed_dimensions": [
-                    "ephemeral route-pool construction from current run",
-                    "set-partitioning exact-cover route selection",
-                    "whole-route recombination rather than contiguous split",
-                    "accepted set-partition objective attribution",
-                ],
-                "contrast": (
-                    "not persistent elite route memory, route skeleton, "
-                    "route-fragment repair, route-pair crossover, giant-tour "
-                    "contiguous split DP, construction seed selection, "
-                    "destroy/repair selector tuning, acceptance guard, "
-                    "runtime allocation, or reviewed local-search moves"
-                ),
-                "evidence": [
-                    "route-pool size and source counts",
-                    "exact-cover candidate count",
-                    "accepted set-partition total_distance delta",
-                    "attempted/accepted/rejected_no_cover/rejected_infeasible/rejected_route_count/rejected_no_improvement/budget_stopped attribution",
-                    "feasibility and route-count preservation",
-                    "bounded runtime and phase telemetry",
-                    "CMT2/CMT4 priority-case outcome evidence",
-                ],
-            },
-            "rule": SUCCESSOR48_TARGET_INTENT_RULE,
+            "blocked_actions": [
+                "long_run",
+                "same_mechanism_threshold_tuning",
+                "same_mechanism_beam_or_pool_tuning",
+                "unchanged_route_pool_exact_cover_repeat",
+                "successor48_or_successor49_same_line_followup",
+                "telemetry_hygiene_as_solver_experiment",
+            ],
+            "carried_lessons": [
+                "whole-route pool exact cover was too conservative",
+                "route-pool activation without accepted final effect is insufficient",
+                "same-run incumbent/current/best route pools are not diverse enough",
+                "route-pool source counts and reject causes are diagnostic only",
+            ],
+            "reviewed_rule": SUCCESSOR48_REVIEWED_RULE,
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
@@ -2369,8 +2376,8 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
             requirement_id=(
                 "successor48_bounded_route_pool_set_partition_recombination"
             ),
-            category="target_intent_bounded_local_search_evidence",
-            description=SUCCESSOR48_TARGET_INTENT_RULE,
+            category="reviewed_bounded_local_search_evidence",
+            description=SUCCESSOR48_REVIEWED_RULE,
             mechanism_ids=(
                 SUCCESSOR48_MECHANISM_ID,
                 "bounded_local_search_variant",
@@ -2379,20 +2386,16 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
             ),
             protected_items=PROTECTED_CASES,
             required_fields=(
-                "successor48 design path cited before code",
-                "exact material_difference keys changed_dimensions contrast evidence",
-                "new CVRP-owned module boundary",
-                "minimal scheduler wiring only",
-                "ephemeral route-pool source counts",
-                "bounded exact-cover set-partition candidate count",
-                "accepted set-partition total_distance delta",
-                "attempted accepted rejected_no_cover rejected_infeasible "
-                "rejected_route_count rejected_no_improvement budget_stopped attribution",
-                "feasibility preservation",
-                "route-count preservation or explicit caveat",
-                "phase runtime and budget-stopped evidence",
-                "CMT2/CMT4 priority-case outcome evidence",
-                "no persistent route memory or route skeleton biasing",
+                "successor48 postrun cited before any route-pool proposal",
+                "successor49 trace audit cited before any route-pool proposal",
+                "no unchanged bounded_route_pool_set_partition_recombination long-run",
+                "no same-mechanism beam width or pool-limit tuning follow-up",
+                "no route-pool telemetry-hygiene-only solver experiment",
+                "whole-route route-pool exact cover carried as reviewed no-effect evidence",
+                "direct mechanism effect was zero or below MDE",
+                "same-run route-pool diversity was insufficient",
+                "new CVRP-owned causal path required if revisiting recombination",
+                "CMT2/CMT4 priority-case outcome evidence remains required",
             ),
         ),
         EvidenceRequirement(
@@ -2592,7 +2595,7 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
             title="Successor portfolio direction",
             lines=(
                 ROUTE_FIRST_COMPARISON_TARGET_INTENT_RULE,
-                SUCCESSOR48_TARGET_INTENT_RULE,
+                SUCCESSOR48_REVIEWED_RULE,
                 SUCCESSOR47_REVIEWED_RULE,
                 SUCCESSOR46B_REVIEWED_RULE,
                 SUCCESSOR46_REVIEWED_RULE,
