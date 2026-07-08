@@ -564,6 +564,29 @@ recombination as reviewed/default-avoid; do not long-run or same-mechanism
 tune it for v0.4. Postrun:
 `scion/docs/experiments/v0.4/v04-cvrp-successor48-route-pool-set-partition-recombination-postrun-20260708.md`.
 
+The route-first comparison is now complete:
+`/home/clawd/research/scion-experiments/v04-cvrp-route-first-comparison-server-claw-2r-gpt55-2r-gpt55-20260708T082843Z-claw`.
+It produced two duplicate config-flip candidates that enabled
+`route_first_heuristic`; both rows abandoned with median delta `-24.5`, CI
+`[-116.5, -15.0]`, aggregate case W/L/T `0/16/0`, aggregate pair W/L/T
+`0/64/0`, and no promotion. The runtime telemetry did show
+`route_first_heuristic` activation, so this was an algorithm-family comparison
+failure rather than a model/provider/instrumentation failure. The trace audit
+also confirmed the deferred CVRP-owned contract/context repair item: the formal
+mechanism id was `route_first_heuristic_baseline` while runtime telemetry used
+`route_first_heuristic`; `material_difference` requirements were not visible as
+a first-class prompt contract; and hypothesis target-intent preflight was
+truncated. The current checkout repairs that CVRP-owned surface: route-first
+identity now aligns to `route_first_heuristic` and is reviewed/default-avoid,
+prepared target-intent binding is cleared, the CVRP material-difference
+requirement is launch-payload and prompt-context visible, and the hypothesis
+quality contract now requires algorithmic-intervention sufficiency: solve
+trajectory/search-state change, candidate route-state generation or selection,
+attempted/accepted/rejected/budget evidence, and post-downstream/final
+`total_distance` attribution. Keep all CVRP semantics inside CVRP problem-owned
+guidance/contracts and preserve v3 generic core boundaries. Postrun:
+`scion/docs/experiments/v0.4/v04-cvrp-route-first-comparison-postrun-20260708.md`.
+
 Legacy direction details below are retained as reviewed-history context.
 
 The latest completed CVRP attempt is
@@ -954,22 +977,34 @@ from the current checkout.
    fatal model/context/boundary failure; the candidate implementation was
    overly conservative and under-attributed. Do not long-run, threshold-tune,
    or continue unchanged route-pool exact-cover recombination variants.
-24. Use the route-first comparison object to test whether the current ALNS+VNS
-   solver family has limited easy headroom. The default-off
-   `route_first_heuristic` variant is implemented under
-   `policies/baseline_modules/`, target-intent-bound through the CVRP-owned
+24. Treat the route-first comparison object as complete, valid, and
+   reviewed/default-avoid for unchanged `route_first_heuristic`. The
+   default-off variant is implemented under `policies/baseline_modules/`,
+   target-intent-bound through the CVRP-owned
    `research_guidance_route_first.py`, documented at
    `scion/docs/experiments/v0.4/v04-cvrp-comparison-route-first-heuristic-design-20260708.md`,
-   and is now running as a short target-intent-bound comparison campaign from
+   and was evaluated as a short target-intent-bound comparison campaign from
    commit `d7430150` through `policies/baseline_modules/config.py`:
    `/home/clawd/research/scion-experiments/v04-cvrp-route-first-comparison-server-claw-2r-gpt55-2r-gpt55-20260708T082843Z-claw`.
-   Direct smoke is feasibility/instrumentation context only, not protocol
-   evidence.
-25. Use the new large-file modularization plan before further behavior changes
+   Both candidates were duplicate config flips, both screening rows abandoned,
+   aggregate case W/L/T was `0/16/0`, aggregate pair W/L/T was `0/64/0`, and
+   row medians were `-24.5` with CI `[-116.5, -15.0]`. Runtime telemetry
+   confirmed `route_first_heuristic` ran; the solver family was simply worse
+   than the current ALNS+VNS champion on the measured surface. Postrun:
+   `scion/docs/experiments/v0.4/v04-cvrp-route-first-comparison-postrun-20260708.md`.
+25. Treat the CVRP-owned contract/context repair as implemented in the current
+   checkout: `route_first_heuristic` is now the aligned reviewed/default-avoid
+   mechanism id, prepared target-intent binding is empty, material-difference
+   requirements are prompt-visible first-class records, and solver-design
+   hypotheses must pass algorithmic-intervention sufficiency before code
+   generation. Use this repaired context for the next materially different
+   CVRP-owned clean fork; do not move CVRP/VRP semantics into generic
+   DecisionFeatures, protocol, scheduler, or postrun code.
+26. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-26. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+27. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-27. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+28. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence

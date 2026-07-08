@@ -407,6 +407,25 @@ The remaining closeout gaps are:
   or final-acceptance attribution. Park unchanged route-pool exact-cover
   recombination for v0.4. Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor48-route-pool-set-partition-recombination-postrun-20260708.md`.
+- The route-first comparison is now complete on the server-local `claw`
+  runner:
+  `/home/clawd/research/scion-experiments/v04-cvrp-route-first-comparison-server-claw-2r-gpt55-2r-gpt55-20260708T082843Z-claw`.
+  It completed valid/complete/postrun-ready with 15 successful local
+  `gpt-5.5` calls, two effective screening rows, and no promotion. Both
+  formal candidates were duplicate config flips enabling
+  `route_first_heuristic`; aggregate case W/L/T was `0/16/0`, aggregate pair
+  W/L/T was `0/64/0`, both row medians were `-24.5`, and CI was
+  `[-116.5, -15.0]`. Runtime telemetry confirmed the route-first variant ran,
+  so this is algorithm-family negative comparison evidence, not an inactive
+  mechanism failure. The current checkout implements the deferred CVRP-owned
+  contract/context repair before the next solver-design line:
+  `route_first_heuristic` is the aligned reviewed/default-avoid mechanism id,
+  prepared target-intent binding is empty, material-difference requirements are
+  launch-payload and prompt-context visible, and solver-design hypotheses must
+  describe a sufficient algorithmic intervention before code generation. This
+  stays problem-owned and does not move CVRP semantics into generic Scion core.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-route-first-comparison-postrun-20260708.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -916,21 +935,22 @@ CVRP:
    It activated but stayed exact-zero at the protocol row level; do not
    long-run, threshold-tune, or continue unchanged route-pool exact-cover
    recombination variants.
-24. Route-first comparison is now running as the next short server-local
-   campaign from commit `d7430150`:
+24. Treat the route-first comparison as complete, valid, and solver-negative:
    `/home/clawd/research/scion-experiments/v04-cvrp-route-first-comparison-server-claw-2r-gpt55-2r-gpt55-20260708T082843Z-claw`.
-   The default-off `route_first_heuristic` solver variant is implemented under
-   `policies/baseline_modules/`, the
-   prepared target-intent binding lives in CVRP-owned
-   `research_guidance_route_first.py`, and the design is documented at
-   `scion/docs/experiments/v0.4/v04-cvrp-comparison-route-first-heuristic-design-20260708.md`,
-   and the campaign is forced to enable it through
-   `policies/baseline_modules/config.py`. Treat direct smoke as feasibility/
-   instrumentation context only, not protocol evidence.
-25. Use the v0.4 large-file modularization plan before adding behavior to
+   The unchanged `route_first_heuristic` family ran but lost every measured
+   case and pair against ALNS+VNS; do not long-run or repeat the same config
+   flip. Postrun:
+   `scion/docs/experiments/v0.4/v04-cvrp-route-first-comparison-postrun-20260708.md`.
+25. Before starting another CVRP solver-design line, complete the CVRP-owned
+   contract/context repair: align route-first mechanism identity with runtime
+   `route_first_heuristic`, expose material-difference and target-intent
+   requirements as non-truncated prompt contract sections, and add
+   algorithmic-intervention sufficiency checks while preserving v3 generic-core
+   boundaries.
+26. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-26. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-27. Keep status documents compact; put detailed root counters and caveats in
+27. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+28. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes

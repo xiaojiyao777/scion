@@ -110,7 +110,7 @@ def render_research_surface_interface(surface_name: str) -> str:
         "- context.record_move(phase='search', attempted=1, accepted=0, "
         "delta=None, best_improved=0)\n"
         "- context.set_stop_reason(reason)\n"
-        "Do not pass arbitrary keyword arguments such as extra=... to these "
+        "Do not pass arbitrary keyword arguments such as extra=debug_payload to these "
         "helpers.\n\n"
         + _POLICY_INSTANCE_API_TEXT
     )

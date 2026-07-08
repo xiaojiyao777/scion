@@ -1438,7 +1438,8 @@ def _branch_lesson_usage_requirement_task_lines(
             "CMT2/CMT4 protection is required: "
             "branch_lesson_usage={clean_fork_diversity_claim:"
             "{protected_cases:['CMT2','CMT4'], protection_plan:"
-            "{CMT2:'...', CMT4:'...'}}}."
+            "{CMT2:'case-specific protection plan', "
+            "CMT4:'case-specific protection plan'}}}."
         ),
         (
             "When leaving a no-effect or weak-positive branch via a clean fork, "

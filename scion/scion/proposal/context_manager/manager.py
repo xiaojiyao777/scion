@@ -201,12 +201,29 @@ def _project_launch_focus_value(value: Any) -> Any:
     return str(value).strip()
 
 
-def _proposal_material_difference_requirement(branch: Branch) -> dict[str, Any]:
+def _proposal_material_difference_requirement(
+    branch: Branch,
+    *,
+    launch_research_focus: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     summary = getattr(branch, "branch_evidence_summary", {}) or {}
     if not isinstance(summary, Mapping):
-        return {}
+        summary = {}
     raw_requirement = summary.get("material_difference_requirement")
     if not isinstance(raw_requirement, Mapping):
+        raw_requirement = {}
+        if isinstance(launch_research_focus, Mapping):
+            candidate = launch_research_focus.get("material_difference_requirement")
+            if isinstance(candidate, Mapping):
+                raw_requirement = candidate
+            else:
+                focus = launch_research_focus.get("research_focus")
+                if isinstance(focus, Mapping) and isinstance(
+                    focus.get("material_difference_requirement"),
+                    Mapping,
+                ):
+                    raw_requirement = focus["material_difference_requirement"]
+    if not isinstance(raw_requirement, Mapping) or not raw_requirement:
         return {}
     candidates = [
         _material_difference_candidate_projection(item)
@@ -251,9 +268,11 @@ def _proposal_material_difference_requirement(branch: Branch) -> dict[str, Any]:
             "candidate_summaries": candidates[:8],
             "required_output_field": "material_difference",
             "required_output_contract": (
-                "The next hypothesis must include a non-empty, non-boilerplate "
-                "material_difference object with compact generic dimensions, "
-                "signature digests, or evidence-status deltas."
+                str(raw_requirement.get("required_output_contract") or "").strip()
+                or "The next hypothesis must include a non-empty, "
+                "non-boilerplate material_difference object with compact "
+                "generic dimensions, signature digests, or evidence-status "
+                "deltas."
             ),
             "proposal_visibility_only": True,
             "proposal_guidance_only": True,
@@ -883,8 +902,14 @@ class ContextManager:
         branch_followup_policy = render_branch_followup_policy(
             branch_followup_policy_payload
         )
+        launch_research_focus = _build_launch_research_focus() or ""
         material_difference_requirement = _proposal_material_difference_requirement(
-            branch
+            branch,
+            launch_research_focus=(
+                launch_research_focus
+                if isinstance(launch_research_focus, Mapping)
+                else None
+            ),
         )
         branch_lesson_records = project_branch_lesson_records(
             cross_branch_research_payload.get("branch_lesson_records")
@@ -924,8 +949,6 @@ class ContextManager:
             if measurement_governance_mode == "on"
             else {}
         )
-        launch_research_focus = _build_launch_research_focus() or ""
-
         return {
             "problem_summary": problem_summary,
             "problem_object": problem_object,
@@ -1118,6 +1141,14 @@ class ContextManager:
             f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
         )
         launch_research_focus = _build_launch_research_focus() or ""
+        material_difference_requirement = _proposal_material_difference_requirement(
+            branch,
+            launch_research_focus=(
+                launch_research_focus
+                if isinstance(launch_research_focus, Mapping)
+                else None
+            ),
+        )
 
         ctx: Dict[str, Any] = {
             "problem_summary": problem_summary,
@@ -1138,6 +1169,7 @@ class ContextManager:
             "reference_operators": reference_operators,
             "operator_interface_spec": operator_interface_spec,
             "launch_research_focus": launch_research_focus,
+            "material_difference_requirement": material_difference_requirement,
             "research_surface_name": hypothesis.change_locus,
             "research_surface_kind": getattr(surface, "kind", "operator"),
             "import_whitelist": import_whitelist,

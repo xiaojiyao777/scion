@@ -78,9 +78,9 @@ class CvrpSolverDesignProvider:
         if normalized == "policies/baseline_modules/local_search.py":
             return (
                 "Target-specific rule for local_search.py: integrate new moves "
-                "through _default_vns_operators() or the existing _vns(...) call "
+                "through _default_vns_operators() or the existing _vns call "
                 "path. Scheduler.py should keep calling _vns(candidate, "
-                "_default_vns_operators(), ...)."
+                "_default_vns_operators(), rng, context)."
             )
         if normalized == "policies/baseline_modules/acceptance.py":
             return (
@@ -113,9 +113,10 @@ class CvrpSolverDesignProvider:
                 "`material_difference.contrast`, and "
                 "`material_difference.evidence` before code generation. Use "
                 "the exact shape "
-                "material_difference={changed_dimensions:[...], "
-                "contrast:{nearest_reviewed_mechanisms:[...], "
-                "difference:'...'}, evidence:[...]}; do not use aliases such "
+                "material_difference={changed_dimensions:['route_state_update'], "
+                "contrast:{nearest_reviewed_mechanisms:['reviewed_mechanism_id'], "
+                "difference:'specific structural contrast'}, "
+                "evidence:['direct telemetry to collect']}; do not use aliases such "
                 "as new_dimensions, old_signature, selection_gate, "
                 "module_boundary, contrasts, or protected_loss_plan."
             ),
@@ -125,10 +126,23 @@ class CvrpSolverDesignProvider:
                 "prose or material_difference: "
                 "branch_lesson_usage={clean_fork_diversity_claim:"
                 "{protected_cases:['CMT2','CMT4'], protection_plan:"
-                "{CMT2:'...', CMT4:'...'}}}. CVRP formal screening already "
+                "{CMT2:'case-specific protection plan', "
+                "CMT4:'case-specific protection plan'}}}. "
+                "CVRP formal screening already "
                 "declares CMT2/CMT4 as priority_case_ids; postrun analysis "
                 "should expect them in effective_priority_case_ids unless the "
                 "split changes."
+            ),
+            (
+                "CVRP solver-design algorithmic-intervention sufficiency: a "
+                "formal hypothesis must explain how the mechanism changes the "
+                "solve trajectory or search state, how it generates or selects "
+                "candidate route states, what attempted/accepted/rejected/"
+                "budget-stopped observations will be recorded, and how "
+                "post-downstream or final total_distance attribution will be "
+                "measured. A config-only activation, default-off variant flip, "
+                "telemetry-only wrapper, or pre-VNS local delta without final "
+                "trajectory attribution is not sufficient."
             ),
             (
                 "For `solver_design` expected_telemetry, use the selected surface "
@@ -252,8 +266,9 @@ class CvrpSolverDesignProvider:
                 "effect telemetry with `context.record_move` under that same id "
                 "only when the triggered embedded VNS actually improves the "
                 "candidate, for example "
-                "`context.record_move('<mechanism>', attempted=1, accepted=..., "
-                "delta=..., best_improved=...)`; activation/runtime counters "
+                "`context.record_move('<mechanism>', attempted=1, "
+                "accepted=accepted_flag, delta=objective_delta, "
+                "best_improved=best_flag)`; activation/runtime counters "
                 "alone leave effect attribution missing. "
                 "Do not hardcode case ids, BKS values, seeds, or split membership; "
                 "do not remove VNS broadly."
@@ -458,8 +473,8 @@ class CvrpSolverDesignProvider:
                 "notes must explain broader formal-surface activation or a "
                 "direct objective-changing seed-selection effect with CMT2 "
                 "protection, using a same-run seed baseline or same-mechanism "
-                "`context.record_move(..., delta=...)` rather than treating "
-                "fallback activation as effect."
+                "`context.record_move('seed_selector', delta=seed_delta)` rather "
+                "than treating fallback activation as effect."
             ),
             (
                 "If target-intent selects seed_selector.py again, the intent "
@@ -678,10 +693,10 @@ class CvrpSolverDesignProvider:
                         "Branch-owned algorithm modules use internal `_Solution` "
                         "and `_Route` objects, not nested customer-list routes."
                     ),
-                    "constraint": (
+                        "constraint": (
                         "`_Route` exposes `.customers`, `.load`, `.cost`, "
-                        "`.can_insert(...)`, `.cost_of_insert(...)`, "
-                        "`.cost_of_remove(...)`, `.insert(...)`, `.remove(...)`, "
+                        "`.can_insert(customer)`, `.cost_of_insert(customer, index)`, "
+                        "`.cost_of_remove(customer)`, `.insert(customer, index)`, `.remove(customer)`, "
                         "and `.recalculate()`. `_Solution` exposes `.copy()`, "
                         "`.rebuild_index()`, `.remove_empty_routes()`, "
                         "`.is_feasible()`, and `.routes_as_tuples()`."
@@ -718,8 +733,9 @@ class CvrpSolverDesignProvider:
                         "duration delta, not cumulative elapsed time. "
                         "`context.record_iteration(phase, count)` populates "
                         "`solver_algorithm_context_records.<phase>_iterations`. "
-                        "`context.record_move(phase, attempted=..., accepted=..., "
-                        "delta=..., best_improved=...)` is for direct move/effect "
+                        "`context.record_move(phase, attempted=attempt_count, "
+                        "accepted=accepted_count, delta=objective_delta, "
+                        "best_improved=best_count)` is for direct move/effect "
                         "evidence. Candidate patches should not add new calls to "
                         "`context.record_best_update`, `context.record_context`, "
                         "`context.record_objective_probe`, "
@@ -816,7 +832,7 @@ class CvrpSolverDesignProvider:
             (
                 "If the target is `policies/baseline_modules/local_search.py`, "
                 "integrate new move operators through the existing "
-                "`_default_vns_operators()` and `_vns(...)` path. Do not invent "
+                "`_default_vns_operators()` and `_vns` path. Do not invent "
                 "a detached scheduler `_run`/`run` entrypoint to call them, and "
                 "do not store temporary search state on `_Solution` with "
                 "private dynamic attributes."
@@ -859,7 +875,7 @@ class CvrpSolverDesignProvider:
                 "`policies/baseline_algorithm.py` while another file is the "
                 "approved target, preserve the stable runtime contract: "
                 "`baseline_algorithm.py` must keep "
-                "`_ALNSVNSSolver(...).solve(instance, rng)`, and `scheduler.py` "
+                "`_ALNSVNSSolver(configured_keywords).solve(instance, rng)`, and `scheduler.py` "
                 "must keep the class-based `_ALNSVNSSolver.__init__(self, *, "
                 "time_limit, destroy_ratio, segment_length, reaction_factor, "
                 "vns_max_no_improve, use_vns, cw_threshold, vns_threshold, "
@@ -898,8 +914,8 @@ class CvrpSolverDesignProvider:
                 "compare the selected candidate against the same-run baseline "
                 "seed/portfolio before downstream ALNS/VNS attribution becomes "
                 "ambiguous, or record an accepted candidate-vs-baseline delta "
-                "with `context.record_move('<mechanism>', delta=..., "
-                "best_improved=...)` under the declared mechanism id. Route-cap "
+                "with `context.record_move('<mechanism>', delta=seed_delta, "
+                "best_improved=best_flag)` under the declared mechanism id. Route-cap "
                 "fallback use, seed-pool size changes, or simply choosing a "
                 "seed are activation/design evidence, not objective effect."
             ),
@@ -911,7 +927,7 @@ class CvrpSolverDesignProvider:
                 "populate `solver_algorithm_context_records.<mechanism>_iterations` "
                 "and `solver_algorithm_phase_runtime_ms.<mechanism>`; there is "
                 "no `context.record_context` API. Only call "
-                "`context.record_move('<mechanism>', delta=..., best_improved=1)` "
+                "`context.record_move('<mechanism>', delta=objective_delta, best_improved=1)` "
                 "when that mechanism directly caused an accepted or improving "
                 "candidate; ordinary scheduler best-improvement bookkeeping is "
                 "not causal acceptance effect evidence."
@@ -931,7 +947,7 @@ class CvrpSolverDesignProvider:
                 "For selector/filter or shadow-selection code, pre-VNS local "
                 "delta is diagnostic evidence only. Use activation/decision "
                 "counters for selector diagnostics, and reserve "
-                "`record_move(..., delta=..., best_improved=...)` final effect "
+                "`record_move(mechanism, delta=objective_delta, best_improved=best_flag)` final effect "
                 "claims for post-downstream accepted/current/best trajectory "
                 "evidence under the declared mechanism id."
             ),
@@ -943,14 +959,14 @@ class CvrpSolverDesignProvider:
                 "`context.record_alns_iteration`, or "
                 "`context.record_solution_progress`, even if existing champion "
                 "scheduler code contains internal diagnostics with similar "
-                "names. Use `record_move(..., delta=..., best_improved=...)` "
+                "names. Use `record_move(mechanism, delta=objective_delta, best_improved=best_flag)` "
                 "for direct effect attribution."
             ),
             (
                 "For ALNS/VNS phase modifications, instrument the declared "
                 "mechanism id for the modified lever, not the broad phase name. "
                 "For example, if the mechanism id is `vns_operator_scheduler`, "
-                "record `context.record_phase('vns_operator_scheduler', ...)` "
+                "record `context.record_phase('vns_operator_scheduler', elapsed_ms)` "
                 "or matching context records; do not rely on an existing `vns` "
                 "or `alns` aggregate phase bucket to satisfy that declaration."
             ),
@@ -958,8 +974,9 @@ class CvrpSolverDesignProvider:
                 "The active package state model uses `_Solution.routes` as "
                 "`_Route` objects, not `list[list[int]]`. A `_Route` exposes "
                 "`.customers`, `.load`, `.cost`, `.can_insert(customer)`, "
-                "`.cost_of_insert(...)`, `.cost_of_remove(...)`, `.insert(...)`, "
-                "`.remove(...)`, and `.recalculate()`. A `_Solution` exposes "
+                "`.cost_of_insert(customer, index)`, `.cost_of_remove(customer)`, "
+                "`.insert(customer, index)`, `.remove(customer)`, and "
+                "`.recalculate()`. A `_Solution` exposes "
                 "`.copy()`, `.rebuild_index()`, `.remove_empty_routes()`, "
                 "`.is_feasible()`, and `.routes_as_tuples()`. Do not slice, "
                 "concatenate, or overwrite `solution.routes` as customer lists; "
@@ -1029,7 +1046,7 @@ class CvrpSolverDesignProvider:
             ),
             (
                 "For local-search targets, wire new move operators into the "
-                "existing `_default_vns_operators()` list or existing `_vns(...)` "
+                "existing `_default_vns_operators()` list or existing `_vns` "
                 "call path; do not create detached `_run`/`run` scheduler "
                 "entrypoints."
             ),
@@ -1047,7 +1064,7 @@ class CvrpSolverDesignProvider:
             (
                 "If scheduler.py or baseline_algorithm.py is only an integration "
                 "edit, preserve the stable runtime contract: baseline_algorithm.py "
-                "calls `_ALNSVNSSolver(...).solve(instance, rng)`, and scheduler.py "
+                "calls `_ALNSVNSSolver(configured_keywords).solve(instance, rng)`, and scheduler.py "
                 "keeps the class-based `_ALNSVNSSolver.__init__(self, *, "
                 "time_limit, destroy_ratio, segment_length, reaction_factor, "
                 "vns_max_no_improve, use_vns, cw_threshold, vns_threshold, "
@@ -1111,7 +1128,7 @@ class CvrpSolverDesignProvider:
                 "`context.record_iteration(phase='search', count=1)`, and "
                 "`context.record_move(phase='search', attempted=1, accepted=0, "
                 "delta=None, best_improved=0)`. Do not pass arbitrary keyword "
-                "arguments such as `extra=...`."
+                "arguments such as `extra=debug_payload`."
             ),
             (
                 "If the approved hypothesis declares mechanism telemetry, all "
@@ -1150,7 +1167,7 @@ class CvrpSolverDesignProvider:
                 f"{ACTIVE_SOLVER_DESIGN_PACKAGE}: use focused modules under "
                 "`policies/baseline_modules/` for construction, destroy/repair, "
                 "local search, acceptance, scheduler/runtime allocation, and "
-                "telemetry, with `policies/baseline_algorithm.py::solve(...)` "
+                "telemetry, with `policies/baseline_algorithm.py::solve(instance, rng)` "
                 "as the stable entrypoint."
             ),
             (

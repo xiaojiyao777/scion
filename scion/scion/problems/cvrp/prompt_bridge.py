@@ -433,7 +433,8 @@ def _minimal_code_constraints_context(
         ),
         "solver_design_api_manifest": (
             "context.make_solution(routes); context.record_phase(name, elapsed_ms); "
-            "context.record_iteration(phase, count); context.record_move(...)"
+            "context.record_iteration(phase, count); "
+            "context.record_move(phase, attempted, accepted, delta, best_improved)"
         ),
         "solver_design_branch_current_integration_files": (
             "policies/baseline_algorithm.py"

@@ -31,7 +31,6 @@ from scion.problems.cvrp.research_guidance_route_first import (
     route_first_comparison_evidence_requirement,
     route_first_comparison_focus,
     route_first_comparison_related_ids,
-    route_first_comparison_required_mechanism,
 )
 
 CVRP_PROBLEM_FAMILY = "cvrp"
@@ -78,6 +77,59 @@ REVIEWED_SCHEDULER_RUNTIME_ALLOCATION_IDS = tuple(
     if item.get("mechanism_family") == "scheduler_runtime_allocation"
 )
 PROTECTED_CASES = ("CMT2", "CMT4")
+CVRP_MATERIAL_DIFFERENCE_REQUIREMENT = {
+    "schema_version": "material_difference_requirement.v1",
+    "record_type": "material_difference_requirement",
+    "record_id": "material_difference_requirement:cvrp_solver_design_causal_path",
+    "required": True,
+    "required_for": "cvrp_solver_design_clean_fork",
+    "requirement_source": "cvrp_problem_research_guidance",
+    "reason": (
+        "CVRP solver-design remains solver-negative after many reviewed "
+        "mechanism families; the next formal hypothesis must state a compact "
+        "material_difference record before code generation."
+    ),
+    "reason_codes": [
+        "CVRP_SOLVER_DESIGN_CAUSAL_PATH_CONTRACT",
+        "CVRP_ALGORITHMIC_INTERVENTION_REQUIRED",
+    ],
+    "required_metadata_key": "material_difference",
+    "required_output_contract": (
+        "material_difference={changed_dimensions:['route_state_update'], "
+        "contrast:{nearest_reviewed_mechanisms:['reviewed_mechanism_id'], "
+        "difference:'specific structural contrast'}, "
+        "evidence:['direct telemetry to collect']}"
+    ),
+}
+CVRP_ALGORITHMIC_INTERVENTION_SUFFICIENCY_CONTRACT = {
+    "schema_version": "cvrp_algorithmic_intervention_sufficiency.v1",
+    "record_type": "cvrp_solver_design_prompt_contract",
+    "requirement_id": "cvrp_algorithmic_intervention_sufficiency",
+    "required_for": "solver_design_clean_fork",
+    "description": (
+        "A CVRP solver-design hypothesis is not sufficient if it only flips a "
+        "config value, activates an existing variant, wraps telemetry, or adds "
+        "a low-risk postprocess. It must describe the algorithmic intervention "
+        "that changes the solve trajectory and the evidence that attributes "
+        "final objective movement to that intervention."
+    ),
+    "required_fields": [
+        "changed solve trajectory or search-state transition",
+        "new candidate solution or route-state generation/selection",
+        "attempted/accepted/rejected/budget-stopped observation plan",
+        "post-downstream or final total_distance attribution",
+        "CMT2/CMT4 protected-case outcome evidence",
+    ],
+    "insufficient_patterns": [
+        "config-only activation",
+        "default-off variant flip",
+        "telemetry-only wrapper",
+        "same mechanism threshold tune",
+        "pre-VNS local delta without final trajectory attribution",
+    ],
+    "proposal_visibility_only": True,
+    "decision_features_excluded": True,
+}
 SUCCESSOR24_MECHANISM_ID = "lookahead_insertion_cost_repair"
 SUCCESSOR24_V2_MECHANISM_ID = "lookahead_insertion_cost_repair_v2"
 SUCCESSOR24_TARGET_FILE = "policies/baseline_modules/destroy_repair.py"
@@ -1060,18 +1112,20 @@ NEXT_REQUIRED_DIRECTION = (
     "candidate, keep the causal-path gate but make the exact "
     "material_difference schema prominent, and ensure CMT2/CMT4 protected "
     "cases are either forced into formal screening or recorded as an explicit "
-    "measurement caveat. The next prepared attempt should run the route-first "
-    "comparison by enabling "
-    f"`{ROUTE_FIRST_COMPARISON_MECHANISM_ID}` / "
+    "measurement caveat. The route-first comparison by enabling "
     f"`{ROUTE_FIRST_COMPARISON_VARIANT_ID}` through "
-    f"`{ROUTE_FIRST_COMPARISON_TARGET_FILE}`, not an unchanged scheduler "
-    "helper rerun, route-skeleton threshold/gating variant, route-memory "
-    "repair, route-fragment repair, route-pair crossover, giant-tour "
-    "contiguous split, route-pool successor48 continuation, two-for-one "
-    "route-set exchange, repair-operator selector, repair-placement "
-    "tournament, removal targeting rule, seed selector, local-search move, "
-    "acceptance-weight, runtime-allocation change, unchanged best-solution "
-    "ruin/recreate rerun, or successor46b/47 continuation."
+    f"`{ROUTE_FIRST_COMPARISON_TARGET_FILE}` is now reviewed negative "
+    "evidence, not the next target-intent slot. Before another CVRP "
+    "solver-design line, repair the CVRP-owned context/contract so the next "
+    "hypothesis must describe a materially different algorithmic intervention "
+    "rather than an unchanged scheduler helper rerun, route-skeleton "
+    "threshold/gating variant, route-memory repair, route-fragment repair, "
+    "route-pair crossover, giant-tour contiguous split, route-pool "
+    "successor48 continuation, two-for-one route-set exchange, repair-"
+    "operator selector, repair-placement tournament, removal targeting rule, "
+    "seed selector, local-search move, acceptance-weight, runtime-allocation "
+    "change, unchanged best-solution ruin/recreate rerun, unchanged "
+    "route-first config flip, or successor46b/47 continuation."
 )
 CURRENT_QUESTION = (
     "After both the large-instance intra-route two-opt checklist and the "
@@ -1124,14 +1178,14 @@ CURRENT_QUESTION = (
     "cause telemetry, and successor47 "
     f"`{SUCCESSOR47_MECHANISM_ID}` activated as a modular giant-tour split "
     "attempt but stayed marginal below MDE with CMT2/CMT4 losses and almost no "
-    "direct split effect, can an independent route-first heuristic comparison "
-    f"`{ROUTE_FIRST_COMPARISON_MECHANISM_ID}` show whether the current "
-    "ALNS+VNS baseline is already a strong solver family with limited easy "
-    "headroom, or whether Scion has been searching inside an overly narrow "
-    "algorithm family? The prepared slot is now target-intent-bound to enabling "
-    f"`{ROUTE_FIRST_COMPARISON_VARIANT_ID}` only, must preserve feasibility, "
-    "route count, bounded runtime, and CMT2/CMT4 priority-case evidence, and "
-    "must not modify generic Scion core or create another new solver family."
+    "direct split effect, and the independent route-first comparison "
+    f"`{ROUTE_FIRST_COMPARISON_MECHANISM_ID}` ran with confirmed runtime "
+    "activation but lost heavily to ALNS+VNS, can the next CVRP clean fork "
+    "state a materially different algorithmic intervention with solve-"
+    "trajectory change, candidate-state generation/selection, accepted/"
+    "rejected/budget telemetry, final total_distance attribution, feasibility, "
+    "route count, bounded runtime, and CMT2/CMT4 priority-case evidence, while "
+    "leaving generic Scion core and DecisionFeatures unchanged?"
 )
 REQUIRED_EVIDENCE = (
     (
@@ -1201,13 +1255,10 @@ REQUIRED_EVIDENCE = (
         "unchanged giant-tour split recombination"
     ),
     (
-        f"`{ROUTE_FIRST_COMPARISON_MECHANISM_ID}` is the live comparison "
-        "target-intent mechanism: enable the existing "
-        f"`{ROUTE_FIRST_COMPARISON_VARIANT_ID}` solver variant through "
-        f"`{ROUTE_FIRST_COMPARISON_TARGET_FILE}` and evaluate it against the "
-        "current ALNS+VNS champion with route_first_heuristic phase runtime, "
-        "iteration, move, best-delta, solution-progress, total_distance, "
-        "feasibility, route-count, and CMT2/CMT4 priority-case evidence"
+        f"`{ROUTE_FIRST_COMPARISON_MECHANISM_ID}` is reviewed/default-avoid "
+        "after the route-first comparison activated normally but lost to the "
+        "current ALNS+VNS champion; do not spend the next slot on unchanged "
+        "SOLVER_VARIANT config flips or route-first baseline repeats"
     ),
     (
         "before the next CVRP hypothesis, use exact material_difference schema "
@@ -1226,7 +1277,15 @@ REQUIRED_EVIDENCE = (
         "and explain why it is distinct from reviewed route-skeleton repair, "
         "two-for-one exchange, bounded dual repair selection, construction seed "
         "selectors, local-search variants, reviewed destroy/repair removals, "
-        "and unchanged acceptance-policy guard variants"
+        "unchanged acceptance-policy guard variants, and the reviewed negative "
+        "route-first config-flip comparison"
+    ),
+    (
+        "for the next clean fork, the hypothesis must describe a sufficient "
+        "algorithmic intervention: changed solve trajectory or search-state "
+        "transition, new candidate route-state generation or selection, "
+        "attempted/accepted/rejected/budget observation, and post-downstream or "
+        "final total_distance attribution"
     ),
     (
         f"successor40 `{SUCCESSOR40_MECHANISM_ID}` is reviewed/default-avoid "
@@ -1741,14 +1800,19 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [
-            ROUTE_FIRST_COMPARISON_MECHANISM_ID
-        ],
+        "target_intent_required_mechanism_ids": [],
         "reviewed_mechanism_ids": [
             *list(REVIEWED_MECHANISM_IDS),
             SUCCESSOR41_MECHANISM_ID,
+            ROUTE_FIRST_COMPARISON_MECHANISM_ID,
         ],
         "suppressed_mechanism_ids": list(SUPPRESSED_MECHANISM_IDS),
+        "material_difference_requirement": deepcopy(
+            CVRP_MATERIAL_DIFFERENCE_REQUIREMENT
+        ),
+        "evidence_requirements": [
+            deepcopy(CVRP_ALGORITHMIC_INTERVENTION_SUFFICIENCY_CONTRACT),
+        ],
         "successor41_target_intent": {
             "mechanism_id": SUCCESSOR41_MECHANISM_ID,
             "mechanism_family": "destroy_repair_selection",
@@ -2056,9 +2120,7 @@ def build_cvrp_legacy_research_focus(
 
 
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
-    return (
-        route_first_comparison_required_mechanism(PROTECTED_CASES),
-    )
+    return ()
 
 
 def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
@@ -2284,6 +2346,25 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
             ),
         ),
         route_first_comparison_evidence_requirement(PROTECTED_CASES),
+        EvidenceRequirement(
+            requirement_id="cvrp_algorithmic_intervention_sufficiency",
+            category="solver_design_prompt_contract",
+            description=CVRP_ALGORITHMIC_INTERVENTION_SUFFICIENCY_CONTRACT[
+                "description"
+            ],
+            mechanism_ids=(
+                "cvrp_solver_design_clean_fork",
+                "route_pool_recombination",
+                "future_clean_fork_mechanism",
+            ),
+            protected_items=PROTECTED_CASES,
+            required_fields=tuple(
+                str(item)
+                for item in CVRP_ALGORITHMIC_INTERVENTION_SUFFICIENCY_CONTRACT[
+                    "required_fields"
+                ]
+            ),
+        ),
         EvidenceRequirement(
             requirement_id=(
                 "successor48_bounded_route_pool_set_partition_recombination"

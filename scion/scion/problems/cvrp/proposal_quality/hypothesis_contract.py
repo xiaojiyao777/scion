@@ -109,6 +109,14 @@ CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS = (
             "trajectory quality"
         ),
     ),
+    (
+        "route_first_heuristic",
+        (
+            "the route-first comparison activated normally but both screened "
+            "candidates were duplicate config flips and the aggregate evidence "
+            "lost to the current ALNS+VNS champion"
+        ),
+    ),
 )
 CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE = CVRP_REVIEWED_DEFAULT_AVOID_FAILURE
 CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS = CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS
@@ -170,6 +178,37 @@ _PROTECTION_FIELD_KEYS = (
     "protection_evidence",
 )
 _PROTECTED_CASES = ("CMT2", "CMT4")
+_ALGORITHMIC_TRAJECTORY_TERMS = (
+    "solve_trajectory",
+    "search_trajectory",
+    "search_state",
+    "candidate_state",
+    "route_state",
+    "current_state",
+    "downstream_trajectory",
+)
+_ALGORITHMIC_CANDIDATE_TERMS = (
+    "new_candidate",
+    "alternate_candidate",
+    "candidate_route",
+    "route_candidate",
+    "candidate_solution",
+    "route_pool",
+    "recombination",
+    "generate",
+    "generation",
+    "selection",
+    "selector",
+)
+_ALGORITHMIC_FINAL_EFFECT_TERMS = (
+    "final_total_distance",
+    "post_downstream",
+    "post_vns",
+    "final_objective",
+    "total_distance",
+    "accepted_current_best",
+    "best_solution",
+)
 
 
 def validate_cvrp_hypothesis_quality(hypothesis: Any) -> Mapping[str, Any]:
@@ -268,6 +307,8 @@ def _causal_path_missing_fields(
         missing.append("expected_telemetry.effect")
     if not _cmt_protection_satisfied(_value(hypothesis, "branch_lesson_usage")):
         missing.append("branch_lesson_usage.clean_fork_diversity_claim")
+    if not _algorithmic_intervention_satisfied(hypothesis):
+        missing.append("algorithmic_intervention_sufficiency")
     return missing
 
 
@@ -329,7 +370,10 @@ def _causal_path_rejection(
                 f"path, {telemetry_retry_constraint}and provide "
                 "structured CMT2/CMT4 protected-case protection evidence. "
                 "Use this exact material_difference shape: "
-                "changed_dimensions=[...], contrast={...}, evidence=[...]; "
+                "changed_dimensions=['route_state_update'], "
+                "contrast={'nearest_reviewed_mechanisms':['reviewed_id'], "
+                "'difference':'specific structural contrast'}, "
+                "evidence=['direct telemetry to collect']; "
                 "do not use aliases such as new_dimensions, old_signature, "
                 "selection_gate, module_boundary, or protected_loss_plan. "
                 "Use this exact shape in branch_lesson_usage: "
@@ -339,7 +383,13 @@ def _causal_path_rejection(
                 "material_difference, or contrast_dimensions. For selector, "
                 "shadow, or filter mechanisms, separate pre_vns_local_delta "
                 "diagnostics from post_downstream_or_final_total_distance_delta "
-                "before claiming final objective effect."
+                "before claiming final objective effect. The hypothesis must "
+                "also describe the algorithmic intervention that changes the "
+                "solve trajectory, how it generates or selects candidate route "
+                "states, attempted/accepted/rejected/budget observations, and "
+                "post-downstream or final total_distance attribution. A "
+                "config-only activation, default-off variant flip, or "
+                "telemetry-only wrapper is not sufficient."
             ),
             "repair_template": {
                 "repair_type": _CAUSAL_PATH_GATE,
@@ -357,6 +407,10 @@ def _causal_path_rejection(
                         "branch_lesson_usage.clean_fork_diversity_claim."
                         "protection_plan"
                     ),
+                    "algorithmic_intervention.solve_trajectory_change",
+                    "algorithmic_intervention.candidate_state_generation_or_selection",
+                    "algorithmic_intervention.attempted_accepted_rejected_budget_evidence",
+                    "algorithmic_intervention.final_total_distance_attribution",
                 ],
                 "example_branch_lesson_usage": {
                     "clean_fork_diversity_claim": {
@@ -448,6 +502,38 @@ def _cmt_protection_satisfied(value: Any) -> bool:
         if protection_payloads and _contains_all_protected_cases(protection_payloads):
             return True
     return False
+
+
+def _algorithmic_intervention_satisfied(hypothesis: Any) -> bool:
+    text = _normalized_text(
+        " ".join(
+            [
+                _proposal_text(hypothesis, include_material_fields=True),
+                " ".join(_flatten_strings(_value(hypothesis, "expected_telemetry"))),
+                " ".join(_flatten_strings(_value(hypothesis, "branch_lesson_usage"))),
+            ]
+        )
+    )
+    if not text:
+        return False
+    has_trajectory_change = any(
+        term in text for term in _ALGORITHMIC_TRAJECTORY_TERMS
+    )
+    has_candidate_state = any(term in text for term in _ALGORITHMIC_CANDIDATE_TERMS)
+    has_outcome_observation = (
+        "attempted" in text
+        and ("accepted" in text or "best_improved" in text)
+        and ("rejected" in text or "budget" in text)
+    )
+    has_final_attribution = any(
+        term in text for term in _ALGORITHMIC_FINAL_EFFECT_TERMS
+    )
+    return (
+        has_trajectory_change
+        and has_candidate_state
+        and has_outcome_observation
+        and has_final_attribution
+    )
 
 
 def _contains_all_protected_cases(value: Any) -> bool:

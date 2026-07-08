@@ -5,7 +5,7 @@ from typing import Any
 
 from scion.research_guidance import EvidenceRequirement, RequiredMechanism
 
-ROUTE_FIRST_COMPARISON_MECHANISM_ID = "route_first_heuristic_baseline"
+ROUTE_FIRST_COMPARISON_MECHANISM_ID = "route_first_heuristic"
 ROUTE_FIRST_COMPARISON_VARIANT_ID = "route_first_heuristic"
 ROUTE_FIRST_COMPARISON_TARGET_FILE = "policies/baseline_modules/config.py"
 ROUTE_FIRST_COMPARISON_TARGET_FILES = (
@@ -19,22 +19,21 @@ ROUTE_FIRST_COMPARISON_DESIGN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-comparison-route-first-heuristic-design-20260708.md"
 )
+ROUTE_FIRST_COMPARISON_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-route-first-comparison-postrun-20260708.md"
+)
 ROUTE_FIRST_COMPARISON_TARGET_INTENT_RULE = (
-    "The next CVRP comparison slot is target-intent-bound to "
-    f"`{ROUTE_FIRST_COMPARISON_MECHANISM_ID}` by enabling the already "
-    f"implemented `{ROUTE_FIRST_COMPARISON_VARIANT_ID}` variant through "
-    f"`{ROUTE_FIRST_COMPARISON_TARGET_FILE}`. This is a solver-family "
-    "comparison against the current ALNS+VNS baseline, not a successor48 "
-    "continuation and not a request to invent another algorithm. The candidate "
-    "should flip the default-off variant only, keep the stable "
-    "`baseline_algorithm.py::solve` entrypoint, leave generic Scion core, "
-    "protocol, gates, DecisionFeatures, postrun acceptance, and `solver.py` "
-    "unchanged, and avoid editing the route-first modules unless the explicit "
-    "comparison smoke fails. Required evidence: route_first_heuristic phase "
-    "runtime, iterations, attempted/accepted moves, best-delta/improvement "
-    "counts, solution progress, final total_distance, route count, feasibility, "
-    "route-cap preservation, and CMT2/CMT4 priority-case outcomes. See "
-    f"`{ROUTE_FIRST_COMPARISON_DESIGN_PATH}`."
+    "The CVRP route-first comparison object is complete and reviewed negative: "
+    f"the implemented `{ROUTE_FIRST_COMPARISON_VARIANT_ID}` variant was enabled "
+    f"through `{ROUTE_FIRST_COMPARISON_TARGET_FILE}`, runtime telemetry proved "
+    "the route_first_heuristic phase executed, and the short comparison lost "
+    "against the current ALNS+VNS champion. Treat unchanged route-first "
+    "config-flip candidates as reviewed/default-avoid evidence, not as a live "
+    "target-intent slot. Future CVRP solver-design work must use a materially "
+    "different CVRP-owned causal path with algorithmic intervention evidence. "
+    f"Design: `{ROUTE_FIRST_COMPARISON_DESIGN_PATH}`. Postrun: "
+    f"`{ROUTE_FIRST_COMPARISON_POSTRUN_PATH}`."
 )
 
 
@@ -46,8 +45,20 @@ def route_first_comparison_focus() -> dict[str, Any]:
         "target_file": ROUTE_FIRST_COMPARISON_TARGET_FILE,
         "target_files": list(ROUTE_FIRST_COMPARISON_TARGET_FILES),
         "design_path": ROUTE_FIRST_COMPARISON_DESIGN_PATH,
-        "status": "live_target_intent_comparison",
-        "required_mechanism_binding": "target_intent_required",
+        "postrun_path": ROUTE_FIRST_COMPARISON_POSTRUN_PATH,
+        "status": "reviewed_negative_comparison",
+        "required_mechanism_binding": "none",
+        "reviewed_result": {
+            "case_wlt": "0/16/0",
+            "pair_wlt": "0/64/0",
+            "median_delta": -24.5,
+            "ci": [-116.5, -15.0],
+            "runtime_confirmed": True,
+            "interpretation": (
+                "unchanged route_first_heuristic is worse than ALNS+VNS on "
+                "the measured CVRP surface"
+            ),
+        },
         "material_difference": {
             "changed_dimensions": [
                 "complete route-first solver family",
@@ -83,7 +94,7 @@ def route_first_comparison_required_mechanism(
 ) -> RequiredMechanism:
     return RequiredMechanism(
         mechanism_id=ROUTE_FIRST_COMPARISON_MECHANISM_ID,
-        category="solver_family_comparison",
+        category="solver_family_comparison_reviewed",
         description=ROUTE_FIRST_COMPARISON_TARGET_INTENT_RULE,
         required_observations=(
             "enable SOLVER_VARIANT route_first_heuristic",
@@ -97,7 +108,7 @@ def route_first_comparison_required_mechanism(
             "CMT2/CMT4 priority-case outcome evidence",
         ),
         protected_items=protected_cases,
-        hypothesis_mechanism_binding="target_intent_required",
+        hypothesis_mechanism_binding="context_only",
     )
 
 

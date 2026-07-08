@@ -93,7 +93,7 @@ def _preview_baseline_algorithm_scheduler_api(
         if passed
         else (
             f"{path} must keep scheduler integration through "
-            "`_ALNSVNSSolver(...).solve(instance, rng)`; do not import "
+            "`_ALNSVNSSolver(configured_keywords).solve(instance, rng)`; do not import "
             f"scheduler entrypoint names {bad_names}"
         )
     )

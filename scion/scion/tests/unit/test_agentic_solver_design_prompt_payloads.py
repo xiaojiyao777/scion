@@ -97,6 +97,9 @@ def test_solver_design_hypothesis_prompt_resolves_provider_from_ref() -> None:
     assert "branch_lesson_usage.clean_fork_diversity_claim" in user_prompt
     assert "priority_case_ids" in user_prompt
     assert "effective_priority_case_ids" in user_prompt
+    assert "algorithmic-intervention sufficiency" in user_prompt
+    assert "config-only activation" in user_prompt
+    assert "final total_distance attribution" in user_prompt
     assert "Current CVRP route-merge lesson" in user_prompt
     assert "post-share70 target-selection run first selected `destroy_repair.py`" in user_prompt
     assert "pair W/L/T `10/3/19`" in user_prompt
@@ -333,7 +336,7 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     assert "smallest necessary wiring edits" in rendered_system
     assert "Do not add new calls to `context.record_best_update`" in rendered_system
     assert "keep the approved mechanism id `route_merge_repair`" in rendered_system
-    assert "_ALNSVNSSolver(...).solve(instance, rng)" in rendered_system
+    assert "_ALNSVNSSolver(configured_keywords).solve(instance, rng)" in rendered_system
     assert "scheduler as orchestration" in rendered_system
     assert "_ALNSVNSSolver.__init__(self, *" in rendered_system
     assert "_ALNSVNSSolver.solve(self, instance, rng)" in rendered_system

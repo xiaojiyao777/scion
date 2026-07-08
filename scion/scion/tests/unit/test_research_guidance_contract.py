@@ -254,6 +254,13 @@ def test_legacy_manifest_projects_successor_focus_metadata(tmp_path) -> None:
             "successor_opportunity_families": ["successor_family"],
             "default_avoid_directions": ["acceptance variants"],
             "next_required_direction": "Choose a successor.",
+            "material_difference_requirement": {
+                "schema_version": "material_difference_requirement.v1",
+                "record_type": "material_difference_requirement",
+                "record_id": "material_difference_requirement:legacy-test",
+                "required": True,
+                "required_for": "clean_fork_new_branch",
+            },
         },
     }
 
@@ -269,6 +276,9 @@ def test_legacy_manifest_projects_successor_focus_metadata(tmp_path) -> None:
     assert payload["successor_opportunity_families"] == ["successor_family"]
     assert payload["default_avoid_directions"] == ["acceptance variants"]
     assert payload["next_required_direction"] == "Choose a successor."
+    assert payload["material_difference_requirement"]["record_id"] == (
+        "material_difference_requirement:legacy-test"
+    )
     assert "acceptance variants" in payload["guidance_text"]
     assert "hypothesis_mechanism_binding=target_intent_required" in (
         payload["guidance_text"]

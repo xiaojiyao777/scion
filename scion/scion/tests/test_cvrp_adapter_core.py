@@ -132,8 +132,11 @@ def test_cvrp_adapter_hypothesis_quality_no_longer_uses_stale_scheduler_focus(
     hypothesis = HypothesisProposal(
         hypothesis_text=(
             "Add a bounded pair-failure cooldown selector before ALNS chooses "
-            "a destroy and repair pair with direct objective-effect telemetry "
-            "and CMT2/CMT4 protection."
+            "a destroy and repair pair; it changes the search_state and "
+            "solve_trajectory by selecting a candidate_route state, records "
+            "attempted, accepted, rejected, and budget-stopped outcomes, and "
+            "attributes post_downstream final_total_distance movement with "
+            "CMT2/CMT4 protection."
         ),
         change_locus="solver_design",
         action="modify",
@@ -154,8 +157,8 @@ def test_cvrp_adapter_hypothesis_quality_no_longer_uses_stale_scheduler_focus(
             "clean_fork_diversity_claim": {
                 "protected_cases": ["CMT2", "CMT4"],
                 "protection_plan": {
-                    "CMT2": "report cooldown accepted/rejected deltas",
-                    "CMT4": "report cooldown accepted/rejected deltas",
+                    "CMT2": "report attempted accepted rejected budget deltas",
+                    "CMT4": "report attempted accepted rejected budget deltas",
                 },
             }
         },
@@ -285,6 +288,7 @@ def test_cvrp_adapter_hypothesis_quality_blocks_reviewed_successor40_repeat(
         ("bounded_dual_repair_selector", "policies/baseline_modules/scheduler.py"),
         ("route_skeleton_regret_repair", "policies/baseline_modules/scheduler.py"),
         ("elite_route_memory_repair", "policies/baseline_modules/route_memory.py"),
+        ("route_first_heuristic", "policies/baseline_modules/config.py"),
     ],
 )
 def test_cvrp_adapter_hypothesis_quality_blocks_reviewed_default_avoid(
@@ -384,7 +388,7 @@ def test_cvrp_hypothesis_quality_blocks_missing_material_difference(
     assert "materially different CVRP-owned causal path" in (
         check.structured_rejection["retry_constraint"]
     )
-    assert "changed_dimensions=[...], contrast={...}, evidence=[...]" in (
+    assert "changed_dimensions=['route_state_update']" in (
         check.structured_rejection["retry_constraint"]
     )
     assert "do not use aliases such as new_dimensions" in (
@@ -533,6 +537,54 @@ def test_cvrp_hypothesis_quality_blocks_missing_cmt_protection(
     )
 
 
+def test_cvrp_hypothesis_quality_blocks_config_only_algorithmic_intervention(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Enable a default-off conservative variant through config and record "
+            "phase telemetry. This intentionally avoids changing the solver body."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/config.py",
+        novelty_signature={"mechanism_family": "solver_family_comparison"},
+        material_difference={
+            "changed_dimensions": ["config activation only"],
+            "contrast": {
+                "nearest_reviewed_mechanism": "route_first_heuristic",
+                "difference": "toggle a variant without changing the algorithm body",
+            },
+            "evidence": ["final total_distance will be compared"],
+        },
+        expected_telemetry={
+            "effect": ["safe_variant_activation.final_total_distance_delta"]
+        },
+        branch_lesson_usage={
+            "clean_fork_diversity_claim": {
+                "protected_cases": ["CMT2", "CMT4"],
+                "protection_plan": {
+                    "CMT2": "report total_distance and feasibility",
+                    "CMT4": "report total_distance and feasibility",
+                },
+            }
+        },
+        mechanism_changes=(
+            MechanismChange(id="safe_variant_activation", change_type="add"),
+        ),
+    )
+
+    check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
+
+    assert check.allowed is False
+    assert "algorithmic_intervention_sufficiency" in (
+        check.structured_rejection["missing_fields"]
+    )
+    assert "config-only activation" in check.structured_rejection[
+        "retry_constraint"
+    ]
+
+
 @pytest.mark.parametrize(
     "surface_name",
     [
@@ -581,9 +633,11 @@ def _solver_design_hypothesis(
     )
     return HypothesisProposal(
         hypothesis_text=(
-            "Test a capacity_slack_repair_rollback mechanism with direct "
-            "repair-before and repair-after objective telemetry plus CMT2/CMT4 "
-            "guards."
+            "Test a capacity_slack_repair_rollback mechanism that changes the "
+            "search_state and solve_trajectory by selecting candidate_route "
+            "states after repair, records attempted, accepted, rejected, and "
+            "budget-stopped rollback outcomes, and attributes post_downstream "
+            "final_total_distance movement with CMT2/CMT4 guards."
         ),
         change_locus="solver_design",
         action="modify",
@@ -599,7 +653,11 @@ def _solver_design_hypothesis(
                     "difference": "rollback on capacity slack harm, not edge memory",
                 },
                 "evidence": {
-                    "source": "successor37 direct effect and CMT2/CMT4 losses"
+                    "source": (
+                        "successor37 direct effect and CMT2/CMT4 losses; "
+                        "new candidate_state attempted accepted rejected budget "
+                        "evidence required"
+                    )
                 },
             }
         ),
@@ -618,12 +676,18 @@ def _solver_design_hypothesis(
             else {
                 "clean_fork_diversity_claim": {
                     "protected_cases": ["CMT2", "CMT4"],
-                    "protection_plan": {
-                        "CMT2": "track rollback accepted/rejected objective deltas",
-                        "CMT4": "track rollback accepted/rejected objective deltas",
-                    },
+                        "protection_plan": {
+                            "CMT2": (
+                                "track rollback attempted accepted rejected "
+                                "objective deltas"
+                            ),
+                            "CMT4": (
+                                "track rollback attempted accepted rejected "
+                                "objective deltas"
+                            ),
+                        },
+                    }
                 }
-            }
         ),
         mechanism_changes=mechanism_changes,
     )

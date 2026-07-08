@@ -133,9 +133,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for mechanism in typed_contract["required_mechanisms"]
     }
     assert "required" not in mechanism_bindings.values()
-    assert mechanism_bindings == {
-        "route_first_heuristic_baseline": "target_intent_required",
-    }
+    assert mechanism_bindings == {}
     assert any(
         requirement["requirement_id"] == "successor_causal_path_direct_effect"
         for requirement in typed_contract["evidence_requirements"]
@@ -260,9 +258,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         manifest=prepared_manifest,
     )
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "route_first_heuristic_baseline",
-    ]
+    assert launch_payload["target_intent_required_mechanism_ids"] == []
+    assert launch_payload["material_difference_requirement"]["required"] is True
     assert launch_payload["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -315,6 +312,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "short_horizon_seed_trajectory_selector_v2",
         "seed_post_optimization_selector",
         "route_skeleton_regret_repair",
+        "route_first_heuristic",
     ]
     assert launch_payload["suppressed_mechanism_ids"] == []
     assert prepared_manifest["research_focus"]["scope"] == (
@@ -563,10 +561,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
-        "independent route-first heuristic comparison"
+        "independent route-first comparison"
         in prepared_manifest["research_focus"]["current_question"]
     )
-    assert "route_first_heuristic_baseline" in prepared_manifest["research_focus"][
+    assert "route_first_heuristic" in prepared_manifest["research_focus"][
         "current_question"
     ]
     assert (
@@ -753,7 +751,6 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "bounded_repair_placement_tournament" in prepared_manifest_md
     assert "best_solution_ruin_recreate_intensification" in prepared_manifest_md
     assert "bounded_giant_tour_split_recombination" in prepared_manifest_md
-    assert "route_first_heuristic_baseline" in prepared_manifest_md
     assert "route_first_heuristic" in prepared_manifest_md
     assert prepared_manifest["research_focus"]["successor47_reviewed_evidence"][
         "mechanism_id"
@@ -779,9 +776,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
     assert prepared_manifest["research_focus"][
         "target_intent_required_mechanism_ids"
-    ] == [
-        "route_first_heuristic_baseline",
-    ]
+    ] == []
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -834,6 +829,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "short_horizon_seed_trajectory_selector_v2",
         "seed_post_optimization_selector",
         "route_skeleton_regret_repair",
+        "route_first_heuristic",
     ]
     assert prepared_manifest["research_focus"]["suppressed_mechanism_ids"] == []
     assert prepared_manifest["research_focus"]["successor_opportunity_families"] == [

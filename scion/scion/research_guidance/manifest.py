@@ -245,6 +245,9 @@ def launch_research_guidance_payload(
         "legacy_research_focus_schema_version": _string(
             legacy_focus.get("schema_version")
         ),
+        "material_difference_requirement": _json_safe(
+            legacy_focus.get("material_difference_requirement")
+        ),
         "reviewed_mechanism_ids": _string_list(
             legacy_focus.get("reviewed_mechanism_ids")
         ),

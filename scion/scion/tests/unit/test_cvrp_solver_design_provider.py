@@ -293,6 +293,10 @@ def test_cvrp_hypothesis_guidance_exposes_causal_path_contract_shape() -> None:
     assert "branch_lesson_usage.clean_fork_diversity_claim" in rendered
     assert "priority_case_ids" in rendered
     assert "effective_priority_case_ids" in rendered
+    assert "algorithmic-intervention sufficiency" in rendered
+    assert "changes the solve trajectory or search state" in rendered
+    assert "config-only activation" in rendered
+    assert "final total_distance attribution" in rendered
 
 
 def test_cvrp_hypothesis_guidance_exposes_share70_tail_diagnostic_lessons() -> None:
