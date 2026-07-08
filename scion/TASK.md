@@ -611,6 +611,31 @@ not long-run, threshold-tune, beam/pool tune, or continue the unchanged
 route-pool exact-cover line. Postrun:
 `scion/docs/experiments/v0.4/v04-cvrp-successor49-repaired-context-route-pool-repeat-postrun-20260708.md`.
 
+Successor50 then tested the repaired route-pool closure context but exposed a
+solver-slot routing failure:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor50-repaired-context-material-cleanfork-server-claw-2r-gpt55-20260708T121805Z-claw`.
+It completed valid/complete/postrun-ready on the server-local `claw` runner
+from commit `0dd21bfc`, with six successful local `gpt-5.5` traces, one
+proposal-quality block, and two effective screening rows. The first
+target-intent selected `bounded_route_path_relinking` but was rejected by
+default-avoid route/path risk and did not bind the formal hypothesis. The first
+formal hypothesis drifted to the real solver idea `depot_anchor_rotation`, but
+the CVRP solver-design causal-path contract correctly blocked it before code
+generation for missing exact clean-fork diversity and algorithmic-intervention
+sufficiency. The retry then misread the repair context and selected
+`material_difference_contract_repair` in `policies/baseline_modules/scheduler.py`:
+a metadata/hook gate that leaves the champion route search unchanged when no
+hook is present. Candidate intent counts were `repair_or_infra_candidate=3` and
+`algorithm_quality_candidate=0`. Solver evidence was zero-effect: aggregate
+case W/L/T `0/0/20`, pair W/L/T `3/2/75`, row medians `0.0`, CI
+`[0.0, 0.0]`, zero promotions, and direct mechanism best-delta/improvement
+positive in `0/80` candidate runs. Treat successor50 as framework/guidance
+negative and solver-negative. The current checkout now removes the stale
+"repair context/contract before another solver line" guidance and blocks exact
+and generalized contract-repair / metadata-preflight / telemetry-wrapper /
+hook-gate candidates from occupying a CVRP solver-design slot. Postrun:
+`scion/docs/experiments/v0.4/v04-cvrp-successor50-material-difference-contract-repair-postrun-20260708.md`.
+
 Legacy direction details below are retained as reviewed-history context.
 
 The latest completed CVRP attempt is
@@ -1030,10 +1055,14 @@ from the current checkout.
    records, solver-design hypotheses must pass algorithmic-intervention
    sufficiency before code generation, and
    `bounded_route_pool_set_partition_recombination` is reviewed/default-avoid
-   rather than live target-intent guidance. Use this repaired context for the
-   next materially different CVRP-owned clean fork; do not move CVRP/VRP
-   semantics into generic DecisionFeatures, protocol, scheduler, or postrun
-   code.
+   rather than live target-intent guidance. Successor50
+   `material_difference_contract_repair` is now also reviewed/default-avoid as
+   repair-or-infra work, not a solver mechanism; contract repair, scheduler
+   metadata preflight, telemetry-only wrappers, hook gates, and no-op hook
+   validation must not consume the next solver-design clean-fork slot. Use this
+   repaired context for the next materially different CVRP-owned clean fork;
+   do not move CVRP/VRP semantics into generic DecisionFeatures, protocol,
+   scheduler, or postrun code.
 26. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 27. Keep the v0.5 governance ablation frozen as a preregistered design; do not

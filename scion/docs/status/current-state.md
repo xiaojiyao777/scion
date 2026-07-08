@@ -441,17 +441,28 @@ The remaining closeout gaps are:
   the CVRP hypothesis contract; next CVRP work must be a materially different
   CVRP-owned clean fork. Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor49-repaired-context-route-pool-repeat-postrun-20260708.md`.
-- Successor50 is now in flight from committed repair `0dd21bfc` on the
-  server-local `claw` runner:
+- Successor50 completed from committed repair `0dd21bfc` on the server-local
+  `claw` runner:
   `/home/clawd/research/scion-experiments/v04-cvrp-successor50-repaired-context-material-cleanfork-server-claw-2r-gpt55-20260708T121805Z-claw`.
-  It uses `--rounds 2`, `--completion-preflight`, full proposal context, and
-  `--force-surface solver_design`. Completion preflight passed against local
-  `gpt-5.5` (HTTP 200). Prepared manifest has empty hard required and
-  target-intent-required mechanism ids, and marks route-pool as
-  reviewed/default-avoid with successor48/49 postrun paths. Early trace: the
-  first weak `depot_anchor_rotation` hypothesis was blocked by the CVRP causal
-  path contract; a later candidate reached code generation. Await completion
-  before interpreting solver evidence.
+  It was valid/complete/postrun-ready with six successful local `gpt-5.5`
+  traces, one proposal-quality block, two screening rows, and zero promotions.
+  The first target-intent selected `bounded_route_path_relinking` but was
+  rejected by default-avoid route/path risk and did not bind the formal
+  hypothesis. The first formal hypothesis drifted to real solver idea
+  `depot_anchor_rotation`; the CVRP causal-path contract correctly blocked it
+  before code generation for missing exact clean-fork diversity and
+  algorithmic-intervention sufficiency. The retry selected
+  `material_difference_contract_repair` in `scheduler.py`, a metadata/hook
+  gate rather than a solver mechanism. All candidate intents were
+  repair/infra, aggregate case W/L/T was `0/0/20`, pair W/L/T was `3/2/75`,
+  row medians were `0.0` with CI `[0.0, 0.0]`, and direct mechanism
+  best-delta/improvement was positive in `0/80` candidate runs. Treat
+  successor50 as framework/guidance-negative and solver-negative. The current
+  checkout now removes the stale context/contract-repair instruction and
+  blocks exact and generalized scheduler-level contract repair, metadata
+  preflight, telemetry wrapper, hook gate, and no-op hook validation from
+  occupying a CVRP solver-design clean-fork slot. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor50-material-difference-contract-repair-postrun-20260708.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.

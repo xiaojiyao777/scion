@@ -253,6 +253,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "seed_post_optimization_selector",
         "route_skeleton_regret_repair",
         "bounded_route_pool_set_partition_recombination",
+        "material_difference_contract_repair",
         "route_first_heuristic",
     ]
     assert focus["suppressed_mechanism_ids"] == []
@@ -418,6 +419,18 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "successor49 confirmed" in (
         focus["successor48_reviewed_evidence"]["reviewed_rule"]
     )
+    assert focus["successor50_reviewed_evidence"]["mechanism_id"] == (
+        "material_difference_contract_repair"
+    )
+    assert focus["successor50_reviewed_evidence"]["target_file"] == (
+        "policies/baseline_modules/scheduler.py"
+    )
+    assert focus["successor50_reviewed_evidence"]["status"] == (
+        "reviewed_repair_or_infra_not_solver_mechanism"
+    )
+    assert "scheduler_contract_gate_as_solver_experiment" in (
+        focus["successor50_reviewed_evidence"]["blocked_actions"]
+    )
     assert focus["route_first_comparison_target_intent"]["mechanism_id"] == (
         ROUTE_FIRST_COMPARISON_MECHANISM_ID
     )
@@ -539,6 +552,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "route-pool successor48/successor49 continuation" in (
         focus["next_required_direction"]
     )
+    assert "material_difference_contract_repair" in focus["next_required_direction"]
+    assert "contract repair" in focus["next_required_direction"]
     assert "Successor18b" in focus["next_required_direction"]
     assert "distinct from cross-exchange, intra-route Or-opt reinsertion" in (
         focus["next_required_direction"]
@@ -1213,6 +1228,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "seed_post_optimization_selector",
         "route_skeleton_regret_repair",
         "bounded_route_pool_set_partition_recombination",
+        "material_difference_contract_repair",
         "route_first_heuristic",
     ]
     assert launch_payload["required_mechanism_ids"] == []

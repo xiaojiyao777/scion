@@ -523,6 +523,95 @@ def test_cvrp_hypothesis_quality_blocks_reviewed_route_pool_recombination(
     )
 
 
+def test_cvrp_hypothesis_quality_blocks_material_difference_contract_repair(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = _solver_design_hypothesis(
+        mechanism_id="material_difference_contract_repair",
+        material_difference={
+            "changed_dimensions": ["metadata preflight"],
+            "contrast": {
+                "nearest_reviewed_mechanism": "route_first_heuristic",
+                "difference": "scheduler contract gate for later hooks",
+            },
+            "evidence": ["final total_distance will remain unchanged"],
+        },
+        expected_telemetry={
+            "effect": [
+                "material_difference_contract_repair.final_total_distance_delta"
+            ]
+        },
+    )
+
+    check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
+
+    assert check.allowed is False
+    assert check.structured_rejection["gate_name"] == "cvrp_reviewed_default_avoid"
+    assert (
+        check.structured_rejection["blocked_mechanism_id"]
+        == "material_difference_contract_repair"
+    )
+    assert "repair-or-infra work" in check.structured_rejection["evidence_reason"]
+
+
+def test_cvrp_hypothesis_quality_blocks_scheduler_contract_gate_retry(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a scheduler-level material difference contract gate and "
+            "metadata preflight. The no-op hook validation records telemetry "
+            "only and leaves the champion route search unchanged unless a "
+            "future experimental hook appears."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        novelty_signature={
+            "mechanism_family": "solver_design_context_contract",
+            "improvement_strategy": "metadata_gate",
+        },
+        material_difference={
+            "changed_dimensions": ["contract governance"],
+            "contrast": {
+                "nearest_reviewed_mechanism": "route_first_heuristic",
+                "difference": "metadata gate instead of route-state change",
+            },
+            "evidence": ["solver_design_context_contract.final_total_distance"],
+        },
+        expected_telemetry={
+            "effect": ["solver_design_context_contract.final_total_distance"]
+        },
+        branch_lesson_usage={
+            "clean_fork_diversity_claim": {
+                "protected_cases": ["CMT2", "CMT4"],
+                "protection_plan": {
+                    "CMT2": "metadata gate caveat",
+                    "CMT4": "metadata gate caveat",
+                },
+            }
+        },
+        mechanism_changes=(
+            MechanismChange(id="solver_design_context_contract", change_type="modify"),
+        ),
+    )
+
+    check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
+
+    assert check.allowed is False
+    assert check.structured_rejection["gate_name"] == "cvrp_reviewed_default_avoid"
+    assert (
+        check.structured_rejection["blocked_mechanism_id"]
+        == "solver_design_context_contract"
+    )
+    assert "retry must rewrite the solver hypothesis" in (
+        check.structured_rejection["evidence_reason"]
+    )
+    assert "Do not switch the retry to scheduler-level contract repair" in (
+        check.structured_rejection["retry_constraint"]
+    )
+
+
 def test_cvrp_hypothesis_quality_blocks_missing_cmt_protection(
     cvrp_adapter: ProblemAdapter,
 ) -> None:

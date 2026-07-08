@@ -127,6 +127,16 @@ CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS = (
             "lost to the current ALNS+VNS champion"
         ),
     ),
+    (
+        "material_difference_contract_repair",
+        (
+            "successor50 showed that a scheduler-level material-difference "
+            "contract hook is repair-or-infra work, not a CVRP solver "
+            "mechanism: it left the champion route search unchanged, produced "
+            "zero direct objective effect, and should not consume solver-design "
+            "optimization slots"
+        ),
+    ),
 )
 CVRP_SUCCESSOR37_DEFAULT_AVOID_FAILURE = CVRP_REVIEWED_DEFAULT_AVOID_FAILURE
 CVRP_SUCCESSOR37_DEFAULT_AVOID_MECHANISMS = CVRP_REVIEWED_DEFAULT_AVOID_MECHANISMS
@@ -219,6 +229,29 @@ _ALGORITHMIC_FINAL_EFFECT_TERMS = (
     "accepted_current_best",
     "best_solution",
 )
+_REPAIR_OR_INFRA_MECHANISM_TERMS = (
+    "contract_repair",
+    "material_difference_contract",
+    "proposal_contract",
+    "context_contract",
+)
+_REPAIR_OR_INFRA_TEXT_TERMS = (
+    "contract_gate",
+    "metadata_gate",
+    "metadata_preflight",
+    "telemetry_only",
+    "hook_gate",
+    "hook_wrapper",
+    "no_op_hook",
+    "solver_design_context_contract",
+    "scheduler_level_material_difference_contract",
+)
+_REPAIR_OR_INFRA_EVIDENCE_REASON = (
+    "successor50 showed that contract repair, scheduler-level metadata gates, "
+    "telemetry-only wrappers, and no-op hook validation are repair-or-infra "
+    "work rather than CVRP solver mechanisms; retry must rewrite the solver "
+    "hypothesis, not replace it with contract governance"
+)
 
 
 def validate_cvrp_hypothesis_quality(hypothesis: Any) -> Mapping[str, Any]:
@@ -236,6 +269,13 @@ def validate_cvrp_hypothesis_quality(hypothesis: Any) -> Mapping[str, Any]:
     )
     if default_avoid is not None:
         return default_avoid
+    repair_or_infra = _repair_or_infra_rejection(
+        hypothesis=hypothesis,
+        mechanism_ids=mechanism_ids,
+        target_file=target_file,
+    )
+    if repair_or_infra is not None:
+        return repair_or_infra
 
     missing = _causal_path_missing_fields(hypothesis, mechanism_ids=mechanism_ids)
     if missing:
@@ -293,6 +333,73 @@ def _reviewed_default_avoid_rejection(
             },
         }
     return None
+
+
+def _repair_or_infra_rejection(
+    *, hypothesis: Any, mechanism_ids: list[str], target_file: str
+) -> Mapping[str, Any] | None:
+    mechanism_text = _normalized_text(" ".join(mechanism_ids))
+    proposal_text = _normalized_text(
+        " ".join(
+            [
+                target_file,
+                mechanism_text,
+                _proposal_text(hypothesis, include_material_fields=True),
+                " ".join(_flatten_strings(_value(hypothesis, "expected_telemetry"))),
+                " ".join(_flatten_strings(_value(hypothesis, "branch_lesson_usage"))),
+                _string(_value(hypothesis, "no_op_condition")),
+            ]
+        )
+    )
+    blocks_by_mechanism = any(
+        term in mechanism_text for term in _REPAIR_OR_INFRA_MECHANISM_TERMS
+    )
+    blocks_by_scheduler_contract = target_file.endswith(
+        "policies/baseline_modules/scheduler.py"
+    ) and any(term in proposal_text for term in _REPAIR_OR_INFRA_TEXT_TERMS)
+    if not blocks_by_mechanism and not blocks_by_scheduler_contract:
+        return None
+
+    blocked_mechanism_id = mechanism_ids[0] if mechanism_ids else "repair_or_infra"
+    return {
+        "allowed": False,
+        "detail": (
+            f"{CVRP_REVIEWED_DEFAULT_AVOID_FAILURE}: "
+            f"{blocked_mechanism_id} is repair-or-infra work, not a CVRP "
+            "solver mechanism; selected_mechanisms="
+            + ",".join(mechanism_ids or ["none"])
+        ),
+        "gate_name": "cvrp_reviewed_default_avoid",
+        "structured_rejection": {
+            "source": "cvrp_problem_adapter",
+            "gate_name": "cvrp_reviewed_default_avoid",
+            "failure_code": CVRP_REVIEWED_DEFAULT_AVOID_FAILURE,
+            "agent_block_reason": "agent_quality_blocked",
+            "blocked_mechanism_id": blocked_mechanism_id,
+            "selected_mechanism_ids": mechanism_ids,
+            "target_file": target_file,
+            "evidence_reason": _REPAIR_OR_INFRA_EVIDENCE_REASON,
+            "retry_constraint": (
+                "Redraft the CVRP solver-design hypothesis before code "
+                "generation: keep the solver mechanism as the target, and "
+                "repair its material_difference, CMT2/CMT4 protection, "
+                "candidate-state generation or selection, attempted/accepted/"
+                "rejected/budget observations, and final total_distance "
+                "attribution. Do not switch the retry to scheduler-level "
+                "contract repair, metadata preflight, telemetry-only wrapper, "
+                "hook gate, or no-op hook validation."
+            ),
+            "repair_template": {
+                "repair_type": "cvrp_repair_or_infra_not_solver_slot",
+                "required_causal_path": (
+                    "materially different CVRP-owned solver mechanism that "
+                    "changes route search state and reports final objective "
+                    "attribution"
+                ),
+            },
+            "decision_features_excluded": True,
+        },
+    }
 
 
 def _causal_path_missing_fields(

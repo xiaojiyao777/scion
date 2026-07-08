@@ -313,6 +313,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "seed_post_optimization_selector",
         "route_skeleton_regret_repair",
         "bounded_route_pool_set_partition_recombination",
+        "material_difference_contract_repair",
         "route_first_heuristic",
     ]
     assert launch_payload["suppressed_mechanism_ids"] == []
@@ -772,6 +773,14 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     ]["target_file"] == (
         "policies/baseline_modules/config.py"
     )
+    assert prepared_manifest["research_focus"]["successor50_reviewed_evidence"][
+        "mechanism_id"
+    ] == "material_difference_contract_repair"
+    assert "scheduler_contract_gate_as_solver_experiment" in (
+        prepared_manifest["research_focus"]["successor50_reviewed_evidence"][
+            "blocked_actions"
+        ]
+    )
     assert "pre_vns_selector_delta_is_not_final_trajectory_proof" in (
         prepared_manifest_md
     )
@@ -837,6 +846,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "seed_post_optimization_selector",
         "route_skeleton_regret_repair",
         "bounded_route_pool_set_partition_recombination",
+        "material_difference_contract_repair",
         "route_first_heuristic",
     ]
     assert prepared_manifest["research_focus"]["suppressed_mechanism_ids"] == []

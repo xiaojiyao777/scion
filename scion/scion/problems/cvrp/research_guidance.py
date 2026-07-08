@@ -619,6 +619,25 @@ SUCCESSOR49_POSTRUN_PATH = (
     "scion/docs/experiments/v0.4/"
     "v04-cvrp-successor49-repaired-context-route-pool-repeat-postrun-20260708.md"
 )
+SUCCESSOR50_POSTRUN_PATH = (
+    "scion/docs/experiments/v0.4/"
+    "v04-cvrp-successor50-material-difference-contract-repair-postrun-20260708.md"
+)
+SUCCESSOR50_MECHANISM_ID = "material_difference_contract_repair"
+SUCCESSOR50_TARGET_FILE = "policies/baseline_modules/scheduler.py"
+SUCCESSOR50_REVIEWED_RULE = (
+    f"Successor50 `{SUCCESSOR50_MECHANISM_ID}` is reviewed/default-avoid as "
+    "repair-or-infra work rather than a CVRP solver mechanism. The run "
+    "completed valid/complete/postrun-ready after the repaired context blocked "
+    "an under-specified depot-anchor hypothesis, but the accepted candidate "
+    "modified scheduler.py only to add a metadata/hook gate, left the champion "
+    "route search unchanged when no hook was present, screened with median "
+    "delta 0.0 and CI [0.0, 0.0], and produced zero direct objective effect. "
+    "Do not long-run, same-line repair, telemetry-tune, or spend another "
+    "solver-design slot on scheduler-level material-difference contract gates, "
+    "metadata preflights, or hook wrappers. See "
+    f"`{SUCCESSOR50_POSTRUN_PATH}`."
+)
 SUCCESSOR48_REVIEWED_RULE = (
     f"Successor48 `{SUCCESSOR48_MECHANISM_ID}` is reviewed/default-avoid after "
     "valid route-pool set-partition evidence, and successor49 confirmed the "
@@ -1104,7 +1123,8 @@ NEXT_REQUIRED_DIRECTION = (
     f"{SUCCESSOR46_MECHANISM_ID}, or unchanged "
     f"{SUCCESSOR46B_MECHANISM_ID}, or unchanged "
     f"{SUCCESSOR47_MECHANISM_ID}, or unchanged "
-    f"{SUCCESSOR48_MECHANISM_ID}. Future construction-seed revisits must be "
+    f"{SUCCESSOR48_MECHANISM_ID}, or unchanged "
+    f"{SUCCESSOR50_MECHANISM_ID}. Future construction-seed revisits must be "
     "materially distinct from raw baseline, short-horizon trajectory, and "
     "post-construction micro-polish selector paths, with direct pre-ALNS/VNS "
     "objective telemetry. "
@@ -1125,17 +1145,19 @@ NEXT_REQUIRED_DIRECTION = (
     "measurement caveat. The route-first comparison by enabling "
     f"`{ROUTE_FIRST_COMPARISON_VARIANT_ID}` through "
     f"`{ROUTE_FIRST_COMPARISON_TARGET_FILE}` is now reviewed negative "
-    "evidence, not the next target-intent slot. Before another CVRP "
-    "solver-design line, repair the CVRP-owned context/contract so the next "
-    "hypothesis must describe a materially different algorithmic intervention "
-    "rather than an unchanged scheduler helper rerun, route-skeleton "
-    "threshold/gating variant, route-memory repair, route-fragment repair, "
-    "route-pair crossover, giant-tour contiguous split, route-pool "
-    "successor48/successor49 continuation, two-for-one route-set exchange, repair-"
-    "operator selector, repair-placement tournament, removal targeting rule, "
-    "seed selector, local-search move, acceptance-weight, runtime-allocation "
-    "change, unchanged best-solution ruin/recreate rerun, unchanged "
-    "route-first config flip, or successor46b/47 continuation."
+    "evidence, not the next target-intent slot. The CVRP-owned context/contract "
+    "repair is already active; do not propose another scheduler-level "
+    "material_difference_contract_repair, metadata preflight, telemetry-only "
+    "wrapper, or hook gate as a solver-design experiment. The next hypothesis "
+    "must describe a materially different algorithmic intervention rather than "
+    "an unchanged scheduler helper rerun, route-skeleton threshold/gating "
+    "variant, route-memory repair, route-fragment repair, route-pair crossover, "
+    "giant-tour contiguous split, route-pool successor48/successor49 "
+    "continuation, two-for-one route-set exchange, repair-operator selector, "
+    "repair-placement tournament, removal targeting rule, seed selector, "
+    "local-search move, acceptance-weight, runtime-allocation change, unchanged "
+    "best-solution ruin/recreate rerun, unchanged route-first config flip, "
+    "successor46b/47 continuation, or contract repair."
 )
 CURRENT_QUESTION = (
     "After both the large-instance intra-route two-opt checklist and the "
@@ -1709,7 +1731,9 @@ SUCCESSOR_PORTFOLIO_RULE = (
     f"`{SUCCESSOR46B_MECHANISM_ID}`, successor47 "
     f"`{SUCCESSOR47_MECHANISM_ID}`, and successor48/49 route-pool "
     f"`{SUCCESSOR48_MECHANISM_ID}` are now also reviewed/default-avoid after "
-    "valid below-MDE or no-effect evidence. The next CVRP solver slot must "
+    "valid below-MDE or no-effect evidence. Successor50 "
+    f"`{SUCCESSOR50_MECHANISM_ID}` is reviewed/default-avoid as "
+    "repair-or-infra work, not a solver mechanism. The next CVRP solver slot must "
     "clean-fork to a materially different CVRP-owned causal path after the "
     "exact material_difference schema and CMT2/CMT4 case-coverage "
     "requirements are satisfied. Scheduler destroy-size "
@@ -1816,6 +1840,7 @@ def build_cvrp_legacy_research_focus(
             *list(REVIEWED_MECHANISM_IDS),
             SUCCESSOR41_MECHANISM_ID,
             SUCCESSOR48_MECHANISM_ID,
+            SUCCESSOR50_MECHANISM_ID,
             ROUTE_FIRST_COMPARISON_MECHANISM_ID,
         ],
         "suppressed_mechanism_ids": list(SUPPRESSED_MECHANISM_IDS),
@@ -2101,6 +2126,34 @@ def build_cvrp_legacy_research_focus(
                 "route-pool source counts and reject causes are diagnostic only",
             ],
             "reviewed_rule": SUCCESSOR48_REVIEWED_RULE,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        },
+        "successor50_reviewed_evidence": {
+            "mechanism_id": SUCCESSOR50_MECHANISM_ID,
+            "mechanism_family": "repair_or_infra_candidate",
+            "target_file": SUCCESSOR50_TARGET_FILE,
+            "target_files": [
+                SUCCESSOR50_TARGET_FILE,
+            ],
+            "postrun_path": SUCCESSOR50_POSTRUN_PATH,
+            "status": "reviewed_repair_or_infra_not_solver_mechanism",
+            "required_mechanism_binding": "none",
+            "blocked_actions": [
+                "long_run",
+                "same_mechanism_followup",
+                "telemetry_tuning",
+                "scheduler_contract_gate_as_solver_experiment",
+                "metadata_preflight_as_solver_experiment",
+                "hook_wrapper_as_solver_experiment",
+            ],
+            "carried_lessons": [
+                "contract repair must not consume solver-design optimization slots",
+                "metadata gates do not generate candidate route states",
+                "telemetry-only wrappers do not prove final objective effect",
+                "context/contract repair is already active before successor50",
+            ],
+            "reviewed_rule": SUCCESSOR50_REVIEWED_RULE,
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
@@ -2595,6 +2648,7 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
             title="Successor portfolio direction",
             lines=(
                 ROUTE_FIRST_COMPARISON_TARGET_INTENT_RULE,
+                SUCCESSOR50_REVIEWED_RULE,
                 SUCCESSOR48_REVIEWED_RULE,
                 SUCCESSOR47_REVIEWED_RULE,
                 SUCCESSOR46B_REVIEWED_RULE,
