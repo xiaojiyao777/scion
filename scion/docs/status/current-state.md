@@ -441,6 +441,17 @@ The remaining closeout gaps are:
   the CVRP hypothesis contract; next CVRP work must be a materially different
   CVRP-owned clean fork. Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor49-repaired-context-route-pool-repeat-postrun-20260708.md`.
+- Successor50 is now in flight from committed repair `0dd21bfc` on the
+  server-local `claw` runner:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor50-repaired-context-material-cleanfork-server-claw-2r-gpt55-20260708T121805Z-claw`.
+  It uses `--rounds 2`, `--completion-preflight`, full proposal context, and
+  `--force-surface solver_design`. Completion preflight passed against local
+  `gpt-5.5` (HTTP 200). Prepared manifest has empty hard required and
+  target-intent-required mechanism ids, and marks route-pool as
+  reviewed/default-avoid with successor48/49 postrun paths. Early trace: the
+  first weak `depot_anchor_rotation` hypothesis was blocked by the CVRP causal
+  path contract; a later candidate reached code generation. Await completion
+  before interpreting solver evidence.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
