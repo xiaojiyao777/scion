@@ -75,6 +75,62 @@ def test_solver_design_surface_declares_active_algorithm_runtime_fields(
     ) is None
 
 
+def test_solver_design_default_solver_variant_stays_alns_vns(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        selected_surface="solver_design",
+    )
+    runtime = raw["runtime"]
+    phase_runtime = runtime["solver_algorithm_phase_runtime_ms"]
+
+    assert raw["feasible"] is True
+    assert runtime["solver_algorithm_active"] is True
+    assert runtime["solver_algorithm_errors"] == 0
+    assert runtime["solver_algorithm_solution_valid"] is True
+    assert "alns_core" in phase_runtime
+    assert "route_first_heuristic" not in phase_runtime
+    assert runtime["solver_algorithm_search_iterations"] > 0
+
+
+def test_solver_design_route_first_variant_runs_with_telemetry(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    config_path = workspace / "policies" / "baseline_modules" / "config.py"
+    config_text = config_path.read_text(encoding="utf-8")
+    assert 'SOLVER_VARIANT = "alns_vns"' in config_text
+    config_path.write_text(
+        config_text.replace(
+            'SOLVER_VARIANT = "alns_vns"',
+            'SOLVER_VARIANT = "route_first_heuristic"',
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        selected_surface="solver_design",
+    )
+    runtime = raw["runtime"]
+    context_records = runtime["solver_algorithm_context_records"]
+
+    assert raw["feasible"] is True
+    assert runtime["solver_algorithm_active"] is True
+    assert runtime["solver_algorithm_errors"] == 0
+    assert runtime["solver_algorithm_solution_valid"] is True
+    assert runtime["solver_algorithm_fleet_violation"] == 0
+    assert runtime["solver_algorithm_stop_reason"] in {"completed", "time_limit"}
+    assert "route_first_heuristic" in runtime["solver_algorithm_phase_runtime_ms"]
+    assert context_records["route_first_heuristic_iterations"] >= 1
+    assert runtime["solver_algorithm_move_attempts"] >= 1
+
+
 def test_solver_design_baseline_algorithm_exception_fails_selected_surface(
     tmp_path: Path,
 ) -> None:

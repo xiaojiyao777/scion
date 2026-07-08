@@ -396,16 +396,17 @@ The remaining closeout gaps are:
   complete feasible routes already seen in the current solve, select whole
   routes through a bounded exact-cover/set-partitioning subproblem, and accept
   only strict final `total_distance` improvement while preserving feasibility
-  and route count. Required evidence includes route-pool source counts,
-  exact-cover candidate count, accepted set-partition delta, separated
-  reject/budget counts, and CMT2/CMT4 priority-case safety. Design:
-  `scion/docs/experiments/v0.4/v04-cvrp-successor48-route-pool-set-partition-recombination-design-20260708.md`.
-  The short server-local validation run launched from commit `eba0c565` with
-  local `gpt-5.5`, completion preflight `ok: true`, and resume-from
-  successor47:
+  and route count. It has now completed valid/complete/postrun-ready on the
+  server-local `claw` runner:
   `/home/clawd/research/scion-experiments/v04-cvrp-successor48-route-pool-set-partition-recombination-server-claw-2r-gpt55-2r-gpt55-20260708T060446Z-claw`.
-  Initial PID is `1742335`. In-flight:
-  `scion/docs/experiments/v0.4/v04-cvrp-successor48-route-pool-set-partition-recombination-inflight-20260708.md`.
+  The run had normal local `gpt-5.5` calls and CMT2/CMT4 priority coverage but
+  no promotion signal: aggregate case W/L/T `0/1/23`, pair W/L/T `10/10/76`,
+  row medians `0.0`, CI highs `0.0`, and `rows_at_or_above_mde=0`. The trace
+  audit found no fatal context/model/v3-boundary failure; the candidates were
+  overly conservative and did not provide enough source-count, reject-cause,
+  or final-acceptance attribution. Park unchanged route-pool exact-cover
+  recombination for v0.4. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor48-route-pool-set-partition-recombination-postrun-20260708.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -908,18 +909,26 @@ CVRP:
    model/context behavior was normal, but direct split-reconstruction effect
    was nearly absent and CMT2/CMT4 were unsafe. Do not long-run or continue
    unchanged contiguous giant-tour split variants.
-23. Monitor successor48
-   `bounded_route_pool_set_partition_recombination`, now running on the
+23. Treat successor48 `bounded_route_pool_set_partition_recombination` as
+   complete, valid, and reviewed/default-avoid. It finished on the
    server-local `claw` runner at
    `/home/clawd/research/scion-experiments/v04-cvrp-successor48-route-pool-set-partition-recombination-server-claw-2r-gpt55-2r-gpt55-20260708T060446Z-claw`.
-   It must stay problem-owned in `route_pool_recombination.py`, use minimal
-   scheduler wiring, and prove route-pool source counts, exact-cover
-   candidates, accepted final-distance delta, separated reject/budget counts,
-   and CMT2/CMT4 safety.
-24. Use the v0.4 large-file modularization plan before adding behavior to
+   It activated but stayed exact-zero at the protocol row level; do not
+   long-run, threshold-tune, or continue unchanged route-pool exact-cover
+   recombination variants.
+24. Route-first comparison is prepared as the next short server-local
+   campaign. The default-off `route_first_heuristic` solver variant is
+   implemented under `policies/baseline_modules/`, the
+   prepared target-intent binding lives in CVRP-owned
+   `research_guidance_route_first.py`, and the design is documented at
+   `scion/docs/experiments/v0.4/v04-cvrp-comparison-route-first-heuristic-design-20260708.md`,
+   and should be enabled through `policies/baseline_modules/config.py`. Treat
+   direct smoke as feasibility/instrumentation context only, not protocol
+   evidence.
+25. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-25. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-26. Keep status documents compact; put detailed root counters and caveats in
+26. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+27. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes

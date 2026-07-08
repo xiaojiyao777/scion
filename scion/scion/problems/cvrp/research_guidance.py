@@ -23,6 +23,16 @@ from scion.problems.cvrp.successor_evidence_catalog import (
     SUCCESSOR_OPPORTUNITY_FAMILIES,
     SUPPRESSED_SUCCESSOR_MECHANISMS,
 )
+from scion.problems.cvrp.research_guidance_route_first import (
+    ROUTE_FIRST_COMPARISON_MECHANISM_ID,
+    ROUTE_FIRST_COMPARISON_TARGET_FILE,
+    ROUTE_FIRST_COMPARISON_TARGET_INTENT_RULE,
+    ROUTE_FIRST_COMPARISON_VARIANT_ID,
+    route_first_comparison_evidence_requirement,
+    route_first_comparison_focus,
+    route_first_comparison_related_ids,
+    route_first_comparison_required_mechanism,
+)
 
 CVRP_PROBLEM_FAMILY = "cvrp"
 LARGE_INSTANCE_TWO_OPT_SEED_REPORT = (
@@ -570,7 +580,6 @@ SUCCESSOR48_TARGET_INTENT_RULE = (
     "feasibility and route-count preservation, phase runtime, and CMT2/CMT4 "
     f"priority-case outcome evidence. See `{SUCCESSOR48_DESIGN_PATH}`."
 )
-
 LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
     "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
     "scope": "proposal_only_prepared_handoff",
@@ -1051,15 +1060,18 @@ NEXT_REQUIRED_DIRECTION = (
     "candidate, keep the causal-path gate but make the exact "
     "material_difference schema prominent, and ensure CMT2/CMT4 protected "
     "cases are either forced into formal screening or recorded as an explicit "
-    "measurement caveat. The next prepared attempt should implement "
-    f"`{SUCCESSOR48_MECHANISM_ID}` as a bounded route-pool set-partitioning "
-    "recombination clean fork, not an unchanged scheduler helper rerun, "
-    "route-skeleton threshold/gating variant, route-memory repair, route-"
-    "fragment repair, route-pair crossover, giant-tour contiguous split, "
-    "two-for-one route-set exchange, repair-operator selector, repair-"
-    "placement tournament, removal targeting rule, seed selector, local-"
-    "search move, acceptance-weight, runtime-allocation change, unchanged "
-    "best-solution ruin/recreate rerun, or successor46b/47 continuation."
+    "measurement caveat. The next prepared attempt should run the route-first "
+    "comparison by enabling "
+    f"`{ROUTE_FIRST_COMPARISON_MECHANISM_ID}` / "
+    f"`{ROUTE_FIRST_COMPARISON_VARIANT_ID}` through "
+    f"`{ROUTE_FIRST_COMPARISON_TARGET_FILE}`, not an unchanged scheduler "
+    "helper rerun, route-skeleton threshold/gating variant, route-memory "
+    "repair, route-fragment repair, route-pair crossover, giant-tour "
+    "contiguous split, route-pool successor48 continuation, two-for-one "
+    "route-set exchange, repair-operator selector, repair-placement "
+    "tournament, removal targeting rule, seed selector, local-search move, "
+    "acceptance-weight, runtime-allocation change, unchanged best-solution "
+    "ruin/recreate rerun, or successor46b/47 continuation."
 )
 CURRENT_QUESTION = (
     "After both the large-instance intra-route two-opt checklist and the "
@@ -1112,15 +1124,14 @@ CURRENT_QUESTION = (
     "cause telemetry, and successor47 "
     f"`{SUCCESSOR47_MECHANISM_ID}` activated as a modular giant-tour split "
     "attempt but stayed marginal below MDE with CMT2/CMT4 losses and almost no "
-    "direct split effect, does successor48 "
-    f"`{SUCCESSOR48_MECHANISM_ID}` provide a materially different ephemeral "
-    "route-pool set-partitioning causal path with final accepted exact-cover "
-    "objective effect, feasibility and route-count preservation, bounded "
-    "runtime, and CMT2/CMT4 priority-case evidence without repeating reviewed/"
-    "default-avoid branches? The prepared slot is now target-intent-bound to "
-    "this clean fork, must satisfy the exact material_difference schema, and "
-    "must separate set-partition route-pool effect from downstream VNS/ALNS or "
-    "generic local-search diagnostics before code work."
+    "direct split effect, can an independent route-first heuristic comparison "
+    f"`{ROUTE_FIRST_COMPARISON_MECHANISM_ID}` show whether the current "
+    "ALNS+VNS baseline is already a strong solver family with limited easy "
+    "headroom, or whether Scion has been searching inside an overly narrow "
+    "algorithm family? The prepared slot is now target-intent-bound to enabling "
+    f"`{ROUTE_FIRST_COMPARISON_VARIANT_ID}` only, must preserve feasibility, "
+    "route count, bounded runtime, and CMT2/CMT4 priority-case evidence, and "
+    "must not modify generic Scion core or create another new solver family."
 )
 REQUIRED_EVIDENCE = (
     (
@@ -1190,14 +1201,13 @@ REQUIRED_EVIDENCE = (
         "unchanged giant-tour split recombination"
     ),
     (
-        f"successor48 `{SUCCESSOR48_MECHANISM_ID}` is the live target-intent "
-        "mechanism: implement it as a CVRP-owned bounded route-pool set-"
-        "partitioning recombination module with minimal scheduler wiring, "
-        "route-pool source counts, exact-cover candidate count, final accepted "
-        "set-partition total_distance effect evidence, attempted/accepted/"
-        "rejected_no_cover/rejected_infeasible/rejected_route_count/"
-        "rejected_no_improvement/budget_stopped attribution, feasibility and "
-        "route-count preservation, and CMT2/CMT4 priority-case evidence"
+        f"`{ROUTE_FIRST_COMPARISON_MECHANISM_ID}` is the live comparison "
+        "target-intent mechanism: enable the existing "
+        f"`{ROUTE_FIRST_COMPARISON_VARIANT_ID}` solver variant through "
+        f"`{ROUTE_FIRST_COMPARISON_TARGET_FILE}` and evaluate it against the "
+        "current ALNS+VNS champion with route_first_heuristic phase runtime, "
+        "iteration, move, best-delta, solution-progress, total_distance, "
+        "feasibility, route-count, and CMT2/CMT4 priority-case evidence"
     ),
     (
         "before the next CVRP hypothesis, use exact material_difference schema "
@@ -1731,7 +1741,9 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [SUCCESSOR48_MECHANISM_ID],
+        "target_intent_required_mechanism_ids": [
+            ROUTE_FIRST_COMPARISON_MECHANISM_ID
+        ],
         "reviewed_mechanism_ids": [
             *list(REVIEWED_MECHANISM_IDS),
             SUCCESSOR41_MECHANISM_ID,
@@ -1991,8 +2003,8 @@ def build_cvrp_legacy_research_focus(
                 SUCCESSOR48_WIRING_FILE,
             ],
             "design_path": SUCCESSOR48_DESIGN_PATH,
-            "status": "live_target_intent_material_clean_fork",
-            "required_mechanism_binding": "target_intent_required",
+            "status": "inflight_existing_run_not_next_binding",
+            "required_mechanism_binding": "none",
             "material_difference": {
                 "changed_dimensions": [
                     "ephemeral route-pool construction from current run",
@@ -2021,6 +2033,7 @@ def build_cvrp_legacy_research_focus(
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
+        "route_first_comparison_target_intent": route_first_comparison_focus(),
         "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
         "reviewed_successor_evidence": deepcopy(REVIEWED_SUCCESSOR_EVIDENCE),
         "current_question": CURRENT_QUESTION,
@@ -2044,25 +2057,7 @@ def build_cvrp_legacy_research_focus(
 
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
     return (
-        RequiredMechanism(
-            mechanism_id=SUCCESSOR48_MECHANISM_ID,
-            category="bounded_local_search_variant",
-            description=SUCCESSOR48_TARGET_INTENT_RULE,
-            required_observations=(
-                "target file remains CVRP-owned",
-                "minimal scheduler wiring only",
-                "ephemeral route-pool construction from current run",
-                "bounded set-partitioning exact-cover selection",
-                "accepted set-partition total_distance delta",
-                "route-pool source counts and exact-cover candidate count",
-                "attempted/accepted/rejected_no_cover/rejected_infeasible/rejected_route_count/rejected_no_improvement/budget_stopped attribution",
-                "runtime budget and budget-stopped fields",
-                "feasibility and route-count preservation",
-                "CMT2/CMT4 priority-case outcome evidence",
-            ),
-            protected_items=PROTECTED_CASES,
-            hypothesis_mechanism_binding="target_intent_required",
-        ),
+        route_first_comparison_required_mechanism(PROTECTED_CASES),
     )
 
 
@@ -2288,6 +2283,7 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 "missing reject-cause telemetry treated as hygiene not solver follow-up",
             ),
         ),
+        route_first_comparison_evidence_requirement(PROTECTED_CASES),
         EvidenceRequirement(
             requirement_id=(
                 "successor48_bounded_route_pool_set_partition_recombination"
@@ -2483,6 +2479,7 @@ def _continuity_requirements() -> tuple[ContinuityRequirement, ...]:
         SUCCESSOR48_MECHANISM_ID,
         SUCCESSOR48_TARGET_FILE,
         SUCCESSOR48_WIRING_FILE,
+        *route_first_comparison_related_ids(),
         REQUIRED_MECHANISM_ID,
         *(str(item["mechanism_id"]) for item in REVIEWED_SUCCESSOR_MECHANISMS),
         "bounded_local_search_variant",
@@ -2513,6 +2510,7 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
             category="proposal_focus",
             title="Successor portfolio direction",
             lines=(
+                ROUTE_FIRST_COMPARISON_TARGET_INTENT_RULE,
                 SUCCESSOR48_TARGET_INTENT_RULE,
                 SUCCESSOR47_REVIEWED_RULE,
                 SUCCESSOR46B_REVIEWED_RULE,

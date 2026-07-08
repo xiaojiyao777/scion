@@ -134,7 +134,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     }
     assert "required" not in mechanism_bindings.values()
     assert mechanism_bindings == {
-        "bounded_route_pool_set_partition_recombination": "target_intent_required",
+        "route_first_heuristic_baseline": "target_intent_required",
     }
     assert any(
         requirement["requirement_id"] == "successor_causal_path_direct_effect"
@@ -261,7 +261,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "bounded_route_pool_set_partition_recombination",
+        "route_first_heuristic_baseline",
     ]
     assert launch_payload["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
@@ -563,9 +563,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
-        "materially different ephemeral route-pool set-partitioning causal path"
+        "independent route-first heuristic comparison"
         in prepared_manifest["research_focus"]["current_question"]
     )
+    assert "route_first_heuristic_baseline" in prepared_manifest["research_focus"][
+        "current_question"
+    ]
     assert (
         "first bounded-local-search, destroy/repair, and construction seed successors"
         in prepared_manifest["research_focus"]["current_question"]
@@ -750,7 +753,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "bounded_repair_placement_tournament" in prepared_manifest_md
     assert "best_solution_ruin_recreate_intensification" in prepared_manifest_md
     assert "bounded_giant_tour_split_recombination" in prepared_manifest_md
-    assert "bounded_route_pool_set_partition_recombination" in prepared_manifest_md
+    assert "route_first_heuristic_baseline" in prepared_manifest_md
+    assert "route_first_heuristic" in prepared_manifest_md
     assert prepared_manifest["research_focus"]["successor47_reviewed_evidence"][
         "mechanism_id"
     ] == "bounded_giant_tour_split_recombination"
@@ -758,6 +762,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "target_file"
     ] == (
         "policies/baseline_modules/route_pool_recombination.py"
+    )
+    assert prepared_manifest["research_focus"][
+        "route_first_comparison_target_intent"
+    ]["target_file"] == (
+        "policies/baseline_modules/config.py"
     )
     assert "pre_vns_selector_delta_is_not_final_trajectory_proof" in (
         prepared_manifest_md
@@ -771,7 +780,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["research_focus"][
         "target_intent_required_mechanism_ids"
     ] == [
-        "bounded_route_pool_set_partition_recombination",
+        "route_first_heuristic_baseline",
     ]
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",

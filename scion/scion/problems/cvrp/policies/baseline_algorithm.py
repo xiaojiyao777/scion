@@ -15,7 +15,10 @@ from .baseline_modules.config import (
     ENABLE_BASELINE_ALGORITHM,
     MAX_DESTROY_CUSTOMERS,
     REACTION_FACTOR,
+    ROUTE_FIRST_LOCAL_SEARCH_PASSES,
+    ROUTE_FIRST_MAX_STARTS,
     SEGMENT_LENGTH,
+    SOLVER_VARIANT,
     USE_VNS,
     VNS_MAX_NO_IMPROVE,
     VNS_THRESHOLD,
@@ -27,20 +30,39 @@ def solve(instance, rng, time_limit_sec, context):
     """Run the controlled solver-design algorithm."""
     if not ENABLE_BASELINE_ALGORITHM:
         return None
-    solver = _ALNSVNSSolver(
-        time_limit=max(0.05, float(time_limit_sec) * BASELINE_TIME_FRACTION),
-        destroy_ratio=DESTROY_RATIO,
-        segment_length=SEGMENT_LENGTH,
-        reaction_factor=REACTION_FACTOR,
-        vns_max_no_improve=VNS_MAX_NO_IMPROVE,
-        use_vns=USE_VNS,
-        cw_threshold=CW_THRESHOLD,
-        vns_threshold=VNS_THRESHOLD,
-        alns_threshold=ALNS_THRESHOLD,
-        max_destroy_customers=MAX_DESTROY_CUSTOMERS,
-        max_routes=instance.allowed_routes or instance.bks_routes,
-        context=context,
-    )
+    solver = _make_solver(instance, time_limit_sec, context)
     solution = solver.solve(instance, rng)
     context.set_stop_reason(solution.stop_reason)
     return context.make_solution(solution.routes_as_tuples())
+
+
+def _make_solver(instance, time_limit_sec, context):
+    variant = str(SOLVER_VARIANT or "alns_vns").strip()
+    time_limit = max(0.05, float(time_limit_sec) * BASELINE_TIME_FRACTION)
+    max_routes = instance.allowed_routes or instance.bks_routes
+    if variant == "alns_vns":
+        return _ALNSVNSSolver(
+            time_limit=time_limit,
+            destroy_ratio=DESTROY_RATIO,
+            segment_length=SEGMENT_LENGTH,
+            reaction_factor=REACTION_FACTOR,
+            vns_max_no_improve=VNS_MAX_NO_IMPROVE,
+            use_vns=USE_VNS,
+            cw_threshold=CW_THRESHOLD,
+            vns_threshold=VNS_THRESHOLD,
+            alns_threshold=ALNS_THRESHOLD,
+            max_destroy_customers=MAX_DESTROY_CUSTOMERS,
+            max_routes=max_routes,
+            context=context,
+        )
+    if variant == "route_first_heuristic":
+        from .baseline_modules.route_first_heuristic import RouteFirstHeuristicSolver
+
+        return RouteFirstHeuristicSolver(
+            time_limit=time_limit,
+            max_routes=max_routes,
+            max_starts=ROUTE_FIRST_MAX_STARTS,
+            local_search_passes=ROUTE_FIRST_LOCAL_SEARCH_PASSES,
+            context=context,
+        )
+    raise ValueError(f"unknown CVRP solver variant: {variant}")

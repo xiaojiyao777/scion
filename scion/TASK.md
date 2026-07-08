@@ -547,23 +547,22 @@ recombination for v0.4; do not long-run, threshold-tune, or create an
 unchanged successor47b. Postrun:
 `scion/docs/experiments/v0.4/v04-cvrp-successor47-bounded-giant-tour-split-recombination-postrun-20260708.md`.
 
-Successor48 is now designed as the next materially different CVRP-owned
-recombination clean fork:
-`bounded_route_pool_set_partition_recombination` in the new module
-`policies/baseline_modules/route_pool_recombination.py`, with minimal scheduler
-wiring only. It should build a small ephemeral route pool from complete
-feasible routes already seen in the current solve, select whole routes through
-a bounded exact-cover/set-partitioning subproblem, and accept only strict
-final `total_distance` improvement while preserving feasibility and route
-count. Required evidence includes route-pool source counts, exact-cover
-candidate count, accepted set-partition delta, separated reject/budget counts,
-and CMT2/CMT4 priority-case safety. Design:
-`scion/docs/experiments/v0.4/v04-cvrp-successor48-route-pool-set-partition-recombination-design-20260708.md`.
-The short server-local validation run launched from commit `eba0c565` with
-local `gpt-5.5`, completion preflight `ok: true`, and resume-from successor47:
+Successor48 then tested the materially different CVRP-owned
+`bounded_route_pool_set_partition_recombination` clean fork and completed
+valid/complete/postrun-ready on the server-local `claw` runner:
 `/home/clawd/research/scion-experiments/v04-cvrp-successor48-route-pool-set-partition-recombination-server-claw-2r-gpt55-2r-gpt55-20260708T060446Z-claw`.
-Initial PID is `1742335`. In-flight:
-`scion/docs/experiments/v0.4/v04-cvrp-successor48-route-pool-set-partition-recombination-inflight-20260708.md`.
+It had normal local `gpt-5.5` calls, CMT2/CMT4 priority-case coverage, no
+quality/model/telemetry/postrun failure, but no promotion signal: aggregate
+case W/L/T `0/1/23`, pair W/L/T `10/10/76`, two row medians `0.0`, CI highs
+`0.0`, and `rows_at_or_above_mde=0`. Trace audit found target-intent and
+hypothesis were correct and v3 boundaries were preserved; failure was in the
+candidate mechanism/evidence quality. The route-pool recombination action was
+overly conservative, mostly attempted without accepted/effective route-pool
+improvement, and lacked source-count/reject-cause/final-acceptance attribution
+needed to explain no-effect. Treat unchanged successor48 route-pool
+recombination as reviewed/default-avoid; do not long-run or same-mechanism
+tune it for v0.4. Postrun:
+`scion/docs/experiments/v0.4/v04-cvrp-successor48-route-pool-set-partition-recombination-postrun-20260708.md`.
 
 Legacy direction details below are retained as reviewed-history context.
 
@@ -946,19 +945,29 @@ from the current checkout.
    model/context behavior was normal, but direct split-reconstruction effect
    was nearly absent and CMT2/CMT4 were unsafe. Do not long-run or continue
    unchanged contiguous giant-tour split variants.
-23. Monitor successor48
-   `bounded_route_pool_set_partition_recombination`, now running on the
+23. Treat successor48 `bounded_route_pool_set_partition_recombination` as
+   complete, valid, and reviewed/default-avoid. It finished on the
    server-local `claw` runner at
    `/home/clawd/research/scion-experiments/v04-cvrp-successor48-route-pool-set-partition-recombination-server-claw-2r-gpt55-2r-gpt55-20260708T060446Z-claw`.
-   It must stay problem-owned in `route_pool_recombination.py`, use minimal
-   scheduler wiring, and prove route-pool source counts, exact-cover
-   candidates, accepted final-distance delta, separated reject/budget counts,
-   and CMT2/CMT4 safety.
-24. Use the new large-file modularization plan before further behavior changes
+   It activated but stayed exact-zero at the protocol row level, with
+   tie-dominated evidence and no promotion signal. The trace audit found no
+   fatal model/context/boundary failure; the candidate implementation was
+   overly conservative and under-attributed. Do not long-run, threshold-tune,
+   or continue unchanged route-pool exact-cover recombination variants.
+24. Use the route-first comparison object to test whether the current ALNS+VNS
+   solver family has limited easy headroom. The default-off
+   `route_first_heuristic` variant is implemented under
+   `policies/baseline_modules/`, target-intent-bound through the CVRP-owned
+   `research_guidance_route_first.py`, documented at
+   `scion/docs/experiments/v0.4/v04-cvrp-comparison-route-first-heuristic-design-20260708.md`,
+   and should be enabled by a short target-intent-bound comparison campaign
+   through `policies/baseline_modules/config.py`. Direct smoke is feasibility/
+   instrumentation context only, not protocol evidence.
+25. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-25. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+26. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-26. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+27. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence
