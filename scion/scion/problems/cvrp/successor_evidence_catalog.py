@@ -458,6 +458,55 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "best_solution_ruin_recreate_intensification_activation_repair",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "best-solution ruin/recreate activation-repair path",
+        "causal_path_label": "best-incumbent ruin/recreate contract repair",
+        "outcome_status": "weak_positive_below_mde_protected_case_unsafe",
+        "effect_summary": {
+            "row1_median_delta": 0.0,
+            "row1_ci_low": 0.0,
+            "row1_ci_high": 0.5,
+            "row2_median_delta": 0.0,
+            "row2_ci_low": 0.0,
+            "row2_ci_high": 1.0,
+            "screening_pair_wins": 20,
+            "screening_pair_losses": 10,
+            "screening_pair_ties": 82,
+            "screening_case_wins": 5,
+            "screening_case_losses": 0,
+            "screening_case_ties": 23,
+            "max_median_delta": 0.0,
+            "max_effect_to_mde_ratio": 0.0,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "row1_activation_pairs": 29,
+            "row1_total_pairs": 48,
+            "row2_activation_pairs": 41,
+            "row2_total_pairs": 64,
+            "row1_positive_mechanism_best_delta_pairs": 11,
+            "row2_positive_mechanism_best_delta_pairs": 15,
+            "protected_case_cmt2_median_delta": -3.5,
+            "protected_case_cmt4_median_delta": 0.0,
+            "mechanism_contract_status": "observed_weak_positive_below_mde",
+            "telemetry_status": "activation_observed_partial_contract",
+            "known_design_gaps": (
+                "reject_cause_telemetry_collapsed_to_generic_accepted_zero",
+                "accepted_new_best_attribution_not_explicit",
+                "cmt4_case_tied_without_mechanism_phase_activation",
+            ),
+            "interpretation": (
+                "valid activation-repair screening with weak pair/case signal, "
+                "but median effect stayed zero, CI highs stayed far below MDE, "
+                "and CMT2 was negative"
+            ),
+            "recommended_followup": (
+                "park_best_solution_ruin_recreate_solver_line_for_v0.4"
+            ),
+            "source_root_label": "successor46b",
+        },
+    },
+    {
         "mechanism_id": "bounded_dual_repair_selector",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "bounded dual repair selector path",
@@ -1321,6 +1370,13 @@ DEFAULT_AVOID_DIRECTIONS = (
         "ruin/recreate path after successor46 valid screening had sparse "
         "activation, zero final best-solution objective effect, and no "
         "rejected-attempt RNG isolation"
+    ),
+    (
+        "unchanged best_solution_ruin_recreate_intensification_activation_repair "
+        "best-solution ruin/recreate activation-repair path after successor46b "
+        "valid screening improved activation but stayed weak-positive below "
+        "MDE with median delta zero, CMT2 negative, and incomplete reject-cause "
+        "telemetry"
     ),
     (
         "unchanged elite_route_memory_repair destroy/repair complete-route "

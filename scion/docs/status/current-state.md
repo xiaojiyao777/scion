@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-07-07
+Last updated: 2026-07-08
 
 This file is the operational resume point, not a run log. Historical root
 chronology belongs in focused experiment reports, sparse milestones, and git
@@ -359,20 +359,26 @@ The remaining closeout gaps are:
   effect. Do not long-run, threshold-tune, or repeat unchanged successor46.
   Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor46-best-solution-ruin-recreate-intensification-postrun-20260707.md`.
-- Successor46b is designed as the only allowed same-line contract repair:
-  `best_solution_ruin_recreate_intensification_activation_repair`. It keeps the
-  CVRP-owned `best_solution_intensification.py` module boundary with minimal
-  scheduler wiring, but must repair rejected-attempt RNG isolation, activation
-  observability, separated reject/budget outcome telemetry, final post-VNS
-  global-best objective attribution, and CMT2/CMT4 mechanism-level activation
-  evidence or caveat. If it remains zero-effect, park best-solution
-  ruin/recreate for v0.4. Design:
-  `scion/docs/experiments/v0.4/v04-cvrp-successor46b-best-solution-activation-contract-repair-design-20260707.md`.
+- Successor46b is complete and reviewed/default-avoid:
+  `best_solution_ruin_recreate_intensification_activation_repair` repaired
+  activation visibility but did not produce promotion-grade solver evidence.
   The short server-local validation run launched from commit `1f121f3b` with
   local `gpt-5.5`, completion preflight `ok: true`, and resume-from successor46:
   `/home/clawd/research/scion-experiments/v04-cvrp-successor46b-best-solution-activation-contract-repair-server-claw-2r-gpt55-2r-gpt55-20260707T150022Z-claw`.
-  Initial PID is `1714735`. In-flight:
-  `scion/docs/experiments/v0.4/v04-cvrp-successor46b-best-solution-activation-contract-repair-inflight-20260707.md`.
+  It finished valid/complete/postrun-ready with seven normal `gpt-5.5` LLM
+  calls, aggregate pair W/L/T `20/10/82`, aggregate case W/L/T `5/0/23`, row
+  medians `0.0`, CI highs `0.5` and `1.0`, and `rows_at_or_above_mde=0`.
+  Activation improved, but CMT2 remained unsafe and CMT4 tied without
+  mechanism-level proof. Park best-solution ruin/recreate for v0.4. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor46b-best-solution-activation-contract-repair-postrun-20260708.md`.
+- Successor47 is the next designed CVRP clean fork:
+  `bounded_giant_tour_split_recombination`, scoped to
+  `policies/baseline_modules/giant_tour_split.py` with minimal scheduler
+  wiring. It must prove final split-reconstructed `total_distance` movement,
+  feasibility and route-count safety, separated reject/budget outcomes, and
+  CMT2/CMT4 priority-case attribution before any long-run consideration.
+  Design:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor47-bounded-giant-tour-split-recombination-design-20260708.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -863,19 +869,21 @@ CVRP:
    complete, valid, and reviewed/default-avoid. It target-bound correctly but
    activated sparsely and produced zero final best-solution objective effect.
    Do not long-run or repeat unchanged best-solution ruin/recreate.
-21. Monitor successor46b
-   `best_solution_ruin_recreate_intensification_activation_repair` as the only
-   narrow same-line contract repair. It is running on the server-local `claw`
+21. Treat successor46b
+   `best_solution_ruin_recreate_intensification_activation_repair` as complete,
+   valid, and reviewed/default-avoid. It finished on the server-local `claw`
    runner at
    `/home/clawd/research/scion-experiments/v04-cvrp-successor46b-best-solution-activation-contract-repair-server-claw-2r-gpt55-2r-gpt55-20260707T150022Z-claw`.
-   Required evidence: rejected-attempt RNG isolation, observable activation,
-   separated reject/budget outcomes, final post-VNS global-best movement, and
-   CMT2/CMT4 mechanism-level evidence or explicit caveat. If it remains
-   zero-effect, park the line.
-22. Use the v0.4 large-file modularization plan before adding behavior to
+   It improved activation but stayed below MDE and left CMT2 unsafe; park the
+   best-solution ruin/recreate line for v0.4.
+22. Use successor47 `bounded_giant_tour_split_recombination` as the next CVRP
+   clean fork. Keep it problem-owned in `giant_tour_split.py` with minimal
+   scheduler wiring and require final objective attribution plus CMT2/CMT4
+   priority evidence before any long-run consideration.
+23. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-23. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-24. Keep status documents compact; put detailed root counters and caveats in
+24. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+25. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes
