@@ -960,9 +960,11 @@ from the current checkout.
    `policies/baseline_modules/`, target-intent-bound through the CVRP-owned
    `research_guidance_route_first.py`, documented at
    `scion/docs/experiments/v0.4/v04-cvrp-comparison-route-first-heuristic-design-20260708.md`,
-   and should be enabled by a short target-intent-bound comparison campaign
-   through `policies/baseline_modules/config.py`. Direct smoke is feasibility/
-   instrumentation context only, not protocol evidence.
+   and is now running as a short target-intent-bound comparison campaign from
+   commit `d7430150` through `policies/baseline_modules/config.py`:
+   `/home/clawd/research/scion-experiments/v04-cvrp-route-first-comparison-server-claw-2r-gpt55-2r-gpt55-20260708T082843Z-claw`.
+   Direct smoke is feasibility/instrumentation context only, not protocol
+   evidence.
 25. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 26. Keep the v0.5 governance ablation frozen as a preregistered design; do not

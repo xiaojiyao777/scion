@@ -916,15 +916,17 @@ CVRP:
    It activated but stayed exact-zero at the protocol row level; do not
    long-run, threshold-tune, or continue unchanged route-pool exact-cover
    recombination variants.
-24. Route-first comparison is prepared as the next short server-local
-   campaign. The default-off `route_first_heuristic` solver variant is
-   implemented under `policies/baseline_modules/`, the
+24. Route-first comparison is now running as the next short server-local
+   campaign from commit `d7430150`:
+   `/home/clawd/research/scion-experiments/v04-cvrp-route-first-comparison-server-claw-2r-gpt55-2r-gpt55-20260708T082843Z-claw`.
+   The default-off `route_first_heuristic` solver variant is implemented under
+   `policies/baseline_modules/`, the
    prepared target-intent binding lives in CVRP-owned
    `research_guidance_route_first.py`, and the design is documented at
    `scion/docs/experiments/v0.4/v04-cvrp-comparison-route-first-heuristic-design-20260708.md`,
-   and should be enabled through `policies/baseline_modules/config.py`. Treat
-   direct smoke as feasibility/instrumentation context only, not protocol
-   evidence.
+   and the campaign is forced to enable it through
+   `policies/baseline_modules/config.py`. Treat direct smoke as feasibility/
+   instrumentation context only, not protocol evidence.
 25. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 26. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
