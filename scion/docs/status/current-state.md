@@ -379,6 +379,11 @@ The remaining closeout gaps are:
   CMT2/CMT4 priority-case attribution before any long-run consideration.
   Design:
   `scion/docs/experiments/v0.4/v04-cvrp-successor47-bounded-giant-tour-split-recombination-design-20260708.md`.
+  The short server-local validation run launched from commit `00bfeb60` with
+  local `gpt-5.5`, completion preflight `ok: true`, and resume-from successor46b:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor47-bounded-giant-tour-split-recombination-server-claw-2r-gpt55-2r-gpt55-20260708T021541Z-claw`.
+  Initial PID is `1729980`. In-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor47-bounded-giant-tour-split-recombination-inflight-20260708.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -876,10 +881,12 @@ CVRP:
    `/home/clawd/research/scion-experiments/v04-cvrp-successor46b-best-solution-activation-contract-repair-server-claw-2r-gpt55-2r-gpt55-20260707T150022Z-claw`.
    It improved activation but stayed below MDE and left CMT2 unsafe; park the
    best-solution ruin/recreate line for v0.4.
-22. Use successor47 `bounded_giant_tour_split_recombination` as the next CVRP
-   clean fork. Keep it problem-owned in `giant_tour_split.py` with minimal
-   scheduler wiring and require final objective attribution plus CMT2/CMT4
-   priority evidence before any long-run consideration.
+22. Monitor successor47 `bounded_giant_tour_split_recombination`, now running
+   on the server-local `claw` runner at
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor47-bounded-giant-tour-split-recombination-server-claw-2r-gpt55-2r-gpt55-20260708T021541Z-claw`.
+   It is problem-owned in `giant_tour_split.py` with minimal scheduler wiring;
+   require final objective attribution plus CMT2/CMT4 priority evidence before
+   any long-run consideration.
 23. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 24. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
