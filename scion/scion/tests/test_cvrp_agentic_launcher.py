@@ -134,7 +134,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     }
     assert "required" not in mechanism_bindings.values()
     assert mechanism_bindings == {
-        "best_solution_ruin_recreate_intensification": "target_intent_required",
+        "bounded_route_pool_set_partition_recombination": "target_intent_required",
     }
     assert any(
         requirement["requirement_id"] == "successor_causal_path_direct_effect"
@@ -156,6 +156,21 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert any(
         requirement["requirement_id"]
         == "successor46_best_solution_ruin_recreate_intensification"
+        for requirement in typed_contract["evidence_requirements"]
+    )
+    assert any(
+        requirement["requirement_id"]
+        == "successor46b_best_solution_activation_contract_repair"
+        for requirement in typed_contract["evidence_requirements"]
+    )
+    assert any(
+        requirement["requirement_id"]
+        == "successor47_bounded_giant_tour_split_recombination"
+        for requirement in typed_contract["evidence_requirements"]
+    )
+    assert any(
+        requirement["requirement_id"]
+        == "successor48_bounded_route_pool_set_partition_recombination"
         for requirement in typed_contract["evidence_requirements"]
     )
     assert any(
@@ -190,6 +205,18 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         (
             "bounded_repair_placement_tournament_reviewed_"
             "quality_regression_local_effect_not_preserved"
+        ),
+        (
+            "best_solution_ruin_recreate_intensification_reviewed_"
+            "activation_sparse_observed_no_effect"
+        ),
+        (
+            "best_solution_ruin_recreate_intensification_acti_"
+            "reviewed_weak_positive_below_mde_protected_case_unsafe"
+        ),
+        (
+            "bounded_giant_tour_split_recombination_reviewed_"
+            "marginal_below_mde_protected_case_unsafe"
         ),
         "bounded_dual_repair_selector_reviewed_weak_positive_below_mde",
         "elite_route_memory_repair_reviewed_marginal_below_mde_protected_case_unsafe",
@@ -234,7 +261,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        "best_solution_ruin_recreate_intensification",
+        "bounded_route_pool_set_partition_recombination",
     ]
     assert launch_payload["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
@@ -255,6 +282,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "post_repair_effect_credit_weighting",
         "post_vns_best_anchor_acceptance_guard",
         "bounded_repair_placement_tournament",
+        "best_solution_ruin_recreate_intensification",
+        "best_solution_ruin_recreate_intensification_activation_repair",
+        "bounded_giant_tour_split_recombination",
         "bounded_dual_repair_selector",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
@@ -533,7 +563,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
-        "materially different CVRP-owned causal path"
+        "materially different ephemeral route-pool set-partitioning causal path"
         in prepared_manifest["research_focus"]["current_question"]
     )
     assert (
@@ -719,10 +749,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "post_vns_best_anchor_acceptance_guard" in prepared_manifest_md
     assert "bounded_repair_placement_tournament" in prepared_manifest_md
     assert "best_solution_ruin_recreate_intensification" in prepared_manifest_md
-    assert prepared_manifest["research_focus"]["successor46_target_intent"][
+    assert "bounded_giant_tour_split_recombination" in prepared_manifest_md
+    assert "bounded_route_pool_set_partition_recombination" in prepared_manifest_md
+    assert prepared_manifest["research_focus"]["successor47_reviewed_evidence"][
+        "mechanism_id"
+    ] == "bounded_giant_tour_split_recombination"
+    assert prepared_manifest["research_focus"]["successor48_target_intent"][
         "target_file"
     ] == (
-        "policies/baseline_modules/best_solution_intensification.py"
+        "policies/baseline_modules/route_pool_recombination.py"
     )
     assert "pre_vns_selector_delta_is_not_final_trajectory_proof" in (
         prepared_manifest_md
@@ -736,7 +771,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["research_focus"][
         "target_intent_required_mechanism_ids"
     ] == [
-        "best_solution_ruin_recreate_intensification",
+        "bounded_route_pool_set_partition_recombination",
     ]
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
@@ -757,6 +792,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "post_repair_effect_credit_weighting",
         "post_vns_best_anchor_acceptance_guard",
         "bounded_repair_placement_tournament",
+        "best_solution_ruin_recreate_intensification",
+        "best_solution_ruin_recreate_intensification_activation_repair",
+        "bounded_giant_tour_split_recombination",
         "bounded_dual_repair_selector",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",

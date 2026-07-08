@@ -507,6 +507,64 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "bounded_giant_tour_split_recombination",
+        "mechanism_family": "bounded_local_search_variant",
+        "path_label": "bounded giant-tour split recombination path",
+        "causal_path_label": "contiguous giant-tour split reconstruction",
+        "outcome_status": "marginal_below_mde_protected_case_unsafe",
+        "effect_summary": {
+            "row1_median_delta": 0.0,
+            "row1_pair_wins": 22,
+            "row1_pair_losses": 22,
+            "row1_pair_ties": 4,
+            "row1_case_wins": 6,
+            "row1_case_losses": 6,
+            "row1_case_ties": 0,
+            "row2_median_delta": 0.0,
+            "row2_pair_wins": 27,
+            "row2_pair_losses": 28,
+            "row2_pair_ties": 9,
+            "row2_case_wins": 8,
+            "row2_case_losses": 7,
+            "row2_case_ties": 1,
+            "aggregate_pair_wins": 49,
+            "aggregate_pair_losses": 50,
+            "aggregate_pair_ties": 13,
+            "aggregate_case_wins": 12,
+            "aggregate_case_losses": 11,
+            "aggregate_case_ties": 5,
+            "current_head_case_wins": 7,
+            "current_head_case_losses": 6,
+            "current_head_case_ties": 3,
+            "current_head_median_delta": 0.5,
+            "current_head_ci_low": -6.0,
+            "current_head_ci_high": 4.5,
+            "screening_mde": 9.9,
+            "row1_positive_mechanism_best_delta_pairs": 0,
+            "row2_positive_mechanism_best_delta_pairs": 1,
+            "row2_total_pairs": 64,
+            "protected_case_cmt2_median_delta": -20.0,
+            "protected_case_cmt4_median_delta": -11.0,
+            "mechanism_contract_status": "observed_sparse_positive_below_mde",
+            "telemetry_status": "activation_observed_reject_causes_missing",
+            "known_design_gaps": (
+                "route_order_generation_too_conservative",
+                "reject_cause_telemetry_collapsed_to_generic_accepted_zero",
+                "direct_split_reconstruction_effect_sparse",
+                "cmt2_cmt4_protected_cases_negative",
+            ),
+            "interpretation": (
+                "valid modular giant-tour split screening with activation and "
+                "runtime observed, but direct split effect was nearly absent "
+                "and protected cases were negative"
+            ),
+            "recommended_followup": (
+                "park_contiguous_giant_tour_split_for_v0.4"
+            ),
+            "source_root_label": "successor47",
+        },
+    },
+    {
         "mechanism_id": "bounded_dual_repair_selector",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "bounded dual repair selector path",
@@ -1377,6 +1435,12 @@ DEFAULT_AVOID_DIRECTIONS = (
         "valid screening improved activation but stayed weak-positive below "
         "MDE with median delta zero, CMT2 negative, and incomplete reject-cause "
         "telemetry"
+    ),
+    (
+        "unchanged bounded_giant_tour_split_recombination contiguous giant-tour "
+        "split reconstruction after successor47 valid screening stayed "
+        "marginal below MDE, produced almost no direct split effect, failed "
+        "CMT2/CMT4 protection, and missed separated reject-cause telemetry"
     ),
     (
         "unchanged elite_route_memory_repair destroy/repair complete-route "

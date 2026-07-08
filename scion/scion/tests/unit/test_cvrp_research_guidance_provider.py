@@ -11,6 +11,7 @@ from scion.problems.cvrp.research_guidance import (
     SUCCESSOR46B_MECHANISM_ID,
     SUCCESSOR46_MECHANISM_ID,
     SUCCESSOR47_MECHANISM_ID,
+    SUCCESSOR48_MECHANISM_ID,
     SELECTOR_TELEMETRY_HYGIENE_LESSON,
     build_cvrp_legacy_research_focus,
     build_cvrp_research_guidance_contract,
@@ -55,7 +56,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         mechanism.mechanism_id
         for mechanism in contract.required_mechanisms
         if mechanism.hypothesis_mechanism_binding == "target_intent_required"
-    ] == [SUCCESSOR47_MECHANISM_ID]
+    ] == [SUCCESSOR48_MECHANISM_ID]
     assert any(
         requirement.requirement_id == "selector_telemetry_hygiene"
         for requirement in contract.evidence_requirements
@@ -77,6 +78,16 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert any(
         requirement.requirement_id
         == "successor46b_best_solution_activation_contract_repair"
+        for requirement in contract.evidence_requirements
+    )
+    assert any(
+        requirement.requirement_id
+        == "successor47_bounded_giant_tour_split_recombination"
+        for requirement in contract.evidence_requirements
+    )
+    assert any(
+        requirement.requirement_id
+        == "successor48_bounded_route_pool_set_partition_recombination"
         for requirement in contract.evidence_requirements
     )
     assert any(
@@ -133,7 +144,9 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert SUCCESSOR46_MECHANISM_ID in rendered.text
     assert SUCCESSOR46B_MECHANISM_ID in rendered.text
     assert SUCCESSOR47_MECHANISM_ID in rendered.text
+    assert SUCCESSOR48_MECHANISM_ID in rendered.text
     assert "giant-tour split recombination" in rendered.text
+    assert "route-pool set-partitioning" in rendered.text
     assert "contract/activation repair" in rendered.text
     assert "pre-VNS repair delta" in rendered.text
     assert "measured_no_positive_at_mde" in rendered.text
@@ -150,7 +163,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     )
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR47_MECHANISM_ID
+        SUCCESSOR48_MECHANISM_ID
     ]
 
 
@@ -170,7 +183,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
     assert focus["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR47_MECHANISM_ID
+        SUCCESSOR48_MECHANISM_ID
     ]
     assert focus["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
@@ -193,6 +206,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_repair_placement_tournament",
         "best_solution_ruin_recreate_intensification",
         "best_solution_ruin_recreate_intensification_activation_repair",
+        "bounded_giant_tour_split_recombination",
         "bounded_dual_repair_selector",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
@@ -347,20 +361,35 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "weak-positive below-MDE" in focus["successor46b_reviewed_evidence"][
         "reviewed_rule"
     ]
-    assert focus["successor47_target_intent"]["mechanism_id"] == (
+    assert focus["successor47_reviewed_evidence"]["mechanism_id"] == (
         SUCCESSOR47_MECHANISM_ID
     )
-    assert focus["successor47_target_intent"]["target_file"] == (
+    assert focus["successor47_reviewed_evidence"]["target_file"] == (
         "policies/baseline_modules/giant_tour_split.py"
     )
     assert "policies/baseline_modules/scheduler.py" in (
-        focus["successor47_target_intent"]["target_files"]
+        focus["successor47_reviewed_evidence"]["target_files"]
     )
-    assert focus["successor47_target_intent"]["required_mechanism_binding"] == (
+    assert focus["successor47_reviewed_evidence"]["required_mechanism_binding"] == (
+        "none"
+    )
+    assert "objective evidence stayed marginal" in focus["successor47_reviewed_evidence"][
+        "reviewed_rule"
+    ]
+    assert focus["successor48_target_intent"]["mechanism_id"] == (
+        SUCCESSOR48_MECHANISM_ID
+    )
+    assert focus["successor48_target_intent"]["target_file"] == (
+        "policies/baseline_modules/route_pool_recombination.py"
+    )
+    assert "policies/baseline_modules/scheduler.py" in (
+        focus["successor48_target_intent"]["target_files"]
+    )
+    assert focus["successor48_target_intent"]["required_mechanism_binding"] == (
         "target_intent_required"
     )
-    assert "final split-reconstructed total_distance delta" in (
-        focus["successor47_target_intent"]["material_difference"]["evidence"]
+    assert "accepted set-partition total_distance delta" in (
+        focus["successor48_target_intent"]["material_difference"]["evidence"]
     )
     assert focus["successor_opportunity_families"] == [
         "acceptance_or_adaptive_weighting",
@@ -462,7 +491,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert SUCCESSOR46_MECHANISM_ID in focus["next_required_direction"]
     assert SUCCESSOR46B_MECHANISM_ID in focus["next_required_direction"]
     assert SUCCESSOR47_MECHANISM_ID in focus["next_required_direction"]
-    assert "bounded giant-tour split" in focus["next_required_direction"]
+    assert SUCCESSOR48_MECHANISM_ID in focus["next_required_direction"]
+    assert "bounded route-pool set-partitioning" in focus["next_required_direction"]
     assert "Successor18b" in focus["next_required_direction"]
     assert "distinct from cross-exchange, intra-route Or-opt reinsertion" in (
         focus["next_required_direction"]
@@ -692,6 +722,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
             "bounded_repair_placement_tournament",
             "best_solution_ruin_recreate_intensification",
             "best_solution_ruin_recreate_intensification_activation_repair",
+            "bounded_giant_tour_split_recombination",
             "bounded_dual_repair_selector",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
@@ -833,6 +864,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
             "bounded_repair_placement_tournament",
             "best_solution_ruin_recreate_intensification",
             "best_solution_ruin_recreate_intensification_activation_repair",
+            "bounded_giant_tour_split_recombination",
             "bounded_dual_repair_selector",
             "elite_route_memory_repair",
             "bounded_destroy_operator_shadow_selector",
@@ -886,6 +918,18 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert best_solution_effect["screening_pair_losses"] == 4
     assert best_solution_effect["mechanism_runtime_weighted_sum_ms"] == 62
     assert best_solution_effect["source_root_label"] == "successor46"
+    assert mechanisms_by_id["bounded_giant_tour_split_recombination"][
+        "outcome_status"
+    ] == "marginal_below_mde_protected_case_unsafe"
+    giant_tour_effect = mechanisms_by_id[
+        "bounded_giant_tour_split_recombination"
+    ]["effect_summary"]
+    assert giant_tour_effect["aggregate_pair_wins"] == 49
+    assert giant_tour_effect["aggregate_pair_losses"] == 50
+    assert giant_tour_effect["current_head_median_delta"] == 0.5
+    assert giant_tour_effect["protected_case_cmt2_median_delta"] == -20.0
+    assert giant_tour_effect["protected_case_cmt4_median_delta"] == -11.0
+    assert giant_tour_effect["source_root_label"] == "successor47"
     assert mechanisms_by_id["elite_route_memory_repair"]["outcome_status"] == (
         "marginal_below_mde_protected_case_unsafe"
     )
@@ -1088,10 +1132,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
         "post_vns_best_anchor_acceptance_guard",
-        "bounded_repair_placement_tournament",
-        "best_solution_ruin_recreate_intensification",
-        "best_solution_ruin_recreate_intensification_activation_repair",
-        "bounded_dual_repair_selector",
+                "bounded_repair_placement_tournament",
+                "best_solution_ruin_recreate_intensification",
+                "best_solution_ruin_recreate_intensification_activation_repair",
+                "bounded_giant_tour_split_recombination",
+                "bounded_dual_repair_selector",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -1124,7 +1169,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     ]
     assert launch_payload["required_mechanism_ids"] == []
     assert launch_payload["target_intent_required_mechanism_ids"] == [
-        SUCCESSOR47_MECHANISM_ID
+        SUCCESSOR48_MECHANISM_ID
     ]
     assert launch_payload["suppressed_mechanism_ids"] == []
     assert launch_payload["successor_opportunity_families"] == [

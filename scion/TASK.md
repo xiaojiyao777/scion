@@ -529,19 +529,36 @@ mechanism-level proof. Park the best-solution ruin/recreate line for v0.4.
 Postrun:
 `scion/docs/experiments/v0.4/v04-cvrp-successor46b-best-solution-activation-contract-repair-postrun-20260708.md`.
 
-Successor47 is designed as the next materially different CVRP-owned clean
-fork: `bounded_giant_tour_split_recombination`. It is route-first split
-recombination from current global-best structure, scoped to the new module
-`policies/baseline_modules/giant_tour_split.py` with minimal scheduler wiring.
-Required evidence is activation/runtime by iteration, split-reconstructed
-final `total_distance` delta, feasibility and route-count safety, separated
-reject/budget outcomes, and CMT2/CMT4 priority-case attribution. Design:
-`scion/docs/experiments/v0.4/v04-cvrp-successor47-bounded-giant-tour-split-recombination-design-20260708.md`.
-The short server-local validation run launched from commit `00bfeb60` with
-local `gpt-5.5`, completion preflight `ok: true`, and resume-from successor46b:
+Successor47 is complete and reviewed/default-avoid:
+`bounded_giant_tour_split_recombination` preserved the intended CVRP module
+boundary in `policies/baseline_modules/giant_tour_split.py`, but did not
+produce promotion-grade solver evidence. The short server-local run launched
+from commit `00bfeb60` with local `gpt-5.5`, completion preflight `ok: true`,
+and resume-from successor46b:
 `/home/clawd/research/scion-experiments/v04-cvrp-successor47-bounded-giant-tour-split-recombination-server-claw-2r-gpt55-2r-gpt55-20260708T021541Z-claw`.
-Initial PID is `1729980`. In-flight:
-`scion/docs/experiments/v0.4/v04-cvrp-successor47-bounded-giant-tour-split-recombination-inflight-20260708.md`.
+It finished valid/complete/postrun-ready with seven successful current-run
+LLM calls, aggregate pair W/L/T `49/50/13`, official aggregate case W/L/T
+`12/11/5`, row medians `0.0`, current-head median `0.5`, CI `[-6.0, 4.5]`,
+and no promotion. Mechanism runtime was observed, but direct positive
+mechanism best delta appeared in only `1/64` expanded-row candidate runs, and
+CMT2/CMT4 were unsafe. Trace audit found no fatal prompt truncation, model
+call, target-binding, or v3-boundary failure. Park contiguous giant-tour split
+recombination for v0.4; do not long-run, threshold-tune, or create an
+unchanged successor47b. Postrun:
+`scion/docs/experiments/v0.4/v04-cvrp-successor47-bounded-giant-tour-split-recombination-postrun-20260708.md`.
+
+Successor48 is now designed as the next materially different CVRP-owned
+recombination clean fork:
+`bounded_route_pool_set_partition_recombination` in the new module
+`policies/baseline_modules/route_pool_recombination.py`, with minimal scheduler
+wiring only. It should build a small ephemeral route pool from complete
+feasible routes already seen in the current solve, select whole routes through
+a bounded exact-cover/set-partitioning subproblem, and accept only strict
+final `total_distance` improvement while preserving feasibility and route
+count. Required evidence includes route-pool source counts, exact-cover
+candidate count, accepted set-partition delta, separated reject/budget counts,
+and CMT2/CMT4 priority-case safety. Design:
+`scion/docs/experiments/v0.4/v04-cvrp-successor48-route-pool-set-partition-recombination-design-20260708.md`.
 
 Legacy direction details below are retained as reviewed-history context.
 
@@ -919,17 +936,22 @@ from the current checkout.
    `/home/clawd/research/scion-experiments/v04-cvrp-successor46b-best-solution-activation-contract-repair-server-claw-2r-gpt55-2r-gpt55-20260707T150022Z-claw`.
    It improved activation but stayed below MDE and left CMT2 unsafe; park the
    best-solution ruin/recreate line for v0.4.
-22. Monitor successor47 `bounded_giant_tour_split_recombination`, now running
-   on the server-local `claw` runner at
-   `/home/clawd/research/scion-experiments/v04-cvrp-successor47-bounded-giant-tour-split-recombination-server-claw-2r-gpt55-2r-gpt55-20260708T021541Z-claw`.
-   It is problem-owned in `giant_tour_split.py` with minimal scheduler wiring;
-   require final objective attribution plus CMT2/CMT4 priority evidence before
-   any long-run consideration.
-23. Use the new large-file modularization plan before further behavior changes
+22. Treat successor47 `bounded_giant_tour_split_recombination` as complete,
+   valid, and reviewed/default-avoid. It preserved the module boundary and
+   model/context behavior was normal, but direct split-reconstruction effect
+   was nearly absent and CMT2/CMT4 were unsafe. Do not long-run or continue
+   unchanged contiguous giant-tour split variants.
+23. Use successor48
+   `bounded_route_pool_set_partition_recombination` as the next live CVRP
+   target-intent-bound short screening run. It must stay problem-owned in
+   `route_pool_recombination.py`, use minimal scheduler wiring, and prove
+   route-pool source counts, exact-cover candidates, accepted final-distance
+   delta, separated reject/budget counts, and CMT2/CMT4 safety.
+24. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-24. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+25. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-25. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+26. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence
