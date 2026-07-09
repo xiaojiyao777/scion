@@ -492,6 +492,19 @@ The remaining closeout gaps are:
   multi-candidate race as reviewed/default-avoid and protected-case unsafe; do
   not long-run or threshold-tune it. Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor52-bounded-multi-candidate-alns-race-postrun-20260709.md`.
+- Successor53 is now in flight from committed guidance repair `7683d05f` on the
+  server-local `claw` runner:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor53-post-successor52-protected-race-or-cleanfork-server-claw-2r-gpt55-20260709T032807Z-claw`.
+  It uses `--rounds 2`, `--completion-preflight`, full proposal context,
+  `--force-surface solver_design`, and no forced mechanism/file binding. Launch
+  preflight passed with local `gpt-5.5` chat completion HTTP 200, and the
+  prepared manifest now leads with successor52-current guidance rather than the
+  old successor46b/q-audit direction. Initial traces selected
+  `protected_candidate_trajectory_selector` in `scheduler.py`, the intended
+  successor52 protected repair line, with retries adding CMT2/CMT4
+  `branch_lesson_usage` and final-attribution constraints. Await postrun
+  readiness before interpreting solver evidence. In-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor53-protected-candidate-trajectory-selector-inflight-20260709.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -1031,10 +1044,14 @@ CVRP:
    selector repair with RNG isolation, one-shot downstream VNS/final-acceptance
    attribution, and substantive CMT2/CMT4 protection, or a materially different
    CVRP-owned clean fork. Do not long-run or threshold-tune the unchanged race.
-28. Use the v0.4 large-file modularization plan before adding behavior to
+28. Await successor53 completion, then analyze every LLM call, quality block,
+   candidate diff, mechanism telemetry, final objective evidence, and CMT2/CMT4
+   coverage before deciding whether the protected repair is viable or must be
+   parked.
+29. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-29. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-30. Keep status documents compact; put detailed root counters and caveats in
+30. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+31. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes
