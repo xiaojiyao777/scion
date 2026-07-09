@@ -642,6 +642,55 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "bounded_multi_candidate_alns_race",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "bounded multi-candidate ALNS race path",
+        "causal_path_label": "bounded ALNS candidate-state race",
+        "outcome_status": "active_positive_below_mde_protected_case_unsafe",
+        "effect_summary": {
+            "row1_median_delta": 5.0,
+            "row1_ci_low": -6.5,
+            "row1_ci_high": 23.0,
+            "row1_pair_wins": 18,
+            "row1_pair_losses": 10,
+            "row1_pair_ties": 4,
+            "row2_median_delta": 3.75,
+            "row2_ci_low": -1.25,
+            "row2_ci_high": 15.0,
+            "row2_pair_wins": 31,
+            "row2_pair_losses": 16,
+            "row2_pair_ties": 1,
+            "max_median_delta": 5.0,
+            "max_effect_to_mde_ratio": 0.505051,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 2,
+            "protected_case_cmt2_row1_median_delta": -6.5,
+            "protected_case_cmt2_row2_median_delta": -11.0,
+            "protected_case_cmt4_median_delta": -25.5,
+            "positive_case_a_n64_median_delta": 23.0,
+            "positive_case_a_n80_median_delta": 21.5,
+            "positive_case_x_n110_median_delta": 35.0,
+            "telemetry_status": "activation_observed_local_race_effect_positive",
+            "mechanism_contract_status": "observed_positive_effect_below_mde",
+            "known_design_gaps": (
+                "local_race_winner_not_final_trajectory_safe",
+                "nonwinning_race_rng_perturbs_later_alns_choices",
+                "embedded_vns_runs_inside_each_race_candidate",
+                "race_accepted_telemetry_not_final_alns_acceptance",
+                "cmt2_cmt4_protected_cases_negative",
+            ),
+            "interpretation": (
+                "valid active multi-candidate race with local positive signal, "
+                "but aggregate effect stayed below MDE and protected cases "
+                "were unsafe"
+            ),
+            "recommended_followup": (
+                "only_design_first_protected_budgeted_trajectory_selector_repair"
+            ),
+            "source_root_label": "successor52",
+        },
+    },
+    {
         "mechanism_id": "elite_route_memory_repair",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "elite complete-route memory repair path",
@@ -1468,6 +1517,12 @@ DEFAULT_AVOID_DIRECTIONS = (
         "successor51 valid active-marginal evidence stayed below MDE: phase-"
         "local route-arc deltas were positive, but final objective evidence "
         "had CI highs below the 9.9 MDE and CMT2/CMT4/P/B cases were unsafe"
+    ),
+    (
+        "unchanged bounded_multi_candidate_alns_race scheduler candidate-state "
+        "race after successor52 valid active-positive below-MDE evidence: local "
+        "race telemetry was positive, but aggregate medians stayed below the "
+        "9.9 MDE and CMT2/CMT4 were loss-heavy in both rows"
     ),
     (
         "unchanged bounded_repair_placement_tournament destroy/repair "

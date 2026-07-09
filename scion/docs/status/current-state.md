@@ -478,18 +478,20 @@ The remaining closeout gaps are:
   telemetry. Treat unchanged route-arc LNS rebuild as reviewed/default-avoid
   and protected-case unsafe; do not long-run or threshold-tune it. Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor51-bounded-route-arc-lns-rebuild-postrun-20260709.md`.
-- Successor52 is now in flight from committed guidance repair `1869299c` on the
+- Successor52 is now complete from committed guidance repair `1869299c` on the
   server-local `claw` runner:
   `/home/clawd/research/scion-experiments/v04-cvrp-successor52-post-successor51-cleanfork-server-claw-2r-gpt55-20260709T020546Z-claw`.
-  It uses `--rounds 2`, `--completion-preflight`, full proposal context,
-  `--force-surface solver_design`, and no forced mechanism/file binding. Launch
-  preflight passed with local `gpt-5.5` chat completion HTTP 200, runtime guard
-  paths were clean, and the prepared manifest confirms both reviewed mechanism
-  ids and default-avoid directions include `bounded_route_arc_lns_rebuild`.
-  Runtime check after launch showed `run_status.status=running`, PID `1821540`,
-  and initial target-intent/hypothesis traces present. Await completion before
-  interpreting solver evidence. In-flight:
-  `scion/docs/experiments/v0.4/v04-cvrp-successor52-post-successor51-cleanfork-inflight-20260709.md`.
+  It finished valid/complete/postrun-ready with six successful local `gpt-5.5`
+  calls, one pre-code quality block, two effective screening rows, and zero
+  promotions. The repaired contract held: the first under-specified
+  `bounded_multi_candidate_alns_race` hypothesis was blocked before code
+  generation, while the retry produced a real scheduler-owned ALNS
+  candidate-state race. Evidence is active-positive locally but below MDE:
+  row medians were `5.0` and `3.75`, `rows_at_or_above_mde=0`, and CMT2/CMT4
+  were loss-heavy in both rows despite strong race telemetry. Treat unchanged
+  multi-candidate race as reviewed/default-avoid and protected-case unsafe; do
+  not long-run or threshold-tune it. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor52-bounded-multi-candidate-alns-race-postrun-20260709.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -1023,9 +1025,12 @@ CVRP:
    deltas, but final objective evidence stayed below MDE and CMT2/CMT4 were
    unsafe. Do not long-run, threshold-tune, or repeat unchanged route-arc LNS
    rebuild; record it as reviewed/default-avoid before the next clean fork.
-27. Await successor52 completion, then analyze every LLM call, quality block,
-   prompt manifest, candidate diff, mechanism telemetry, final objective
-   evidence, and CMT2/CMT4 coverage before deciding the next branch action.
+27. Treat successor52 `bounded_multi_candidate_alns_race` as valid
+   active-positive below-MDE evidence and protected-case unsafe. The next CVRP
+   action must be design-first: either a protected, budgeted candidate-trajectory
+   selector repair with RNG isolation, one-shot downstream VNS/final-acceptance
+   attribution, and substantive CMT2/CMT4 protection, or a materially different
+   CVRP-owned clean fork. Do not long-run or threshold-tune the unchanged race.
 28. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 29. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.

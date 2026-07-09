@@ -221,6 +221,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_giant_tour_split_recombination",
         "bounded_dual_repair_selector",
         "bounded_route_arc_lns_rebuild",
+        "bounded_multi_candidate_alns_race",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -740,6 +741,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         and "CMT2/CMT4/P/B cases were unsafe" in item
         for item in focus["default_avoid_directions"]
     )
+    assert any(
+        "bounded_multi_candidate_alns_race" in item
+        and "successor52 valid active-positive below-MDE" in item
+        and "CMT2/CMT4 were loss-heavy" in item
+        for item in focus["default_avoid_directions"]
+    )
     assert not any(
         item.strip().lower() == "avoid bounded_local_search_variant"
         for item in focus["default_avoid_directions"]
@@ -774,6 +781,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_giant_tour_split_recombination",
         "bounded_dual_repair_selector",
         "bounded_route_arc_lns_rebuild",
+        "bounded_multi_candidate_alns_race",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -898,6 +906,20 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         == -33.5
     )
     assert (
+        mechanisms_by_id["bounded_multi_candidate_alns_race"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["bounded_multi_candidate_alns_race"]["outcome_status"]
+        == "active_positive_below_mde_protected_case_unsafe"
+    )
+    assert (
+        mechanisms_by_id["bounded_multi_candidate_alns_race"]["effect_summary"][
+            "protected_case_cmt2_row2_median_delta"
+        ]
+        == -11.0
+    )
+    assert (
         mechanisms_by_id["route_pair_overlap_removal"]["mechanism_family"]
         == "destroy_repair_selection"
     )
@@ -968,6 +990,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
             "bounded_giant_tour_split_recombination",
             "bounded_dual_repair_selector",
             "bounded_route_arc_lns_rebuild",
+            "bounded_multi_candidate_alns_race",
             "elite_route_memory_repair",
             "bounded_destroy_operator_shadow_selector",
             "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -1281,6 +1304,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_giant_tour_split_recombination",
         "bounded_dual_repair_selector",
         "bounded_route_arc_lns_rebuild",
+        "bounded_multi_candidate_alns_race",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",

@@ -221,6 +221,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
             "bounded_route_arc_lns_rebuild_reviewed_"
             "active_marginal_below_mde_protected_case_unsafe"
         ),
+        (
+            "bounded_multi_candidate_alns_race_reviewed_"
+            "active_positive_below_mde_protected_case_unsafe"
+        ),
         "elite_route_memory_repair_reviewed_marginal_below_mde_protected_case_unsafe",
         "bounded_destroy_operator_shadow_selector_reviewed_marginal_below_mde_protected_case_unsafe",
         "bounded_destroy_operator_shadow_selector_protect_reviewed_below_mde_protected_case_unsafe",
@@ -288,6 +292,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_giant_tour_split_recombination",
         "bounded_dual_repair_selector",
         "bounded_route_arc_lns_rebuild",
+        "bounded_multi_candidate_alns_race",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -765,6 +770,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "best_solution_ruin_recreate_intensification" in prepared_manifest_md
     assert "bounded_giant_tour_split_recombination" in prepared_manifest_md
     assert "bounded_route_arc_lns_rebuild" in prepared_manifest_md
+    assert "bounded_multi_candidate_alns_race" in prepared_manifest_md
     assert "route_first_heuristic" in prepared_manifest_md
     assert (
         prepared_manifest["research_focus"]["successor47_reviewed_evidence"][
@@ -832,6 +838,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_giant_tour_split_recombination",
         "bounded_dual_repair_selector",
         "bounded_route_arc_lns_rebuild",
+        "bounded_multi_candidate_alns_race",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",
