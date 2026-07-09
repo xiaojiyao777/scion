@@ -224,6 +224,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_dual_repair_selector",
         "bounded_route_arc_lns_rebuild",
         "bounded_multi_candidate_alns_race",
+        "protected_budgeted_trajectory_selector",
+        "protected_budgeted_trajectory_selector_v2",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -749,6 +751,18 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         and "CMT2/CMT4 were loss-heavy" in item
         for item in focus["default_avoid_directions"]
     )
+    assert any(
+        "protected_budgeted_trajectory_selector" in item
+        and "successor54 valid active no-positive" in item
+        and "CMT2 stayed unsafe" in item
+        for item in focus["default_avoid_directions"]
+    )
+    assert any(
+        "protected_budgeted_trajectory_selector_v2" in item
+        and "successor54 valid weak-positive below-MDE" in item
+        and "CMT4/X-n110 remained unsafe" in item
+        for item in focus["default_avoid_directions"]
+    )
     assert not any(
         item.strip().lower() == "avoid bounded_local_search_variant"
         for item in focus["default_avoid_directions"]
@@ -784,6 +798,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_dual_repair_selector",
         "bounded_route_arc_lns_rebuild",
         "bounded_multi_candidate_alns_race",
+        "protected_budgeted_trajectory_selector",
+        "protected_budgeted_trajectory_selector_v2",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -922,6 +938,34 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         == -11.0
     )
     assert (
+        mechanisms_by_id["protected_budgeted_trajectory_selector"][
+            "mechanism_family"
+        ]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["protected_budgeted_trajectory_selector"]["outcome_status"]
+        == "active_no_positive_below_mde_protected_case_unsafe"
+    )
+    assert (
+        mechanisms_by_id["protected_budgeted_trajectory_selector"][
+            "effect_summary"
+        ]["protected_case_cmt2_median_delta"]
+        == -7.5
+    )
+    assert (
+        mechanisms_by_id["protected_budgeted_trajectory_selector_v2"][
+            "outcome_status"
+        ]
+        == "weak_positive_below_mde_protected_case_mixed"
+    )
+    assert (
+        mechanisms_by_id["protected_budgeted_trajectory_selector_v2"][
+            "effect_summary"
+        ]["protected_case_cmt4_median_delta"]
+        == -2.0
+    )
+    assert (
         mechanisms_by_id["route_pair_overlap_removal"]["mechanism_family"]
         == "destroy_repair_selection"
     )
@@ -993,6 +1037,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
             "bounded_dual_repair_selector",
             "bounded_route_arc_lns_rebuild",
             "bounded_multi_candidate_alns_race",
+            "protected_budgeted_trajectory_selector",
+            "protected_budgeted_trajectory_selector_v2",
             "elite_route_memory_repair",
             "bounded_destroy_operator_shadow_selector",
             "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -1307,6 +1353,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_dual_repair_selector",
         "bounded_route_arc_lns_rebuild",
         "bounded_multi_candidate_alns_race",
+        "protected_budgeted_trajectory_selector",
+        "protected_budgeted_trajectory_selector_v2",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",

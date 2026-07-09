@@ -510,18 +510,22 @@ The remaining closeout gaps are:
   `algorithmic_intervention` record explicit in solver-design guidance before
   relaunch. Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor53-protected-candidate-trajectory-selector-quality-block-postrun-20260709.md`.
-- Successor54 is now in flight from committed gate-wording repair `d7a1370c`
+- Successor54 is now complete from committed gate-wording repair `d7a1370c`
   on the server-local `claw` runner:
   `/home/clawd/research/scion-experiments/v04-cvrp-successor54-post-successor53-gate-repair-protected-race-server-claw-2r-gpt55-20260709T033540Z-claw`.
-  It uses `--rounds 2`, `--completion-preflight`, full proposal context,
-  `--force-surface solver_design`, and no forced mechanism/file binding. Launch
-  preflight passed with local `gpt-5.5` chat completion HTTP 200. The first
-  hypothesis was correctly blocked only for missing
-  `branch_lesson_usage.clean_fork_diversity_claim`; the retry passed to code
-  generation as `protected_budgeted_trajectory_selector` in `scheduler.py`, with
-  CMT2/CMT4 lesson usage and final-attribution telemetry. Await postrun
-  readiness before interpreting solver evidence. In-flight:
-  `scion/docs/experiments/v0.4/v04-cvrp-successor54-protected-budgeted-trajectory-selector-inflight-20260709.md`.
+  It completed valid/complete/postrun-ready with local `gpt-5.5`, eleven
+  successful LLM calls, one pre-code quality block, two effective screening
+  rows, and zero promotions. The successor53 gate-wording repair worked: the
+  first hypothesis was blocked only for missing
+  `branch_lesson_usage.clean_fork_diversity_claim`, and the retries reached
+  code instead of repeating the `algorithmic_intervention_sufficiency` block.
+  Solver evidence did not justify continuation. The first selector was
+  abandoned with median `0.0`, CI `[-0.25, 0.0]`, win rate `0.125`, and CMT2
+  median `-7.5`; v2 improved CMT2 to `+0.5` but stayed weak-positive below MDE
+  with median `1.25`, CI `[-2.0, 6.0]` below the `9.9` MDE, CMT4 `-2.0`, and
+  X-n110 `-6.0`. Treat both protected race repairs as reviewed/default-avoid;
+  do not long-run, threshold-tune, or continue the same line. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor54-protected-budgeted-trajectory-selector-postrun-20260709.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -1061,10 +1065,13 @@ CVRP:
    selector repair with RNG isolation, one-shot downstream VNS/final-acceptance
    attribution, and substantive CMT2/CMT4 protection, or a materially different
    CVRP-owned clean fork. Do not long-run or threshold-tune the unchanged race.
-28. Await successor54 completion, then inspect every LLM call, quality block,
-   candidate diff, mechanism telemetry, final objective evidence, and CMT2/CMT4
-   coverage before deciding whether the protected repair is viable or must be
-   parked.
+28. Treat successor54 `protected_budgeted_trajectory_selector` and
+   `protected_budgeted_trajectory_selector_v2` as valid reviewed/default-avoid
+   evidence for the protected race repair line. The gate repair succeeded, but
+   the solver effect remained below MDE and CMT4/X-n110 stayed unsafe in v2.
+   Do not long-run or continue same-line threshold/cadence tuning. The next
+   CVRP slot should be a materially different CVRP-owned clean fork with a
+   design-first module boundary instead of more inline scheduler helper growth.
 29. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
 30. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.

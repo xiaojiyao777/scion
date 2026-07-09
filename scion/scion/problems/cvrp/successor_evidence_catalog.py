@@ -691,6 +691,79 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
         },
     },
     {
+        "mechanism_id": "protected_budgeted_trajectory_selector",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "protected budgeted trajectory selector path",
+        "causal_path_label": "protected budgeted ALNS trajectory selection",
+        "outcome_status": "active_no_positive_below_mde_protected_case_unsafe",
+        "effect_summary": {
+            "median_delta": 0.0,
+            "ci_low": -0.25,
+            "ci_high": 0.0,
+            "win_rate": 0.125,
+            "pair_wins": 3,
+            "pair_losses": 6,
+            "pair_ties": 23,
+            "max_effect_to_mde_ratio": 0.0,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 0,
+            "protected_case_cmt2_median_delta": -7.5,
+            "protected_case_cmt4_median_delta": 0.0,
+            "negative_case_p_n65_median_delta": -0.5,
+            "telemetry_status": "activation_observed_phase_effect_positive",
+            "mechanism_contract_status": "observed_positive_effect_below_mde",
+            "known_design_gaps": (
+                "alternate_selected_before_post_downstream_comparison",
+                "repair_local_delta_not_final_trajectory_safe",
+                "cmt2_protected_case_negative",
+            ),
+            "interpretation": (
+                "valid protected race repair activation, but aggregate median "
+                "was zero and CMT2 stayed unsafe"
+            ),
+            "recommended_followup": "none_clean_fork_materially_different_path",
+            "source_root_label": "successor54",
+        },
+    },
+    {
+        "mechanism_id": "protected_budgeted_trajectory_selector_v2",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "protected budgeted trajectory selector v2 path",
+        "causal_path_label": "protected post-polish ALNS trajectory selection",
+        "outcome_status": "weak_positive_below_mde_protected_case_mixed",
+        "effect_summary": {
+            "median_delta": 1.25,
+            "ci_low": -2.0,
+            "ci_high": 6.0,
+            "win_rate": 0.375,
+            "pair_wins": 14,
+            "pair_losses": 9,
+            "pair_ties": 9,
+            "max_effect_to_mde_ratio": 0.126263,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 1,
+            "protected_case_cmt2_median_delta": 0.5,
+            "protected_case_cmt4_median_delta": -2.0,
+            "negative_case_x_n110_median_delta": -6.0,
+            "positive_case_a_n64_median_delta": 18.5,
+            "positive_case_p_n65_median_delta": 6.0,
+            "telemetry_status": "activation_observed_phase_effect_positive",
+            "mechanism_contract_status": "observed_positive_effect_below_mde",
+            "known_design_gaps": (
+                "post_polish_alternate_race_still_below_mde",
+                "main_rng_consumed_for_alternate_seed",
+                "extra_alternate_vns_runtime_changes_trajectory_budget",
+                "cmt4_and_x_n110_cases_negative",
+            ),
+            "interpretation": (
+                "valid weak-positive protected race repair, but CI high stayed "
+                "below MDE and CMT4/X-n110 remained unsafe"
+            ),
+            "recommended_followup": "none_clean_fork_materially_different_path",
+            "source_root_label": "successor54",
+        },
+    },
+    {
         "mechanism_id": "elite_route_memory_repair",
         "mechanism_family": "destroy_repair_selection",
         "path_label": "elite complete-route memory repair path",
@@ -1523,6 +1596,18 @@ DEFAULT_AVOID_DIRECTIONS = (
         "race after successor52 valid active-positive below-MDE evidence: local "
         "race telemetry was positive, but aggregate medians stayed below the "
         "9.9 MDE and CMT2/CMT4 were loss-heavy in both rows"
+    ),
+    (
+        "unchanged protected_budgeted_trajectory_selector scheduler protected "
+        "candidate-trajectory repair after successor54 valid active no-positive "
+        "evidence: aggregate median was 0.0, CI high was 0.0 below the 9.9 MDE, "
+        "and CMT2 stayed unsafe"
+    ),
+    (
+        "unchanged protected_budgeted_trajectory_selector_v2 scheduler protected "
+        "post-polish trajectory selector after successor54 valid weak-positive "
+        "below-MDE evidence: CMT2 improved, but aggregate CI high stayed below "
+        "the 9.9 MDE and CMT4/X-n110 remained unsafe"
     ),
     (
         "unchanged bounded_repair_placement_tournament destroy/repair "

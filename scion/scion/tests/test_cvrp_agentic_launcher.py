@@ -225,6 +225,14 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
             "bounded_multi_candidate_alns_race_reviewed_"
             "active_positive_below_mde_protected_case_unsafe"
         ),
+        (
+            "protected_budgeted_trajectory_selector_reviewed_"
+            "active_no_positive_below_mde_protected_case_unsa"
+        ),
+        (
+            "protected_budgeted_trajectory_selector_v2_reviewed_"
+            "weak_positive_below_mde_protected_case_mixed"
+        ),
         "elite_route_memory_repair_reviewed_marginal_below_mde_protected_case_unsafe",
         "bounded_destroy_operator_shadow_selector_reviewed_marginal_below_mde_protected_case_unsafe",
         "bounded_destroy_operator_shadow_selector_protect_reviewed_below_mde_protected_case_unsafe",
@@ -293,6 +301,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_dual_repair_selector",
         "bounded_route_arc_lns_rebuild",
         "bounded_multi_candidate_alns_race",
+        "protected_budgeted_trajectory_selector",
+        "protected_budgeted_trajectory_selector_v2",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -771,6 +781,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "bounded_giant_tour_split_recombination" in prepared_manifest_md
     assert "bounded_route_arc_lns_rebuild" in prepared_manifest_md
     assert "bounded_multi_candidate_alns_race" in prepared_manifest_md
+    assert "protected_budgeted_trajectory_selector" in prepared_manifest_md
+    assert "protected_budgeted_trajectory_selector_v2" in prepared_manifest_md
     assert "route_first_heuristic" in prepared_manifest_md
     assert (
         prepared_manifest["research_focus"]["successor47_reviewed_evidence"][
@@ -839,6 +851,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "bounded_dual_repair_selector",
         "bounded_route_arc_lns_rebuild",
         "bounded_multi_candidate_alns_race",
+        "protected_budgeted_trajectory_selector",
+        "protected_budgeted_trajectory_selector_v2",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",
