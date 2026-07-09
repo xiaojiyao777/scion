@@ -156,7 +156,9 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert ROUTE_FIRST_COMPARISON_MECHANISM_ID in rendered.text
     assert "route_first_heuristic" in rendered.text
     assert "giant-tour split recombination" in rendered.text
-    assert "contract/activation repair" in rendered.text
+    assert "candidate-trajectory selector repair" in rendered.text
+    assert "bounded_multi_candidate_alns_race" in rendered.text
+    assert "RNG/VNS/final-attribution failure modes" in rendered.text
     assert "pre-VNS repair delta" in rendered.text
     assert "measured_no_positive_at_mde" in rendered.text
     assert "no-positive-at-MDE" in rendered.text
