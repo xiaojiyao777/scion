@@ -656,6 +656,18 @@ route-arc LNS rebuild; the next CVRP slot must clean-fork to a materially
 different CVRP-owned causal path with final total-distance attribution. Postrun:
 `scion/docs/experiments/v0.4/v04-cvrp-successor51-bounded-route-arc-lns-rebuild-postrun-20260709.md`.
 
+Successor52 is now in flight from committed guidance repair `1869299c` on the
+server-local `claw` runner:
+`/home/clawd/research/scion-experiments/v04-cvrp-successor52-post-successor51-cleanfork-server-claw-2r-gpt55-20260709T020546Z-claw`.
+It uses `--rounds 2`, `--completion-preflight`, full proposal context,
+`--force-surface solver_design`, and no forced mechanism/file binding. Launch
+preflight passed with local `gpt-5.5` chat completion HTTP 200, runtime guard
+paths were clean, and the prepared manifest confirms both reviewed mechanism
+ids and default-avoid directions include `bounded_route_arc_lns_rebuild`.
+Treat this as the next materially different CVRP-owned clean-fork attempt;
+await postrun readiness before interpreting solver evidence. In-flight:
+`scion/docs/experiments/v0.4/v04-cvrp-successor52-post-successor51-cleanfork-inflight-20260709.md`.
+
 Legacy direction details below are retained as reviewed-history context.
 
 The latest completed CVRP attempt is
@@ -1089,11 +1101,15 @@ from the current checkout.
    evidence stayed below MDE and CMT2/CMT4 regressed. Do not long-run,
    threshold-tune, or continue unchanged route-arc LNS rebuild; record it as
    reviewed/default-avoid before the next clean fork.
-27. Use the new large-file modularization plan before further behavior changes
+27. Await successor52 completion, then run the same postrun analysis discipline:
+   inspect every LLM call, quality block, prompt manifest, candidate diff,
+   mechanism telemetry, final objective evidence, and CMT2/CMT4 coverage
+   before deciding whether to park, follow up diagnostically, or clean-fork.
+28. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-28. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+29. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-29. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+30. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence

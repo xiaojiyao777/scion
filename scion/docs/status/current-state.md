@@ -478,6 +478,18 @@ The remaining closeout gaps are:
   telemetry. Treat unchanged route-arc LNS rebuild as reviewed/default-avoid
   and protected-case unsafe; do not long-run or threshold-tune it. Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor51-bounded-route-arc-lns-rebuild-postrun-20260709.md`.
+- Successor52 is now in flight from committed guidance repair `1869299c` on the
+  server-local `claw` runner:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor52-post-successor51-cleanfork-server-claw-2r-gpt55-20260709T020546Z-claw`.
+  It uses `--rounds 2`, `--completion-preflight`, full proposal context,
+  `--force-surface solver_design`, and no forced mechanism/file binding. Launch
+  preflight passed with local `gpt-5.5` chat completion HTTP 200, runtime guard
+  paths were clean, and the prepared manifest confirms both reviewed mechanism
+  ids and default-avoid directions include `bounded_route_arc_lns_rebuild`.
+  Runtime check after launch showed `run_status.status=running`, PID `1821540`,
+  and initial target-intent/hypothesis traces present. Await completion before
+  interpreting solver evidence. In-flight:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor52-post-successor51-cleanfork-inflight-20260709.md`.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -1011,10 +1023,13 @@ CVRP:
    deltas, but final objective evidence stayed below MDE and CMT2/CMT4 were
    unsafe. Do not long-run, threshold-tune, or repeat unchanged route-arc LNS
    rebuild; record it as reviewed/default-avoid before the next clean fork.
-27. Use the v0.4 large-file modularization plan before adding behavior to
+27. Await successor52 completion, then analyze every LLM call, quality block,
+   prompt manifest, candidate diff, mechanism telemetry, final objective
+   evidence, and CMT2/CMT4 coverage before deciding the next branch action.
+28. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-28. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-29. Keep status documents compact; put detailed root counters and caveats in
+29. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+30. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes
