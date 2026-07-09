@@ -229,6 +229,26 @@ _ALGORITHMIC_FINAL_EFFECT_TERMS = (
     "accepted_current_best",
     "best_solution",
 )
+_ALGORITHMIC_ATTEMPT_TERMS = (
+    "attempted",
+    "attempt",
+    "attempts",
+    "move_attempts",
+)
+_ALGORITHMIC_ACCEPT_TERMS = (
+    "accepted",
+    "acceptance",
+    "accepted_moves",
+)
+_ALGORITHMIC_REJECT_OR_BUDGET_TERMS = (
+    "rejected",
+    "reject",
+    "rejects",
+    "rejection",
+    "budget",
+    "budget_stopped",
+    "budget_exhausted",
+)
 _REPAIR_OR_INFRA_MECHANISM_TERMS = (
     "contract_repair",
     "material_difference_contract",
@@ -500,10 +520,13 @@ def _causal_path_rejection(
                 "material_difference, or contrast_dimensions. For selector, "
                 "shadow, or filter mechanisms, separate pre_vns_local_delta "
                 "diagnostics from post_downstream_or_final_total_distance_delta "
-                "before claiming final objective effect. The hypothesis must "
-                "also describe the algorithmic intervention that changes the "
-                "solve trajectory, how it generates or selects candidate route "
-                "states, attempted/accepted/rejected/budget observations, and "
+                "before claiming final objective effect. Use an explicit "
+                "algorithmic_intervention record with "
+                "solve_trajectory_change, "
+                "candidate_state_generation_or_selection, "
+                "attempted_accepted_rejected_budget_evidence, and "
+                "final_total_distance_attribution. The evidence text must "
+                "include attempt/accept/reject or budget-stop observations and "
                 "post-downstream or final total_distance attribution. A "
                 "config-only activation, default-off variant flip, or "
                 "telemetry-only wrapper is not sufficient."
@@ -638,9 +661,12 @@ def _algorithmic_intervention_satisfied(hypothesis: Any) -> bool:
     )
     has_candidate_state = any(term in text for term in _ALGORITHMIC_CANDIDATE_TERMS)
     has_outcome_observation = (
-        "attempted" in text
-        and ("accepted" in text or "best_improved" in text)
-        and ("rejected" in text or "budget" in text)
+        any(term in text for term in _ALGORITHMIC_ATTEMPT_TERMS)
+        and (
+            any(term in text for term in _ALGORITHMIC_ACCEPT_TERMS)
+            or "best_improved" in text
+        )
+        and any(term in text for term in _ALGORITHMIC_REJECT_OR_BUDGET_TERMS)
     )
     has_final_attribution = any(
         term in text for term in _ALGORITHMIC_FINAL_EFFECT_TERMS

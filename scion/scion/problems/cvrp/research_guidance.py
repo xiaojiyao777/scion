@@ -120,6 +120,13 @@ CVRP_ALGORITHMIC_INTERVENTION_SUFFICIENCY_CONTRACT = {
         "post-downstream or final total_distance attribution",
         "CMT2/CMT4 protected-case outcome evidence",
     ],
+    "required_output_contract": (
+        "algorithmic_intervention={"
+        "solve_trajectory_change:'how the solve trajectory changes', "
+        "candidate_state_generation_or_selection:'how candidate route states are generated or selected', "
+        "attempted_accepted_rejected_budget_evidence:'attempted/accepted/rejected/budget_stopped observations', "
+        "final_total_distance_attribution:'post_downstream_or_final_total_distance_delta evidence'}"
+    ),
     "insufficient_patterns": [
         "config-only activation",
         "default-off variant flip",

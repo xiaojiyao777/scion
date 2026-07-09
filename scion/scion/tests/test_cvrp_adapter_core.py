@@ -358,6 +358,75 @@ def test_cvrp_hypothesis_quality_accepts_prompt_schema_material_difference(
     assert check.allowed is True
 
 
+def test_cvrp_hypothesis_quality_accepts_successor53_outcome_terms(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add protected_candidate_trajectory_selector to change route_state "
+            "and downstream_trajectory by selecting candidate_state alternatives "
+            "after repair. Record move_attempts, accepted_moves, reject causes, "
+            "budget_exhausted stops, and post_downstream final_total_distance "
+            "attribution before any objective claim."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        novelty_signature={
+            "mechanism_family": "destroy_repair_selection",
+            "improvement_strategy": "candidate_state_selection",
+        },
+        material_difference={
+            "changed_dimensions": [
+                "route_state_update",
+                "effect_path",
+                "runtime_budget_strategy",
+            ],
+            "contrast": {
+                "nearest_reviewed_mechanisms": [
+                    "bounded_multi_candidate_alns_race",
+                ],
+                "difference": "uses final attribution instead of local race delta",
+            },
+            "evidence": [
+                "protected_candidate_trajectory_selector post_downstream delta",
+            ],
+        },
+        expected_telemetry={
+            "activity": [
+                "protected_candidate_trajectory_selector.move_attempts",
+                "protected_candidate_trajectory_selector.accepted_moves",
+            ],
+            "budget": [
+                "protected_candidate_trajectory_selector.budget_exhausted",
+            ],
+            "effect": [
+                "protected_candidate_trajectory_selector."
+                "post_downstream_or_final_total_distance_delta",
+            ],
+        },
+        branch_lesson_usage={
+            "clean_fork_diversity_claim": {
+                "protected_cases": ["CMT2", "CMT4"],
+                "protection_plan": {
+                    "CMT2": "report accepted rejected budget final deltas",
+                    "CMT4": "report accepted rejected budget final deltas",
+                },
+            }
+        },
+        mechanism_changes=(
+            MechanismChange(
+                id="protected_candidate_trajectory_selector",
+                change_type="modify",
+            ),
+        ),
+    )
+
+    check = _validate_cvrp_hypothesis_quality(cvrp_adapter, hypothesis)
+
+    assert check.allowed is True
+
+
 def test_cvrp_hypothesis_quality_blocks_missing_mechanism_id(
     cvrp_adapter: ProblemAdapter,
 ) -> None:

@@ -135,14 +135,16 @@ class CvrpSolverDesignProvider:
             ),
             (
                 "CVRP solver-design algorithmic-intervention sufficiency: a "
-                "formal hypothesis must explain how the mechanism changes the "
-                "solve trajectory or search state, how it generates or selects "
-                "candidate route states, what attempted/accepted/rejected/"
-                "budget-stopped observations will be recorded, and how "
-                "post-downstream or final total_distance attribution will be "
-                "measured. A config-only activation, default-off variant flip, "
-                "telemetry-only wrapper, or pre-VNS local delta without final "
-                "trajectory attribution is not sufficient."
+                "formal hypothesis must include algorithmic_intervention with "
+                "solve_trajectory_change, "
+                "candidate_state_generation_or_selection, "
+                "attempted_accepted_rejected_budget_evidence, and "
+                "final_total_distance_attribution. The evidence text must name "
+                "attempt/accept/reject or budget-stop observations and "
+                "post-downstream or final total_distance attribution. A "
+                "config-only activation, default-off variant flip, telemetry-only "
+                "wrapper, or pre-VNS local delta without final trajectory "
+                "attribution is not sufficient."
             ),
             (
                 "For `solver_design` expected_telemetry, use the selected surface "

@@ -294,7 +294,10 @@ def test_cvrp_hypothesis_guidance_exposes_causal_path_contract_shape() -> None:
     assert "priority_case_ids" in rendered
     assert "effective_priority_case_ids" in rendered
     assert "algorithmic-intervention sufficiency" in rendered
-    assert "changes the solve trajectory or search state" in rendered
+    assert "algorithmic_intervention" in rendered
+    assert "solve_trajectory_change" in rendered
+    assert "candidate_state_generation_or_selection" in rendered
+    assert "attempted_accepted_rejected_budget_evidence" in rendered
     assert "config-only activation" in rendered
     assert "final total_distance attribution" in rendered
 

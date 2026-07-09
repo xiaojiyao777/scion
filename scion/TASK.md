@@ -672,19 +672,24 @@ rows despite strong race telemetry. Treat unchanged
 unsafe. Do not long-run or threshold-tune it as-is. Postrun:
 `scion/docs/experiments/v0.4/v04-cvrp-successor52-bounded-multi-candidate-alns-race-postrun-20260709.md`.
 
-Successor53 is now in flight from committed guidance repair `7683d05f` on the
-server-local `claw` runner:
+Successor53 is now complete/invalid from committed guidance repair `7683d05f`
+on the server-local `claw` runner:
 `/home/clawd/research/scion-experiments/v04-cvrp-successor53-post-successor52-protected-race-or-cleanfork-server-claw-2r-gpt55-20260709T032807Z-claw`.
-It uses `--rounds 2`, `--completion-preflight`, full proposal context,
-`--force-surface solver_design`, and no forced mechanism/file binding. Launch
-preflight passed with local `gpt-5.5` chat completion HTTP 200, and the
-prepared manifest now leads with successor52-current guidance rather than the
-old successor46b/q-audit direction. Initial traces selected
-`protected_candidate_trajectory_selector` in `scheduler.py`, the intended
-successor52 protected repair line, with retries adding CMT2/CMT4
-`branch_lesson_usage` and final-attribution constraints. Await postrun readiness
-before interpreting solver evidence. In-flight:
-`scion/docs/experiments/v0.4/v04-cvrp-successor53-protected-candidate-trajectory-selector-inflight-20260709.md`.
+It stopped before code generation with `invalid_no_effective_rounds`,
+`formal_screened_candidates=0`, `protocol_evaluated_candidates=0`, and
+`last_stop_reason=repeated_quality_block_signature`. This is proposal/gate
+evidence, not solver evidence. All four target-intent calls selected the right
+line, `protected_candidate_trajectory_selector` in `scheduler.py`, but all four
+hypotheses were blocked by `cvrp_solver_design_causal_path_contract`; attempts
+2-4 only missed `algorithmic_intervention_sufficiency`. The root cause is a
+CVRP-owned gate/prompt mismatch: the hypotheses described the intended
+RNG-isolated protected trajectory selector, but the gate was too brittle around
+attempt/reject telemetry wording (`move_attempts`, `accepted_moves`, reject
+causes, `budget_exhausted`). The current checkout now broadens the
+CVRP-owned outcome-observation vocabulary and makes the
+`algorithmic_intervention` record explicit in solver-design guidance before
+relaunch. Postrun:
+`scion/docs/experiments/v0.4/v04-cvrp-successor53-protected-candidate-trajectory-selector-quality-block-postrun-20260709.md`.
 
 Legacy direction details below are retained as reviewed-history context.
 
@@ -1125,10 +1130,12 @@ from the current checkout.
    selector repair with RNG isolation, one-shot downstream VNS/final-acceptance
    attribution, and substantive CMT2/CMT4 protection, or a materially different
    CVRP-owned clean fork. Do not long-run or threshold-tune the unchanged race.
-28. Await successor53 completion, then analyze every LLM call, quality block,
-   candidate diff, mechanism telemetry, final objective evidence, and CMT2/CMT4
-   coverage before deciding whether the protected repair is viable or must be
-   parked.
+28. Relaunch the successor52 protected repair after the successor53
+   gate-wording fix. The relaunch must still target solver-design research,
+   keep hard required mechanisms empty, and inspect every LLM call, quality
+   block, candidate diff, mechanism telemetry, final objective evidence, and
+   CMT2/CMT4 coverage before deciding whether the protected repair is viable or
+   must be parked.
 29. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
 30. Keep the v0.5 governance ablation frozen as a preregistered design; do not
