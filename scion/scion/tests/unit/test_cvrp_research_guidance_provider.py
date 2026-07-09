@@ -67,8 +67,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         for requirement in contract.evidence_requirements
     )
     assert any(
-        requirement.requirement_id
-        == "successor45_bounded_repair_placement_tournament"
+        requirement.requirement_id == "successor45_bounded_repair_placement_tournament"
         for requirement in contract.evidence_requirements
     )
     assert any(
@@ -87,13 +86,11 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         for requirement in contract.evidence_requirements
     )
     assert any(
-        requirement.requirement_id
-        == "route_first_heuristic_comparison_baseline"
+        requirement.requirement_id == "route_first_heuristic_comparison_baseline"
         for requirement in contract.evidence_requirements
     )
     assert any(
-        requirement.requirement_id
-        == "cvrp_algorithmic_intervention_sufficiency"
+        requirement.requirement_id == "cvrp_algorithmic_intervention_sufficiency"
         for requirement in contract.evidence_requirements
     )
     assert any(
@@ -223,6 +220,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "best_solution_ruin_recreate_intensification_activation_repair",
         "bounded_giant_tour_split_recombination",
         "bounded_dual_repair_selector",
+        "bounded_route_arc_lns_rebuild",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -323,14 +321,13 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "policies/baseline_modules/scheduler.py" in (
         focus["successor44d_reviewed_evidence"]["target_files"]
     )
-    assert focus["successor44d_reviewed_evidence"][
-        "required_mechanism_binding"
-    ] == (
+    assert focus["successor44d_reviewed_evidence"]["required_mechanism_binding"] == (
         "none"
     )
-    assert "weak-positive below MDE" in focus["successor44d_reviewed_evidence"][
-        "reviewed_rule"
-    ]
+    assert (
+        "weak-positive below MDE"
+        in focus["successor44d_reviewed_evidence"]["reviewed_rule"]
+    )
     assert SELECTOR_TELEMETRY_HYGIENE_LESSON in (
         focus["successor44d_reviewed_evidence"]["carried_lessons"]
     )
@@ -346,9 +343,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["successor45_reviewed_evidence"]["required_mechanism_binding"] == (
         "none"
     )
-    assert "same-removed-set" in focus["successor45_reviewed_evidence"][
-        "reviewed_rule"
-    ]
+    assert "same-removed-set" in focus["successor45_reviewed_evidence"]["reviewed_rule"]
     assert focus["successor46_reviewed_evidence"]["mechanism_id"] == (
         SUCCESSOR46_MECHANISM_ID
     )
@@ -361,9 +356,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["successor46_reviewed_evidence"]["required_mechanism_binding"] == (
         "none"
     )
-    assert "sparse runtime" in focus["successor46_reviewed_evidence"][
-        "reviewed_rule"
-    ]
+    assert "sparse runtime" in focus["successor46_reviewed_evidence"]["reviewed_rule"]
     assert focus["successor46b_reviewed_evidence"]["mechanism_id"] == (
         SUCCESSOR46B_MECHANISM_ID
     )
@@ -376,9 +369,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["successor46b_reviewed_evidence"]["required_mechanism_binding"] == (
         "none"
     )
-    assert "weak-positive below-MDE" in focus["successor46b_reviewed_evidence"][
-        "reviewed_rule"
-    ]
+    assert (
+        "weak-positive below-MDE"
+        in focus["successor46b_reviewed_evidence"]["reviewed_rule"]
+    )
     assert focus["successor47_reviewed_evidence"]["mechanism_id"] == (
         SUCCESSOR47_MECHANISM_ID
     )
@@ -391,9 +385,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["successor47_reviewed_evidence"]["required_mechanism_binding"] == (
         "none"
     )
-    assert "objective evidence stayed marginal" in focus["successor47_reviewed_evidence"][
-        "reviewed_rule"
-    ]
+    assert (
+        "objective evidence stayed marginal"
+        in focus["successor47_reviewed_evidence"]["reviewed_rule"]
+    )
     assert focus["successor48_reviewed_evidence"]["mechanism_id"] == (
         SUCCESSOR48_MECHANISM_ID
     )
@@ -437,16 +432,15 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["route_first_comparison_target_intent"]["target_file"] == (
         "policies/baseline_modules/config.py"
     )
-    assert focus["route_first_comparison_target_intent"][
-        "required_mechanism_binding"
-    ] == "none"
+    assert (
+        focus["route_first_comparison_target_intent"]["required_mechanism_binding"]
+        == "none"
+    )
     assert focus["route_first_comparison_target_intent"]["status"] == (
         "reviewed_negative_comparison"
     )
     assert "SOLVER_VARIANT enables route_first_heuristic" in (
-        focus["route_first_comparison_target_intent"]["material_difference"][
-            "evidence"
-        ]
+        focus["route_first_comparison_target_intent"]["material_difference"]["evidence"]
     )
     assert focus["successor_opportunity_families"] == [
         "acceptance_or_adaptive_weighting",
@@ -458,9 +452,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "positive-at-MDE" in focus["current_question"]
     assert "short_horizon_seed_trajectory_selector" in focus["current_question"]
     assert "short-horizon seed trajectory selector" in focus["current_question"]
-    assert "successor27/29 route-pair-overlap follow-ups" in focus[
-        "current_question"
-    ]
+    assert "successor27/29 route-pair-overlap follow-ups" in focus["current_question"]
     assert "neighbor_list_vns_filter" in focus["current_question"]
     assert "frozen_safe_neighbor_list_vns_filter" in focus["current_question"]
     assert "capacity_tightness_removal" in focus["current_question"]
@@ -508,19 +500,17 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "cw_sweep_seed_baseline_selector" in focus["next_required_direction"]
     assert "not preserved by downstream ALNS/VNS" in focus["next_required_direction"]
     assert "successor26b reran" in focus["next_required_direction"]
-    assert "short_horizon_seed_trajectory_selector" in focus[
-        "next_required_direction"
-    ]
-    assert "short_horizon_seed_trajectory_selector_v2" in focus[
-        "next_required_direction"
-    ]
+    assert "short_horizon_seed_trajectory_selector" in focus["next_required_direction"]
+    assert (
+        "short_horizon_seed_trajectory_selector_v2" in focus["next_required_direction"]
+    )
     assert "CMT4 median -19.0" in focus["next_required_direction"]
     assert "policies/baseline_modules/destroy_repair.py" in (
         focus["next_required_direction"]
     )
-    assert (
-        "Hard `required_mechanism_ids` remains empty"
-    ) in focus["next_required_direction"]
+    assert ("Hard `required_mechanism_ids` remains empty") in focus[
+        "next_required_direction"
+    ]
     assert SUCCESSOR44_MECHANISM_ID in focus["next_required_direction"]
     assert "must not bind another destroy-shadow selector follow-up" in (
         focus["next_required_direction"]
@@ -530,21 +520,22 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "Successor29 forced" in focus["next_required_direction"]
     assert "route-pair-overlap line is parked" in focus["next_required_direction"]
     assert "neighbor_list_vns_filter" in focus["next_required_direction"]
-    assert "frozen_safe_neighbor_list_vns_filter" in focus[
-        "next_required_direction"
-    ]
+    assert "frozen_safe_neighbor_list_vns_filter" in focus["next_required_direction"]
     assert "capacity_tightness_removal" in focus["next_required_direction"]
     assert "telemetry-only q-audit repair" in focus["next_required_direction"]
     assert "successor36b" in focus["next_required_direction"]
-    assert "proposal-control evidence plus solver-negative" in focus[
-        "next_required_direction"
-    ]
-    assert "observed_no_effect mechanism contract status" in focus[
-        "next_required_direction"
-    ]
-    assert "materially different CVRP-owned causal path" in focus[
-        "next_required_direction"
-    ]
+    assert (
+        "proposal-control evidence plus solver-negative"
+        in focus["next_required_direction"]
+    )
+    assert (
+        "observed_no_effect mechanism contract status"
+        in focus["next_required_direction"]
+    )
+    assert (
+        "materially different CVRP-owned causal path"
+        in focus["next_required_direction"]
+    )
     assert SUCCESSOR46_MECHANISM_ID in focus["next_required_direction"]
     assert SUCCESSOR46B_MECHANISM_ID in focus["next_required_direction"]
     assert SUCCESSOR47_MECHANISM_ID in focus["next_required_direction"]
@@ -565,13 +556,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["required_evidence"]
     )
     assert any(
-        "seed_post_optimization_selector" in item
-        and "micro-polish" in item
+        "seed_post_optimization_selector" in item and "micro-polish" in item
         for item in focus["required_evidence"]
     )
     assert any(
-        "construction-seed revisit" in item
-        and "same-mechanism accepted delta" in item
+        "construction-seed revisit" in item and "same-mechanism accepted delta" in item
         for item in focus["required_evidence"]
     )
     assert any(
@@ -629,8 +618,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["default_avoid_directions"]
     )
     assert any(
-        "polar_sweep_destroy_repair" in item
-        and "measured_no_positive_at_mde" in item
+        "polar_sweep_destroy_repair" in item and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
     )
     assert any(
@@ -649,18 +637,15 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["default_avoid_directions"]
     )
     assert any(
-        "load_complement_pair_removal" in item
-        and "measured_no_positive_at_mde" in item
+        "load_complement_pair_removal" in item and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
     )
     assert any(
-        "route_pair_crossover_repair" in item
-        and "measured_no_positive_at_mde" in item
+        "route_pair_crossover_repair" in item and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
     )
     assert any(
-        "timewarp_string_removal" in item
-        and "measured_no_positive_at_mde" in item
+        "timewarp_string_removal" in item and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
     )
     assert any(
@@ -668,13 +653,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["default_avoid_directions"]
     )
     assert any(
-        "lookahead_insertion_cost_repair_v2" in item
-        and "direct-effect-zero" in item
+        "lookahead_insertion_cost_repair_v2" in item and "direct-effect-zero" in item
         for item in focus["default_avoid_directions"]
     )
     assert any(
-        "savings_seed_selection_probe" in item
-        and "measured_no_positive_at_mde" in item
+        "savings_seed_selection_probe" in item and "measured_no_positive_at_mde" in item
         for item in focus["default_avoid_directions"]
     )
     assert any(
@@ -683,8 +666,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         for item in focus["default_avoid_directions"]
     )
     assert any(
-        "exact_short_route_polish" in item
-        and "quality-regression/loss-heavy" in item
+        "exact_short_route_polish" in item and "quality-regression/loss-heavy" in item
         for item in focus["default_avoid_directions"]
     )
     assert any(
@@ -752,6 +734,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_dual_repair_selector" in item and "successor39" in item
         for item in focus["default_avoid_directions"]
     )
+    assert any(
+        "bounded_route_arc_lns_rebuild" in item
+        and "successor51 valid active-marginal" in item
+        and "CMT2/CMT4/P/B cases were unsafe" in item
+        for item in focus["default_avoid_directions"]
+    )
     assert not any(
         item.strip().lower() == "avoid bounded_local_search_variant"
         for item in focus["default_avoid_directions"]
@@ -779,12 +767,13 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "stagnation_adaptive_destroy_size_schedule",
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
-            "post_vns_best_anchor_acceptance_guard",
-            "bounded_repair_placement_tournament",
-            "best_solution_ruin_recreate_intensification",
-            "best_solution_ruin_recreate_intensification_activation_repair",
-            "bounded_giant_tour_split_recombination",
-            "bounded_dual_repair_selector",
+        "post_vns_best_anchor_acceptance_guard",
+        "bounded_repair_placement_tournament",
+        "best_solution_ruin_recreate_intensification",
+        "best_solution_ruin_recreate_intensification_activation_repair",
+        "bounded_giant_tour_split_recombination",
+        "bounded_dual_repair_selector",
+        "bounded_route_arc_lns_rebuild",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -817,102 +806,153 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "edge_frequency_penalty_repair",
     }
     assert "seed_post_optimization_selector" in mechanisms_by_id
-    assert mechanisms_by_id["capacity_tightness_removal"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["bounded_intra_route_3opt"][
-        "mechanism_family"
-    ] == "bounded_local_search_variant"
-    assert mechanisms_by_id["bounded_ejection_chain_relocate"][
-        "mechanism_family"
-    ] == "bounded_local_search_variant"
-    assert mechanisms_by_id["bounded_cross_route_double_bridge_polish"][
-        "mechanism_family"
-    ] == "bounded_local_search_variant"
-    assert mechanisms_by_id["frozen_safe_neighbor_list_vns_filter"][
-        "mechanism_family"
-    ] == "bounded_local_search_variant"
-    assert mechanisms_by_id["route_angle_aware_2opt_star"][
-        "mechanism_family"
-    ] == "bounded_local_search_variant"
-    assert mechanisms_by_id["radial_2opt_star_relink"][
-        "mechanism_family"
-    ] == "bounded_local_search_variant"
-    assert mechanisms_by_id["operator_pair_destroy_size_bands"][
-        "mechanism_family"
-    ] == "scheduler_destroy_size_policy"
-    assert mechanisms_by_id["stagnation_adaptive_destroy_size_schedule"][
-        "mechanism_family"
-    ] == "scheduler_destroy_size_policy"
-    assert mechanisms_by_id["adaptive_embedded_vns_runtime_allocation"][
-        "mechanism_family"
-    ] == "scheduler_runtime_allocation"
-    assert mechanisms_by_id["farthest_noise_related_removal"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["polar_sweep_destroy_repair"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["route_fragment_recombination_repair"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["adjacency_pair_removal_repair"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["load_compatible_ruin_recreate"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["load_complement_pair_removal"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["route_pair_crossover_repair"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["timewarp_string_removal"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["elite_route_memory_repair"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["route_pair_overlap_removal"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["boundary_spoke_outlier_removal"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["edge_conflict_endpoint_removal"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["route_pair_overlap_removal_protected_followup"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["edge_frequency_penalty_repair"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["lookahead_insertion_cost_repair"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["lookahead_insertion_cost_repair_v2"][
-        "mechanism_family"
-    ] == "destroy_repair_selection"
-    assert mechanisms_by_id["savings_seed_selection_probe"][
-        "mechanism_family"
-    ] == "construction_seed_portfolio"
-    assert mechanisms_by_id["granular_savings_seed_portfolio"][
-        "mechanism_family"
-    ] == "construction_seed_portfolio"
-    assert mechanisms_by_id["exact_short_route_polish"][
-        "mechanism_family"
-    ] == "construction_seed_portfolio"
-    assert mechanisms_by_id["cw_sweep_seed_baseline_selector"][
-        "mechanism_family"
-    ] == "construction_seed_portfolio"
-    assert mechanisms_by_id["short_horizon_seed_trajectory_selector"][
-        "mechanism_family"
-    ] == "construction_seed_portfolio"
-    assert mechanisms_by_id["short_horizon_seed_trajectory_selector_v2"][
-        "mechanism_family"
-    ] == "construction_seed_portfolio"
+    assert (
+        mechanisms_by_id["capacity_tightness_removal"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["bounded_intra_route_3opt"]["mechanism_family"]
+        == "bounded_local_search_variant"
+    )
+    assert (
+        mechanisms_by_id["bounded_ejection_chain_relocate"]["mechanism_family"]
+        == "bounded_local_search_variant"
+    )
+    assert (
+        mechanisms_by_id["bounded_cross_route_double_bridge_polish"]["mechanism_family"]
+        == "bounded_local_search_variant"
+    )
+    assert (
+        mechanisms_by_id["frozen_safe_neighbor_list_vns_filter"]["mechanism_family"]
+        == "bounded_local_search_variant"
+    )
+    assert (
+        mechanisms_by_id["route_angle_aware_2opt_star"]["mechanism_family"]
+        == "bounded_local_search_variant"
+    )
+    assert (
+        mechanisms_by_id["radial_2opt_star_relink"]["mechanism_family"]
+        == "bounded_local_search_variant"
+    )
+    assert (
+        mechanisms_by_id["operator_pair_destroy_size_bands"]["mechanism_family"]
+        == "scheduler_destroy_size_policy"
+    )
+    assert (
+        mechanisms_by_id["stagnation_adaptive_destroy_size_schedule"][
+            "mechanism_family"
+        ]
+        == "scheduler_destroy_size_policy"
+    )
+    assert (
+        mechanisms_by_id["adaptive_embedded_vns_runtime_allocation"]["mechanism_family"]
+        == "scheduler_runtime_allocation"
+    )
+    assert (
+        mechanisms_by_id["farthest_noise_related_removal"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["polar_sweep_destroy_repair"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["route_fragment_recombination_repair"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["adjacency_pair_removal_repair"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["load_compatible_ruin_recreate"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["load_complement_pair_removal"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["route_pair_crossover_repair"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["timewarp_string_removal"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["elite_route_memory_repair"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["bounded_route_arc_lns_rebuild"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert mechanisms_by_id["bounded_route_arc_lns_rebuild"]["outcome_status"] == (
+        "active_marginal_below_mde_protected_case_unsafe"
+    )
+    assert (
+        mechanisms_by_id["bounded_route_arc_lns_rebuild"]["effect_summary"][
+            "protected_case_cmt4_median_delta"
+        ]
+        == -33.5
+    )
+    assert (
+        mechanisms_by_id["route_pair_overlap_removal"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["boundary_spoke_outlier_removal"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["edge_conflict_endpoint_removal"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["route_pair_overlap_removal_protected_followup"][
+            "mechanism_family"
+        ]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["edge_frequency_penalty_repair"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["lookahead_insertion_cost_repair"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["lookahead_insertion_cost_repair_v2"]["mechanism_family"]
+        == "destroy_repair_selection"
+    )
+    assert (
+        mechanisms_by_id["savings_seed_selection_probe"]["mechanism_family"]
+        == "construction_seed_portfolio"
+    )
+    assert (
+        mechanisms_by_id["granular_savings_seed_portfolio"]["mechanism_family"]
+        == "construction_seed_portfolio"
+    )
+    assert (
+        mechanisms_by_id["exact_short_route_polish"]["mechanism_family"]
+        == "construction_seed_portfolio"
+    )
+    assert (
+        mechanisms_by_id["cw_sweep_seed_baseline_selector"]["mechanism_family"]
+        == "construction_seed_portfolio"
+    )
+    assert (
+        mechanisms_by_id["short_horizon_seed_trajectory_selector"]["mechanism_family"]
+        == "construction_seed_portfolio"
+    )
+    assert (
+        mechanisms_by_id["short_horizon_seed_trajectory_selector_v2"][
+            "mechanism_family"
+        ]
+        == "construction_seed_portfolio"
+    )
     no_positive_mechanisms = {
         mechanism_id: item
         for mechanism_id, item in mechanisms_by_id.items()
@@ -927,6 +967,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
             "best_solution_ruin_recreate_intensification_activation_repair",
             "bounded_giant_tour_split_recombination",
             "bounded_dual_repair_selector",
+            "bounded_route_arc_lns_rebuild",
             "elite_route_memory_repair",
             "bounded_destroy_operator_shadow_selector",
             "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -941,12 +982,16 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert mechanisms_by_id["neighbor_list_vns_filter"]["outcome_status"] == (
         "frozen_unsafe_validation_positive"
     )
-    assert mechanisms_by_id["neighbor_list_vns_filter"]["effect_summary"][
-        "recommended_followup"
-    ] == "frozen_safe_neighbor_list_vns_filter"
-    assert mechanisms_by_id["frozen_safe_neighbor_list_vns_filter"][
-        "outcome_status"
-    ] == "weak_positive_below_mde"
+    assert (
+        mechanisms_by_id["neighbor_list_vns_filter"]["effect_summary"][
+            "recommended_followup"
+        ]
+        == "frozen_safe_neighbor_list_vns_filter"
+    )
+    assert (
+        mechanisms_by_id["frozen_safe_neighbor_list_vns_filter"]["outcome_status"]
+        == "weak_positive_below_mde"
+    )
     assert mechanisms_by_id["edge_frequency_penalty_repair"]["outcome_status"] == (
         "weak_positive_below_mde_direct_no_effect"
     )
@@ -959,19 +1004,23 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert bounded_dual_effect["row2_median_delta"] == 0.75
     assert bounded_dual_effect["max_effect_to_mde_ratio"] == 0.075758
     assert bounded_dual_effect["source_root_label"] == "successor39"
-    assert mechanisms_by_id["bounded_repair_placement_tournament"][
-        "outcome_status"
-    ] == "quality_regression_local_effect_not_preserved"
-    repair_tournament_effect = mechanisms_by_id[
-        "bounded_repair_placement_tournament"
-    ]["effect_summary"]
+    assert (
+        mechanisms_by_id["bounded_repair_placement_tournament"]["outcome_status"]
+        == "quality_regression_local_effect_not_preserved"
+    )
+    repair_tournament_effect = mechanisms_by_id["bounded_repair_placement_tournament"][
+        "effect_summary"
+    ]
     assert repair_tournament_effect["expanded_median_delta"] == -2.75
     assert repair_tournament_effect["protected_case_cmt2_median_delta"] == -3.5
     assert repair_tournament_effect["protected_case_cmt4_median_delta"] == -7.0
     assert repair_tournament_effect["source_root_label"] == "successor45"
-    assert mechanisms_by_id["best_solution_ruin_recreate_intensification"][
-        "outcome_status"
-    ] == "activation_sparse_observed_no_effect"
+    assert (
+        mechanisms_by_id["best_solution_ruin_recreate_intensification"][
+            "outcome_status"
+        ]
+        == "activation_sparse_observed_no_effect"
+    )
     best_solution_effect = mechanisms_by_id[
         "best_solution_ruin_recreate_intensification"
     ]["effect_summary"]
@@ -979,12 +1028,13 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert best_solution_effect["screening_pair_losses"] == 4
     assert best_solution_effect["mechanism_runtime_weighted_sum_ms"] == 62
     assert best_solution_effect["source_root_label"] == "successor46"
-    assert mechanisms_by_id["bounded_giant_tour_split_recombination"][
-        "outcome_status"
-    ] == "marginal_below_mde_protected_case_unsafe"
-    giant_tour_effect = mechanisms_by_id[
-        "bounded_giant_tour_split_recombination"
-    ]["effect_summary"]
+    assert (
+        mechanisms_by_id["bounded_giant_tour_split_recombination"]["outcome_status"]
+        == "marginal_below_mde_protected_case_unsafe"
+    )
+    giant_tour_effect = mechanisms_by_id["bounded_giant_tour_split_recombination"][
+        "effect_summary"
+    ]
     assert giant_tour_effect["aggregate_pair_wins"] == 49
     assert giant_tour_effect["aggregate_pair_losses"] == 50
     assert giant_tour_effect["current_head_median_delta"] == 0.5
@@ -1001,9 +1051,10 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert elite_memory_effect["protected_case_cmt2_median_delta"] == -8.0
     assert elite_memory_effect["protected_case_cmt4_median_delta"] == -10.5
     assert elite_memory_effect["source_root_label"] == "successor42b"
-    assert mechanisms_by_id["bounded_destroy_operator_shadow_selector"][
-        "outcome_status"
-    ] == "marginal_below_mde_protected_case_unsafe"
+    assert (
+        mechanisms_by_id["bounded_destroy_operator_shadow_selector"]["outcome_status"]
+        == "marginal_below_mde_protected_case_unsafe"
+    )
     destroy_shadow_effect = mechanisms_by_id[
         "bounded_destroy_operator_shadow_selector"
     ]["effect_summary"]
@@ -1013,9 +1064,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_destroy_operator_shadow_selector_protected_followup"
     )
     assert destroy_shadow_effect["source_root_label"] == "successor43"
-    assert mechanisms_by_id[
-        "bounded_destroy_operator_shadow_selector_protected_followup"
-    ]["outcome_status"] == "below_mde_protected_case_unsafe"
+    assert (
+        mechanisms_by_id["bounded_destroy_operator_shadow_selector_protected_followup"][
+            "outcome_status"
+        ]
+        == "below_mde_protected_case_unsafe"
+    )
     protected_destroy_shadow_effect = mechanisms_by_id[
         "bounded_destroy_operator_shadow_selector_protected_followup"
     ]["effect_summary"]
@@ -1026,42 +1080,70 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "none_park_destroy_shadow_line_v04"
     )
     assert protected_destroy_shadow_effect["source_root_label"] == "successor43b"
-    radial_relink_effect = mechanisms_by_id["radial_2opt_star_relink"][
-        "effect_summary"
-    ]
+    radial_relink_effect = mechanisms_by_id["radial_2opt_star_relink"]["effect_summary"]
     assert radial_relink_effect["mechanism_contract_status"] == "observed_no_effect"
     assert radial_relink_effect["direct_effect_candidate_positive"] == 0
     assert radial_relink_effect["source_root_label"] == "successor38"
-    assert mechanisms_by_id["frozen_safe_neighbor_list_vns_filter"][
-        "effect_summary"
-    ]["recommended_followup"] == "capacity_tightness_removal"
-    assert mechanisms_by_id["bounded_intra_route_3opt"]["effect_summary"][
-        "protected_case_cmt2_median_delta"
-    ] == -6.5
-    assert mechanisms_by_id["farthest_noise_related_removal"]["effect_summary"][
-        "protected_case_cmt2_median_delta"
-    ] == -12.0
-    assert mechanisms_by_id["polar_sweep_destroy_repair"]["effect_summary"][
-        "protected_case_cmt2_median_delta"
-    ] == -19.5
-    assert mechanisms_by_id["route_fragment_recombination_repair"]["effect_summary"][
-        "screening_wins"
-    ] == 13
-    assert mechanisms_by_id["adjacency_pair_removal_repair"]["effect_summary"][
-        "screening_wins"
-    ] == 15
-    assert mechanisms_by_id["load_compatible_ruin_recreate"]["effect_summary"][
-        "protected_case_cmt2_median_delta"
-    ] == -13.0
-    assert mechanisms_by_id["load_complement_pair_removal"]["effect_summary"][
-        "protected_case_cmt4_median_delta"
-    ] == -15.0
-    assert mechanisms_by_id["route_pair_crossover_repair"]["effect_summary"][
-        "protected_case_x_n110_median_delta"
-    ] == -6.0
-    assert mechanisms_by_id["timewarp_string_removal"]["effect_summary"][
-        "research_efficiency_median_delta"
-    ] == -5.25
+    assert (
+        mechanisms_by_id["frozen_safe_neighbor_list_vns_filter"]["effect_summary"][
+            "recommended_followup"
+        ]
+        == "capacity_tightness_removal"
+    )
+    assert (
+        mechanisms_by_id["bounded_intra_route_3opt"]["effect_summary"][
+            "protected_case_cmt2_median_delta"
+        ]
+        == -6.5
+    )
+    assert (
+        mechanisms_by_id["farthest_noise_related_removal"]["effect_summary"][
+            "protected_case_cmt2_median_delta"
+        ]
+        == -12.0
+    )
+    assert (
+        mechanisms_by_id["polar_sweep_destroy_repair"]["effect_summary"][
+            "protected_case_cmt2_median_delta"
+        ]
+        == -19.5
+    )
+    assert (
+        mechanisms_by_id["route_fragment_recombination_repair"]["effect_summary"][
+            "screening_wins"
+        ]
+        == 13
+    )
+    assert (
+        mechanisms_by_id["adjacency_pair_removal_repair"]["effect_summary"][
+            "screening_wins"
+        ]
+        == 15
+    )
+    assert (
+        mechanisms_by_id["load_compatible_ruin_recreate"]["effect_summary"][
+            "protected_case_cmt2_median_delta"
+        ]
+        == -13.0
+    )
+    assert (
+        mechanisms_by_id["load_complement_pair_removal"]["effect_summary"][
+            "protected_case_cmt4_median_delta"
+        ]
+        == -15.0
+    )
+    assert (
+        mechanisms_by_id["route_pair_crossover_repair"]["effect_summary"][
+            "protected_case_x_n110_median_delta"
+        ]
+        == -6.0
+    )
+    assert (
+        mechanisms_by_id["timewarp_string_removal"]["effect_summary"][
+            "research_efficiency_median_delta"
+        ]
+        == -5.25
+    )
     double_bridge_effect = mechanisms_by_id["bounded_cross_route_double_bridge_polish"][
         "effect_summary"
     ]
@@ -1072,9 +1154,7 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     ]
     assert runtime_effect["median_delta"] == 0.0
     assert runtime_effect["source_root_label"] == "successor31"
-    route_pair_effect = mechanisms_by_id["route_pair_overlap_removal"][
-        "effect_summary"
-    ]
+    route_pair_effect = mechanisms_by_id["route_pair_overlap_removal"]["effect_summary"]
     assert route_pair_effect["max_effect_to_mde_ratio"] == 0.253
     protected_route_pair_effect = mechanisms_by_id[
         "route_pair_overlap_removal_protected_followup"
@@ -1113,7 +1193,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert seed_baseline_effect["median_delta"] == 0.0
     assert seed_baseline_effect["direct_seed_delta_positive_pairs"] == 4
     assert seed_baseline_effect["direct_seed_delta_total_pairs"] == 48
-    assert seed_baseline_effect["interpretation"] == "seed_delta_not_preserved_downstream"
+    assert (
+        seed_baseline_effect["interpretation"] == "seed_delta_not_preserved_downstream"
+    )
     assert seed_baseline_effect["source_root_label"] == "successor25"
     stagnation_effect = mechanisms_by_id["stagnation_adaptive_destroy_size_schedule"][
         "effect_summary"
@@ -1180,11 +1262,11 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "bounded_2node_cross_exchange",
         "intra_route_or_opt_reinsert",
         "bounded_intra_route_3opt",
-            "bounded_ejection_chain_relocate",
-            "bounded_route_segment_exchange",
-            "bounded_cross_route_double_bridge_polish",
-            "bounded_two_for_one_exchange",
-            "neighbor_list_vns_filter",
+        "bounded_ejection_chain_relocate",
+        "bounded_route_segment_exchange",
+        "bounded_cross_route_double_bridge_polish",
+        "bounded_two_for_one_exchange",
+        "neighbor_list_vns_filter",
         "frozen_safe_neighbor_list_vns_filter",
         "route_angle_aware_2opt_star",
         "radial_2opt_star_relink",
@@ -1193,11 +1275,12 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "adaptive_embedded_vns_runtime_allocation",
         "post_repair_effect_credit_weighting",
         "post_vns_best_anchor_acceptance_guard",
-                "bounded_repair_placement_tournament",
-                "best_solution_ruin_recreate_intensification",
-                "best_solution_ruin_recreate_intensification_activation_repair",
-                "bounded_giant_tour_split_recombination",
-                "bounded_dual_repair_selector",
+        "bounded_repair_placement_tournament",
+        "best_solution_ruin_recreate_intensification",
+        "best_solution_ruin_recreate_intensification_activation_repair",
+        "bounded_giant_tour_split_recombination",
+        "bounded_dual_repair_selector",
+        "bounded_route_arc_lns_rebuild",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",

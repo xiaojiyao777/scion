@@ -217,6 +217,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
             "marginal_below_mde_protected_case_unsafe"
         ),
         "bounded_dual_repair_selector_reviewed_weak_positive_below_mde",
+        (
+            "bounded_route_arc_lns_rebuild_reviewed_"
+            "active_marginal_below_mde_protected_case_unsafe"
+        ),
         "elite_route_memory_repair_reviewed_marginal_below_mde_protected_case_unsafe",
         "bounded_destroy_operator_shadow_selector_reviewed_marginal_below_mde_protected_case_unsafe",
         "bounded_destroy_operator_shadow_selector_protect_reviewed_below_mde_protected_case_unsafe",
@@ -283,6 +287,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "best_solution_ruin_recreate_intensification_activation_repair",
         "bounded_giant_tour_split_recombination",
         "bounded_dual_repair_selector",
+        "bounded_route_arc_lns_rebuild",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -371,8 +376,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
-        "polar_sweep_destroy_repair" in item
-        and "measured_no_positive_at_mde" in item
+        "polar_sweep_destroy_repair" in item and "measured_no_positive_at_mde" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
@@ -391,23 +395,19 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
-        "load_complement_pair_removal" in item
-        and "measured_no_positive_at_mde" in item
+        "load_complement_pair_removal" in item and "measured_no_positive_at_mde" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
-        "route_pair_crossover_repair" in item
-        and "measured_no_positive_at_mde" in item
+        "route_pair_crossover_repair" in item and "measured_no_positive_at_mde" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
-        "timewarp_string_removal" in item
-        and "measured_no_positive_at_mde" in item
+        "timewarp_string_removal" in item and "measured_no_positive_at_mde" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
-        "savings_seed_selection_probe" in item
-        and "measured_no_positive_at_mde" in item
+        "savings_seed_selection_probe" in item and "measured_no_positive_at_mde" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
@@ -416,8 +416,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
-        "exact_short_route_polish" in item
-        and "quality-regression/loss-heavy" in item
+        "exact_short_route_polish" in item and "quality-regression/loss-heavy" in item
         for item in prepared_manifest["research_focus"]["default_avoid_directions"]
     )
     assert any(
@@ -545,15 +544,18 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
             "measurable_opportunity_classes"
         ]
     )
-    assert "neighbor_list_vns_filter" in prepared_manifest[
-        "research_focus"
-    ]["current_question"]
-    assert "frozen_safe_neighbor_list_vns_filter" in prepared_manifest[
-        "research_focus"
-    ]["current_question"]
-    assert "capacity_tightness_removal" in prepared_manifest[
-        "research_focus"
-    ]["current_question"]
+    assert (
+        "neighbor_list_vns_filter"
+        in prepared_manifest["research_focus"]["current_question"]
+    )
+    assert (
+        "frozen_safe_neighbor_list_vns_filter"
+        in prepared_manifest["research_focus"]["current_question"]
+    )
+    assert (
+        "capacity_tightness_removal"
+        in prepared_manifest["research_focus"]["current_question"]
+    )
     assert (
         "short_horizon_seed_trajectory_selector"
         in prepared_manifest["research_focus"]["current_question"]
@@ -566,9 +568,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "independent route-first comparison"
         in prepared_manifest["research_focus"]["current_question"]
     )
-    assert "route_first_heuristic" in prepared_manifest["research_focus"][
-        "current_question"
-    ]
+    assert (
+        "route_first_heuristic"
+        in prepared_manifest["research_focus"]["current_question"]
+    )
     assert (
         "first bounded-local-search, destroy/repair, and construction seed successors"
         in prepared_manifest["research_focus"]["current_question"]
@@ -673,41 +676,49 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "Hard `required_mechanism_ids` remains empty"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
-    assert "post_vns_best_anchor_acceptance_guard" in prepared_manifest[
-        "research_focus"
-    ]["next_required_direction"]
-    assert "bounded_repair_placement_tournament" in prepared_manifest[
-        "research_focus"
-    ]["next_required_direction"]
+    assert (
+        "post_vns_best_anchor_acceptance_guard"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "bounded_repair_placement_tournament"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
     assert (
         "must not bind another destroy-shadow selector follow-up"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
-    assert "Successor27 then clean-forked" in prepared_manifest[
-        "research_focus"
-    ]["next_required_direction"]
-    assert "route_pair_overlap_removal" in prepared_manifest[
-        "research_focus"
-    ]["next_required_direction"]
-    assert "Successor29 forced" in prepared_manifest[
-        "research_focus"
-    ]["next_required_direction"]
-    assert "neighbor_list_vns_filter" in prepared_manifest[
-        "research_focus"
-    ]["next_required_direction"]
-    assert "frozen_safe_neighbor_list_vns_filter" in prepared_manifest[
-        "research_focus"
-    ]["next_required_direction"]
-    assert "capacity_tightness_removal" in prepared_manifest[
-        "research_focus"
-    ]["next_required_direction"]
+    assert (
+        "Successor27 then clean-forked"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "route_pair_overlap_removal"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "Successor29 forced"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "neighbor_list_vns_filter"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "frozen_safe_neighbor_list_vns_filter"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
+    assert (
+        "capacity_tightness_removal"
+        in prepared_manifest["research_focus"]["next_required_direction"]
+    )
     assert (
         "telemetry-only q-audit repair"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
-    assert "successor36b" in prepared_manifest["research_focus"][
-        "next_required_direction"
-    ]
+    assert (
+        "successor36b" in prepared_manifest["research_focus"]["next_required_direction"]
+    )
     assert (
         "causal path distinct from cross-exchange, intra-route"
         in prepared_manifest["research_focus"]["next_required_direction"]
@@ -753,29 +764,32 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "bounded_repair_placement_tournament" in prepared_manifest_md
     assert "best_solution_ruin_recreate_intensification" in prepared_manifest_md
     assert "bounded_giant_tour_split_recombination" in prepared_manifest_md
+    assert "bounded_route_arc_lns_rebuild" in prepared_manifest_md
     assert "route_first_heuristic" in prepared_manifest_md
-    assert prepared_manifest["research_focus"]["successor47_reviewed_evidence"][
-        "mechanism_id"
-    ] == "bounded_giant_tour_split_recombination"
+    assert (
+        prepared_manifest["research_focus"]["successor47_reviewed_evidence"][
+            "mechanism_id"
+        ]
+        == "bounded_giant_tour_split_recombination"
+    )
     assert prepared_manifest["research_focus"]["successor48_reviewed_evidence"][
         "target_file"
-    ] == (
-        "policies/baseline_modules/route_pool_recombination.py"
-    )
+    ] == ("policies/baseline_modules/route_pool_recombination.py")
     assert (
         "scion/docs/experiments/v0.4/"
         "v04-cvrp-successor49-repaired-context-route-pool-repeat-postrun-20260708.md"
     ) in prepared_manifest["research_focus"]["successor48_reviewed_evidence"][
         "postrun_paths"
     ]
-    assert prepared_manifest["research_focus"][
-        "route_first_comparison_target_intent"
-    ]["target_file"] == (
-        "policies/baseline_modules/config.py"
+    assert prepared_manifest["research_focus"]["route_first_comparison_target_intent"][
+        "target_file"
+    ] == ("policies/baseline_modules/config.py")
+    assert (
+        prepared_manifest["research_focus"]["successor50_reviewed_evidence"][
+            "mechanism_id"
+        ]
+        == "material_difference_contract_repair"
     )
-    assert prepared_manifest["research_focus"]["successor50_reviewed_evidence"][
-        "mechanism_id"
-    ] == "material_difference_contract_repair"
     assert "scheduler_contract_gate_as_solver_experiment" in (
         prepared_manifest["research_focus"]["successor50_reviewed_evidence"][
             "blocked_actions"
@@ -790,9 +804,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
-    assert prepared_manifest["research_focus"][
-        "target_intent_required_mechanism_ids"
-    ] == []
+    assert (
+        prepared_manifest["research_focus"]["target_intent_required_mechanism_ids"]
+        == []
+    )
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
         "bounded_2node_cross_exchange",
@@ -816,6 +831,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "best_solution_ruin_recreate_intensification_activation_repair",
         "bounded_giant_tour_split_recombination",
         "bounded_dual_repair_selector",
+        "bounded_route_arc_lns_rebuild",
         "elite_route_memory_repair",
         "bounded_destroy_operator_shadow_selector",
         "bounded_destroy_operator_shadow_selector_protected_followup",
@@ -997,7 +1013,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "capacity_tightness_removal" in prepared_manifest_md
     assert "route_pair_overlap_removal" in prepared_manifest_md
     assert "route-pair-overlap line is parked" in prepared_manifest_md
-    assert "eligible_only_if_materially_different_or_telemetry_audit" in prepared_manifest_md
+    assert (
+        "eligible_only_if_materially_different_or_telemetry_audit"
+        in prepared_manifest_md
+    )
     assert "reviewed_default_avoid" in prepared_manifest_md
     assert "reviewed_not_next_required" in prepared_manifest_md
     assert "opportunity_diagnostics" in prepared_manifest_md
@@ -1294,12 +1313,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         cvrp_checks["cvrp_protected_cases_in_split"]["detail"]["required_stage"]
         == "screening"
     )
-    assert (
-        cvrp_checks["cvrp_protected_cases_in_priority_selection"]["passed"] is True
-    )
-    priority_detail = cvrp_checks[
-        "cvrp_protected_cases_in_priority_selection"
-    ]["detail"]
+    assert cvrp_checks["cvrp_protected_cases_in_priority_selection"]["passed"] is True
+    priority_detail = cvrp_checks["cvrp_protected_cases_in_priority_selection"][
+        "detail"
+    ]
     assert priority_detail["present_priority_cases"] == ["CMT2", "CMT4"]
     assert priority_detail["missing_priority_cases"] == []
     assert priority_detail["required_stage"] == "screening"

@@ -558,9 +558,7 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
                 "runtime observed, but direct split effect was nearly absent "
                 "and protected cases were negative"
             ),
-            "recommended_followup": (
-                "park_contiguous_giant_tour_split_for_v0.4"
-            ),
+            "recommended_followup": ("park_contiguous_giant_tour_split_for_v0.4"),
             "source_root_label": "successor47",
         },
     },
@@ -593,6 +591,54 @@ REVIEWED_SUCCESSOR_MECHANISMS = (
             "mechanism_contract_status": "observed_positive_effect_below_mde",
             "interpretation": "local_selector_signal_below_mde_not_promotion",
             "source_root_label": "successor39",
+        },
+    },
+    {
+        "mechanism_id": "bounded_route_arc_lns_rebuild",
+        "mechanism_family": "destroy_repair_selection",
+        "path_label": "bounded route-arc LNS rebuild path",
+        "causal_path_label": "bounded post-repair route-arc rebuild",
+        "outcome_status": "active_marginal_below_mde_protected_case_unsafe",
+        "effect_summary": {
+            "row1_median_delta": 0.0,
+            "row1_ci_low": -6.25,
+            "row1_ci_high": 5.0,
+            "row1_pair_wins": 22,
+            "row1_pair_losses": 19,
+            "row1_pair_ties": 7,
+            "row1_case_wins": 5,
+            "row1_case_losses": 4,
+            "row1_case_ties": 3,
+            "row2_median_delta": 1.0,
+            "row2_ci_low": -1.0,
+            "row2_ci_high": 5.0,
+            "row2_pair_wins": 30,
+            "row2_pair_losses": 25,
+            "row2_pair_ties": 9,
+            "row2_case_wins": 6,
+            "row2_case_losses": 4,
+            "row2_case_ties": 6,
+            "max_median_delta": 1.0,
+            "max_effect_to_mde_ratio": 0.10101,
+            "rows_at_or_above_mde": 0,
+            "positive_rows": 1,
+            "protected_case_cmt2_median_delta": -8.0,
+            "protected_case_cmt4_median_delta": -33.5,
+            "negative_case_b_n67_median_delta": -5.5,
+            "negative_case_p_n101_median_delta": -7.0,
+            "telemetry_status": "activation_observed_phase_effect_positive",
+            "mechanism_contract_status": "observed_positive_effect_below_mde",
+            "known_design_gaps": (
+                "phase_local_route_arc_lns_delta_not_final_trajectory_safe",
+                "cmt2_cmt4_protected_cases_negative",
+                "strict_small_neighborhood_limited_promotion_scale",
+            ),
+            "interpretation": (
+                "valid active route-arc LNS rebuild, but final objective "
+                "effect stayed below MDE and protected cases were unsafe"
+            ),
+            "recommended_followup": "none_clean_fork_materially_different_path",
+            "source_root_label": "successor51",
         },
     },
     {
@@ -1416,6 +1462,12 @@ DEFAULT_AVOID_DIRECTIONS = (
         "unchanged bounded_dual_repair_selector destroy/repair repair-choice "
         "selector after successor39 activated but stayed weak-positive below "
         "MDE with CI highs below the 9.9 MDE and CMT4/B/P losses"
+    ),
+    (
+        "unchanged bounded_route_arc_lns_rebuild route-arc LNS rebuild after "
+        "successor51 valid active-marginal evidence stayed below MDE: phase-"
+        "local route-arc deltas were positive, but final objective evidence "
+        "had CI highs below the 9.9 MDE and CMT2/CMT4/P/B cases were unsafe"
     ),
     (
         "unchanged bounded_repair_placement_tournament destroy/repair "

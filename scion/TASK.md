@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `v0.4-dev`*
-*Last updated: 2026-07-08*
+*Last updated: 2026-07-09*
 
 This is the active task definition for closing v0.4. It is not a run log.
 Historical launch/root details live in focused experiment reports, sparse
@@ -636,17 +636,25 @@ and generalized contract-repair / metadata-preflight / telemetry-wrapper /
 hook-gate candidates from occupying a CVRP solver-design slot. Postrun:
 `scion/docs/experiments/v0.4/v04-cvrp-successor50-material-difference-contract-repair-postrun-20260708.md`.
 
-Successor51 is now in flight from committed repair `7dfbd1b0` on the
+Successor51 is now complete from committed repair `7dfbd1b0` on the
 server-local `claw` runner:
 `/home/clawd/research/scion-experiments/v04-cvrp-successor51-repaired-slot-cleanfork-server-claw-2r-gpt55-2r-gpt55-20260708T135236Z-claw`.
-It uses `--rounds 2`, `--completion-preflight`, full proposal context, and
-`--force-surface solver_design`, with no forced mechanism/file binding. Launch
-readiness passed with local `gpt-5.5` chat completion HTTP 200, git runtime
-guard commit/worktree consistency, CMT2/CMT4 protected-case readiness, and
-successor50 reviewed evidence visible in the prepared manifest. Treat this as
-the next materially different CVRP-owned solver clean-fork attempt unless the
-run itself proves another quality/routing failure. Await completion before
-interpreting solver evidence.
+It completed valid/complete/postrun-ready with six successful local `gpt-5.5`
+calls, no prompt-section truncation, one pre-code quality block, two effective
+screening rows, and zero promotions. The successor50 repair worked at the slot
+control layer: the first under-specified `bounded_edge_path_relinking`
+hypothesis was blocked before code generation and did not consume a protocol
+round, while the accepted retry generated a genuine solver mechanism,
+`bounded_route_arc_lns_rebuild`, in a new `route_arc_lns.py` module with
+minimal `scheduler.py` wiring. Solver evidence is still not promotion-grade:
+row medians were `0.0` and `1.0`, CI highs were both `5.0` below the `9.9`
+MDE, `rows_at_or_above_mde=0`, and CMT2/CMT4 were objective-negative
+(`-8.0` and `-33.5` medians in the expanded row) despite strong local phase
+telemetry. Treat successor51 as valid active-marginal below-MDE evidence and
+protected-case unsafe. Do not long-run or same-mechanism tune unchanged
+route-arc LNS rebuild; the next CVRP slot must clean-fork to a materially
+different CVRP-owned causal path with final total-distance attribution. Postrun:
+`scion/docs/experiments/v0.4/v04-cvrp-successor51-bounded-route-arc-lns-rebuild-postrun-20260709.md`.
 
 Legacy direction details below are retained as reviewed-history context.
 
@@ -1075,11 +1083,17 @@ from the current checkout.
    repaired context for the next materially different CVRP-owned clean fork;
    do not move CVRP/VRP semantics into generic DecisionFeatures, protocol,
    scheduler, or postrun code.
-26. Use the new large-file modularization plan before further behavior changes
+26. Treat successor51 `bounded_route_arc_lns_rebuild` as valid active-marginal
+   below-MDE evidence and protected-case unsafe. The mechanism activated and
+   produced phase-local objective deltas, but final candidate-vs-champion
+   evidence stayed below MDE and CMT2/CMT4 regressed. Do not long-run,
+   threshold-tune, or continue unchanged route-arc LNS rebuild; record it as
+   reviewed/default-avoid before the next clean fork.
+27. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-27. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+28. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-28. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+29. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence
