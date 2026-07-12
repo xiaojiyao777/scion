@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-07-09
+Last updated: 2026-07-12
 
 This file is the operational resume point, not a run log. Historical root
 chronology belongs in focused experiment reports, sparse milestones, and git
@@ -420,10 +420,12 @@ The remaining closeout gaps are:
   mechanism failure. The current checkout implements the deferred CVRP-owned
   contract/context repair before the next solver-design line:
   `route_first_heuristic` is the aligned reviewed/default-avoid mechanism id,
-  prepared target-intent binding is empty, material-difference requirements are
-  launch-payload and prompt-context visible, and solver-design hypotheses must
-  describe a sufficient algorithmic intervention before code generation. This
-  stays problem-owned and does not move CVRP semantics into generic Scion core.
+  prepared target-intent binding was empty at that closure point,
+  material-difference requirements are launch-payload and prompt-context
+  visible, and solver-design hypotheses must describe a sufficient algorithmic
+  intervention before code generation. Successor55 now deliberately occupies
+  the target-intent slot described below. This stays problem-owned and does not
+  move CVRP semantics into generic Scion core.
   Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-route-first-comparison-postrun-20260708.md`.
 - Successor49 completed the repaired-context validation run on the server-local
@@ -526,6 +528,17 @@ The remaining closeout gaps are:
   X-n110 `-6.0`. Treat both protected race repairs as reviewed/default-avoid;
   do not long-run, threshold-tune, or continue the same line. Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor54-protected-budgeted-trajectory-selector-postrun-20260709.md`.
+- Successor55 is designed and running from commit `b56a2a32` on the
+  server-local `claw` runner:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor55-bounded-elite-solution-pool-search-server-claw-2r-gpt55-20260712T134551Z-claw`.
+  The current target intent is `bounded_elite_solution_pool_search`, owned by
+  a new solver-side `policies/baseline_modules/solution_pool.py` with narrow
+  scheduler wiring. The design/guidance surface itself is modularized in the
+  CVRP-owned `research_guidance_solution_pool.py`; generic Scion boundaries are
+  unchanged. Completion preflight is healthy and the first real `gpt-5.5`
+  target-intent trace selected `create_new`, the intended owner file, and the
+  `search_state_pool` family. This is only launch/entry evidence; solver effect
+  and long-run eligibility remain undecided until the two rounds complete.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.
@@ -1072,10 +1085,15 @@ CVRP:
    Do not long-run or continue same-line threshold/cadence tuning. The next
    CVRP slot should be a materially different CVRP-owned clean fork with a
    design-first module boundary instead of more inline scheduler helper growth.
-29. Use the v0.4 large-file modularization plan before adding behavior to
+29. Monitor successor55
+   `bounded_elite_solution_pool_search` at the recorded server-local run root.
+   On completion, audit every LLM call, implementation/module ownership,
+   activation and reject telemetry, final objective attribution, and CMT2/CMT4
+   evidence before deciding on any longer run or repair.
+30. Use the v0.4 large-file modularization plan before adding behavior to
    oversized files.
-30. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
-31. Keep status documents compact; put detailed root counters and caveats in
+31. Keep the v0.5 governance ablation preregistration frozen until v0.4 closes.
+32. Keep status documents compact; put detailed root counters and caveats in
    focused experiment reports.
 
 ## Runner Notes
@@ -1245,6 +1263,10 @@ authoritative because mirrored artifacts can keep WSL absolute paths.
   `scion/docs/experiments/v0.4/v04-cvrp-successor38-proposal-quality-contract-inflight-20260705.md`
 - CVRP successor38 proposal-quality contract postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor38-proposal-quality-contract-postrun-20260706.md`
+- CVRP successor55 bounded elite solution-pool design:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor55-bounded-elite-solution-pool-design-20260712.md`
+- CVRP successor55 bounded elite solution-pool in-flight record:
+  `scion/docs/experiments/v0.4/v04-cvrp-successor55-bounded-elite-solution-pool-inflight-20260712.md`
 - CVRP deferred seed-post selector activation plan:
   `scion/docs/experiments/v0.4/v04-cvrp-successor21-seed-post-selector-activation-plan-20260629.md`
 - v0.4 large-file modularization plan:

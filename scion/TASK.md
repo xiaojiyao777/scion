@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `v0.4-dev`*
-*Last updated: 2026-07-09*
+*Last updated: 2026-07-12*
 
 This is the active task definition for closing v0.4. It is not a run log.
 Historical launch/root details live in focused experiment reports, sparse
@@ -1127,10 +1127,12 @@ from the current checkout.
    `scion/docs/experiments/v0.4/v04-cvrp-route-first-comparison-postrun-20260708.md`.
 25. Treat the CVRP-owned contract/context and route-pool closure repair as
    implemented in the current checkout: `route_first_heuristic` is now the
-   aligned reviewed/default-avoid mechanism id, prepared target-intent binding
-   is empty, material-difference requirements are prompt-visible first-class
-   records, solver-design hypotheses must pass algorithmic-intervention
-   sufficiency before code generation, and
+   aligned reviewed/default-avoid mechanism id, material-difference
+   requirements are prompt-visible first-class records, and solver-design
+   hypotheses must pass algorithmic-intervention sufficiency before code
+   generation. The prepared target-intent binding was cleared for the open
+   clean-fork slot and is now deliberately bound to successor55; hard
+   `required_mechanism_ids` remains empty. Also treat
    `bounded_route_pool_set_partition_recombination` is reviewed/default-avoid
    rather than live target-intent guidance. Successor50
    `material_difference_contract_repair` is now also reviewed/default-avoid as
@@ -1161,11 +1163,22 @@ from the current checkout.
    CVRP solver slot must be a materially different CVRP-owned clean fork, and
    any implementation should be designed as a bounded module rather than more
    inline scheduler helper growth.
-29. Use the new large-file modularization plan before further behavior changes
+29. Successor55 is designed and running as target-intent-bound
+   `bounded_elite_solution_pool_search` from commit `b56a2a32`. The independent
+   CVRP-owned `research_guidance_solution_pool.py` module binds creation of
+   `policies/baseline_modules/solution_pool.py`; that solver module must own
+   pool admission, bounded capacity, diversity, anchor selection, guards, and
+   telemetry, while scheduler wiring stays narrow and global `best` semantics
+   remain unchanged. The two-round server-local `claw` screening run is:
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor55-bounded-elite-solution-pool-search-server-claw-2r-gpt55-20260712T134551Z-claw`.
+   Completion preflight and the first `gpt-5.5` target-intent call are healthy;
+   wait for complete per-call and solver evidence before deciding whether to
+   long-run, revise, or park the mechanism.
+30. Use the new large-file modularization plan before further behavior changes
    in oversized core/postrun/proposal/problem files.
-30. Keep the v0.5 governance ablation frozen as a preregistered design; do not
+31. Keep the v0.5 governance ablation frozen as a preregistered design; do not
    start the broad matrix as v0.4 work.
-31. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
+32. Keep `TASK.md` and `current-state.md` compact. New detailed run facts belong
    in focused experiment reports.
 
 ## Status Cadence
