@@ -528,17 +528,23 @@ The remaining closeout gaps are:
   X-n110 `-6.0`. Treat both protected race repairs as reviewed/default-avoid;
   do not long-run, threshold-tune, or continue the same line. Postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor54-protected-budgeted-trajectory-selector-postrun-20260709.md`.
-- Successor55 is designed and running from commit `b56a2a32` on the
-  server-local `claw` runner:
-  `/home/clawd/research/scion-experiments/v04-cvrp-successor55-bounded-elite-solution-pool-search-server-claw-2r-gpt55-20260712T134551Z-claw`.
+- Successor55 is designed from commit `b56a2a32` and running fresh from
+  campaign commit `ff184608` on the server-local `claw` runner with exact model
+  `gpt-5.6-sol`:
+  `/home/clawd/research/scion-experiments/v04-cvrp-successor55-bounded-elite-solution-pool-search-server-claw-gpt56sol-2r-gpt56sol-20260712T141031Z-claw`.
+  The initial `gpt-5.5` root was intentionally stopped before solver evidence
+  so codex-proxy could be fast-forwarded to `v2.0.83`, migrated to SQLite,
+  restarted, and model-checked; it must not be interpreted as a successor55
+  solver row.
   The current target intent is `bounded_elite_solution_pool_search`, owned by
   a new solver-side `policies/baseline_modules/solution_pool.py` with narrow
   scheduler wiring. The design/guidance surface itself is modularized in the
   CVRP-owned `research_guidance_solution_pool.py`; generic Scion boundaries are
-  unchanged. Completion preflight is healthy and the first real `gpt-5.5`
+  unchanged. Completion preflight is healthy and the first real `gpt-5.6-sol`
   target-intent trace selected `create_new`, the intended owner file, and the
-  `search_state_pool` family. This is only launch/entry evidence; solver effect
-  and long-run eligibility remain undecided until the two rounds complete.
+  `search_state_pool` family with confidence `0.99`. This is only launch/entry
+  evidence; solver effect and long-run eligibility remain undecided until the
+  two rounds complete.
 - Large files remain a design risk. Further behavior changes in oversized
   core/postrun/proposal/problem files should follow the new modularization
   design before implementation.

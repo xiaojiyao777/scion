@@ -1164,14 +1164,17 @@ from the current checkout.
    any implementation should be designed as a bounded module rather than more
    inline scheduler helper growth.
 29. Successor55 is designed and running as target-intent-bound
-   `bounded_elite_solution_pool_search` from commit `b56a2a32`. The independent
+   `bounded_elite_solution_pool_search` from design commit `b56a2a32`. The independent
    CVRP-owned `research_guidance_solution_pool.py` module binds creation of
    `policies/baseline_modules/solution_pool.py`; that solver module must own
    pool admission, bounded capacity, diversity, anchor selection, guards, and
    telemetry, while scheduler wiring stays narrow and global `best` semantics
-   remain unchanged. The two-round server-local `claw` screening run is:
-   `/home/clawd/research/scion-experiments/v04-cvrp-successor55-bounded-elite-solution-pool-search-server-claw-2r-gpt55-20260712T134551Z-claw`.
-   Completion preflight and the first `gpt-5.5` target-intent call are healthy;
+   remain unchanged. The initial `gpt-5.5` root was intentionally stopped
+   before solver evidence to update/restart codex-proxy. The fresh two-round
+   server-local `claw` screening run uses exact model `gpt-5.6-sol` from
+   campaign commit `ff184608`:
+   `/home/clawd/research/scion-experiments/v04-cvrp-successor55-bounded-elite-solution-pool-search-server-claw-gpt56sol-2r-gpt56sol-20260712T141031Z-claw`.
+   Completion preflight and the first `gpt-5.6-sol` target-intent call are healthy;
    wait for complete per-call and solver evidence before deciding whether to
    long-run, revise, or park the mechanism.
 30. Use the new large-file modularization plan before further behavior changes
