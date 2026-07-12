@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from scion.problems.cvrp.research_guidance import SUCCESSOR55_MECHANISM_ID
 from scion.research_guidance import launch_research_guidance_payload
 
 SCION_DIR = Path(__file__).resolve().parents[2]
@@ -133,7 +134,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         for mechanism in typed_contract["required_mechanisms"]
     }
     assert "required" not in mechanism_bindings.values()
-    assert mechanism_bindings == {}
+    assert mechanism_bindings == {
+        SUCCESSOR55_MECHANISM_ID: "target_intent_required"
+    }
     assert any(
         requirement["requirement_id"] == "successor_causal_path_direct_effect"
         for requirement in typed_contract["evidence_requirements"]
@@ -169,6 +172,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert any(
         requirement["requirement_id"]
         == "successor48_bounded_route_pool_set_partition_recombination"
+        for requirement in typed_contract["evidence_requirements"]
+    )
+    assert any(
+        requirement["requirement_id"]
+        == "successor55_bounded_elite_solution_pool_search"
         for requirement in typed_contract["evidence_requirements"]
     )
     assert any(
@@ -274,7 +282,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         manifest=prepared_manifest,
     )
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == []
+    assert launch_payload["target_intent_required_mechanism_ids"] == [
+        SUCCESSOR55_MECHANISM_ID
+    ]
     assert launch_payload["material_difference_requirement"]["required"] is True
     assert launch_payload["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",
@@ -783,6 +793,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "bounded_multi_candidate_alns_race" in prepared_manifest_md
     assert "protected_budgeted_trajectory_selector" in prepared_manifest_md
     assert "protected_budgeted_trajectory_selector_v2" in prepared_manifest_md
+    assert SUCCESSOR55_MECHANISM_ID in prepared_manifest_md
+    assert "policies/baseline_modules/solution_pool.py" in prepared_manifest_md
     assert "route_first_heuristic" in prepared_manifest_md
     assert (
         prepared_manifest["research_focus"]["successor47_reviewed_evidence"][
@@ -818,13 +830,19 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert "post_downstream_or_final_total_distance_delta" in prepared_manifest_md
     assert (
+        prepared_manifest["research_focus"]["successor55_target_intent"][
+            "mechanism_id"
+        ]
+        == SUCCESSOR55_MECHANISM_ID
+    )
+    assert (
         "telemetry-only q-audit repair"
         in prepared_manifest["research_focus"]["next_required_direction"]
     )
     assert prepared_manifest["research_focus"]["required_mechanism_ids"] == []
     assert (
         prepared_manifest["research_focus"]["target_intent_required_mechanism_ids"]
-        == []
+        == [SUCCESSOR55_MECHANISM_ID]
     )
     assert prepared_manifest["research_focus"]["reviewed_mechanism_ids"] == [
         "large_instance_intra_route_two_opt_seed",

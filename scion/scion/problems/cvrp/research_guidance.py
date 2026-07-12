@@ -32,6 +32,15 @@ from scion.problems.cvrp.research_guidance_route_first import (
     route_first_comparison_focus,
     route_first_comparison_related_ids,
 )
+from scion.problems.cvrp.research_guidance_solution_pool import (
+    SUCCESSOR55_MECHANISM_ID,
+    SUCCESSOR55_TARGET_FILE,
+    SUCCESSOR55_TARGET_INTENT_RULE,
+    solution_pool_evidence_requirement,
+    solution_pool_focus,
+    solution_pool_related_ids,
+    solution_pool_required_mechanism,
+)
 
 CVRP_PROBLEM_FAMILY = "cvrp"
 LARGE_INSTANCE_TWO_OPT_SEED_REPORT = (
@@ -887,15 +896,24 @@ REVIEWED_SUCCESSOR_GUIDANCE_LINE = (
 )
 
 NEXT_REQUIRED_DIRECTION = (
-    "Current direction after successor52: do not long-run or threshold-tune "
-    "unchanged `bounded_multi_candidate_alns_race`. Successor52 completed valid "
-    "active-positive below-MDE screening, but CMT2/CMT4 were loss-heavy and "
-    "local race telemetry did not preserve final trajectory quality. The next "
-    "CVRP solver slot must either design a protected, budgeted candidate-"
-    "trajectory selector repair with RNG isolation, one-shot downstream VNS or "
-    "final-acceptance attribution, canonical baseline/winner telemetry, and "
-    "substantive CMT2/CMT4 protection, or clean-fork to a materially different "
-    "CVRP-owned causal path. Historical reviewed context follows. "
+    "Current successor55 direction after successor54: target-intent-bind "
+    f"`{SUCCESSOR55_MECHANISM_ID}` as a materially different CVRP-owned "
+    "search-state clean fork. Hard `required_mechanism_ids` remains empty; "
+    "`target_intent_required_mechanism_ids` must name successor55 so proposal "
+    "and hypothesis generation do not drift back to low-risk scheduler helper "
+    "patches. Successor52 completed valid active-positive below-MDE screening "
+    "for `bounded_multi_candidate_alns_race`, but CMT2/CMT4 were loss-heavy "
+    "and local race telemetry did not preserve final trajectory quality. "
+    "Successor54 then repaired the protected candidate-trajectory selector "
+    "gate, but both `protected_budgeted_trajectory_selector` variants stayed "
+    "below MDE and protected-case unsafe. Do not long-run, threshold-tune, or "
+    "continue unchanged race/selector variants. The next candidate should "
+    f"introduce `{SUCCESSOR55_TARGET_FILE}` as the owner of a bounded elite "
+    "solution-pool policy and touch scheduler only for narrow pool wiring. "
+    "It must preserve feasibility, max-route constraints, final best-solution "
+    "selection, bounded runtime, direct pool admission/anchor-switch telemetry, "
+    "and CMT2/CMT4 protected-case evidence. Historical reviewed context "
+    "follows. "
     "The `large_instance_intra_route_two_opt_seed` checklist is now "
     "reviewed evidence, not the next hard-required mechanism: current-run "
     "postrun evidence completed the activation/objective/phase and CMT2/CMT4 "
@@ -1233,15 +1251,26 @@ CURRENT_QUESTION = (
     "`bounded_route_arc_lns_rebuild` was active-marginal below MDE with "
     "CMT2/CMT4 unsafe, and successor52 `bounded_multi_candidate_alns_race` was "
     "active-positive locally but below MDE with CMT2/CMT4 loss-heavy final "
-    "evidence, can the next CVRP branch either repair the race as a protected, "
-    "budgeted candidate-trajectory selector with final attribution, or state a "
-    "materially different algorithmic intervention with solve-trajectory change, "
-    "candidate-state generation/selection, accepted/rejected/budget telemetry, "
-    "final total_distance attribution, feasibility, route count, bounded runtime, "
-    "and CMT2/CMT4 priority-case evidence, while leaving generic Scion core and "
-    "DecisionFeatures unchanged?"
+    "evidence, and successor54 `protected_budgeted_trajectory_selector` / "
+    "`protected_budgeted_trajectory_selector_v2` proved the gate repair but "
+    "stayed below MDE with CMT2/CMT4/X unsafe outcomes, can the next CVRP "
+    f"branch target `{SUCCESSOR55_MECHANISM_ID}` as a materially different "
+    "algorithmic intervention that changes solve-trajectory search state via "
+    "bounded elite feasible solution-pool admission and anchor selection, "
+    "records accepted/rejected/budget telemetry plus final total_distance "
+    "attribution, preserves feasibility, route count, and bounded runtime, "
+    "carries CMT2/CMT4 priority-case evidence, and leaves generic Scion core "
+    "and DecisionFeatures unchanged?"
 )
 REQUIRED_EVIDENCE = (
+    (
+        f"successor55 target intent must name `{SUCCESSOR55_MECHANISM_ID}` and "
+        "treat it as a bounded elite solution-pool search-state intervention: "
+        "pool admission, anchor selection, feasibility/route-count guards, "
+        "direct pool telemetry, final total_distance attribution, bounded "
+        "runtime, and CMT2/CMT4 evidence are required before any long-run "
+        "decision"
+    ),
     (
         f"`{SUCCESSOR41_MECHANISM_ID}` is reviewed/default-avoid after "
         "successor41 and successor41b valid below-MDE evidence; do not long-run, "
@@ -1764,12 +1793,14 @@ SUCCESSOR_PORTFOLIO_RULE = (
     "marginal below-MDE evidence with CMT2/CMT4 unsafe. Successor52 "
     "`bounded_multi_candidate_alns_race` is reviewed/default-avoid unchanged "
     "after active-positive below-MDE evidence with local race signal but "
-    "loss-heavy CMT2/CMT4 final outcomes. The next CVRP solver slot must either "
-    "design a protected, budgeted candidate-trajectory selector repair for the "
-    "race's RNG/VNS/final-attribution failure modes or clean-fork to a materially "
-    "different CVRP-owned causal path after the exact material_difference schema "
-    "and CMT2/CMT4 case-coverage requirements are satisfied. Scheduler destroy-size "
-    "policy remains allowed only as "
+    "loss-heavy CMT2/CMT4 final outcomes. Successor54 then repaired the "
+    "protected race gate, but `protected_budgeted_trajectory_selector` and "
+    "`protected_budgeted_trajectory_selector_v2` stayed below MDE and "
+    "protected-case unsafe. The next CVRP solver slot target-intent-binds "
+    f"`{SUCCESSOR55_MECHANISM_ID}` as a bounded elite solution-pool search-state "
+    "clean fork after the exact material_difference schema and CMT2/CMT4 "
+    "case-coverage requirements are satisfied. Scheduler destroy-size policy "
+    "remains allowed only as "
     "telemetry-only q-audit repair or a materially different scheduler-policy "
     "causal path; insertion-cost lookahead repair and post-repair effect "
     "credit weighting are parked as reviewed solver-negative. Use "
@@ -1867,7 +1898,7 @@ def build_cvrp_legacy_research_focus(
         "scope": "report_only_prepared_handoff",
         "next_required_direction": NEXT_REQUIRED_DIRECTION,
         "required_mechanism_ids": [],
-        "target_intent_required_mechanism_ids": [],
+        "target_intent_required_mechanism_ids": [SUCCESSOR55_MECHANISM_ID],
         "reviewed_mechanism_ids": [
             *list(REVIEWED_MECHANISM_IDS),
             SUCCESSOR41_MECHANISM_ID,
@@ -2189,6 +2220,7 @@ def build_cvrp_legacy_research_focus(
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
         },
+        "successor55_target_intent": solution_pool_focus(),
         "route_first_comparison_target_intent": route_first_comparison_focus(),
         "successor_opportunity_families": list(SUCCESSOR_OPPORTUNITY_FAMILIES),
         "reviewed_successor_evidence": deepcopy(REVIEWED_SUCCESSOR_EVIDENCE),
@@ -2212,7 +2244,7 @@ def build_cvrp_legacy_research_focus(
 
 
 def _required_mechanisms() -> tuple[RequiredMechanism, ...]:
-    return ()
+    return (solution_pool_required_mechanism(PROTECTED_CASES),)
 
 
 def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
@@ -2457,6 +2489,7 @@ def _evidence_requirements() -> tuple[EvidenceRequirement, ...]:
                 ]
             ),
         ),
+        solution_pool_evidence_requirement(PROTECTED_CASES),
         EvidenceRequirement(
             requirement_id=(
                 "successor48_bounded_route_pool_set_partition_recombination"
@@ -2623,6 +2656,7 @@ def _continuity_requirements() -> tuple[ContinuityRequirement, ...]:
     resume = RESUME_CONTINUITY_REQUIREMENTS
     related_ids = (
         *SUCCESSOR_OPPORTUNITY_FAMILIES,
+        *solution_pool_related_ids(),
         SUCCESSOR41_MECHANISM_ID,
         SUCCESSOR41_TARGET_FILE,
         SUCCESSOR41_SECONDARY_TARGET_FILE,
@@ -2679,6 +2713,7 @@ def _guidance_blocks() -> tuple[GuidanceBlock, ...]:
             category="proposal_focus",
             title="Successor portfolio direction",
             lines=(
+                SUCCESSOR55_TARGET_INTENT_RULE,
                 ROUTE_FIRST_COMPARISON_TARGET_INTENT_RULE,
                 SUCCESSOR50_REVIEWED_RULE,
                 SUCCESSOR48_REVIEWED_RULE,

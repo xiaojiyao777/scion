@@ -13,6 +13,7 @@ from scion.problems.cvrp.research_guidance import (
     SUCCESSOR46_MECHANISM_ID,
     SUCCESSOR47_MECHANISM_ID,
     SUCCESSOR48_MECHANISM_ID,
+    SUCCESSOR55_MECHANISM_ID,
     SELECTOR_TELEMETRY_HYGIENE_LESSON,
     build_cvrp_legacy_research_focus,
     build_cvrp_research_guidance_contract,
@@ -57,7 +58,7 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         mechanism.mechanism_id
         for mechanism in contract.required_mechanisms
         if mechanism.hypothesis_mechanism_binding == "target_intent_required"
-    ] == []
+    ] == [SUCCESSOR55_MECHANISM_ID]
     assert any(
         requirement.requirement_id == "selector_telemetry_hygiene"
         for requirement in contract.evidence_requirements
@@ -91,6 +92,11 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     )
     assert any(
         requirement.requirement_id == "cvrp_algorithmic_intervention_sufficiency"
+        for requirement in contract.evidence_requirements
+    )
+    assert any(
+        requirement.requirement_id
+        == "successor55_bounded_elite_solution_pool_search"
         for requirement in contract.evidence_requirements
     )
     assert any(
@@ -153,12 +159,14 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
     assert SUCCESSOR46B_MECHANISM_ID in rendered.text
     assert SUCCESSOR47_MECHANISM_ID in rendered.text
     assert SUCCESSOR48_MECHANISM_ID in rendered.text
+    assert SUCCESSOR55_MECHANISM_ID in rendered.text
+    assert "policies/baseline_modules/solution_pool.py" in rendered.text
     assert ROUTE_FIRST_COMPARISON_MECHANISM_ID in rendered.text
     assert "route_first_heuristic" in rendered.text
     assert "giant-tour split recombination" in rendered.text
-    assert "candidate-trajectory selector repair" in rendered.text
+    assert "bounded elite feasible solution pool" in rendered.text
     assert "bounded_multi_candidate_alns_race" in rendered.text
-    assert "RNG/VNS/final-attribution failure modes" in rendered.text
+    assert "pool admission and anchor selection" in rendered.text
     assert "pre-VNS repair delta" in rendered.text
     assert "measured_no_positive_at_mde" in rendered.text
     assert "no-positive-at-MDE" in rendered.text
@@ -173,7 +181,9 @@ def test_cvrp_research_guidance_contract_contains_required_blocks() -> None:
         },
     )
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == []
+    assert launch_payload["target_intent_required_mechanism_ids"] == [
+        SUCCESSOR55_MECHANISM_ID
+    ]
 
 
 def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
@@ -191,7 +201,15 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert focus["schema_version"] == "scion.cvrp_research_focus.v1"
     assert focus["scope"] == "report_only_prepared_handoff"
     assert focus["required_mechanism_ids"] == []
-    assert focus["target_intent_required_mechanism_ids"] == []
+    assert focus["target_intent_required_mechanism_ids"] == [
+        SUCCESSOR55_MECHANISM_ID
+    ]
+    assert focus["successor55_target_intent"]["mechanism_id"] == (
+        SUCCESSOR55_MECHANISM_ID
+    )
+    assert focus["successor55_target_intent"]["target_file"] == (
+        "policies/baseline_modules/solution_pool.py"
+    )
     assert focus["material_difference_requirement"]["required"] is True
     assert focus["material_difference_requirement"]["required_metadata_key"] == (
         "material_difference"
@@ -469,6 +487,8 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
     assert "bounded_ejection_chain_relocate" in focus["next_required_direction"]
     assert "bounded_route_segment_exchange" in focus["next_required_direction"]
     assert "Successor19 and successor20" in focus["next_required_direction"]
+    assert SUCCESSOR55_MECHANISM_ID in focus["next_required_direction"]
+    assert "bounded elite feasible solution-pool" in focus["current_question"]
     assert "stagnation_adaptive_destroy_size_schedule" in (
         focus["next_required_direction"]
     )
@@ -1389,7 +1409,9 @@ def test_cvrp_legacy_research_focus_keeps_prepared_manifest_keys() -> None:
         "route_first_heuristic",
     ]
     assert launch_payload["required_mechanism_ids"] == []
-    assert launch_payload["target_intent_required_mechanism_ids"] == []
+    assert launch_payload["target_intent_required_mechanism_ids"] == [
+        SUCCESSOR55_MECHANISM_ID
+    ]
     assert launch_payload["material_difference_requirement"]["required"] is True
     assert launch_payload["suppressed_mechanism_ids"] == []
     assert launch_payload["successor_opportunity_families"] == [
