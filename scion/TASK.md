@@ -123,9 +123,9 @@ steering, or launch a formal experiment from the transition worktree.
 
 ## Integrated Evidence
 
-- Final collection: `1819 tests collected`.
+- Final collection: `1820 tests collected`.
 - Full Scion suite after the final context, launch-boundary, and postrun fixes:
-  `1818 passed, 1 skipped` in `489.51s`.
+  `1819 passed, 1 skipped` in `492.28s`.
 - Direct warehouse and CVRP outer smokes pass through
   Contract -> Verification -> Protocol -> Decision.
 - The serial-iteration regression proves two screening failures use one branch,
@@ -138,6 +138,10 @@ steering, or launch a formal experiment from the transition worktree.
   the scheduler change.
 - Critical branch-state persistence no longer swallows SQLite write failures;
   the focused durable-state/failure/reopen shard passes `49` tests.
+- The first clean-commit warehouse readiness attempt exposed and repaired a
+  builder/validator drift in `prepared_research_focus_projection.required`;
+  manifest-declared focus is now required while absent focus remains optional.
+  The affected builder/readiness/warehouse/CVRP shard passes `115` tests.
 - Unit/core integrated shard: `259 passed`; final core/lineage focused cleanup:
   `292 passed` plus `20` affected postrun tests.
 - Proposal/context unit shard: `384 passed`.
@@ -174,10 +178,15 @@ The refreshed scope classifies all `826` status paths with no ambiguity:
 unresolved paths. The excluded set is the user-owned measurement-readiness
 change plus `33` old/future untracked documents.
 
-The integration commit contains exactly the audited refactor scope. No push,
-prepared formal run, or formal experiment has occurred. The user-owned change
-in `scion/docs/v0.4-measurement-readiness.md` remains outside the commit and
-must remain untouched.
+The integration commit contains exactly the audited refactor scope. No push or
+formal experiment has occurred. The user-owned change in
+`scion/docs/v0.4-measurement-readiness.md` remains outside the commit and must
+remain untouched.
+
+The first prepared warehouse root at commit `09af19d2` was never launched and
+must not be reused: readiness correctly stopped on an invalid generic API-key
+environment and the focus-projection required-bit regression. Rebuild from the
+new commit with the dedicated proxy-key environment after readiness is green.
 
 ## Immediate Queue
 

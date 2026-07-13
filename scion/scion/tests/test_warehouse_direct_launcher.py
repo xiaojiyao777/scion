@@ -514,9 +514,11 @@ def test_warehouse_direct_launcher_prepare_writes_rewritten_run_files(
     assert prepared_prompt_context["proposal_runtime"]["resolved_mode"] == (
         "direct_v3"
     )
-    prompt_summary = prepared_prompt_context["signals"][
+    prompt_projection = prepared_prompt_context["signals"][
         "prepared_research_focus_projection"
-    ]["detail"]
+    ]
+    assert prompt_projection["required"] is True
+    prompt_summary = prompt_projection["detail"]
     assert prompt_summary["contract_present"] is True
     assert prompt_summary["contract_source"] == "typed_manifest"
     assert prompt_summary["schema_valid"] is True

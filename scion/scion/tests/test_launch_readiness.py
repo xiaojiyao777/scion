@@ -1310,6 +1310,30 @@ def test_launch_readiness_rejects_prompt_context_artifact_identity_mismatch(
     )
 
 
+def test_launch_readiness_rejects_optional_projection_for_declared_focus(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    artifact_path = (
+        run_root
+        / "prepared_handoff"
+        / "prompt_context_readiness"
+        / "cvrp_direct_v3.prepared_prompt_context_readiness.v1.json"
+    )
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["signals"]["prepared_research_focus_projection"]["required"] = False
+    artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert any(
+        failure["reason"] == "prepared_focus_projection_not_required"
+        for failure in prompt_check["detail"]["failures"]
+    )
+
+
 def test_launch_readiness_rejects_stale_research_focus_projection(
     tmp_path: Path,
 ) -> None:

@@ -297,6 +297,7 @@ def test_rebuild_prepared_handoff_refreshes_direct_v3_handoff(
     assert prompt_context["signals"]["prompt_manifest_history"]["available"] is True
     projection = prompt_context["signals"]["prepared_research_focus_projection"]
     assert projection["available"] is True
+    assert projection["required"] is True
     assert projection["runtime_generated_after_launch"] is False
     projection_detail = projection["detail"]
     assert projection_detail["schema_version"] == (

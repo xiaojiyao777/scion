@@ -141,12 +141,13 @@ Production forbidden scans are currently clean for the K6 deletion list.
 
 ## Validation Snapshot
 
-- final collection: `1819 tests`;
-- full Scion after all cleanup: `1818 passed, 1 skipped` in `489.51s`;
+- final collection: `1820 tests`;
+- full Scion after all cleanup: `1819 passed, 1 skipped` in `492.28s`;
 - final direct-writer/legacy-reader hardening: `106 passed` affected regression;
 - direct warehouse/CVRP outer smokes: passed;
 - scheduler/same-branch/reopen H/C evidence regression: `82 passed`;
 - critical durable branch-state/failure/reopen regression: `49 passed`;
+- prepared-focus builder/readiness/warehouse/CVRP regression: `115 passed`;
 - post-scheduler warehouse/CVRP outer and launcher regression: `22 passed`;
 - final launcher/readiness/runtime-diagnostic affected regression: `157 passed`;
 - started-only/postrun artifact affected regression: `44 passed`;
@@ -161,6 +162,21 @@ Production forbidden scans are currently clean for the K6 deletion list.
 - compile and diff checks: passed.
 - live non-formal `gpt-5.6-sol` route probe: authenticated, HTTP 200, non-empty
   response; the exact clean-commit completion preflight remains pending.
+
+## First Clean-Commit Preflight Finding
+
+The warehouse root prepared at `09af19d2` was never launched. Real readiness
+correctly stopped it for two independent reasons:
+
+- the generic `SCION_API_KEY` environment did not contain the local proxy key;
+  the replacement root must use a dedicated proxy-key environment name;
+- the prompt-readiness builder marked a manifest-declared typed research-focus
+  projection optional while the validator correctly required it. The builder
+  now propagates `required=bool(research_focus)`; absent guidance stays optional
+  and no research-quality judgment is added.
+
+That failed prepared root is characterization evidence only and must not be
+reused. Rebuild from the commit containing this repair.
 
 The source worktree remains intentionally dirty because excluded user/history
 files are preserved. It is not a formal runtime root; readiness must be run in
@@ -180,7 +196,8 @@ the isolated clean worktree at the integration commit.
   (`0755`);
 - `scion/docs/v0.4-measurement-readiness.md` has a pre-existing user change and
   was deliberately not edited by this refactor;
-- nothing has been pushed, prepared, or launched.
+- nothing has been pushed or launched; the first prepared root failed readiness
+  before campaign execution and is retained only as characterization evidence.
 
 ## Resume Actions
 

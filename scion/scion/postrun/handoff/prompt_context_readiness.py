@@ -201,6 +201,7 @@ def build_prepared_prompt_context_readiness(
     _add_launch_research_focus_projection_signal(
         signals,
         root=root,
+        required=bool(research_focus),
     )
 
     missing_required = [
@@ -495,6 +496,7 @@ def _add_launch_research_focus_projection_signal(
     signals: dict[str, dict[str, Any]],
     *,
     root: Path,
+    required: bool,
 ) -> None:
     manifest_path = root / "prepared_run_manifest.v1.json"
     manifest = _mapping_or_empty(_read_json(manifest_path))
@@ -506,7 +508,7 @@ def _add_launch_research_focus_projection_signal(
         signals,
         "prepared_research_focus_projection",
         available=projection_summary.get("available") is True,
-        required=False,
+        required=required,
         source=(
             "prepared_run_manifest.research_focus typed projection"
         ),
