@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 import re
@@ -319,6 +320,14 @@ def test_warehouse_direct_launcher_prepare_writes_rewritten_run_files(
     assert "COMPLETION_PREFLIGHT=0" in launch_env
     assert "POSTRUN_REPORTS=1" in launch_env
     assert "CONTROL_PAIR_KEY=warehouse.unit-warehouse:prepared" in launch_env
+    run_script_sha256 = hashlib.sha256(
+        (run_root / "run.sh").read_bytes()
+    ).hexdigest()
+    assert f"RUN_SCRIPT_SHA256={run_script_sha256}" in launch_env
+    assert prepared_manifest["run_script"] == {
+        "path": str(run_root / "run.sh"),
+        "sha256": run_script_sha256,
+    }
     assert (
         "GIT_RUNTIME_GUARD_PATHS="
         "'scion/scion :(exclude)scion/scion/tests "
@@ -503,6 +512,7 @@ def test_warehouse_direct_launcher_prepare_writes_rewritten_run_files(
     assert prepared_readiness["schema_version"] == "scion.launch_readiness.v1"
     assert prepared_readiness["static_ready"] is False
     assert prepared_readiness["launch_ready"] is False
+    assert prepared_readiness["guarded_wrapper_launch_ready"] is False
     assert prepared_readiness["checks"]["prepared_contract_complete"][
         "status"
     ] == "failed"
@@ -536,9 +546,9 @@ def test_warehouse_direct_launcher_prepare_writes_rewritten_run_files(
     assert (
         prepared_rebuild["families"]["prompt_context_readiness"]["status"] == "ok"
     )
-    assert "Launch only after rerunning this tool" in readiness_md.read_text(
-        encoding="utf-8"
-    )
+    readiness_text = readiness_md.read_text(encoding="utf-8")
+    assert "guarded_wrapper_launch_ready=true" in readiness_text
+    assert "duplicates the provider request" in readiness_text
     brief_md_text = brief_md.read_text(encoding="utf-8")
     assert "## Prepared Run Contract" in brief_md_text
     assert "## Launcher Artifacts" in inventory_md.read_text(encoding="utf-8")

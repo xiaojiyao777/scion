@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shlex
@@ -100,6 +101,7 @@ def build_readiness(
     run_root: Path | str,
     *,
     completion_preflight: bool = False,
+    guarded_wrapper_launch: bool = False,
     api_key: str | None = None,
     api_key_env: str | None = None,
     timeout_sec: float = 60.0,
@@ -390,6 +392,12 @@ def build_readiness(
     )
     ready = bool(static_ready and completion_ready)
     launch_ready = bool(static_ready and completion_preflight and completion_ready)
+    guarded_wrapper_launch_ready = bool(
+        static_ready
+        and checks["run_script_completion_preflight_enforced"]["status"] == "ok"
+        and checks["run_script_campaign_execution_marker_enforced"]["status"]
+        == "ok"
+    )
     failed_required_checks = _failed_check_names(checks, required=True)
     failed_static_required_checks = [
         name for name in failed_required_checks if name != "completion_preflight"
@@ -418,11 +426,27 @@ def build_readiness(
         completion_ready=completion_ready,
         failed_static_required_checks=failed_static_required_checks,
     )
-    readiness_scope = (
-        "launch_with_completion_preflight"
-        if completion_preflight
-        else "static_only_completion_preflight_not_run"
-    )
+    guarded_wrapper_launch_blockers = list(failed_static_required_checks)
+    if guarded_wrapper_launch and not guarded_wrapper_launch_ready:
+        if not guarded_wrapper_launch_blockers:
+            guarded_wrapper_launch_blockers.append(
+                "guarded_wrapper_launch_readiness_failed"
+            )
+    if guarded_wrapper_launch:
+        readiness_scope = "guarded_wrapper_launch"
+        ready_meaning = (
+            "guarded wrapper launch readiness; run.sh owns the sole live "
+            "pre-campaign completion preflight"
+        )
+        selected_launch_blockers = guarded_wrapper_launch_blockers
+    elif completion_preflight:
+        readiness_scope = "external_live_probe"
+        ready_meaning = "external diagnostic live-probe readiness"
+        selected_launch_blockers = launch_blockers
+    else:
+        readiness_scope = "prepared_audit"
+        ready_meaning = "static prepared-root audit; no launch workflow selected"
+        selected_launch_blockers = launch_blockers
     return {
         "schema_version": SCHEMA_VERSION,
         "report_only": True,
@@ -434,14 +458,14 @@ def build_readiness(
         "run_root": str(root),
         "static_ready": static_ready,
         "launch_ready": launch_ready,
+        "guarded_wrapper_launch_ready": guarded_wrapper_launch_ready,
         "ready": ready,
-        "ready_meaning": (
-            "static readiness only; not operator launch approval"
-            if not completion_preflight
-            else "launch readiness because completion preflight was required"
-        ),
+        "ready_meaning": ready_meaning,
         "readiness_scope": readiness_scope,
         "launch_blockers": launch_blockers,
+        "guarded_wrapper_launch_blockers": guarded_wrapper_launch_blockers,
+        "selected_launch_blockers": selected_launch_blockers,
+        "guarded_wrapper_launch_selected": guarded_wrapper_launch,
         "completion_preflight_required": completion_preflight,
         "completion_preflight_summary": completion_summary,
         "completion_http_status": completion_summary.get("http_status"),
@@ -637,10 +661,18 @@ def render_markdown(report: dict[str, Any]) -> str:
         "- Boundary: this report does not mutate campaign state, scheduler state, "
         "promotion state, `DecisionFeatures`, or Protocol evidence.",
         f"- Static ready: `{_display(report.get('static_ready'))}`",
-        f"- Launch ready: `{_display(report.get('launch_ready'))}`",
+        "- Guarded wrapper launch ready: "
+        f"`{_display(report.get('guarded_wrapper_launch_ready'))}`",
+        "- External live-probe ready: "
+        f"`{_display(report.get('launch_ready'))}`",
         f"- Readiness scope: `{_display(report.get('readiness_scope'))}`",
         f"- Legacy `ready` meaning: {_display(report.get('ready_meaning'))}",
-        f"- Launch blockers: `{_display(report.get('launch_blockers'))}`",
+        "- External live-probe blockers: "
+        f"`{_display(report.get('launch_blockers'))}`",
+        "- Guarded wrapper blockers: "
+        f"`{_display(report.get('guarded_wrapper_launch_blockers'))}`",
+        "- Selected workflow blockers: "
+        f"`{_display(report.get('selected_launch_blockers'))}`",
         f"- Completion preflight required: `{_display(report.get('completion_preflight_required'))}`",
         "- Campaign execution marker: "
         f"`{_display(report.get('campaign_execution_marker_status'))}`",
@@ -672,11 +704,15 @@ def render_markdown(report: dict[str, Any]) -> str:
         [
             "",
             "## Launch Rule",
-            "- A report with `readiness_scope=static_only_completion_preflight_not_run` "
-            "is a prepared-root audit, not launch approval.",
-            "- Static readiness is not enough to start an LLM campaign.",
-            "- Launch only after rerunning this tool with `--completion-preflight` "
-            "and seeing `launch_ready=true`.",
+            "- `readiness_scope=prepared_audit` is not proof that the provider is live.",
+            "- When `guarded_wrapper_launch_ready=true`, an explicit operator "
+            "decision may start `run.sh`; its enforced pre-campaign guard owns the "
+            "single live completion preflight and persists the receipt before any "
+            "campaign command.",
+            "- Do not run an external `--completion-preflight` immediately before "
+            "starting the guarded wrapper; that duplicates the provider request.",
+            "- `launch_ready=true` reports an external diagnostic live probe. It is "
+            "not required for the guarded-wrapper workflow.",
         ]
     )
     return "\n".join(lines) + "\n"
@@ -697,6 +733,15 @@ def main(argv: list[str] | None = None) -> int:
             "Imply --completion-preflight and exit zero only when launch_ready=true."
         ),
     )
+    parser.add_argument(
+        "--require-guarded-wrapper-launch-ready",
+        action="store_true",
+        help=(
+            "Do not call the provider; exit zero only when the prepared run.sh "
+            "is statically ready and enforces the sole live pre-campaign "
+            "completion preflight."
+        ),
+    )
     parser.add_argument("--api-key", default=None)
     parser.add_argument("--api-key-env", default=None)
     parser.add_argument("--timeout-sec", type=float, default=60.0)
@@ -709,12 +754,20 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.api_key and args.api_key_env:
         parser.error("--api-key and --api-key-env are mutually exclusive")
+    if args.require_guarded_wrapper_launch_ready and (
+        args.completion_preflight or args.require_launch_ready
+    ):
+        parser.error(
+            "--require-guarded-wrapper-launch-ready is mutually exclusive with "
+            "--completion-preflight/--require-launch-ready"
+        )
     if args.timeout_sec <= 0:
         parser.error("--timeout-sec must be positive")
 
     report = build_readiness(
         args.run_root,
         completion_preflight=args.completion_preflight or args.require_launch_ready,
+        guarded_wrapper_launch=args.require_guarded_wrapper_launch_ready,
         api_key=args.api_key,
         api_key_env=args.api_key_env,
         timeout_sec=args.timeout_sec,
@@ -725,6 +778,8 @@ def main(argv: list[str] | None = None) -> int:
         print(render_markdown(report), end="")
     if args.require_launch_ready:
         return 0 if report["launch_ready"] else UNREADY_EXIT
+    if args.require_guarded_wrapper_launch_ready:
+        return 0 if report["guarded_wrapper_launch_ready"] else UNREADY_EXIT
     return 0 if report["ready"] else UNREADY_EXIT
 
 
@@ -1053,14 +1108,54 @@ def _run_script_runtime_guard_contract_consistency(
             }
         )
     try:
-        run_text = run_sh.read_text(encoding="utf-8")
-    except OSError as exc:
+        run_bytes = run_sh.read_bytes()
+        run_text = run_bytes.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        run_bytes = b""
         run_text = ""
         failures.append(
             {
                 "reason": "unable_to_read_run_script",
                 "run_script": str(run_sh),
                 "error": str(exc),
+            }
+        )
+
+    actual_run_script_sha256 = (
+        hashlib.sha256(run_bytes).hexdigest() if run_bytes else None
+    )
+    launch_env_run_script_sha256 = _shell_assignment_value(
+        launch_env_text,
+        "RUN_SCRIPT_SHA256",
+    )
+    manifest = _read_json(root / "prepared_run_manifest.v1.json")
+    manifest_run_script = (
+        manifest.get("run_script") if isinstance(manifest, dict) else {}
+    )
+    manifest_run_script_sha256 = (
+        manifest_run_script.get("sha256")
+        if isinstance(manifest_run_script, dict)
+        else None
+    )
+    if not launch_env_run_script_sha256 or not manifest_run_script_sha256:
+        failures.append(
+            {
+                "reason": "run_script_digest_missing",
+                "launch_env_sha256": launch_env_run_script_sha256,
+                "manifest_sha256": manifest_run_script_sha256,
+            }
+        )
+    elif not (
+        launch_env_run_script_sha256
+        == manifest_run_script_sha256
+        == actual_run_script_sha256
+    ):
+        failures.append(
+            {
+                "reason": "run_script_digest_mismatch",
+                "launch_env_sha256": launch_env_run_script_sha256,
+                "manifest_sha256": manifest_run_script_sha256,
+                "actual_sha256": actual_run_script_sha256,
             }
         )
 
@@ -1175,6 +1270,15 @@ def _run_script_runtime_guard_contract_consistency(
         "manifest_runtime_guard_paths": manifest_paths,
         "launch_env": str(launch_env),
         "run_script": str(run_sh),
+        "launch_env_run_script_sha256": launch_env_run_script_sha256,
+        "manifest_run_script_sha256": manifest_run_script_sha256,
+        "actual_run_script_sha256": actual_run_script_sha256,
+        "run_script_digest_matches": bool(
+            launch_env_run_script_sha256
+            and launch_env_run_script_sha256
+            == manifest_run_script_sha256
+            == actual_run_script_sha256
+        ),
         "launch_env_git_commit": launch_env_commit,
         "launch_env_runtime_guard_paths": launch_env_paths,
         "run_script_git_commit": run_script_commit,
@@ -1618,18 +1722,103 @@ def _run_script_completion_preflight_enforced(
         )
 
     source_pos = _first_launch_env_source_position(run_text)
-    preflight_pos = run_text.find('if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then')
-    proxy_pos, _proxy_block = _shell_command_block_containing_marker(
+    preflight_guard_positions = _executable_marker_positions(
+        run_text,
+        'if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then',
+    )
+    preflight_pos = (
+        preflight_guard_positions[0] if len(preflight_guard_positions) == 1 else -1
+    )
+    proxy_positions = _executable_marker_positions(
         run_text,
         "tools/check_completion_proxy.py",
+    )
+    proxy_pos, proxy_block = _shell_command_block_containing_marker(
+        run_text,
+        "tools/check_completion_proxy.py",
+    )
+    receipt_assignment_positions = _executable_marker_positions(
+        run_text,
+        'PREFLIGHT_DETAIL="$RUN_ROOT/pre_campaign_completion_preflight.v1.json"',
+    )
+    all_receipt_assignment_positions = _executable_assignment_positions(
+        run_text,
+        "PREFLIGHT_DETAIL",
+    )
+    unexpected_receipt_references = [
+        record
+        for record in _executable_marker_lines(run_text, "PREFLIGHT_DETAIL")
+        if not _allowed_preflight_detail_reference(record["line"])
+    ]
+    preflight_status_positions = _executable_assignment_positions(
+        run_text,
+        "PREFLIGHT_STATUS",
+        expected_value="$?",
+    )
+    preflight_failure_exit_positions = _executable_marker_positions(
+        run_text,
+        'exit "$PREFLIGHT_STATUS"',
     )
     campaign_pos = _campaign_command_position(run_text)
     if source_pos < 0:
         failures.append({"reason": "run_script_does_not_source_launch_env"})
-    if preflight_pos < 0:
+    if not preflight_guard_positions:
         failures.append({"reason": "completion_preflight_guard_missing"})
-    if proxy_pos < 0:
+    elif len(preflight_guard_positions) != 1:
+        failures.append(
+            {
+                "reason": "completion_preflight_guard_not_unique",
+                "count": len(preflight_guard_positions),
+            }
+        )
+    if not proxy_positions:
         failures.append({"reason": "completion_preflight_proxy_call_missing"})
+    elif len(proxy_positions) != 1:
+        failures.append(
+            {
+                "reason": "completion_preflight_proxy_call_not_unique",
+                "count": len(proxy_positions),
+            }
+        )
+    if len(receipt_assignment_positions) != 1:
+        failures.append(
+            {
+                "reason": "completion_preflight_receipt_path_not_unique",
+                "count": len(receipt_assignment_positions),
+            }
+        )
+    if len(all_receipt_assignment_positions) != 1:
+        failures.append(
+            {
+                "reason": "completion_preflight_receipt_assignment_not_unique",
+                "count": len(all_receipt_assignment_positions),
+            }
+        )
+    if unexpected_receipt_references:
+        failures.append(
+            {
+                "reason": "completion_preflight_receipt_reference_not_canonical",
+                "references": unexpected_receipt_references,
+            }
+        )
+    if len(preflight_status_positions) != 1:
+        failures.append(
+            {
+                "reason": "completion_preflight_status_capture_not_unique",
+                "count": len(preflight_status_positions),
+            }
+        )
+    if len(preflight_failure_exit_positions) != 1:
+        failures.append(
+            {
+                "reason": "completion_preflight_failure_exit_not_unique",
+                "count": len(preflight_failure_exit_positions),
+            }
+        )
+    if '> "$PREFLIGHT_DETAIL"' not in proxy_block:
+        failures.append(
+            {"reason": "completion_preflight_receipt_redirection_missing"}
+        )
     if campaign_pos < 0:
         failures.append(
             {
@@ -1643,6 +1832,37 @@ def _run_script_completion_preflight_enforced(
         failures.append({"reason": "completion_preflight_after_campaign"})
     if proxy_pos >= 0 and campaign_pos >= 0 and proxy_pos > campaign_pos:
         failures.append({"reason": "completion_proxy_call_after_campaign"})
+    receipt_pos = (
+        receipt_assignment_positions[0]
+        if len(receipt_assignment_positions) == 1
+        and len(all_receipt_assignment_positions) == 1
+        else -1
+    )
+    preflight_status_pos = (
+        preflight_status_positions[0] if len(preflight_status_positions) == 1 else -1
+    )
+    preflight_failure_exit_pos = (
+        preflight_failure_exit_positions[0]
+        if len(preflight_failure_exit_positions) == 1
+        else -1
+    )
+    ordered_positions = (
+        preflight_pos,
+        receipt_pos,
+        proxy_pos,
+        preflight_status_pos,
+        preflight_failure_exit_pos,
+        campaign_pos,
+    )
+    if all(position >= 0 for position in ordered_positions) and not all(
+        left < right for left, right in zip(ordered_positions, ordered_positions[1:])
+    ):
+        failures.append(
+            {
+                "reason": "completion_preflight_execution_order_invalid",
+                "positions": list(ordered_positions),
+            }
+        )
 
     detail = {
         "launch_env": str(launch_env),
@@ -1650,7 +1870,16 @@ def _run_script_completion_preflight_enforced(
         "completion_preflight": completion_value,
         "launch_env_source_position": source_pos,
         "preflight_guard_position": preflight_pos,
+        "preflight_guard_positions": preflight_guard_positions,
         "proxy_call_position": proxy_pos,
+        "proxy_call_positions": proxy_positions,
+        "executable_proxy_call_count": len(proxy_positions),
+        "receipt_path_assignment_positions": receipt_assignment_positions,
+        "all_receipt_assignment_positions": all_receipt_assignment_positions,
+        "unexpected_receipt_references": unexpected_receipt_references,
+        "receipt_redirection_present": '> "$PREFLIGHT_DETAIL"' in proxy_block,
+        "preflight_status_capture_positions": preflight_status_positions,
+        "preflight_failure_exit_positions": preflight_failure_exit_positions,
         "campaign_command_position": campaign_pos,
         "failures": failures,
     }
@@ -1711,11 +1940,10 @@ def _run_script_campaign_execution_marker_enforced(run_sh: Path) -> tuple[str, A
     marker_positions = [
         pos for pos in (marker_file_pos, marker_schema_pos, marker_log_pos) if pos >= 0
     ]
-    earliest_marker_pos = min(marker_positions) if marker_positions else -1
     if (
         preflight_proxy_pos >= 0
-        and earliest_marker_pos >= 0
-        and earliest_marker_pos < preflight_proxy_pos
+        and marker_positions
+        and any(pos < preflight_proxy_pos for pos in marker_positions)
     ):
         failures.append({"reason": "campaign_execution_marker_before_preflight"})
     if preflight_proxy_pos >= 0 and preflight_failure_exit_pos < 0:
@@ -1724,16 +1952,16 @@ def _run_script_campaign_execution_marker_enforced(run_sh: Path) -> tuple[str, A
         )
     if (
         preflight_failure_exit_pos >= 0
-        and earliest_marker_pos >= 0
-        and earliest_marker_pos <= preflight_failure_exit_pos
+        and marker_positions
+        and any(pos <= preflight_failure_exit_pos for pos in marker_positions)
     ):
         failures.append(
             {"reason": "campaign_execution_marker_before_preflight_failure_exit"}
         )
     if (
         campaign_pos >= 0
-        and earliest_marker_pos >= 0
-        and earliest_marker_pos > campaign_pos
+        and marker_positions
+        and any(pos > campaign_pos for pos in marker_positions)
     ):
         failures.append({"reason": "campaign_execution_marker_after_campaign"})
 
@@ -2730,6 +2958,72 @@ def _shell_command_block_containing_marker(text: str, marker: str) -> tuple[int,
             block.append(lines[cursor])
         return offset + line.find(marker), "".join(block)
     return -1, ""
+
+
+def _executable_marker_positions(text: str, marker: str) -> list[int]:
+    positions: list[int] = []
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if marker in stripped and not _line_is_non_executed_shell_text(stripped):
+            positions.append(offset + line.find(marker))
+        offset += len(line)
+    return positions
+
+
+def _executable_marker_lines(text: str, marker: str) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if marker in stripped and not _line_is_non_executed_shell_text(stripped):
+            records.append(
+                {
+                    "position": offset + line.find(marker),
+                    "line": stripped,
+                }
+            )
+        offset += len(line)
+    return records
+
+
+def _allowed_preflight_detail_reference(line: str) -> bool:
+    if line == 'PREFLIGHT_DETAIL="$RUN_ROOT/pre_campaign_completion_preflight.v1.json"':
+        return True
+    if (
+        "tools/check_completion_proxy.py" in line
+        and '> "$PREFLIGHT_DETAIL"' in line
+    ):
+        return True
+    if line.startswith('> "$PREFLIGHT_DETAIL"'):
+        return True
+    if line.startswith('echo "COMPLETION_PREFLIGHT_DETAIL:$PREFLIGHT_DETAIL"'):
+        return True
+    return line.startswith('--detail "$PREFLIGHT_DETAIL"')
+
+
+def _executable_assignment_positions(
+    text: str,
+    name: str,
+    *,
+    expected_value: str | None = None,
+) -> list[int]:
+    prefix = f"{name}="
+    positions: list[int] = []
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if (
+            stripped.startswith(prefix)
+            and not _line_is_non_executed_shell_text(stripped)
+            and (
+                expected_value is None
+                or stripped.removeprefix(prefix) == expected_value
+            )
+        ):
+            positions.append(offset + line.find(name))
+        offset += len(line)
+    return positions
 
 
 def _shell_command_has_option_value(

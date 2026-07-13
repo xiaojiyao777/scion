@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -19,11 +20,20 @@ from scion.research_guidance import (
 SCION_DIR = Path(__file__).resolve().parents[2]
 REPO_DIR = SCION_DIR.parent
 TOOL_PATH = SCION_DIR / "tools" / "check_launch_readiness.py"
+EXPERIMENT_RUNBOOK = SCION_DIR / "docs" / "operations" / "experiment-runbook.zh.md"
 SPEC = importlib.util.spec_from_file_location("check_launch_readiness", TOOL_PATH)
 assert SPEC is not None
 readiness_tool = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(readiness_tool)
+
+
+def test_formal_runbook_uses_guarded_wrapper_readiness() -> None:
+    runbook = EXPERIMENT_RUNBOOK.read_text(encoding="utf-8")
+
+    assert runbook.count("--require-guarded-wrapper-launch-ready") == 2
+    assert "\n  --require-launch-ready \\" not in runbook
+    assert "不要在它之前再执行" in runbook
 
 
 @pytest.fixture
@@ -57,12 +67,17 @@ def test_launch_readiness_accepts_clean_prepared_root(
     assert report["decision_features_excluded"] is True
     assert report["ready"] is True
     assert report["ready_meaning"] == (
-        "static readiness only; not operator launch approval"
+        "static prepared-root audit; no launch workflow selected"
     )
-    assert report["readiness_scope"] == "static_only_completion_preflight_not_run"
+    assert report["readiness_scope"] == "prepared_audit"
     assert report["static_ready"] is True
     assert report["launch_ready"] is False
+    assert report["guarded_wrapper_launch_ready"] is True
     assert report["launch_blockers"] == ["completion_preflight_not_run"]
+    assert report["guarded_wrapper_launch_blockers"] == []
+    assert report["selected_launch_blockers"] == [
+        "completion_preflight_not_run"
+    ]
     assert report["failed_required_checks"] == []
     assert report["failed_static_required_checks"] == []
     assert report["failed_optional_checks"] == []
@@ -104,12 +119,18 @@ def test_launch_readiness_accepts_clean_prepared_root(
         == "ok"
     )
     markdown = readiness_tool.render_markdown(report)
-    assert "readiness_scope=static_only_completion_preflight_not_run" in markdown
-    assert "not launch approval" in markdown
+    assert "readiness_scope=prepared_audit" in markdown
+    assert "not proof that the provider is live" in markdown
     assert report["checks"]["run_script_preflight_failure_reports"]["status"] == "ok"
     assert (
         report["checks"]["run_script_completion_preflight_enforced"]["status"] == "ok"
     )
+    preflight_detail = report["checks"][
+        "run_script_completion_preflight_enforced"
+    ]["detail"]
+    assert preflight_detail["executable_proxy_call_count"] == 1
+    assert preflight_detail["receipt_redirection_present"] is True
+    assert len(preflight_detail["receipt_path_assignment_positions"]) == 1
     assert report["checks"]["run_script_pythonpath_enforced"]["status"] == "ok"
     assert report["checks"]["run_script_model_route_enforced"]["status"] == "ok"
     assert (
@@ -190,7 +211,8 @@ def test_launch_readiness_accepts_clean_prepared_root(
     markdown = readiness_tool.render_markdown(report)
     assert markdown.startswith("# Launch Readiness:")
     assert "Campaign execution marker: `ok`" in markdown
-    assert "Launch only after rerunning this tool" in markdown
+    assert "guarded_wrapper_launch_ready=true" in markdown
+    assert "duplicates the provider request" in markdown
 
 
 def test_launch_readiness_accepts_no_resume_prepared_root(
@@ -221,6 +243,7 @@ def test_launch_readiness_rejects_already_started_root(tmp_path: Path) -> None:
     assert report["ready"] is False
     assert report["static_ready"] is False
     assert report["launch_ready"] is False
+    assert report["guarded_wrapper_launch_ready"] is False
     assert "not_already_started" in report["failed_required_checks"]
     assert "not_already_started" in report["failed_static_required_checks"]
     assert report["checks"]["not_already_started"]["status"] == "failed"
@@ -244,6 +267,7 @@ def test_launch_readiness_rejects_preflight_failed_root(tmp_path: Path) -> None:
     assert report["ready"] is False
     assert report["static_ready"] is False
     assert report["launch_ready"] is False
+    assert report["guarded_wrapper_launch_ready"] is False
     assert report["checks"]["prepared_only_not_started"]["status"] == "failed"
     assert report["checks"]["zero_current_run_counters"]["status"] == "ok"
     assert report["checks"]["postrun_acceptance_not_present"]["status"] == "failed"
@@ -1453,6 +1477,30 @@ def test_launch_readiness_rejects_campaign_execution_marker_after_campaign(
     ]
 
 
+def test_launch_readiness_rejects_one_late_campaign_execution_marker(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    marker_line = next(
+        line
+        for line in run_text.splitlines()
+        if line.strip().startswith('echo "CAMPAIGN_EXECUTION_MARKER:')
+    )
+    run_text = run_text.replace(marker_line + "\n", "", 1)
+    run_sh.write_text(run_text + "\n" + marker_line + "\n", encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    marker_check = report["checks"]["run_script_campaign_execution_marker_enforced"]
+    assert report["static_ready"] is False
+    assert report["guarded_wrapper_launch_ready"] is False
+    assert {"reason": "campaign_execution_marker_after_campaign"} in marker_check[
+        "detail"
+    ]["failures"]
+
+
 def test_launch_readiness_rejects_campaign_execution_marker_before_preflight_exit(
     tmp_path: Path,
 ) -> None:
@@ -1463,7 +1511,7 @@ def test_launch_readiness_rejects_campaign_execution_marker_before_preflight_exi
     campaign_start = run_text.index(f"{sys.executable} -m scion.cli.main run")
     marker_block = run_text[marker_start:campaign_start]
     run_text = run_text[:marker_start] + run_text[campaign_start:]
-    insert_after = "    --json || PREFLIGHT_STATUS=$?\n"
+    insert_after = "  PREFLIGHT_STATUS=$?\n"
     run_text = run_text.replace(insert_after, insert_after + marker_block, 1)
     run_sh.write_text(run_text, encoding="utf-8")
 
@@ -2037,6 +2085,213 @@ def test_launch_readiness_rejects_comment_only_completion_preflight_proxy(
     ]["failures"]
 
 
+def test_launch_readiness_rejects_duplicate_completion_preflight_proxy_call(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    run_text = run_text.replace(
+        '  "$PY" "$SCION_DIR/tools/check_completion_proxy.py"',
+        '  "$PY" "$SCION_DIR/tools/check_completion_proxy.py" --help >/dev/null\n'
+        '  "$PY" "$SCION_DIR/tools/check_completion_proxy.py"',
+        1,
+    )
+    run_sh.write_text(run_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    preflight_check = report["checks"]["run_script_completion_preflight_enforced"]
+    assert report["static_ready"] is False
+    assert report["guarded_wrapper_launch_ready"] is False
+    assert preflight_check["detail"]["executable_proxy_call_count"] == 2
+    assert {
+        "reason": "completion_preflight_proxy_call_not_unique",
+        "count": 2,
+    } in preflight_check["detail"]["failures"]
+
+
+def test_launch_readiness_rejects_missing_completion_preflight_receipt_redirect(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            '> "$PREFLIGHT_DETAIL"',
+            "> /dev/null",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    preflight_check = report["checks"]["run_script_completion_preflight_enforced"]
+    assert report["static_ready"] is False
+    assert report["guarded_wrapper_launch_ready"] is False
+    assert preflight_check["detail"]["receipt_redirection_present"] is False
+    assert {
+        "reason": "completion_preflight_receipt_redirection_missing"
+    } in preflight_check["detail"]["failures"]
+
+
+def test_launch_readiness_rejects_completion_preflight_receipt_reassignment(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    assignment = (
+        'PREFLIGHT_DETAIL="$RUN_ROOT/pre_campaign_completion_preflight.v1.json"'
+    )
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            assignment,
+            assignment + "\n  PREFLIGHT_DETAIL=/dev/null",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    preflight_check = report["checks"]["run_script_completion_preflight_enforced"]
+    assert report["static_ready"] is False
+    assert report["guarded_wrapper_launch_ready"] is False
+    assert len(preflight_check["detail"]["all_receipt_assignment_positions"]) == 2
+    assert {
+        "reason": "completion_preflight_receipt_assignment_not_unique",
+        "count": 2,
+    } in preflight_check["detail"]["failures"]
+
+
+def test_launch_readiness_rejects_exported_preflight_receipt_reassignment(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    assignment = (
+        'PREFLIGHT_DETAIL="$RUN_ROOT/pre_campaign_completion_preflight.v1.json"'
+    )
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            assignment,
+            assignment + "\n  export PREFLIGHT_DETAIL=/dev/null",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    preflight_check = report["checks"]["run_script_completion_preflight_enforced"]
+    assert report["static_ready"] is False
+    assert report["guarded_wrapper_launch_ready"] is False
+    assert preflight_check["detail"]["unexpected_receipt_references"] == [
+        {
+            "position": run_sh.read_text(encoding="utf-8").index(
+                "PREFLIGHT_DETAIL=/dev/null"
+            ),
+            "line": "export PREFLIGHT_DETAIL=/dev/null",
+        }
+    ]
+    assert any(
+        failure["reason"]
+        == "completion_preflight_receipt_reference_not_canonical"
+        for failure in preflight_check["detail"]["failures"]
+    )
+
+
+def test_launch_readiness_digest_rejects_indirect_preflight_receipt_reassignment(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    assignment = (
+        'PREFLIGHT_DETAIL="$RUN_ROOT/pre_campaign_completion_preflight.v1.json"'
+    )
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            assignment,
+            assignment
+            + '\n  prefix=PREFLIGHT_\n  name="${prefix}DETAIL"'
+            + '\n  printf -v "$name" /dev/null',
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    digest_check = report["checks"][
+        "run_script_runtime_guard_contract_consistency"
+    ]
+    assert report["static_ready"] is False
+    assert report["guarded_wrapper_launch_ready"] is False
+    assert digest_check["detail"]["run_script_digest_matches"] is False
+    assert any(
+        failure["reason"] == "run_script_digest_mismatch"
+        for failure in digest_check["detail"]["failures"]
+    )
+
+
+def test_launch_readiness_digest_rejects_dynamic_duplicate_preflight_proxy(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    status_capture = "PREFLIGHT_STATUS=$?"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            status_capture,
+            status_capture
+            + '\n  "$PY" "$SCION_DIR/tools/check_completion_"proxy.py'
+            + ' --base-url "$SCION_BASE_URL" --model "$SCION_MODEL"'
+            + ' --json > /dev/null',
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    digest_check = report["checks"][
+        "run_script_runtime_guard_contract_consistency"
+    ]
+    assert report["static_ready"] is False
+    assert report["guarded_wrapper_launch_ready"] is False
+    assert digest_check["detail"]["run_script_digest_matches"] is False
+    assert any(
+        failure["reason"] == "run_script_digest_mismatch"
+        for failure in digest_check["detail"]["failures"]
+    )
+
+
+def test_launch_readiness_rejects_comment_only_completion_preflight_guard(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    guard = 'if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then'
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            guard,
+            f"if false; then\n  # {guard}",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    preflight_check = report["checks"]["run_script_completion_preflight_enforced"]
+    assert report["static_ready"] is False
+    assert report["guarded_wrapper_launch_ready"] is False
+    assert {"reason": "completion_preflight_guard_missing"} in preflight_check[
+        "detail"
+    ]["failures"]
+
+
 def test_launch_readiness_rejects_comment_only_launch_env_source(
     tmp_path: Path,
 ) -> None:
@@ -2305,6 +2560,7 @@ def test_launch_readiness_accepts_multiline_supported_command(
         .replace(" --time-limit-sec ", " \\\n  --time-limit-sec ")
     )
     run_sh.write_text(run_text.replace(single_line, multiline), encoding="utf-8")
+    _refresh_run_script_digest(run_root)
 
     report = readiness_tool.build_readiness(run_root)
 
@@ -2724,13 +2980,12 @@ def test_launch_readiness_cli_require_launch_ready_implies_completion_preflight(
 
     assert exit_code == 64
     assert payload["completion_preflight_required"] is True
-    assert payload["readiness_scope"] == "launch_with_completion_preflight"
+    assert payload["readiness_scope"] == "external_live_probe"
     assert payload["static_ready"] is True
     assert payload["launch_ready"] is False
+    assert payload["guarded_wrapper_launch_ready"] is True
     assert payload["ready"] is False
-    assert payload["ready_meaning"] == (
-        "launch readiness because completion preflight was required"
-    )
+    assert payload["ready_meaning"] == "external diagnostic live-probe readiness"
     assert payload["launch_blockers"] == ["completion_preflight"]
     assert payload["failed_required_checks"] == ["completion_preflight"]
     assert payload["failed_static_required_checks"] == []
@@ -2778,9 +3033,10 @@ def test_launch_readiness_cli_require_launch_ready_accepts_real_preflight_succes
 
     assert exit_code == 0
     assert payload["completion_preflight_required"] is True
-    assert payload["readiness_scope"] == "launch_with_completion_preflight"
+    assert payload["readiness_scope"] == "external_live_probe"
     assert payload["static_ready"] is True
     assert payload["launch_ready"] is True
+    assert payload["guarded_wrapper_launch_ready"] is True
     assert payload["ready"] is True
     assert payload["launch_blockers"] == []
     assert payload["checks"]["completion_preflight"]["status"] == "ok"
@@ -2790,6 +3046,100 @@ def test_launch_readiness_cli_require_launch_ready_accepts_real_preflight_succes
     assert payload["completion_login_url"] is None
     assert payload["completion_next_step"] is None
     assert payload["completion_operator_action"] is None
+
+
+def test_launch_readiness_cli_accepts_guarded_wrapper_without_provider_call(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+    clean_runtime_worktree,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+
+    def unexpected_preflight(**_: object) -> tuple[str, object]:
+        raise AssertionError("guarded wrapper readiness must not call provider")
+
+    monkeypatch.setattr(
+        readiness_tool,
+        "_completion_preflight_check",
+        unexpected_preflight,
+    )
+
+    exit_code = readiness_tool.main(
+        [
+            str(run_root),
+            "--require-guarded-wrapper-launch-ready",
+            "--format",
+            "json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["static_ready"] is True
+    assert payload["guarded_wrapper_launch_ready"] is True
+    assert payload["launch_ready"] is False
+    assert payload["readiness_scope"] == "guarded_wrapper_launch"
+    assert payload["ready_meaning"] == (
+        "guarded wrapper launch readiness; run.sh owns the sole live "
+        "pre-campaign completion preflight"
+    )
+    assert payload["guarded_wrapper_launch_blockers"] == []
+    assert payload["selected_launch_blockers"] == []
+    assert payload["completion_preflight_required"] is False
+    assert payload["checks"]["completion_preflight"]["status"] == "skipped"
+
+
+def test_guarded_wrapper_cli_rejects_static_failure_without_provider_call(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    (run_root / "exit.txt").write_text("WRAPPER_EXIT_STATUS:64\n", encoding="utf-8")
+
+    def unexpected_preflight(**_: object) -> tuple[str, object]:
+        raise AssertionError("guarded wrapper readiness must not call provider")
+
+    monkeypatch.setattr(
+        readiness_tool,
+        "_completion_preflight_check",
+        unexpected_preflight,
+    )
+
+    exit_code = readiness_tool.main(
+        [
+            str(run_root),
+            "--require-guarded-wrapper-launch-ready",
+            "--format",
+            "json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 64
+    assert payload["guarded_wrapper_launch_ready"] is False
+    assert "not_already_started" in payload["guarded_wrapper_launch_blockers"]
+    assert payload["selected_launch_blockers"] == payload[
+        "guarded_wrapper_launch_blockers"
+    ]
+
+
+def test_guarded_wrapper_cli_rejects_external_live_probe_mode(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+
+    with pytest.raises(SystemExit) as exc_info:
+        readiness_tool.main(
+            [
+                str(run_root),
+                "--require-guarded-wrapper-launch-ready",
+                "--completion-preflight",
+            ]
+        )
+
+    assert exc_info.value.code == 2
 
 
 def _write_prepared_root(
@@ -3021,11 +3371,13 @@ if [[ "$_ACTUAL_GIT_COMMIT" != "$GIT_COMMIT" ]]; then
 fi
 unset _ACTUAL_GIT_COMMIT
 if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
-  PREFLIGHT_STATUS=64
+  PREFLIGHT_DETAIL="$RUN_ROOT/pre_campaign_completion_preflight.v1.json"
   "$PY" "$SCION_DIR/tools/check_completion_proxy.py" \
     --base-url "$SCION_BASE_URL" \
     --model "$SCION_MODEL" \
-    --json || PREFLIGHT_STATUS=$?
+    --json \
+    > "$PREFLIGHT_DETAIL" 2>> "$RUN_ROOT/run.log"
+  PREFLIGHT_STATUS=$?
   if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then
     printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s,"pre_campaign_completion_preflight":"failed"}}\\n' "$PREFLIGHT_STATUS" > "$RUN_ROOT/run_status.json"
     write_postrun_acceptance_reports
@@ -3061,6 +3413,20 @@ exit "$STATUS"
 """,
         encoding="utf-8",
     )
+    run_script_sha256 = hashlib.sha256(
+        (run_root / "run.sh").read_bytes()
+    ).hexdigest()
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(
+        launch_env.read_text(encoding="utf-8")
+        + f"RUN_SCRIPT_SHA256={run_script_sha256}\n",
+        encoding="utf-8",
+    )
+    manifest["run_script"] = {
+        "path": str(run_root / "run.sh"),
+        "sha256": run_script_sha256,
+    }
+    _write_json(run_root / "prepared_run_manifest.v1.json", manifest)
     if include_prompt_context_readiness:
         _write_prompt_context_readiness(
             run_root,
@@ -3071,6 +3437,27 @@ exit "$STATUS"
         _write_prepared_analysis_brief(run_root)
     _write_prepared_handoff_rebuild_manifest(run_root)
     return run_root
+
+
+def _refresh_run_script_digest(run_root: Path) -> None:
+    digest = hashlib.sha256((run_root / "run.sh").read_bytes()).hexdigest()
+    launch_env = run_root / "launch.env"
+    lines = [
+        line
+        for line in launch_env.read_text(encoding="utf-8").splitlines()
+        if not line.startswith("RUN_SCRIPT_SHA256=")
+    ]
+    launch_env.write_text(
+        "\n".join([*lines, f"RUN_SCRIPT_SHA256={digest}", ""]),
+        encoding="utf-8",
+    )
+    manifest_path = run_root / "prepared_run_manifest.v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["run_script"] = {
+        "path": str(run_root / "run.sh"),
+        "sha256": digest,
+    }
+    _write_json(manifest_path, manifest)
 
 
 def _write_prepared_handoff_rebuild_manifest(run_root: Path) -> None:

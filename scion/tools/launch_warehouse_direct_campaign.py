@@ -363,6 +363,7 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "CONTROL_PAIR_KEY",
         "GIT_COMMIT",
         "GIT_RUNTIME_GUARD_PATHS",
+        "RUN_SCRIPT_SHA256",
         "STARTED_UTC",
     ]
     content = "\n".join(_shell_assign(key, env[key]) for key in ordered_keys) + "\n"
@@ -371,7 +372,7 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
     launch_env.chmod(0o600)
 
 
-def _write_run_sh(run_root: Path, command: str, env: dict[str, object]) -> None:
+def _write_run_sh(run_root: Path, command: str, env: dict[str, object]) -> str:
     fallback_keys = [
         "RUN_ROOT",
         "PY",
@@ -435,6 +436,7 @@ def _write_run_sh(run_root: Path, command: str, env: dict[str, object]) -> None:
     run_sh = run_root / "run.sh"
     run_sh.write_text(content, encoding="utf-8")
     run_sh.chmod(0o755)
+    return hashlib.sha256(run_sh.read_bytes()).hexdigest()
 
 
 def _launch(run_root: Path) -> str:
@@ -523,6 +525,10 @@ def _write_prepared_run_manifest(
         "git": {
             "commit": str(env["GIT_COMMIT"]),
             "runtime_guard_paths": str(env["GIT_RUNTIME_GUARD_PATHS"]),
+        },
+        "run_script": {
+            "path": str(run_root / "run.sh"),
+            "sha256": str(env["RUN_SCRIPT_SHA256"]),
         },
         "config": {
             "problem": str(env["PROBLEM"]),
@@ -816,8 +822,8 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     env.update(resume_state.env())
 
     command = _build_command(env)
+    env["RUN_SCRIPT_SHA256"] = _write_run_sh(run_root, command, env)
     _write_launch_env(run_root, env)
-    _write_run_sh(run_root, command, env)
     api_key_display = (
         f"<from-env:{env['SCION_API_KEY_ENV']}>"
         if str(env["SCION_API_KEY_ENV"])

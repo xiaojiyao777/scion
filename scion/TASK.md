@@ -108,6 +108,10 @@ steering, or launch a formal experiment from the transition worktree.
 
 - prepared commands are parsed by the real current CLI before launch;
 - `--launch` requires a real completion preflight;
+- operator readiness uses `--require-guarded-wrapper-launch-ready`, which makes
+  no provider call and proves that `run.sh` contains exactly one executable
+  preflight, one receipt path/redirection, fail-closed reporting, and a
+  campaign marker after the preflight exit path;
 - formal completion roots must be fresh: resume state and skipped postrun
   reports are rejected;
 - formal completion roots reject all forced surface/action/target bindings;
@@ -116,6 +120,10 @@ steering, or launch a formal experiment from the transition worktree.
 - readiness and generated `run.sh` require an entirely clean repository and
   exact equality between runtime HEAD and the prepared commit; docs-only drift
   and unrelated untracked files are not exceptions;
+- both direct launchers bind the final `run.sh` bytes with SHA-256 in
+  `launch.env` and the prepared manifest; guarded readiness requires both
+  anchors to equal the on-disk script, so the prepared root must not be edited
+  between readiness and operator launch;
 - the manifest model is authoritative and may be `gpt-5.6-sol`; readiness
   checks exact manifest/environment consistency rather than a hard-coded model;
 - historical retry/repair labels remain readable only in legacy postrun
@@ -123,9 +131,9 @@ steering, or launch a formal experiment from the transition worktree.
 
 ## Integrated Evidence
 
-- Final collection after the preflight/postrun repair: `1824 tests collected`.
+- Final collection after the guarded-readiness repair: `1836 tests collected`.
 - Full Scion suite after the final context, launch-boundary, and postrun fixes:
-  `1823 passed, 1 skipped` in `485.91s`.
+  `1835 passed, 1 skipped` in `496.64s`.
 - Direct warehouse and CVRP outer smokes pass through
   Contract -> Verification -> Protocol -> Decision.
 - The serial-iteration regression proves two screening failures use one branch,
@@ -154,6 +162,15 @@ steering, or launch a formal experiment from the transition worktree.
   regression are restored. Timeout is now classified as
   `completion_timeout`, and an authenticated timeout no longer starts an OAuth
   login flow or suggests an auth repair. The affected shard passes `116` tests.
+- The prepared-root readiness surface now separates `prepared_audit`,
+  `guarded_wrapper_launch`, and `external_live_probe`. Only the guarded workflow
+  is used for formal launch: it proves the wrapper capability without sending
+  a model request, while `launch_ready` remains an explicit diagnostic live
+  probe and must not be chained before `run.sh`. The launcher/readiness focused
+  matrix passes `117` tests, including receipt reassignment, independently
+  late marker, indirect receipt rebinding, and dynamically composed duplicate
+  proxy counterexamples. The final independent audit reports P0=0/P1=0 for
+  prepared-root `run.sh` drift with unchanged digest anchors.
 - Unit/core integrated shard: `259 passed`; final core/lineage focused cleanup:
   `292 passed` plus `20` affected postrun tests.
 - Proposal/context unit shard: `384 passed`.
@@ -210,6 +227,13 @@ static/structural readiness first, then let `run.sh` own and persist the sole
 real pre-campaign completion receipt. Starting that replacement root requires
 an explicit operator decision; do not restart automatically.
 
+The root prepared from `695b7204` at
+`v04-warehouse-direct-control-695b7204-2r-gpt56sol-20260713T133245Z-claw`
+was never launched and sent no completion. Its static checks passed, but its
+generated rule still required an external live probe immediately before the
+wrapper, so it is superseded by the guarded-readiness repair and must not be
+used.
+
 ## Immediate Queue
 
 1. Verify the commit containing this document includes the postrun import,
@@ -217,8 +241,11 @@ an explicit operator decision; do not restart automatically.
    and excludes all `34` preserved paths.
 2. From that commit, create an isolated detached clean runtime worktree;
    preserve excluded user/history files in the source worktree, rebuild
-   prepared artifacts, and run static/structural readiness with exact commit
-   identity. Do not send a separate live completion probe.
+   prepared artifacts, and run
+   `--require-guarded-wrapper-launch-ready` with exact commit identity. Require
+   `readiness_scope=guarded_wrapper_launch`, no blockers, exactly one executable
+   proxy call, and a persisted receipt path. Do not send a separate live
+   completion probe.
 3. After explicit operator approval, start one warehouse production control;
    its `run.sh` performs and persists the one real completion preflight. Review
    proposal, code, receipts,

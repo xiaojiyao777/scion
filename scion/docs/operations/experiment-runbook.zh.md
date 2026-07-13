@@ -185,7 +185,7 @@ test -f "$RUN_ROOT/run.sh"
 正式命令中不要加入 `--resume-from-campaign` 或
 `--skip-postrun-reports`。
 
-### 4.2 核对 prepared contract 与真实 completion
+### 4.2 核对 prepared contract 与受保护 wrapper
 
 ```bash
 cd "$REPO_ROOT"
@@ -198,18 +198,27 @@ test "$(jq -r '.resume_from_campaign' "$RUN_ROOT/prepared_run_manifest.v1.json")
 test "$(jq -r '.report_metadata.postrun_reports' "$RUN_ROOT/prepared_run_manifest.v1.json")" = true
 
 "$PY" scion/tools/check_launch_readiness.py "$RUN_ROOT" \
-  --require-launch-ready \
-  --api-key-env SCION_SHARED_PROXY_KEY \
+  --require-guarded-wrapper-launch-ready \
   --format json \
   > "$RUN_ROOT/launch_readiness.operator.v1.json"
 
-jq '{static_ready, launch_ready, readiness_scope, launch_blockers,
-     completion_http_status, completion_classification,
-     prepared_runtime_commit, actual_runtime_commit}' \
+jq '{static_ready, guarded_wrapper_launch_ready, readiness_scope,
+     guarded_wrapper_launch_blockers, selected_launch_blockers,
+     prepared_runtime_commit, actual_runtime_commit,
+     run_script_digest_matches:
+       .checks.run_script_runtime_guard_contract_consistency.detail.run_script_digest_matches}' \
   "$RUN_ROOT/launch_readiness.operator.v1.json"
 ```
 
-只有命令退出码为零且 `launch_ready` 为 `true` 时才可启动。preflight 必须实际完成 chat completion；只看到 `/v1/models` HTTP 200 不够。
+只有命令退出码为零、`readiness_scope=guarded_wrapper_launch` 且
+`guarded_wrapper_launch_ready=true` 时，操作员才可批准启动 `run.sh`。
+此检查不发送 completion；`run.sh` 在任何 campaign 命令之前发送并持久化
+唯一一次实时 completion preflight，失败即退出。不要在它之前再执行
+`--require-launch-ready`，否则会重复 provider 请求。
+两个 direct launcher 会把最终 `run.sh` bytes 的 SHA-256 同时写入
+`launch.env` 和 prepared manifest；guarded readiness 要求双锚与磁盘脚本
+完全一致。readiness 通过后不得再编辑 prepared root；若发生变化，废弃该
+root 并重新 prepare，不得手工刷新 digest 锚点。
 
 ### 4.3 后台启动
 
@@ -224,9 +233,9 @@ cat pid
 jq . run_status.json
 ```
 
-`run.sh` 会再次检查 clean runtime commit 和 completion。这是启动瞬间的
-TOCTOU 防护，不是 H/C 重试；任何失败都会在 campaign 执行前退出并写入
-`run_status.json`。
+`run.sh` 会检查 clean runtime commit，并执行本次启动唯一的实时
+completion preflight。这是启动瞬间的 TOCTOU 防护，不是 H/C 重试；任何
+失败都会在 campaign 执行前退出并写入 `run_status.json`。
 
 ## 5. 低频监控
 
@@ -312,14 +321,15 @@ test "$(jq -r '.execution.proposal_runtime_mode' "$RUN_ROOT/prepared_run_manifes
 test "$(jq -r '.report_metadata.postrun_reports' "$RUN_ROOT/prepared_run_manifest.v1.json")" = true
 
 "$PY" scion/tools/check_launch_readiness.py "$RUN_ROOT" \
-  --require-launch-ready \
-  --api-key-env SCION_SHARED_PROXY_KEY \
+  --require-guarded-wrapper-launch-ready \
   --format json \
   > "$RUN_ROOT/launch_readiness.operator.v1.json"
 
-jq '{static_ready, launch_ready, launch_blockers,
-     completion_http_status, completion_classification,
-     prepared_runtime_commit, actual_runtime_commit}' \
+jq '{static_ready, guarded_wrapper_launch_ready, readiness_scope,
+     guarded_wrapper_launch_blockers, selected_launch_blockers,
+     prepared_runtime_commit, actual_runtime_commit,
+     run_script_digest_matches:
+       .checks.run_script_runtime_guard_contract_consistency.detail.run_script_digest_matches}' \
   "$RUN_ROOT/launch_readiness.operator.v1.json"
 
 cd "$RUN_ROOT"

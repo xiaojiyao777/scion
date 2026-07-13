@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -76,6 +77,14 @@ def test_cvrp_launcher_prepare_writes_open_direct_manifest(tmp_path: Path) -> No
     assert status["proposal_runtime_mode"] == "direct_v3"
     assert manifest["problem_family"] == "cvrp"
     assert manifest["execution"]["proposal_runtime_mode"] == "direct_v3"
+    run_script_sha256 = hashlib.sha256(
+        (run_root / "run.sh").read_bytes()
+    ).hexdigest()
+    assert f"RUN_SCRIPT_SHA256={run_script_sha256}" in launch_env
+    assert manifest["run_script"] == {
+        "path": str(run_root / "run.sh"),
+        "sha256": run_script_sha256,
+    }
     assert manifest["research_guidance_contract"]["schema_version"] == (
         "scion.cvrp_research_guidance_contract.v3"
     )

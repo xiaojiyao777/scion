@@ -105,6 +105,10 @@ Key properties:
 - formal launch readiness parses the concrete command with the real CLI,
   requires completion preflight, rejects forced research targets, and rejects
   resume or skipped postrun reports;
+- guarded wrapper readiness is the formal operator surface: it makes no model
+  call, proves exactly one executable `run.sh` completion preflight and receipt
+  redirection before the campaign marker, and exposes separate blockers from
+  the optional external live-probe diagnostic;
 - model readiness is configuration-driven and accepts `gpt-5.6-sol` when the
   manifest and launch environment agree.
 - parameter search is disabled by default and explicitly disabled for both
@@ -143,8 +147,8 @@ Production forbidden scans are currently clean for the K6 deletion list.
 
 ## Validation Snapshot
 
-- final collection after the latest regression additions: `1824 tests`;
-- full Scion after all cleanup: `1823 passed, 1 skipped` in `485.91s`;
+- final collection after the latest regression additions: `1836 tests`;
+- full Scion after all cleanup: `1835 passed, 1 skipped` in `496.64s`;
 - final direct-writer/legacy-reader hardening: `106 passed` affected regression;
 - direct warehouse/CVRP outer smokes: passed;
 - scheduler/same-branch/reopen H/C evidence regression: `82 passed`;
@@ -164,6 +168,13 @@ Production forbidden scans are currently clean for the K6 deletion list.
 - compile and diff checks: passed.
 - affected postrun/preflight/readiness shard after the latest repair:
   `116 passed`;
+- guarded-wrapper/launcher focused matrix: `117 passed`, including receipt
+  reassignment, independently late marker, indirect receipt rebinding, and
+  dynamically composed duplicate proxy counterexamples;
+- both direct launchers bind the final `run.sh` bytes in `launch.env` and the
+  prepared manifest; guarded readiness requires both SHA-256 anchors to match
+  the on-disk script. The final independent audit reports P0=0/P1=0 for
+  prepared-root script drift with unchanged anchors;
 - the live `gpt-5.6-sol` route returned authenticated HTTP 200/non-empty output
   immediately before the formal wrapper's next identical request hung; this is
   infra liveness evidence, not a research outcome.
@@ -205,9 +216,9 @@ as an upstream/proxy-route hang, not a Scion campaign or algorithm failure.
 Two framework findings followed:
 
 - the operator workflow had manually run a live launch-readiness probe before
-  `run.sh`, duplicating the launcher's authoritative preflight. The next root
-  gets static/structural readiness only before launch; `run.sh` owns the sole
-  real completion receipt;
+  `run.sh`, duplicating the launcher's authoritative preflight. Formal operator
+  readiness now uses `--require-guarded-wrapper-launch-ready`; it sends no
+  completion and proves that `run.sh` owns the sole real completion receipt;
 - direct-runtime cleanup removed the import of
   `_prompt_context_visibility_summary` while retaining its postrun call. This
   would crash readiness for both infra-only and successful formal roots. The
@@ -219,6 +230,12 @@ The stopped root is immutable characterization evidence and must not be reused.
 A new root requires the commit containing this repair, a new detached clean
 worktree, static readiness, and an explicit operator decision to start; no
 automatic restart.
+
+The next prepared root at `695b7204`,
+`v04-warehouse-direct-control-695b7204-2r-gpt56sol-20260713T133245Z-claw`,
+also was never launched and sent no completion. Static checks passed, but the
+generated readiness text still encoded the old duplicate-probe workflow. It is
+superseded and must not be used; rebuild after the guarded-readiness commit.
 
 ## Worktree State
 
@@ -244,8 +261,9 @@ automatic restart.
    repair and excludes all `34` preserved paths.
 2. Create an isolated detached clean runtime worktree at that exact commit.
    Do not stash/delete the excluded source-tree files. Prepare warehouse and
-   run static/structural readiness only; do not duplicate the live completion
-   probe.
+   run `--require-guarded-wrapper-launch-ready`. Require guarded scope, no
+   guarded blockers, exactly one executable proxy call, and receipt
+   redirection; do not duplicate the live completion probe.
 3. After explicit approval, run warehouse control first; `run.sh` owns the one
    live pre-campaign completion preflight and persists its receipt.
 4. If warehouse artifacts confirm the framework contract, run one open CVRP
