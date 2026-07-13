@@ -123,9 +123,9 @@ steering, or launch a formal experiment from the transition worktree.
 
 ## Integrated Evidence
 
-- Final collection: `1820 tests collected`.
+- Final collection after the preflight/postrun repair: `1824 tests collected`.
 - Full Scion suite after the final context, launch-boundary, and postrun fixes:
-  `1819 passed, 1 skipped` in `492.28s`.
+  `1823 passed, 1 skipped` in `485.91s`.
 - Direct warehouse and CVRP outer smokes pass through
   Contract -> Verification -> Protocol -> Decision.
 - The serial-iteration regression proves two screening failures use one branch,
@@ -142,6 +142,18 @@ steering, or launch a formal experiment from the transition worktree.
   builder/validator drift in `prepared_research_focus_projection.required`;
   manifest-declared focus is now required while absent focus remains optional.
   The affected builder/readiness/warehouse/CVRP shard passes `115` tests.
+- The next clean warehouse root reached its sole launch-boundary completion
+  preflight, but that request hung upstream for the explicit 60-second provider
+  safety timeout. The wrapper stopped with status `64` before creating a
+  campaign and did not retry. Proxy evidence shows an authenticated active
+  account and a routed request with no usage or HTTP terminal record; the same
+  probe had completed successfully immediately beforehand.
+- That infra-only root exposed a direct-refactor regression in postrun
+  readiness: `_prompt_context_visibility_summary` was still called after its
+  import had been deleted. The import and a real preflight-failed-root CLI
+  regression are restored. Timeout is now classified as
+  `completion_timeout`, and an authenticated timeout no longer starts an OAuth
+  login flow or suggests an auth repair. The affected shard passes `116` tests.
 - Unit/core integrated shard: `259 passed`; final core/lineage focused cleanup:
   `292 passed` plus `20` affected postrun tests.
 - Proposal/context unit shard: `384 passed`.
@@ -178,8 +190,8 @@ The refreshed scope classifies all `826` status paths with no ambiguity:
 unresolved paths. The excluded set is the user-owned measurement-readiness
 change plus `33` old/future untracked documents.
 
-The integration commit contains exactly the audited refactor scope. No push or
-formal experiment has occurred. The user-owned change in
+The integration commits contain exactly the audited refactor scope plus the
+prepared-focus repair. No push has occurred. The user-owned change in
 `scion/docs/v0.4-measurement-readiness.md` remains outside the commit and must
 remain untouched.
 
@@ -188,15 +200,28 @@ must not be reused: readiness correctly stopped on an invalid generic API-key
 environment and the focus-projection required-bit regression. Rebuild from the
 new commit with the dedicated proxy-key environment after readiness is green.
 
+The clean warehouse root at `82dcf3fb` also must not be reused. Its campaign
+never started: the single `run.sh` launch-boundary completion attempt timed out
+upstream and the wrapper stopped fail-closed without a retry. A new formal root
+must be prepared from the commit containing this document, which includes the
+postrun/timeout-classification repair. Do not precede `run.sh` with a second
+live completion probe: perform
+static/structural readiness first, then let `run.sh` own and persist the sole
+real pre-campaign completion receipt. Starting that replacement root requires
+an explicit operator decision; do not restart automatically.
+
 ## Immediate Queue
 
-1. Verify the integration commit contains the audited `792`-path refactor
-   manifest and none of the `34` excluded paths.
+1. Verify the commit containing this document includes the postrun import,
+   preflight-failure integration coverage, and timeout-classification repair,
+   and excludes all `34` preserved paths.
 2. From that commit, create an isolated detached clean runtime worktree;
    preserve excluded user/history files in the source worktree, rebuild
-   prepared artifacts in the clean runtime root, and run the real completion
-   preflight including auth/non-empty response and exact commit identity.
-3. Run one warehouse production control and review proposal, code, receipts,
+   prepared artifacts, and run static/structural readiness with exact commit
+   identity. Do not send a separate live completion probe.
+3. After explicit operator approval, start one warehouse production control;
+   its `run.sh` performs and persists the one real completion preflight. Review
+   proposal, code, receipts,
    Contract, Verification, Protocol, Decision, normalization events, and
    postrun artifacts. If screening continues, verify the next candidate uses
    the same branch's experiment evidence and verified source.

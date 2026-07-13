@@ -3904,6 +3904,12 @@ def _with_completion_preflight_action(
         action["next_step"] = (
             "Wait for the rate limit window to clear, then rerun launch readiness."
         )
+    elif classification == "completion_timeout":
+        action["next_step"] = (
+            "The upstream completion did not finish within the configured safety "
+            "timeout. Inspect route liveness before starting a new run; do not "
+            "retry this campaign automatically."
+        )
     elif classification == "transport_error":
         action["next_step"] = (
             f"Start or repair the local {model} proxy endpoint, then rerun launch readiness."

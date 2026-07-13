@@ -173,6 +173,12 @@ def _operator_action(classification: str) -> str:
         )
     if classification == "rate_limited":
         return "Wait for the rate limit window to clear, then rerun launch readiness."
+    if classification == "completion_timeout":
+        return (
+            "The upstream completion did not finish within the configured safety "
+            "timeout. Inspect route liveness before starting a new run; do not retry "
+            "this campaign automatically."
+        )
     if classification == "transport_error":
         return (
             "Start or repair the configured proxy endpoint, then rerun launch readiness."

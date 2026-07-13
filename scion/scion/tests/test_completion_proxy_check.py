@@ -76,6 +76,22 @@ def test_parse_chat_success_requires_non_empty_content() -> None:
     assert empty.classification == "empty_completion"
 
 
+def test_probe_chat_classifies_timeout_without_requesting_login(monkeypatch) -> None:
+    tool = _load_tool_module()
+
+    def raise_timeout(*args, **kwargs):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(tool, "post_json", raise_timeout)
+
+    result = tool.probe_chat("http://127.0.0.1:8080", "model", "key", 60.0)
+
+    assert result.classification == "completion_timeout"
+    assert result.code == "TimeoutError"
+    assert tool._login_url_required(result.classification) is False
+    assert tool._login_url_required("not_authenticated") is True
+
+
 def test_tool_help_and_api_key_env_guard() -> None:
     help_result = subprocess.run(
         [sys.executable, str(TOOL), "--help"],

@@ -147,6 +147,14 @@ def probe_chat(base_url: str, model: str, api_key: str, timeout: float) -> Probe
     }
     try:
         status, body = post_json(url, payload, api_key=api_key, timeout=timeout)
+    except TimeoutError as exc:
+        return ProbeResult(
+            ok=False,
+            http_status=None,
+            code=type(exc).__name__,
+            message=str(exc),
+            classification="completion_timeout",
+        )
     except Exception as exc:
         return ProbeResult(
             ok=False,
@@ -165,6 +173,14 @@ def probe_chat(base_url: str, model: str, api_key: str, timeout: float) -> Probe
         message=message,
         classification=classification,
     )
+
+
+def _login_url_required(classification: str) -> bool:
+    return classification in {
+        "auth_token_invalidated",
+        "not_authenticated",
+        "unauthorized",
+    }
 
 
 def fetch_auth_status(base_url: str, timeout: float) -> dict[str, Any] | None:
@@ -250,7 +266,11 @@ def main() -> None:
     auth_status = fetch_auth_status(args.base_url, args.timeout_sec)
     result = probe_chat(args.base_url, args.model, api_key, args.timeout_sec)
     login_url = ""
-    if not result.ok and args.login_url_on_failure:
+    if (
+        not result.ok
+        and args.login_url_on_failure
+        and _login_url_required(result.classification)
+    ):
         login_url = fetch_login_url(args.base_url, args.timeout_sec)
 
     payload: dict[str, Any] = {

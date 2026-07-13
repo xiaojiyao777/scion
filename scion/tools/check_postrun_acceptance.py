@@ -19,6 +19,7 @@ if str(SCION_ROOT) not in sys.path:
 
 from postrun_analysis_brief import (  # noqa: E402
     _measurement_effect_summary,
+    _prompt_context_visibility_summary,
     _protocol_accounting_summary,
     _runtime_feedback_summary,
 )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,16 @@ assert SPEC is not None
 check_tool = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(check_tool)
+
+REBUILD_PATH = SCION_DIR / "tools" / "rebuild_postrun_acceptance.py"
+REBUILD_SPEC = importlib.util.spec_from_file_location(
+    "rebuild_postrun_acceptance_for_readiness_test",
+    REBUILD_PATH,
+)
+assert REBUILD_SPEC is not None
+rebuild_tool = importlib.util.module_from_spec(REBUILD_SPEC)
+assert REBUILD_SPEC.loader is not None
+REBUILD_SPEC.loader.exec_module(rebuild_tool)
 
 
 @pytest.mark.parametrize("problem_family", ("cvrp", "warehouse_delivery"))
@@ -126,6 +137,68 @@ def test_failed_check_names_separates_required_from_report_only() -> None:
     ]
     assert check_tool._failed_check_names(checks, required=False) == [
         "problem_fact"
+    ]
+
+
+def test_prompt_visibility_check_rebuilds_expected_summary(tmp_path: Path) -> None:
+    status, detail = check_tool._prompt_source_visibility_actionability(
+        tmp_path,
+        {"prepared_run_contract": {"problem_family": "cvrp"}},
+        {
+            "phase4_evidence_coverage": {"current_run_evidence": False},
+            "launcher": {
+                "prepared_run_contract": {"problem_family": "cvrp"},
+            },
+        },
+    )
+
+    assert status == "failed"
+    assert detail["expected_current_run_evidence"] is False
+    assert "prompt_context_visibility_summary_unavailable" in detail["failures"]
+
+
+def test_preflight_failed_root_emits_structured_unready_json(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_root = tmp_path / "preflight-failed-root"
+    run_root.mkdir()
+    (run_root / "run_status.json").write_text(
+        json.dumps(
+            {
+                "schema": "outer-wrapper.v1",
+                "status": "finished",
+                "wrapper_exit_status": 64,
+                "pre_campaign_completion_preflight": "failed",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_root / "prepared_run_manifest.v1.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "scion.launcher_prepared_run_manifest.v1",
+                "problem_family": "warehouse_delivery",
+                "execution": {"rounds": 2},
+            }
+        ),
+        encoding="utf-8",
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="preflight_failed",
+    )
+
+    exit_code = check_tool.main(
+        [str(run_root), "--format", "json", "--require-current-run-ready"]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 64
+    assert payload["delegation_ready"] is True
+    assert payload["current_run_analysis_ready"] is False
+    assert "not_pre_campaign_preflight_failed" in payload[
+        "failed_required_checks"
     ]
 
 

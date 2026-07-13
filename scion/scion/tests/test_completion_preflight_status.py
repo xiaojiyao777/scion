@@ -94,6 +94,42 @@ def test_build_status_preserves_resume_snapshot_metadata(tmp_path: Path) -> None
     assert status["copied_campaign_summary_present"] is True
 
 
+def test_build_status_reports_upstream_timeout_without_login_noise(
+    tmp_path: Path,
+) -> None:
+    tool = _load_tool_module()
+    detail_path = tmp_path / "pre_campaign_completion_preflight.v1.json"
+    detail_path.write_text(
+        json.dumps(
+            {
+                "ok": False,
+                "chat": {
+                    "classification": "completion_timeout",
+                    "code": "TimeoutError",
+                    "http_status": None,
+                    "message": "timed out",
+                },
+                "auth_status": {
+                    "authenticated": True,
+                    "pool": {"active": 1, "refreshing": 0},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    status = tool.build_status(exit_code=64, detail_path=detail_path)
+
+    assert status["pre_campaign_completion_preflight_classification"] == (
+        "completion_timeout"
+    )
+    assert status["pre_campaign_completion_preflight_authenticated"] is True
+    assert status["pre_campaign_completion_preflight_login_url_present"] is False
+    assert "do not retry" in status[
+        "pre_campaign_completion_preflight_operator_action"
+    ]
+
+
 def test_write_status_tolerates_missing_detail(tmp_path: Path) -> None:
     tool = _load_tool_module()
     output = tmp_path / "run_status.json"

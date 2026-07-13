@@ -3,14 +3,16 @@
 *Last updated: 2026-07-13*
 
 This is the operational resume point. Read `scion/TASK.md` first. v0.4 is in
-final integration review; no experiment is running.
+final integration review; no experiment is running. The latest warehouse root
+stopped before campaign creation on a single upstream completion timeout and
+must not be restarted or reused.
 
 ## Current Decision
 
-The refactor implementation, integrated test suite, and final scope are
-accepted. The commit containing this file is the audited integration payload;
-formal validation remains locked until an isolated runtime is prepared from
-that exact clean commit.
+The refactor implementation and final scope are accepted. The initial audited
+payload is `09af19d2`; the prepared-focus repair is `82dcf3fb`. The commit
+containing this document includes the final postrun/preflight repair and is the
+required base for a replacement clean runtime.
 
 Do not launch successor56, resume successor55, create a targeted CVRP successor,
 or bypass `git_runtime_worktree_clean`.
@@ -141,8 +143,8 @@ Production forbidden scans are currently clean for the K6 deletion list.
 
 ## Validation Snapshot
 
-- final collection: `1820 tests`;
-- full Scion after all cleanup: `1819 passed, 1 skipped` in `492.28s`;
+- final collection after the latest regression additions: `1824 tests`;
+- full Scion after all cleanup: `1823 passed, 1 skipped` in `485.91s`;
 - final direct-writer/legacy-reader hardening: `106 passed` affected regression;
 - direct warehouse/CVRP outer smokes: passed;
 - scheduler/same-branch/reopen H/C evidence regression: `82 passed`;
@@ -160,8 +162,11 @@ Production forbidden scans are currently clean for the K6 deletion list.
   the deselections are explicit `@slow` cases, and the warehouse adapter smoke
   now executes with path-independent absolute fixture roots;
 - compile and diff checks: passed.
-- live non-formal `gpt-5.6-sol` route probe: authenticated, HTTP 200, non-empty
-  response; the exact clean-commit completion preflight remains pending.
+- affected postrun/preflight/readiness shard after the latest repair:
+  `116 passed`;
+- the live `gpt-5.6-sol` route returned authenticated HTTP 200/non-empty output
+  immediately before the formal wrapper's next identical request hung; this is
+  infra liveness evidence, not a research outcome.
 
 ## First Clean-Commit Preflight Finding
 
@@ -182,6 +187,39 @@ The source worktree remains intentionally dirty because excluded user/history
 files are preserved. It is not a formal runtime root; readiness must be run in
 the isolated clean worktree at the integration commit.
 
+## First Warehouse Launch Finding
+
+The clean root
+`v04-warehouse-direct-control-82dcf3fb-2r-gpt56sol-20260713T130254Z-claw`
+started its wrapper at `13:04:12Z` and stopped at `13:05:12Z` with status `64`.
+No campaign directory, execution marker, H call, C call, or candidate was
+created. This is not a research result and was not retried.
+
+The direct cause was the one `run.sh` completion preflight timing out after its
+explicit 60-second provider safety timeout. The proxy stayed listening and
+authenticated with one active account. Its log shows the request routed to
+`gpt-5.6-sol` but no usage or HTTP terminal record; the immediately preceding
+identical probe completed in 1.598 seconds. The failure is therefore classified
+as an upstream/proxy-route hang, not a Scion campaign or algorithm failure.
+
+Two framework findings followed:
+
+- the operator workflow had manually run a live launch-readiness probe before
+  `run.sh`, duplicating the launcher's authoritative preflight. The next root
+  gets static/structural readiness only before launch; `run.sh` owns the sole
+  real completion receipt;
+- direct-runtime cleanup removed the import of
+  `_prompt_context_visibility_summary` while retaining its postrun call. This
+  would crash readiness for both infra-only and successful formal roots. The
+  import is restored and covered through a preflight-failed-root rebuild plus
+  CLI JSON/exit-code test. Authenticated timeouts are now
+  `completion_timeout` and do not start an irrelevant OAuth flow.
+
+The stopped root is immutable characterization evidence and must not be reused.
+A new root requires the commit containing this repair, a new detached clean
+worktree, static readiness, and an explicit operator decision to start; no
+automatic restart.
+
 ## Worktree State
 
 - branch: `v0.4-dev`;
@@ -196,17 +234,20 @@ the isolated clean worktree at the integration commit.
   (`0755`);
 - `scion/docs/v0.4-measurement-readiness.md` has a pre-existing user change and
   was deliberately not edited by this refactor;
-- nothing has been pushed or launched; the first prepared root failed readiness
-  before campaign execution and is retained only as characterization evidence.
+- nothing has been pushed; one wrapper launch at `82dcf3fb` stopped in its sole
+  pre-campaign completion preflight before campaign execution and is retained
+  only as infra characterization evidence.
 
 ## Resume Actions
 
-1. Verify the integration commit includes all `792` audited paths and excludes
-   all `34` preserved paths.
-2. Create an isolated detached clean runtime worktree at that exact commit. Do
-   not stash/delete the excluded source-tree files. Rebuild both prepared roots
-   and run completion preflight there.
-3. Run warehouse control first.
+1. Verify the commit containing this document includes the postrun/preflight
+   repair and excludes all `34` preserved paths.
+2. Create an isolated detached clean runtime worktree at that exact commit.
+   Do not stash/delete the excluded source-tree files. Prepare warehouse and
+   run static/structural readiness only; do not duplicate the live completion
+   probe.
+3. After explicit approval, run warehouse control first; `run.sh` owns the one
+   live pre-campaign completion preflight and persists its receipt.
 4. If warehouse artifacts confirm the framework contract, run one open CVRP
    campaign with no successor target binding.
 5. For a screening continuation, verify the second candidate remains on the
