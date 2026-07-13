@@ -136,7 +136,7 @@ class TestClassifier:
             r.family_id = "other"  # type: ignore[misc]
 
     def test_classifier_without_client_uses_keywords(self) -> None:
-        c = HypothesisFamilyClassifier(llm_client=None)
+        c = HypothesisFamilyClassifier()
         r = c.classify("reassign orders between vehicles")
         assert r.source == "keyword"
         assert r.family_id == "NEW_FAMILY"
@@ -144,7 +144,6 @@ class TestClassifier:
 
     def test_classifier_with_explicit_warehouse_taxonomy(self) -> None:
         c = HypothesisFamilyClassifier(
-            llm_client=None,
             taxonomy=warehouse_family_taxonomy(),
             taxonomy_version="warehouse-delivery-v1",
         )
@@ -153,35 +152,8 @@ class TestClassifier:
         assert r.family_id == "subcategory_consolidation"
         assert r.taxonomy_version == "warehouse-delivery-v1"
 
-    def test_classifier_with_failing_client_falls_back_to_explicit_taxonomy(self) -> None:
-        class FailingClient:
-            def call_text(self, prompt, model=None):
-                raise RuntimeError("API down")
-
-        c = HypothesisFamilyClassifier(
-            llm_client=FailingClient(),
-            taxonomy=warehouse_family_taxonomy(),
-        )
-        r = c.classify("merge subcategories")
-        assert r.source == "keyword"
-        assert r.family_id == "subcategory_consolidation"
-
-    def test_classifier_with_mock_client(self) -> None:
-        class MockClient:
-            def call_text(self, prompt, model=None):
-                return "vehicle_elimination"
-
-        c = HypothesisFamilyClassifier(
-            llm_client=MockClient(),
-            taxonomy=warehouse_family_taxonomy(),
-        )
-        r = c.classify("eliminate expensive vehicles")
-        assert r.source == "classifier"
-        assert r.family_id == "vehicle_elimination"
-
     def test_classifier_uses_problem_taxonomy_without_warehouse_keywords(self) -> None:
         c = HypothesisFamilyClassifier(
-            llm_client=None,
             taxonomy=["two_opt_local_search", "nearest_neighbor_seed"],
             taxonomy_version="tsp-v1",
         )
@@ -192,7 +164,6 @@ class TestClassifier:
 
     def test_classifier_custom_route_taxonomy_blocks_warehouse_labels(self) -> None:
         c = HypothesisFamilyClassifier(
-            llm_client=None,
             taxonomy=cvrp_family_taxonomy(),
             taxonomy_version="cvrp-route-v1",
         )
@@ -205,7 +176,6 @@ class TestClassifier:
 
     def test_classifier_custom_cvrp_taxonomy_maps_only_solver_design_aliases(self) -> None:
         c = HypothesisFamilyClassifier(
-            llm_client=None,
             taxonomy=cvrp_family_taxonomy(),
             taxonomy_version="cvrp-route-v1",
         )
@@ -213,23 +183,3 @@ class TestClassifier:
         assert c.classify("Apply baseline algorithm local search cleanup").family_id == "solver_design"
         assert c.classify("Try a route-pair 2-opt* exchange").family_id == "NEW_FAMILY"
         assert c.classify("Use bounded ruin and recreate repair").family_id == "NEW_FAMILY"
-
-    def test_classifier_invalid_response_falls_back_to_default_neutral(self) -> None:
-        class MockClient:
-            def call_text(self, prompt, model=None):
-                return "not_a_valid_taxonomy_entry_at_all"
-
-        c = HypothesisFamilyClassifier(llm_client=MockClient())
-        r = c.classify("destroy and rebuild")
-        assert r.family_id == "NEW_FAMILY"
-
-
-# ---------------------------------------------------------------------------
-# LLMClient.call_text
-# ---------------------------------------------------------------------------
-
-
-class TestLLMClientCallText:
-    def test_call_text_method_exists(self) -> None:
-        from scion.proposal.llm_client import LLMClient
-        assert callable(getattr(LLMClient, "call_text", None))

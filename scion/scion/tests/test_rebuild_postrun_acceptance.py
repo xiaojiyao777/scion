@@ -19,6 +19,24 @@ assert SPEC.loader is not None
 SPEC.loader.exec_module(rebuild_tool)
 
 
+def test_family_result_preserves_complete_subprocess_output(tmp_path: Path) -> None:
+    stdout = "stdout-start-" + ("x" * 3000) + "-stdout-end"
+    stderr = "stderr-start-" + ("y" * 3000) + "-stderr-end"
+
+    result = rebuild_tool._family_result(
+        "fixture",
+        status="failed",
+        outputs=[tmp_path / "missing.json"],
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    assert result["stdout"] == stdout
+    assert result["stderr"] == stderr
+    assert "stdout_tail" not in result
+    assert "stderr_tail" not in result
+
+
 def test_rebuild_postrun_acceptance_writes_complete_bundle(tmp_path: Path) -> None:
     run_root = tmp_path / "run-root"
     campaign_dir = run_root / "campaign"
@@ -75,22 +93,6 @@ def test_rebuild_postrun_acceptance_writes_complete_bundle(tmp_path: Path) -> No
     formal_index = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
     formal_index.parent.mkdir(parents=True)
     formal_index.write_text('{"candidate_id":"cand-1"}\n', encoding="utf-8")
-    stale_json = (
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "zz_stale.research_efficiency.v1.json"
-    )
-    stale_json.parent.mkdir(parents=True)
-    _write_json(
-        stale_json,
-        {
-            "schema_version": "stale.test",
-            "research_continuity": {
-                "research_shape_summary": {"max_branch_depth": 99},
-            },
-        },
-    )
     stale_manifest = (
         run_root
         / "postrun_acceptance"
@@ -126,7 +128,6 @@ def test_rebuild_postrun_acceptance_writes_complete_bundle(tmp_path: Path) -> No
     assert set(manifest["families"]) == {
         "summaries",
         "failures",
-        "research_efficiency",
         "manifests",
         "analysis_brief",
         "inventory",
@@ -134,11 +135,6 @@ def test_rebuild_postrun_acceptance_writes_complete_bundle(tmp_path: Path) -> No
     assert all(item["status"] == "ok" for item in manifest["families"].values())
     assert (
         report_dir / "summaries" / "fixture.summary.json"
-    ).exists()
-    assert (
-        report_dir
-        / "research_efficiency"
-        / "fixture.research_efficiency.v1.json"
     ).exists()
     assert (
         report_dir
@@ -155,7 +151,6 @@ def test_rebuild_postrun_acceptance_writes_complete_bundle(tmp_path: Path) -> No
         / "inventory"
         / "fixture.postrun_artifact_inventory.v1.json"
     ).exists()
-    assert not stale_json.exists()
     assert not stale_manifest.exists()
     assert not stale_brief.exists()
     assert not stale_brief_md.exists()
@@ -175,7 +170,6 @@ def test_rebuild_postrun_acceptance_writes_complete_bundle(tmp_path: Path) -> No
     assert inventory["postrun_reports"]["counts"]["analysis_brief"] == 1
     assert inventory["postrun_reports"]["counts"]["rebuild"] == 1
     assert inventory["postrun_reports"]["counts"]["manifests"] == 1
-    assert inventory["postrun_reports"]["counts"]["research_efficiency"] == 1
 
 
 def test_rebuild_postrun_acceptance_skips_current_run_reports_for_prepared_only(
@@ -220,15 +214,9 @@ def test_rebuild_postrun_acceptance_skips_current_run_reports_for_prepared_only(
     report_dir = run_root / "postrun_acceptance"
     assert manifest["prepared_only"] is True
     assert manifest["complete"] is False
-    assert manifest["families"]["research_efficiency"]["status"] == "skipped"
     assert manifest["families"]["summaries"]["status"] == "skipped"
     assert manifest["families"]["analysis_brief"]["status"] == "ok"
     assert manifest["families"]["inventory"]["status"] == "ok"
-    assert not (
-        report_dir
-        / "research_efficiency"
-        / "prepared.research_efficiency.v1.json"
-    ).exists()
     brief = json.loads(
         (
             report_dir
@@ -292,13 +280,7 @@ def test_rebuild_postrun_acceptance_skips_current_run_reports_after_preflight_fa
     assert manifest["current_run_reports_skipped"] is True
     assert manifest["complete"] is False
     assert manifest["families"]["summaries"]["status"] == "skipped"
-    assert manifest["families"]["research_efficiency"]["status"] == "skipped"
     assert manifest["families"]["manifests"]["status"] == "skipped"
-    assert not (
-        report_dir
-        / "research_efficiency"
-        / "preflight_failed.research_efficiency.v1.json"
-    ).exists()
     assert not (
         report_dir
         / "manifests"
@@ -362,13 +344,7 @@ def test_rebuild_postrun_acceptance_skips_current_run_reports_without_campaign_e
     ]
     assert manifest["complete"] is False
     assert manifest["families"]["summaries"]["status"] == "skipped"
-    assert manifest["families"]["research_efficiency"]["status"] == "skipped"
     assert manifest["families"]["manifests"]["status"] == "skipped"
-    assert not (
-        report_dir
-        / "research_efficiency"
-        / "missing_campaign_execution.research_efficiency.v1.json"
-    ).exists()
     assert not (
         report_dir
         / "manifests"
@@ -472,13 +448,7 @@ def test_rebuild_postrun_acceptance_skips_stale_resume_campaign_docs(
     assert manifest["current_run_reports_skipped"] is True
     assert manifest["complete"] is False
     assert manifest["families"]["summaries"]["status"] == "skipped"
-    assert manifest["families"]["research_efficiency"]["status"] == "skipped"
     assert manifest["families"]["manifests"]["status"] == "skipped"
-    assert not (
-        report_dir
-        / "research_efficiency"
-        / "stale_resume_docs.research_efficiency.v1.json"
-    ).exists()
     brief = json.loads(
         (
             report_dir
@@ -554,16 +524,10 @@ def test_rebuild_postrun_acceptance_skips_current_run_reports_after_runtime_guar
     assert manifest["current_run_reports_skipped"] is True
     assert manifest["complete"] is False
     assert manifest["families"]["summaries"]["status"] == "skipped"
-    assert manifest["families"]["research_efficiency"]["status"] == "skipped"
     assert manifest["families"]["manifests"]["status"] == "skipped"
     assert "pre_campaign_infra_failure(git_runtime_dirty)" in (
         manifest["current_run_skip_reason"]
     )
-    assert not (
-        report_dir
-        / "research_efficiency"
-        / "runtime_guard_failed.research_efficiency.v1.json"
-    ).exists()
     assert not (
         report_dir
         / "manifests"

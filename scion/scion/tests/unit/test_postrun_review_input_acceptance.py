@@ -86,7 +86,6 @@ def _ready_inputs() -> tuple[dict[str, object], dict[str, object]]:
                 "scion.postrun_runtime_feedback_summary.v1",
                 "runtime_report_count",
             ),
-            "drain_status_complete": True,
             "review_ready": True,
             "budget_diagnostic_source_count": 1,
             "runtime_budget_diagnostics": {"diagnostic_count": 1},

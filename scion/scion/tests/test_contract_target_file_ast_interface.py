@@ -1,6 +1,68 @@
 """Focused tests split from test_contract.py."""
 
+import hashlib
+import json
+
 from .contract_test_support import *  # noqa: F401,F403
+
+
+class TestC0GovernanceEnvelope:
+    @pytest.mark.parametrize(
+        ("actual_surface", "actual_target"),
+        (
+            ("crossover", "operators/sel.py"),
+            ("selection", "operators/other.py"),
+        ),
+    )
+    def test_outer_contract_rejects_host_target_mismatch(
+        self,
+        gate: ContractGate,
+        actual_surface: str,
+        actual_target: str,
+    ) -> None:
+        hypothesis = HypothesisProposal(
+            hypothesis_text="Change one valid operator.",
+            change_locus=actual_surface,
+            action="modify",
+            target_file=actual_target,
+        )
+        expected_values = {
+            "forced_surface": "selection",
+            "forced_action": "modify",
+            "forced_target_file": "operators/sel.py",
+        }
+        expected_digest = hashlib.sha256(
+            json.dumps(
+                expected_values,
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        envelope = SimpleNamespace(
+            to_primitive=lambda: {
+                "provider_task_constraint_authority": {
+                    "provider_keys": list(expected_values),
+                    "provider_values_digest": expected_digest,
+                    "authority_ref": "provider_visible_task_constraints",
+                }
+            },
+            digest="governance-test-digest",
+        )
+
+        result = gate.validate_hypothesis(
+            hypothesis,
+            governance_envelope=envelope,
+        )
+
+        c0 = next(
+            check
+            for check in result.checks
+            if check.name == "C0_governance_constraints"
+        )
+        assert not result.passed
+        assert not c0.passed
+        assert "contradicts provider-visible host task constraints" in c0.detail
 
 class TestC2ChangeLocus:
     def test_valid_category_passes(self, gate: ContractGate):
@@ -10,7 +72,7 @@ class TestC2ChangeLocus:
             action="modify",
             target_file="operators/mut.py",
         )
-        result = gate.validate_hypothesis(h, [], [])
+        result = gate.validate_hypothesis(h)
         c2 = next(c for c in result.checks if c.name == "C2_change_locus")
         assert c2.passed
 
@@ -21,7 +83,7 @@ class TestC2ChangeLocus:
             action="modify",
             target_file="operators/mut.py",
         )
-        result = gate.validate_hypothesis(h, [], [])
+        result = gate.validate_hypothesis(h)
         c2 = next(c for c in result.checks if c.name == "C2_change_locus")
         assert not c2.passed
         assert not result.passed
@@ -35,7 +97,7 @@ class TestC3ActionTarget:
             action="modify",
             target_file="operators/sel.py",
         )
-        result = gate.validate_hypothesis(h, [], [])
+        result = gate.validate_hypothesis(h)
         c3 = next(c for c in result.checks if c.name == "C3_action_target")
         assert c3.passed
 
@@ -46,7 +108,7 @@ class TestC3ActionTarget:
             action="modify",
             target_file=None,
         )
-        result = gate.validate_hypothesis(h, [], [])
+        result = gate.validate_hypothesis(h)
         c3 = next(c for c in result.checks if c.name == "C3_action_target")
         assert not c3.passed
 
@@ -57,7 +119,7 @@ class TestC3ActionTarget:
             action="remove",
             target_file=None,
         )
-        result = gate.validate_hypothesis(h, [], [])
+        result = gate.validate_hypothesis(h)
         c3 = next(c for c in result.checks if c.name == "C3_action_target")
         assert not c3.passed
 
@@ -68,7 +130,7 @@ class TestC3ActionTarget:
             action="create_new",
             target_file=None,
         )
-        result = gate.validate_hypothesis(h, [], [])
+        result = gate.validate_hypothesis(h)
         c3 = next(c for c in result.checks if c.name == "C3_action_target")
         assert c3.passed
 

@@ -5,9 +5,9 @@ from typing import Any
 
 from scion.core.async_weight_opt import AsyncWeightOptCoordinator
 from scion.core.campaign import CampaignManager
-import scion.core.campaign as campaign_module
 from scion.core.campaign_loop import CampaignLoop
 from scion.core.evidence_recorder import EvidenceRecorder
+from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.models import CanaryResult, Decision, StepRecord
 from scion.core.step_result import StepResult
 
@@ -139,9 +139,10 @@ def test_canary_vetoed_attempts_are_not_formal_protocol_rows(tmp_path) -> None:
         last_result=StepResult(
             action="explore",
             branch_id="branch-1",
-            decision=Decision.ABANDON,
             reason="CANARY_FAILED",
             canary_result=canary,
+            execution_outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            execution_outcome_reason_code="CANARY_FAILED",
         ),
         stopped_reason="max_rounds_exhausted",
         loop_status=loop_status,
@@ -155,7 +156,7 @@ def test_canary_vetoed_attempts_are_not_formal_protocol_rows(tmp_path) -> None:
     assert status["legacy_formal_screened_candidates_reported"] == 4
     assert status["legacy_protocol_evaluated_candidates_reported"] == 4
     assert status["run_validity"]["status"] == "invalid"
-    assert status["run_validity"]["reason"] == "invalid_no_protocol_rows"
+    assert status["run_validity"]["reason"] == "invalid_research_rejected_only"
     status_canary = status["last_result"]["canary_result"]
     assert status_canary["failed_case_id"] == "canary_x"
     assert status_canary["failed_seed"] == 101
@@ -178,10 +179,12 @@ def test_canary_vetoed_attempts_are_not_formal_protocol_rows(tmp_path) -> None:
                 contract_passed=True,
                 verification_passed=True,
                 protocol_result=None,
-                decision=Decision.ABANDON,
+                decision=None,
                 failure_stage=None,
                 failure_detail=None,
                 canary_result=canary,
+                execution_outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                execution_outcome_reason_code="CANARY_FAILED",
             )
         ],
         round_num=4,
@@ -198,7 +201,6 @@ def test_canary_vetoed_attempts_are_not_formal_protocol_rows(tmp_path) -> None:
 
 def test_status_and_summary_state_snapshot_does_not_reconcile_active_slots(
     tmp_path,
-    monkeypatch,
 ) -> None:
     manager = CampaignManager.__new__(CampaignManager)
     recorder = EvidenceRecorder(
@@ -215,28 +217,15 @@ def test_status_and_summary_state_snapshot_does_not_reconcile_active_slots(
     )
     manager._step_history = []
     manager._n_experiments = 0
-    manager._telemetry_failed_experiments = 0
     manager._round_num = 0
     manager._champion = _champion()
-    manager._budget = SimpleNamespace(remaining_ratio=1.0)
     manager._balance_exhausted = False
-    manager._circuit_breaker = SimpleNamespace(is_tripped=False)
-    manager._frozen_budget_ledger = SimpleNamespace(snapshot=lambda: {})
     manager._evidence_recorder = recorder
     manager._proposal_pipeline = SimpleNamespace(agentic_artifact_dir=None)
     manager._weight_opt_coord = SimpleNamespace(
         status_snapshot=lambda: {"pending_threads": 0, "active": [], "runs": []}
     )
     manager._current_status_progress = None
-
-    def fail_reconcile(*_args, **_kwargs):
-        raise AssertionError("status snapshot must not reconcile active slots")
-
-    monkeypatch.setattr(
-        campaign_module,
-        "reconcile_active_slot_overflow",
-        fail_reconcile,
-    )
 
     status = recorder.write_status(stopped_reason="max_rounds_exhausted")
     summary = recorder.write_campaign_summary(
@@ -342,30 +331,27 @@ def test_campaign_loop_final_summary_sees_reconciled_stopped_status() -> None:
             "value",
             reason,
         ),
-        get_circuit_breaker=lambda: SimpleNamespace(
-            is_tripped=False,
-            last_failure_detail=None,
-        ),
-        circuit_breaker_threshold=3,
         run_one_step=lambda: StepResult(
             action="explore",
             branch_id="branch-1",
             reason="screening complete",
+            execution_outcome=ExecutionOutcome.EVALUATED,
+            execution_outcome_reason_code="PROTOCOL_EVALUATED",
+            protocol_stage="screening",
+            formal_protocol_evaluated=True,
+            screened_experiment_effective=True,
         ),
-        run_stagnation_check=lambda: None,
-        check_soft_stagnation=lambda: None,
         write_campaign_summary=write_campaign_summary,
-        terminalize_active_branches=lambda reason: None,
         get_final_wait_timeout=lambda: 0.0,
         wait_weight_opt_all=lambda timeout: None,
     )
 
-    loop.run(max_rounds=1)
+    loop.run(requested_rounds=1)
 
-    assert stopped_statuses[-1] == "max_rounds_exhausted"
+    assert stopped_statuses[-1] == "requested_rounds_completed"
     assert summaries[-1] == {
-        "summary_stopped_reason": "max_rounds_exhausted",
-        "status_stopped_reason": "max_rounds_exhausted",
+        "summary_stopped_reason": "requested_rounds_completed",
+        "status_stopped_reason": "requested_rounds_completed",
         "current_progress": None,
     }
 

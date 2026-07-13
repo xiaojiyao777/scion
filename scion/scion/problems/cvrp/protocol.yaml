@@ -15,7 +15,6 @@ validation:
 frozen:
   n_cases: 1
   n_seeds: 2
-  max_uses_per_campaign: 1
 
 canary:
   cases: []

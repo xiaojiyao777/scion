@@ -147,8 +147,7 @@ if ! cd "$SCION_DIR"; then
   write_postrun_acceptance_reports
   exit {plan.preflight_failure_exit_code}
 fi
-read -r -a _GIT_RUNTIME_GUARD_PATHS <<< "$GIT_RUNTIME_GUARD_PATHS"
-if [[ -n "$(git -C "$REPO_ROOT" status --porcelain -- "${{_GIT_RUNTIME_GUARD_PATHS[@]}}")" ]]; then
+if [[ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]]; then
   {{
     echo "WRAPPER_EXIT_STATUS:{plan.preflight_failure_exit_code}"
     echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -160,20 +159,16 @@ if [[ -n "$(git -C "$REPO_ROOT" status --porcelain -- "${{_GIT_RUNTIME_GUARD_PAT
 fi
 _ACTUAL_GIT_COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
 if [[ "$_ACTUAL_GIT_COMMIT" != "$GIT_COMMIT" ]]; then
-  if git -C "$REPO_ROOT" diff --quiet "$GIT_COMMIT" HEAD -- "${{_GIT_RUNTIME_GUARD_PATHS[@]}}"; then
-    echo "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED:expected=$GIT_COMMIT actual=$_ACTUAL_GIT_COMMIT paths=$GIT_RUNTIME_GUARD_PATHS" >> "$RUN_ROOT/run.log"
-  else
-    {{
-      echo "WRAPPER_EXIT_STATUS:{plan.preflight_failure_exit_code}"
-      echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-      echo "GIT_COMMIT_MISMATCH:expected=$GIT_COMMIT actual=$_ACTUAL_GIT_COMMIT paths=$GIT_RUNTIME_GUARD_PATHS"
-    }} > "$RUN_ROOT/exit.txt"
-    printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{plan.preflight_failure_exit_code},"git_runtime_commit_mismatch":true}}\\n' > "$RUN_ROOT/run_status.json"
-    write_postrun_acceptance_reports
-    exit {plan.preflight_failure_exit_code}
-  fi
+  {{
+    echo "WRAPPER_EXIT_STATUS:{plan.preflight_failure_exit_code}"
+    echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "GIT_COMMIT_MISMATCH:expected=$GIT_COMMIT actual=$_ACTUAL_GIT_COMMIT"
+  }} > "$RUN_ROOT/exit.txt"
+  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{plan.preflight_failure_exit_code},"git_runtime_commit_mismatch":true}}\\n' > "$RUN_ROOT/run_status.json"
+  write_postrun_acceptance_reports
+  exit {plan.preflight_failure_exit_code}
 fi
-unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS
+unset _ACTUAL_GIT_COMMIT
 {{
   echo "STARTED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "GIT_COMMIT:$GIT_COMMIT"
@@ -252,8 +247,7 @@ def _render_postrun_report_function(report_stem_prefix: str) -> str:
     return 0
   fi
   REPORT_DIR="$RUN_ROOT/postrun_acceptance"
-  REPORT_STEM="{report_stem_prefix}_${{MEASUREMENT_GOVERNANCE//-/_}}_${{PROPOSAL_CONTEXT_ABLATION//-/_}}"
-  OBSERVED_CONTROL_ARM="${{MEASUREMENT_GOVERNANCE//-/_}}"
+  REPORT_STEM="{report_stem_prefix}_direct_v3"
   echo "POSTRUN_ACCEPTANCE_DIR:$REPORT_DIR" >> "$RUN_ROOT/exit.txt"
   {{
     echo "POSTRUN_REPORTS_STARTED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -262,7 +256,6 @@ def _render_postrun_report_function(report_stem_prefix: str) -> str:
   rebuild_args=(
     "$RUN_ROOT"
     --report-stem "$REPORT_STEM"
-    --observed-control-arm "$OBSERVED_CONTROL_ARM"
   )
   if [[ -n "${{CONTROL_PAIR_KEY:-}}" ]]; then
     rebuild_args+=(--control-pair-key "$CONTROL_PAIR_KEY")
@@ -340,7 +333,7 @@ def _dedupe(names: tuple[str, ...]) -> tuple[str, ...]:
 _COMPLETION_PREFLIGHT_SNIPPET = r'''
 if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then
   PREFLIGHT_DETAIL="$RUN_ROOT/pre_campaign_completion_preflight.v1.json"
-  "$PY" "$SCION_DIR/tools/check_gpt55_proxy.py" \
+  "$PY" "$SCION_DIR/tools/check_completion_proxy.py" \
     --base-url "$SCION_BASE_URL" \
     --model "$SCION_MODEL" \
     --api-key "$SCION_API_KEY" \

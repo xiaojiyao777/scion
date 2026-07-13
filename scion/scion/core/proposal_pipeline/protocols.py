@@ -9,21 +9,26 @@ from scion.core.models import (
     HypothesisRecord,
     PatchProposal,
 )
-from scion.proposal.agentic_session import (
-    AgenticProposalOutput,
-    AgenticProposalRequest,
-)
+from scion.proposal.engine import PromptCallReceipt, PromptTurnSnapshot
 
 
 class CreativeLayerLike(Protocol):
-    def generate_hypothesis(self, context: dict[str, Any]) -> HypothesisProposal:
+    def generate_direct_hypothesis_with_receipt(
+        self,
+        context: dict[str, Any],
+        snapshot: PromptTurnSnapshot,
+        *,
+        attempt_audit: dict[str, Any],
+    ) -> tuple[HypothesisProposal, PromptCallReceipt]:
         ...
 
-    def generate_code(self, context: dict[str, Any]) -> PatchProposal:
-        ...
-
-    def fix_code(self, context: dict[str, Any]) -> PatchProposal | None:
-        ...
+    def generate_direct_code_with_receipt(
+        self,
+        context: dict[str, Any],
+        snapshot: PromptTurnSnapshot,
+        *,
+        attempt_audit: dict[str, Any],
+    ) -> tuple[PatchProposal, PromptCallReceipt]: ...
 
 
 class ProblemRuntimeLike(Protocol):
@@ -33,21 +38,21 @@ class ProblemRuntimeLike(Protocol):
     def build_code_context(self, **kwargs: Any) -> dict[str, Any]:
         ...
 
-    def build_fix_context(self, **kwargs: Any) -> dict[str, Any]:
-        ...
-
-
-class AgenticProposalSessionLike(Protocol):
-    def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
-        ...
-
-
 class BranchControllerLike(Protocol):
     def get_active_branches(self) -> list[Branch]:
         ...
 
 
 class HypothesisStoreLike(Protocol):
+    def save(self, record: HypothesisRecord) -> None:
+        ...
+
+    def mark_status(self, hypothesis_id: str, status: str) -> None:
+        ...
+
+    def get_one(self, hypothesis_id: str) -> HypothesisRecord | None:
+        ...
+
     def get_by_status(self, status: str) -> list[HypothesisRecord]:
         ...
 
@@ -57,12 +62,4 @@ class HypothesisStoreLike(Protocol):
 
 class ClassifierLike(Protocol):
     def classify(self, text: str) -> Any:
-        ...
-
-
-class CircuitBreakerLike(Protocol):
-    def record_success(self) -> None:
-        ...
-
-    def record_failure(self, detail: str) -> bool:
         ...

@@ -5,6 +5,7 @@ import hashlib
 import os
 import shutil
 import stat
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Iterable, Optional
@@ -96,7 +97,7 @@ class WorkspaceMaterializer:
         return str(dest)
 
     def apply_patch(self, workspace: str, patch: PatchProposal) -> str:
-        """Write patch content into the workspace, return updated code hash.
+        """Atomically materialize every declared file change.
 
         The file_path in patch is treated as relative to workspace root.
 
@@ -112,11 +113,67 @@ class WorkspaceMaterializer:
             ValueError: If patch.action is 'delete' (not yet supported here).
         """
         ws = Path(workspace).resolve()
+        if not ws.is_dir():
+            raise FileNotFoundError(f"workspace does not exist: {workspace}")
+        changes = patch_file_changes(patch)
+        self._preflight_file_changes(ws, changes)
 
-        for change in patch_file_changes(patch):
-            self._apply_file_change(ws, change)
+        transaction_id = uuid.uuid4().hex
+        staged = ws.parent / f".{ws.name}.patch-stage-{transaction_id}"
+        backup = ws.parent / f".{ws.name}.patch-backup-{transaction_id}"
+        try:
+            shutil.copytree(ws, staged, symlinks=False)
+            _make_tree_writable(staged)
+            for change in changes:
+                self._apply_file_change(staged, change)
+            code_hash = self.compute_code_hash(str(staged))
 
-        return self.compute_code_hash(workspace)
+            ws.rename(backup)
+            try:
+                staged.rename(ws)
+            except BaseException:
+                backup.rename(ws)
+                raise
+            try:
+                shutil.rmtree(backup)
+            except OSError:
+                # The committed workspace is authoritative. A stale backup is
+                # cleanup debris, not a reason to report a failed materialization.
+                pass
+            return code_hash
+        finally:
+            if staged.exists():
+                shutil.rmtree(staged, ignore_errors=True)
+
+    def _preflight_file_changes(
+        self,
+        ws: Path,
+        changes: Iterable[PatchFileChange],
+    ) -> None:
+        seen: set[str] = set()
+        for change in changes:
+            file_rel = normalize_relative_patch_path(change.file_path)
+            if file_rel in seen:
+                raise ValueError(f"patch repeats file_path: {file_rel}")
+            seen.add(file_rel)
+            if self._is_frozen(file_rel):
+                raise FrozenFileError(
+                    f"apply_patch refused: '{change.file_path}' matches frozen patterns"
+                )
+            target = (ws / file_rel).resolve()
+            if not _is_relative_to(target, ws):
+                raise ValueError(
+                    f"patch file_path escapes workspace: {change.file_path}"
+                )
+            if change.action not in {"modify", "create", "delete"}:
+                raise ValueError(f"unsupported patch action: {change.action}")
+            if change.action != "delete" and not isinstance(
+                change.code_content,
+                str,
+            ):
+                raise TypeError(
+                    f"patch code_content must be a string: {change.file_path}"
+                )
 
     def _apply_file_change(self, ws: Path, change: PatchFileChange) -> None:
         # Second-level frozen-file check (Contract Gate is the first)

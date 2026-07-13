@@ -158,7 +158,12 @@ def _operator_runtime_diagnostics(
     operators: list,
     operator_names: list[str],
 ) -> dict[str, Any]:
-    """Collect Scion-visible runtime diagnostics from operator instances."""
+    """Collect Scion-visible operator registry state and legacy diagnostics."""
+    mechanisms: list[str] = []
+    for op, raw_name in zip(operators, operator_names):
+        mechanism = _mechanism_id(raw_name) or _mechanism_id(op.__class__.__name__)
+        if mechanism and mechanism not in mechanisms:
+            mechanisms.append(mechanism)
     diagnostics: dict[str, dict[str, float | int]] = {}
     for op, raw_name in zip(operators, operator_names):
         raw = getattr(op, "validation_transfer_diagnostics", None)
@@ -175,13 +180,30 @@ def _operator_runtime_diagnostics(
         for key, value in normalized.items():
             bucket[key] += value
 
-    if not diagnostics:
+    if not mechanisms:
         return {}
 
-    return {
-        "operator_diagnostics": diagnostics,
-        "validation_transfer_diagnostics": diagnostics,
+    runtime: dict[str, Any] = {
+        "operator_registry": mechanisms,
+        "typed_telemetry_events": [
+            {
+                "schema": "scion.typed_telemetry_event.v1",
+                "lane": "state_transition",
+                "mechanism_id": "warehouse_operator_registry",
+                "attribution_scope": "warehouse_solver_operator_registry_resolution",
+                "attribution_confidence": 1.0,
+                "before_ref": "operator_registry:unresolved",
+                "after_ref": "operator_registry:active:" + ",".join(mechanisms),
+                "missing_refs": [],
+                "occurrences": 1,
+                "evidence_ref": "runtime.operator_registry",
+            }
+        ],
     }
+    if diagnostics:
+        runtime["operator_diagnostics"] = diagnostics
+        runtime["validation_transfer_diagnostics"] = diagnostics
+    return runtime
 
 
 def _normalize_validation_transfer_diagnostics(

@@ -7,15 +7,7 @@ from typing import Any, Dict, Literal, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .shared import (
-    _mechanism_changes_json_schema,
-    _normalize_mechanism_changes_preflight,
-    _validate_unique_mechanism_change_ids,
-    MechanismChangeInput,
-)
-
 PatchEditIntent = Literal["exact_replace", "full_file"]
-PremiseCheck = Literal["supported", "contradicted", "duplicate", "wrong_owner"]
 
 
 class PatchSchemaPreflightError(ValueError):
@@ -194,7 +186,7 @@ def _raise_exact_replace_shape_error(
         "edit_intent": "exact_replace",
         "detail": detail,
         "guidance": (
-            "Retry with a complete typed exact_replace object. Minimal JSON "
+            "A complete typed exact_replace object has this minimal JSON "
             "shape: action='modify', edit_intent='exact_replace', "
             "source_digest='<host-provided sha256 digest>', "
             "old_string='<non-empty exact current text>', "
@@ -267,8 +259,6 @@ class PatchFileChangeInput(BaseModel):
 class PatchProposalInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    premise_check: PremiseCheck = "supported"
-    premise_check_reason: str = ""
     file_path: str = ""
     action: str = "modify"
     code_content: str = ""
@@ -283,12 +273,6 @@ class PatchProposalInput(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
     test_hint: Optional[str] = None
     additional_changes: list[PatchFileChangeInput] = Field(default_factory=list)
-    mechanism_changes: list[MechanismChangeInput] = Field(default_factory=list)
-
-    @field_validator("mechanism_changes", mode="before")
-    @classmethod
-    def normalize_empty_mechanism_changes(cls, value: Any) -> Any:
-        return _normalize_mechanism_changes_preflight(value)
 
     @field_validator("additional_changes", mode="before")
     @classmethod
@@ -298,14 +282,11 @@ class PatchProposalInput(BaseModel):
         if not isinstance(value, str):
             return value
         raise ValueError(
-            "additional_changes must be a JSON array, not a JSON-encoded string; "
-            "retry by emitting the same edits as an array of objects."
+            "additional_changes must be a JSON array, not a JSON-encoded string."
         )
 
     @model_validator(mode="after")
     def validate_supported_patch_fields(self) -> "PatchProposalInput":
-        if self.premise_check != "supported":
-            return self
         if not self.file_path or not self.file_path.strip():
             raise ValueError("file_path must not be empty")
         if self.content_after is not None and not self.code_content:
@@ -331,7 +312,6 @@ class PatchProposalInput(BaseModel):
                 "additional_changes must not repeat file_path values: "
                 + ", ".join(duplicates)
             )
-        _validate_unique_mechanism_change_ids(self.mechanism_changes)
         return self
 
 
@@ -340,21 +320,6 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
     "required": ["file_path", "action"],
     "additionalProperties": False,
     "properties": {
-        "premise_check": {
-            "type": "string",
-            "enum": ["supported", "contradicted", "duplicate", "wrong_owner"],
-            "description": (
-                "Return supported for implementable algorithm changes. "
-                "duplicate is diagnostic only and must still include the typed "
-                "edit when the approved hypothesis is a material variant. "
-                "contradicted is legacy/diagnostic for mechanism novelty or "
-                "premise concerns and is not a no-patch exit. wrong_owner is "
-                "the only ordinary no-patch ownership exit; hard boundary, "
-                "objective-policy, or protected-constraint contradictions must "
-                "be stated explicitly in premise_check_reason."
-            ),
-        },
-        "premise_check_reason": {"type": "string"},
         "file_path": {"type": "string"},
         "action": {
             "type": "string",
@@ -364,19 +329,17 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
             "type": "string",
             "enum": ["exact_replace", "full_file"],
             "description": (
-                "Default to exact_replace for action=modify on an existing "
-                "file. Use full_file only for creates or deletes; "
-                "host-visible existing-file modifies with full_file/content_after "
-                "are rejected by default. Existing files must not use create "
-                "or create_new/full_file as a modification path."
+                "Existing files use action=modify with the current source_digest. "
+                "Choose exact_replace or explicit full_file/content_after based "
+                "on the algorithm change; create is only for new files."
             ),
         },
         "source_digest": {
             "type": ["string", "object", "null"],
             "description": (
                 "sha256 digest of the file content used for this edit. Required "
-                "and non-empty for exact_replace on existing files; null only "
-                "for create/full_file edits to new files."
+                "and non-empty for every existing-file modify; null only for "
+                "creates of new files."
             ),
             "additionalProperties": True,
         },
@@ -413,22 +376,9 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
         "full_file_reason": {
             "type": ["string", "null"],
             "description": (
-                "Brief note when edit_intent=full_file for create/delete. This "
-                "is not authorization for existing-file modify. Omit or leave "
-                "empty for exact_replace."
+                "Optional explanation of why the approved algorithm change is "
+                "best expressed as a full-file edit."
             ),
-        },
-        "code_content": {
-            "type": "string",
-            "description": (
-                "Legacy complete file content. Supported for compatibility, "
-                "but model-facing modify responses must use typed exact_replace; "
-                "only creates/deletes may provide full content."
-            ),
-        },
-        "derived_diff_ref": {
-            "type": ["string", "null"],
-            "description": "Host-generated audit diff reference; model may omit.",
         },
         "evidence_refs": {
             "type": "array",
@@ -472,8 +422,6 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
                     "replace_all": {"type": "boolean"},
                     "content_after": {"type": ["string", "null"]},
                     "full_file_reason": {"type": ["string", "null"]},
-                    "code_content": {"type": "string"},
-                    "derived_diff_ref": {"type": ["string", "null"]},
                     "evidence_refs": {
                         "type": "array",
                         "items": {"type": "string"},
@@ -483,188 +431,13 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
                 "additionalProperties": False,
             },
         },
-        "mechanism_changes": _mechanism_changes_json_schema(),
     },
 }
-
-
-CODE_PROMPT_TEMPLATE = """\
-You are a software engineer implementing a declared research surface for a combinatorial optimisation solver framework.
-Your task is to submit typed file edits that implement the approved hypothesis below.
-
-## Problem Summary
-{problem_summary}
-
-## Hypothesis to Implement
-{hypothesis_detail}
-
-## Current Champion Research Code
-Study these implementations for coding style, data model usage, and patterns:
-
-{champion_operators_code}
-
-## Target File (current content — modify this if action is "modify")
-{target_file_code}
-
-## Reference Surface Files
-{reference_operators}
-
-## Research Surface Interface Specification
-Follow this interface exactly:
-
-{operator_interface_spec}
-
-## Allowed Imports
-Only use modules from this whitelist — any other import will be rejected:
-{import_whitelist}
-
-## Editable Paths
-{editable_patterns}
-
-## Frozen Paths (DO NOT MODIFY)
-{frozen_patterns}
-
-## Task
-Produce a typed edit set that implements the hypothesis.
-- Conform to the research-surface interface specification exactly
-- Preserve all feasibility, consistency, and determinism invariants described there
-- For operator surfaces, use the provided `rng` argument for all randomness and return the new solution/artifact, or original if no valid move found
-- For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds
-- For existing `action="modify"` files, default to `edit_intent="exact_replace"`. Provide `source_digest`, exact `old_string`, `new_string`, `replace_all`, and `evidence_refs`.
-- For existing-file `exact_replace`, keep `old_string` scoped to a function,
-  import block, registry entry, or local code block. Host preflight rejects
-  whole-file and near-whole-file selectors (hard limit 85% of files over 2000
-  chars); aim for each `old_string` to stay under 35% of the file.
-- For `exact_replace`, `old_string` must be a non-empty string and `new_string` must be present as a string. To delete text, set `new_string` to `""`; do not omit it or set it to null.
-- Use `edit_intent="full_file"` with `content_after` only for creates or deletes. Host-visible existing-file modifies that emit `full_file`/`content_after` are rejected by default; `full_file_reason` is not authorization.
-- Existing files must never be changed through `action="create"`, `create_new`, or `full_file`; existing file requires `action="modify"` with `edit_intent="exact_replace"` and `source_digest`. Create/full content is only for genuinely new files.
-- Legacy `code_content` full-file output is rejected for model-facing existing-file modifies; it is only accepted for creates/deletes or host-internal compatibility.
-- Do not emit unified diffs; Scion derives audit diffs from host before/after content.
-- If action is "delete", use `edit_intent="full_file"` and set `content_after` to an empty string ""
-- If the approved algorithm change requires extra files to be executable, put
-  them in `additional_changes`; each item may be exact_replace or full_file and
-  will be independently checked.
-- When one file needs multiple small edits, prefer a single file change or
-  serializable `exact_replace` edits for the same `file_path`; each later
-  `old_string` must match the content after earlier same-file edits. Do not
-  emit no-op `exact_replace` entries such as `old_string == new_string` or
-  EOF/trailing newline edits. Do not emit conflicting `full_file` entries for
-  the same file.
-- Echo the approved hypothesis `mechanism_changes` ids exactly. Do not add or
-  drop mechanism ids in the patch response. Use only legal generic
-  `mechanism_changes[].change_type` values: add, modify, replace, remove, or
-  integrate. Branch action labels such as tune, repair, parameterize, and
-  telemetry_wiring are not change_type values; map tune/parameterize to modify
-  and telemetry_wiring to modify or integrate.
-- `premise_check="duplicate"` and mechanism/premise `contradicted` observations
-  are diagnostic only. Use them to disclose close overlap with visible code, but
-  still provide the typed edit when the approved hypothesis is a material
-  variant. Do not use `contradicted` for novelty, duplicate-risk,
-  near-existing mechanism, baseline-already-has-similar-capability observations,
-  uncertain algorithm benefit, or telemetry expectation mismatch. Only
-  `wrong_owner` and explicit hard boundary/objective-policy/protected-constraint
-  contradictions are no-patch premise outcomes.
-
-Respond with a single JSON object (no markdown fences, no extra text):
-{{
-  "premise_check": "supported" | "contradicted" | "duplicate" | "wrong_owner",
-  "premise_check_reason": "<brief reason when not supported, otherwise empty>",
-  "file_path": "<relative path within workspace, e.g. operators/my_operator.py>",
-  "action": "modify" | "create" | "delete",
-  "edit_intent": "exact_replace" | "full_file",
-  "source_digest": "<sha256 digest of current file content, or null for create>",
-  "old_string": "<exact current text for exact_replace>",
-  "new_string": "<replacement text for exact_replace>",
-  "replace_all": false,
-  "content_after": "<complete file contents for full_file, otherwise omit>",
-  "full_file_reason": "<required when edit_intent is full_file, otherwise empty>",
-  "evidence_refs": ["<observation/source ref>"],
-  "additional_changes": [
-    {{
-      "file_path": "<relative path for required integration edit>",
-      "action": "modify" | "create" | "delete",
-      "edit_intent": "exact_replace" | "full_file",
-      "source_digest": "<sha256 digest or null>",
-      "old_string": "<exact current text>",
-      "new_string": "<replacement text>",
-      "replace_all": false,
-      "content_after": "<complete file contents only for full_file>",
-      "full_file_reason": "<required when edit_intent is full_file>",
-      "evidence_refs": ["<observation/source ref>"]
-    }}
-  ],
-  "mechanism_changes": [
-    {{"id": "<approved_mechanism_id>", "change_type": "add" | "modify" | "replace" | "remove" | "integrate"}}
-  ],
-  "test_hint": "<optional brief testing note, or null>"
-}}
-"""
-
-FIX_PROMPT_TEMPLATE = """\
-You are a software engineer fixing an optimisation research-surface file that failed verification.
-Correct the code so it passes, while preserving the intended logic. Prefer a
-small typed exact_replace edit when possible; use full_file only for creates or
-deletes. full_file_reason is not authorization for existing-file modify.
-For exact_replace, include source_digest, non-empty old_string, and new_string
-as a string. Use new_string "" for deletion; never omit it or set it to null.
-
-## Problem Summary
-{problem_summary}
-
-## Original Code That Failed
-{original_code}
-
-## Verification Failure Details
-{failure_detail}
-
-## Research Surface Interface Specification
-{operator_interface_spec}
-
-## Allowed Imports
-{import_whitelist}
-
-## Editable Paths
-{editable_patterns}
-
-## Frozen Paths (DO NOT MODIFY)
-{frozen_patterns}
-
-## Task
-Fix the code so it passes verification.
-Preserve the research-surface interface specification exactly.
-Make only the minimal changes needed to fix the reported failure.
-If the failure is outside this patch's editable owner/boundary, or it is an
-environmental verifier problem rather than patch-owned code, return
-`premise_check="wrong_owner"` with a concrete `premise_check_reason` and do not
-invent an empty or whole-file exact_replace patch.
-
-Respond with a single JSON object (no markdown fences, no extra text):
-{{
-  "premise_check": "supported" | "wrong_owner",
-  "premise_check_reason": "",
-  "file_path": "<same relative path as original>",
-  "action": "modify" | "create" | "delete",
-  "edit_intent": "exact_replace" | "full_file",
-  "source_digest": "<sha256 digest of current file content, or null for create>",
-  "old_string": "<exact current text for exact_replace>",
-  "new_string": "<replacement text for exact_replace>",
-  "replace_all": false,
-  "content_after": "<complete corrected file contents only for full_file>",
-  "full_file_reason": "<required when edit_intent is full_file, otherwise empty>",
-  "additional_changes": [],
-  "test_hint": "<optional note, or null>"
-}}
-"""
-
-
 __all__ = [
-    "CODE_PROMPT_TEMPLATE",
-    "FIX_PROMPT_TEMPLATE",
     "PATCH_PROPOSAL_SCHEMA",
     "PatchSchemaPreflightError",
     "PatchEditIntent",
     "PatchFileChangeInput",
     "PatchProposalInput",
-    "PremiseCheck",
     "preflight_patch_exact_replace_shape",
 ]

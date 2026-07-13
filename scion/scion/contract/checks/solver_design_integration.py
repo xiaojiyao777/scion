@@ -17,6 +17,9 @@ from scion.contract.checks.problem_integration import (
 from scion.core.models import PatchProposal
 
 
+_UNRESOLVED_PROVIDER = object()
+
+
 @dataclass(frozen=True)
 class SolverDesignIntegrationResult:
     passed: bool
@@ -30,6 +33,8 @@ def check_solver_design_integration(
     adapter: Any = None,
     selected_surface: str | None,
     champion_file_content,
+    provider: Any = _UNRESOLVED_PROVIDER,
+    provider_error: str | None = None,
 ) -> SolverDesignIntegrationResult:
     """Dispatch C9e to a problem-owned provider when the surface declares it."""
 
@@ -40,10 +45,13 @@ def check_solver_design_integration(
     ):
         return SolverDesignIntegrationResult(True, "not a solver_design patch")
 
-    try:
-        provider = resolve_contract_check_provider(problem_spec, adapter=adapter)
-    except ProblemIntegrationProviderError as exc:
-        return SolverDesignIntegrationResult(False, str(exc))
+    if provider_error:
+        return SolverDesignIntegrationResult(False, provider_error)
+    if provider is _UNRESOLVED_PROVIDER:
+        try:
+            provider = resolve_contract_check_provider(problem_spec, adapter=adapter)
+        except ProblemIntegrationProviderError as exc:
+            return SolverDesignIntegrationResult(False, str(exc))
     if provider is None:
         return SolverDesignIntegrationResult(
             False,

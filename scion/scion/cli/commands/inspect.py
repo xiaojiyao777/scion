@@ -78,94 +78,6 @@ def register_inspect_commands(inspect_app: typer.Typer) -> None:
                 f"{(op.category or ''):<20}  {op.file_path}"
             )
 
-    @inspect_app.command("agentic-session")
-    def inspect_agentic_session(
-        artifact: str = typer.Option(
-            ...,
-            "--artifact",
-            help="Path to APS output artifact JSON",
-        ),
-    ) -> None:
-        """Validate and summarize a compact agentic proposal-session artifact."""
-        from scion.proposal.agentic_session import inspect_agentic_session_artifact
-
-        try:
-            summary = inspect_agentic_session_artifact(Path(artifact).resolve())
-        except Exception as exc:
-            typer.echo(
-                f"ERROR: failed to inspect agentic session artifact: {exc}",
-                err=True,
-            )
-            raise typer.Exit(code=1)
-
-        typer.echo(json.dumps(summary, indent=2, sort_keys=True))
-        if not summary.get("validation", {}).get("ok"):
-            raise typer.Exit(code=1)
-
-    @inspect_app.command("agentic-sessions")
-    def inspect_agentic_sessions(
-        campaign_dir: str = typer.Option(
-            "campaign_out",
-            "--campaign-dir",
-            help="Campaign directory",
-        ),
-        artifact_dir: Optional[str] = typer.Option(
-            None,
-            "--artifact-dir",
-            help=(
-                "APS artifact directory; defaults to "
-                "campaign_dir/artifacts/agentic_proposal_sessions"
-            ),
-        ),
-    ) -> None:
-        """List persisted agentic proposal sessions from the recovery index."""
-        from scion.proposal.agentic_session import AgenticSessionStore
-
-        root = (
-            Path(artifact_dir).resolve()
-            if artifact_dir
-            else Path(campaign_dir).resolve() / "artifacts" / "agentic_proposal_sessions"
-        )
-        store = AgenticSessionStore(root)
-        sessions = store.list_sessions()
-
-        def _ops_validation_errors(errors):
-            cleaned = []
-            for error in errors:
-                text = str(error)
-                if text.startswith("raw ref marker found:"):
-                    cleaned.append("raw ref marker found")
-                else:
-                    cleaned.append(text)
-            return cleaned
-
-        output = {
-            "artifact_dir": str(root),
-            "index_path": str(store.index_path),
-            "sessions": [
-                {
-                    "session_id": stored.entry.session_id,
-                    "request_id": stored.entry.request_id,
-                    "idempotency_key": stored.entry.idempotency_key,
-                    "status": stored.entry.status,
-                    "termination_reason": stored.entry.termination_reason,
-                    "tool_budget_used": dict(stored.entry.tool_budget_used),
-                    "tool_loop_config": dict(stored.entry.tool_loop_config),
-                    "transcript_digest": stored.entry.transcript_digest,
-                    "artifact_ref": stored.entry.artifact_ref,
-                    "schema_version": stored.entry.schema_version,
-                    "tainted": stored.entry.tainted,
-                    "updated_at": stored.entry.updated_at,
-                    "validation": {
-                        "ok": stored.validation.ok,
-                        "errors": _ops_validation_errors(stored.validation.errors),
-                    },
-                }
-                for stored in sessions
-            ],
-        }
-        typer.echo(json.dumps(output, indent=2, sort_keys=True))
-
     @inspect_app.command("campaign")
     def inspect_campaign(
         campaign_dir: str = typer.Option(
@@ -230,7 +142,6 @@ def register_inspect_commands(inspect_app: typer.Typer) -> None:
             "branch": {
                 "state": branch.state.value if branch else None,
                 "base_champion_id": branch.base_champion_id if branch else None,
-                "retry_count": branch.retry_count if branch else None,
                 "created_at": branch.created_at.isoformat() if branch else None,
             },
             "experiment_events": events,
@@ -241,7 +152,7 @@ def register_inspect_commands(inspect_app: typer.Typer) -> None:
                     "change_locus": h.change_locus,
                     "target_file": h.target_file,
                     "status": h.status,
-                    "hypothesis_text": (h.hypothesis_text or "")[:300],
+                    "hypothesis_text": h.hypothesis_text or "",
                     "created_at": h.created_at.isoformat(),
                 }
                 for h in hypotheses

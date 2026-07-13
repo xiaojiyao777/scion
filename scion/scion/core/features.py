@@ -7,19 +7,9 @@ from typing import Any, Optional, Tuple, get_args
 from scion.core.models import (
     Branch, BranchState, ContractResult, VerificationResult,
     CanaryResult, ProtocolResult, DecisionFeatures,
-    DecisionLifecyclePriorEvidenceTier,
     DecisionRuntimeEvidenceConfidence, DecisionRuntimeEvidenceStatus,
 )
-from scion.core.repeated_contract_failures import REPEATED_CONTRACT_FAILURE_CODE
-from scion.core.runtime_budget_diagnostics import (
-    runtime_budget_candidate_saturation_detected,
-)
 from scion.core.screening_visibility import runtime_confidence_for_protocol
-from scion.core.telemetry_validation import (
-    formal_telemetry_guard_failed,
-    is_repairable_telemetry_validation_failure,
-    telemetry_effect_zero_detected,
-)
 
 
 # Failure taxonomy — two layers, both allowed in branch.failure_codes / DecisionFeatures.
@@ -39,7 +29,6 @@ _NORMALIZED_CODES = frozenset({
     "FEASIBILITY", "OBJECTIVE", "SOLUTION_CONSISTENCY", "STATE_LEAK",
     "WALL_CLOCK", "NONDETERMINISM",
     "CANARY_FAIL", "SCREENING_FAIL", "VALIDATION_FAIL", "FROZEN_FAIL",
-    REPEATED_CONTRACT_FAILURE_CODE,
 })
 KNOWN_FAILURE_CODES = _RAW_CATEGORIES | _NORMALIZED_CODES
 
@@ -51,25 +40,59 @@ RUNTIME_EVIDENCE_CONFIDENCE_VALUES = frozenset(
     get_args(DecisionRuntimeEvidenceConfidence)
 )
 RUNTIME_EVIDENCE_STATUS_VALUES = frozenset(get_args(DecisionRuntimeEvidenceStatus))
-LIFECYCLE_PRIOR_EVIDENCE_TIER_VALUES = frozenset(
-    get_args(DecisionLifecyclePriorEvidenceTier)
-)
+PROTOCOL_REASON_CODES = frozenset({
+    "BOTH_RUNTIME_BUDGET_SATURATION",
+    "CANDIDATE_RUNTIME_BUDGET_SATURATION",
+    "CANDIDATE_RUNTIME_FAILURE",
+    "CHAMPION_RUNTIME_BUDGET_SATURATION",
+    "CHAMPION_RUNTIME_FAILURE",
+    "FROZEN_FAIL_CI_NEGATIVE",
+    "FROZEN_FAIL_HIERARCHICAL_NEGATIVE",
+    "FROZEN_FAIL_HIERARCHICAL_UNCERTAIN",
+    "FROZEN_FAIL_NO_HIERARCHICAL_GAIN",
+    "FROZEN_FAIL_UNCLEAR",
+    "FROZEN_PASS",
+    "FROZEN_PASS_HIERARCHICAL",
+    "FROZEN_PASS_RUNTIME_TIE_IMPROVEMENT",
+    "INCOMPLETE_EVIDENCE",
+    "NO_VALID_RUNS",
+    "RUNTIME_REGRESSION",
+    "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",
+    "SCREENING_BELOW_WIN_RATE_MIN_ALLOWED_BY_POLICY",
+    "SCREENING_BORDERLINE_POLICY_FAIL_CLOSED",
+    "SCREENING_EXPAND",
+    "SCREENING_EXPAND_EXHAUSTED",
+    "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_CI_LOW",
+    "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_DELTA",
+    "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_POLICY_PASS",
+    "SCREENING_EXPAND_EXHAUSTED_PAIR_SIGNAL_POLICY_PASS",
+    "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",
+    "SCREENING_FAIL_WIN_RATE",
+    "SCREENING_INCONCLUSIVE_HIGH_WIN_NEGATIVE_EFFECT",
+    "SCREENING_LOW_SNR_EXPAND_EXHAUSTED_CONTINUE",
+    "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE",
+    "SCREENING_PARTIAL_CHAMPION_EVIDENCE",
+    "SCREENING_PASS",
+    "SCREENING_PASS_MARGINAL_DELTA",
+    "SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT",
+    "SCREENING_RUNTIME_BUDGET_SATURATION",
+    "TINY_RUNTIME_BUDGET_SATURATION",
+    "VALIDATION_EXPAND",
+    "VALIDATION_EXPAND_EXHAUSTED_FAIL",
+    "VALIDATION_EXPAND_EXHAUSTED_MARGINAL_PASS",
+    "VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN",
+    "VALIDATION_FAIL_CI_NEGATIVE",
+    "VALIDATION_FAIL_HIERARCHICAL_NEGATIVE",
+    "VALIDATION_FAIL_NO_HIERARCHICAL_GAIN",
+    "VALIDATION_FAIL_WIN_RATE",
+    "VALIDATION_PASS",
+    "VALIDATION_PASS_HIERARCHICAL",
+    "VALIDATION_PASS_RUNTIME_TIE_IMPROVEMENT",
+})
 
 
 class DecisionInputGuardError(Exception):
     pass
-
-
-@dataclass
-class BudgetState:
-    total: int
-    used: int
-
-    @property
-    def remaining_ratio(self) -> float:
-        if self.total <= 0:
-            return 0.0
-        return max(0.0, (self.total - self.used) / self.total)
 
 
 def _branch_state_to_stage(state: BranchState) -> str:
@@ -89,7 +112,6 @@ class SafeFeatureExtractor:
         verification: VerificationResult,
         canary: CanaryResult,
         protocol: Optional[ProtocolResult],
-        budget: BudgetState,
     ) -> DecisionFeatures:
         """
         Extract DecisionFeatures from raw stage results.
@@ -110,6 +132,7 @@ class SafeFeatureExtractor:
         runtime_evidence_confidence = "high"
         runtime_evidence_status = "sufficient"
         protocol_gate_outcome = None
+        protocol_reason_codes: Tuple[str, ...] = ()
         total_pairs = 0
         attempted_pairs = 0
         valid_pairs = 0
@@ -131,6 +154,7 @@ class SafeFeatureExtractor:
             losses = stats.losses
             ties = stats.ties
             protocol_gate_outcome = protocol.gate_outcome
+            protocol_reason_codes = tuple(protocol.reason_codes)
             win_rate = stats.win_rate
             median_delta = stats.median_delta
             ci_low = stats.ci_low
@@ -199,11 +223,9 @@ class SafeFeatureExtractor:
             statistical_status=statistical_status,
             statistical_metric=statistical_metric,
             stale=branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE),
-            recent_retry_count=branch.retry_count,
             screening_expand_count=branch.screening_expand_count,
             validation_expand_count=branch.validation_expand_count,
             recent_failure_codes=recent_failure_codes,
-            budget_remaining_ratio=budget.remaining_ratio,
             runtime_guard_passed=runtime_guard_passed,
             runtime_guard_ratio=runtime_guard_ratio,
             runtime_guard_timeout=runtime_guard_timeout,
@@ -214,6 +236,7 @@ class SafeFeatureExtractor:
             runtime_evidence_confidence=runtime_evidence_confidence,
             runtime_evidence_status=runtime_evidence_status,
             protocol_gate_outcome=protocol_gate_outcome,  # type: ignore[arg-type]
+            protocol_reason_codes=protocol_reason_codes,
             total_pairs=total_pairs,
             attempted_pairs=attempted_pairs,
             valid_pairs=valid_pairs,
@@ -223,14 +246,6 @@ class SafeFeatureExtractor:
             pair_wins=pair_wins,
             pair_losses=pair_losses,
             pair_ties=pair_ties,
-            telemetry_validation_repairable=(
-                is_repairable_telemetry_validation_failure(protocol)
-            ),
-            telemetry_guard_failed=formal_telemetry_guard_failed(protocol),
-            telemetry_effect_zero_diagnostic=telemetry_effect_zero_detected(protocol),
-            runtime_budget_saturation_diagnostic=(
-                runtime_budget_candidate_saturation_detected(protocol)
-            ),
         )
 
         _validate_no_free_text(features)
@@ -264,6 +279,11 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
         raise DecisionInputGuardError(
             f"protocol_gate_outcome is not a known enum: {features.protocol_gate_outcome!r}"
         )
+    for code in features.protocol_reason_codes:
+        if code not in PROTOCOL_REASON_CODES:
+            raise DecisionInputGuardError(
+                f"Unknown protocol reason code: {code!r}"
+            )
     if features.statistical_metric is not None:
         metric = str(features.statistical_metric)
         if not _METRIC_ID_RE.fullmatch(metric):
@@ -317,12 +337,6 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
             "runtime_evidence_status is not a known enum: "
             f"{features.runtime_evidence_status!r}"
         )
-    lifecycle_tier = str(features.lifecycle_prior_evidence_tier or "")
-    if lifecycle_tier not in LIFECYCLE_PRIOR_EVIDENCE_TIER_VALUES:
-        raise DecisionInputGuardError(
-            "lifecycle_prior_evidence_tier is not a known enum: "
-            f"{features.lifecycle_prior_evidence_tier!r}"
-        )
     for field_name in (
         "total_pairs",
         "attempted_pairs",
@@ -338,12 +352,6 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
         "ties",
         "screening_expand_count",
         "validation_expand_count",
-        "lifecycle_zero_win_streak",
-        "lifecycle_telemetry_diagnostic_streak",
-        "lifecycle_marginal_no_effect_streak",
-        "lifecycle_no_effect_diagnostic_followups",
-        "lifecycle_previous_signal_repeat_count",
-        "lifecycle_rollback_count",
     ):
         value = getattr(features, field_name)
         if value < 0:

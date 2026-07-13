@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import PurePosixPath
 from typing import Any, Mapping
 
 from scion.postrun.acceptance_checks import (
@@ -149,8 +148,6 @@ def _review_input_summary_detail(
     if required_for_interpretation and count_value <= 0:
         failures.append(f"{key}_{count_field}_missing")
     if key == "runtime_feedback_summary" and required_for_interpretation:
-        if summary.get("drain_status_complete") is not True:
-            failures.append("runtime_feedback_summary_drain_status_incomplete")
         if summary.get("review_ready") is not True:
             failures.append("runtime_feedback_summary_not_review_ready")
 
@@ -182,8 +179,6 @@ def _review_input_summary_detail(
         "expected_report_count": expected.get("report_count"),
         count_field: summary.get(count_field),
         f"expected_{count_field}": expected_count_value,
-        "drain_status_complete": summary.get("drain_status_complete"),
-        "expected_drain_status_complete": expected.get("drain_status_complete"),
         "review_ready": summary.get("review_ready"),
         "expected_review_ready": expected.get("review_ready"),
     }
@@ -207,7 +202,6 @@ def _review_input_summary_consistency_failures(
             failures.append(f"{key}_{field}_mismatch")
     if key == "runtime_feedback_summary":
         for field in (
-            "drain_status_complete",
             "review_ready",
             "budget_diagnostic_source_count",
         ):
@@ -232,7 +226,7 @@ def _summary_without_paths(value: Any) -> Any:
     if isinstance(value, Mapping):
         return {
             str(key): (
-                _path_tail_signature(item)
+                _path_signature(item)
                 if str(key) == "path"
                 else _summary_without_paths(item)
             )
@@ -243,12 +237,11 @@ def _summary_without_paths(value: Any) -> Any:
     return _json_comparison_value(value)
 
 
-def _path_tail_signature(value: Any) -> Any:
+def _path_signature(value: Any) -> Any:
     if not isinstance(value, str) or not value:
         return _json_comparison_value(value)
     normalized = value.replace("\\", "/")
-    parts = [part for part in PurePosixPath(normalized).parts if part not in {"", "/"}]
-    return {"path_tail": parts[-4:]}
+    return {"path": normalized}
 
 
 def _json_comparison_value(value: Any) -> Any:

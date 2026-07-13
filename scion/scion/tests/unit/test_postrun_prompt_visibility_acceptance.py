@@ -21,7 +21,6 @@ def test_prompt_visibility_acceptance_emits_legacy_ready_payload() -> None:
         problem_family="cvrp",
         summary=summary,
         expected=expected,
-        active_subject_failure_prefix="cvrp",
     ).checks[0]
 
     assert check.name == "prompt_source_visibility_actionability"
@@ -29,7 +28,7 @@ def test_prompt_visibility_acceptance_emits_legacy_ready_payload() -> None:
     assert check.required is True
     assert check.detail["problem_family"] == "cvrp"
     assert check.detail["failures"] == []
-    assert check.detail["target_intent_source_visibility_required"] is True
+    assert "target_intent_source_visibility_required" not in check.detail
 
 
 def test_prompt_visibility_acceptance_rejects_drift_and_policy_failures() -> None:
@@ -39,29 +38,18 @@ def test_prompt_visibility_acceptance_rejects_drift_and_policy_failures() -> Non
     density = aggregate["signal_density"]
     aggregate["trace_count"] = 3
     density["total_token_estimate"] = 999
-    source["hypothesis_target_source_visible_count"] = 0
     source["code_protected_source_visible_count"] = 0
-    source["active_subject_code_constraints_trace_count"] = 0
-    source["active_subject_code_constraints_required_count"] = 0
-    source["active_subject_code_constraints_full_visible_count"] = 0
 
     check = PostrunPromptVisibilityAcceptancePort().summarize(
         problem_family="warehouse_delivery",
         summary=summary,
         expected=expected,
-        active_subject_failure_prefix="warehouse",
     ).checks[0]
 
     failures = check.detail["failures"]
 
     assert check.status == "failed"
-    assert "hypothesis_target_source_visibility_not_visible" in failures
     assert "code_protected_source_visibility_not_full" in failures
-    assert "warehouse_active_subject_code_constraints_trace_missing" in failures
-    assert "warehouse_active_subject_code_constraints_not_required" in failures
-    assert (
-        "warehouse_active_subject_code_constraints_not_full_visible" in failures
-    )
     assert "prompt_context_visibility_trace_count_mismatch" in failures
     assert "prompt_signal_density_total_token_estimate_mismatch" in failures
 
@@ -114,21 +102,6 @@ def _ready_prompt_inputs() -> tuple[dict[str, object], dict[str, object]]:
         "code_missing_required_source_path_counts": {},
         "code_target_source_status_counts": {"visible": 1},
         "code_target_visibility_status_counts": {"visible": 1},
-        "hypothesis_target_source_trace_count": 1,
-        "hypothesis_target_source_required_count": 1,
-        "hypothesis_target_source_visible_count": 1,
-        "hypothesis_target_source_not_visible_count": 0,
-        "hypothesis_target_visibility_status_counts": {"visible": 1},
-        "active_subject_code_constraints_trace_count": 1,
-        "active_subject_code_constraints_required_count": 1,
-        "active_subject_code_constraints_full_visible_count": 1,
-        "active_subject_code_constraints_partial_visible_count": 0,
-        "active_subject_code_constraints_not_full_visible_count": 0,
-        "active_subject_code_constraints_not_required_count": 0,
-        "active_subject_code_constraints_constraint_count_total": 1,
-        "active_subject_code_constraints_forbidden_pattern_count_total": 0,
-        "active_subject_code_constraints_status_counts": {"included": 1},
-        "active_subject_code_constraints_missing_reason_counts": {},
     }
     signal_density = {
         "schema_version": PROMPT_SIGNAL_DENSITY_SCHEMA,
@@ -157,8 +130,7 @@ def _ready_prompt_inputs() -> tuple[dict[str, object], dict[str, object]]:
         "section_visible_trace_count": 1,
         "hypothesis_generation_section_visible_trace_count": 1,
         "full_section_visible_trace_count": 1,
-        "truncated_section_trace_count": 0,
-        "omitted_or_absent_trace_count": 0,
+        "not_visible_trace_count": 0,
         "section_status_counts": {"included": 1},
         "visibility_status_counts": {"included": 1},
         "block_family_counts": {"research_signal": 1},
@@ -172,11 +144,7 @@ def _ready_prompt_inputs() -> tuple[dict[str, object], dict[str, object]]:
         "block_family_trace_count": 1,
         "hypothesis_generation_trace_count": 1,
         "hypothesis_generation_block_family_trace_count": 1,
-        "omitted_section_trace_count": 0,
-        "truncated_section_trace_count": 0,
-        "call_kind_counts": {"hypothesis_target_intent": 1},
-        "omitted_section_counts": {},
-        "truncated_section_counts": {},
+        "call_kind_counts": {"hypothesis_generation": 1},
         "block_family_totals": {
             "research_signal": {
                 "trace_count": 1,
@@ -220,15 +188,11 @@ def _ready_prompt_inputs() -> tuple[dict[str, object], dict[str, object]]:
                 "block_family_trace_count": 1,
                 "hypothesis_generation_trace_count": 1,
                 "hypothesis_generation_block_family_trace_count": 1,
-                "omitted_section_trace_count": 0,
-                "truncated_section_trace_count": 0,
-                "call_kind_counts": {"hypothesis_target_intent": 1},
+                "call_kind_counts": {"hypothesis_generation": 1},
                 "block_family_totals": aggregate["block_family_totals"],
                 "hypothesis_generation_block_family_totals": (
                     aggregate["hypothesis_generation_block_family_totals"]
                 ),
-                "omitted_section_counts": {},
-                "truncated_section_counts": {},
                 "source_visibility": source_visibility,
                 "problem_opportunity_visibility": opportunity_visibility,
             }

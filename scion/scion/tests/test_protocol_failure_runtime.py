@@ -128,9 +128,11 @@ def test_mixed_screening_champion_failures_are_explicit_partial_evidence(tmp_pat
 
 def test_candidate_failure_summary_preserves_traceback_terminal_exception(tmp_path):
     runner = MagicMock()
-    stderr = """Traceback (most recent call last):
+    long_diagnostic = "diagnostic-context-" + "x" * 600 + "-complete-tail"
+    stderr = f"""Traceback (most recent call last):
   File "solver.py", line 84, in _main
     instance = adapter.load_instance(instance_path)
+{long_diagnostic}
 FileNotFoundError: [Errno 2] No such file or directory: 'cvrplib/A/A-n32-k5.vrp'
 """
     runner.run_solver.side_effect = [
@@ -154,6 +156,8 @@ FileNotFoundError: [Errno 2] No such file or directory: 'cvrplib/A/A-n32-k5.vrp'
 
     assert result.candidate_first_runtime_failure is not None
     summary = result.candidate_first_runtime_failure["detail_summary"]
+    assert summary == stderr
+    assert "complete-tail" in summary
     assert "FileNotFoundError" in summary
     assert "cvrplib/A/A-n32-k5.vrp" in summary
 

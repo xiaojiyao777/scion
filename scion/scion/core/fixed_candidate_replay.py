@@ -26,6 +26,34 @@ MEASUREMENT_GOVERNANCE_BY_ARM = {
     "on": "on",
     "record_only": "off_record_only",
 }
+FORMAL_CANDIDATE_PATCH_SCHEMA_V1 = "scion.formal_candidate_patch_artifact.v1"
+FORMAL_CANDIDATE_PATCH_SCHEMA_V2 = "scion.formal_candidate_patch_artifact.v2"
+_SOURCE_ATTRIBUTION_KEYS = frozenset(
+    {
+        "schema_version",
+        "origin",
+        "source_ledger_owner",
+        "source_provenance",
+        "source_visibility",
+        "source_digest",
+    }
+)
+_SOURCE_LEDGER_OWNERS = frozenset(
+    {
+        "approved_target",
+        "branch_current_integration",
+        "branch_helper",
+        "champion_api_support",
+    }
+)
+_SOURCE_ATTRIBUTION_ORIGINS = frozenset(
+    {
+        "proposal_source_ledger",
+        "base_workspace",
+        "new_file",
+        "runtime_activation",
+    }
+)
 
 
 def build_fixed_candidate_replay_manifest(
@@ -404,6 +432,17 @@ def _metadata_omission_reasons(
         reasons.append("candidate_patch_replay_identity_not_complete")
     if formal_replay_identity_missing_keys(replay_identity):
         reasons.append("candidate_patch_missing_replay_identity_keys")
+    artifact_schema = _clean_str(metadata.get("schema"))
+    if artifact_schema not in {
+        FORMAL_CANDIDATE_PATCH_SCHEMA_V1,
+        FORMAL_CANDIDATE_PATCH_SCHEMA_V2,
+    }:
+        reasons.append("candidate_patch_schema_unsupported")
+    elif artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V2:
+        try:
+            _validated_file_source_attributions(metadata)
+        except ValueError:
+            reasons.append("candidate_patch_source_attribution_invalid")
     return _dedupe(reasons)
 
 
@@ -453,6 +492,7 @@ def _candidate_manifest_entry(
         "replay_stage": stage,
         "artifact_ref": artifact_ref,
         "target_files": _target_files(metadata),
+        **_manifest_source_attribution_fields(metadata),
         "selected_surface": _clean_str(
             replay_identity.get("selected_surface")
             or replay_metadata.get("selected_surface")
@@ -519,6 +559,7 @@ def _external_candidate_manifest_entry(
         "replay_stage": stage,
         "artifact_ref": artifact_ref,
         "target_files": _target_files(metadata),
+        **_manifest_source_attribution_fields(metadata),
         "selected_surface": _clean_str(
             replay_identity.get("selected_surface")
             or metadata.get("selected_surface")
@@ -651,6 +692,9 @@ def materialize_candidate_workspace(
 ) -> Path:
     """Copy the base champion workspace and apply full-file patch entries."""
 
+    if _clean_str(candidate_patch.get("schema")) == FORMAL_CANDIDATE_PATCH_SCHEMA_V2:
+        _validated_file_source_attributions(candidate_patch)
+
     source_dir = Path(source_campaign_dir).expanduser().resolve()
     base = candidate_patch.get("base")
     if not isinstance(base, Mapping):
@@ -688,6 +732,75 @@ def materialize_candidate_workspace(
             raise ValueError("patch.files entries must be objects")
         _apply_full_file_patch_entry(workspace, entry)
     return workspace
+
+
+def _manifest_source_attribution_fields(
+    metadata: Mapping[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    if _clean_str(metadata.get("schema")) != FORMAL_CANDIDATE_PATCH_SCHEMA_V2:
+        return {}
+    return {
+        "file_source_attributions": _validated_file_source_attributions(metadata)
+    }
+
+
+def _validated_file_source_attributions(
+    metadata: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    patch = metadata.get("patch")
+    files = patch.get("files") if isinstance(patch, Mapping) else None
+    if not isinstance(files, list) or not files:
+        raise ValueError("candidate patch missing patch.files source attribution")
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in files:
+        if not isinstance(entry, Mapping):
+            raise ValueError("candidate patch file source attribution is invalid")
+        file_path = _clean_str(entry.get("file_path"))
+        _validate_patch_relative_path(file_path)
+        if file_path in seen:
+            raise ValueError(f"duplicate candidate patch file: {file_path}")
+        seen.add(file_path)
+        attribution = entry.get("source_attribution")
+        if not isinstance(attribution, Mapping) or set(attribution) != _SOURCE_ATTRIBUTION_KEYS:
+            raise ValueError(f"missing source attribution for patch file: {file_path}")
+        if attribution.get("schema_version") != "formal-file-source-attribution.v1":
+            raise ValueError(f"unsupported source attribution schema: {file_path}")
+        origin = _clean_str(attribution.get("origin"))
+        owner = _clean_str(attribution.get("source_ledger_owner"))
+        provenance = _clean_str(attribution.get("source_provenance"))
+        visibility = _clean_str(attribution.get("source_visibility"))
+        digest = _clean_str(attribution.get("source_digest"))
+        if origin not in _SOURCE_ATTRIBUTION_ORIGINS or not provenance:
+            raise ValueError(f"invalid source attribution origin: {file_path}")
+        if origin == "proposal_source_ledger":
+            if owner not in _SOURCE_LEDGER_OWNERS:
+                raise ValueError(f"invalid source ledger owner: {file_path}")
+        elif owner:
+            raise ValueError(f"non-ledger source attribution has owner: {file_path}")
+        action = _clean_str(entry.get("action")) or "modify"
+        if action == "create":
+            if visibility not in {"new_file_placeholder", "new_file_absent"} or digest:
+                raise ValueError(f"invalid create source attribution: {file_path}")
+        elif action in {"modify", "delete"}:
+            if visibility != "full_current" or not _is_sha256(digest):
+                raise ValueError(f"invalid existing-file source attribution: {file_path}")
+        else:
+            raise ValueError(f"invalid patch action for source attribution: {file_path}")
+        result.append({"file_path": file_path, **dict(attribution)})
+    return result
+
+
+def _validate_patch_relative_path(value: str) -> None:
+    rel = Path(value)
+    if not value or "\\" in value or rel.is_absolute() or any(
+        part in {"", ".", ".."} for part in rel.parts
+    ):
+        raise ValueError(f"unsafe patch file path: {value}")
+
+
+def _is_sha256(value: str) -> bool:
+    return len(value) == 64 and all(char in "0123456789abcdef" for char in value)
 
 
 def _target_files(metadata: Mapping[str, Any]) -> list[str]:

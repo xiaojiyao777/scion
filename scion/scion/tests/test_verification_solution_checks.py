@@ -67,7 +67,7 @@ class TestFeasibilityCheck:
         assert r.name == "V6_feasibility"
         assert "feasibility ok" in r.detail
 
-    def test_selected_surface_missing_runtime_field_preempts_adapter_required(
+    def test_selected_surface_missing_runtime_field_does_not_preempt_adapter_required(
         self,
         tmp_path,
     ):
@@ -99,9 +99,8 @@ class TestFeasibilityCheck:
         )
 
         assert r.passed is False
-        assert "solver runtime audit failed" in r.detail
-        assert "missing=policy_loaded" in r.detail
-        assert "problem adapter is required" not in r.detail
+        assert "solver runtime audit failed" not in r.detail
+        assert "problem adapter is required" in r.detail
 
 
 class TestSolutionConsistencyCheck:

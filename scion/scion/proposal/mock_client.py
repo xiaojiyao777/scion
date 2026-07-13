@@ -7,7 +7,6 @@ from typing import Any, Dict, Literal, Optional
 from scion.proposal.llm_client import (
     LLMFormatError,
     LLMTimeoutError,
-    LLMRetryExhaustedError,
 )
 
 # ---------------------------------------------------------------------------
@@ -56,7 +55,6 @@ class MockLLMClient:
               ``"success"``       — always return a valid response.
               ``"format_error"``  — always raise :class:`LLMFormatError`.
               ``"timeout"``       — always raise :class:`LLMTimeoutError`.
-              ``"exhausted"``     — always raise :class:`LLMRetryExhaustedError`.
         hypothesis_response: Override the default hypothesis proposal JSON.
         patch_response: Override the default patch proposal JSON.
         mode_sequence: If given, cycle through modes in this order (one per call).
@@ -64,7 +62,7 @@ class MockLLMClient:
 
     def __init__(
         self,
-        mode: Literal["success", "format_error", "timeout", "exhausted"] = "success",
+        mode: Literal["success", "format_error", "timeout"] = "success",
         hypothesis_response: Optional[Dict[str, Any]] = None,
         patch_response: Optional[Dict[str, Any]] = None,
         mode_sequence: Optional[list] = None,
@@ -77,45 +75,24 @@ class MockLLMClient:
         self._mode_sequence = list(mode_sequence) if mode_sequence else None
         self._call_count = 0
 
-    # ------------------------------------------------------------------
-    # Public API (same signature as LLMClient.call)
-    # ------------------------------------------------------------------
-
-    def call(
-        self,
-        prompt: str,
-        response_schema: Dict[str, Any],
-        model: Optional[str] = None,
-        system_blocks: "list[dict] | None" = None,
-    ) -> Dict[str, Any]:
-        """Return a canned response or raise a configured error."""
-        current_mode = self._current_mode()
-        self._call_count += 1
-
-        if current_mode == "timeout":
-            raise LLMTimeoutError("MockLLMClient: simulated timeout")
-        if current_mode == "format_error":
-            raise LLMFormatError("MockLLMClient: simulated format error")
-        if current_mode == "exhausted":
-            raise LLMRetryExhaustedError("MockLLMClient: simulated retry exhausted")
-
-        # "success" — pick response based on required fields in schema
-        return self._pick_response(response_schema)
-
-    # ------------------------------------------------------------------
-    # Tool-use variant (same behavior as call for mocks)
-    # ------------------------------------------------------------------
-
     def call_with_tool(
         self,
         prompt: str,
         tool: Dict[str, Any],
         model: Optional[str] = None,
         system_blocks: "list[dict] | None" = None,
+        request_kind: str | None = None,
     ) -> Dict[str, Any]:
-        """Mock version: delegates to call() using tool's input_schema."""
+        """Return one canned typed tool response or configured leaf fault."""
+        del prompt, model, system_blocks, request_kind
+        current_mode = self._current_mode()
+        self._call_count += 1
+        if current_mode == "timeout":
+            raise LLMTimeoutError("MockLLMClient: simulated timeout")
+        if current_mode == "format_error":
+            raise LLMFormatError("MockLLMClient: simulated format error")
         schema = tool.get("input_schema", {})
-        return self.call(prompt, schema, model, system_blocks)
+        return self._pick_response(schema)
 
     # ------------------------------------------------------------------
     # Helpers

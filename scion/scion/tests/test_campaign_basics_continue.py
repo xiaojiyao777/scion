@@ -2,10 +2,11 @@
 
 import json
 import shutil
+from pathlib import Path
 
 from .campaign_test_support import *  # noqa: F401,F403
-from scion.core.models import HypothesisRecord, MechanismChange, PatchFileChange
-from scion.proposal.llm_client import LLMTransientProviderError
+from scion.core.models import HypothesisRecord, PatchFileChange
+from scion.proposal.llm_client import LLMProviderError
 
 class TestCampaignBasics:
     def test_initial_state(self, tmp_path):
@@ -14,6 +15,7 @@ class TestCampaignBasics:
         assert state["n_experiments"] == 0
         assert state["n_active_branches"] == 0
         assert state["champion_version"] == 1
+        assert state["proposal_runtime_mode"] == "direct_v3"
         assert "campaign_id" in state
 
     def test_run_writes_status_json(self, tmp_path):
@@ -24,41 +26,42 @@ class TestCampaignBasics:
             ]),
         )
 
-        cm.run(max_rounds=1)
+        cm.run(requested_rounds=1)
 
         status_path = tmp_path / "campaign" / "status.json"
         assert status_path.exists()
         status = json.loads(status_path.read_text())
         assert status["campaign_id"] == cm.get_state()["campaign_id"]
+        assert status["proposal_runtime_mode"] == "direct_v3"
         assert status["total_rounds"] >= 1
         assert "last_result" in status
 
-    def test_max_rounds_exhausted_preserves_active_branches_for_resume(self, tmp_path):
+    def test_requested_rounds_completed_preserves_active_branches(self, tmp_path):
         cm = _campaign(
             tmp_path,
             experiment_protocol=MockExperimentProtocol([
                 _make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass")
             ]),
-            termination_config=TerminationConfig(max_experiments=1000),
         )
 
-        cm.run(max_rounds=1)
+        cm.run(requested_rounds=1)
 
         state = cm.get_state()
         assert state["n_active_branches"] == 1
-        assert cm._last_stop_reason == "max_rounds_exhausted"
+        assert cm._last_stop_reason == "requested_rounds_completed"
         branch = next(iter(cm._branch_ctrl._branches.values()))
         assert branch.state != BranchState.ABANDONED
         assert "MAX_ROUNDS_EXHAUSTED" not in branch.failure_codes
 
         status = json.loads((tmp_path / "campaign" / "status.json").read_text())
         summary = json.loads((tmp_path / "campaign" / "campaign_summary.json").read_text())
-        assert status["stopped_reason"] == "max_rounds_exhausted"
+        assert status["stopped_reason"] == "requested_rounds_completed"
         assert status["n_active_branches"] == 1
         assert status["branches"][0]["state"] == branch.state.value
-        assert summary["stopped_reason"] == "max_rounds_exhausted"
+        assert summary["stopped_reason"] == "requested_rounds_completed"
         assert summary["n_active_branches"] == 1
         assert summary["branches"][0]["state"] == branch.state.value
+        assert summary["proposal_runtime_mode"] == "direct_v3"
         with sqlite3.connect(tmp_path / "campaign" / "scion.db") as conn:
             row = conn.execute(
                 "SELECT state, failure_codes FROM branches WHERE branch_id = ?",
@@ -90,7 +93,6 @@ class TestCampaignBasics:
         branch.state = BranchState.EXPLORE_EXPAND
         branch.current_code_hash = "candidate-hash"
         branch.last_clean_code_hash = "candidate-hash"
-        branch.branch_mechanism_ids = ("demand_slack_regret_insertion",)
         branch.branch_evidence_summary = {
             "stage": "screening",
             "tier": "marginal",
@@ -110,15 +112,6 @@ class TestCampaignBasics:
             target_file="policies/baseline_modules/destroy_repair.py",
             hypothesis_text="Follow demand slack regret insertion.",
             predicted_direction="improve",
-            target_objectives=("quality",),
-            protected_objectives=("runtime",),
-            novelty_signature={"mechanism_id": "demand_slack_regret_insertion"},
-            mechanism_changes=(
-                MechanismChange(
-                    id="demand_slack_regret_insertion",
-                    change_type="modify",
-                ),
-            ),
         )
         cm._hyp_store.save(active_hypothesis)
         artifact_dir = (
@@ -191,9 +184,6 @@ class TestCampaignBasics:
         assert reopened._champion.version == 2
         restored = reopened._branch_ctrl.get_branch(branch.branch_id)
         assert restored.state == BranchState.EXPLORE_EXPAND
-        assert restored.branch_mechanism_ids == (
-            "demand_slack_regret_insertion",
-        )
         assert restored.branch_evidence_summary["tier"] == "marginal"
         assert reopened._branch_workspaces[branch.branch_id] == str(workspace)
         assert (
@@ -204,11 +194,8 @@ class TestCampaignBasics:
         assert restored_hypothesis.target_file == (
             "policies/baseline_modules/destroy_repair.py"
         )
-        assert restored_hypothesis.mechanism_changes == (
-            MechanismChange(
-                id="demand_slack_regret_insertion",
-                change_type="modify",
-            ),
+        assert restored_hypothesis.hypothesis_text == (
+            "Follow demand slack regret insertion."
         )
         restored_patch = reopened._branch_patches[branch.branch_id]
         assert restored_patch.file_path == (
@@ -247,7 +234,7 @@ class TestCampaignBasics:
             tmp_path / "campaign" / "champions" / "champion_v1"
         )
 
-    def test_final_round_queue_validate_drains_validation_without_new_proposal(self, tmp_path):
+    def test_final_round_leaves_validation_for_next_invocation(self, tmp_path):
         cm = _campaign(
             tmp_path,
             experiment_protocol=MockExperimentProtocol([
@@ -260,34 +247,34 @@ class TestCampaignBasics:
                     ci_high=0.02,
                 ),
             ]),
-            termination_config=TerminationConfig(max_experiments=1000),
         )
 
-        cm.run(max_rounds=1)
+        cm.run(requested_rounds=1)
 
         branch = next(iter(cm._branch_ctrl._branches.values()))
-        assert branch.state == BranchState.READY_FROZEN
+        assert branch.state == BranchState.READY_VALIDATE
         status = json.loads((tmp_path / "campaign" / "status.json").read_text())
-        assert status["stopped_reason"] == "max_rounds_exhausted"
+        assert status["stopped_reason"] == "requested_rounds_completed"
         assert status["effective_rounds_completed"] == 1
-        assert status["proposal_attempts_consumed"] == 1
         assert status["protocol_stage_counts"] == {
             "screening": 1,
-            "validation": 1,
+            "validation": 0,
             "frozen": 0,
         }
-        assert status["stage_transition_drain_executed"] == 1
-        assert status["stage_transition_drain"]["counts_toward_max_rounds"] is False
-        assert status["stage_transition_drain"]["generates_new_hypothesis"] is False
+        assert "stage_transition_drain" not in status
+        assert "stage_transition_drain_executed" not in status
 
-    def test_infra_only_attempt_exhaustion_is_marked_invalid(self, tmp_path):
+    def test_infra_only_call_stops_immediately_and_is_marked_invalid(self, tmp_path):
         class NoAvailableAccountsLLM:
             def call(self, prompt, response_schema, model=None, system_blocks=None):
-                raise LLMTransientProviderError(
+                raise LLMProviderError(
                     "Transient provider error: HTTP 503 no_available_accounts"
                 )
 
-            def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+            def call_with_tool(
+                self, prompt, tool, model=None, system_blocks=None, request_kind=None
+            ):
+                del request_kind
                 return self.call(
                     prompt,
                     tool.get("input_schema", {}),
@@ -303,66 +290,34 @@ class TestCampaignBasics:
             ),
         )
 
-        cm.run(max_rounds=4)
+        cm.run(requested_rounds=4)
 
         status = json.loads((tmp_path / "campaign" / "status.json").read_text())
         summary = json.loads((tmp_path / "campaign" / "campaign_summary.json").read_text())
-        assert cm._last_stop_reason == "proposal_attempt_limit_exhausted"
-        assert status["stopped_reason"] == "proposal_attempt_limit_exhausted"
+        assert cm._last_stop_reason == "execution_blocked_infra"
+        assert status["stopped_reason"] == "execution_blocked_infra"
         assert status["effective_rounds_completed"] == 0
         assert status["n_experiments"] == 0
         assert status["run_validity"]["status"] == "invalid"
         assert status["run_validity"]["reason"] == "invalid_infra_only"
-        assert status["campaign_loop"]["failure_categories"] == {"infra": 12}
+        assert status["campaign_loop"]["failure_categories"] == {"infra": 1}
+        assert status["campaign_loop"]["scheduled_calls"] == 1
         assert summary["run_validity"]["reason"] == "invalid_infra_only"
-        assert summary["failure_categories"] == {"infra": 12}
+        assert summary["failure_categories"] == {"infra": 1}
 
     def test_should_stop_false_initially(self, tmp_path):
         cm = _campaign(tmp_path)
         assert not cm.should_stop()
 
-    def test_should_stop_when_max_experiments_reached(self, tmp_path):
-        cm = _campaign(
-            tmp_path,
-            termination_config=TerminationConfig(max_experiments=0)
-        )
+    def test_external_stop_is_explicit_and_preserves_reason(self, tmp_path):
+        cm = _campaign(tmp_path)
+
+        cm.request_stop("operator_requested_stop")
+
         assert cm.should_stop()
-
-    def test_pending_evaluation_queue_delays_early_stop(self, tmp_path):
-        cm = _campaign(tmp_path)
-        active = [
-            Branch(
-                branch_id=str(uuid.uuid4()),
-                state=BranchState.READY_VALIDATE,
-                base_champion_id=1,
-                base_champion_hash="h",
-            )
-        ]
-        assert cm._has_pending_evaluation(active) is True
-
-    def test_stale_queue_delays_early_stop(self, tmp_path):
-        cm = _campaign(tmp_path)
-        active = [
-            Branch(
-                branch_id=str(uuid.uuid4()),
-                state=BranchState.STALE,
-                base_champion_id=1,
-                base_champion_hash="h",
-            )
-        ]
-        assert cm._has_pending_evaluation(active) is True
-
-    def test_explore_only_queue_does_not_delay_early_stop(self, tmp_path):
-        cm = _campaign(tmp_path)
-        active = [
-            Branch(
-                branch_id=str(uuid.uuid4()),
-                state=BranchState.EXPLORE,
-                base_champion_id=1,
-                base_champion_hash="h",
-            )
-        ]
-        assert cm._has_pending_evaluation(active) is False
+        assert cm._last_stop_reason == "operator_requested_stop"
+        status = json.loads((tmp_path / "campaign" / "status.json").read_text())
+        assert status["stopped_reason"] == "operator_requested_stop"
 
     def test_run_one_step_creates_branch(self, tmp_path):
         cm = _campaign(tmp_path, experiment_protocol=MockExperimentProtocol(
@@ -388,14 +343,17 @@ class TestContinueExplore:
         # Decision should be CONTINUE_EXPLORE because there are no stats
         assert result.decision == Decision.CONTINUE_EXPLORE
 
-    def test_continue_explore_clears_workspace(self, tmp_path):
-        """After CONTINUE_EXPLORE, the branch workspace is cleaned up."""
+    def test_continue_explore_retains_verified_workspace(self, tmp_path):
+        """CONTINUE_EXPLORE keeps the branch's executable verified codebase."""
         cm = _campaign(tmp_path, experiment_protocol=None)
         result = cm.run_one_step()
         assert result.branch_id is not None
         bid = result.branch_id
-        # Workspace should have been cleared
-        assert bid not in cm._branch_workspaces
+        workspace = Path(cm._branch_workspaces[bid])
+        assert workspace.is_dir()
+        assert "candidate = solution" in (
+            workspace / "operators" / "local_search.py"
+        ).read_text()
 
     def test_continue_explore_clears_hypothesis(self, tmp_path):
         """After CONTINUE_EXPLORE, the branch hypothesis is cleared."""
@@ -403,6 +361,7 @@ class TestContinueExplore:
         result = cm.run_one_step()
         bid = result.branch_id
         assert bid not in cm._branch_hypotheses
+        assert bid not in cm._branch_current_hypothesis
 
     def test_continue_explore_branch_stays_in_explore(self, tmp_path):
         """Branch should remain in EXPLORE state after CONTINUE_EXPLORE."""
@@ -412,12 +371,11 @@ class TestContinueExplore:
         branch = cm._branch_ctrl.get_branch(bid)
         assert branch.state == BranchState.EXPLORE
 
-    def test_second_step_proposes_new_hypothesis(self, tmp_path):
-        """After CONTINUE_EXPLORE, the next step generates a fresh hypothesis.
+    def test_second_step_iterates_same_branch_with_screening_evidence(self, tmp_path):
+        """After screening failure, the branch iterates from durable evidence.
 
-        Uses a sequenced LLM so the two steps produce different hypotheses.
-        C10_novelty key for action='modify' is (locus, action, target_file), so the
-        two hypotheses must differ in one of those — we vary target_file.
+        Uses a sequenced LLM so the two candidates have distinct targets while
+        capturing the second H/C provider contexts.
         """
         hyp1 = dict(_VALID_HYPOTHESIS)
         hyp1["target_file"] = "operators/local_search.py"
@@ -438,27 +396,207 @@ class TestContinueExplore:
             def __init__(self):
                 self.hyp_calls = 0
                 self.patch_calls = 0
+                self.provider_calls = []
             def call(self, prompt, schema, model=None, system_blocks=None):
                 if _schema_requests_patch(schema):
                     self.patch_calls += 1
                     return patch1 if self.patch_calls == 1 else patch2
                 self.hyp_calls += 1
                 return hyp1 if self.hyp_calls == 1 else hyp2
-            def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
-                return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
+            def call_with_tool(
+                self, prompt, tool, model=None, system_blocks=None, request_kind=None
+            ):
+                self.provider_calls.append(
+                    {
+                        "request_kind": request_kind,
+                        "prompt": prompt,
+                        "system_blocks": system_blocks,
+                    }
+                )
+                return self.call(
+                    prompt,
+                    tool.get("input_schema", {}),
+                    model,
+                    system_blocks,
+                )
 
-        cm = _campaign(tmp_path, llm_client=SequencedLLM(), experiment_protocol=None)
+        llm = SequencedLLM()
+        cm = _campaign(
+            tmp_path,
+            llm_client=llm,
+            experiment_protocol=MockExperimentProtocol(
+                [
+                    _make_protocol_result(
+                        ExperimentStage.SCREENING,
+                        gate_outcome="fail",
+                        win_rate=0.1,
+                        median_delta=-12.0,
+                    ),
+                    _make_protocol_result(
+                        ExperimentStage.SCREENING,
+                        gate_outcome="pass",
+                    ),
+                ]
+            ),
+        )
         r1 = cm.run_one_step()
         r2 = cm.run_one_step()
-        # Both steps should be on the same branch
+        assert r1.decision == Decision.CONTINUE_EXPLORE
+        assert r2.decision == Decision.QUEUE_VALIDATE
         assert r1.branch_id == r2.branch_id
-        # Both should be CONTINUE_EXPLORE
-        assert r2.decision == Decision.CONTINUE_EXPLORE
+        assert len(cm._branch_ctrl._branches) == 1
+        assert llm.hyp_calls == 2
+        assert llm.patch_calls == 2
 
-    def test_new_hypothesis_resets_expand_counters(self, tmp_path):
-        """T3: When a new hypothesis is generated on a branch (pending=None),
-        screening_expand_count and validation_expand_count must reset to 0.
-        Per v3 §11.5 'expand 1 次' is per-candidate, not per-branch."""
+        hypothesis_calls = [
+            call for call in llm.provider_calls
+            if call["request_kind"] == "hypothesis"
+        ]
+        second_h_evidence = json.loads(
+            hypothesis_calls[1]["system_blocks"][2]["text"].split("\n", 1)[1]
+        )
+        assert len(second_h_evidence["experiment_history"]) == 1
+        prior = second_h_evidence["experiment_history"][0]
+        assert prior["experiment_evidence"]["stage"] == "screening"
+        prior_aggregate = prior["experiment_evidence"]["objective_outcome"][
+            "aggregate"
+        ]
+        assert prior_aggregate["win_rate"] == 0.1
+        assert prior_aggregate["median_delta"] == -12.0
+        assert "candidate = solution" in second_h_evidence["branch_current_code"]
+
+        code_calls = [
+            call for call in llm.provider_calls if call["request_kind"] == "code"
+        ]
+        second_c_context = json.loads(
+            code_calls[1]["system_blocks"][1]["text"].split("\n", 1)[1]
+        )
+        source_ledger = second_c_context["proposal_source_ledger"]
+        prior_source = next(
+            entry
+            for entry in source_ledger["entries"]
+            if entry["path"] == "operators/local_search.py"
+        )
+        assert prior_source["provenance"] == "branch_history_current"
+        assert "candidate = solution" in prior_source["content"]
+
+        workspace = Path(cm._branch_workspaces[r2.branch_id])
+        assert "candidate = solution" in (
+            workspace / "operators" / "local_search.py"
+        ).read_text()
+        assert (workspace / "operators" / "other_op.py").is_file()
+
+    def test_reopen_iterates_same_branch_with_durable_history_and_source(self, tmp_path):
+        """A process reopen preserves prior screening facts and verified code."""
+        first = _campaign(
+            tmp_path,
+            experiment_protocol=MockExperimentProtocol(
+                [
+                    _make_protocol_result(
+                        ExperimentStage.SCREENING,
+                        gate_outcome="fail",
+                        win_rate=0.1,
+                        median_delta=-12.0,
+                    )
+                ]
+            ),
+        )
+        r1 = first.run_one_step()
+        assert r1.decision == Decision.CONTINUE_EXPLORE
+        first_workspace = Path(first._branch_workspaces[r1.branch_id])
+        assert "candidate = solution" in (
+            first_workspace / "operators" / "local_search.py"
+        ).read_text()
+
+        hypothesis = dict(_VALID_HYPOTHESIS)
+        hypothesis["action"] = "create_new"
+        hypothesis["target_file"] = "operators/other_op.py"
+        patch = {
+            "file_path": "operators/other_op.py",
+            "action": "create",
+            "edit_intent": "full_file",
+            "content_after": _VALID_CODE,
+            "test_hint": None,
+        }
+
+        class ReopenLLM:
+            def __init__(self):
+                self.provider_calls = []
+            def call(self, prompt, schema, model=None, system_blocks=None):
+                return patch if _schema_requests_patch(schema) else hypothesis
+            def call_with_tool(
+                self, prompt, tool, model=None, system_blocks=None, request_kind=None
+            ):
+                self.provider_calls.append(
+                    {
+                        "request_kind": request_kind,
+                        "prompt": prompt,
+                        "system_blocks": system_blocks,
+                    }
+                )
+                return self.call(
+                    prompt,
+                    tool.get("input_schema", {}),
+                    model,
+                    system_blocks,
+                )
+
+        llm = ReopenLLM()
+        shutil.rmtree(tmp_path / "champion_code")
+        reopened = _campaign(
+            tmp_path,
+            llm_client=llm,
+            experiment_protocol=MockExperimentProtocol(
+                [_make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass")]
+            ),
+        )
+        assert reopened._branch_workspaces[r1.branch_id] == str(first_workspace)
+
+        r2 = reopened.run_one_step()
+        assert r2.decision == Decision.QUEUE_VALIDATE
+        assert r2.branch_id == r1.branch_id
+        assert len(reopened._branch_ctrl._branches) == 1
+
+        hypothesis_call = next(
+            call for call in llm.provider_calls
+            if call["request_kind"] == "hypothesis"
+        )
+        h_evidence = json.loads(
+            hypothesis_call["system_blocks"][2]["text"].split("\n", 1)[1]
+        )
+        assert len(h_evidence["experiment_history"]) == 1
+        prior = h_evidence["experiment_history"][0]
+        prior_aggregate = prior["experiment_evidence"]["objective_outcome"][
+            "aggregate"
+        ]
+        assert prior_aggregate["median_delta"] == -12.0
+        assert "candidate = solution" in h_evidence["branch_current_code"]
+
+        code_call = next(
+            call for call in llm.provider_calls if call["request_kind"] == "code"
+        )
+        c_context = json.loads(
+            code_call["system_blocks"][1]["text"].split("\n", 1)[1]
+        )
+        prior_source = next(
+            entry
+            for entry in c_context["proposal_source_ledger"]["entries"]
+            if entry["path"] == "operators/local_search.py"
+        )
+        assert prior_source["provenance"] == "branch_history_current"
+        assert "candidate = solution" in prior_source["content"]
+
+        workspace = Path(reopened._branch_workspaces[r2.branch_id])
+        assert "candidate = solution" in (
+            workspace / "operators" / "local_search.py"
+        ).read_text()
+        assert (workspace / "operators" / "other_op.py").is_file()
+
+    def test_next_same_branch_candidate_starts_with_zero_expand_counters(
+        self,
+        tmp_path,
+    ):
+        """A new candidate iteration resets branch-local expand counters."""
         hyp1 = dict(_VALID_HYPOTHESIS)
         hyp1["target_file"] = "operators/local_search.py"
         hyp2 = dict(_VALID_HYPOTHESIS)
@@ -484,7 +622,10 @@ class TestContinueExplore:
                     return patch1 if self.patch_calls == 1 else patch2
                 self.hyp_calls += 1
                 return hyp1 if self.hyp_calls == 1 else hyp2
-            def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+            def call_with_tool(
+                self, prompt, tool, model=None, system_blocks=None, request_kind=None
+            ):
+                del request_kind
                 return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
 
         cm = _campaign(tmp_path, llm_client=SequencedLLM(), experiment_protocol=None)
@@ -497,11 +638,9 @@ class TestContinueExplore:
         branch.screening_expand_count = 2
         branch.validation_expand_count = 1
 
-        # Second step: new hypothesis (pending is None) — counters must reset
+        # Second step starts a fresh candidate on the same scientific branch.
         r2 = cm.run_one_step()
         assert r2.branch_id == r1.branch_id
         branch_after = cm._branch_ctrl.get_branch(r2.branch_id)
-        assert branch_after.screening_expand_count == 0, \
-            "screening_expand_count must reset on new hypothesis (v3 §11.5 per-candidate)"
-        assert branch_after.validation_expand_count == 0, \
-            "validation_expand_count must reset on new hypothesis (v3 §11.5 per-candidate)"
+        assert branch_after.screening_expand_count == 0
+        assert branch_after.validation_expand_count == 0

@@ -18,7 +18,7 @@ def register_report_commands(report_app: typer.Typer) -> None:
         campaign_dir: str = typer.Option(
             ...,
             "--campaign-dir",
-            help="Campaign directory containing agentic session artifacts",
+            help="Campaign directory containing durable proposal-attempt events",
         ),
         observed_control_arm: str = typer.Option(
             ...,
@@ -58,20 +58,18 @@ def register_report_commands(report_app: typer.Typer) -> None:
             raise typer.Exit(code=1)
 
         counts = manifest["counts"]
-        context_arm = manifest.get("context_arm_fingerprint", {})
         typer.echo(
             json.dumps(
                 {
                     "manifest_path": str(manifest_path),
                     "schema_version": manifest["schema_version"],
-                    "session_count": counts["session_count"],
-                    "trace_count": counts["trace_count"],
+                    "attempt_count": counts["attempt_count"],
+                    "proposal_attempt_transition_count": counts[
+                        "proposal_attempt_transition_count"
+                    ],
                     "formal_candidate_count": counts["formal_candidate_count"],
                     "observed_control_arm": manifest["observed_control_arm"],
                     "control_pair_key": manifest.get("control_pair_key", ""),
-                    "proposal_context_ablation": context_arm.get(
-                        "proposal_context_ablation", ""
-                    ),
                 },
                 indent=2,
                 sort_keys=True,
@@ -123,10 +121,8 @@ def register_report_commands(report_app: typer.Typer) -> None:
                     "comparison_path": str(comparison_path),
                     "schema_version": comparison["schema_version"],
                     "observational_only": comparison["observational_only"],
-                    "left_session_count": summary["left"]["session_count"],
-                    "right_session_count": summary["right"]["session_count"],
-                    "left_trace_count": summary["left"]["trace_count"],
-                    "right_trace_count": summary["right"]["trace_count"],
+                    "left_attempt_count": summary["left"]["attempt_count"],
+                    "right_attempt_count": summary["right"]["attempt_count"],
                 },
                 indent=2,
                 sort_keys=True,
@@ -400,15 +396,6 @@ def register_report_commands(report_app: typer.Typer) -> None:
                     "latest_improved": bool(latest.get("improved")),
                 }
 
-            stagnation_signals: list = []
-            summary_file = campaign_path / "campaign_summary.json"
-            if summary_file.exists():
-                try:
-                    cs = json.loads(summary_file.read_text())
-                    stagnation_signals = cs.get("stagnation_signals", [])
-                except Exception:
-                    pass
-
             vfail_breakdown: dict = {}
             all_failures = registry.query_failures()
             for evt in all_failures:
@@ -421,7 +408,6 @@ def register_report_commands(report_app: typer.Typer) -> None:
             screening_rate_fields = {}
             family_dist = {}
             weight_opt_summary = None
-            stagnation_signals = []
             vfail_breakdown = {}
 
         v_intercept = (
@@ -464,7 +450,6 @@ def register_report_commands(report_app: typer.Typer) -> None:
             "family_distribution": family_dist,
             "verification_failure_breakdown": vfail_breakdown,
             "weight_optimization": weight_opt_summary,
-            "stagnation_signals": stagnation_signals,
         }
 
         if markdown:
@@ -480,7 +465,6 @@ def register_report_commands(report_app: typer.Typer) -> None:
                 family_dist=family_dist,
                 vfail_breakdown=vfail_breakdown,
                 weight_opt_summary=weight_opt_summary,
-                stagnation_signals=stagnation_signals,
             )
             if output:
                 Path(output).write_text(report_text)
@@ -493,48 +477,6 @@ def register_report_commands(report_app: typer.Typer) -> None:
         if output:
             Path(output).write_text(report_json)
             typer.echo(f"Report written to {output}")
-        else:
-            typer.echo(report_json)
-
-    @report_app.command("research-efficiency")
-    def report_research_efficiency(
-        campaign_dir: str = typer.Option(
-            "campaign_out",
-            "--campaign-dir",
-            help="Campaign directory, or a run cell directory containing campaign/",
-        ),
-        output: Optional[str] = typer.Option(
-            None,
-            "--output",
-            "-o",
-            help="Write JSON report to file",
-        ),
-    ) -> None:
-        """Postrun research-efficiency accounting and failure taxonomy."""
-        from scion.core.research_efficiency_report import (
-            build_research_efficiency_report,
-            write_research_efficiency_report,
-        )
-
-        try:
-            if output:
-                report_path = write_research_efficiency_report(
-                    campaign_dir,
-                    output_path=output,
-                )
-                report = json.loads(report_path.read_text(encoding="utf-8"))
-            else:
-                report = build_research_efficiency_report(campaign_dir)
-        except (OSError, ValueError) as exc:
-            typer.echo(
-                f"ERROR: failed to build research-efficiency report: {exc}",
-                err=True,
-            )
-            raise typer.Exit(code=1)
-
-        report_json = json.dumps(report, indent=2, sort_keys=True, default=str)
-        if output:
-            typer.echo(f"Research-efficiency report written to {output}")
         else:
             typer.echo(report_json)
 
@@ -587,7 +529,7 @@ def register_report_commands(report_app: typer.Typer) -> None:
                     "verification_result": e.get("verification_result"),
                     "decision": e.get("decision"),
                 }
-                for e in all_failures[:20]
+                for e in all_failures
             ],
         }
 
@@ -612,7 +554,6 @@ def _summary_report_markdown(
     family_dist: dict,
     vfail_breakdown: dict,
     weight_opt_summary: dict | None,
-    stagnation_signals: list,
 ) -> str:
     lines = [
         f"# Campaign Report: {meta.get('problem_name', 'unknown')}",
@@ -655,14 +596,6 @@ def _summary_report_markdown(
             f"- Latest baseline score: {weight_opt_summary['latest_baseline_score']}"
         )
         lines.append(f"- Latest best score: {weight_opt_summary['latest_best_score']}")
-        lines.append("")
-    if stagnation_signals:
-        lines.append("## Stagnation Signals")
-        for sig in stagnation_signals:
-            lines.append(
-                f"- [{sig.get('severity', '?').upper()}] {sig.get('kind', '?')}: "
-                f"{sig.get('detail', '')}"
-            )
         lines.append("")
     return "\n".join(lines)
 

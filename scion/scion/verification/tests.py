@@ -155,10 +155,9 @@ def _run_pytest(test_path: str, workspace: str, check_name: str, t0: int) -> Che
     if proc.returncode == 0:
         return _cr(True, check_name, "all tests passed", t0)
 
-    # Collect a short excerpt from stdout/stderr for the failure detail.
     output = (proc.stdout or "") + (proc.stderr or "")
-    snippet = output[-400:].strip().replace("\n", " | ")
-    return _cr(False, check_name, f"pytest exit={proc.returncode}: {snippet}", t0)
+    detail = output.strip().replace("\n", " | ")
+    return _cr(False, check_name, f"pytest exit={proc.returncode}: {detail}", t0)
 
 
 def _cr(passed: bool, name: str, detail: str, t0: int) -> CheckResult:

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-from dataclasses import fields
 from pathlib import Path
 import threading
 from types import SimpleNamespace
+from typing import Any, Mapping
 
 import pytest
 
@@ -22,23 +22,13 @@ from scion.core.models import (
     VerificationResult,
 )
 from scion.core.proposal_pipeline import ProposalPipeline
+from scion.proposal.engine import PromptCallReceipt
+
+from ..source_ledger_test_support import ledgerize_code_context
+from scion.proposal.prompt_manifest_accounting import _provider_prompt_hash
 from scion.core.public_refs import contains_absolute_path
-from scion.proposal.search_memory import CampaignSearchMemory
-from scion.proposal.agentic_session import (
-    AgenticEvidenceRef,
-    AgenticFailureCategory,
-    AgenticProposalOutput,
-    AgenticProposalRequest,
-    AgenticProposalSession,
-    AgenticProposalStatus,
-    AgenticSelfCheck,
-    AgenticTerminationReason,
-    AgenticTranscriptEvent,
-    FileAgenticSessionArtifactStore,
-)
 from scion.proposal.engine import ProposalValidationError
-from scion.proposal.llm_client import LLMBalanceError, LLMRetryExhaustedError
-from scion.proposal.tools import ProposalToolContext, ProposalToolRegistry
+from scion.proposal.llm_client import LLMBalanceError
 
 
 class FakeProblemRuntime:
@@ -46,36 +36,53 @@ class FakeProblemRuntime:
         self.spec = spec
         self.hypothesis_kwargs = None
         self.code_kwargs = None
-        self.fix_kwargs = None
 
     def build_hypothesis_context(self, **kwargs):
         self.hypothesis_kwargs = kwargs
-        return {"kind": "hypothesis"}
+        return {
+            "problem_summary": "fixture",
+            "branch_id": kwargs["branch"].branch_id,
+            "research_surfaces": "",
+            "champion_operators_code": "",
+            "champion_stats": {},
+        }
 
     def build_code_context(self, **kwargs):
         self.code_kwargs = kwargs
-        return {"kind": "code"}
-
-    def build_fix_context(self, **kwargs):
-        self.fix_kwargs = kwargs
-        return {"kind": "fix"}
-
+        hypothesis = kwargs["hypothesis"]
+        return ledgerize_code_context({
+            "problem_summary": "fixture",
+            "branch_id": kwargs["branch"].branch_id,
+            "approved_hypothesis": {
+                "hypothesis_text": hypothesis.hypothesis_text,
+                "change_locus": hypothesis.change_locus,
+                "action": hypothesis.action,
+                "target_file": hypothesis.target_file,
+                "predicted_direction": hypothesis.predicted_direction,
+                "target_weakness": hypothesis.target_weakness,
+                "expected_effect": hypothesis.expected_effect,
+                "suggested_weight": hypothesis.suggested_weight,
+            },
+            "target_file": hypothesis.target_file,
+            "target_file_code": "",
+            "operator_interface_spec": "",
+            "editable_patterns": "operators/*.py",
+            "frozen_patterns": "solver.py",
+            "action": hypothesis.action,
+        })
 
 class FakeCreative:
     def __init__(
         self,
         *,
         code_error: Exception | None = None,
-        fix_error: Exception | None = None,
     ) -> None:
         self.code_error = code_error
-        self.fix_error = fix_error
         self.hypothesis_calls = 0
         self.code_calls = 0
-        self.fix_calls = 0
         self.hypothesis_context = None
         self.code_context = None
-        self.fix_context = None
+        self.attempt_audits: dict[str, Mapping[str, Any]] = {}
         self.hypothesis = HypothesisProposal(
             hypothesis_text="Bounded route-pair search.",
             change_locus="local_search",
@@ -85,14 +92,6 @@ class FakeCreative:
             predicted_direction="improve",
             target_weakness="The current search lacks a bounded route-pair move.",
             expected_effect="Improve distance on screening cases without changing feasibility.",
-            target_objectives=("distance",),
-            protected_objectives=("feasibility",),
-            objective_tradeoff_policy="Protect feasibility before distance.",
-            no_op_condition="Do nothing when no improving route-pair move exists.",
-            risk_to_higher_priority="May spend budget without finding an improving move.",
-            target_runtime_effect="neutral",
-            complexity_claim="O(k) candidate route-pair checks.",
-            runtime_budget_strategy="Use a fixed top-k candidate cap.",
         )
         self.patch = PatchProposal(
             file_path="operators/bounded.py",
@@ -102,11 +101,6 @@ class FakeCreative:
                 "    def execute(self, solution, rng):\n"
                 "        return solution\n"
             ),
-        )
-        self.fix = PatchProposal(
-            file_path="operators/bounded.py",
-            action="modify",
-            code_content="class Bounded: pass\n",
         )
 
     def generate_hypothesis(self, context):
@@ -121,13 +115,50 @@ class FakeCreative:
             raise self.code_error
         return self.patch
 
-    def fix_code(self, context):
-        self.fix_calls += 1
-        self.fix_context = context
-        if self.fix_error is not None:
-            raise self.fix_error
-        return self.fix
+    @staticmethod
+    def _receipt(snapshot) -> PromptCallReceipt:
+        trace_ref = f"artifacts/llm_traces/{snapshot.render_kind}-fixture.json"
+        return PromptCallReceipt(
+            request_kind=snapshot.render_kind,
+            trace_ref=trace_ref,
+            prompt_manifest_ref=f"{trace_ref}#/prompt_manifest",
+            raw_response_ref=f"{trace_ref}#/response",
+            prompt_hash=_provider_prompt_hash(
+                snapshot.system_blocks,
+                snapshot.user_prompt,
+            ),
+            context_digest=snapshot.context_digest,
+            provider_ok=True,
+            ok=True,
+        )
 
+    def generate_hypothesis_with_receipt(self, context, snapshot):
+        return self.generate_hypothesis(context), self._receipt(snapshot)
+
+    def generate_code_with_receipt(self, context, snapshot):
+        return self.generate_code(context), self._receipt(snapshot)
+
+    def generate_direct_hypothesis_with_receipt(
+        self,
+        context,
+        snapshot,
+        *,
+        attempt_audit=None,
+    ):
+        if attempt_audit is not None:
+            self.attempt_audits["hypothesis"] = dict(attempt_audit)
+        return self.generate_hypothesis_with_receipt(context, snapshot)
+
+    def generate_direct_code_with_receipt(
+        self,
+        context,
+        snapshot,
+        *,
+        attempt_audit=None,
+    ):
+        if attempt_audit is not None:
+            self.attempt_audits["code"] = dict(attempt_audit)
+        return self.generate_code_with_receipt(context, snapshot)
 
 class FakeBranchController:
     def __init__(self, branches):
@@ -148,20 +179,27 @@ class FakeHypothesisStore:
         return [record for record in self.records if record.branch_id == branch_id]
 
     def save(self, record: HypothesisRecord) -> None:
+        self.records = [
+            existing
+            for existing in self.records
+            if existing.hypothesis_id != record.hypothesis_id
+        ]
         self.records.append(record)
 
+    def mark_status(self, hypothesis_id: str, status: str) -> None:
+        for record in self.records:
+            if record.hypothesis_id == hypothesis_id:
+                record.status = status
 
-class FakeCircuitBreaker:
-    def __init__(self) -> None:
-        self.successes = 0
-        self.failures: list[str] = []
-
-    def record_success(self) -> None:
-        self.successes += 1
-
-    def record_failure(self, detail: str) -> bool:
-        self.failures.append(detail)
-        return False
+    def get_one(self, hypothesis_id: str) -> HypothesisRecord | None:
+        return next(
+            (
+                record
+                for record in self.records
+                if record.hypothesis_id == hypothesis_id
+            ),
+            None,
+        )
 
 
 class MemoryLineageRegistry:
@@ -195,14 +233,6 @@ def _champion() -> ChampionState:
 def _pipeline(
     *,
     creative: FakeCreative | None = None,
-    use_agentic_proposal: bool = False,
-    agentic_session=None,
-    agentic_artifact_dir: str | None = None,
-    agentic_session_timeout_sec: float | None = None,
-    agentic_tool_max_steps: int | None = None,
-    agentic_tool_max_calls: int | None = None,
-    agentic_code_tool_max_calls: int | None = None,
-    agentic_observation_max_chars: int | None = None,
     lineage_registry=None,
     branch_workspace: str = "/tmp/branch",
     forced_locus: str | None = "local_search",
@@ -213,10 +243,9 @@ def _pipeline(
     problem_spec=None,
     split_manifest_hash: str | None = None,
     seed_ledger_hash: str | None = None,
-    production_campaign: bool = False,
-    require_agentic_problem_anchors: bool = False,
-    launch_research_focus_provider=lambda: {},
 ):
+    if lineage_registry is None:
+        lineage_registry = MemoryLineageRegistry()
     branch = _branch()
     sibling = _branch("sibling")
     if problem_spec is None:
@@ -239,7 +268,6 @@ def _pipeline(
             ]
         )
     runtime = FakeProblemRuntime(spec=problem_spec)
-    circuit = FakeCircuitBreaker()
     failures: list[tuple[Branch, FailureEvent]] = []
     balance_exhausted = {"value": False}
     pipeline = ProposalPipeline(
@@ -258,39 +286,24 @@ def _pipeline(
         champion_lock=threading.Lock(),
         get_champion=_champion,
         step_history=[],
-        failure_streak={"proposal": 1},
-        consume_forced_locus=lambda: forced_locus,
-        search_memory=SimpleNamespace(),
-        get_saturation_analyzer=lambda: None,
-        get_baseline_metrics=lambda: None,
-        get_latest_weight_opt_result=lambda: {"weights": "latest"},
-        research_log=SimpleNamespace(),
         handle_failure=lambda b, f: failures.append((b, f)),
-        circuit_breaker=circuit,
         mark_balance_exhausted=lambda: balance_exhausted.__setitem__("value", True),
-        launch_research_focus_provider=launch_research_focus_provider,
-        use_agentic_proposal=use_agentic_proposal,
-        agentic_session=agentic_session,
-        agentic_artifact_dir=agentic_artifact_dir,
-        agentic_session_timeout_sec=agentic_session_timeout_sec,
-        agentic_tool_max_steps=agentic_tool_max_steps,
-        agentic_tool_max_calls=agentic_tool_max_calls,
-        agentic_code_tool_max_calls=agentic_code_tool_max_calls,
-        agentic_observation_max_chars=agentic_observation_max_chars,
         lineage_registry=lineage_registry,
         campaign_id="camp-1",
         problem_id="toy",
         problem_spec_hash="spec-hash",
         split_manifest_hash=split_manifest_hash,
         seed_ledger_hash=seed_ledger_hash,
-        production_campaign=production_campaign,
-        require_agentic_problem_anchors=require_agentic_problem_anchors,
-        persistent_forced_locus=persistent_forced_locus,
+        persistent_forced_locus=(
+            persistent_forced_locus
+            if persistent_forced_locus is not None
+            else forced_locus
+        ),
         forced_surface_action=forced_surface_action,
         forced_surface_target_file=forced_surface_target_file,
         forced_surface_diagnostic=forced_surface_diagnostic,
     )
-    return pipeline, branch, runtime, circuit, failures, balance_exhausted
+    return pipeline, branch, runtime, failures, balance_exhausted
 
 
 __all__ = [

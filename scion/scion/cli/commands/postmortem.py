@@ -90,7 +90,6 @@ class PostmortemReport:
             "campaign_dir": str(self.campaign_path),
             "total_rounds": summary.get("total_rounds", 0),
             "champion_version": summary.get("champion_version", 0),
-            "budget_utilization": summary.get("budget_utilization", 0.0),
             "total_steps": self.total_steps,
             "n_failed": self.n_failed,
             "n_promoted": self.n_promoted,
@@ -101,7 +100,6 @@ class PostmortemReport:
             ),
             "failure_stages": self.failure_stages,
             "action_locus_coverage": summary.get("action_locus_coverage", {}),
-            "stagnation_signals": summary.get("stagnation_signals", []),
             "diagnostics": summary.get("diagnostics", []),
             "cache_stats": summary.get("cache_stats", {}),
             "comparisons": [
@@ -109,7 +107,6 @@ class PostmortemReport:
                     "name": name,
                     "total_rounds": sibling.get("total_rounds", 0),
                     "champion_version": sibling.get("champion_version", 0),
-                    "budget_utilization": sibling.get("budget_utilization", 0.0),
                 }
                 for name, sibling in self.sibling_summaries
             ],
@@ -124,14 +121,12 @@ class PostmortemReport:
             f"- Campaign ID: {summary.get('campaign_id', 'unknown')}",
             f"- Total rounds: {summary.get('total_rounds', 0)}",
             f"- Champion version: {summary.get('champion_version', 0)}",
-            f"- Budget utilization: {summary.get('budget_utilization', 0.0):.1%}",
             "",
         ]
         lines.extend(self._family_lines())
         lines.extend(self._failure_lines())
         lines.extend(self._action_locus_lines())
         lines.extend(self._cache_lines())
-        lines.extend(self._stagnation_lines())
         lines.extend(self._diagnostic_lines())
         lines.extend(self._promoted_lines())
         lines.extend(self._recommendation_lines())
@@ -207,7 +202,7 @@ class PostmortemReport:
         no_read_groups = cache_stats.get("repeated_cache_key_no_read", [])
         if no_read_groups:
             lines.append("- Repeated cache keys without reads:")
-            for group in no_read_groups[:10]:
+            for group in no_read_groups:
                 lines.append(
                     "  - "
                     f"{group.get('request_kind', '?')} "
@@ -217,18 +212,6 @@ class PostmortemReport:
                 )
         return lines + [""]
 
-    def _stagnation_lines(self) -> list[str]:
-        signals = self.summary.get("stagnation_signals", [])
-        if not signals:
-            return []
-        lines = ["## Stagnation Signals"]
-        for sig in signals:
-            lines.append(
-                f"- [{sig.get('severity', '?').upper()}] "
-                f"{sig.get('kind', '?')}: {sig.get('detail', '')}"
-            )
-            lines.append(f"  Suggested action: {sig.get('suggested_action', '')}")
-        return lines + [""]
 
     def _diagnostic_lines(self) -> list[str]:
         diagnostics = self.summary.get("diagnostics", [])
@@ -266,7 +249,7 @@ class PostmortemReport:
                 f"{hyp.get('action', '?')} {hyp.get('target_file', '?')} "
                 f"(case_win_rate={win_rate})"
             )
-            lines.append(f"  Hypothesis: {(hyp.get('text') or '')[:120]}")
+            lines.append(f"  Hypothesis: {hyp.get('text') or ''}")
         return lines + [""]
 
     def _recommendation_lines(self) -> list[str]:
@@ -289,7 +272,7 @@ class PostmortemReport:
         if not diagnostics_recs:
             if self.n_promoted == 0:
                 lines.append(
-                    "- No operators promoted. Consider increasing max_rounds or "
+                    "- No operators promoted. Consider increasing requested_rounds or "
                     "exploring new mechanism families."
                 )
             else:
@@ -308,13 +291,12 @@ class PostmortemReport:
         summary = self.summary
         lines = [
             "## Comparison with Other Campaigns",
-            "| Campaign | Rounds | Champion | Promotions | Budget |",
-            "|---|---|---|---|---|",
+            "| Campaign | Rounds | Champion | Promotions |",
+            "|---|---|---|---|",
         ]
         lines.append(
             f"| **{self.campaign_path.name}** | {summary.get('total_rounds', 0)} | "
-            f"{summary.get('champion_version', 0)} | {self.n_promoted} | "
-            f"{summary.get('budget_utilization', 0.0):.1%} |"
+            f"{summary.get('champion_version', 0)} | {self.n_promoted} |"
         )
         for sibling_name, sibling in self.sibling_summaries:
             sibling_steps = sibling.get("steps", [])
@@ -323,8 +305,7 @@ class PostmortemReport:
             )
             lines.append(
                 f"| {sibling_name} | {sibling.get('total_rounds', 0)} | "
-                f"{sibling.get('champion_version', 0)} | {sibling_promoted} | "
-                f"{sibling.get('budget_utilization', 0.0):.1%} |"
+                f"{sibling.get('champion_version', 0)} | {sibling_promoted} |"
             )
         return lines + [""]
 

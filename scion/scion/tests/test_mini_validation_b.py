@@ -1,18 +1,12 @@
-"""Mini-Validation B: classifier on/off, async weight stress, early-stop replay."""
+"""Mini-Validation B: classifier and async weight-update smoke."""
 from __future__ import annotations
 
-import pytest
-
 from scion.core.branch import BranchController
-from scion.core.early_stop import EarlyStopController
 from scion.core.models import BranchState, ChampionState, HypothesisRecord
-from scion.core.stagnation import StagnationSignal
-from scion.core.termination import CampaignState, TerminationChecker
 from scion.lineage.registry import LineageRegistry
 from scion.lineage.branch_store import HypothesisStore
 from scion.proposal.classifier import HypothesisFamilyClassifier, ClassificationResult
 from scion.tests.taxonomy_helpers import warehouse_family_taxonomy
-from scion.proposal.saturation import ChampionSaturationAnalyzer, SaturationSignal
 
 WAREHOUSE_MECHANISM_TAXONOMY = warehouse_family_taxonomy()
 
@@ -21,24 +15,19 @@ WAREHOUSE_MECHANISM_TAXONOMY = warehouse_family_taxonomy()
 # Classifier on/off smoke
 # ---------------------------------------------------------------------------
 
-class TestClassifierOnOffSmoke:
-    def test_off_keyword_only(self) -> None:
-        c = HypothesisFamilyClassifier(llm_client=None)
+class TestDeterministicClassifierSmoke:
+    def test_default_taxonomy_is_domain_neutral(self) -> None:
+        c = HypothesisFamilyClassifier()
         r = c.classify("destroy and rebuild vehicles")
         assert r.source == "keyword"
         assert r.family_id == "NEW_FAMILY"
 
-    def test_on_with_mock(self) -> None:
-        class MockLLM:
-            def call_text(self, prompt, model=None):
-                return "vehicle_elimination_cost"
-
+    def test_problem_taxonomy_classifies_without_provider_call(self) -> None:
         c = HypothesisFamilyClassifier(
-            llm_client=MockLLM(),
             taxonomy=WAREHOUSE_MECHANISM_TAXONOMY,
         )
-        r = c.classify("eliminate expensive vehicles")
-        assert r.source == "classifier"
+        r = c.classify("eliminate weak vehicles")
+        assert r.source == "keyword"
         assert r.family_id == "vehicle_elimination"
 
     def test_classification_persists_to_lineage(self, tmp_path) -> None:
@@ -141,61 +130,3 @@ class TestAsyncWeightStress:
         )
         assert c2.weight_revision == c1.weight_revision + 1
         assert c2.code_snapshot_path != c1.code_snapshot_path
-
-
-# ---------------------------------------------------------------------------
-# Early-stop replay smoke
-# ---------------------------------------------------------------------------
-
-class TestEarlyStopReplaySmoke:
-    def test_hard_saturation_stops_campaign(self) -> None:
-        analyzer = ChampionSaturationAnalyzer(
-            {"subcategory_splits": 0.5},
-            lower_bounds={"subcategory_splits": 0.0},
-        )
-        signals = analyzer.analyze({"subcategory_splits": 0.3})
-        assert signals[0].saturation_type == "hard"
-
-        ctrl = EarlyStopController()
-        decision = ctrl.should_early_stop(signals, [])
-        assert decision.stop is True
-        assert decision.rule == "all_bounded"
-
-    def test_soft_saturation_needs_plateau(self) -> None:
-        analyzer = ChampionSaturationAnalyzer({"total_cost": 100000})
-        signals = analyzer.analyze({"total_cost": 20000})
-        assert signals[0].saturation_type == "soft"
-
-        ctrl = EarlyStopController()
-        decision = ctrl.should_early_stop(signals, [])
-        assert decision.stop is False
-
-        plateau = StagnationSignal(
-            kind="plateau", severity="warning",
-            detail="flat", suggested_action="switch",
-        )
-        decision2 = ctrl.should_early_stop(
-            signals, [plateau],
-            total_rounds=50, rounds_since_last_promote=30,
-        )
-        assert decision2.stop is True
-        assert decision2.rule == "diminishing_returns"
-
-    def test_termination_integration(self) -> None:
-        checker = TerminationChecker()
-        state = CampaignState(
-            early_stop_detected=True,
-            early_stop_reason="all objectives at absolute minimum",
-        )
-        assert checker.should_stop(state) is True
-
-    def test_force_continue_overrides_everything(self) -> None:
-        ctrl = EarlyStopController(force_continue=True)
-        hard = SaturationSignal(
-            objective="x", improvement_ratio=0.0,
-            saturation_level="high", opportunity_hint="at min",
-            at_absolute_minimum=True, saturation_type="hard",
-        )
-        decision = ctrl.should_early_stop([hard], [])
-        assert decision.stop is False
-        assert decision.rule == "override"

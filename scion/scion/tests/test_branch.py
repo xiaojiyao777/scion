@@ -147,19 +147,6 @@ def test_get_code_base_with_clean_hash():
     assert ctrl.get_code_base(b.branch_id) == "branch_workspace"
 
 
-def test_get_code_base_telemetry_wiring_suspect_returns_champion():
-    ctrl = _ctrl()
-    b = ctrl.create_branch(_champion())
-    ctrl.record_verification_result(b.branch_id, passed=True, code_hash="abc123")
-    b.branch_code_status = "telemetry_wiring_suspect"
-
-    assert ctrl.get_code_base(b.branch_id) == "champion"
-
-    ctrl.record_verification_result(b.branch_id, passed=True, code_hash="def456")
-    assert ctrl.get_code_base(b.branch_id) == "branch_workspace"
-    assert ctrl.get_branch(b.branch_id).branch_code_status == "clean"
-
-
 def test_get_code_base_stale_returns_champion():
     ctrl = _ctrl()
     b = ctrl.create_branch(_champion())

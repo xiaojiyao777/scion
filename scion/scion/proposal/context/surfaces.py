@@ -7,18 +7,9 @@ from the loaded problem spec or adapter.
 
 from __future__ import annotations
 
-import json
-from typing import Any, List
+from typing import Any
 
 from scion.core.forced_surface import surface_action_allowed, surface_target_files
-from scion.core.models import HypothesisRecord
-
-_NONEMPTY_SEQUENCE_NOVELTY_FIELDS = frozenset(
-    {
-        "selected_components",
-        "deep_components_selected",
-    }
-)
 
 
 def _get_research_surfaces(problem_spec: Any, adapter_spec: Any = None) -> list[Any]:
@@ -113,7 +104,7 @@ def _build_research_surfaces_block(surfaces: list[Any]) -> str:
         (
             "Metadata below is declared by the problem package. Framework core "
             "treats algorithm roles, invocation points, bounds, scale terms, "
-            "runtime evidence, and novelty fields as problem-provided context."
+            "and runtime evidence as problem-provided context."
         ),
     ]
     for surface in surfaces:
@@ -133,7 +124,12 @@ def _build_research_surface_interface_spec(surface: Any) -> str:
     lines = [f"### Declared Research Surface: {name} [{kind}]"]
     if description:
         lines.append(description)
-    _append_research_surface_metadata(lines, surface, prefix="")
+    _append_research_surface_metadata(
+        lines,
+        surface,
+        prefix="",
+        include_research_grading_metadata=False,
+    )
     return "\n".join(lines)
 
 
@@ -144,7 +140,6 @@ def _build_forced_surface_constraint(
     action: str | None,
     target_file: str | None,
     diagnostic: bool,
-    blocking_hypotheses: List[HypothesisRecord] | None = None,
 ) -> str:
     lines = ["\n## MANDATORY SEARCH CONSTRAINT"]
     if diagnostic:
@@ -183,90 +178,7 @@ def _build_forced_surface_constraint(
         targets = surface_target_files(surface)
         if targets:
             lines.append("Declared target files: " + ", ".join(targets) + ".")
-    lines.extend(
-        _build_forced_surface_novelty_guidance(
-            surface=surface,
-            surface_name=surface_name,
-            blocking_hypotheses=blocking_hypotheses or [],
-        )
-    )
     return "\n".join(lines) + "\n"
-
-
-def _build_forced_surface_novelty_guidance(
-    *,
-    surface: Any | None,
-    surface_name: str,
-    blocking_hypotheses: List[HypothesisRecord],
-) -> list[str]:
-    if surface is None:
-        return []
-    novelty = getattr(surface, "novelty", None)
-    strategy = str(getattr(novelty, "strategy", "") or "")
-    fields = _coerce_text_list(getattr(novelty, "signature_fields", None))
-    if strategy != "semantic_signature" or not fields:
-        return []
-
-    lines = [
-        "This surface uses structured semantic novelty.",
-        "C10 requires `novelty_signature` with distinct values for declared "
-        f"`novelty.signature_fields`: {', '.join(fields)}.",
-        "Do not use hypothesis prose as novelty identity; C10 ignores free text "
-        "for this semantic signature.",
-        "Use compact novelty_signature values; scalar strings longer than 120 "
-        "characters are invalid.",
-    ]
-    sequence_fields = [
-        field for field in fields if field in _NONEMPTY_SEQUENCE_NOVELTY_FIELDS
-    ]
-    if sequence_fields:
-        lines.append(
-            "These novelty_signature fields must be non-empty JSON arrays of "
-            "component names, not null, false, empty strings, or empty arrays: "
-            + ", ".join(sequence_fields)
-            + "."
-        )
-    occupied = _summarise_surface_structured_signatures(
-        blocking_hypotheses,
-        surface_name=surface_name,
-        fields=fields,
-    )
-    if occupied:
-        lines.append("Occupied structured signatures for this surface:")
-        lines.extend(f"  - {item}" for item in occupied)
-    else:
-        lines.append("Occupied structured signatures for this surface: (none)")
-    return lines
-
-
-def _summarise_surface_structured_signatures(
-    active_hypotheses: List[HypothesisRecord],
-    *,
-    surface_name: str,
-    fields: list[str],
-) -> list[str]:
-    summaries: list[str] = []
-    for hypothesis in active_hypotheses:
-        if hypothesis.change_locus != surface_name:
-            continue
-        signature: dict[str, Any] = {}
-        for field in fields:
-            if hasattr(hypothesis, field):
-                value = getattr(hypothesis, field)
-                if value not in (None, "", [], (), {}):
-                    signature[field] = value
-                    continue
-            novelty_values = getattr(hypothesis, "novelty_signature", None)
-            if isinstance(novelty_values, dict) and field in novelty_values:
-                signature[field] = novelty_values[field]
-        if signature:
-            summaries.append(
-                json.dumps(signature, sort_keys=True, default=str, separators=(",", ":"))
-            )
-        else:
-            target = hypothesis.target_file or "(no target_file)"
-            summaries.append(f"{target}: missing structured novelty_signature")
-    return summaries
 
 
 def _append_research_surface_metadata(
@@ -274,6 +186,7 @@ def _append_research_surface_metadata(
     surface: Any,
     *,
     prefix: str,
+    include_research_grading_metadata: bool = True,
 ) -> None:
     algorithm = getattr(surface, "algorithm", None)
     if algorithm is not None:
@@ -378,7 +291,7 @@ def _append_research_surface_metadata(
             )
 
     evidence = getattr(surface, "evidence", None)
-    if evidence is not None:
+    if include_research_grading_metadata and evidence is not None:
         runtime_fields = _coerce_text_list(
             getattr(evidence, "required_runtime_fields", None)
         )
@@ -399,7 +312,7 @@ def _append_research_surface_metadata(
             )
 
     novelty = getattr(surface, "novelty", None)
-    if novelty is not None:
+    if include_research_grading_metadata and novelty is not None:
         _append_metadata_value(
             lines, prefix, "novelty.strategy", getattr(novelty, "strategy", "")
         )

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from scion.core.models import RunResult
-from .values import _as_int, _bounded_text, _increment_category
+from .values import _as_int, _increment_category, _text_value
 
 
 def _candidate_process_failure_category(result: RunResult) -> str:
@@ -34,7 +34,7 @@ def _candidate_audit_failure_category(issue: dict[str, Any]) -> str:
     return raw or "runtime_error"
 
 
-def _bounded_runtime_failure_from_audit(
+def _runtime_failure_summary_from_audit(
     issue: dict[str, Any],
     *,
     category: str,
@@ -45,7 +45,7 @@ def _bounded_runtime_failure_from_audit(
         if value:
             component = str(value)
             break
-    return _bounded_runtime_failure(
+    return _runtime_failure_summary(
         category=category,
         code=str(issue.get("error_category") or category),
         surface=issue.get("selected_surface"),
@@ -54,7 +54,7 @@ def _bounded_runtime_failure_from_audit(
     )
 
 
-def _bounded_runtime_failure(
+def _runtime_failure_summary(
     *,
     category: str,
     code: str,
@@ -63,42 +63,12 @@ def _bounded_runtime_failure(
     detail_summary: str,
 ) -> dict[str, Any]:
     return {
-        "category": _bounded_text(category, 80),
-        "code": _bounded_text(code, 120),
-        "surface": _bounded_text(surface, 120),
-        "component": _bounded_text(component, 160),
-        "detail_summary": _bounded_text(_compact_failure_detail(detail_summary), 240),
+        "category": _text_value(category),
+        "code": _text_value(code),
+        "surface": _text_value(surface),
+        "component": _text_value(component),
+        "detail_summary": _text_value(detail_summary),
     }
-
-
-def _compact_failure_detail(detail: str) -> str:
-    text = str(detail or "").strip()
-    if not text:
-        return ""
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    if not lines:
-        return text
-    tail = lines[-1]
-    head = lines[0]
-    if tail == head:
-        return tail
-    if _looks_like_terminal_exception(tail):
-        return f"{tail} | {head}"
-    return head
-
-
-def _looks_like_terminal_exception(line: str) -> bool:
-    return any(
-        marker in line
-        for marker in (
-            "Error:",
-            "Exception:",
-            "Traceback",
-            "FileNotFoundError",
-            "ModuleNotFoundError",
-            "ImportError",
-        )
-    )
 
 
 def _format_runtime_failure_categories(categories: dict[str, int]) -> str:
@@ -107,12 +77,12 @@ def _format_runtime_failure_categories(categories: dict[str, int]) -> str:
         for category, count in sorted(categories.items())
         if count > 0
     ]
-    return ";".join(parts[:8])
+    return ";".join(parts)
 
 
 __all__ = [
-    "_bounded_runtime_failure",
-    "_bounded_runtime_failure_from_audit",
+    "_runtime_failure_summary",
+    "_runtime_failure_summary_from_audit",
     "_candidate_audit_failure_category",
     "_candidate_process_failure_category",
     "_format_runtime_failure_categories",

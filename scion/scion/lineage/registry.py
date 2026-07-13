@@ -8,9 +8,17 @@ import json
 import sqlite3
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
-from scion.core.models import DecisionFeatures, DecisionOutcome, WeightOptimizationResult
+from scion.core.execution_outcome import (
+    ExecutionOutcome,
+    ExecutionOutcomeRecord,
+)
+from scion.core.models import (
+    DecisionFeatures,
+    DecisionOutcome,
+    WeightOptimizationResult,
+)
 
 
 def _with_screening_case_level_gate_aliases(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -44,6 +52,15 @@ def _with_screening_case_level_gate_aliases(event: Dict[str, Any]) -> Dict[str, 
 
 
 class LineageRegistry:
+    _EXECUTION_OUTCOME_COLUMNS = frozenset(
+        {
+            "execution_outcome",
+            "execution_outcome_reason_code",
+            "execution_outcome_detail",
+            "execution_outcome_provenance_json",
+        }
+    )
+
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
         self._init_db()
@@ -98,9 +115,6 @@ class LineageRegistry:
                     screening_median_delta REAL,
                     screening_ci_low       REAL,
                     screening_ci_high      REAL,
-                    telemetry_guard_failed INTEGER,
-                    telemetry_failure_categories_json TEXT,
-                    telemetry_failure_details_json TEXT,
                     decision_features_json TEXT,
                     decision               TEXT,
                     decision_reason        TEXT,
@@ -110,6 +124,11 @@ class LineageRegistry:
                     protocol_version       TEXT,
                     prompt_tokens          INTEGER,
                     completion_tokens      INTEGER,
+                    execution_outcome      TEXT,
+                    execution_outcome_reason_code TEXT,
+                    execution_outcome_detail TEXT,
+                    execution_outcome_provenance_json TEXT,
+                    audit_payload_json     TEXT,
                     created_at             TEXT DEFAULT (datetime('now'))
                 )
             """)
@@ -121,6 +140,10 @@ class LineageRegistry:
                 "prompt_tokens":     "INTEGER",
                 "completion_tokens": "INTEGER",
                 "audit_payload_json": "TEXT",
+                "execution_outcome": "TEXT",
+                "execution_outcome_reason_code": "TEXT",
+                "execution_outcome_detail": "TEXT",
+                "execution_outcome_provenance_json": "TEXT",
                 "contract_diagnostics_json": "TEXT",
                 "screening_win_rate_scope": "TEXT",
                 "screening_case_wins": "INTEGER",
@@ -139,9 +162,6 @@ class LineageRegistry:
                 "screening_pair_ties": "INTEGER",
                 "screening_pair_total": "INTEGER",
                 "screening_pair_win_rate": "REAL",
-                "telemetry_guard_failed": "INTEGER",
-                "telemetry_failure_categories_json": "TEXT",
-                "telemetry_failure_details_json": "TEXT",
                 "scheduler_slot": "TEXT",
                 "scheduler_reason": "TEXT",
             })
@@ -154,7 +174,6 @@ class LineageRegistry:
                     lineage_id          TEXT,
                     current_code_hash   TEXT,
                     last_clean_code_hash TEXT,
-                    retry_count         INTEGER DEFAULT 0,
                     screening_expand_count INTEGER DEFAULT 0,
                     validation_expand_count INTEGER DEFAULT 0,
                     failure_codes       TEXT,
@@ -163,23 +182,7 @@ class LineageRegistry:
                     direction           TEXT,
                     weight_revision     INTEGER DEFAULT 0,
                     branch_code_status  TEXT DEFAULT 'clean',
-                    last_screening_feedback_tier TEXT,
-                    last_telemetry_outcome TEXT,
-                    branch_mechanism_ids_json TEXT,
-                    telemetry_repair_mechanism_ids_json TEXT,
-                    telemetry_repair_attempts_json TEXT,
-                    branch_lifecycle_policy_blocks INTEGER DEFAULT 0,
-                    branch_lifecycle_new_mechanism_ineligible INTEGER DEFAULT 0,
-                    branch_lifecycle_reroute_reason TEXT,
-                    last_branch_lifecycle_policy_block_json TEXT,
-                    best_quality_checkpoint_id TEXT,
-                    last_valid_checkpoint_id TEXT,
-                    rollback_count INTEGER DEFAULT 0,
-                    last_rollback_reason TEXT,
                     branch_evidence_summary_json TEXT,
-                    pending_retry       INTEGER DEFAULT 0,
-                    blocked_rounds      INTEGER DEFAULT 0,
-                    consecutive_llm_retries INTEGER DEFAULT 0,
                     infra_block_count   INTEGER DEFAULT 0
                 )
             """)
@@ -190,23 +193,7 @@ class LineageRegistry:
                 "direction": "TEXT",
                 "weight_revision": "INTEGER DEFAULT 0",
                 "branch_code_status": "TEXT DEFAULT 'clean'",
-                "last_screening_feedback_tier": "TEXT",
-                "last_telemetry_outcome": "TEXT",
-                "branch_mechanism_ids_json": "TEXT",
-                "telemetry_repair_mechanism_ids_json": "TEXT",
-                "telemetry_repair_attempts_json": "TEXT",
-                "branch_lifecycle_policy_blocks": "INTEGER DEFAULT 0",
-                "branch_lifecycle_new_mechanism_ineligible": "INTEGER DEFAULT 0",
-                "branch_lifecycle_reroute_reason": "TEXT",
-                "last_branch_lifecycle_policy_block_json": "TEXT",
-                "best_quality_checkpoint_id": "TEXT",
-                "last_valid_checkpoint_id": "TEXT",
-                "rollback_count": "INTEGER DEFAULT 0",
-                "last_rollback_reason": "TEXT",
                 "branch_evidence_summary_json": "TEXT",
-                "pending_retry": "INTEGER DEFAULT 0",
-                "blocked_rounds": "INTEGER DEFAULT 0",
-                "consecutive_llm_retries": "INTEGER DEFAULT 0",
                 "infra_block_count": "INTEGER DEFAULT 0",
             })
             conn.execute("""
@@ -225,11 +212,7 @@ class LineageRegistry:
                     family_id            TEXT,
                     family_source        TEXT,
                     taxonomy_version     TEXT,
-                    predicted_direction  TEXT,
-                    target_objectives_json TEXT,
-                    protected_objectives_json TEXT,
-                    novelty_signature_json TEXT,
-                    mechanism_changes_json TEXT
+                    predicted_direction  TEXT
                 )
             """)
             conn.execute("""
@@ -271,10 +254,6 @@ class LineageRegistry:
             self._ensure_columns(conn, "hypotheses", {
                 "base_champion_version": "INTEGER DEFAULT 0",
                 "predicted_direction": "TEXT",
-                "target_objectives_json": "TEXT",
-                "protected_objectives_json": "TEXT",
-                "novelty_signature_json": "TEXT",
-                "mechanism_changes_json": "TEXT",
             })
 
     # ------------------------------------------------------------------
@@ -297,6 +276,19 @@ class LineageRegistry:
 
     def record_event(self, event: Dict[str, Any]) -> str:
         """Insert one experiment row into experiment_events. Returns event_id."""
+        direct_outcome_fields = sorted(
+            self._EXECUTION_OUTCOME_COLUMNS.intersection(event)
+        )
+        if direct_outcome_fields:
+            raise ValueError(
+                "typed execution outcomes must be written through "
+                "record_execution_outcome: "
+                + ", ".join(direct_outcome_fields)
+            )
+        return self._insert_event(event)
+
+    def _insert_event(self, event: Dict[str, Any]) -> str:
+        """Low-level append used by the typed single-owner writer."""
         event = _with_screening_case_level_gate_aliases(event)
         if "event_id" not in event:
             event = dict(event, event_id=str(uuid.uuid4()))
@@ -312,6 +304,66 @@ class LineageRegistry:
             conn.execute(sql, list(event.values()))
         return event["event_id"]
 
+    def record_execution_outcome(
+        self,
+        *,
+        campaign_id: str,
+        branch_id: str,
+        record: ExecutionOutcomeRecord,
+        hypothesis_id: Optional[str] = None,
+        event_kind: str = "execution_outcome",
+        stage: str = "",
+        extra_fields: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        """Append the authoritative typed outcome event for one attempt."""
+        if not isinstance(record, ExecutionOutcomeRecord):
+            raise TypeError("record must be an ExecutionOutcomeRecord")
+        protected = {
+            "event_id",
+            "timestamp",
+            "event_kind",
+            "campaign_id",
+            "branch_id",
+            "hypothesis_id",
+            "stage",
+            "decision",
+            "decision_features_json",
+            "decision_reason",
+            "execution_outcome",
+            "execution_outcome_reason_code",
+            "execution_outcome_detail",
+            "execution_outcome_provenance_json",
+            "audit_payload_json",
+        }
+        extras = dict(extra_fields or {})
+        collisions = sorted(protected.intersection(extras))
+        if collisions:
+            raise ValueError(
+                "execution outcome extra_fields cannot override: "
+                + ", ".join(collisions)
+            )
+        primitive = record.to_primitive()
+        audit_payload = {
+            "schema": "execution-outcome-event.v1",
+            "execution_outcome": primitive,
+        }
+        event: Dict[str, Any] = {
+            "campaign_id": campaign_id,
+            "branch_id": branch_id,
+            "hypothesis_id": hypothesis_id,
+            "event_kind": event_kind,
+            "stage": stage,
+            "execution_outcome": primitive["outcome"],
+            "execution_outcome_reason_code": primitive["reason_code"],
+            "execution_outcome_detail": primitive["detail"],
+            "execution_outcome_provenance_json": json.dumps(
+                primitive["provenance"], sort_keys=True
+            ),
+            "audit_payload_json": json.dumps(audit_payload, sort_keys=True),
+        }
+        event.update(extras)
+        return self._insert_event(event)
+
     def record_contract_failure(
         self,
         campaign_id: str,
@@ -321,26 +373,54 @@ class LineageRegistry:
         action: str,
         target_file: Optional[str],
         failure_reason: str,
-    ) -> None:
-        """Record a C10/contract failure event so research_log can surface it."""
-        event = {
-            "campaign_id": campaign_id,
-            "branch_id": branch_id,
-            "timestamp": datetime.now().isoformat(),
-            "event_kind": "contract_fail",
-            "hypothesis_text": hypothesis_text[:500],
-            "patch_action": action,
-            "patch_file": target_file or "",
-            "contract_result": "failed",
-            "verification_result": "skipped",
-            "canary_result": "skipped",
-            "stage": "hypothesis_contract",
-            "decision": "abandon",
+        *,
+        hypothesis_id: Optional[str] = None,
+        stage: str = "hypothesis_contract",
+        reason_code: str = "CONTRACT_REJECTED",
+        contract_checks: Optional[List[Mapping[str, Any]]] = None,
+        provenance: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        """Record the outer Contract's sole typed research-rejection event."""
+        outcome_provenance = {
+            "owner": "outer_contract",
+            "stage": stage,
+            "change_locus": change_locus,
+            "contract_checks": list(contract_checks or ()),
         }
-        try:
-            self.record_event(event)
-        except Exception:
-            pass
+        supplemental_provenance = dict(provenance or {})
+        protected_provenance = {
+            "owner",
+            "stage",
+            "contract_checks",
+        }.intersection(supplemental_provenance)
+        if protected_provenance:
+            raise ValueError(
+                "contract outcome provenance cannot override: "
+                + ", ".join(sorted(protected_provenance))
+            )
+        outcome_provenance.update(supplemental_provenance)
+        record = ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            reason_code=reason_code,
+            detail=failure_reason,
+            provenance=outcome_provenance,
+        )
+        return self.record_execution_outcome(
+            campaign_id=campaign_id,
+            branch_id=branch_id,
+            hypothesis_id=hypothesis_id,
+            record=record,
+            event_kind="contract_fail",
+            stage=stage,
+            extra_fields={
+                "hypothesis_text": hypothesis_text,
+                "patch_action": action,
+                "patch_file": target_file or "",
+                "contract_result": "failed",
+                "verification_result": "skipped",
+                "canary_result": "skipped",
+            },
+        )
 
     def record_decision(
         self,
@@ -377,6 +457,102 @@ class LineageRegistry:
                 (branch_id,),
             )
             return [dict(row) for row in cursor.fetchall()]
+
+    @staticmethod
+    def _execution_outcome_from_row(row: Mapping[str, Any]) -> Dict[str, Any]:
+        provenance_json = row.get("execution_outcome_provenance_json") or "{}"
+        record = ExecutionOutcomeRecord.from_primitive(
+            {
+                "outcome": row.get("execution_outcome"),
+                "reason_code": row.get("execution_outcome_reason_code"),
+                "detail": row.get("execution_outcome_detail") or "",
+                "provenance": json.loads(provenance_json),
+            }
+        )
+        return {
+            "event_id": row.get("event_id"),
+            "campaign_id": row.get("campaign_id"),
+            "branch_id": row.get("branch_id"),
+            "hypothesis_id": row.get("hypothesis_id"),
+            "timestamp": row.get("timestamp"),
+            "event_kind": row.get("event_kind"),
+            "stage": row.get("stage"),
+            **record.to_primitive(),
+        }
+
+    def get_latest_execution_outcome(
+        self,
+        *,
+        branch_id: str,
+        campaign_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Return the latest explicit outcome; historical NULL rows stay unknown."""
+        clauses = ["branch_id = ?", "execution_outcome IS NOT NULL"]
+        params: List[Any] = [branch_id]
+        if campaign_id is not None:
+            clauses.append("campaign_id = ?")
+            params.append(campaign_id)
+        sql = (
+            "SELECT rowid, * FROM experiment_events WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY timestamp DESC, rowid DESC LIMIT 1"
+        )
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(sql, params).fetchone()
+        if row is None:
+            return None
+        return self._execution_outcome_from_row(dict(row))
+
+    def query_execution_outcomes(
+        self,
+        *,
+        campaign_id: Optional[str] = None,
+        branch_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Query explicit typed outcomes without interpreting historical rows."""
+        clauses = ["execution_outcome IS NOT NULL"]
+        params: List[Any] = []
+        if campaign_id is not None:
+            clauses.append("campaign_id = ?")
+            params.append(campaign_id)
+        if branch_id is not None:
+            clauses.append("branch_id = ?")
+            params.append(branch_id)
+        sql = (
+            "SELECT rowid, * FROM experiment_events WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY timestamp DESC, rowid DESC"
+        )
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(sql, params).fetchall()
+        return [self._execution_outcome_from_row(dict(row)) for row in rows]
+
+    def rebuild_latest_execution_outcomes(
+        self,
+        *,
+        campaign_id: Optional[str] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """Rebuild the per-branch latest typed projection from append-only rows."""
+        clauses = ["execution_outcome IS NOT NULL"]
+        params: List[Any] = []
+        if campaign_id is not None:
+            clauses.append("campaign_id = ?")
+            params.append(campaign_id)
+        sql = (
+            "SELECT rowid, * FROM experiment_events WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY timestamp ASC, rowid ASC"
+        )
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(sql, params).fetchall()
+        latest: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            projected = self._execution_outcome_from_row(dict(row))
+            latest[str(projected["branch_id"])] = projected
+        return latest
 
     def query_failures(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
         """Return events where contract_result or verification_result = 'failed'.
@@ -433,15 +609,6 @@ class LineageRegistry:
                 "SELECT COUNT(*) FROM experiment_events "
                 "WHERE event_kind = 'experiment' AND verification_result = 'failed'"
             ).fetchone()[0]
-            telemetry_failed_experiments = conn.execute(
-                "SELECT COUNT(*) FROM experiment_events "
-                "WHERE event_kind = 'experiment' AND telemetry_guard_failed = 1"
-            ).fetchone()[0]
-            telemetry_category_rows = conn.execute(
-                "SELECT telemetry_failure_categories_json, telemetry_failure_details_json "
-                "FROM experiment_events "
-                "WHERE event_kind = 'experiment' AND telemetry_guard_failed = 1"
-            ).fetchall()
             screening = conn.execute("""
                 SELECT
                     COALESCE(
@@ -507,31 +674,6 @@ class LineageRegistry:
                 if screening_pair_total
                 else 0.0
             )
-            telemetry_failed_experiments_by_category: Dict[str, int] = {}
-            telemetry_failure_details: list[dict[str, Any]] = []
-            for row in telemetry_category_rows:
-                try:
-                    categories = json.loads(row[0] or "[]")
-                except (TypeError, json.JSONDecodeError):
-                    categories = []
-                if not isinstance(categories, list):
-                    categories = []
-                if not categories:
-                    categories = ["unknown"]
-                for category in dict.fromkeys(str(item) for item in categories):
-                    telemetry_failed_experiments_by_category[category] = (
-                        telemetry_failed_experiments_by_category.get(category, 0) + 1
-                    )
-                try:
-                    details = json.loads(row[1] or "[]")
-                except (TypeError, json.JSONDecodeError):
-                    details = []
-                if isinstance(details, dict):
-                    details = [details]
-                if isinstance(details, list):
-                    telemetry_failure_details.extend(
-                        item for item in details if isinstance(item, dict)
-                    )
         return {
             "total_events": total,
             "by_decision": by_decision,
@@ -539,11 +681,6 @@ class LineageRegistry:
             "n_champions": n_champions,
             "contract_failures": contract_failures,
             "verification_failures": verification_failures,
-            "telemetry_failed_experiments": telemetry_failed_experiments,
-            "telemetry_failed_experiments_by_category": (
-                telemetry_failed_experiments_by_category
-            ),
-            "telemetry_failure_details": telemetry_failure_details,
             "screening_win_rate": screening_case_win_rate,
             "screening_win_rate_scope": "case_level_gate",
             "screening_case_wins": screening_case_wins,
@@ -576,7 +713,7 @@ class LineageRegistry:
                 "by_stage": {"contract": N, "verification": N, ...},
                 "by_decision": {"abandon": N, "discard": N, ...},
                 "by_family": {"family_id": {"total": N, "failed": N}, ...},
-                "recent_failures": [last 10 failure events as dicts],
+                "recent_failures": [all failure events as dicts, newest first],
             }
         """
         with sqlite3.connect(self.db_path) as conn:
@@ -629,7 +766,6 @@ class LineageRegistry:
                 WHERE event_kind = 'experiment'
                   AND (contract_result = 'failed' OR verification_result = 'failed')
                 ORDER BY timestamp DESC
-                LIMIT 10
             """).fetchall()]
 
         return {

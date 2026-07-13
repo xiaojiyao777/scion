@@ -58,10 +58,10 @@ def _solution_is_valid(
         artifact = adapter.deserialize_solver_output(raw, instance)
         consistency = adapter.check_solution_consistency(artifact, instance)
         if not consistency.passed:
-            return False, "; ".join(consistency.reasons[:3])
+            return False, "; ".join(consistency.reasons)
         feasibility = adapter.check_feasibility(artifact, instance)
         if not feasibility.passed:
-            return False, "; ".join(feasibility.reasons[:3])
+            return False, "; ".join(feasibility.reasons)
     except Exception as exc:
         return False, str(exc)
     return True, ""

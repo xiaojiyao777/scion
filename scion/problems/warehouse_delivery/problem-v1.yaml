@@ -50,14 +50,7 @@ solver:
   max_iter: 200
 
 parameter_search:
-  enabled: true
-  trigger: on_promote
-  target: operator_weights
-  strategy: random_local
-  n_initial_random: 8
-  n_iterations: 16
-  n_eval_seeds: 2
-  weight_bounds: [0.05, 5.0]
+  enabled: false
 
 operator_interface:
   base_class_import: "operators.base:Operator"

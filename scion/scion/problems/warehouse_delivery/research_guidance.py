@@ -1,4 +1,4 @@
-"""Warehouse-owned research guidance provider."""
+"""Warehouse-owned, direct-V3 research guidance."""
 
 from __future__ import annotations
 
@@ -15,56 +15,51 @@ from scion.research_guidance import (
     GuidanceBlock,
     GuidanceContext,
     MeasurementGuidanceSummary,
-    RequiredMechanism,
     ResearchGuidanceContract,
     validate_research_guidance_contract,
 )
 
+
 WAREHOUSE_PROBLEM_FAMILY = "warehouse_delivery"
 WAREHOUSE_RESEARCH_GUIDANCE_CONTRACT_SCHEMA = (
-    "scion.warehouse_research_guidance_contract.v1"
+    "scion.warehouse_research_guidance_contract.v2"
 )
 WAREHOUSE_LEGACY_RESEARCH_FOCUS_SCHEMA = "scion.warehouse_research_focus.v1"
 
 WAREHOUSE_ANALYSIS_INTENT = (
-    "Warehouse champion-v2 continuous-improvement follow-up. Verify whether "
-    "the accepted v0.4 positive research path can produce additional useful "
-    "research without regressing promotion behavior; inspect branch transfer, "
-    "prompt context, runtime/model explanation, and whether any plateau is real "
-    "or a missed continuous-promotion opportunity."
+    "Use the current warehouse champion source, branch history, and safe aggregate "
+    "measurement evidence to choose an algorithmic improvement on either the "
+    "order-level or vehicle-level research surface."
 )
 WAREHOUSE_ACCEPTED_CHECKPOINT = (
-    "Champion v2 promoted from the validation-transfer acceptance-contract "
-    "run via split-preserving cost compression in pack_compatible_vehicles."
+    "The current champion source is the implementation starting point; its "
+    "algorithmic choices are evidence, not a prescribed next mechanism."
 )
 WAREHOUSE_CURRENT_QUESTION = (
-    "Starting from champion v2, determine whether warehouse can produce "
-    "additional useful research or whether the observed behavior is a real "
-    "post-v2 plateau."
+    "What source-grounded change on the order-level or vehicle-level surface can "
+    "improve the lexicographic warehouse objective while preserving feasibility?"
 )
 WAREHOUSE_DECISION_BOUNDARY = (
-    "This focus is proposal/delegated-analysis guidance only and must not "
-    "enter DecisionFeatures, Protocol gates, promotion input, or scheduler "
-    "state."
+    "This problem-owned context supports hypothesis formation only and remains "
+    "outside DecisionFeatures, Protocol decisions, promotion input, and scheduler state."
 )
 WAREHOUSE_REQUIRED_EVIDENCE = (
-    "preserve or improve promotion behavior relative to the v2 checkpoint",
-    "inspect branch transfer from the v2 source campaign before judging plateau",
-    "distinguish quality-blocked proposals from protocol-evaluated no-effect candidates",
-    "interpret split-preserving cost-compression with cost_delta and improving-move telemetry, not split_delta alone",
-    "explain fast completion through the declared warehouse runtime/problem model",
+    "connect the proposed algorithmic effect to subcategory_splits or total_cost",
+    "ground the idea in the current champion source and complete branch evidence",
+    "preserve assignment completeness and synchronization",
+    "preserve capacity, region, category, pickup, hazard, and locked-order feasibility",
+    "use runtime and operator diagnostics as optional explanation when informative",
 )
 WAREHOUSE_DEFAULT_AVOID_DIRECTIONS = (
-    "restart from baseline instead of champion v2",
-    "treat proposal-quality blocks as plateau evidence",
-    "treat fast completion as incidental noise rather than runtime-model evidence",
-    "treat split_delta_sum==0 as no effect when cost_delta_sum is positive",
-    "repeat unbounded merge_vehicles or swap_orders variants without validation-transfer risk controls",
-    "launch a broad warehouse matrix before the focused v2 follow-up is analyzed",
+    "model the warehouse assignment problem as routing or distance optimization",
+    "preselect an operator family before inspecting the current source",
+    "move orders without an explicit path to the lexicographic objective",
+    "trade away assignment feasibility for an apparent objective improvement",
+    "treat optional telemetry as a proposal gate or as a substitute for objective evidence",
 )
 WAREHOUSE_ADAPTER_OPPORTUNITY_FIELDS = (
-    "transfer_risk",
-    "required_diagnostics",
+    "objective_model",
+    "optional_observability",
     "measurable_opportunity_classes",
     "opportunity_diagnostics",
     "policy",
@@ -75,25 +70,22 @@ WAREHOUSE_ADAPTER_FORBIDDEN_KEY_FRAGMENTS = (
     "raw_pair",
     "raw_calibration",
     "calibration_pair",
-    "validation_case",
-    "frozen_case",
-    "holdout",
+    "evaluation_case",
     "prompt_ratio",
     "llm_text",
 )
 
 
 class WarehouseResearchGuidanceProvider:
-    """Build warehouse proposal-only research guidance."""
+    """Build open, problem-owned warehouse hypothesis context."""
 
     def build_guidance_contract(
         self,
         context: GuidanceContext,
     ) -> ResearchGuidanceContract:
-        measurement_diagnostics = _measurement_diagnostics_from_context(context)
         return build_warehouse_research_guidance_contract(
             context,
-            measurement_diagnostics=measurement_diagnostics,
+            measurement_diagnostics=_measurement_diagnostics_from_context(context),
         )
 
 
@@ -102,11 +94,11 @@ def build_warehouse_research_guidance_contract(
     *,
     measurement_diagnostics: Mapping[str, Any] | None = None,
 ) -> ResearchGuidanceContract:
-    """Return the typed warehouse guidance contract for generic rendering."""
+    """Return warehouse facts without selecting the next mechanism."""
 
-    problem_family = WAREHOUSE_PROBLEM_FAMILY
-    if context is not None and context.problem_family:
-        problem_family = context.problem_family
+    problem_family = (
+        context.problem_family if context is not None else WAREHOUSE_PROBLEM_FAMILY
+    )
     if problem_family != WAREHOUSE_PROBLEM_FAMILY:
         raise ValueError(
             "warehouse research guidance requires problem_family="
@@ -117,87 +109,73 @@ def build_warehouse_research_guidance_contract(
         schema_version=WAREHOUSE_RESEARCH_GUIDANCE_CONTRACT_SCHEMA,
         problem_family=problem_family,
         current_question=WAREHOUSE_CURRENT_QUESTION,
-        required_mechanisms=(
-            RequiredMechanism(
-                mechanism_id="warehouse_champion_v2_checkpoint",
-                category="research_continuity",
-                description=WAREHOUSE_ACCEPTED_CHECKPOINT,
-                required_observations=(
-                    "champion_v2_source_campaign",
-                    "promotion_behavior_relative_to_checkpoint",
-                ),
-                protected_items=("champion_v2", "pack_compatible_vehicles"),
-                hypothesis_mechanism_binding="context_only",
+        required_mechanisms=(),
+        evidence_requirements=(
+            EvidenceRequirement(
+                requirement_id="algorithmic_objective_path",
+                category="problem_reasoning",
+                description=WAREHOUSE_REQUIRED_EVIDENCE[0],
+                required_fields=("subcategory_splits", "total_cost"),
             ),
-            RequiredMechanism(
-                mechanism_id="validation_transfer_continuation",
-                category="warehouse_operator_followup",
-                description=(
-                    "Follow the accepted validation-transfer path with bounded "
-                    "operator changes and explicit activation/effect diagnostics."
-                ),
-                required_observations=(
-                    "operator_invocations",
-                    "eligible_vehicle_or_order_groups_seen",
-                    "accepted_moves",
-                    "split_delta_sum",
-                    "cost_delta_sum",
-                    "improving_move_count",
-                ),
-                protected_items=(
-                    "validation_transfer_acceptance_contract",
-                    "split_preserving_cost_compression",
-                ),
-                hypothesis_mechanism_binding="context_only",
+            EvidenceRequirement(
+                requirement_id="current_source_grounding",
+                category="source_grounding",
+                description=WAREHOUSE_REQUIRED_EVIDENCE[1],
+                required_fields=("champion_source", "branch_evidence"),
             ),
-            RequiredMechanism(
-                mechanism_id="warehouse_runtime_model_handoff",
-                category="measurement_runtime",
+            EvidenceRequirement(
+                requirement_id="warehouse_feasibility_model",
+                category="problem_feasibility",
                 description=(
-                    "Explain fast completion and low-SNR outcomes through the "
-                    "declared warehouse runtime/problem model."
+                    f"{WAREHOUSE_REQUIRED_EVIDENCE[2]}; "
+                    f"{WAREHOUSE_REQUIRED_EVIDENCE[3]}"
                 ),
-                required_observations=(
-                    "runtime_model",
-                    "pairing_validity",
-                    "screening_mde_at_power_80",
-                ),
-                protected_items=("measurement_opportunity_diagnostics",),
-                hypothesis_mechanism_binding="context_only",
+                required_fields=("assignment", "vehicle_order_ids", "feasibility"),
             ),
         ),
-        evidence_requirements=_warehouse_evidence_requirements(),
-        avoid_rules=_warehouse_avoid_rules(),
+        avoid_rules=tuple(
+            AvoidRule(
+                rule_id=f"warehouse_fact_{index}",
+                category="problem_model",
+                description=description,
+            )
+            for index, description in enumerate(
+                WAREHOUSE_DEFAULT_AVOID_DIRECTIONS,
+                start=1,
+            )
+        ),
         continuity_requirements=(
             ContinuityRequirement(
-                requirement_id="continue_from_champion_v2",
-                category="champion_lineage",
-                description=(
-                    "Start from champion v2 and inspect branch transfer before "
-                    "calling the post-v2 behavior a plateau."
-                ),
-                related_ids=(
-                    "warehouse_champion_v2_checkpoint",
-                    "validation_transfer_continuation",
-                ),
+                requirement_id="current_champion_is_starting_source",
+                category="source_continuity",
+                description=WAREHOUSE_ACCEPTED_CHECKPOINT,
             ),
         ),
         guidance_blocks=(
             GuidanceBlock(
-                block_id="warehouse_prepared_followup_focus",
-                category="proposal_focus",
-                title="Champion-v2 warehouse follow-up",
+                block_id="warehouse_open_research_surfaces",
+                category="research_surfaces",
+                title="Open warehouse research surfaces",
                 lines=(
-                    WAREHOUSE_ACCEPTED_CHECKPOINT,
-                    WAREHOUSE_CURRENT_QUESTION,
-                    "Treat quality-blocked, infra-only, or screened-only outcomes as insufficient plateau evidence.",
-                    "Tie any split-preserving cost compression claim to cost_delta_sum and improving_move_count, not split_delta_sum alone.",
+                    "order_level: move or exchange orders when the source supports a credible objective path",
+                    "vehicle_level: merge, split, resize, or rebuild assignments when the source supports a credible objective path",
+                    "Neither surface nor operator family is preferred in advance.",
                 ),
             ),
             GuidanceBlock(
-                block_id="warehouse_measurement_runtime_focus",
-                category="measurement_runtime",
-                title="Measurement/runtime interpretation",
+                block_id="warehouse_optional_observability",
+                category="observability",
+                title="Optional algorithm observability",
+                lines=(
+                    WAREHOUSE_REQUIRED_EVIDENCE[4],
+                    "Useful fields may include operator_invocations, accepted_moves, split_delta_sum, cost_delta_sum, and improving_move_count.",
+                    "Absence of those fields does not block an otherwise valid algorithmic idea.",
+                ),
+            ),
+            GuidanceBlock(
+                block_id="warehouse_measurement_context",
+                category="measurement",
+                title="Safe aggregate measurement context",
                 lines=_measurement_guidance_lines(measurement_diagnostics),
             ),
         ),
@@ -214,7 +192,7 @@ def build_warehouse_legacy_research_focus(
     *,
     measurement_diagnostics: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return the compatibility dict consumed by prepared manifests today."""
+    """Return the prepared-manifest compatibility shape with V3 content."""
 
     if measurement_diagnostics is None:
         measurement_diagnostics = build_warehouse_measurement_opportunity_diagnostics(
@@ -242,7 +220,7 @@ def build_warehouse_measurement_opportunity_diagnostics(
     scion_dir: Path,
     problem_v1: Path,
 ) -> dict[str, Any]:
-    """Build proposal-visible warehouse measurement/runtime guidance."""
+    """Build complete safe aggregate measurement and opportunity context."""
 
     if str(scion_dir) not in sys.path:
         sys.path.insert(0, str(scion_dir))
@@ -251,38 +229,28 @@ def build_warehouse_measurement_opportunity_diagnostics(
     from scion.problem.bridge import load_problem_spec_v1_from_yaml  # noqa: PLC0415
 
     if not problem_v1.is_file():
-        raise SystemExit(
-            "Warehouse agentic launcher requires problem-v1 measurement "
-            f"declaration: {problem_v1}"
-        )
+        raise SystemExit(f"Warehouse problem declaration not found: {problem_v1}")
 
     spec = load_problem_spec_v1_from_yaml(problem_v1)
     measurement = spec.measurement
     measurement_view = measurement_consumer_view(spec)
     if measurement_view.readiness_status != "ready":
         raise SystemExit(
-            "Warehouse measurement calibration is not launch-ready: "
+            "Warehouse measurement declaration is not ready: "
             f"{measurement_view.readiness_reason_code}"
         )
 
     calibration_ref = str(measurement.calibration_ref or "").strip()
     calibration_path = _resolve_calibration_ref(spec.root_dir, calibration_ref)
     calibration_artifact = _read_calibration_artifact(calibration_path)
-    power = _mapping_or_empty(calibration_artifact.get("protocol_power"))
     practical_screen_delta = float(measurement_view.practical_delta_screen or 0.0)
-    practical_validate_delta = float(measurement_view.practical_delta_validate or 0.0)
-    mde_at_power_80 = float(measurement_view.mde_at_power_80 or 0.0)
-    reason_codes = _warehouse_measurement_reason_codes(
-        runtime_model=measurement_view.runtime_model,
-        pairing_validity=measurement_view.pairing_validity,
-        practical_screen_delta=practical_screen_delta,
-        mde_at_power_80=mde_at_power_80,
+    practical_validate_delta = float(
+        measurement_view.practical_delta_validate or 0.0
     )
-    recommended_min_seeds = _positive_int_or_none(power.get("recommended_min_seeds"))
-    related_calibrations = _warehouse_related_calibrations(calibration_artifact)
+    mde_at_power_80 = float(measurement_view.mde_at_power_80 or 0.0)
 
     diagnostic: dict[str, Any] = {
-        "schema_version": "warehouse_measurement_runtime_handoff.v1",
+        "schema_version": "warehouse_measurement_opportunity.v2",
         "source": "problem_v1.measurement.calibration_ref",
         "proposal_visibility_only": True,
         "decision_features_excluded": True,
@@ -305,13 +273,14 @@ def build_warehouse_measurement_opportunity_diagnostics(
             mde_at_power_80=mde_at_power_80,
             practical_screen_delta=practical_screen_delta,
         ),
-        "reason_codes": reason_codes,
+        "reason_codes": _warehouse_measurement_reason_codes(
+            runtime_model=measurement_view.runtime_model,
+            pairing_validity=measurement_view.pairing_validity,
+            practical_screen_delta=practical_screen_delta,
+            mde_at_power_80=mde_at_power_80,
+        ),
     }
     diagnostic.update(_warehouse_adapter_opportunity_projection(spec))
-    if recommended_min_seeds is not None:
-        diagnostic["recommended_min_seeds"] = recommended_min_seeds
-    if related_calibrations:
-        diagnostic["related_calibrations"] = related_calibrations
     return diagnostic
 
 
@@ -331,158 +300,62 @@ def _measurement_diagnostics_from_context(
     return None
 
 
-def _warehouse_evidence_requirements() -> tuple[EvidenceRequirement, ...]:
-    return (
-        EvidenceRequirement(
-            requirement_id="promotion_behavior_checkpoint",
-            category="champion_continuity",
-            description=WAREHOUSE_REQUIRED_EVIDENCE[0],
-            mechanism_ids=("warehouse_champion_v2_checkpoint",),
-            required_fields=("promotion_behavior", "checkpoint_comparison"),
-        ),
-        EvidenceRequirement(
-            requirement_id="branch_transfer_before_plateau",
-            category="research_continuity",
-            description=WAREHOUSE_REQUIRED_EVIDENCE[1],
-            mechanism_ids=("warehouse_champion_v2_checkpoint",),
-            required_fields=("source_campaign_transfer", "plateau_evidence_kind"),
-        ),
-        EvidenceRequirement(
-            requirement_id="quality_block_vs_protocol_effect",
-            category="proposal_quality_boundary",
-            description=WAREHOUSE_REQUIRED_EVIDENCE[2],
-            mechanism_ids=("validation_transfer_continuation",),
-            protected_items=("proposal_quality_blocks", "protocol_evaluated_candidates"),
-            required_fields=("quality_block_status", "protocol_effect_status"),
-        ),
-        EvidenceRequirement(
-            requirement_id="split_cost_telemetry_interpretation",
-            category="measurement_telemetry",
-            description=WAREHOUSE_REQUIRED_EVIDENCE[3],
-            mechanism_ids=("validation_transfer_continuation",),
-            required_fields=("split_delta_sum", "cost_delta_sum", "improving_move_count"),
-        ),
-        EvidenceRequirement(
-            requirement_id="runtime_model_interpretation",
-            category="measurement_runtime",
-            description=WAREHOUSE_REQUIRED_EVIDENCE[4],
-            mechanism_ids=("warehouse_runtime_model_handoff",),
-            required_fields=("runtime_model", "pairing_validity", "completion_explanation"),
-        ),
-    )
-
-
-def _warehouse_avoid_rules() -> tuple[AvoidRule, ...]:
-    return tuple(
-        AvoidRule(
-            rule_id=_avoid_rule_id(index, description),
-            category="warehouse_prepared_focus",
-            description=description,
-            applies_to=(
-                "warehouse_champion_v2_checkpoint",
-                "validation_transfer_continuation",
-            ),
-        )
-        for index, description in enumerate(WAREHOUSE_DEFAULT_AVOID_DIRECTIONS, start=1)
-    )
-
-
-def _avoid_rule_id(index: int, description: str) -> str:
-    words = [
-        "".join(character for character in word.lower() if character.isalnum())
-        for word in description.split()
-    ]
-    slug = "_".join(word for word in words if word)[:48].strip("_")
-    return f"avoid_{index}_{slug or 'warehouse_pattern'}"
-
-
 def _measurement_summary(
-    measurement_diagnostics: Mapping[str, Any] | None,
+    diagnostics: Mapping[str, Any] | None,
 ) -> MeasurementGuidanceSummary:
-    metric_names = ["subcategory_splits", "total_cost"]
     summary = (
-        "Use warehouse measurement/runtime handoff as proposal guidance only; "
-        "interpret split and cost effects together."
+        str(diagnostics.get("summary") or "").strip()
+        if diagnostics
+        else "No aggregate measurement handoff was supplied."
     )
-    limitations = [
-        "proposal-only measurement summary",
-        "excluded from DecisionFeatures",
-        "validation and frozen case details remain hidden",
-    ]
-    if measurement_diagnostics:
-        metric = str(measurement_diagnostics.get("metric") or "").strip()
-        if metric and metric not in metric_names:
-            metric_names.append(metric)
-        summary = str(measurement_diagnostics.get("summary") or summary)
-        runtime_model = str(measurement_diagnostics.get("runtime_model") or "").strip()
-        pairing_validity = str(
-            measurement_diagnostics.get("pairing_validity") or ""
-        ).strip()
-        if runtime_model:
-            limitations.append(f"runtime_model={runtime_model}")
-        if pairing_validity:
-            limitations.append(f"pairing_validity={pairing_validity}")
-        reason_codes = measurement_diagnostics.get("reason_codes")
-        if isinstance(reason_codes, list) and reason_codes:
-            limitations.append("reason_codes=" + ",".join(map(str, reason_codes)))
     return MeasurementGuidanceSummary(
-        summary_id="warehouse_measurement_runtime_handoff",
+        summary_id="warehouse_safe_aggregate_measurement",
         summary=summary,
-        metric_names=tuple(metric_names),
-        limitations=tuple(limitations),
+        metric_names=("subcategory_splits", "total_cost"),
+        limitations=(
+            "hypothesis context only",
+            "excluded from DecisionFeatures",
+            "contains aggregate measurement facts and no evaluation-case details",
+        ),
     )
 
 
 def _measurement_guidance_lines(
-    measurement_diagnostics: Mapping[str, Any] | None,
+    diagnostics: Mapping[str, Any] | None,
 ) -> tuple[str, ...]:
-    if not measurement_diagnostics:
+    if not diagnostics:
         return (
-            "Use the warehouse runtime/problem model before treating fast completion as plateau evidence.",
-            "Measurement diagnostics remain proposal-only and excluded from DecisionFeatures.",
+            "No aggregate measurement handoff was supplied.",
+            "Choose the algorithmic direction from source and branch evidence.",
         )
-    metric = measurement_diagnostics.get("metric")
-    runtime_model = measurement_diagnostics.get("runtime_model")
-    pairing_validity = measurement_diagnostics.get("pairing_validity")
-    mde = measurement_diagnostics.get("screening_mde_at_power_80")
-    summary = measurement_diagnostics.get("summary")
     return (
-        f"Metric: {metric}",
-        f"Runtime model: {runtime_model}",
-        f"Pairing validity: {pairing_validity}",
-        f"Screening MDE at 80% power: {mde}",
-        f"Summary: {summary}",
+        f"Metric: {diagnostics.get('metric')}",
+        f"Unit: {diagnostics.get('unit')}",
+        f"Runtime model: {diagnostics.get('runtime_model')}",
+        f"Pairing validity: {diagnostics.get('pairing_validity')}",
+        f"Practical screen delta: {diagnostics.get('practical_screen_delta')}",
+        f"Practical formal delta: {diagnostics.get('practical_validate_delta')}",
+        f"Screening MDE at 80% power: {diagnostics.get('screening_mde_at_power_80')}",
+        f"Summary: {diagnostics.get('summary')}",
     )
 
 
 def _warehouse_adapter_opportunity_projection(spec: Any) -> dict[str, Any]:
-    """Project problem-owned warehouse follow-up diagnostics into launch focus."""
-
     from scion.problem.loader import load_problem_adapter  # noqa: PLC0415
 
     adapter = load_problem_adapter(spec)
-    hook = getattr(adapter, "render_problem_measurement_diagnostics", None)
-    if not callable(hook):
-        raise SystemExit(
-            "Warehouse agentic launcher requires adapter measurement "
-            "follow-up diagnostics"
-        )
-    payload = hook()
+    payload = adapter.render_problem_measurement_diagnostics()
     if not isinstance(payload, Mapping):
-        raise SystemExit(
-            "Warehouse adapter measurement follow-up diagnostics must be a mapping"
-        )
-    redacted = _redact_warehouse_adapter_opportunity_payload(dict(payload))
-    if not isinstance(redacted, Mapping):
-        raise SystemExit("Warehouse adapter measurement diagnostics invalid")
+        raise SystemExit("Warehouse adapter research diagnostics must be a mapping")
+    safe_payload = _redact_warehouse_adapter_opportunity_payload(dict(payload))
     projection: dict[str, Any] = {
         "opportunity_projection_source": (
             "problem_adapter.render_problem_measurement_diagnostics"
         ),
-        "adapter_payload_schema": str(redacted.get("schema_version") or "").strip(),
+        "adapter_payload_schema": str(safe_payload.get("schema_version") or ""),
     }
     for field in WAREHOUSE_ADAPTER_OPPORTUNITY_FIELDS:
-        value = redacted.get(field)
+        value = safe_payload.get(field)
         if value not in ("", None, [], {}, ()):
             projection[field] = value
     missing = [
@@ -492,7 +365,7 @@ def _warehouse_adapter_opportunity_projection(spec: Any) -> dict[str, Any]:
     ]
     if missing:
         raise SystemExit(
-            "Warehouse adapter measurement follow-up diagnostics missing fields: "
+            "Warehouse adapter research diagnostics missing fields: "
             + ", ".join(missing)
         )
     return projection
@@ -500,23 +373,14 @@ def _warehouse_adapter_opportunity_projection(spec: Any) -> dict[str, Any]:
 
 def _redact_warehouse_adapter_opportunity_payload(value: Any) -> Any:
     if isinstance(value, Mapping):
-        projected: dict[str, Any] = {}
-        for key, child in value.items():
-            key_text = str(key)
-            if not _warehouse_adapter_key_allowed(key_text):
-                continue
-            redacted = _redact_warehouse_adapter_opportunity_payload(child)
-            if redacted not in ("", None, [], {}, ()):
-                projected[key_text] = redacted
-        return projected
+        return {
+            str(key): _redact_warehouse_adapter_opportunity_payload(child)
+            for key, child in value.items()
+            if _warehouse_adapter_key_allowed(str(key))
+        }
     if isinstance(value, (list, tuple)):
-        projected_items = [
-            _redact_warehouse_adapter_opportunity_payload(item) for item in value
-        ]
         return [
-            item
-            for item in projected_items
-            if item not in ("", None, [], {}, ())
+            _redact_warehouse_adapter_opportunity_payload(item) for item in value
         ]
     return value
 
@@ -544,7 +408,7 @@ def _read_calibration_artifact(path: Path) -> dict[str, Any]:
             f"unable to read warehouse calibration artifact {path}: {exc}"
         ) from exc
     if not isinstance(payload, dict):
-        raise SystemExit(f"Warehouse calibration artifact must be a JSON object: {path}")
+        raise SystemExit(f"Warehouse calibration artifact must be an object: {path}")
     return payload
 
 
@@ -555,10 +419,9 @@ def _calibration_handoff(
     calibration_path: Path,
     n_pairs: int,
 ) -> dict[str, Any]:
-    calibration_run = _compact_calibration_run(
-        calibration_artifact.get("calibration_run")
-    )
-    payload: dict[str, Any] = {
+    source = calibration_artifact.get("source_artifact")
+    source_artifact = dict(source) if isinstance(source, Mapping) else {}
+    return {
         "schema": calibration_artifact.get("schema"),
         "ref": calibration_ref,
         "path": str(calibration_path),
@@ -567,105 +430,12 @@ def _calibration_handoff(
         "decision_features_excluded": calibration_artifact.get(
             "decision_features_excluded"
         ),
-        "calibration_run_action": calibration_run.get("action"),
+        "source_artifact": {
+            key: source_artifact.get(key)
+            for key in ("ref", "sha256")
+            if source_artifact.get(key) not in ("", None)
+        },
     }
-    source_artifact = _compact_source_artifact(
-        calibration_artifact.get("source_artifact")
-    )
-    if source_artifact:
-        payload["source_artifact"] = source_artifact
-    if calibration_run:
-        payload["calibration_run"] = calibration_run
-    return {
-        key: value
-        for key, value in payload.items()
-        if value not in ("", None, [], {}, ())
-    }
-
-
-def _compact_source_artifact(value: Any) -> dict[str, Any]:
-    source = _mapping_or_empty(value)
-    payload = {
-        "ref": str(source.get("ref") or ""),
-        "sha256": str(source.get("sha256") or ""),
-    }
-    return {
-        key: item
-        for key, item in payload.items()
-        if item not in ("", None)
-    }
-
-
-def _compact_calibration_run(value: Any) -> dict[str, Any]:
-    run = _mapping_or_empty(value)
-    payload: dict[str, Any] = {}
-    for key in (
-        "action",
-        "replicate_count",
-        "selected_surface",
-        "selected_case_count",
-        "selected_seed_count",
-        "seed_offset",
-        "bootstrap_samples",
-        "decision_features_excluded",
-    ):
-        item = run.get(key)
-        if item not in ("", None, [], {}, ()):
-            payload[key] = item
-    runtime_policy = _compact_runtime_policy(run.get("runtime_policy"))
-    if runtime_policy:
-        payload["runtime_policy"] = runtime_policy
-    return payload
-
-
-def _compact_runtime_policy(value: Any) -> dict[str, Any]:
-    policy = _mapping_or_empty(value)
-    payload: dict[str, Any] = {}
-    for key in (
-        "selected_policy",
-        "runner_timeout_sec",
-        "uniform_time_limit_sec",
-        "time_limit_sec",
-    ):
-        item = policy.get(key)
-        if item not in ("", None, [], {}, ()):
-            payload[key] = item
-    return payload
-
-
-def _mapping_or_empty(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
-
-
-def _positive_int_or_none(value: Any) -> int | None:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return None
-    return parsed if parsed > 0 else None
-
-
-def _warehouse_related_calibrations(artifact: dict[str, Any]) -> list[dict[str, Any]]:
-    related = artifact.get("related_calibrations")
-    if not isinstance(related, list):
-        return []
-    items: list[dict[str, Any]] = []
-    for item in related:
-        if not isinstance(item, dict):
-            continue
-        payload = {
-            "action": str(item.get("action") or ""),
-            "n_pairs": item.get("n_pairs"),
-            "mde_at_power_80": item.get("mde_at_power_80"),
-        }
-        items.append(
-            {
-                key: value
-                for key, value in payload.items()
-                if value not in ("", None)
-            }
-        )
-    return items
 
 
 def _warehouse_measurement_reason_codes(
@@ -693,11 +463,11 @@ def _warehouse_measurement_summary(
 ) -> str:
     if mde_at_power_80 > practical_screen_delta:
         return (
-            f"Warehouse screening is low-power for raw {metric} effects below "
-            "the measured MDE; interpret split-preserving cost compression "
-            "against the A/A noise floor and current-run runtime evidence."
+            f"Aggregate {metric} effects below the measured screening MDE are "
+            "hard to distinguish from the current noise floor; use this as "
+            "interpretive context, not as a proposal constraint."
         )
     return (
-        f"Warehouse screening MDE is within the declared practical {metric} delta; "
-        "interpret effects against the measured A/A noise floor."
+        f"The measured screening MDE is within the declared practical {metric} "
+        "delta; interpret observed effects against the aggregate noise floor."
     )

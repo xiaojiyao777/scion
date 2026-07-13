@@ -150,7 +150,7 @@ def test_contract_gate_rejects_baseline_algorithm_integration_extra_solve_kwargs
     )
     assert not c9e.passed
     assert "solver.solve(instance, rng)" in c9e.detail
-    assert "initial_solution" in c9e.detail
+    assert "no stable solver.solve call found" in c9e.detail
 
 
 def test_contract_gate_rejects_scheduler_integration_constructor_api_change(

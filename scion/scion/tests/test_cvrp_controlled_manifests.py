@@ -142,7 +142,6 @@ def test_csv_rows_are_importable_and_match_checked_in_manifests() -> None:
             config=CvrpCaseSelectionConfig(
                 subsets=(stage,),
                 seeds=tuple(checked_in.config["seeds"]),  # type: ignore[arg-type]
-                max_cases_total=len(checked_in.cases),
                 source_label="vrp_full_experiment_seed0_final_csv",
             ),
         )

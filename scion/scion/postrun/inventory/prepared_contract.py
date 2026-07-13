@@ -9,9 +9,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-
 PREPARED_RUN_MANIFEST_SCHEMA = "scion.launcher_prepared_run_manifest.v1"
 PREPARED_RUN_CONTRACT_SCHEMA = "scion.prepared_run_contract_inventory.v1"
+REMOVED_RUNTIME_COMMAND_OPTIONS = (
+    "--measurement-governance",
+    "--proposal-context-ablation",
+    "--proposal-runtime-mode",
+    "--disable-early-stop",
+)
+REMOVED_RUNTIME_ENV_KEYS = (
+    "MEASUREMENT_GOVERNANCE",
+    "PROPOSAL_CONTEXT_ABLATION",
+    "PROPOSAL_RUNTIME_MODE",
+    "DISABLE_EARLY_STOP",
+)
 
 
 @dataclass
@@ -140,7 +151,11 @@ class PreparedRunContractInventoryPort:
             _command_points_to_prepared_manifest(command_text, run_root, run_root_text),
             "PREPARED_RUN_MANIFEST",
         )
-        add_check("model_is_gpt55", model.get("name") == "gpt-5.5", model.get("name"))
+        add_check(
+            "model_name_present",
+            bool(str(model.get("name") or "").strip()),
+            model.get("name"),
+        )
         add_check(
             "completion_preflight_enabled",
             model.get("completion_preflight") is True,
@@ -173,15 +188,27 @@ class PreparedRunContractInventoryPort:
             _positive_number(execution.get("rounds")),
             execution.get("rounds"),
         )
+        try:
+            recorded_runtime_mode = prepared_execution_runtime_mode(execution)
+            runtime_mode_detail = recorded_runtime_mode
+            runtime_mode_consistent = True
+        except ValueError as exc:
+            runtime_mode_detail = str(exc)
+            runtime_mode_consistent = False
         add_check(
-            "execution_disable_early_stop",
-            execution.get("disable_early_stop") is True,
-            execution.get("disable_early_stop"),
+            "execution_proposal_runtime_mode_consistent",
+            runtime_mode_consistent,
+            runtime_mode_detail,
         )
+        removed_command_options = [
+            option
+            for option in REMOVED_RUNTIME_COMMAND_OPTIONS
+            if command_has_shell_flag(command, option)
+        ]
         add_check(
-            "command_disable_early_stop",
-            command_has_shell_flag(command, "--disable-early-stop"),
-            command,
+            "command_removed_runtime_controls_absent",
+            not removed_command_options,
+            removed_command_options,
         )
         missing_config_paths = missing_manifest_config_paths(
             config,
@@ -457,24 +484,35 @@ def git_output(args: tuple[str, ...], *, repo_dir: Path) -> str | None:
 
 
 def prepared_contract_execution(execution: Mapping[str, Any]) -> dict[str, Any]:
+    try:
+        proposal_runtime_mode = prepared_execution_runtime_mode(execution)
+    except ValueError:
+        proposal_runtime_mode = None
     return {
         "rounds": execution.get("rounds"),
         "time_limit_sec": execution.get("time_limit_sec"),
-        "agentic_session_timeout_sec": execution.get("agentic_session_timeout_sec"),
-        "agentic_tool_max_steps": execution.get("agentic_tool_max_steps"),
-        "agentic_tool_max_calls": execution.get("agentic_tool_max_calls"),
-        "agentic_code_tool_max_calls": execution.get("agentic_code_tool_max_calls"),
-        "agentic_observation_max_chars": execution.get(
-            "agentic_observation_max_chars"
-        ),
-        "proposal_attempt_limit": execution.get("proposal_attempt_limit"),
-        "proposal_quality_loop_limit": execution.get("proposal_quality_loop_limit"),
-        "stage_transition_drain_limit": execution.get("stage_transition_drain_limit"),
-        "measurement_governance": execution.get("measurement_governance"),
-        "proposal_context_ablation": execution.get("proposal_context_ablation"),
-        "agentic_proposal": execution.get("agentic_proposal"),
-        "disable_early_stop": execution.get("disable_early_stop"),
+        "proposal_runtime_mode": proposal_runtime_mode,
     }
+
+
+def prepared_execution_runtime_mode(execution: Mapping[str, Any]) -> str:
+    """Require the sole production proposal runtime."""
+
+    explicit = execution.get("proposal_runtime_mode")
+    if explicit != "direct_v3":
+        raise ValueError("prepared proposal runtime must be direct_v3")
+    supported_fields = {
+        "rounds",
+        "time_limit_sec",
+        "proposal_runtime_mode",
+    }
+    unsupported = sorted(set(execution).difference(supported_fields))
+    if unsupported:
+        raise ValueError(
+            "prepared direct_v3 execution contains unsupported fields: "
+            + ", ".join(unsupported)
+        )
+    return "direct_v3"
 
 
 def prepared_contract_git_identity(

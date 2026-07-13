@@ -11,11 +11,6 @@ from scion.proposal.edit_protocol.errors import (
 )
 from scion.proposal.edit_protocol.source_discovery import source_digest_for_content
 
-_NEAR_WHOLE_FILE_EXACT_REPLACE_MIN_CHARS = 2000
-_NEAR_WHOLE_FILE_EXACT_REPLACE_MAX_COVERAGE = 0.85
-_RECOMMENDED_EXACT_REPLACE_MAX_COVERAGE = 0.35
-
-
 def apply_exact_replace(
     change: Mapping[str, Any],
     *,
@@ -65,27 +60,6 @@ def apply_exact_replace(
         raise PatchEditProtocolError(
             f"{change_pointer}: exact_replace requires new_string"
         )
-    if old_string == before:
-        _raise_exact_replace_granularity_error(
-            reason="existing_file_whole_file_exact_replace_rejected",
-            file_path=file_path,
-            change_pointer=change_pointer,
-            source_digest=actual_digest,
-            old_string_chars=len(old_string),
-            file_chars=len(before),
-            coverage_ratio=1.0,
-            detail=(
-                "exact_replace old_string is the complete existing file; "
-                "whole-file rewrites of host-visible files are disabled by default."
-            ),
-        )
-    _validate_exact_replace_granularity(
-        file_path=file_path,
-        change_pointer=change_pointer,
-        source_digest=actual_digest,
-        before=before,
-        old_string=old_string,
-    )
     occurrences = before.count(old_string)
     if occurrences == 0:
         eof_adjusted = _apply_eof_final_newline_drift(
@@ -223,32 +197,24 @@ def _old_string_not_unique_payload(
 def _old_string_candidate_matches(
     before: str,
     old_string: str,
-    *,
-    max_candidates: int = 5,
-    context_chars: int = 120,
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     start = 0
-    while len(candidates) < max_candidates:
+    while True:
         index = before.find(old_string, start)
         if index < 0:
             break
         line, column = _line_column_for_offset(before, index)
-        prefix_start = max(0, index - context_chars)
-        suffix_end = min(len(before), index + len(old_string) + context_chars)
-        prefix = before[prefix_start:index]
-        suffix = before[index + len(old_string) : suffix_end]
+        line_start = before.rfind("\n", 0, index) + 1
+        line_end = before.find("\n", index + len(old_string))
+        if line_end < 0:
+            line_end = len(before)
         candidates.append(
             {
                 "line": line,
                 "column": column,
-                "prefix": _single_line_snippet(prefix),
-                "match": _single_line_snippet(old_string),
-                "suffix": _single_line_snippet(suffix),
-                "unique_old_string_hint": _single_line_snippet(
-                    before[prefix_start:suffix_end],
-                    max_chars=320,
-                ),
+                "line_content": before[line_start:line_end],
+                "match": old_string,
             }
         )
         start = index + max(1, len(old_string))
@@ -260,86 +226,6 @@ def _line_column_for_offset(text: str, offset: int) -> tuple[int, int]:
     line = text.count("\n", 0, safe_offset) + 1
     line_start = text.rfind("\n", 0, safe_offset) + 1
     return line, safe_offset - line_start + 1
-
-
-def _single_line_snippet(value: str, *, max_chars: int = 220) -> str:
-    text = str(value or "").replace("\r", "")
-    text = text.replace("\n", "\\n")
-    if len(text) <= max_chars:
-        return text
-    return text[: max(0, max_chars - 3)] + "..."
-
-
-def _validate_exact_replace_granularity(
-    *,
-    file_path: str,
-    change_pointer: str,
-    source_digest: str,
-    before: str,
-    old_string: str,
-) -> None:
-    file_chars = len(before)
-    if file_chars <= _NEAR_WHOLE_FILE_EXACT_REPLACE_MIN_CHARS:
-        return
-    coverage_ratio = len(old_string) / max(1, file_chars)
-    if coverage_ratio < _NEAR_WHOLE_FILE_EXACT_REPLACE_MAX_COVERAGE:
-        return
-    _raise_exact_replace_granularity_error(
-        reason="existing_file_near_whole_file_exact_replace_rejected",
-        file_path=file_path,
-        change_pointer=change_pointer,
-        source_digest=source_digest,
-        old_string_chars=len(old_string),
-        file_chars=file_chars,
-        coverage_ratio=coverage_ratio,
-        detail=(
-            "exact_replace old_string covers most of an existing host-visible "
-            "file; near-whole-file rewrites are disabled by default."
-        ),
-    )
-
-
-def _raise_exact_replace_granularity_error(
-    *,
-    reason: str,
-    file_path: str,
-    change_pointer: str,
-    source_digest: str,
-    old_string_chars: int,
-    file_chars: int,
-    coverage_ratio: float,
-    detail: str,
-) -> None:
-    raise PatchEditProtocolError(
-        json.dumps(
-            {
-                "error": "patch_edit_protocol",
-                "reason": reason,
-                "file_path": file_path,
-                "json_pointer": change_pointer,
-                "source_digest": source_digest,
-                "old_string_chars": old_string_chars,
-                "file_chars": file_chars,
-                "coverage_ratio": round(coverage_ratio, 4),
-                "max_coverage_ratio": _NEAR_WHOLE_FILE_EXACT_REPLACE_MAX_COVERAGE,
-                "recommended_max_coverage_ratio": (
-                    _RECOMMENDED_EXACT_REPLACE_MAX_COVERAGE
-                ),
-                "detail": detail,
-                "guidance": (
-                    "Split the change into smaller exact_replace edits for a "
-                    "function/block, or create a helper file and add a small "
-                    "integration edit. Each old_string should identify only the "
-                    "function, import block, registration entry, or local code "
-                    "block that actually changes. Keep exact_replace old_string "
-                    "well below whole-file scope; use the recommended coverage "
-                    "ratio as the retry target."
-                ),
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-    )
 
 
 def _strip_digest_prefix(value: str) -> str:

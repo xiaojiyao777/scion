@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, call
@@ -9,22 +10,22 @@ import pytest
 
 from scion.proposal.llm_client import (
     LLMClient,
-    LLM_TRANSIENT_API_ERROR_CATEGORY,
+    LLMAuthError,
     LLMBalanceError,
+    LLMError,
     LLMFormatError,
+    LLMProviderError,
     LLMRateLimitError,
-    LLMRetryExhaustedError,
     LLMTimeoutError,
-    LLMTransientProviderError,
+    LLMTransportError,
     _parse_retry_after,
-    is_llm_transient_api_error,
 )
 from scion.proposal.engine import CreativeLayer
 from scion.proposal.mock_client import MockLLMClient
+from scion.proposal.llm.cache import _kind_short
 from scion.proposal.schemas import (
-    HYPOTHESIS_PROPOSAL_SCHEMA,
-    PATCH_PROPOSAL_SCHEMA,
-    TOOL_SELECTION_SCHEMA,
+    HYPOTHESIS_TOOL,
+    PATCH_TOOL,
 )
 
 
@@ -32,17 +33,38 @@ from scion.proposal.schemas import (
 # MockLLMClient tests
 # ---------------------------------------------------------------------------
 
+
+@pytest.mark.parametrize(
+    ("removed_kind", "removed_alias"),
+    (
+        ("hypothesis_target_intent", "hti"),
+        ("tool_selection", "tsel"),
+        ("llm_call", "call"),
+    ),
+)
+def test_prompt_cache_removed_request_kinds_use_generic_shortening(
+    removed_kind: str,
+    removed_alias: str,
+) -> None:
+    assert _kind_short(removed_kind) != removed_alias
+
+
+def test_prompt_cache_has_no_raw_or_fix_kind_aliases() -> None:
+    source = inspect.getsource(_kind_short)
+    assert '"llm_call":' not in source
+    assert '"fix":' not in source
+
 class TestMockLLMClient:
     def test_success_returns_hypothesis(self):
         client = MockLLMClient(mode="success")
-        result = client.call("test prompt", HYPOTHESIS_PROPOSAL_SCHEMA)
+        result = client.call_with_tool("test prompt", HYPOTHESIS_TOOL)
         assert "hypothesis_text" in result
         assert "change_locus" in result
         assert result["action"] in ("modify", "create_new", "remove")
 
     def test_success_returns_patch(self):
         client = MockLLMClient(mode="success")
-        result = client.call("test prompt", PATCH_PROPOSAL_SCHEMA)
+        result = client.call_with_tool("test prompt", PATCH_TOOL)
         assert "file_path" in result
         assert "action" in result
         assert result["edit_intent"] == "exact_replace"
@@ -52,30 +74,25 @@ class TestMockLLMClient:
 
     def test_success_picks_hypothesis_schema(self):
         client = MockLLMClient(mode="success")
-        result = client.call("prompt", HYPOTHESIS_PROPOSAL_SCHEMA)
+        result = client.call_with_tool("prompt", HYPOTHESIS_TOOL)
         # Should return hypothesis (has hypothesis_text)
         assert "hypothesis_text" in result
 
     def test_success_picks_patch_schema(self):
         client = MockLLMClient(mode="success")
-        result = client.call("prompt", PATCH_PROPOSAL_SCHEMA)
+        result = client.call_with_tool("prompt", PATCH_TOOL)
         # Should return patch (has file_path, not hypothesis_text)
         assert "file_path" in result
 
     def test_format_error_mode(self):
         client = MockLLMClient(mode="format_error")
         with pytest.raises(LLMFormatError):
-            client.call("prompt", PATCH_PROPOSAL_SCHEMA)
+            client.call_with_tool("prompt", PATCH_TOOL)
 
     def test_timeout_mode(self):
         client = MockLLMClient(mode="timeout")
         with pytest.raises(LLMTimeoutError):
-            client.call("prompt", PATCH_PROPOSAL_SCHEMA)
-
-    def test_exhausted_mode(self):
-        client = MockLLMClient(mode="exhausted")
-        with pytest.raises(LLMRetryExhaustedError):
-            client.call("prompt", PATCH_PROPOSAL_SCHEMA)
+            client.call_with_tool("prompt", PATCH_TOOL)
 
     def test_custom_hypothesis_response(self):
         custom = {
@@ -89,165 +106,59 @@ class TestMockLLMClient:
             "suggested_weight": 0.5,
         }
         client = MockLLMClient(mode="success", hypothesis_response=custom)
-        result = client.call("prompt", HYPOTHESIS_PROPOSAL_SCHEMA)
+        result = client.call_with_tool("prompt", HYPOTHESIS_TOOL)
         assert result["hypothesis_text"] == "Custom hypothesis"
         assert result["change_locus"] == "custom_op"
 
     def test_call_count_increments(self):
         client = MockLLMClient(mode="success")
         assert client.call_count == 0
-        client.call("p", PATCH_PROPOSAL_SCHEMA)
+        client.call_with_tool("p", PATCH_TOOL)
         assert client.call_count == 1
-        client.call("p", PATCH_PROPOSAL_SCHEMA)
+        client.call_with_tool("p", PATCH_TOOL)
         assert client.call_count == 2
 
     def test_mode_sequence(self):
         client = MockLLMClient(mode_sequence=["success", "timeout", "success"])
         # First call: success
-        result = client.call("p", PATCH_PROPOSAL_SCHEMA)
+        result = client.call_with_tool("p", PATCH_TOOL)
         assert "file_path" in result
         # Second call: timeout
         with pytest.raises(LLMTimeoutError):
-            client.call("p", PATCH_PROPOSAL_SCHEMA)
+            client.call_with_tool("p", PATCH_TOOL)
         # Third call: success again
-        result = client.call("p", PATCH_PROPOSAL_SCHEMA)
+        result = client.call_with_tool("p", PATCH_TOOL)
         assert "file_path" in result
 
 
-# ---------------------------------------------------------------------------
-# LLMClient._parse_and_validate tests
-# ---------------------------------------------------------------------------
+class TestLLMClientSingleAttempt:
+    """Every public typed-tool call executes one transport call."""
 
-class TestLLMClientParse:
-    """Test the JSON-extraction and validation logic without making real API calls."""
-
-    def _client(self) -> LLMClient:
-        return LLMClient()
-
-    def test_plain_json(self):
-        client = self._client()
-        raw = json.dumps({"file_path": "x.py", "action": "modify", "code_content": "x=1"})
-        result = client._parse_and_validate(raw, PATCH_PROPOSAL_SCHEMA)
-        assert result["file_path"] == "x.py"
-
-    def test_json_in_markdown_fence(self):
-        client = self._client()
-        raw = "```json\n{\"file_path\": \"x.py\", \"action\": \"modify\", \"code_content\": \"x=1\"}\n```"
-        result = client._parse_and_validate(raw, PATCH_PROPOSAL_SCHEMA)
-        assert result["file_path"] == "x.py"
-
-    def test_json_in_plain_fence(self):
-        client = self._client()
-        raw = "```\n{\"file_path\": \"x.py\", \"action\": \"modify\", \"code_content\": \"x=1\"}\n```"
-        result = client._parse_and_validate(raw, PATCH_PROPOSAL_SCHEMA)
-        assert result["file_path"] == "x.py"
-
-    def test_invalid_json_raises_format_error(self):
-        client = self._client()
-        with pytest.raises(LLMFormatError, match="not valid JSON"):
-            client._parse_and_validate("not json at all", PATCH_PROPOSAL_SCHEMA)
-
-    def test_array_json_raises_format_error(self):
-        client = self._client()
-        with pytest.raises(LLMFormatError, match="JSON object"):
-            client._parse_and_validate("[1, 2, 3]", PATCH_PROPOSAL_SCHEMA)
-
-    def test_missing_required_field_raises(self):
-        client = self._client()
-        raw = json.dumps({"file_path": "x.py"})  # missing action
-        with pytest.raises(LLMFormatError, match="missing required"):
-            client._parse_and_validate(raw, PATCH_PROPOSAL_SCHEMA)
-
-    def test_all_required_fields_present(self):
-        client = self._client()
-        raw = json.dumps({
-            "hypothesis_text": "h",
-            "change_locus": "c",
-            "action": "modify",
-        })
-        result = client._parse_and_validate(raw, HYPOTHESIS_PROPOSAL_SCHEMA)
-        assert result["hypothesis_text"] == "h"
-
-
-# ---------------------------------------------------------------------------
-# LLMClient retry logic (mock _call_once)
-# ---------------------------------------------------------------------------
-
-class TestLLMClientRetry:
-    """Test retry behaviour without any real API calls."""
-
-    def _client(self, max_retries: int = 2) -> LLMClient:
-        c = LLMClient(max_retries=max_retries)
-        return c
-
-    def test_success_first_try(self):
-        client = self._client()
-        good_response = json.dumps({"file_path": "x.py", "action": "modify", "code_content": "x=1"})
-        with patch.object(client, "_call_once", return_value=good_response) as mock_call:
-            result = client.call("prompt", PATCH_PROPOSAL_SCHEMA)
-        assert result["file_path"] == "x.py"
-        mock_call.assert_called_once()
-
-    def test_timeout_retries_then_exhausted(self):
-        client = self._client(max_retries=2)
-        with patch.object(client, "_call_once", side_effect=LLMTimeoutError("timeout")):
-            with patch("scion.proposal.llm_client.time.sleep"):  # don't actually sleep
-                with pytest.raises(LLMRetryExhaustedError):
-                    client.call("prompt", PATCH_PROPOSAL_SCHEMA)
-
-    def test_timeout_then_success(self):
-        client = self._client(max_retries=2)
-        good = json.dumps({"file_path": "x.py", "action": "modify", "code_content": "x=1"})
-        side_effects = [LLMTimeoutError("t"), good]
-        with patch.object(client, "_call_once", side_effect=side_effects):
-            with patch("scion.proposal.llm_client.time.sleep"):
-                result = client.call("prompt", PATCH_PROPOSAL_SCHEMA)
-        assert result["file_path"] == "x.py"
-
-    def test_format_error_retries_and_appends_error(self):
-        client = self._client(max_retries=2)
-        good = json.dumps({"file_path": "x.py", "action": "modify", "code_content": "x=1"})
-
-        call_prompts = []
-
-        def mock_call(prompt, model, system_blocks=None):
-            call_prompts.append(prompt)
-            if len(call_prompts) == 1:
-                return "not-json"  # will cause format error
-            return good
-
-        with patch.object(client, "_call_once", side_effect=mock_call):
-            with patch("scion.proposal.llm_client.time.sleep"):
-                result = client.call("original prompt", PATCH_PROPOSAL_SCHEMA)
-
-        assert result["file_path"] == "x.py"
-        assert len(call_prompts) == 2
-        # Second call should include error context
-        assert "Format error" in call_prompts[1] or "format issue" in call_prompts[1]
-
-    def test_format_error_exhausted(self):
-        client = self._client(max_retries=1)
-        with patch.object(client, "_call_once", return_value="not-json"):
-            with patch("scion.proposal.llm_client.time.sleep"):
-                with pytest.raises(LLMRetryExhaustedError):
-                    client.call("prompt", PATCH_PROPOSAL_SCHEMA)
-
-    def test_rate_limit_does_not_consume_retry_budget(self):
-        client = self._client(max_retries=1)
-        good = json.dumps({"file_path": "x.py", "action": "modify", "code_content": "x=1"})
-        # rate limit once, then success
-        side_effects = [LLMRateLimitError("429", retry_after=0.001), good]
-        with patch.object(client, "_call_once", side_effect=side_effects):
-            with patch("scion.proposal.llm_client.time.sleep"):
-                result = client.call("prompt", PATCH_PROPOSAL_SCHEMA)
-        assert result["file_path"] == "x.py"
-
-    def test_two_timeouts_then_exhausted_with_max_retries_1(self):
-        client = self._client(max_retries=1)
-        with patch.object(client, "_call_once", side_effect=LLMTimeoutError("t")):
-            with patch("scion.proposal.llm_client.time.sleep"):
-                with pytest.raises(LLMRetryExhaustedError):
-                    client.call("prompt", PATCH_PROPOSAL_SCHEMA)
+    @pytest.mark.parametrize(
+        ("raw_fault", "expected_type"),
+        [
+            (TimeoutError("read timed out"), LLMTimeoutError),
+            (ConnectionError("connection reset"), LLMTransportError),
+            (Exception("HTTP 429 rate_limit"), LLMRateLimitError),
+            (Exception("HTTP 503 service unavailable"), LLMProviderError),
+            (Exception("Error code: 401 - invalid api key"), LLMAuthError),
+            (Exception("Error code: 403 - insufficient balance"), LLMBalanceError),
+            (Exception("unclassified provider response"), LLMError),
+        ],
+    )
+    def test_raw_tool_fault_is_classified_after_one_call_without_sleep(
+        self,
+        raw_fault,
+        expected_type,
+    ):
+        client = LLMClient()
+        tool = {"name": "unit_tool", "input_schema": {"required": []}}
+        with patch.object(client, "_tool_call_once", side_effect=raw_fault) as call_once:
+            with patch("scion.proposal.llm.client.time.sleep") as mock_sleep:
+                with pytest.raises(expected_type):
+                    client.call_with_tool("prompt", tool)
+        call_once.assert_called_once()
+        mock_sleep.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -265,19 +176,24 @@ def test_parse_retry_after_with_header():
     assert _parse_retry_after(mock_exc) == 30.0
 
 
-def test_provider_sdk_retries_are_disabled_by_default():
-    client = LLMClient()
-    assert client.sdk_max_retries == 0
-
-
-def test_provider_sdk_retries_can_be_overridden_by_env(monkeypatch):
+def test_provider_sdk_retries_cannot_be_reenabled_by_env(monkeypatch):
     monkeypatch.setenv("SCION_SDK_MAX_RETRIES", "1")
     client = LLMClient()
-    assert client.sdk_max_retries == 1
+    fake_openai = MagicMock()
+    with patch.dict("sys.modules", {"openai": fake_openai}):
+        client._get_openai_client()
+    assert fake_openai.OpenAI.call_args.kwargs["max_retries"] == 0
+    assert not hasattr(client, "sdk_max_retries")
+
+
+def test_llm_client_has_no_retry_constructor_controls() -> None:
+    parameters = inspect.signature(LLMClient).parameters
+    assert "max_retries" not in parameters
+    assert "sdk_max_retries" not in parameters
 
 
 def test_anthropic_client_receives_sdk_retry_limit():
-    client = LLMClient(sdk_max_retries=0)
+    client = LLMClient()
     fake_anthropic = MagicMock()
     with patch.dict("sys.modules", {"anthropic": fake_anthropic}):
         client._get_anthropic_client()
@@ -286,7 +202,7 @@ def test_anthropic_client_receives_sdk_retry_limit():
 
 
 def test_openai_client_receives_sdk_retry_limit():
-    client = LLMClient(sdk_max_retries=0)
+    client = LLMClient()
     fake_openai = MagicMock()
     with patch.dict("sys.modules", {"openai": fake_openai}):
         client._get_openai_client()
@@ -366,7 +282,7 @@ def test_gpt_codex_reasoning_effort_rejects_unknown_values(monkeypatch):
 def test_deepseek_openai_base_url_does_not_append_v1(monkeypatch):
     monkeypatch.setenv("SCION_MODEL", "deepseek-v4-pro")
     monkeypatch.setenv("SCION_BASE_URL", "https://api.deepseek.com")
-    client = LLMClient(sdk_max_retries=0)
+    client = LLMClient()
     fake_openai = MagicMock()
 
     with patch.dict("sys.modules", {"openai": fake_openai}):
@@ -382,7 +298,6 @@ def test_deepseek_chat_kwargs_include_thinking_and_max_effort(monkeypatch):
 
     kwargs = client._openai_chat_kwargs(
         model=client.model,
-        max_tokens=128,
         messages=[{"role": "user", "content": "hi"}],
         timeout_sec=10,
     )
@@ -398,7 +313,6 @@ def test_deepseek_tool_call_kwargs_omit_named_tool_choice(monkeypatch):
 
     kwargs = client._openai_chat_kwargs(
         model=client.model,
-        max_tokens=128,
         messages=[{"role": "user", "content": "hi"}],
         timeout_sec=10,
         tools=[{"type": "function", "function": {"name": "x", "parameters": {}}}],
@@ -421,7 +335,6 @@ def test_gpt_codex_chat_kwargs_include_prompt_cache_key_without_retention() -> N
 
     kwargs = client._openai_chat_kwargs(
         model=client.model,
-        max_tokens=128,
         messages=[{"role": "user", "content": "branch=session user prompt"}],
         timeout_sec=10,
         tools=[tool],
@@ -444,7 +357,6 @@ def test_prompt_cache_key_omitted_for_deepseek_chat_kwargs() -> None:
 
     kwargs = client._openai_chat_kwargs(
         model=client.model,
-        max_tokens=128,
         messages=[{"role": "user", "content": "hi"}],
         timeout_sec=10,
         request_kind="code",
@@ -462,7 +374,7 @@ def test_prompt_cache_key_omitted_for_deepseek_chat_kwargs() -> None:
 
 
 def test_prompt_cache_key_omitted_for_anthropic_tool_call() -> None:
-    client = LLMClient(model="claude-test", timeout_sec=60, max_retries=0)
+    client = LLMClient(model="claude-test", timeout_sec=60)
     tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
     tool_block = MagicMock()
     tool_block.type = "tool_use"
@@ -515,18 +427,16 @@ def test_prompt_cache_key_ignores_user_prompt_branch_and_session() -> None:
 
     first = client._openai_chat_kwargs(
         model=client.model,
-        max_tokens=128,
         messages=[
             {"role": "user", "content": "branch_id=a session_id=a choose tool"}
         ],
         timeout_sec=10,
         tools=tools,
-        request_kind="tool_selection",
+        request_kind="code",
         system_blocks=system_blocks,
     )["prompt_cache_key"]
     second = client._openai_chat_kwargs(
         model=client.model,
-        max_tokens=128,
         messages=[
             {
                 "role": "user",
@@ -535,7 +445,7 @@ def test_prompt_cache_key_ignores_user_prompt_branch_and_session() -> None:
         ],
         timeout_sec=10,
         tools=tools,
-        request_kind="tool_selection",
+        request_kind="code",
         system_blocks=system_blocks,
     )["prompt_cache_key"]
 
@@ -582,7 +492,6 @@ def test_prompt_cache_key_changes_when_cacheable_system_or_tool_schema_changes()
 
     base_key = client._openai_chat_kwargs(
         model=client.model,
-        max_tokens=128,
         messages=[{"role": "user", "content": "same prompt"}],
         timeout_sec=10,
         tools=base_tool,
@@ -591,7 +500,6 @@ def test_prompt_cache_key_changes_when_cacheable_system_or_tool_schema_changes()
     )["prompt_cache_key"]
     system_key = client._openai_chat_kwargs(
         model=client.model,
-        max_tokens=128,
         messages=[{"role": "user", "content": "same prompt"}],
         timeout_sec=10,
         tools=base_tool,
@@ -600,7 +508,6 @@ def test_prompt_cache_key_changes_when_cacheable_system_or_tool_schema_changes()
     )["prompt_cache_key"]
     tool_key = client._openai_chat_kwargs(
         model=client.model,
-        max_tokens=128,
         messages=[{"role": "user", "content": "same prompt"}],
         timeout_sec=10,
         tools=changed_tool,
@@ -612,124 +519,44 @@ def test_prompt_cache_key_changes_when_cacheable_system_or_tool_schema_changes()
     assert tool_key != base_key
 
 
-def test_tool_selection_tool_call_defaults_missing_intent() -> None:
-    client = LLMClient(max_retries=0)
-    client._tool_call_once = MagicMock(  # type: ignore[method-assign]
-        return_value=(
-            {"tool_name": "context.read_problem", "args": {}},
-            False,
-        )
-    )
-
-    result = client.call_with_tool(
-        "choose",
-        {
-            "name": "plan_proposal_tool_call",
-            "input_schema": TOOL_SELECTION_SCHEMA,
-        },
-        request_kind="tool_selection",
-    )
-
-    assert result == {
-        "intent": "call_tool",
-        "tool_name": "context.read_problem",
-        "args": {},
-    }
-
-
-def test_tool_selection_tool_call_normalizes_common_aliases() -> None:
-    client = LLMClient(max_retries=0)
-    client._tool_call_once = MagicMock(  # type: ignore[method-assign]
-        return_value=(
-            {"name": "context.read_problem", "input": {"detail": "compact"}},
-            False,
-        )
-    )
-
-    result = client.call_with_tool(
-        "choose",
-        {
-            "name": "plan_proposal_tool_call",
-            "input_schema": TOOL_SELECTION_SCHEMA,
-        },
-        request_kind="tool_selection",
-    )
-
-    assert result["intent"] == "call_tool"
-    assert result["tool_name"] == "context.read_problem"
-    assert result["args"] == {"detail": "compact"}
-    assert "required" not in TOOL_SELECTION_SCHEMA
-
-
 def test_tool_call_hard_timeout_interrupts_blocking_provider_call() -> None:
-    client = LLMClient(timeout_sec=0.05, max_retries=0)
+    client = LLMClient(timeout_sec=0.05)
 
     def _slow_tool_call(*args, **kwargs):
         time.sleep(1.0)
-        return {"result": "late"}, False
+        return {"result": "late"}
 
     client._tool_call_once = MagicMock(side_effect=_slow_tool_call)  # type: ignore[method-assign]
 
-    with pytest.raises(LLMRetryExhaustedError) as exc_info:
+    with pytest.raises(LLMTimeoutError):
         client.call_with_tool(
             "prompt",
             {"name": "x", "input_schema": {"required": ["result"]}},
         )
 
-    assert isinstance(exc_info.value.last_error, LLMTimeoutError)
-
-
-def test_json_call_hard_timeout_interrupts_blocking_provider_call() -> None:
-    client = LLMClient(timeout_sec=0.05, max_retries=0)
-
-    def _slow_call_once(*args, **kwargs):
-        time.sleep(1.0)
-        return '{"result": "late"}'
-
-    client._call_once = MagicMock(side_effect=_slow_call_once)  # type: ignore[method-assign]
-
-    with pytest.raises(LLMRetryExhaustedError) as exc_info:
-        client.call(
-            "prompt",
-            {"type": "object", "required": ["result"]},
-        )
-
-    assert isinstance(exc_info.value.last_error, LLMTimeoutError)
-
-
-def test_call_text_hard_timeout_interrupts_blocking_provider_call() -> None:
-    client = LLMClient(timeout_sec=0.05, max_retries=0)
-
-    def _slow_call_once(*args, **kwargs):
-        time.sleep(1.0)
-        return "late"
-
-    client._call_once = MagicMock(side_effect=_slow_call_once)  # type: ignore[method-assign]
-
-    with pytest.raises(LLMTimeoutError):
-        client.call_text("prompt")
+    assert client._tool_call_once.call_count == 1
 
 
 def test_tool_call_masks_connection_error_at_hard_timeout_as_timeout() -> None:
-    client = LLMClient(timeout_sec=0.05, max_retries=0)
+    client = LLMClient(timeout_sec=0.05)
 
     def _masked_timeout(*args, **kwargs):
         try:
             time.sleep(1.0)
         except LLMTimeoutError as exc:
             raise RuntimeError("Connection error.") from exc
-        return {"result": "late"}, False
+        return {"result": "late"}
 
     client._tool_call_once = MagicMock(side_effect=_masked_timeout)  # type: ignore[method-assign]
 
-    with pytest.raises(LLMRetryExhaustedError) as exc_info:
+    with pytest.raises(LLMTimeoutError) as exc_info:
         client.call_with_tool(
             "prompt",
             {"name": "x", "input_schema": {"required": ["result"]}},
         )
 
-    assert isinstance(exc_info.value.last_error, LLMTimeoutError)
-    assert "hard timeout" in str(exc_info.value.last_error)
+    assert "hard timeout" in str(exc_info.value)
+    assert client._tool_call_once.call_count == 1
 
 
 def test_openai_cache_usage_reads_deepseek_cache_fields() -> None:
@@ -757,7 +584,7 @@ def test_openai_cache_usage_reads_dict_nested_cache_fields() -> None:
 
 
 def test_anthropic_tool_call_records_last_usage_metadata() -> None:
-    client = LLMClient(timeout_sec=60, max_retries=0)
+    client = LLMClient(timeout_sec=60)
     tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
     tool_block = MagicMock()
     tool_block.type = "tool_use"
@@ -793,7 +620,7 @@ def test_anthropic_tool_call_records_last_usage_metadata() -> None:
 
 
 def test_openai_tool_call_records_prompt_cache_usage_metadata() -> None:
-    client = LLMClient(model="gpt-test", timeout_sec=60, max_retries=0)
+    client = LLMClient(model="gpt-test", timeout_sec=60)
     tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
     tool_call = SimpleNamespace(
         function=SimpleNamespace(arguments=json.dumps({"file_path": "x.py"}))
@@ -836,8 +663,148 @@ def test_openai_tool_call_records_prompt_cache_usage_metadata() -> None:
     assert usage["prompt_cache_key_digest"] == usage["prompt_cache_key"].rsplit(":", 1)[-1]
 
 
+def test_openai_provider_managed_output_omits_max_completion_tokens() -> None:
+    client = LLMClient(
+        model="gpt-5.6-sol",
+        timeout_sec=60,
+    )
+    tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
+    tool_call = SimpleNamespace(
+        function=SimpleNamespace(arguments=json.dumps({"file_path": "x.py"}))
+    )
+    response = SimpleNamespace(
+        usage=None,
+        choices=[
+            SimpleNamespace(
+                finish_reason="tool_calls",
+                message=SimpleNamespace(tool_calls=[tool_call]),
+            )
+        ],
+    )
+    fake_openai_client = MagicMock()
+    fake_openai_client.chat.completions.create.return_value = response
+
+    with patch.object(client, "_get_openai_client", return_value=fake_openai_client):
+        result = client.call_with_tool(
+            "prompt",
+            tool,
+            model="gpt-5.6-sol",
+            request_kind="code",
+        )
+
+    assert result == {"file_path": "x.py"}
+    request = fake_openai_client.chat.completions.create.call_args.kwargs
+    assert "max_completion_tokens" not in request
+    assert "max_tokens" not in request
+
+
+def test_openai_default_output_policy_is_provider_managed_without_cap() -> None:
+    client = LLMClient(model="gpt-5.6-sol")
+
+    policy = client.resolve_request_policy(
+        model="gpt-5.6-sol",
+        request_kind="code",
+    )
+
+    assert policy["output_token_policy"] == "provider_managed"
+    assert policy["output_token_parameter"] == "omitted"
+    assert policy["provider_transport_output_ceiling_tokens"] is None
+    assert "max_tokens" not in policy
+    assert "truncation_retries" not in policy
+
+
+def test_anthropic_transport_keeps_provider_native_required_max_tokens() -> None:
+    client = LLMClient(model="claude-test")
+    tool = {"name": "generate_patch", "input_schema": {"required": []}}
+    block = SimpleNamespace(
+        type="tool_use",
+        name="generate_patch",
+        input={"file_path": "x.py"},
+    )
+    response = SimpleNamespace(
+        stop_reason="tool_use",
+        content=[block],
+        usage=None,
+    )
+    fake_anthropic_client = MagicMock()
+    fake_anthropic_client.messages.create.return_value = response
+
+    with patch.object(
+        client,
+        "_get_anthropic_client",
+        return_value=fake_anthropic_client,
+    ):
+        result = client._tool_call_once_anthropic(
+            "prompt",
+            tool,
+            "claude-test",
+            None,
+            60.0,
+        )
+
+    assert result == {"file_path": "x.py"}
+    request = fake_anthropic_client.messages.create.call_args.kwargs
+    assert request["max_tokens"] == 16384
+    policy = client.resolve_request_policy(model="claude-test", request_kind="code")
+    assert policy["output_token_policy"] == "provider_native_required"
+    assert policy["output_token_parameter"] == "max_tokens"
+    assert policy["provider_transport_output_ceiling_tokens"] == 16384
+    assert "truncation_retries" not in policy
+
+
+def test_openai_length_finish_with_tool_payload_is_a_real_response() -> None:
+    client = LLMClient(model="gpt-5.6-sol")
+    tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
+    tool_call = SimpleNamespace(
+        function=SimpleNamespace(arguments=json.dumps({"file_path": "x.py"}))
+    )
+    response = SimpleNamespace(
+        usage=None,
+        choices=[
+            SimpleNamespace(
+                finish_reason="length",
+                message=SimpleNamespace(tool_calls=[tool_call]),
+            )
+        ],
+    )
+    fake_openai_client = MagicMock()
+    fake_openai_client.chat.completions.create.return_value = response
+
+    with patch.object(client, "_get_openai_client", return_value=fake_openai_client):
+        result = client.call_with_tool("prompt", tool, request_kind="code")
+
+    assert result == {"file_path": "x.py"}
+    assert fake_openai_client.chat.completions.create.call_count == 1
+
+
+def test_openai_length_finish_invalid_tool_payload_is_format_failure() -> None:
+    client = LLMClient(model="gpt-5.6-sol")
+    tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
+    tool_call = SimpleNamespace(
+        function=SimpleNamespace(arguments='{"file_path":')
+    )
+    response = SimpleNamespace(
+        usage=None,
+        choices=[
+            SimpleNamespace(
+                finish_reason="length",
+                message=SimpleNamespace(tool_calls=[tool_call]),
+            )
+        ],
+    )
+    fake_openai_client = MagicMock()
+    fake_openai_client.chat.completions.create.return_value = response
+
+    with patch.object(client, "_get_openai_client", return_value=fake_openai_client):
+        with pytest.raises(LLMFormatError) as caught:
+            client.call_with_tool("prompt", tool, request_kind="code")
+
+    assert "invalid JSON arguments" in str(caught.value)
+    assert fake_openai_client.chat.completions.create.call_count == 1
+
+
 def test_openai_tool_call_records_codex_proxy_usage_metadata() -> None:
-    client = LLMClient(model="gpt-5.5", timeout_sec=60, max_retries=0)
+    client = LLMClient(model="gpt-5.5", timeout_sec=60)
     tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
     tool_call = SimpleNamespace(
         function=SimpleNamespace(arguments=json.dumps({"file_path": "x.py"}))
@@ -870,65 +837,53 @@ def test_openai_tool_call_records_codex_proxy_usage_metadata() -> None:
     assert usage["reasoning_output_tokens"] == 32
 
 
-def test_code_tool_policy_defaults_to_long_timeout_without_internal_retry(monkeypatch):
+def test_code_tool_policy_contains_only_transport_and_output_facts(monkeypatch):
     monkeypatch.delenv("SCION_LLM_TIMEOUT_SEC", raising=False)
-    monkeypatch.delenv("SCION_LLM_MAX_RETRIES", raising=False)
     monkeypatch.delenv("SCION_LLM_CODE_TIMEOUT_SEC", raising=False)
-    monkeypatch.delenv("SCION_LLM_CODE_MAX_RETRIES", raising=False)
 
-    client = LLMClient(timeout_sec=60, max_retries=2)
+    client = LLMClient(timeout_sec=60)
     policy = client.resolve_request_policy(
         tool={"name": "generate_patch", "input_schema": {"required": []}},
     )
 
     assert policy["request_kind"] == "code"
     assert policy["timeout_sec"] == 180.0
-    assert policy["max_retries"] == 0
+    assert policy["provider"] == "anthropic"
+    assert policy["output_token_policy"] == "provider_native_required"
+    assert not any("retri" in key for key in policy)
 
 
-def test_code_tool_policy_respects_kind_specific_env(monkeypatch):
+def test_code_tool_policy_ignores_removed_retry_env(monkeypatch):
     monkeypatch.delenv("SCION_LLM_TIMEOUT_SEC", raising=False)
-    monkeypatch.delenv("SCION_LLM_MAX_RETRIES", raising=False)
     monkeypatch.setenv("SCION_LLM_CODE_TIMEOUT_SEC", "240")
     monkeypatch.setenv("SCION_LLM_CODE_MAX_RETRIES", "1")
+    monkeypatch.setenv("SCION_LLM_TRANSIENT_PROVIDER_MAX_RETRIES", "9")
 
-    client = LLMClient(timeout_sec=60, max_retries=2)
+    client = LLMClient(timeout_sec=60)
     policy = client.resolve_request_policy(request_kind="code")
 
     assert policy["timeout_sec"] == 240.0
-    assert policy["max_retries"] == 1
+    assert not any("retri" in key for key in policy)
 
 
-def test_code_tool_timeout_does_not_duplicate_same_prompt_by_default(monkeypatch):
-    monkeypatch.delenv("SCION_LLM_TIMEOUT_SEC", raising=False)
-    monkeypatch.delenv("SCION_LLM_MAX_RETRIES", raising=False)
-    monkeypatch.delenv("SCION_LLM_CODE_TIMEOUT_SEC", raising=False)
-    monkeypatch.delenv("SCION_LLM_CODE_MAX_RETRIES", raising=False)
-
-    client = LLMClient(timeout_sec=60, max_retries=2)
+def test_code_tool_timeout_is_typed_and_does_not_duplicate_prompt():
+    client = LLMClient(timeout_sec=60)
     tool = {"name": "generate_patch", "input_schema": {"required": []}}
     fake_anthropic_client = MagicMock()
     fake_anthropic_client.messages.create.side_effect = LLMTimeoutError("slow")
 
     with patch.object(client, "_get_anthropic_client", return_value=fake_anthropic_client):
-        with patch("scion.proposal.llm_client.time.sleep") as mock_sleep:
-            with pytest.raises(LLMRetryExhaustedError) as exc_info:
+        with patch("scion.proposal.llm.client.time.sleep") as mock_sleep:
+            with pytest.raises(LLMTimeoutError):
                 client.call_with_tool("prompt", tool)
 
-    assert "1 attempt(s)" in str(exc_info.value)
     assert fake_anthropic_client.messages.create.call_count == 1
     assert fake_anthropic_client.messages.create.call_args.kwargs["timeout"] == 180.0
     mock_sleep.assert_not_called()
 
 
-def test_code_tool_retries_transient_provider_error_once(monkeypatch):
-    monkeypatch.delenv("SCION_LLM_TIMEOUT_SEC", raising=False)
-    monkeypatch.delenv("SCION_LLM_MAX_RETRIES", raising=False)
-    monkeypatch.delenv("SCION_LLM_CODE_TIMEOUT_SEC", raising=False)
-    monkeypatch.delenv("SCION_LLM_CODE_MAX_RETRIES", raising=False)
-    monkeypatch.delenv("SCION_LLM_TRANSIENT_PROVIDER_MAX_RETRIES", raising=False)
-
-    client = LLMClient(timeout_sec=60, max_retries=2)
+def test_code_tool_provider_error_is_typed_after_one_call_without_sleep():
+    client = LLMClient(timeout_sec=60)
     tool = {
         "name": "generate_patch",
         "input_schema": {"required": ["file_path", "action", "code_content"]},
@@ -938,35 +893,20 @@ def test_code_tool_retries_transient_provider_error_once(monkeypatch):
         "'message': 'new request failed: parse \" https://aws-example\": first "
         "path segment in URL cannot contain colon'}}"
     )
-    tool_block = MagicMock()
-    tool_block.type = "tool_use"
-    tool_block.name = "generate_patch"
-    tool_block.input = {
-        "file_path": "policies/baseline_algorithm.py",
-        "action": "modify",
-        "code_content": "def solve(instance, rng, time_limit_sec, context):\n    return []\n",
-    }
-    response = MagicMock()
-    response.stop_reason = "tool_use"
-    response.content = [tool_block]
-    response.usage = None
     fake_anthropic_client = MagicMock()
-    fake_anthropic_client.messages.create.side_effect = [provider_error, response]
+    fake_anthropic_client.messages.create.side_effect = provider_error
 
     with patch.object(client, "_get_anthropic_client", return_value=fake_anthropic_client):
-        with patch("scion.proposal.llm_client.time.sleep") as mock_sleep:
-            result = client.call_with_tool("prompt", tool)
+        with patch("scion.proposal.llm.client.time.sleep") as mock_sleep:
+            with pytest.raises(LLMProviderError):
+                client.call_with_tool("prompt", tool)
 
-    assert result["file_path"] == "policies/baseline_algorithm.py"
-    assert fake_anthropic_client.messages.create.call_count == 2
-    mock_sleep.assert_called_once_with(5.0)
+    assert fake_anthropic_client.messages.create.call_count == 1
+    mock_sleep.assert_not_called()
 
 
-def test_code_tool_exhausted_502_html_is_transient_api_failure(monkeypatch):
-    monkeypatch.delenv("SCION_LLM_CODE_MAX_RETRIES", raising=False)
-    monkeypatch.setenv("SCION_LLM_TRANSIENT_PROVIDER_MAX_RETRIES", "1")
-
-    client = LLMClient(timeout_sec=60, max_retries=2)
+def test_code_tool_502_html_is_provider_fault_after_one_call():
+    client = LLMClient(timeout_sec=60)
     tool = {
         "name": "generate_patch",
         "input_schema": {"required": ["file_path", "action", "code_content"]},
@@ -976,19 +916,15 @@ def test_code_tool_exhausted_502_html_is_transient_api_failure(monkeypatch):
         "<body>nginx upstream temporarily unavailable</body></html>"
     )
     fake_anthropic_client = MagicMock()
-    fake_anthropic_client.messages.create.side_effect = [gateway_error, gateway_error]
+    fake_anthropic_client.messages.create.side_effect = gateway_error
 
     with patch.object(client, "_get_anthropic_client", return_value=fake_anthropic_client):
-        with patch("scion.proposal.llm_client.time.sleep") as mock_sleep:
-            with pytest.raises(LLMRetryExhaustedError) as exc_info:
+        with patch("scion.proposal.llm.client.time.sleep") as mock_sleep:
+            with pytest.raises(LLMProviderError):
                 client.call_with_tool("prompt", tool)
 
-    exc = exc_info.value
-    assert fake_anthropic_client.messages.create.call_count == 2
-    mock_sleep.assert_called_once_with(5.0)
-    assert exc.failure_category == LLM_TRANSIENT_API_ERROR_CATEGORY
-    assert isinstance(exc.last_error, LLMTransientProviderError)
-    assert is_llm_transient_api_error(exc)
+    assert fake_anthropic_client.messages.create.call_count == 1
+    mock_sleep.assert_not_called()
 
 
 def test_403_insufficient_balance_classifies_before_transient_provider() -> None:
@@ -1004,108 +940,48 @@ def test_403_insufficient_balance_classifies_before_transient_provider() -> None
     assert "balance exhausted" in str(exc_info.value)
 
 
-def test_no_available_accounts_is_transient_provider_error() -> None:
+def test_no_available_accounts_is_typed_provider_error() -> None:
     exc = Exception(
         "codex-proxy returned 503 service error: no_available_accounts"
     )
 
-    assert is_llm_transient_api_error(exc)
+    with pytest.raises(LLMProviderError):
+        LLMClient._raise_classified(exc)
 
 
-def test_creative_trace_records_llm_request_policy(tmp_path):
-    class PolicyClient:
-        def resolve_request_policy(self, *, request_kind=None, tool=None):
-            return {
-                "request_kind": request_kind,
-                "timeout_sec": 180.0,
-                "max_retries": 0,
-                "sdk_max_retries": 0,
-            }
+def test_ordinary_403_is_typed_auth_error() -> None:
+    with pytest.raises(LLMAuthError):
+        LLMClient._raise_classified(Exception("Error code: 403 - forbidden"))
 
-        def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
-            return {
-                "file_path": "policies/baseline_algorithm.py",
-                "action": "create",
-                "code_content": "def solve(instance, rng, time_limit_sec, context):\n    return []\n",
-            }
 
-        def get_last_usage_metadata(self):
-            return {
-                "provider": "anthropic",
-                "input_tokens": 11,
-                "output_tokens": 7,
-                "cache_creation_input_tokens": 5,
-                "cache_read_input_tokens": 3,
-            }
+def test_connection_failure_is_typed_transport_error() -> None:
+    with pytest.raises(LLMTransportError):
+        LLMClient._raise_classified(ConnectionError("connection reset"))
 
-    creative = CreativeLayer(
-        PolicyClient(),
+
+def test_direct_trace_records_request_policy_without_retry_fields(tmp_path):
+    from scion.proposal.engine.trace import _TraceWriter
+
+    writer = _TraceWriter(str(tmp_path))
+    path = writer.write_start(
+        request_kind="code",
         model="claude-test",
-        trace_dir=str(tmp_path),
+        tool={"name": "generate_patch", "input_schema": {"type": "object"}},
+        prompt="generate one patch",
+        system_blocks=[{"type": "text", "text": "system"}],
+        context={"branch_id": "branch-policy"},
+        request_policy={
+            "request_kind": "code",
+            "timeout_sec": 180.0,
+            "provider": "anthropic",
+            "output_token_policy": "provider_native_required",
+        },
     )
-
-    creative.generate_code({"change_locus": "solver_design"})
-
-    traces = list(tmp_path.glob("*.json"))
-    assert len(traces) == 1
-    payload = json.loads(traces[0].read_text())
-    assert payload["request_kind"] == "code"
-    assert payload["request_policy"]["timeout_sec"] == 180.0
-    assert payload["request_policy"]["max_retries"] == 0
-    assert payload["llm_usage"]["cache_creation_input_tokens"] == 5
-    assert payload["llm_usage"]["cache_read_input_tokens"] == 3
-    assert payload["prompt_cache_audit"]["user_prompt_chars"] > 0
-    assert payload["prompt_cache_audit"]["provider"] == "anthropic"
-    assert payload["prompt_cache_audit"]["cache_mode"] == "explicit_cache_control"
-    assert payload["prompt_cache_audit"]["cache_control_forwarded_to_provider"] is True
-    assert payload["prompt_cache_audit"]["tool_schema_hash"]
-    assert payload["prompt_cache_audit"]["system_blocks"]
-    assert payload["prompt_cache_audit"]["cache_prefix_order"] == (
-        "tools -> system -> messages"
-    )
-
-
-def test_creative_trace_marks_openai_cache_as_automatic_prefix(tmp_path):
-    class PolicyClient:
-        def resolve_request_policy(self, *, request_kind=None, tool=None):
-            return {"request_kind": request_kind, "timeout_sec": 180.0, "max_retries": 0}
-
-        def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
-            return {
-                "file_path": "policies/baseline_algorithm.py",
-                "action": "create",
-                "code_content": "def solve(instance, rng, time_limit_sec, context):\n    return []\n",
-            }
-
-        def get_last_usage_metadata(self):
-            return {
-                "provider": "openai_compatible",
-                "cache_mode": "automatic_prefix_cache_observed",
-                "cache_accounting_mode": "provider_prompt_tokens_include_cache_read",
-                "input_tokens": 120,
-                "prompt_tokens_total": 120,
-                "output_tokens": 7,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 80,
-                "cache_miss_input_tokens": 40,
-            }
-
-    creative = CreativeLayer(
-        PolicyClient(),
-        model="gpt-5.5",
-        trace_dir=str(tmp_path),
-    )
-
-    creative.generate_code({"change_locus": "solver_design"})
+    writer.write_finish(path, ok=True, response={"file_path": "x.py"})
 
     payload = json.loads(next(tmp_path.glob("*.json")).read_text())
-    audit = payload["prompt_cache_audit"]
-    assert audit["provider"] == "openai_compatible"
-    assert audit["cache_mode"] == "automatic_prefix_cache_attempted"
-    assert audit["cache_accounting_mode"] == "provider_prompt_tokens_include_cache_read"
-    assert audit["cache_control_forwarded_to_provider"] is False
-    assert all(
-        block["cache_control_forwarded_to_provider"] is False
-        for block in audit["system_blocks"]
-    )
-    assert "do not forward Anthropic cache_control" in audit["cache_strategy_note"]
+    assert payload["request_kind"] == "code"
+    assert payload["request_policy"]["timeout_sec"] == 180.0
+    assert payload["request_policy"]["provider"] == "anthropic"
+    assert not any("retri" in key for key in payload["request_policy"])
+    assert payload["response"] == {"file_path": "x.py"}

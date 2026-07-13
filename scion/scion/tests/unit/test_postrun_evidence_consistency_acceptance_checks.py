@@ -71,6 +71,59 @@ def test_evidence_consistency_checks_reject_drift() -> None:
     assert reports["detail"]["manifests"] == 0
 
 
+def test_direct_mode_not_applicable_agentic_requirements_are_ready() -> None:
+    analysis_brief, inventory = _ready_inputs()
+    requirements = {
+        key: {
+            "status": "not_applicable",
+            "applicable": False,
+            "required": False,
+            "source": "mode-aware fixture",
+        }
+        for key in (
+            "agentic_session_index",
+            "target_intent_trace",
+            "tool_selection_trace",
+            "agentic_transcript",
+            "agentic_planner",
+            "agentic_resume_context",
+        )
+    }
+    analysis_brief["phase4_evidence_coverage"]["requirements"] = requirements
+    inventory["phase4_evidence_coverage"]["requirements"] = requirements
+
+    check = PostrunEvidenceConsistencyAcceptancePort().summarize(
+        analysis_brief=analysis_brief,
+        inventory=inventory,
+    ).to_payloads()["phase4_evidence_coverage_actionability"]
+
+    assert check["status"] == "ok"
+    assert check["detail"]["required_evidence_unavailable"] == []
+
+
+def test_unknown_mode_required_agentic_requirements_fail_closed() -> None:
+    analysis_brief, inventory = _ready_inputs()
+    requirements = {
+        "agentic_session_index": {
+            "status": "invalid_runtime_mode",
+            "applicable": True,
+            "required": True,
+            "available": False,
+            "source": "mode-aware fixture",
+        }
+    }
+    analysis_brief["phase4_evidence_coverage"]["requirements"] = requirements
+    inventory["phase4_evidence_coverage"]["requirements"] = requirements
+
+    check = PostrunEvidenceConsistencyAcceptancePort().summarize(
+        analysis_brief=analysis_brief,
+        inventory=inventory,
+    ).to_payloads()["phase4_evidence_coverage_actionability"]
+
+    assert check["status"] == "failed"
+    assert "phase4_required_evidence_unavailable" in check["detail"]["failures"]
+
+
 def _ready_inputs() -> tuple[dict[str, object], dict[str, object]]:
     phase4_inventory = {
         "evidence_scope": "current_run",

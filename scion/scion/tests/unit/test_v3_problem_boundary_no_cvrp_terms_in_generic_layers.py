@@ -16,11 +16,6 @@ GENERIC_LAYER_DIRS = (
     "evidence",
     "opportunity",
 )
-GENERIC_PREVIEW_PATHS = (
-    PACKAGE_ROOT / "proposal" / "agentic_preview.py",
-    PACKAGE_ROOT / "proposal" / "agentic_preview_compaction.py",
-    *(PACKAGE_ROOT / "proposal" / "tools" / "previews").rglob("*.py"),
-)
 GENERIC_PREPARED_PROMPT_CONTEXT_FILES = (
     PACKAGE_ROOT / "postrun" / "handoff" / "prepared_prompt_context.py",
     PACKAGE_ROOT / "postrun" / "handoff" / "prompt_context_readiness_validation.py",
@@ -102,26 +97,6 @@ def test_generic_layers_do_not_contain_cvrp_solver_design_semantics() -> None:
     )
 
 
-def test_generic_preview_tools_do_not_hardcode_solver_algorithm_fields() -> None:
-    violations: list[str] = []
-    for path in GENERIC_PREVIEW_PATHS:
-        relative = path.relative_to(PACKAGE_ROOT).as_posix()
-        for line_number, line in enumerate(
-            path.read_text(encoding="utf-8").splitlines(),
-            start=1,
-        ):
-            if "solver_algorithm_" not in line:
-                continue
-            violations.append(f"{relative}:{line_number}: {line.strip()}")
-
-    assert not violations, (
-        "Generic proposal preview tools must consume declared telemetry fields "
-        "from problem/surface providers instead of hardcoding CVRP-shaped "
-        "solver_algorithm_* names.\n"
-        + "\n".join(violations)
-    )
-
-
 def test_generic_prepared_prompt_context_does_not_own_problem_prompt_semantics() -> None:
     forbidden = {
         "cvrp": re.compile(r"\bcvrp\b|\bCVRP\b"),
@@ -157,13 +132,6 @@ def test_generic_prepared_prompt_context_does_not_own_problem_prompt_semantics()
 
 
 TAXONOMY_BOUNDARY_FILES = (
-    "proposal/mechanism_novelty.py",
-    "proposal/agentic_session_patch_flow.py",
-    "proposal/agentic_session_hypothesis.py",
-    "proposal/context_manager/guidance.py",
-    "proposal/engine/solver_design_prompts.py",
-    "proposal/agentic_code_context.py",
-    "proposal/solver_design_smoke/constants.py",
     "runtime/audit.py",
 )
 FORBIDDEN_TAXONOMY_LITERALS = {

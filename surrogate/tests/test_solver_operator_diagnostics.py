@@ -45,6 +45,40 @@ def test_operator_runtime_diagnostics_exports_snake_case_class_names() -> None:
     assert diagnostics["fill_and_downsize"]["cost_delta_sum"] == 500
     assert diagnostics["locked_anchor_repack"]["operator_invocations"] == 5
     assert "notes" not in diagnostics["locked_anchor_repack"]
+    assert runtime["operator_registry"] == [
+        "fill_and_downsize",
+        "locked_anchor_repack",
+    ]
+    events = runtime["typed_telemetry_events"]
+    assert len(events) == 1
+    assert events[0]["lane"] == "state_transition"
+    assert events[0]["mechanism_id"] == "warehouse_operator_registry"
+    assert events[0]["attribution_confidence"] == 1.0
+    assert events[0]["before_ref"] == "operator_registry:unresolved"
+    assert events[0]["after_ref"] == (
+        "operator_registry:active:fill_and_downsize,locked_anchor_repack"
+    )
+    assert events[0]["missing_refs"] == []
+    assert all(event["lane"] != "direct_effect" for event in events)
+
+
+def test_operator_registry_transition_does_not_invent_legacy_diagnostics() -> None:
+    class MoveOrderWithoutDiagnostics:
+        pass
+
+    runtime = _operator_runtime_diagnostics(
+        [MoveOrderWithoutDiagnostics()],
+        ["MoveOrder"],
+    )
+
+    assert runtime["operator_registry"] == ["move_order"]
+    assert "operator_diagnostics" not in runtime
+    assert "validation_transfer_diagnostics" not in runtime
+    event = runtime["typed_telemetry_events"][0]
+    assert event["lane"] == "state_transition"
+    assert event["mechanism_id"] == "warehouse_operator_registry"
+    assert "accepted" not in event
+    assert "direct_effect" not in str(event)
 
 
 def test_solution_to_dict_exposes_operator_diagnostics_top_level() -> None:

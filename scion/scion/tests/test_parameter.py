@@ -16,7 +16,7 @@ from scion.parameter.search_space import ParameterSearchSpace
 
 def test_parameter_search_config_defaults():
     cfg = ParameterSearchConfig()
-    assert cfg.enabled is True
+    assert cfg.enabled is False
     assert cfg.trigger == "on_promote"
     assert cfg.target == "operator_weights"
     assert cfg.strategy == "random_local"
@@ -61,7 +61,7 @@ def test_problem_spec_with_parameter_search():
     )
     assert hasattr(spec, "parameter_search")
     assert isinstance(spec.parameter_search, ParameterSearchConfig)
-    assert spec.parameter_search.enabled is True
+    assert spec.parameter_search.enabled is False
 
 
 def test_problem_spec_yaml_without_parameter_search(tmp_path):
@@ -79,7 +79,7 @@ def test_problem_spec_yaml_without_parameter_search(tmp_path):
     yaml_path.write_text(yaml_content)
     spec = ProblemSpec.from_yaml(str(yaml_path))
     assert isinstance(spec.parameter_search, ParameterSearchConfig)
-    assert spec.parameter_search.enabled is True
+    assert spec.parameter_search.enabled is False
 
 
 # ─────────────────────────────────────────────────────────────────────────────

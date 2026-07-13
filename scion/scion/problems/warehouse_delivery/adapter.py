@@ -16,11 +16,69 @@ from typing import Any, Mapping, Sequence
 
 from scion.problem.contracts import CheckReport, LowerBoundEstimate, SolverArtifact
 from scion.problem.spec import ProblemSpecV1
-from scion.runtime.telemetry_guard import (
-    normalize_declared_mechanisms,
-    normalize_expected_telemetry,
-    normalize_expected_telemetry_by_mechanism,
-)
+from scion.runtime.telemetry_events import TypedTelemetryEvent
+
+
+def typed_events_from_warehouse_operator_diagnostics(
+    mechanism_id: str,
+    diagnostics: Mapping[str, Any],
+) -> tuple[TypedTelemetryEvent, ...]:
+    """Map legacy warehouse aggregates without upgrading them to direct effects."""
+
+    mechanism = str(mechanism_id or "").strip()
+    if not mechanism:
+        raise ValueError("warehouse telemetry mechanism_id must be non-empty")
+    invocations = _nonnegative_int(diagnostics.get("operator_invocations"))
+    accepted_moves = _nonnegative_int(diagnostics.get("accepted_moves"))
+    improving_moves = _nonnegative_int(diagnostics.get("improving_move_count"))
+    split_delta = _number_or_zero(diagnostics.get("split_delta_sum"))
+    cost_delta = _number_or_zero(diagnostics.get("cost_delta_sum"))
+    events: list[TypedTelemetryEvent] = []
+    if invocations > 0:
+        events.append(
+            TypedTelemetryEvent(
+                lane="attempt",
+                mechanism_id=mechanism,
+                attribution_scope="warehouse_operator_invocation",
+                attribution_confidence=1.0,
+                before_ref=None,
+                after_ref=None,
+                missing_refs=("before_ref", "after_ref"),
+                occurrences=invocations,
+                evidence_ref=f"runtime.operator_diagnostics.{mechanism}",
+            )
+        )
+    if accepted_moves > 0 or improving_moves > 0 or split_delta or cost_delta:
+        events.append(
+            TypedTelemetryEvent(
+                lane="associated_outcome",
+                mechanism_id=mechanism,
+                attribution_scope="legacy_warehouse_operator_aggregate",
+                attribution_confidence=0.0,
+                before_ref=None,
+                after_ref=None,
+                missing_refs=("before_ref", "after_ref"),
+                occurrences=max(accepted_moves, improving_moves, 1),
+                evidence_ref=f"runtime.operator_diagnostics.{mechanism}",
+            )
+        )
+    return tuple(events)
+
+
+def _nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _number_or_zero(value: Any) -> int | float:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0
 
 
 class WarehouseDeliveryAdapter:
@@ -34,140 +92,12 @@ class WarehouseDeliveryAdapter:
     def spec(self) -> ProblemSpecV1:
         return self._spec
 
-    def active_subject_policy_provider(self) -> "WarehouseDeliveryAdapter":
-        return self
+    def research_guidance_provider(self) -> Any:
+        from scion.problems.warehouse_delivery.research_guidance import (
+            WarehouseResearchGuidanceProvider,
+        )
 
-    def active_subject_taxonomy(
-        self,
-        context: Any = None,
-        *,
-        surface: str | None = None,
-        subject_id: str | None = None,
-    ) -> Mapping[str, Any]:
-        del context, surface, subject_id
-        return {
-            "telemetry_activation_refs": (
-                "operator_diagnostics",
-                "validation_transfer_diagnostics",
-                "validation_transfer",
-                "operator_invocations",
-                "eligible_vehicle_or_order_groups_seen",
-                "accepted_moves",
-            )
-        }
-
-    def active_subject_code_constraints(
-        self,
-        context: Any = None,
-        *,
-        surface: str | None = None,
-        subject_id: str | None = None,
-    ) -> Mapping[str, Any] | None:
-        del context, subject_id
-        selected = str(surface or "").strip()
-        if selected not in {"", "order_level", "vehicle_level"}:
-            return None
-        return {
-            "surface": selected or "warehouse_operator",
-            "subject_id": "warehouse_delivery.operator.validation_transfer",
-            "version": "warehouse_operator_validation_transfer_code_constraints.v1",
-            "constraints": (
-                {
-                    "id": "exportable_validation_transfer_diagnostics",
-                    "summary": (
-                        "Warehouse operator diagnostics must be stored on the "
-                        "operator instance for solver/runtime export."
-                    ),
-                    "constraint": (
-                        "Initialize or update `self.validation_transfer_diagnostics` "
-                        "with the exact standard keys `operator_invocations`, "
-                        "`eligible_vehicle_or_order_groups_seen`, `accepted_moves`, "
-                        "`split_delta_sum`, `cost_delta_sum`, and "
-                        "`improving_move_count`; a helper such as "
-                        "`self._new_diagnostics()` or `new_diagnostics()` may "
-                        "return that standard dict literal, but its result must "
-                        "be assigned to `self.validation_transfer_diagnostics`, "
-                        "not only a local dict or undeclared expected_telemetry "
-                        "names. When modifying an existing operator module, "
-                        "the expected telemetry runtime key must use the target "
-                        "operator registry/export name, for example "
-                        "`operator_diagnostics.move_order.*` for "
-                        "`operators/move_order.py`."
-                    ),
-                },
-                {
-                    "id": "activation_and_effect_mutations",
-                    "summary": (
-                        "Code must mutate both activation and effect counters before "
-                        "the patch reaches protocol."
-                    ),
-                    "constraint": (
-                        "Increment activation counters such as `operator_invocations` "
-                        "and `eligible_vehicle_or_order_groups_seen`, then mutate "
-                        "`self.validation_transfer_diagnostics` or an alias of "
-                        "that operator-instance field for effect counters such as "
-                        "`split_delta_sum`, `cost_delta_sum`, or "
-                        "`improving_move_count` from computed candidate/base deltas."
-                    ),
-                },
-                {
-                    "id": "screening_only_lexicographic_guard",
-                    "summary": (
-                        "Accepted moves must be guarded against screening-only or "
-                        "lexicographically dominated changes."
-                    ),
-                    "constraint": (
-                        "Compute split and cost deltas, or candidate/base split and "
-                        "cost values, and return the original solution when the "
-                        "candidate worsens subcategory splits or only offers a "
-                        "lower-priority cost gain after harming splits. Comments or "
-                        "string mentions of a lexicographic guard are not sufficient."
-                    ),
-                },
-                {
-                    "id": "validation_transfer_acceptance_contract",
-                    "summary": (
-                        "Order-level transfer candidates must encode the "
-                        "split/cost acceptance contract in executable code."
-                    ),
-                    "constraint": (
-                        "Prefer split-positive moves. If the mechanism is "
-                        "split-preserving cost-only, accept only when computed "
-                        "`split_delta == 0` and `cost_delta > 0`, update "
-                        "exported `split_delta_sum` and `cost_delta_sum` from "
-                        "those computed values, and return the original solution "
-                        "otherwise. Hypothesis text or validation W/T/L alone is "
-                        "not enough."
-                    ),
-                },
-                {
-                    "id": "effect_scope_and_bounded_runtime",
-                    "summary": (
-                        "Merge-style operators must declare their split/cost effect "
-                        "scope and keep candidate enumeration bounded."
-                    ),
-                    "constraint": (
-                        "For vehicle-level merge or resize operators, distinguish a "
-                        "true split-positive improvement from split-preserving "
-                        "cost-only compression. If the intended effect is cost-only, "
-                        "state why it should not overfit screening/validation and "
-                        "how frozen holdout and runtime regression risk are bounded. "
-                        "Use an executable bounded candidate policy such as top_k, "
-                        "limit, max_candidates, a candidate cap, an early exit, or "
-                        "sorted candidates sliced before expensive trial evaluation; "
-                        "do not rely on unbounded full vehicle-pair scans."
-                    ),
-                },
-            ),
-            "forbidden_patterns": (
-                "local-only validation_transfer_diagnostics dict",
-                "comments or strings as the only screening/lexicographic guard",
-                "accepting cost-only moves that worsen subcategory_splits",
-                "accepting cost-only moves without computed split_delta == 0 "
-                "and cost_delta > 0",
-                "unbounded full vehicle-pair scans in merge_vehicles.py",
-            ),
-        }
+        return WarehouseResearchGuidanceProvider()
 
     # --- lazy import of surrogate modules ---
 
@@ -187,7 +117,6 @@ class WarehouseDeliveryAdapter:
             c.name for c in self._spec.operator_interface.categories
         ) if self._spec.operator_interface else "vehicle_level, order_level"
         editable = ", ".join(self._spec.search_space.editable)
-        frozen = ", ".join(self._spec.search_space.frozen)
         objective_policy = _render_objective_policy(self._spec)
         objective_implication = _render_objective_implication(self._spec)
 
@@ -207,9 +136,6 @@ Metric definitions:
 
 {objective_implication}
 
-### Validation Transfer Risk and Operator Diagnostics
-{_render_validation_transfer_guidance()}
-
 ### How the Initial Solution is Built (greedy_init)
 Orders are grouped by (vehicle_category, vehicle_subcategory, pickup_city).
 Within each group, orders are packed sequentially into vehicles using first-fit.
@@ -217,39 +143,12 @@ When a vehicle reaches capacity (pallet limit), a new vehicle is opened for the 
 Subcategory splits occur when a subcategory group's total pallets exceed one vehicle's capacity.
 Example: if subcategory 3 has 50 pallets and HQ40 capacity is 40, it needs 2 vehicles -> 1 split.
 
-To reduce splits, an operator typically consolidates orders so a subcategory fits in
-fewer vehicles: merging partially-filled vehicles of the SAME vehicle_subcategory,
-or moving orders between vehicles to free up space for same-subcategory consolidation.
-To reduce cost while preserving splits, an operator typically downsizes, merges
-under-filled compatible vehicles, or removes vehicles without spreading a subcategory
-across more vehicles. Random order moves between arbitrary vehicles are unlikely to
-improve either metric reliably.
-
-### Worked Example (Small Instance)
-Instance: 6 orders, 2 subcategories, all Shenzhen region
-  Orders: A1(subcat=1,8plt), A2(subcat=1,6plt), A3(subcat=1,10plt),
-          A4(subcat=1,12plt), B1(subcat=2,5plt), B2(subcat=2,4plt)
-  Vehicle types: T10(cap=14,cost=1800), HQ40(cap=40,cost=3300)
-
-Greedy init (groups by subcategory, first-fit):
-  V1[T10]: A1(8)+A2(6)=14plt -> full
-  V2[T10]: A3(10) -> 10plt (A4 won't fit: 10+12=22 > 14)
-  V3[T10]: A4(12) -> 12plt
-  V4[T10]: B1(5)+B2(4)=9plt
-  Objective: splits=2 (subcat 1 in V1,V2,V3 -> split=2; subcat 2 in V4 -> split=0)
-             cost=4*1800=7200
-
-Improved (merge subcat-1 vehicles into HQ40):
-  V1[HQ40]: A1+A2+A3+A4=36plt
-  V4[T10]: B1+B2=9plt
-  Objective: splits=0, cost=3300+1800=5100 -> BETTER on both objectives
-
-The key move: merging V2+V3 orders into V1 (upgrading to HQ40).
-This is what a good subcategory-consolidation operator should do.
-
 Operator categories: {cats}
-Editable files: {editable}
-Frozen files (do not modify): {frozen}"""
+Editable operator source: {editable}
+
+Both order-level and vehicle-level research remain open. Inspect the current
+champion source and branch evidence before choosing which surface and algorithmic
+idea to investigate."""
 
     def render_operator_interface(self) -> str:
         base_py_path = os.path.join(self._root, "operators", "base.py")
@@ -294,8 +193,12 @@ Frozen files (do not modify): {frozen}"""
 - Helper: `select_minimum_vehicle_type(total_pallets, total_hazard) -> str` from models.py
 - Helper: `get_max_pickups(region) -> int` from models.py (Dongguan=2, Shenzhen=3)
 
-### Validation Transfer Risk and Operator Diagnostics
-{_render_validation_transfer_guidance()}
+### Optional Operator Observability
+Operators may expose `operator_invocations`,
+`eligible_vehicle_or_order_groups_seen`, `accepted_moves`, `split_delta_sum`,
+`cost_delta_sum`, and `improving_move_count` when those values help explain an
+algorithmic effect. These diagnostics are observability, not a condition for
+proposing or implementing a useful algorithmic change.
 
 ### Critical Constraints
 1. **Deep copy first**: always call `new_sol = solution.deep_copy()` before any modification
@@ -392,65 +295,21 @@ Frozen files (do not modify): {frozen}"""
         }
 
     def render_problem_measurement_diagnostics(self) -> Mapping[str, Any]:
-        """Return warehouse proposal-only transfer diagnostics.
-
-        This is problem-owned planning context.  It intentionally exposes the
-        aggregate failure shape but not validation/frozen case details.
-        """
+        """Return safe, proposal-visible warehouse research opportunities."""
 
         return {
-            "schema_version": "warehouse_validation_transfer_diagnostic.v1",
-            "taint": "problem_owned_proposal_diagnostic",
+            "schema_version": "warehouse_research_opportunity_diagnostic.v2",
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
-            "transfer_risk": {
-                "risk_model": (
-                    "screening-positive operator changes may activate on the "
-                    "small screening distribution while producing no "
-                    "hierarchical gain on formal validation aggregates, or may "
-                    "compress cost while preserving the same split structure and "
-                    "then regress on frozen holdout/runtime"
+            "objective_model": {
+                "mode": "lexicographic",
+                "metrics": ["subcategory_splits", "total_cost"],
+                "interpretation": (
+                    "total_cost matters when subcategory_splits is preserved; "
+                    "feasibility is always required"
                 ),
-                "historical_pattern": (
-                    "same_subcategory_consolidate-style operator: screening "
-                    "positive, formal aggregate 2/3/0, paired 6/9/0, median "
-                    "delta 0, failure VALIDATION_FAIL_NO_HIERARCHICAL_GAIN"
-                ),
-                "latest_field_gate_pattern": (
-                    "merge_vehicles-style candidate: strong screening and "
-                    "validation cost signal, mostly split-preserving "
-                    "cost-only compression, negative frozen median, and "
-                    "roughly 30s runtime regression"
-                ),
-                "latest_formal_no_gain_pattern": (
-                    "swap_orders candidate: screening improved enough to reach "
-                    "formal validation, then validation produced W/T/L 8/1/6 "
-                    "with median delta -200, VALIDATION_FAIL_NO_HIERARCHICAL_GAIN, "
-                    "split_delta_sum 0 across validation transfer diagnostics, "
-                    "and median runtime ratio about 1.025. Cost-only wins were "
-                    "not enough to prove case-general hierarchical improvement."
-                ),
-                "required_hypothesis_claims": [
-                    "why the mechanism should transfer beyond screening cases",
-                    "what operator activation counter should become positive",
-                    "what effect counter should prove subcategory split or cost gain",
-                    "how the operator avoids screening-only activation",
-                    (
-                        "the validation-transfer acceptance contract: prefer "
-                        "split-positive moves; cost-only moves require computed "
-                        "split_delta == 0 and cost_delta > 0"
-                    ),
-                    (
-                        "whether the intended effect is true split-positive "
-                        "improvement or split-preserving cost-only compression"
-                    ),
-                    (
-                        "what top-k, cap, limit, early-exit, or runtime "
-                        "budget strategy bounds candidate search"
-                    ),
-                ],
             },
-            "required_diagnostics": {
+            "optional_observability": {
                 "activation": [
                     "operator_invocations",
                     "eligible_vehicle_or_order_groups_seen",
@@ -461,191 +320,44 @@ Frozen files (do not modify): {frozen}"""
                     "cost_delta_sum",
                     "improving_move_count",
                 ],
+                "policy": (
+                    "Use these fields when they clarify why an operator did or "
+                    "did not affect the objective; they are not proposal gates."
+                ),
             },
             "measurable_opportunity_classes": [
                 {
-                    "mechanism_family": "validation_transfer_continuation",
-                    "required_evidence": (
-                        "bounded warehouse operator changes with activation "
-                        "and effect counters, protocol-evaluated split/cost "
-                        "deltas, runtime feedback, and branch-continuity "
-                        "evidence before calling post-promotion behavior a "
-                        "real plateau"
+                    "surface": "order_level",
+                    "research_question": (
+                        "Can order reassignment or exchange improve subcategory "
+                        "consolidation or reduce cost without worsening splits?"
                     ),
-                }
+                },
+                {
+                    "surface": "vehicle_level",
+                    "research_question": (
+                        "Can vehicle merge, split, resize, or rebuild structure "
+                        "improve the lexicographic objective while preserving "
+                        "assignment feasibility?"
+                    ),
+                },
             ],
             "opportunity_diagnostics": [
                 {
-                    "diagnostic_type": "post_promotion_followup",
-                    "surface": "warehouse_operator",
-                    "mechanism_family": "validation_transfer_continuation",
+                    "diagnostic_type": "open_algorithm_research",
                     "metric": "lexicographic_objective",
                     "summary": (
-                        "Warehouse has a proven promotion path, including the "
-                        "champion-v2 validation-transfer checkpoint; follow-up "
-                        "research should test continuous split/cost improvement "
-                        "instead of assuming a plateau from shallow evidence."
+                        "The current source and complete branch evidence should "
+                        "determine the next algorithmic direction; neither "
+                        "warehouse research surface is preselected."
                     ),
-                    "recommended_action": (
-                        "For champion-v2 follow-up, propose a bounded operator "
-                        "with declared activation/effect diagnostics and require "
-                        "protocol-evaluated split/cost, runtime-feedback, and "
-                        "branch-continuity evidence before accepting a plateau "
-                        "interpretation. Quality-blocked, infra-only, or "
-                        "screened-only runs are not plateau evidence."
-                    ),
-                    "confidence": "medium",
-                    "reason_codes": [
-                        "WAREHOUSE_V2_FOLLOWUP_CONTINUOUS_RESEARCH",
-                        "PLATEAU_REQUIRES_PROTOCOL_EVIDENCE",
-                        "SCREENING_ONLY_NOT_PLATEAU_EVIDENCE",
-                    ],
                 }
             ],
             "policy": (
-                "Use these diagnostics to shape warehouse proposals before "
-                "code generation. They are not promotion evidence and are not "
-                "DecisionFeatures."
+                "These aggregate facts support hypothesis formation only. They "
+                "contain no hidden evaluation-case details and do not constrain "
+                "which algorithmic mechanism the agent may investigate."
             ),
-        }
-
-    def validate_hypothesis_quality(
-        self,
-        *,
-        branch: Any | None,
-        hypothesis: Any,
-        step_history: Sequence[Any] | None = None,
-    ) -> Mapping[str, Any]:
-        """Problem-owned proposal-only quality check for warehouse operators."""
-
-        del step_history
-        if not _is_high_risk_warehouse_hypothesis(branch, hypothesis):
-            return {"allowed": True}
-        identity_rejection = _warehouse_telemetry_identity_rejection(
-            hypothesis=hypothesis,
-            patch=None,
-        )
-        if identity_rejection:
-            return identity_rejection
-        missing = _missing_transfer_quality_claims(hypothesis)
-        if not missing:
-            return {
-                "allowed": True,
-                "gate_name": "warehouse_validation_transfer_quality",
-            }
-        detail = (
-            f"{WAREHOUSE_VALIDATION_TRANSFER_QUALITY_FAILURE}: warehouse "
-            "operator proposal must explain validation-case transfer risk, "
-            "expected activation/effect diagnostics, and how it avoids "
-            "screening-only gains before code generation; merge-style "
-            "warehouse proposals must also declare split-vs-cost effect scope "
-            "and bounded runtime/candidate policy; missing="
-            + ",".join(missing)
-        )
-        return {
-            "allowed": False,
-            "detail": detail,
-            "gate_name": "warehouse_validation_transfer_quality",
-            "structured_rejection": {
-                "source": "warehouse_problem_adapter",
-                "gate_name": "warehouse_validation_transfer_quality",
-                "failure_code": WAREHOUSE_VALIDATION_TRANSFER_QUALITY_FAILURE,
-                "agent_block_reason": "agent_quality_blocked",
-                "retry_constraint": (
-                    "Rewrite the warehouse operator hypothesis before code: "
-                    "state the screening-to-validation transfer risk, declare "
-                    "expected activation/effect diagnostics, and explain the "
-                    "guard against screening-only improvements. Also state "
-                    "whether the mechanism targets true split-positive gain or "
-                    "split-preserving cost-only compression, and name the "
-                    "top-k/cap/early-exit/runtime budget strategy."
-                ),
-                "repair_template": _warehouse_hypothesis_quality_repair_template(
-                    missing
-                ),
-                "missing_claims": list(missing),
-                "decision_features_excluded": True,
-            },
-        }
-
-    def validate_patch_quality(
-        self,
-        *,
-        branch: Any | None,
-        hypothesis: Any,
-        patch: Any,
-        step_history: Sequence[Any] | None = None,
-    ) -> Mapping[str, Any]:
-        """Problem-owned code quality check for warehouse operator patches."""
-
-        del step_history
-        if not _is_high_risk_warehouse_hypothesis(branch, hypothesis):
-            return {"allowed": True}
-        identity_rejection = _warehouse_telemetry_identity_rejection(
-            hypothesis=hypothesis,
-            patch=patch,
-        )
-        if identity_rejection:
-            return identity_rejection
-        code, changed_files = _warehouse_operator_patch_code(patch, hypothesis)
-        missing = list(
-            _missing_transfer_patch_quality(
-                code,
-                target_files=changed_files
-                or (
-                    _normalize_patch_path(
-                        getattr(hypothesis, "target_file", "")
-                    ),
-                ),
-            )
-        )
-        if not changed_files:
-            missing.insert(0, "warehouse_operator_patch_code")
-        if not missing:
-            return {
-                "allowed": True,
-                "gate_name": "warehouse_validation_transfer_patch_quality",
-            }
-        detail = (
-            f"{WAREHOUSE_VALIDATION_TRANSFER_PATCH_QUALITY_FAILURE}: warehouse "
-            "operator patch must implement proposal/code-visible validation "
-            "transfer diagnostics before protocol: activation/effect counters "
-            "or an explicit instrumentation path, plus a screening-only or "
-            "lexicographic guard; missing="
-            + ",".join(dict.fromkeys(missing))
-        )
-        return {
-            "allowed": False,
-            "detail": detail,
-            "gate_name": "warehouse_validation_transfer_patch_quality",
-            "structured_rejection": {
-                "source": "warehouse_problem_adapter",
-                "gate_name": "warehouse_validation_transfer_patch_quality",
-                "failure_code": WAREHOUSE_VALIDATION_TRANSFER_PATCH_QUALITY_FAILURE,
-                "agent_block_reason": "agent_quality_blocked",
-                "retry_constraint": (
-                    "Revise the warehouse operator patch before protocol: "
-                    "add code-visible activation/effect diagnostic counters or "
-                    "a named instrumentation path, compute base/candidate "
-                    "subcategory splits and total cost, and accept only "
-                    "`split_delta > 0 or (split_delta == 0 and cost_delta > 0)`. "
-                    "Return the original solution otherwise. For "
-                    "change_vehicle_type/downsize patches, a cost-only filter "
-                    "is not enough unless the code proves assignment consistency "
-                    "and computes/preserves split_delta. For merge-style "
-                    "vehicle-pair scans, include an executable pre-evaluation "
-                    "top-k/cap/limit/early-exit candidate policy."
-                ),
-                "repair_template": _warehouse_patch_quality_repair_template(missing),
-                "missing_code_elements": list(dict.fromkeys(missing)),
-                "target_file": _normalize_patch_path(
-                    getattr(hypothesis, "target_file", "")
-                ),
-                "changed_files": list(changed_files),
-                "counts_as_screened_round": False,
-                "counts_as_proposal_quality_attempt": True,
-                "decision_features_excluded": True,
-            },
         }
 
     # --- Instance / output ---
@@ -747,7 +459,7 @@ Frozen files (do not modify): {frozen}"""
 
         missing = all_order_ids - set(placed.keys())
         if missing:
-            reasons.append(f"{len(missing)} orders not assigned: {sorted(missing)[:5]}")
+            reasons.append(f"{len(missing)} orders not assigned: {sorted(missing)}")
 
         return CheckReport(passed=len(reasons) == 0, reasons=tuple(reasons))
 
@@ -764,7 +476,7 @@ Frozen files (do not modify): {frozen}"""
         feas = self._oracle_mod.check_feasibility(solution, instance, phase=1)
         return CheckReport(
             passed=feas.is_feasible,
-            reasons=tuple(feas.violations[:10]),
+            reasons=tuple(feas.violations),
         )
 
     def recompute_objective(
@@ -883,49 +595,6 @@ def _render_objective_implication(spec: ProblemSpecV1) -> str:
     )
 
 
-def _render_validation_transfer_guidance() -> str:
-    return (
-        "Warehouse operator proposals must handle screening-to-validation "
-        "transfer explicitly. A recent high-risk pattern was a "
-        "same_subcategory_consolidate-style operator that looked positive in "
-        "screening but failed formal validation with aggregate 2/3/0, paired "
-        "6/9/0, median delta 0, and "
-        "VALIDATION_FAIL_NO_HIERARCHICAL_GAIN. A newer `swap_orders` pattern "
-        "reached validation but failed with W/T/L 8/1/6, median delta -200, "
-        "VALIDATION_FAIL_NO_HIERARCHICAL_GAIN, `split_delta_sum` 0, and about "
-        "1.025 median runtime ratio; wins without a positive formal median and "
-        "split/effect transfer are not enough. Before code generation, state "
-        "why the mechanism should generalize beyond screening cases, which "
-        "operator activation counters should become positive, which effect "
-        "counters should show subcategory split or cost improvement, and what "
-        "guard prevents a screening-only no-effect move from being accepted. "
-        "Treat the validation-transfer acceptance contract as proposal-visible "
-        "and code-visible: prefer split-positive moves; if the mechanism is "
-        "split-preserving cost-only, accept only computed `split_delta == 0` "
-        "and `cost_delta > 0`, update exported `split_delta_sum` and "
-        "`cost_delta_sum`, and return the original solution otherwise. "
-        "For merge/vehicle-level candidates, distinguish true split-positive "
-        "improvement from split-preserving cost-only compression. If the "
-        "proposal is cost-only, explain why it should not overfit the "
-        "screening/validation distribution and how it controls frozen holdout "
-        "and runtime regression risk. State a concrete top-k, candidate cap, "
-        "limit, early-exit, or runtime budget strategy before code generation. "
-        "Store runtime counters on the operator instance under "
-        "`self.validation_transfer_diagnostics` using the declared standard "
-        "keys (`operator_invocations`, "
-        "`eligible_vehicle_or_order_groups_seen`, `accepted_moves`, "
-        "`split_delta_sum`, `cost_delta_sum`, `improving_move_count`) so the "
-        "warehouse solver exports them as "
-        "`runtime.operator_diagnostics.{mechanism}.*`. For modify-existing "
-        "operator proposals, `{mechanism}` must be the target operator "
-        "registry/export key derived from the module name, such as "
-        "`move_order` for `operators/move_order.py`; new operator modules may "
-        "use their new registry name as the mechanism. Do not use a local dict "
-        "or undeclared expected_telemetry keys that cannot be consumed by the "
-        "telemetry guard."
-    )
-
-
 def _render_surface_prompt_guidance(spec: ProblemSpecV1, surface_name: str) -> str:
     surface = None
     for candidate in spec.research_surfaces or []:
@@ -952,16 +621,6 @@ def _render_surface_prompt_guidance(spec: ProblemSpecV1, surface_name: str) -> s
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
-WAREHOUSE_VALIDATION_TRANSFER_QUALITY_FAILURE = (
-    "agent_quality_blocked:warehouse_validation_transfer_quality_missing"
-)
-WAREHOUSE_VALIDATION_TRANSFER_PATCH_QUALITY_FAILURE = (
-    "agent_quality_blocked:warehouse_validation_transfer_patch_quality_missing"
-)
-WAREHOUSE_OPERATOR_TELEMETRY_IDENTITY_FAILURE = (
-    "agent_quality_blocked:warehouse_operator_telemetry_identity_mismatch"
-)
-
 _EXISTING_OPERATOR_MODULES = frozenset(
     {
         "operators/change_vehicle_type.py",
@@ -972,1199 +631,6 @@ _EXISTING_OPERATOR_MODULES = frozenset(
         "operators/swap_orders.py",
     }
 )
-
-
-def _is_high_risk_warehouse_hypothesis(branch: Any | None, hypothesis: Any) -> bool:
-    if hypothesis is None:
-        return False
-    if not _is_warehouse_operator_hypothesis(hypothesis):
-        return False
-    if _is_screening_positive_followup(branch):
-        return True
-    action = str(getattr(hypothesis, "action", "") or "").strip()
-    return action in {"modify", "create_new", "remove"}
-
-
-def _is_warehouse_operator_hypothesis(hypothesis: Any) -> bool:
-    locus = str(getattr(hypothesis, "change_locus", "") or "").strip()
-    target_file = _normalize_patch_path(getattr(hypothesis, "target_file", ""))
-    return locus in {"order_level", "vehicle_level"} or (
-        target_file.startswith("operators/") and target_file.endswith(".py")
-    )
-
-
-def _is_screening_positive_followup(branch: Any | None) -> bool:
-    if branch is None:
-        return False
-    status = str(getattr(branch, "branch_code_status", "") or "")
-    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
-    summary = getattr(branch, "branch_evidence_summary", {}) or {}
-    return (
-        status in {"active_weak_positive", "screening_positive"}
-        or tier in {"weak_positive", "screening_positive", "strong_positive"}
-        or str(summary.get("screening_tier") or "") in {
-            "weak_positive",
-            "screening_positive",
-            "strong_positive",
-        }
-    )
-
-
-def _missing_transfer_quality_claims(hypothesis: Any) -> tuple[str, ...]:
-    text = _hypothesis_quality_text(hypothesis)
-    missing: list[str] = []
-    if not _mentions_validation_transfer_risk(text):
-        missing.append("validation_transfer_risk")
-    if not _has_activation_effect_diagnostics(hypothesis, text):
-        missing.append("activation_effect_diagnostics")
-    if not _mentions_screening_only_guard(text):
-        missing.append("screening_only_guard")
-    if not _mentions_effect_scope_or_split_cost_risk(text):
-        missing.append("effect_scope_or_split_cost_risk")
-    if not _mentions_runtime_bounded_acceptance(text):
-        missing.append("runtime_bounded_acceptance")
-    return tuple(missing)
-
-
-def _warehouse_hypothesis_quality_repair_template(
-    missing: Sequence[str],
-) -> Mapping[str, Any]:
-    return {
-        "repair_type": "warehouse_validation_transfer_hypothesis_quality",
-        "purpose": (
-            "Make the next warehouse operator hypothesis explicitly measurable "
-            "for screening-to-validation transfer before code generation."
-        ),
-        "missing_items": list(dict.fromkeys(str(item) for item in missing)),
-        "required_claims": [
-            (
-                "validation_transfer_risk: name why a screening-positive "
-                "operator can fail formal validation or holdout cases"
-            ),
-            (
-                "activation_effect_diagnostics: name at least one activation "
-                "counter such as operator_invocations, eligible_*_seen, or "
-                "accepted_moves and one effect counter such as split_delta_sum, "
-                "cost_delta_sum, or improving_move_count"
-            ),
-            (
-                "screening_only_guard: state the no-op, case-general, or "
-                "lexicographic guard that prevents screening-only gains"
-            ),
-            (
-                "effect_scope_or_split_cost_risk: state whether the mechanism "
-                "is expected to be split-positive or split-preserving "
-                "cost-only, and if cost-only why it will not overfit "
-                "screening/validation or regress frozen holdout"
-            ),
-            (
-                "validation_transfer_acceptance_contract: prefer "
-                "split-positive moves; if the mechanism is cost-only, require "
-                "computed split_delta == 0 and cost_delta > 0 before accepting"
-            ),
-            (
-                "runtime_bounded_acceptance: state the top-k, limit, "
-                "max_candidates, candidate cap, early-exit, or runtime budget "
-                "strategy that bounds candidate evaluation"
-            ),
-        ],
-        "hypothesis_field_hints": {
-            "target_weakness": (
-                "Mention validation/formal transfer risk, not only the "
-                "screening symptom."
-            ),
-            "expected_effect": (
-                "Declare activation and effect diagnostics that should move if "
-                "the mechanism is real, including whether split_delta or "
-                "cost_delta is the intended effect scope."
-            ),
-            "no_op_condition": (
-                "State the guard that returns the original solution when the "
-                "move is screening-only, not case-general, or lexicographically "
-                "dominated."
-            ),
-            "risk_to_higher_priority": (
-                "Acknowledge no hierarchical gain / median-delta-zero formal "
-                "failure risk, and frozen/runtime risk for cost-only "
-                "compression."
-            ),
-            "runtime_budget_strategy": (
-                "Name the bounded search policy, e.g. top_k candidate pairs, "
-                "max_candidates cap, early exit after the first accepted move, "
-                "or another runtime budget."
-            ),
-        },
-        "must_not": [
-            "Do not propose another warehouse operator hypothesis that only says it may improve screening.",
-            "Do not defer diagnostics to analysis prose; put them in hypothesis fields.",
-        ],
-        "decision_features_excluded": True,
-    }
-
-
-def _missing_transfer_patch_quality(
-    code: str,
-    *,
-    target_files: Sequence[str] = (),
-) -> tuple[str, ...]:
-    if not str(code or "").strip():
-        return ("activation_effect_diagnostic_code", "screening_or_lexicographic_guard")
-    signal_text = _code_signal_text(code)
-    missing: list[str] = []
-    if not _patch_has_activation_effect_diagnostics(code, signal_text):
-        missing.append("activation_effect_diagnostic_code")
-    if not _patch_has_screening_or_lexicographic_guard(code, signal_text):
-        missing.append("screening_or_lexicographic_guard")
-    if _patch_has_unbounded_merge_vehicle_pair_scan(code, target_files):
-        missing.append("bounded_candidate_policy")
-    return tuple(missing)
-
-
-def _warehouse_patch_quality_repair_template(
-    missing: Sequence[str],
-) -> Mapping[str, Any]:
-    return {
-        "repair_type": "warehouse_validation_transfer_patch_quality",
-        "purpose": (
-            "Make the warehouse operator patch visibly measurable for "
-            "activation/effect transfer and guarded against screening-only or "
-            "lexicographically dominated moves."
-        ),
-        "missing_items": list(dict.fromkeys(str(item) for item in missing)),
-        "required_code_signals": {
-            "activation": [
-                "operator_invocations",
-                "eligible_vehicle_or_order_groups_seen",
-                "accepted_moves",
-            ],
-            "effect": [
-                "split_delta_sum",
-                "cost_delta_sum",
-                "improving_move_count",
-            ],
-            "guard": [
-                "screening_only_guard",
-                "validation_transfer_guard",
-                "no_op_condition",
-                "lexicographic guard comparing subcategory_splits and total_cost",
-            ],
-            "bounded_candidate_policy": [
-                "top_k",
-                "limit",
-                "max_candidates",
-                "candidate cap",
-                "early exit",
-                "sorted/ranked candidates sliced before expensive trial evaluation",
-            ],
-        },
-        "lexicographic_guard_skeleton": [
-            "base_splits = count_subcategory_splits(solution)",
-            "base_cost = total_cost(solution)",
-            "candidate = build_candidate(solution)",
-            "candidate_splits = count_subcategory_splits(candidate)",
-            "candidate_cost = total_cost(candidate)",
-            "split_delta = base_splits - candidate_splits",
-            "cost_delta = base_cost - candidate_cost",
-            "if not (split_delta > 0 or (split_delta == 0 and cost_delta > 0)):",
-            "    return solution",
-            "diagnostics['split_delta_sum'] += split_delta",
-            "diagnostics['cost_delta_sum'] += cost_delta",
-            "diagnostics['accepted_moves'] += 1",
-            "diagnostics['improving_move_count'] += 1",
-            "return candidate",
-        ],
-        "bounded_candidate_policy_skeleton": [
-            "ranked_candidates = sorted(raw_candidates, key=score_candidate)",
-            "for candidate_ref in ranked_candidates[:max_candidates]:",
-            "    candidate = build_and_evaluate_trial(candidate_ref)",
-            "    ... apply the split_delta/cost_delta guard before accepting ...",
-            "or: increment a generated_count counter and break before trial evaluation when generated_count >= max_candidates.",
-        ],
-        "operator_specific_hints": {
-            "change_vehicle_type_downsize": (
-                "Vehicle type changes may be split-preserving only when the "
-                "code proves/checks assignment consistency, computes "
-                "candidate_splits, and computes/preserves split_delta. A "
-                "patch that filters only `cost_delta <= 0` is still missing "
-                "the validation-transfer lexicographic guard."
-            ),
-            "merge_vehicle_pair_scan": (
-                "A real bound must cap candidates before expensive trial "
-                "evaluation. Building/sorting all pair trials and then using "
-                "`candidates[:32][0]` is not a generation bound for pair scans."
-            ),
-        },
-        "minimal_shape": [
-            "Initialize or update self.validation_transfer_diagnostics on the operator instance; local dictionaries are not exportable telemetry.",
-            "Increment operator_invocations before evaluating the move.",
-            "Increment an eligible_* counter only when the case-general precondition is true.",
-            "Compute base_splits/base_cost and candidate_splits/candidate_cost, or equivalent split_delta/cost_delta values, before accepting a move.",
-            "Only accept when split_delta > 0 or when split_delta == 0 and cost_delta > 0.",
-            "Increment split_delta_sum and cost_delta_sum only from the computed split_delta/cost_delta values.",
-            "For merge-style vehicle scans, bound candidate pairs before expensive trial evaluation.",
-            "Return the original solution when the move is screening-only, not case-general, or lexicographically dominated.",
-        ],
-        "example_identifiers": [
-            "validation_transfer_diagnostics",
-            "operator_invocations",
-            "eligible_vehicle_or_order_groups_seen",
-            "accepted_moves",
-            "split_delta_sum",
-            "cost_delta_sum",
-            "improving_move_count",
-            "screening_only_guard",
-            "top_k",
-            "max_candidates",
-        ],
-        "must_not": [
-            "Do not add counters in comments only; identifiers must appear in executable code.",
-            "Do not store diagnostics only in a local dict; the solver exports self.validation_transfer_diagnostics from operator instances.",
-            "Do not accept moves that worsen subcategory_splits for a cost-only gain.",
-            "Do not use a cost-only `cost_delta <= 0` filter for change_vehicle_type/downsize without computing split_delta or proving split preservation.",
-            "Do not build and evaluate all vehicle-pair trials and then pick `candidates[:32][0]`; cap generation or pre-evaluation iteration.",
-            "Do not run an unbounded nested vehicle-pair scan in merge_vehicles.py.",
-        ],
-        "decision_features_excluded": True,
-    }
-
-
-def _warehouse_telemetry_identity_rejection(
-    *,
-    hypothesis: Any,
-    patch: Any | None,
-) -> Mapping[str, Any] | None:
-    expected_runtime_key = _existing_operator_runtime_key(hypothesis, patch)
-    if not expected_runtime_key:
-        return None
-
-    declared_ids = _declared_warehouse_telemetry_mechanism_ids(hypothesis, patch)
-    offending = tuple(
-        mechanism
-        for mechanism in declared_ids
-        if mechanism and mechanism != expected_runtime_key
-    )
-    if not offending:
-        return None
-
-    target_file = _existing_operator_target_file(hypothesis, patch)
-    detail = (
-        f"{WAREHOUSE_OPERATOR_TELEMETRY_IDENTITY_FAILURE}: modify-existing "
-        f"warehouse operator target {target_file or '<unknown>'} exports runtime "
-        f"telemetry under operator_diagnostics.{expected_runtime_key}.*, but "
-        "the proposal declared non-exported mechanism id(s) "
-        f"{', '.join(offending)}. Use the target operator registry/export key "
-        "in expected_telemetry or add an explicit exportable registry alias "
-        "before protocol."
-    )
-    return {
-        "allowed": False,
-        "detail": detail,
-        "gate_name": "warehouse_operator_telemetry_identity",
-        "structured_rejection": {
-            "source": "warehouse_problem_adapter",
-            "gate_name": "warehouse_operator_telemetry_identity",
-            "failure_code": WAREHOUSE_OPERATOR_TELEMETRY_IDENTITY_FAILURE,
-            "agent_block_reason": "agent_quality_blocked",
-            "retry_constraint": (
-                "For modify-existing warehouse operator patches, keep the "
-                "mechanism identity aligned with the runtime export key. "
-                f"Use `operator_diagnostics.{expected_runtime_key}.*` for "
-                f"`{target_file}` or include an explicit registry/export alias."
-            ),
-            "target_file": target_file,
-            "expected_runtime_key": expected_runtime_key,
-            "offending_mechanism_ids": list(offending),
-            "repair_template": _warehouse_telemetry_identity_repair_template(
-                target_file=target_file,
-                expected_runtime_key=expected_runtime_key,
-                offending=offending,
-            ),
-            "counts_as_screened_round": False,
-            "counts_as_proposal_quality_attempt": True,
-            "decision_features_excluded": True,
-        },
-    }
-
-
-def _warehouse_telemetry_identity_repair_template(
-    *,
-    target_file: str,
-    expected_runtime_key: str,
-    offending: Sequence[str],
-) -> Mapping[str, Any]:
-    return {
-        "repair_type": "warehouse_operator_telemetry_identity",
-        "purpose": (
-            "Align the declared mechanism id with the warehouse solver's "
-            "operator_diagnostics export key before Protocol runs."
-        ),
-        "target_file": target_file,
-        "expected_runtime_key": expected_runtime_key,
-        "offending_mechanism_ids": list(
-            dict.fromkeys(str(item) for item in offending)
-        ),
-        "required_expected_telemetry_shape": {
-            "activation": [
-                f"operator_diagnostics.{expected_runtime_key}.operator_invocations",
-                (
-                    "operator_diagnostics."
-                    f"{expected_runtime_key}.eligible_vehicle_or_order_groups_seen"
-                ),
-                f"operator_diagnostics.{expected_runtime_key}.accepted_moves",
-            ],
-            "effect": [
-                f"operator_diagnostics.{expected_runtime_key}.split_delta_sum",
-                f"operator_diagnostics.{expected_runtime_key}.cost_delta_sum",
-                f"operator_diagnostics.{expected_runtime_key}.improving_move_count",
-            ],
-        },
-        "allowed_create_new_pattern": (
-            "For create_new operator modules, use the new registered operator "
-            "name as the mechanism id and runtime key."
-        ),
-        "must_not": [
-            (
-                "Do not invent a separate mechanism id for an existing "
-                "operator unless the patch also adds an exportable registry alias."
-            ),
-            "Do not wait for SCREENING_TELEMETRY_FAILED to discover the mismatch.",
-        ],
-        "decision_features_excluded": True,
-    }
-
-
-def _existing_operator_runtime_key(hypothesis: Any, patch: Any | None) -> str:
-    target_file = _existing_operator_target_file(hypothesis, patch)
-    if not target_file:
-        return ""
-    return _operator_runtime_key_from_module_path(target_file)
-
-
-def _existing_operator_target_file(hypothesis: Any, patch: Any | None) -> str:
-    action = str(getattr(hypothesis, "action", "") or "").strip()
-    target_file = _normalize_patch_path(getattr(hypothesis, "target_file", ""))
-    if action == "modify" and _is_existing_operator_module(target_file):
-        return target_file
-    if patch is None:
-        return ""
-    for change in _patch_changes(patch):
-        change_action = str(getattr(change, "action", "") or "").strip()
-        file_path = _normalize_patch_path(getattr(change, "file_path", ""))
-        if change_action == "modify" and _is_existing_operator_module(file_path):
-            return file_path
-    return ""
-
-
-def _operator_runtime_key_from_module_path(file_path: str) -> str:
-    basename = os.path.basename(_normalize_patch_path(file_path))
-    stem, ext = os.path.splitext(basename)
-    if ext != ".py":
-        return ""
-    return stem
-
-
-def _declared_warehouse_telemetry_mechanism_ids(
-    hypothesis: Any,
-    patch: Any | None,
-) -> tuple[str, ...]:
-    declared: list[str] = []
-    for artifact in (hypothesis, patch):
-        if artifact is None:
-            continue
-        expected = getattr(artifact, "expected_telemetry", {}) or {}
-        novelty = getattr(artifact, "novelty_signature", {}) or {}
-        declared.extend(
-            normalize_declared_mechanisms(
-                getattr(artifact, "mechanism_changes", ()) or (),
-                expected_telemetry=expected,
-                novelty_signature=novelty,
-            )
-        )
-        declared.extend(_mechanism_ids_from_expected_telemetry_paths(expected))
-    return tuple(dict.fromkeys(item for item in declared if item))
-
-
-def _mechanism_ids_from_expected_telemetry_paths(
-    expected_telemetry: Any,
-) -> tuple[str, ...]:
-    mechanisms: list[str] = []
-    mechanisms.extend(normalize_expected_telemetry_by_mechanism(expected_telemetry))
-    claims = normalize_expected_telemetry(expected_telemetry)
-    for fields in claims.values():
-        for field in fields:
-            mechanism = _operator_diagnostics_mechanism_from_field(field)
-            if mechanism:
-                mechanisms.append(mechanism)
-    return tuple(dict.fromkeys(mechanisms))
-
-
-def _operator_diagnostics_mechanism_from_field(field: Any) -> str:
-    parts = str(field or "").strip().split(".")
-    for index, part in enumerate(parts[:-1]):
-        if part == "operator_diagnostics" and index + 1 < len(parts):
-            mechanism = parts[index + 1].strip()
-            return mechanism if mechanism and mechanism != "{mechanism}" else ""
-    return ""
-
-
-def _warehouse_operator_patch_code(
-    patch: Any,
-    hypothesis: Any,
-) -> tuple[str, tuple[str, ...]]:
-    target_file = _normalize_patch_path(getattr(hypothesis, "target_file", ""))
-    chunks: list[str] = []
-    changed_files: list[str] = []
-    for change in _patch_changes(patch):
-        file_path = _normalize_patch_path(getattr(change, "file_path", ""))
-        if not _is_warehouse_operator_patch_file(file_path, target_file):
-            continue
-        changed_files.append(file_path)
-        action = str(getattr(change, "action", "") or "").strip()
-        if action in {"delete", "remove"}:
-            continue
-        chunks.append(str(getattr(change, "code_content", "") or ""))
-    return "\n\n".join(chunks), tuple(dict.fromkeys(changed_files))
-
-
-def _is_warehouse_operator_patch_file(file_path: str, target_file: str) -> bool:
-    normalized = _normalize_patch_path(file_path)
-    if not normalized.startswith("operators/") or not normalized.endswith(".py"):
-        return False
-    if not target_file:
-        return True
-    return normalized == target_file or _is_existing_operator_module(normalized)
-
-
-def _code_signal_text(code: str) -> str:
-    try:
-        tree = ast.parse(code or "")
-    except SyntaxError:
-        return str(code or "").lower()
-    parts: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name):
-            parts.append(node.id)
-        elif isinstance(node, ast.Attribute):
-            parts.append(node.attr)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            parts.append(node.name)
-        elif isinstance(node, ast.arg):
-            parts.append(node.arg)
-        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
-            parts.append(node.value)
-    return " ".join(parts).lower()
-
-
-def _patch_has_activation_effect_diagnostics(code: str, signal_text: str) -> bool:
-    del signal_text
-    return _patch_has_exportable_validation_transfer_diagnostics(code)
-
-
-_STANDARD_VALIDATION_TRANSFER_KEYS = frozenset(
-    {
-        "operator_invocations",
-        "eligible_vehicle_or_order_groups_seen",
-        "accepted_moves",
-        "split_delta_sum",
-        "cost_delta_sum",
-        "improving_move_count",
-    }
-)
-_ACTIVATION_DIAGNOSTIC_KEYS = frozenset(
-    {
-        "operator_invocations",
-        "eligible_vehicle_or_order_groups_seen",
-        "accepted_moves",
-    }
-)
-_EFFECT_DIAGNOSTIC_KEYS = frozenset(
-    {
-        "split_delta_sum",
-        "cost_delta_sum",
-        "improving_move_count",
-    }
-)
-
-
-def _patch_has_exportable_validation_transfer_diagnostics(code: str) -> bool:
-    try:
-        tree = ast.parse(code or "")
-    except SyntaxError:
-        return False
-
-    aliases: set[str] = set()
-    declared_keys: set[str] = set()
-    mutating_keys: set[str] = set()
-    helper_return_keys = _diagnostic_helper_return_keys(tree)
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            if any(_is_self_validation_transfer_attr(target) for target in node.targets):
-                declared_keys.update(
-                    _diagnostic_initializer_keys(node.value, helper_return_keys)
-                )
-            if _is_self_validation_transfer_attr(node.value):
-                aliases.update(_name_targets(node.targets))
-            for target in node.targets:
-                if _is_exportable_diagnostic_target(target, aliases):
-                    mutating_keys.update(_diagnostic_keys_from_node(target))
-        elif isinstance(node, ast.AnnAssign):
-            if _is_self_validation_transfer_attr(node.target):
-                declared_keys.update(
-                    _diagnostic_initializer_keys(node.value, helper_return_keys)
-                )
-            if _is_self_validation_transfer_attr(node.value):
-                aliases.update(_name_targets((node.target,)))
-            if _is_exportable_diagnostic_target(node.target, aliases):
-                mutating_keys.update(_diagnostic_keys_from_node(node.target))
-        elif isinstance(node, ast.AugAssign):
-            if _is_exportable_diagnostic_target(node.target, aliases):
-                mutating_keys.update(_diagnostic_keys_from_node(node.target))
-
-    return (
-        _STANDARD_VALIDATION_TRANSFER_KEYS <= declared_keys
-        and bool(mutating_keys & _ACTIVATION_DIAGNOSTIC_KEYS)
-        and bool(mutating_keys & _EFFECT_DIAGNOSTIC_KEYS)
-    )
-
-
-def _name_targets(targets: Sequence[ast.AST]) -> set[str]:
-    return {target.id for target in targets if isinstance(target, ast.Name)}
-
-
-def _diagnostic_helper_return_keys(tree: ast.AST) -> dict[str, set[str]]:
-    helpers: dict[str, set[str]] = {}
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        returned_keys: set[str] = set()
-        for child in ast.walk(node):
-            if isinstance(child, ast.Return):
-                returned_keys.update(_literal_dict_string_keys(child.value))
-        if returned_keys:
-            helpers[node.name] = returned_keys
-    return helpers
-
-
-def _diagnostic_initializer_keys(
-    node: ast.AST | None,
-    helper_return_keys: Mapping[str, set[str]],
-) -> set[str]:
-    keys = _literal_dict_string_keys(node)
-    if keys:
-        return keys
-    helper_name = _diagnostic_helper_call_name(node)
-    if not helper_name:
-        return set()
-    return set(helper_return_keys.get(helper_name, set()))
-
-
-def _diagnostic_helper_call_name(node: ast.AST | None) -> str | None:
-    if not isinstance(node, ast.Call):
-        return None
-    func = node.func
-    if isinstance(func, ast.Name):
-        return func.id
-    if isinstance(func, ast.Attribute):
-        return func.attr
-    return None
-
-
-def _is_self_validation_transfer_attr(node: ast.AST | None) -> bool:
-    return (
-        isinstance(node, ast.Attribute)
-        and node.attr == "validation_transfer_diagnostics"
-        and isinstance(node.value, ast.Name)
-        and node.value.id == "self"
-    )
-
-
-def _is_exportable_diagnostic_target(node: ast.AST, aliases: set[str]) -> bool:
-    if not isinstance(node, ast.Subscript):
-        return False
-    root = node.value
-    return _is_self_validation_transfer_attr(root) or (
-        isinstance(root, ast.Name) and root.id in aliases
-    )
-
-
-def _diagnostic_keys_from_node(node: ast.AST) -> set[str]:
-    keys: set[str] = set()
-    for child in ast.walk(node):
-        if isinstance(child, ast.Constant) and isinstance(child.value, str):
-            value = child.value.strip()
-            if value in _STANDARD_VALIDATION_TRANSFER_KEYS:
-                keys.add(value)
-    return keys
-
-
-def _literal_dict_string_keys(node: ast.AST | None) -> set[str]:
-    if not isinstance(node, ast.Dict):
-        return set()
-    keys: set[str] = set()
-    for key in node.keys:
-        if isinstance(key, ast.Constant) and isinstance(key.value, str):
-            keys.add(key.value.strip())
-    return keys
-
-
-def _patch_has_screening_or_lexicographic_guard(
-    code: str,
-    signal_text: str,
-) -> bool:
-    del signal_text
-    try:
-        tree = ast.parse(code or "")
-    except SyntaxError:
-        return False
-    executable_guard_names = _executable_transfer_guard_names(tree)
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.If):
-            continue
-        if not _is_transfer_guard_if(
-            node,
-            executable_guard_names=executable_guard_names,
-        ):
-            continue
-        if any(_returns_original_solution(child) for child in ast.walk(node)):
-            return True
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        if _function_has_helper_based_transfer_guard(
-            node,
-            executable_guard_names=executable_guard_names,
-        ):
-            return True
-        if _function_has_candidate_filter_transfer_guard(
-            node,
-            executable_guard_names=executable_guard_names,
-        ):
-            return True
-    return False
-
-
-def _is_transfer_guard_if(
-    node: ast.If,
-    *,
-    executable_guard_names: set[str],
-) -> bool:
-    if _is_string_only_guard_value(node.test):
-        return False
-    test_text = _ast_signal_text(node.test)
-    test_names = _ast_name_texts(node.test)
-    return _guard_test_is_transfer_relevant(
-        test_text,
-        test_names=test_names,
-        executable_guard_names=executable_guard_names,
-    )
-
-
-def _function_has_helper_based_transfer_guard(
-    node: ast.FunctionDef | ast.AsyncFunctionDef,
-    *,
-    executable_guard_names: set[str],
-) -> bool:
-    has_transfer_acceptance = False
-    for child in ast.walk(node):
-        if isinstance(child, ast.If) and _is_transfer_guard_if(
-            child,
-            executable_guard_names=executable_guard_names,
-        ):
-            has_transfer_acceptance = True
-            break
-    if not has_transfer_acceptance:
-        return False
-    return any(_returns_none(child) for child in ast.walk(node))
-
-
-def _function_has_candidate_filter_transfer_guard(
-    node: ast.FunctionDef | ast.AsyncFunctionDef,
-    *,
-    executable_guard_names: set[str],
-) -> bool:
-    """Accept loop-level candidate filters that fall back to the original solution."""
-
-    has_transfer_filter = False
-    for child in ast.walk(node):
-        if not isinstance(child, ast.If):
-            continue
-        if not _is_transfer_guard_if(
-            child,
-            executable_guard_names=executable_guard_names,
-        ):
-            continue
-        if any(isinstance(grandchild, ast.Continue) for grandchild in ast.walk(child)):
-            has_transfer_filter = True
-            break
-    if not has_transfer_filter:
-        has_transfer_filter = _function_has_sequential_metric_candidate_filters(node)
-    if not has_transfer_filter:
-        return False
-    return any(_returns_original_solution(child) for child in ast.walk(node))
-
-
-def _function_has_sequential_metric_candidate_filters(
-    node: ast.FunctionDef | ast.AsyncFunctionDef,
-) -> bool:
-    """Accept equivalent split/cost filters expressed as sequential continues."""
-
-    for child in ast.walk(node):
-        if not isinstance(child, (ast.For, ast.AsyncFor, ast.While)):
-            continue
-        has_split_filter = False
-        has_cost_filter = False
-        for loop_child in ast.walk(child):
-            if not isinstance(loop_child, ast.If):
-                continue
-            if _is_string_only_guard_value(loop_child.test):
-                continue
-            if not any(
-                isinstance(grandchild, ast.Continue)
-                for grandchild in ast.walk(loop_child)
-            ):
-                continue
-            test_text = _ast_signal_text(loop_child.test)
-            has_split_filter = has_split_filter or _guard_expression_has_split_metric(
-                test_text
-            )
-            has_cost_filter = has_cost_filter or _guard_expression_has_cost_metric(
-                test_text
-            )
-        if has_split_filter and has_cost_filter:
-            return True
-    return False
-
-
-def _executable_transfer_guard_names(tree: ast.AST) -> set[str]:
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        targets: Sequence[ast.AST]
-        value: ast.AST | None
-        if isinstance(node, ast.Assign):
-            targets = tuple(node.targets)
-            value = node.value
-        elif isinstance(node, ast.AnnAssign):
-            targets = (node.target,)
-            value = node.value
-        elif isinstance(node, ast.NamedExpr):
-            targets = (node.target,)
-            value = node.value
-        else:
-            continue
-        if value is None or _is_string_only_guard_value(value):
-            continue
-        value_text = _ast_signal_text(value)
-        if not _guard_expression_has_metric_pair(value_text):
-            continue
-        for target in targets:
-            names.update(_assigned_name_texts(target))
-    return names
-
-
-def _assigned_name_texts(node: ast.AST) -> set[str]:
-    if isinstance(node, ast.Name):
-        return {node.id.lower()}
-    if isinstance(node, (ast.Tuple, ast.List)):
-        names: set[str] = set()
-        for child in node.elts:
-            names.update(_assigned_name_texts(child))
-        return names
-    return set()
-
-
-def _is_string_only_guard_value(node: ast.AST) -> bool:
-    if isinstance(node, ast.Constant):
-        return isinstance(node.value, str)
-    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
-        return all(_is_string_only_guard_value(child) for child in node.elts)
-    return False
-
-
-def _ast_signal_text(node: ast.AST) -> str:
-    parts: list[str] = []
-    for child in ast.walk(node):
-        if isinstance(child, ast.Name):
-            parts.append(child.id)
-        elif isinstance(child, ast.Attribute):
-            parts.append(child.attr)
-        elif isinstance(child, ast.Constant) and isinstance(child.value, str):
-            parts.append(child.value)
-    return " ".join(parts).lower()
-
-
-def _ast_name_texts(node: ast.AST) -> set[str]:
-    names: set[str] = set()
-    for child in ast.walk(node):
-        if isinstance(child, ast.Name):
-            names.add(child.id.lower())
-    return names
-
-
-def _guard_test_is_transfer_relevant(
-    test_text: str,
-    *,
-    test_names: set[str],
-    executable_guard_names: set[str],
-) -> bool:
-    if test_names & executable_guard_names:
-        return True
-    return _guard_expression_has_metric_pair(test_text)
-
-
-def _guard_expression_has_metric_pair(test_text: str) -> bool:
-    return _guard_expression_has_split_metric(
-        test_text
-    ) and _guard_expression_has_cost_metric(test_text)
-
-
-def _guard_expression_has_split_metric(test_text: str) -> bool:
-    return any(
-        term in test_text
-        for term in (
-            "subcategory_splits",
-            "candidate_splits",
-            "base_splits",
-            "split_delta",
-            "split_delta_sum",
-            "splits",
-            "split",
-        )
-    )
-
-
-def _guard_expression_has_cost_metric(test_text: str) -> bool:
-    return any(
-        term in test_text
-        for term in (
-            "total_cost",
-            "candidate_cost",
-            "base_cost",
-            "cost_delta",
-            "cost_delta_sum",
-            "cost",
-        )
-    )
-
-
-def _returns_original_solution(node: ast.AST) -> bool:
-    if not isinstance(node, ast.Return):
-        return False
-    value = node.value
-    if isinstance(value, ast.Name):
-        return value.id in {"solution", "original_solution", "base_solution"}
-    if isinstance(value, ast.Attribute):
-        return value.attr in {"solution", "original_solution", "base_solution"}
-    return False
-
-
-def _returns_none(node: ast.AST) -> bool:
-    if not isinstance(node, ast.Return):
-        return False
-    return node.value is None or (
-        isinstance(node.value, ast.Constant) and node.value.value is None
-    )
-
-
-def _hypothesis_quality_text(hypothesis: Any) -> str:
-    fields = [
-        getattr(hypothesis, "hypothesis_text", ""),
-        getattr(hypothesis, "target_weakness", ""),
-        getattr(hypothesis, "expected_effect", ""),
-        getattr(hypothesis, "objective_tradeoff_policy", ""),
-        getattr(hypothesis, "no_op_condition", ""),
-        getattr(hypothesis, "risk_to_higher_priority", ""),
-        getattr(hypothesis, "runtime_budget_strategy", ""),
-        getattr(hypothesis, "target_file", ""),
-        _jsonish(getattr(hypothesis, "branch_lesson_usage", {}) or {}),
-        _jsonish(getattr(hypothesis, "mechanism_changes", ()) or ()),
-    ]
-    return " ".join(str(field or "") for field in fields).lower()
-
-
-def _jsonish(value: Any) -> str:
-    try:
-        return json.dumps(value, default=str, sort_keys=True)
-    except TypeError:
-        return str(value)
-
-
-def _mentions_validation_transfer_risk(text: str) -> bool:
-    has_formal_stage = any(
-        term in text for term in ("validation", "formal", "holdout")
-    )
-    has_transfer = any(
-        term in text
-        for term in (
-            "transfer",
-            "generaliz",
-            "screening-to-validation",
-            "screening to validation",
-            "screening-positive",
-            "screening positive",
-            "screening-only",
-            "screening only",
-            "no hierarchical gain",
-            "median delta 0",
-            "2/3/0",
-            "6/9/0",
-        )
-    )
-    if has_formal_stage and has_transfer:
-        return True
-
-    has_beyond_screening_generalization = any(
-        term in text
-        for term in (
-            "beyond screening",
-            "generalize beyond screening",
-            "generalise beyond screening",
-            "generalizes beyond screening",
-            "generalises beyond screening",
-            "not distribution-specific",
-            "distribution-specific",
-            "case-general",
-            "objective-computed",
-        )
-    )
-    has_screening_failure_guard = any(
-        term in text
-        for term in (
-            "screening-only",
-            "screening only",
-            "no-effect",
-            "no effect",
-            "cost-worsening",
-            "cost worsening",
-            "cost regress",
-            "return the original solution",
-            "reject",
-            "guard",
-        )
-    )
-    return (
-        "screening" in text
-        and has_beyond_screening_generalization
-        and has_screening_failure_guard
-    )
-
-
-def _has_activation_effect_diagnostics(hypothesis: Any, text: str) -> bool:
-    has_activation_terms = any(
-        term in text
-        for term in (
-            "activation",
-            "operator_invocation",
-            "operator invocation",
-            "accepted_moves",
-            "eligible_vehicle",
-            "eligible_order",
-        )
-    )
-    has_effect_terms = any(
-        term in text
-        for term in (
-            "effect",
-            "split_delta",
-            "cost_delta",
-            "improving_move",
-            "record_move",
-            "counter",
-            "diagnostic",
-        )
-    )
-    return has_activation_terms and has_effect_terms
-
-
-def _mentions_screening_only_guard(text: str) -> bool:
-    return any(
-        term in text
-        for term in (
-            "screening-only",
-            "screening only",
-            "not only screening",
-            "avoid overfit",
-            "overfitting",
-            "case-general",
-            "general condition",
-            "validation cases",
-            "formal cases",
-            "return the original solution",
-            "no-op",
-            "no op",
-            "guard",
-        )
-    )
-
-
-def _mentions_effect_scope_or_split_cost_risk(text: str) -> bool:
-    has_scope_term = any(
-        term in text
-        for term in (
-            "effect scope",
-            "intended effect",
-            "split-positive",
-            "split positive",
-            "split_delta",
-            "split delta",
-            "cost_delta",
-            "cost delta",
-            "split-preserving",
-            "split preserving",
-            "cost-only",
-            "cost only",
-        )
-    )
-    has_split = any(term in text for term in ("split_delta", "split delta", "split"))
-    has_cost = any(term in text for term in ("cost_delta", "cost delta", "cost"))
-    if not (has_scope_term and has_split and has_cost):
-        return False
-    if any(term in text for term in ("cost-only", "cost only", "split-preserving")):
-        return any(
-            term in text
-            for term in (
-                "overfit",
-                "overfitting",
-                "frozen",
-                "holdout",
-                "runtime",
-                "validation distribution",
-                "screening/validation",
-            )
-        )
-    return True
-
-
-def _mentions_runtime_bounded_acceptance(text: str) -> bool:
-    return any(
-        term in text
-        for term in (
-            "top-k",
-            "top_k",
-            "top k",
-            "limit",
-            "max_candidates",
-            "max candidates",
-            "candidate cap",
-            "cap candidate",
-            "early-exit",
-            "early exit",
-            "runtime budget",
-            "time budget",
-            "bounded candidate",
-            "bounded search",
-        )
-    )
-
-
-def _patch_has_unbounded_merge_vehicle_pair_scan(
-    code: str,
-    target_files: Sequence[str],
-) -> bool:
-    normalized_targets = {
-        _normalize_patch_path(path) for path in target_files if str(path or "").strip()
-    }
-    if "operators/merge_vehicles.py" not in normalized_targets:
-        return False
-    try:
-        tree = ast.parse(code or "")
-    except SyntaxError:
-        return False
-    if not _has_nested_vehicle_pair_loop(tree):
-        return False
-    return not _has_executable_bounded_candidate_policy(tree)
-
-
-def _has_nested_vehicle_pair_loop(tree: ast.AST) -> bool:
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.For):
-            continue
-        if not _loop_mentions_vehicle_pair_space(node):
-            continue
-        for child in ast.walk(node):
-            if child is node or not isinstance(child, ast.For):
-                continue
-            if _loop_mentions_vehicle_pair_space(child):
-                return True
-    return False
-
-
-def _loop_mentions_vehicle_pair_space(node: ast.For) -> bool:
-    text = " ".join(
-        (
-            _ast_signal_text(node.target),
-            _ast_signal_text(node.iter),
-        )
-    )
-    return "vehicle" in text or "vehicles" in text
-
-
-_BOUNDED_CANDIDATE_TERMS = frozenset(
-    {
-        "top_k",
-        "topk",
-        "limit",
-        "max_candidates",
-        "candidate_cap",
-        "pair_cap",
-        "merge_cap",
-        "runtime_budget",
-        "time_budget",
-    }
-)
-
-
-def _has_executable_bounded_candidate_policy(tree: ast.AST) -> bool:
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Subscript) and _slice_has_upper_bound(node.slice):
-            if _expr_uses_bounded_candidate_term(node.slice):
-                return True
-        if isinstance(node, ast.Call) and _call_name(node.func) == "islice":
-            return True
-        if isinstance(node, ast.If):
-            test_uses_bound = _expr_uses_bounded_candidate_term(node.test)
-            has_exit = any(
-                isinstance(child, (ast.Break, ast.Return))
-                for child in ast.walk(node)
-            )
-            if test_uses_bound and has_exit:
-                return True
-            if _is_accepted_move_early_exit(node) and has_exit:
-                return True
-    return False
-
-
-def _slice_has_upper_bound(node: ast.AST) -> bool:
-    return isinstance(node, ast.Slice) and node.upper is not None
-
-
-def _expr_uses_bounded_candidate_term(node: ast.AST | None) -> bool:
-    if node is None:
-        return False
-    for child in ast.walk(node):
-        if isinstance(child, ast.Name) and child.id.lower() in _BOUNDED_CANDIDATE_TERMS:
-            return True
-        if (
-            isinstance(child, ast.Attribute)
-            and child.attr.lower() in _BOUNDED_CANDIDATE_TERMS
-        ):
-            return True
-    return False
-
-
-def _is_accepted_move_early_exit(node: ast.If) -> bool:
-    text = _ast_signal_text(node.test)
-    if not any(term in text for term in ("accepted_moves", "improving_move_count")):
-        return False
-    return any(isinstance(child, ast.Compare) for child in ast.walk(node.test))
-
-
-def _call_name(node: ast.AST) -> str:
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        return node.attr
-    return ""
 
 
 def _patch_changes(patch: Any) -> tuple[Any, ...]:
@@ -2210,7 +676,7 @@ def _preview_operator_code_static_state(
     if unknown_refs:
         detail = (
             "candidate operator references internal state keys not declared "
-            f"in their local dict literals: {', '.join(unknown_refs[:5])}"
+            f"in their local dict literals: {', '.join(unknown_refs)}"
         )
         issues.append(f"warehouse_operator_internal_state_key: {detail}")
         checks.append(

@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List
 
 import pytest
 
@@ -15,7 +15,6 @@ from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, Decision,
     EvalStats, ExperimentStage, ProtocolResult, VerificationResult, CheckResult,
 )
-from scion.core.termination import TerminationConfig
 from scion.proposal.mock_client import MockLLMClient
 
 # ---------------------------------------------------------------------------
@@ -74,7 +73,13 @@ def _make_protocol_result(
         stage=stage,
         stats=stats,
         gate_outcome=gate_outcome,
-        reason_codes=("E2E_TEST",),
+        reason_codes=(
+            {
+                ExperimentStage.SCREENING: "SCREENING_PASS",
+                ExperimentStage.VALIDATION: "VALIDATION_PASS",
+                ExperimentStage.FROZEN: "FROZEN_PASS",
+            }[stage],
+        ),
         exposed_summary=f"stage={stage.value}",
         raw_metrics_ref="/tmp/e2e.json",
     )
@@ -122,7 +127,6 @@ def _build_campaign(
     llm_client: Any = None,
     experiment_protocol: Any = None,
     verification_gate: Any = None,
-    max_experiments: int = 100,
 ) -> CampaignManager:
     code_dir = tmp_path / "champion_code"
     (code_dir / "operators").mkdir(parents=True)
@@ -165,10 +169,6 @@ def _build_campaign(
         campaign_dir=str(tmp_path / "campaign"),
         verification_gate=verification_gate or _AlwaysPassVerificationGate(),
         experiment_protocol=experiment_protocol,
-        termination_config=TerminationConfig(
-            max_experiments=max_experiments,
-            stagnation_limit=50,
-        ),
     )
 
 
@@ -181,7 +181,7 @@ class TestFullMockCampaign:
 
     def test_runs_at_least_5_rounds_without_crash(self, tmp_path):
         """Campaign runs 5 steps without raising an exception."""
-        cm = _build_campaign(tmp_path, max_experiments=20)
+        cm = _build_campaign(tmp_path)
 
         for _ in range(5):
             if cm.should_stop():
@@ -195,7 +195,7 @@ class TestFullMockCampaign:
 
     def test_at_least_one_explore_step(self, tmp_path):
         """At least one step must be of action type 'explore' or 'create_branch'."""
-        cm = _build_campaign(tmp_path, max_experiments=20)
+        cm = _build_campaign(tmp_path)
 
         results = []
         for _ in range(5):
@@ -210,7 +210,7 @@ class TestFullMockCampaign:
 
     def test_lineage_queryable_via_get_state(self, tmp_path):
         """get_state() returns branch lineage (branch list) after exploration."""
-        cm = _build_campaign(tmp_path, max_experiments=20)
+        cm = _build_campaign(tmp_path)
 
         cm.run_one_step()  # creates branch + explore
 
@@ -222,9 +222,9 @@ class TestFullMockCampaign:
             assert "state" in entry
 
     def test_campaign_run_method_terminates(self, tmp_path):
-        """cm.run(max_rounds=5) terminates without hanging."""
-        cm = _build_campaign(tmp_path, max_experiments=20)
-        cm.run(max_rounds=5)
+        """cm.run(requested_rounds=5) terminates without hanging."""
+        cm = _build_campaign(tmp_path)
+        cm.run(requested_rounds=5)
         # No exception = pass
 
     def test_experiments_counter_increments(self, tmp_path):
@@ -233,7 +233,7 @@ class TestFullMockCampaign:
         proto = _MockExperimentProtocol(
             results=[_make_protocol_result(ExperimentStage.SCREENING)] * 10
         )
-        cm = _build_campaign(tmp_path, experiment_protocol=proto, max_experiments=20)
+        cm = _build_campaign(tmp_path, experiment_protocol=proto)
 
         initial = cm.get_state()["n_experiments"]
         cm.run_one_step()
@@ -262,22 +262,6 @@ class TestContractFailureRouting:
         result = cm.run_one_step()
         assert result is not None
 
-    def test_contract_fail_increments_retry(self, tmp_path):
-        """Failed contract increments retry_count on the branch (tracked internally)."""
-        bad_patch = {
-            **_VALID_PATCH,
-            "action": "INVALID",  # patch contract will reject this
-        }
-        llm_client = MockLLMClient(patch_response=bad_patch)
-        cm = _build_campaign(tmp_path, llm_client=llm_client)
-
-        cm.run_one_step()
-        # Branch exists and retry_count > 0 after a failure
-        active = cm._branch_ctrl.get_active_branches()
-        if active:
-            branch = active[0]
-            # retry_count is incremented by _handle_failure
-            assert branch.retry_count >= 0  # may be 0 if contract passed somehow
 
     def test_format_error_does_not_crash(self, tmp_path):
         """LLMFormatError in hypothesis generation is handled gracefully."""

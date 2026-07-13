@@ -1,4 +1,4 @@
-"""VerificationGate: fail-fast orchestrator for all V1–V9 checks.
+"""VerificationGate: fail-fast orchestrator for V1–V8 correctness checks.
 
 Checks (in order):
   V1_syntax                light   AST parse of patch code
@@ -9,19 +9,18 @@ Checks (in order):
   V6_feasibility           heavy   oracle.check_feasibility on canary run
   V7_objective             heavy   oracle.recompute_objective matches solver output
   V8_nondeterminism        heavy   two identical-seed runs produce identical output
-  V9_perf_guard            heavy   candidate ≤ champion × 5 wall-clock
 
 V5 and V8 are separate concerns:
   - V5_solution_consistency: does the solver output satisfy declared consistency checks?
   - V8_nondeterminism: is the solver deterministic? (uuid, set iteration, entropy)
 
-Runtime checks (V5–V9) are skipped when:
+Runtime checks (V5–V8) are skipped when:
   - runner is None, OR
   - problem_spec is None, OR
   - problem_spec.canary_case_path is empty
 unless strict_runtime_checks=True, in which case missing runtime verification
     configuration fails closed. Production callers can also set
-    require_adapter_for_runtime=True so V5-V9 never fall back to legacy
+    require_adapter_for_runtime=True so V5-V8 never fall back to legacy
     direct-oracle reconstruction.
 
 Test checks (V3, V4) are skipped when runner is None or no test file is found.
@@ -42,12 +41,12 @@ from scion.verification.tests import (
     check_unit_tests,
     verification_pytest_preflight_reasons,
 )
-from scion.verification.feasibility import resolve_problem_path
+from scion.verification.feasibility import _registry_path, resolve_problem_path
+from scion.verification.candidate_canary import run_candidate_canary
 from scion.verification.state_mutation import check_state_mutation
 from scion.verification.feasibility import check_feasibility
 from scion.verification.objective import check_objective
 from scion.verification.nondeterminism import check_nondeterminism
-from scion.verification.perf_guard import check_perf
 from scion.verification.requirements import requires_adapter_for_runtime
 
 if TYPE_CHECKING:
@@ -58,7 +57,7 @@ _DEFAULT_RUNTIME_TIME_LIMIT_SEC = 30
 
 
 class VerificationGate:
-    """Full Verification Gate — runs V1–V9 checks in fail-fast order.
+    """Full Verification Gate — runs V1–V8 checks in fail-fast order.
 
     Args:
         problem_spec: ProblemSpec with canary_case_path, oracle_path, root_dir.
@@ -67,7 +66,7 @@ class VerificationGate:
                       instead of direct oracle imports.
 
     When problem_spec is None or runner is None (e.g., in unit tests), runtime
-    checks V3–V9 are automatically skipped and return passed=True.
+    checks V3–V8 are automatically skipped and return passed=True.
     """
 
     def __init__(
@@ -114,9 +113,8 @@ class VerificationGate:
         """Bind protocol-derived runtime policy to an accepted custom gate.
 
         Production composition may receive an already-built ``VerificationGate``.
-        The gate is still campaign-owned at that point, so binding the protocol
-        runtime policy keeps V5-V9 coherent with the evidence harness instead
-        of falling back to constructor defaults.
+        The gate is still campaign-owned at that point. Runtime time limits are
+        shared by V5-V8; comparative slowdown policy belongs to Protocol.
         """
 
         if max_runtime_ratio is not None:
@@ -150,8 +148,8 @@ class VerificationGate:
     ) -> VerificationResult:
         """Execute all checks in fail-fast order; return VerificationResult.
 
-        Light checks (V1, V2): LLM may attempt to fix these.
-        Heavy checks (V3–V9): not fixable; branch is abandoned or blacklisted.
+        Light checks (V1, V2) are static candidate checks.
+        Heavy checks (V3–V8) execute correctness and runtime validation.
         """
         checks: List[CheckResult] = []
         surface_name = _selected_surface_name(
@@ -204,13 +202,27 @@ class VerificationGate:
         if self._strict_runtime_checks:
             r = _validate_runtime_config(
                 self._spec,
-                champion_workspace,
                 adapter=self._adapter,
                 require_adapter_for_runtime=self._require_adapter_for_runtime,
             )
             if r is not None:
                 checks.append(r)
                 return _fail(checks, r)
+
+        canary_path = resolve_problem_path(
+            self._spec,
+            self._spec.canary_case_path,
+        )
+        canary_execution = None
+        if canary_path and os.path.isfile(canary_path):
+            canary_execution = run_candidate_canary(
+                self._runner,
+                candidate_workspace=candidate_workspace,
+                case_path=canary_path,
+                registry_path=_registry_path(candidate_workspace),
+                selected_surface=surface_name,
+                runtime_time_limit_sec=self._runtime_time_limit_sec,
+            )
 
         # --- V5: state_mutation (heavy) ---
         # V5_solution_consistency: solution consistency after solver run.
@@ -224,6 +236,7 @@ class VerificationGate:
             selected_surface=surface_name,
             require_adapter_for_runtime=self._require_adapter_for_runtime,
             runtime_time_limit_sec=self._runtime_time_limit_sec,
+            canary_execution=canary_execution,
         )
         r = _with_runtime_budget_metadata(r, self._runtime_time_limit_sec)
         checks.append(r)
@@ -239,6 +252,7 @@ class VerificationGate:
             selected_surface=surface_name,
             require_adapter_for_runtime=self._require_adapter_for_runtime,
             runtime_time_limit_sec=self._runtime_time_limit_sec,
+            canary_execution=canary_execution,
         )
         r = _with_runtime_budget_metadata(r, self._runtime_time_limit_sec)
         checks.append(r)
@@ -254,6 +268,7 @@ class VerificationGate:
             selected_surface=surface_name,
             require_adapter_for_runtime=self._require_adapter_for_runtime,
             runtime_time_limit_sec=self._runtime_time_limit_sec,
+            canary_execution=canary_execution,
         )
         r = _with_runtime_budget_metadata(r, self._runtime_time_limit_sec)
         checks.append(r)
@@ -272,22 +287,7 @@ class VerificationGate:
             adapter=self._adapter,
             require_adapter_for_runtime=self._require_adapter_for_runtime,
             runtime_time_limit_sec=self._runtime_time_limit_sec,
-        )
-        r = _with_runtime_budget_metadata(r, self._runtime_time_limit_sec)
-        checks.append(r)
-        if not r.passed:
-            return _fail(checks, r)
-
-        # --- V9: perf_guard (heavy) ---
-        r = check_perf(
-            self._spec,
-            self._runner,
-            candidate_workspace,
-            champion_workspace,
-            max_slowdown=self._max_runtime_ratio or 5.0,
-            selected_surface=surface_name,
-            timeout_sec=self._runtime_time_limit_sec,
-            strict_runtime_checks=self._strict_runtime_checks,
+            first_execution=canary_execution,
         )
         r = _with_runtime_budget_metadata(r, self._runtime_time_limit_sec)
         checks.append(r)
@@ -308,7 +308,6 @@ def _fail(checks: List[CheckResult], failed: CheckResult) -> VerificationResult:
 
 def _validate_runtime_config(
     problem_spec: ProblemSpec,
-    champion_workspace: str,
     *,
     adapter: ProblemAdapter | None = None,
     require_adapter_for_runtime: bool = False,
@@ -318,8 +317,6 @@ def _validate_runtime_config(
         return _runtime_config_failure("canary_case_path is required")
     if not os.path.isfile(canary):
         return _runtime_config_failure(f"canary file not found: {canary}")
-    if not champion_workspace or not os.path.isdir(champion_workspace):
-        return _runtime_config_failure("champion workspace is required")
     if require_adapter_for_runtime and adapter is None:
         return _runtime_config_failure(
             "problem adapter is required for runtime verification; "

@@ -76,13 +76,9 @@ def _normalize_request_kind_for_cache(request_kind: str) -> str:
 
 def _kind_short(request_kind: str) -> str:
     known = {
-        "llm_call": "call",
         "tool_call": "tool",
         "hypothesis": "hyp",
-        "hypothesis_target_intent": "hti",
         "code": "code",
-        "fix": "fix",
-        "tool_selection": "tsel",
     }
     if request_kind in known:
         return known[request_kind]

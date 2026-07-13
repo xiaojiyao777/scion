@@ -57,17 +57,11 @@ class CvrpCaseSelectionConfig:
     require_bks: bool = True
     require_bks_routes: bool = True
     require_benchmark_feasible: bool = True
-    max_cases_total: int | None = None
-    max_cases_per_subset: int | None = None
     source_label: str = "cvrp_result_csv"
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "subsets", _normalize_optional_tuple(self.subsets))
         object.__setattr__(self, "seeds", _normalize_tuple(self.seeds))
-        if self.max_cases_total is not None and self.max_cases_total <= 0:
-            raise ValueError("max_cases_total must be positive when provided")
-        if self.max_cases_per_subset is not None and self.max_cases_per_subset <= 0:
-            raise ValueError("max_cases_per_subset must be positive when provided")
         if not str(self.source_label).strip():
             raise ValueError("source_label must be non-empty")
 
@@ -138,7 +132,7 @@ def build_cvrp_case_manifest_from_rows(
             eligible_rows.append(row)
 
     eligible_cases = _unique_case_entries(eligible_rows, config)
-    selected_cases = _select_cases(eligible_cases, config)
+    selected_cases = eligible_cases
     _validate_selected_cases(selected_cases)
 
     config_payload = _config_payload(config)
@@ -258,24 +252,6 @@ def _unique_case_entries(
     return tuple(
         sorted(entries_by_case.values(), key=lambda item: _entry_sort_key(item, config))
     )
-
-
-def _select_cases(
-    entries: tuple[CvrpCaseEntry, ...],
-    config: CvrpCaseSelectionConfig,
-) -> tuple[CvrpCaseEntry, ...]:
-    per_subset_counts: dict[str, int] = {}
-    selected: list[CvrpCaseEntry] = []
-    for entry in entries:
-        subset_key = entry.subset or ""
-        count = per_subset_counts.get(subset_key, 0)
-        if config.max_cases_per_subset is not None and count >= config.max_cases_per_subset:
-            continue
-        selected.append(entry)
-        per_subset_counts[subset_key] = count + 1
-        if config.max_cases_total is not None and len(selected) >= config.max_cases_total:
-            break
-    return tuple(selected)
 
 
 def _entry_from_row(row: CvrpCsvResultRow) -> CvrpCaseEntry:
@@ -402,8 +378,6 @@ def _config_payload(config: CvrpCaseSelectionConfig) -> dict[str, object]:
         "require_bks": config.require_bks,
         "require_bks_routes": config.require_bks_routes,
         "require_benchmark_feasible": config.require_benchmark_feasible,
-        "max_cases_total": config.max_cases_total,
-        "max_cases_per_subset": config.max_cases_per_subset,
         "source_label": config.source_label,
     }
 

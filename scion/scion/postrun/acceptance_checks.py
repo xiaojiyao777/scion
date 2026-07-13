@@ -5,8 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import subprocess
 from typing import Any, Mapping
 
+from scion.core.execution_outcome import ExecutionOutcome
 
 ANALYSIS_BRIEF_SCHEMA = "scion.postrun_analysis_brief.v1"
 PHASE4_EVIDENCE_COVERAGE_SCHEMA = "scion.postrun_phase4_evidence_coverage.v1"
@@ -110,6 +112,9 @@ class PostrunArtifactAcceptancePort:
         )
         brief_boundary_status, brief_boundary_detail = _analysis_brief_boundary(
             analysis_brief
+        )
+        candidate_diff_status, candidate_diff_detail = (
+            _formal_candidate_diff_integrity(root)
         )
         return PostrunAcceptanceCheckBundle(
             checks=(
@@ -238,8 +243,182 @@ class PostrunArtifactAcceptancePort:
                     ),
                     detail=dict(postrun_counts),
                 ),
+                PostrunAcceptanceCheck(
+                    name="formal_candidate_diff_integrity",
+                    status=candidate_diff_status,
+                    detail=candidate_diff_detail,
+                ),
             )
         )
+
+
+def _formal_candidate_diff_integrity(root: Path) -> tuple[str, dict[str, Any]]:
+    """Validate recorded formal-candidate diffs without mutating a workspace."""
+
+    campaign_dir = root / "campaign"
+    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    if not index_path.is_file():
+        return "ok", {
+            "reason": "formal_candidate_index_absent",
+            "index_path": str(index_path),
+            "checked_candidates": 0,
+        }
+
+    failures: list[dict[str, Any]] = []
+    validations: list[dict[str, Any]] = []
+    legacy_unbound_rows: list[dict[str, Any]] = []
+    try:
+        lines = index_path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        return "failed", {
+            "reason": "formal_candidate_index_unreadable",
+            "index_path": str(index_path),
+            "error": str(exc),
+        }
+
+    for line_number, raw_line in enumerate(lines, start=1):
+        if not raw_line.strip():
+            continue
+        try:
+            row = json.loads(raw_line)
+        except json.JSONDecodeError as exc:
+            failures.append(
+                {
+                    "line": line_number,
+                    "reason": "invalid_index_json",
+                    "error": str(exc),
+                }
+            )
+            continue
+        if not isinstance(row, Mapping):
+            failures.append(
+                {"line": line_number, "reason": "index_row_not_object"}
+            )
+            continue
+        candidate_id = str(row.get("candidate_id") or "")
+        if not row.get("artifact_ref") and "artifact_status" not in row:
+            legacy_unbound_rows.append(
+                {"line": line_number, "candidate_id": candidate_id}
+            )
+            continue
+        metadata_path = _campaign_artifact_path(
+            campaign_dir,
+            row.get("artifact_ref"),
+        )
+        if metadata_path is None or not metadata_path.is_file():
+            failures.append(
+                {
+                    "candidate_id": candidate_id,
+                    "reason": "candidate_metadata_missing",
+                    "artifact_ref": row.get("artifact_ref"),
+                }
+            )
+            continue
+        metadata = _read_json_object(metadata_path)
+        if not metadata:
+            failures.append(
+                {
+                    "candidate_id": candidate_id,
+                    "reason": "candidate_metadata_invalid",
+                    "artifact_ref": row.get("artifact_ref"),
+                }
+            )
+            continue
+        patch = _mapping_or_empty(metadata.get("patch"))
+        diff_path = _campaign_artifact_path(campaign_dir, patch.get("diff_ref"))
+        if diff_path is None or not diff_path.is_file():
+            failures.append(
+                {
+                    "candidate_id": candidate_id,
+                    "reason": "candidate_diff_missing",
+                    "diff_ref": patch.get("diff_ref"),
+                }
+            )
+            continue
+
+        base = _mapping_or_empty(metadata.get("base"))
+        base_workspace = _campaign_artifact_path(
+            campaign_dir,
+            base.get("base_workspace_ref"),
+        )
+        if base_workspace is not None and base_workspace.is_dir():
+            command = ["git", "apply", "--check", str(diff_path)]
+            cwd = base_workspace
+            validation_mode = "apply_check"
+        else:
+            command = ["git", "apply", "--numstat", str(diff_path)]
+            cwd = campaign_dir
+            validation_mode = "parse_only_base_unavailable"
+        try:
+            result = subprocess.run(
+                command,
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+        except subprocess.TimeoutExpired as exc:
+            failures.append(
+                {
+                    "candidate_id": candidate_id,
+                    "reason": "git_apply_timeout",
+                    "validation_mode": validation_mode,
+                    "timeout_seconds": exc.timeout,
+                }
+            )
+            continue
+        except OSError as exc:
+            failures.append(
+                {
+                    "candidate_id": candidate_id,
+                    "reason": "git_apply_unavailable",
+                    "validation_mode": validation_mode,
+                    "error": str(exc),
+                }
+            )
+            continue
+        validation = {
+            "candidate_id": candidate_id,
+            "diff_ref": patch.get("diff_ref"),
+            "validation_mode": validation_mode,
+            "returncode": result.returncode,
+        }
+        validations.append(validation)
+        if result.returncode != 0:
+            failures.append(
+                {
+                    **validation,
+                    "reason": "candidate_diff_not_replayable",
+                    "stderr": result.stderr.strip(),
+                }
+            )
+
+    status = "ok" if validations and not failures else "failed"
+    if not validations and not failures:
+        status = "ok"
+    return status, {
+        "index_path": str(index_path),
+        "checked_candidates": len(validations),
+        "legacy_unbound_rows": legacy_unbound_rows,
+        "validations": validations,
+        "failures": failures,
+    }
+
+
+def _campaign_artifact_path(campaign_dir: Path, ref: Any) -> Path | None:
+    text = str(ref or "").strip()
+    if not text:
+        return None
+    candidate = Path(text)
+    if not candidate.is_absolute():
+        candidate = campaign_dir / candidate
+    try:
+        resolved = candidate.resolve()
+        resolved.relative_to(campaign_dir.resolve())
+    except (OSError, ValueError):
+        return None
+    return resolved
 
 
 class PostrunEvidenceConsistencyAcceptancePort:
@@ -261,6 +440,10 @@ class PostrunEvidenceConsistencyAcceptancePort:
             analysis_brief,
             inventory,
         )
+        outcome_status, outcome_detail = _execution_outcome_integrity(
+            analysis_brief,
+            inventory,
+        )
         return PostrunAcceptanceCheckBundle(
             checks=(
                 PostrunAcceptanceCheck(
@@ -274,6 +457,11 @@ class PostrunEvidenceConsistencyAcceptancePort:
                     detail=contract_detail,
                 ),
                 PostrunAcceptanceCheck(
+                    name="execution_outcome_integrity",
+                    status=outcome_status,
+                    detail=outcome_detail,
+                ),
+                PostrunAcceptanceCheck(
                     name="current_run_report_families_present",
                     status=(
                         "ok"
@@ -282,7 +470,6 @@ class PostrunEvidenceConsistencyAcceptancePort:
                             for name in (
                                 "summaries",
                                 "failures",
-                                "research_efficiency",
                                 "manifests",
                             )
                         )
@@ -292,6 +479,81 @@ class PostrunEvidenceConsistencyAcceptancePort:
                 ),
             )
         )
+
+
+def _execution_outcome_integrity(
+    analysis_brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    outcomes = _mapping_or_empty(inventory.get("execution_outcomes"))
+    brief_outcomes = _mapping_or_empty(analysis_brief.get("execution_outcomes"))
+    counts = _mapping_or_empty(outcomes.get("execution_outcome_counts"))
+    allowed = {outcome.value for outcome in ExecutionOutcome}
+    failures: list[str] = []
+    invalid_keys = sorted(str(key) for key in counts if str(key) not in allowed)
+    if invalid_keys:
+        failures.append("invalid_execution_outcome_members")
+    normalized_counts = {
+        key: _int_or_zero(counts.get(key)) for key in sorted(allowed)
+    }
+    evaluated = _int_or_zero(outcomes.get("evaluated_count"))
+    non_evaluated = _int_or_zero(outcomes.get("non_evaluated_count"))
+    unknown = _int_or_zero(outcomes.get("unknown_outcome_count"))
+    if evaluated != normalized_counts[ExecutionOutcome.EVALUATED.value]:
+        failures.append("evaluated_count_mismatch")
+    if non_evaluated != sum(normalized_counts.values()) - evaluated:
+        failures.append("non_evaluated_count_mismatch")
+    total = _int_or_zero(outcomes.get("total_outcome_subject_count"))
+    if total != evaluated + non_evaluated + unknown:
+        failures.append("total_outcome_subject_count_mismatch")
+
+    step_invariants = _mapping_or_empty(outcomes.get("step_invariants"))
+    if step_invariants.get("status") == "invalid":
+        failures.append("step_outcome_invariants_invalid")
+    if outcomes.get("summary_step_counts_comparable") is True and outcomes.get(
+        "summary_step_counts_consistent"
+    ) is not True:
+        failures.append("summary_step_outcome_counts_mismatch")
+    if outcomes.get("summary_lineage_counts_comparable") is True and outcomes.get(
+        "summary_lineage_counts_consistent"
+    ) is not True:
+        failures.append("summary_lineage_outcome_counts_mismatch")
+    lineage = _mapping_or_empty(outcomes.get("lineage"))
+    if _int_or_zero(lineage.get("invalid_outcome_count")) > 0:
+        failures.append("lineage_invalid_execution_outcome")
+    if lineage.get("decision_outcome_consistency_status") == "invalid":
+        failures.append("decision_row_requires_evaluated_outcome")
+
+    eligibility = _mapping_or_empty(
+        outcomes.get("research_conclusion_eligibility")
+    )
+    if evaluated == 0 and non_evaluated > 0:
+        if eligibility.get("eligible") is not False or eligibility.get(
+            "algorithm_conclusions_allowed"
+        ) is not False:
+            failures.append("zero_evaluated_conclusion_eligibility_invalid")
+    elif evaluated > 0 and eligibility.get("eligible") is not True:
+        failures.append("evaluated_conclusion_eligibility_invalid")
+    elif evaluated == 0 and non_evaluated == 0 and eligibility.get(
+        "eligible"
+    ) is not None:
+        failures.append("historical_missing_outcome_not_unknown")
+
+    if evaluated + non_evaluated > 0 and not brief_outcomes:
+        failures.append("analysis_brief_execution_outcomes_missing")
+    elif brief_outcomes and dict(brief_outcomes) != dict(outcomes):
+        failures.append("analysis_brief_outcome_projection_mismatch")
+    return ("ok" if not failures else "failed"), {
+        "failures": failures,
+        "execution_outcome_counts": normalized_counts,
+        "evaluated_count": evaluated,
+        "non_evaluated_count": non_evaluated,
+        "unknown_outcome_count": unknown,
+        "research_conclusion_eligibility": dict(eligibility),
+        "step_invariants": dict(step_invariants),
+        "lineage": dict(lineage),
+        "historical_missing_outcome_policy": "unknown_not_negative",
+    }
 
 
 class PostrunLifecycleAcceptancePort:
@@ -508,6 +770,24 @@ def _phase4_evidence_coverage_actionability(
     if field_mismatches:
         failures.append("phase4_evidence_coverage_inventory_mismatch")
 
+    expected_requirements = _phase4_requirement_signature_map(
+        expected.get("requirements")
+    )
+    actual_requirements = _phase4_requirement_signature_map(
+        summary.get("requirements")
+    )
+    if actual_requirements != expected_requirements:
+        failures.append("phase4_requirements_inventory_mismatch")
+    unavailable_required = sorted(
+        key
+        for key, item in actual_requirements.items()
+        if item.get("required") is True
+        and item.get("applicable") is not False
+        and item.get("available") is not True
+    )
+    if unavailable_required:
+        failures.append("phase4_required_evidence_unavailable")
+
     expected_problem_specific = _phase4_requirement_signature_map(
         expected.get("problem_specific_requirements")
     )
@@ -535,6 +815,7 @@ def _phase4_evidence_coverage_actionability(
             "problem_specific_keys": sorted(actual_problem_specific),
             "expected_problem_specific_keys": sorted(expected_problem_specific),
             "problem_specific_unavailable": unavailable_problem_specific,
+            "required_evidence_unavailable": unavailable_required,
         },
     )
 
@@ -544,8 +825,13 @@ def _phase4_requirement_signature_map(value: Any) -> dict[str, dict[str, Any]]:
     return {
         str(key): {
             "available": item.get("available") is True,
-            "count": _int_or_zero(item.get("count")),
+            "count": (
+                _int_or_zero(item.get("count")) if "count" in item else None
+            ),
             "source": str(item.get("source") or ""),
+            "status": str(item.get("status") or ""),
+            "applicable": item.get("applicable"),
+            "required": item.get("required") is True,
         }
         for key, item in sorted(requirements.items())
         if isinstance(item, Mapping)

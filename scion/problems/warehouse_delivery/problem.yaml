@@ -75,6 +75,8 @@ search_space:
 solver:
   time_limit_sec: 300
   max_iter: 200
+parameter_search:
+  enabled: false
 canary_case_path: /home/clawd/research/or-autoresearch-agent/surrogate/data/instance_small_1.json
 unit_test_path: tests/test_operators.py
 regression_test_path: tests/test_solver.py

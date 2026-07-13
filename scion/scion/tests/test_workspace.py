@@ -123,6 +123,77 @@ class TestApplyPatch:
             encoding="utf-8"
         ) == "VALUE = 1\n"
 
+    def test_multi_file_preflight_failure_leaves_workspace_unchanged(
+        self,
+        campaign_dir: Path,
+        code_base: Path,
+    ):
+        mat = WorkspaceMaterializer(
+            str(campaign_dir),
+            frozen_patterns=frozenset({"solver.py"}),
+        )
+        ws = mat.create_branch_workspace("b2-preflight", str(code_base))
+        patch = PatchProposal(
+            file_path="operators/swap.py",
+            action="modify",
+            code_content="changed = True\n",
+            additional_changes=(
+                PatchFileChange(
+                    file_path="solver.py",
+                    action="modify",
+                    code_content="# forbidden\n",
+                ),
+            ),
+        )
+
+        with pytest.raises(FrozenFileError):
+            mat.apply_patch(ws, patch)
+
+        assert (Path(ws) / "operators" / "swap.py").read_text() == (
+            "class SwapOperator:\n    pass\n"
+        )
+        assert (Path(ws) / "solver.py").read_text() == "# solver\n"
+
+    def test_multi_file_staging_failure_rolls_back_all_changes(
+        self,
+        mat: WorkspaceMaterializer,
+        code_base: Path,
+        monkeypatch,
+    ):
+        ws = mat.create_branch_workspace("b2-rollback", str(code_base))
+        original_apply = mat._apply_file_change
+        calls = 0
+
+        def fail_second(staged_ws, change):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("simulated second write failure")
+            return original_apply(staged_ws, change)
+
+        monkeypatch.setattr(mat, "_apply_file_change", fail_second)
+        patch = PatchProposal(
+            file_path="operators/swap.py",
+            action="modify",
+            code_content="changed = True\n",
+            additional_changes=(
+                PatchFileChange(
+                    file_path="policies/helper.py",
+                    action="create",
+                    code_content="VALUE = 1\n",
+                ),
+            ),
+        )
+
+        with pytest.raises(OSError, match="second write failure"):
+            mat.apply_patch(ws, patch)
+
+        assert (Path(ws) / "operators" / "swap.py").read_text() == (
+            "class SwapOperator:\n    pass\n"
+        )
+        assert not (Path(ws) / "policies" / "helper.py").exists()
+        assert not list(Path(ws).parent.glob(".b2-rollback.patch-*"))
+
     def test_delete_removes_file(self, mat: WorkspaceMaterializer, code_base: Path):
         ws = mat.create_branch_workspace("b3", str(code_base))
         target = Path(ws) / "operators" / "swap.py"

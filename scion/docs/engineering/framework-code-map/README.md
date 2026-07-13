@@ -1,5 +1,12 @@
 # Scion Framework Code Map
 
+> Historical snapshot: this map describes the pre-direct-v3 v0.4 runtime and
+> intentionally retains APS, budget, termination, stagnation, and compatibility
+> paths that were deleted in the July 2026 refactor. Do not use it as current
+> implementation authority. Start with `scion/TASK.md`,
+> `scion/docs/status/current-state.md`, V3 plus its v0.4 direct-runtime addendum,
+> and verify every claim against current source.
+
 ## Scope / Sources
 
 Sources read: `scion/scion/cli/`, `scion/scion/core/`, `scion/scion/proposal/`, `scion/scion/contract/`, `scion/scion/verification/`, `scion/scion/protocol/`, `scion/scion/problem/`, `scion/scion/runtime/`, `scion/scion/evidence/`, `scion/scion/lineage/`, and CVRP package code/config under `scion/scion/problems/cvrp/`.

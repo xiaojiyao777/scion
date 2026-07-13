@@ -6,6 +6,7 @@ import pytest
 
 from scion.problem.bridge import legacy_problem_spec_from_v1
 from scion.problem.spec import ProblemSpecV1
+from scion.proposal.context.problem_adapter import _build_operator_interface_spec
 from scion.tests.unit.research_surface_helpers import _problem_payload
 
 
@@ -176,6 +177,18 @@ def test_problem_spec_accepts_v2_research_surface_and_exposes_legacy_fields(
         "baseline_budget",
         "round_limit",
     ]
+
+    rendered = _build_operator_interface_spec(
+        legacy,
+        surface_name="search_policy",
+    )
+    assert "interface.required_functions" in rendered
+    assert "bounds.allowed_components" in rendered
+    assert "prompt.implementation_guidance" in rendered
+    assert "evidence.required_runtime_fields" not in rendered
+    assert "evidence.mechanism_telemetry" not in rendered
+    assert "novelty.strategy" not in rendered
+    assert "novelty.signature_fields" not in rendered
 
 
 def test_problem_spec_rejects_invalid_mechanism_telemetry_declaration(

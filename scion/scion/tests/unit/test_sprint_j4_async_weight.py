@@ -108,13 +108,6 @@ class TestSchedulerIncludesStaleWeight:
         assert BranchState.STALE_WEIGHT_UPDATE in stale_tier[0]
 
 
-class TestTerminationIncludesStaleWeight:
-    def test_stale_weight_update_is_active_for_termination(self):
-        """STALE_WEIGHT_UPDATE is counted as active for termination check."""
-        from scion.core.termination import _ACTIVE_STATES
-        assert BranchState.STALE_WEIGHT_UPDATE in _ACTIVE_STATES
-
-
 class TestWeightOptResult:
     def test_weight_opt_result_dataclass(self):
         """WeightOptimizationResult can be created and queried."""

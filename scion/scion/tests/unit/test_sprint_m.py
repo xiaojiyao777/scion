@@ -5,8 +5,8 @@ import sqlite3
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, List, Optional
-from unittest.mock import MagicMock, patch
+from typing import Any, List
+from unittest.mock import patch
 
 import pytest
 
@@ -14,11 +14,9 @@ from scion.config.problem import ParameterSearchConfig
 from scion.core.campaign import CampaignManager
 from scion.core.models import (
     Branch, BranchState, CanaryResult, CheckResult, ChampionState,
-    Decision, EvalStats, ExperimentStage, HypothesisProposal, HypothesisRecord,
+    Decision, EvalStats, ExperimentStage,
     PatchProposal, ProtocolResult, VerificationResult,
 )
-from scion.core.termination import TerminationConfig
-from scion.failure.router import FailureRouter, RetryConfig
 from scion.lineage.branch_store import BranchStore, HypothesisStore
 from scion.lineage.registry import LineageRegistry
 from scion.proposal.llm_client import LLMBalanceError
@@ -51,7 +49,11 @@ _VALID_HYPOTHESIS = {
 _VALID_PATCH = {
     "file_path": "operators/local_search.py",
     "action": "modify",
-    "code_content": _VALID_CODE,
+    "edit_intent": "exact_replace",
+    "source_digest": source_digest_for_content(_VALID_CODE),
+    "old_string": "        return solution\n",
+    "new_string": "        candidate = solution\n        return candidate\n",
+    "replace_all": False,
     "test_hint": None,
 }
 
@@ -154,16 +156,15 @@ def _solver_design_campaign(
         "predicted_direction": "improve",
         "target_weakness": "candidate lifecycle",
         "expected_effect": "better total_distance",
-        "target_objectives": ["total_distance"],
-        "protected_objectives": ["fleet_violation"],
     }
     patch = {
         "file_path": "policies/baseline_algorithm.py",
         "action": "modify",
         "edit_intent": "exact_replace",
-        "source_digest": source_digest_for_content(solver_code + "\n"),
+        "source_digest": source_digest_for_content(solver_code),
         "old_string": "    return None\n",
-        "new_string": "    return None\n",
+        "new_string": "    return context.nearest_neighbor()\n",
+        "replace_all": False,
         "test_hint": None,
     }
     return CampaignManager(
@@ -178,7 +179,6 @@ def _solver_design_campaign(
         champion=champion,
         campaign_dir=str(tmp_path / "solver_design_campaign"),
         verification_gate=verification_gate or AlwaysPassVerificationGate(),
-        termination_config=TerminationConfig(max_experiments=100, stagnation_limit=50),
     )
 
 
@@ -221,7 +221,6 @@ def _campaign(
     llm_client: Any = None,
     experiment_protocol: Any = None,
     verification_gate: Any = None,
-    termination_config: Optional[TerminationConfig] = None,
 ) -> CampaignManager:
     code_dir = tmp_path / "champion_code"
     (code_dir / "operators").mkdir(parents=True)
@@ -244,127 +243,7 @@ def _campaign(
         campaign_dir=campaign_dir,
         verification_gate=verification_gate or AlwaysPassVerificationGate(),
         experiment_protocol=experiment_protocol,
-        termination_config=termination_config or TerminationConfig(
-            max_experiments=100,
-            stagnation_limit=50,
-        ),
     )
-
-
-# ---------------------------------------------------------------------------
-# T1: Blacklist double-write bug
-# ---------------------------------------------------------------------------
-
-class TestT1BlacklistDoubleWrite:
-    """Heavy verification failure must produce exactly 1 blacklisted hypothesis record."""
-
-    def test_heavy_verification_failure_single_blacklist_record(self, tmp_path):
-        """V-heavy failure: only 1 blacklisted row in hypotheses table."""
-        cm = _campaign(tmp_path, verification_gate=HeavyFailVerificationGate())
-        # Run one step — creates branch + runs explore step with heavy V-failure
-        cm.run_one_step()
-        # Check hypotheses table
-        db_path = str(Path(cm._materializer._champions_dir).parent / "scion.db")
-        with sqlite3.connect(db_path) as conn:
-            rows = conn.execute(
-                "SELECT * FROM hypotheses WHERE status = 'blacklisted'"
-            ).fetchall()
-        assert len(rows) == 1, (
-            f"Expected exactly 1 blacklisted record, got {len(rows)}. "
-            "This indicates the double-write bug is still present."
-        )
-
-    def test_solver_design_heavy_failure_rejects_candidate_not_boundary(
-        self,
-        tmp_path,
-    ):
-        """A failed solver-design implementation must not blacklist the surface."""
-        cm = _solver_design_campaign(
-            tmp_path,
-            verification_gate=HeavyFailVerificationGate(),
-        )
-
-        cm.run_one_step()
-
-        db_path = str(Path(cm._materializer._champions_dir).parent / "scion.db")
-        with sqlite3.connect(db_path) as conn:
-            rows = conn.execute(
-                "SELECT change_locus, status FROM hypotheses"
-            ).fetchall()
-        assert rows == [("solver_design", "contract_failed")]
-
-    def test_hypothesis_already_recorded_prevents_duplicate(self, tmp_path):
-        """Direct _handle_failure calls: flag=True skips write, flag=False writes."""
-        from scion.core.models import FailureEvent
-        cm = _campaign(tmp_path)
-        branch = Branch(
-            branch_id=str(uuid.uuid4()),
-            state=BranchState.EXPLORE,
-            base_champion_id=1,
-            base_champion_hash="abc",
-        )
-        hyp = HypothesisProposal(
-            hypothesis_text="test hyp",
-            change_locus="local_search",
-            action="modify",
-            target_file="operators/local_search.py",
-        )
-        cm._branch_hypotheses[branch.branch_id] = hyp
-        failure = FailureEvent(category="verification_heavy", detail="V5")
-
-        db_path = str(Path(cm._materializer._champions_dir).parent / "scion.db")
-
-        # Call 1: hypothesis_already_recorded=True — no new record
-        cm._handle_failure(branch, failure, hypothesis_already_recorded=True)
-        with sqlite3.connect(db_path) as conn:
-            c1 = conn.execute("SELECT COUNT(*) FROM hypotheses WHERE status='blacklisted'").fetchone()[0]
-        assert c1 == 0
-
-        # Reset streaks so action still routes to discard
-        cm._failure_streak.clear()
-        # Call 2: hypothesis_already_recorded=False — 1 new record
-        cm._handle_failure(branch, failure, hypothesis_already_recorded=False)
-        with sqlite3.connect(db_path) as conn:
-            c2 = conn.execute("SELECT COUNT(*) FROM hypotheses WHERE status='blacklisted'").fetchone()[0]
-        assert c2 == 1
-
-    def test_handle_failure_with_hypothesis_already_recorded_skips_write(self, tmp_path):
-        """_handle_failure(hypothesis_already_recorded=True) must NOT write a new record."""
-        from scion.core.models import FailureEvent
-        cm = _campaign(tmp_path)
-        # Manually create a branch
-        from scion.core.models import Branch, BranchState
-        branch = Branch(
-            branch_id=str(uuid.uuid4()),
-            state=BranchState.EXPLORE,
-            base_champion_id=1,
-            base_champion_hash="abc",
-        )
-        # Inject a hypothesis into the campaign so _handle_failure has something to write
-        hyp = HypothesisProposal(
-            hypothesis_text="test",
-            change_locus="local_search",
-            action="modify",
-            target_file="operators/local_search.py",
-        )
-        cm._branch_hypotheses[branch.branch_id] = hyp
-
-        db_path = str(Path(cm._materializer._champions_dir).parent / "scion.db")
-        failure = FailureEvent(category="verification_heavy", detail="V5 regression")
-
-        # With hypothesis_already_recorded=True: should NOT create a new record
-        cm._handle_failure(branch, failure, hypothesis_already_recorded=True)
-        with sqlite3.connect(db_path) as conn:
-            count = conn.execute("SELECT COUNT(*) FROM hypotheses").fetchone()[0]
-        assert count == 0, "hypothesis_already_recorded=True must skip hypothesis write"
-
-        # Reset streak for second call
-        cm._failure_streak.clear()
-        # Without the flag: should create a new record
-        cm._handle_failure(branch, failure, hypothesis_already_recorded=False)
-        with sqlite3.connect(db_path) as conn:
-            count = conn.execute("SELECT COUNT(*) FROM hypotheses").fetchone()[0]
-        assert count == 1, "hypothesis_already_recorded=False must write a new record"
 
 
 # ---------------------------------------------------------------------------
@@ -531,9 +410,6 @@ class TestT6BalanceExhaustedStop:
             def call_with_tool(self, *args, **kwargs):
                 raise _BalanceError("API balance exhausted: 403 Forbidden balance is insufficient")
 
-            def call(self, *args, **kwargs):
-                raise _BalanceError("API balance exhausted: 403 Forbidden balance is insufficient")
-
             def get_cache_stats(self):
                 return {}
 
@@ -555,9 +431,6 @@ class TestT6BalanceExhaustedStop:
             def call_with_tool(self, *args, **kwargs):
                 raise _BalanceError("API balance exhausted: 403 balance is insufficient")
 
-            def call(self, *args, **kwargs):
-                raise _BalanceError("API balance exhausted: 403 balance is insufficient")
-
             def get_cache_stats(self):
                 return {}
 
@@ -574,25 +447,3 @@ class TestT6BalanceExhaustedStop:
         assert summary.get("stopped_reason") == "api_balance_exhausted", (
             f"Expected 'api_balance_exhausted', got {summary.get('stopped_reason')}"
         )
-
-    def test_llm_client_raises_balance_error_on_403_with_balance(self):
-        """LLMClient._call_once raises LLMBalanceError when error has 403 + balance."""
-        from scion.proposal.llm_client import LLMClient, LLMBalanceError as _BalanceError
-        import anthropic
-
-        client = LLMClient.__new__(LLMClient)
-        client._anthropic_client = None
-        client._openai_client = None
-        client.model = "claude-test"
-        client.max_tokens = 100
-        client.timeout_sec = 10
-
-        # Mock the anthropic client to raise a 403 balance error
-        mock_anthropic = MagicMock()
-        mock_anthropic.messages.create.side_effect = Exception(
-            "403 Forbidden: balance is insufficient"
-        )
-        client._anthropic_client = mock_anthropic
-
-        with pytest.raises(_BalanceError):
-            client._call_once("test prompt", "claude-test")

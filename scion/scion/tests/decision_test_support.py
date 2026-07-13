@@ -9,7 +9,7 @@ from scion.core.models import (
 )
 from scion.config.problem import ProtocolConfig
 from scion.core.features import (
-    SafeFeatureExtractor, BudgetState, DecisionInputGuardError, _validate_no_free_text,
+    SafeFeatureExtractor, DecisionInputGuardError, _validate_no_free_text,
 )
 from scion.core.decision import DecisionEngine
 
@@ -18,13 +18,12 @@ from scion.core.decision import DecisionEngine
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _branch(state: BranchState = BranchState.EXPLORE, retry: int = 0) -> Branch:
+def _branch(state: BranchState = BranchState.EXPLORE) -> Branch:
     return Branch(
         branch_id=str(uuid.uuid4()),
         state=state,
         base_champion_id=0,
         base_champion_hash="h",
-        retry_count=retry,
     )
 
 
@@ -140,7 +139,6 @@ def _make_features(
     median_delta: float = None,
     ci_low: float = None,
     ci_high: float = None,
-    budget_remaining_ratio: float = 1.0,
 ):
     return DecisionEngine.__new__(DecisionEngine)  # won't use this
 
@@ -160,7 +158,6 @@ def _features(
     pair_wins: int = 0,
     pair_losses: int = 0,
     pair_ties: int = 0,
-    budget_ratio: float = 1.0,
     branch_id: str = None,
     statistical_status=None,
     statistical_metric=None,
@@ -176,6 +173,7 @@ def _features(
     candidate_failed_pairs: int = 0,
     champion_failed_pairs: int = 0,
     protocol_gate_outcome=None,
+    protocol_reason_codes=(),
 ):
     from scion.core.models import DecisionFeatures
     return DecisionFeatures(
@@ -194,9 +192,7 @@ def _features(
         ci_low=ci_low,
         ci_high=ci_high,
         stale=False,
-        recent_retry_count=0,
         recent_failure_codes=(),
-        budget_remaining_ratio=budget_ratio,
         statistical_status=statistical_status,
         statistical_metric=statistical_metric,
         runtime_guard_passed=runtime_guard_passed,
@@ -214,6 +210,7 @@ def _features(
         pair_losses=pair_losses,
         pair_ties=pair_ties,
         protocol_gate_outcome=protocol_gate_outcome,
+        protocol_reason_codes=tuple(protocol_reason_codes),
     )
 
 

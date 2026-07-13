@@ -3,8 +3,8 @@
 from .campaign_test_support import *  # noqa: F401,F403
 
 class TestScreeningFail:
-    def test_screening_fail_low_winrate_soft_abandons_regressive_branch(self, tmp_path):
-        """win_rate=0.3 with negative delta is a clear regression and is abandoned."""
+    def test_screening_fail_rejects_candidate_and_keeps_branch_research_open(self, tmp_path):
+        """A regressive candidate ends without turning one result into branch policy."""
         protocol = MockExperimentProtocol(results=[
             _make_protocol_result(
                 ExperimentStage.SCREENING, gate_outcome="fail",
@@ -13,8 +13,9 @@ class TestScreeningFail:
         ])
         cm = _campaign(tmp_path, experiment_protocol=protocol)
         result = cm.run_one_step()
-        assert result.decision == Decision.ABANDON
-        assert "SCREENING_FAIL_WIN_RATE" in result.reason
+        assert result.decision == Decision.CONTINUE_EXPLORE
+        assert cm._branch_ctrl.get_branch(result.branch_id).state == BranchState.EXPLORE
+        assert cm._step_history[-1].protocol_result.gate_outcome == "fail"
 
 
 class TestCanaryFail:
@@ -127,8 +128,8 @@ class TestVerificationGate:
         result = gate.run("/tmp", "", patch)
         assert result.passed is True
 
-    def test_verification_fail_light_triggers_fix(self, tmp_path):
-        """Light verification failure triggers fix_code, then succeeds."""
+    def test_direct_verification_fail_light_does_not_trigger_fix(self, tmp_path):
+        """Direct v3 preserves the failed patch instead of adding a third call."""
         fix_call_count = [0]
 
         class FixSuccessClient:
@@ -139,7 +140,10 @@ class TestVerificationGate:
                         return dict(_VALID_PATCH_REPAIR)
                     return dict(_VALID_PATCH)
                 return dict(_VALID_HYPOTHESIS)
-            def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+            def call_with_tool(
+                self, prompt, tool, model=None, system_blocks=None, request_kind=None
+            ):
+                del request_kind
                 return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
 
         # Gate fails on first run (bad code), passes on second (fixed code)
@@ -174,35 +178,17 @@ class TestVerificationGate:
             ),
         )
         result = cm.run_one_step()
-        # Should have attempted a fix and succeeded
-        assert fix_call_count[0] >= 1
-        assert result.decision is not None
+        assert fix_call_count[0] == 1  # one code proposal; no fix_code call
+        assert run_count[0] == 1
+        assert result.decision is None
+        assert cm._step_history[-1].failure_stage == "verification"
 
 
 class TestRunLoop:
-    def test_run_stops_on_max_experiments(self, tmp_path):
-        """run() should stop when termination condition is met."""
-        cm = _campaign(
-            tmp_path,
-            experiment_protocol=None,
-            termination_config=TerminationConfig(
-                max_experiments=3,
-                stagnation_limit=100,
-                max_wall_clock_hours=24,
-            ),
-        )
-        cm.run(max_rounds=100)
-        # Should have stopped (3 experiments budget exhausted causes no_progress eventually)
-        assert cm._n_experiments <= 100  # sanity check
-
     def test_run_respects_max_rounds_arg(self, tmp_path):
-        """run(max_rounds=N) stops after at most N steps."""
-        cm = _campaign(
-            tmp_path,
-            experiment_protocol=None,
-            termination_config=TerminationConfig(max_experiments=10000),
-        )
-        cm.run(max_rounds=3)
+        """run(requested_rounds=N) targets N formal evaluated rounds."""
+        cm = _campaign(tmp_path, experiment_protocol=None)
+        cm.run(requested_rounds=3)
         assert cm._n_experiments <= 3
 
 

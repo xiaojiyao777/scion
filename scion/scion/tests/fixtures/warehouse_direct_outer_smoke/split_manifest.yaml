@@ -1,0 +1,13 @@
+version: "warehouse-direct-outer-smoke"
+
+screening:
+  - data/instance_small_1.json
+
+validation:
+  - data/instance_small_2.json
+
+frozen:
+  - data/instance_small_3.json
+
+canary:
+  - data/instance_small_4.json

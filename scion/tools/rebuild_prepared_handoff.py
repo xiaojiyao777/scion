@@ -34,6 +34,9 @@ from scion.postrun.handoff.prompt_context_readiness import (  # noqa: E402
     build_prepared_prompt_context_readiness,
     render_prompt_context_readiness_markdown,
 )
+from scion.postrun.inventory.prepared_contract import (  # noqa: E402
+    prepared_execution_runtime_mode,
+)
 from scion.problems.postrun_inventory import (
     build_problem_inventory as build_inventory,
 )  # noqa: E402
@@ -57,6 +60,17 @@ def rebuild_prepared_handoff(
 
     root = Path(run_root).expanduser().resolve()
     manifest = _read_json(root / "prepared_run_manifest.v1.json")
+    manifest_dict = manifest if isinstance(manifest, dict) else {}
+    execution = manifest_dict.get("execution")
+    execution_dict = execution if isinstance(execution, dict) else {}
+    try:
+        proposal_runtime_mode = prepared_execution_runtime_mode(execution_dict)
+        proposal_runtime_status = "resolved"
+        proposal_runtime_error = None
+    except ValueError as exc:
+        proposal_runtime_mode = None
+        proposal_runtime_status = "invalid"
+        proposal_runtime_error = str(exc)
     stem = report_stem or _resolve_report_stem(root, manifest)
 
     handoff_dir = root / "prepared_handoff"
@@ -105,7 +119,10 @@ def rebuild_prepared_handoff(
         lambda: _write_launch_readiness(root, readiness_dir, stem),
     )
 
-    complete = all(result.get("status") == "ok" for result in family_results.values())
+    complete = (
+        proposal_runtime_status == "resolved"
+        and all(result.get("status") == "ok" for result in family_results.values())
+    )
     rebuild_manifest = {
         "schema_version": SCHEMA_VERSION,
         "artifact_kind": "prepared_handoff_rebuild",
@@ -122,6 +139,12 @@ def rebuild_prepared_handoff(
         "problem_family": (
             manifest.get("problem_family") if isinstance(manifest, dict) else None
         ),
+        "proposal_runtime": {
+            "status": proposal_runtime_status,
+            "resolved_mode": proposal_runtime_mode,
+            "error": proposal_runtime_error,
+            "fail_closed": proposal_runtime_status != "resolved",
+        },
         "prepared_manifest_commit": _manifest_commit(manifest),
         "checkout_commit": _git_output(("rev-parse", "--short", "HEAD")),
         "families": family_results,
@@ -138,8 +161,12 @@ def rebuild_prepared_handoff(
             lambda: _write_launch_readiness(root, readiness_dir, stem),
         )
         rebuild_manifest["families"] = family_results
-        rebuild_manifest["complete"] = all(
-            result.get("status") == "ok" for result in family_results.values()
+        rebuild_manifest["complete"] = (
+            proposal_runtime_status == "resolved"
+            and all(
+                result.get("status") == "ok"
+                for result in family_results.values()
+            )
         )
         manifest_path.write_text(_stable_json(rebuild_manifest), encoding="utf-8")
         complete = bool(rebuild_manifest["complete"])
@@ -302,19 +329,7 @@ def _resolve_report_stem(root: Path, manifest: Any) -> str:
             "cvrp": "cvrp",
             "warehouse_delivery": "warehouse",
         }.get(family, _safe_slug(family) or _safe_slug(root.name))
-        execution = manifest.get("execution")
-        if not isinstance(execution, dict):
-            execution = {}
-        governance = _safe_slug(
-            str(execution.get("measurement_governance") or "on").replace("-", "_")
-        )
-        ablation = _safe_slug(
-            str(execution.get("proposal_context_ablation") or "full").replace(
-                "-",
-                "_",
-            )
-        )
-        return f"{prefix}_{governance}_{ablation}"
+        return f"{prefix}_direct_v3"
     return _safe_slug(root.name) or "prepared_handoff"
 
 

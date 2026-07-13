@@ -15,11 +15,12 @@ from scion.problems.cvrp.solver_runtime.solution_ops import (
     _solution_is_valid,
 )
 from scion.problems.cvrp.solver_runtime.timing import _remaining_time_sec
+from scion.runtime.telemetry_events import (
+    TypedTelemetryEvent,
+    append_typed_telemetry_event,
+)
 
 _BASELINE_ALGORITHM_RELATIVE_PATH = "policies/baseline_algorithm.py"
-_BEST_UPDATE_TRACE_LIMIT = 32
-_ALNS_ITERATION_TRACE_LIMIT = 32
-
 
 def load_baseline_algorithm(
     *,
@@ -374,6 +375,36 @@ class SolverAlgorithmContext:
         key = f"{phase_name}_iterations"
         records[key] = _as_nonnegative_int(records.get(key)) + increment
 
+    def record_telemetry_event(
+        self,
+        lane: str,
+        mechanism_id: str,
+        *,
+        attribution_scope: str,
+        attribution_confidence: float,
+        before_ref: str | None,
+        after_ref: str | None,
+        missing_refs: tuple[str, ...],
+        occurrences: int = 1,
+        evidence_ref: str | None = None,
+    ) -> None:
+        """Record one typed event without changing legacy move counters."""
+
+        append_typed_telemetry_event(
+            self._audit,
+            TypedTelemetryEvent(
+                lane=lane,
+                mechanism_id=mechanism_id,
+                attribution_scope=attribution_scope,
+                attribution_confidence=attribution_confidence,
+                before_ref=before_ref,
+                after_ref=after_ref,
+                missing_refs=missing_refs,
+                occurrences=occurrences,
+                evidence_ref=evidence_ref,
+            ),
+        )
+
     def record_move(
         self,
         phase: str,
@@ -474,7 +505,7 @@ class SolverAlgorithmContext:
         repair_operator: str | None = None,
         operator: str | None = None,
     ) -> None:
-        """Record a bounded incumbent-update trace for CVRP solver diagnostics."""
+        """Record every incumbent update needed for CVRP solver diagnostics."""
 
         coerced = _coerce_solution(solution)
         if coerced is None:
@@ -511,8 +542,7 @@ class SolverAlgorithmContext:
             event["operator_pair"] = (
                 f"{destroy_name or 'unknown'}+{repair_name or 'unknown'}"
             )
-        if len(trace) < _BEST_UPDATE_TRACE_LIMIT:
-            trace.append(event)
+        trace.append(event)
         _refresh_solver_algorithm_best_update_summary(self._audit, event)
 
     def record_objective_probe(
@@ -522,7 +552,7 @@ class SolverAlgorithmContext:
         *,
         metadata: Mapping[str, Any] | None = None,
     ) -> None:
-        """Record bounded objective snapshots for phase attribution diagnostics."""
+        """Record objective snapshots for phase attribution diagnostics."""
 
         coerced = _coerce_solution(solution)
         if coerced is None and callable(getattr(solution, "routes_as_tuples", None)):
@@ -534,8 +564,6 @@ class SolverAlgorithmContext:
         if not isinstance(probes, list):
             probes = []
             self._audit["solver_algorithm_objective_probes"] = probes
-        if len(probes) >= _BEST_UPDATE_TRACE_LIMIT:
-            return
         event: dict[str, Any] = {
             "elapsed_ms": self.elapsed_ms(),
             "name": str(name or "").strip() or "objective_probe",
@@ -568,14 +596,12 @@ class SolverAlgorithmContext:
         elapsed_ms_after: int | float | None = None,
         remaining_ms_after: int | float | None = None,
     ) -> None:
-        """Record bounded ALNS iteration diagnostics for budget pressure analysis."""
+        """Record ALNS iteration diagnostics for runtime-pressure analysis."""
 
         trace = self._audit.setdefault("solver_algorithm_alns_iteration_trace", [])
         if not isinstance(trace, list):
             trace = []
             self._audit["solver_algorithm_alns_iteration_trace"] = trace
-        if len(trace) >= _ALNS_ITERATION_TRACE_LIMIT:
-            return
         event: dict[str, Any] = {
             "iteration": _as_nonnegative_int(iteration),
             "elapsed_ms_before": _as_nonnegative_int(elapsed_ms_before),
@@ -639,6 +665,75 @@ class SolverAlgorithmContext:
         }
 
 
+def typed_events_from_legacy_record_move(
+    phase: str,
+    *,
+    attempted: int = 1,
+    accepted: int = 0,
+    delta: int | float = 0.0,
+    best_improved: bool = False,
+) -> tuple[TypedTelemetryEvent, ...]:
+    """Interpret ambiguous ``record_move`` data without claiming direct effect.
+
+    This is a compatibility reader, not a write-through bridge.  Existing
+    ``record_move`` calls may represent a move, pool admission, selector switch,
+    or later associated improvement, so legacy effect-shaped values stay in the
+    weaker associated-outcome lane until problem code supplies causal refs.
+    """
+
+    mechanism_id = str(phase or "").strip() or "search"
+    attempts = _as_nonnegative_int(attempted)
+    accepts = _as_nonnegative_int(accepted)
+    try:
+        delta_value = max(0.0, float(delta))
+    except (TypeError, ValueError):
+        delta_value = 0.0
+    if attempts <= 0 and accepts <= 0:
+        attempts = 1
+    events: list[TypedTelemetryEvent] = []
+    if attempts > 0:
+        events.append(
+            TypedTelemetryEvent(
+                lane="attempt",
+                mechanism_id=mechanism_id,
+                attribution_scope="legacy_record_move",
+                attribution_confidence=1.0,
+                before_ref=None,
+                after_ref=None,
+                missing_refs=("before_ref", "after_ref"),
+                occurrences=attempts,
+                evidence_ref=(
+                    f"runtime.solver_algorithm_phase_move_attempts.{mechanism_id}"
+                ),
+            )
+        )
+    if accepts > 0 or delta_value > 0.0 or best_improved:
+        if delta_value > 0.0:
+            evidence_ref = f"runtime.solver_algorithm_phase_delta_sum.{mechanism_id}"
+        elif accepts > 0:
+            evidence_ref = (
+                f"runtime.solver_algorithm_phase_accepted_moves.{mechanism_id}"
+            )
+        else:
+            evidence_ref = (
+                f"runtime.solver_algorithm_phase_improvement_counts.{mechanism_id}"
+            )
+        events.append(
+            TypedTelemetryEvent(
+                lane="associated_outcome",
+                mechanism_id=mechanism_id,
+                attribution_scope="legacy_record_move_ambiguous",
+                attribution_confidence=0.0,
+                before_ref=None,
+                after_ref=None,
+                missing_refs=("before_ref", "after_ref"),
+                occurrences=max(accepts, 1),
+                evidence_ref=evidence_ref,
+            )
+        )
+    return tuple(events)
+
+
 def nearest_neighbor_solution(instance: CvrpInstance) -> CvrpSolution:
     unvisited = set(instance.customer_ids)
     routes: list[tuple[int, ...]] = []
@@ -674,8 +769,6 @@ def _record_solver_algorithm_event(
     detail: str,
 ) -> None:
     events = audit.setdefault("solver_algorithm_events", [])
-    if len(events) >= 20:
-        return
     events.append(
         {
             "policy": str(
@@ -864,8 +957,6 @@ def _best_update_summary_template() -> dict[str, Any]:
     return {
         "schema": "scion.cvrp.best_update_summary.v1",
         "best_update_count": 0,
-        "trace_limit": _BEST_UPDATE_TRACE_LIMIT,
-        "trace_truncated": False,
         "first_elapsed_ms": None,
         "last_elapsed_ms": None,
         "first_iteration": None,
@@ -890,9 +981,6 @@ def _refresh_solver_algorithm_best_update_summary(
         audit["solver_algorithm_best_update_summary"] = summary
     count = _as_nonnegative_int(summary.get("best_update_count")) + 1
     summary["best_update_count"] = count
-    summary["trace_limit"] = _BEST_UPDATE_TRACE_LIMIT
-    summary["trace_truncated"] = bool(count > _BEST_UPDATE_TRACE_LIMIT)
-
     elapsed_ms = _as_nonnegative_int(event.get("elapsed_ms"))
     iteration = _as_nonnegative_int(event.get("iteration"))
     if summary.get("first_elapsed_ms") is None:

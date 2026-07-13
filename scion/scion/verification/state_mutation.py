@@ -17,8 +17,13 @@ from typing import TYPE_CHECKING, Literal, Optional
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
 from scion.runtime.runner import Runner, run_solver_with_surface
-from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_raw
+from scion.runtime.audit import (
+    format_runtime_audit_failure,
+    runtime_audit_failure_from_raw,
+    runtime_audit_issue_blocks_execution,
+)
 from scion.verification.feasibility import _registry_path, resolve_problem_path
+from scion.verification.candidate_canary import CandidateCanaryExecution
 from scion.verification.requirements import requires_adapter_for_runtime
 
 if TYPE_CHECKING:
@@ -38,50 +43,60 @@ def check_state_mutation(
     selected_surface: str | None = None,
     require_adapter_for_runtime: bool = False,
     runtime_time_limit_sec: int | float = 30,
+    canary_execution: CandidateCanaryExecution | None = None,
 ) -> CheckResult:
     """V5_solution_consistency: output must be internally consistent."""
     t0 = time.monotonic_ns()
 
-    canary = resolve_problem_path(problem_spec, problem_spec.canary_case_path)
+    canary = (
+        canary_execution.case_path
+        if canary_execution is not None
+        else resolve_problem_path(problem_spec, problem_spec.canary_case_path)
+    )
     if not canary:
         return _cr(True, "skipped: no canary_case_path configured", t0)
 
     if not os.path.isfile(canary):
         return _cr(True, f"skipped: canary file not found: {canary}", t0)
 
-    reg = _registry_path(candidate_workspace)
+    if canary_execution is not None:
+        if canary_execution.raw_output is None:
+            detail = canary_execution.error or "solver run failed or no output"
+            return _cr(False, detail, t0, diagnosis="ENV")
+        raw = dict(canary_execution.raw_output)
+    else:
+        reg = _registry_path(candidate_workspace)
+        try:
+            result = run_solver_with_surface(
+                runner,
+                workdir=candidate_workspace,
+                instance_path=canary,
+                seed=_CANARY_SEED,
+                time_limit_sec=runtime_time_limit_sec,
+                registry_path=reg,
+                selected_surface=selected_surface,
+            )
+        except Exception as exc:
+            return _cr(False, f"solver run failed: {exc}", t0, diagnosis="ENV")
 
-    try:
-        result = run_solver_with_surface(
-            runner,
-            workdir=candidate_workspace,
-            instance_path=canary,
-            seed=_CANARY_SEED,
-            time_limit_sec=runtime_time_limit_sec,
-            registry_path=reg,
-            selected_surface=selected_surface,
-        )
-    except Exception as exc:
-        return _cr(False, f"solver run failed: {exc}", t0, diagnosis="ENV")
+        if not result.success or result.output_path is None:
+            detail = "solver run failed or no output"
+            if result.stderr:
+                detail = f"solver run failed: {result.stderr.strip()}"
+            return _cr(False, detail, t0, diagnosis="ENV")
 
-    if not result.success or result.output_path is None:
-        detail = "solver run failed or no output"
-        if result.stderr:
-            detail = f"solver run failed: {result.stderr.strip()}"
-        return _cr(False, detail, t0, diagnosis="ENV")
-
-    try:
-        with open(result.output_path, encoding="utf-8") as f:
-            raw = json.load(f)
-    except Exception as exc:
-        return _cr(False, f"could not read output: {exc}", t0, diagnosis="ENV")
+        try:
+            with open(result.output_path, encoding="utf-8") as f:
+                raw = json.load(f)
+        except Exception as exc:
+            return _cr(False, f"could not read output: {exc}", t0, diagnosis="ENV")
 
     audit_failure = runtime_audit_failure_from_raw(
         raw,
         problem_spec=problem_spec,
         selected_surface=selected_surface,
     )
-    if audit_failure is not None:
+    if runtime_audit_issue_blocks_execution(audit_failure):
         return _cr(
             False,
             "solver runtime audit failed: " + format_runtime_audit_failure(audit_failure),
@@ -129,7 +144,7 @@ def _check_via_adapter(
 
     return _cr(
         False,
-        "adapter consistency failed: " + "; ".join(consistency.reasons[:3]),
+        "adapter consistency failed: " + "; ".join(consistency.reasons),
         t0,
         diagnosis="CANDIDATE",
     )
@@ -232,7 +247,7 @@ def _legacy_result_reasons(value: object) -> list[str]:
             or getattr(value, "issues", None)
             or ()
         )
-    return [str(reason) for reason in list(raw_reasons)[:3]]
+    return [str(reason) for reason in raw_reasons]
 
 
 def _legacy_result_diagnosis(

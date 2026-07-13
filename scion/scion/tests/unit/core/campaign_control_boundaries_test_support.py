@@ -20,15 +20,12 @@ from unittest.mock import MagicMock, patch as mock_patch
 import pytest
 
 from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig, SearchSpace
-from scion.config.protocol_config import FrozenConfig
 from scion.core.campaign import CampaignManager
-from scion.core.frozen_budget import FROZEN_BUDGET_EXHAUSTED, FrozenBudgetLedger
 from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, CheckResult,
     ContractResult, Decision, EvalStats, ExperimentStage, HypothesisProposal,
     HypothesisRecord, PatchProposal, ProtocolResult, StepRecord, VerificationResult,
 )
-from scion.core.termination import TerminationConfig
 from scion.problem.preflight import RuntimeDependencyPreflightError
 from scion.problem.spec import RuntimeDependencySpec
 from scion.proposal.mock_client import MockLLMClient
@@ -41,7 +38,7 @@ from scion.proposal.mock_client import MockLLMClient
 _VALID_CODE = (
     "class LocalSearch:\n"
     "    def execute(self, solution, rng):\n"
-    "        return solution\n"
+    "        return solution\n\n"
 )
 
 _VALID_HYPOTHESIS = {
@@ -100,7 +97,13 @@ def _make_protocol_result(
         stage=stage,
         stats=stats,
         gate_outcome=gate_outcome,
-        reason_codes=("TEST",),
+        reason_codes=(
+            {
+                ExperimentStage.SCREENING: "SCREENING_PASS",
+                ExperimentStage.VALIDATION: "VALIDATION_PASS",
+                ExperimentStage.FROZEN: "FROZEN_PASS",
+            }[stage],
+        ),
         exposed_summary=f"stage={stage.value}",
         raw_metrics_ref="/tmp/test.json",
     )
@@ -199,34 +202,7 @@ def _campaign(
         campaign_dir=campaign_dir,
         verification_gate=verification_gate or _AlwaysPassVerification(),
         experiment_protocol=experiment_protocol,
-        termination_config=TerminationConfig(max_experiments=100, stagnation_limit=50),
     )
-
-
-def _install_frozen_ready_branch(cm: CampaignManager, workspace: str) -> str:
-    branch = cm._branch_ctrl.create_branch(cm._champion)
-    branch.state = BranchState.READY_FROZEN
-    cm._branch_workspaces[branch.branch_id] = workspace
-    hyp = HypothesisProposal(
-        hypothesis_text="Bounded route-local frozen test.",
-        change_locus="local_search",
-        action="modify",
-        target_file="operators/local_search.py",
-    )
-    cm._branch_hypotheses[branch.branch_id] = hyp
-    cm._branch_current_hypothesis[branch.branch_id] = HypothesisRecord(
-        hypothesis_id=str(uuid.uuid4()),
-        branch_id=branch.branch_id,
-        change_locus=hyp.change_locus,
-        action=hyp.action,
-        status="active",
-        target_file=hyp.target_file,
-        hypothesis_text=hyp.hypothesis_text,
-        base_champion_version=cm._champion.version,
-    )
-    return branch.branch_id
-
-
 
 
 # ---------------------------------------------------------------------------

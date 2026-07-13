@@ -51,9 +51,6 @@ def _manifest_payload(base_workspace: Path, external_workspace: Path) -> dict:
             "action": "modify",
             "target_file": "policies/dispatch.py",
             "predicted_direction": "exploratory",
-            "mechanism_changes": [
-                {"id": "external_dispatch_policy", "change_type": "modify"}
-            ],
         },
         "source": {
             "type": "workspace",
@@ -182,9 +179,12 @@ def test_external_ingest_cli_records_lineage_event(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     manifest_path = tmp_path / "external_manifest.yaml"
+    manifest_payload = _manifest_payload(base_workspace, external_workspace)
+    hypothesis_text = "External source-grounded hypothesis. " * 20 + "complete-tail"
+    manifest_payload["hypothesis"]["hypothesis_text"] = hypothesis_text
     manifest_path.write_text(
         yaml.safe_dump(
-            _manifest_payload(base_workspace, external_workspace),
+            manifest_payload,
             sort_keys=False,
         ),
         encoding="utf-8",
@@ -220,6 +220,7 @@ def test_external_ingest_cli_records_lineage_event(tmp_path: Path) -> None:
     )
     assert len(events) == 1
     assert events[0]["event_kind"] == "external_proposal_ingest"
+    assert events[0]["hypothesis_text"] == hypothesis_text
     audit_payload = json.loads(events[0]["audit_payload_json"])
     assert audit_payload["provenance"]["run_id"] == "run-001"
     assert audit_payload["resolved_safe_data_roots"] == [

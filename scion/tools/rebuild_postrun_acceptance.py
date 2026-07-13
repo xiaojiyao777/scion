@@ -27,9 +27,6 @@ from postrun_artifact_inventory import (
 from scion.core.proposal_trajectory_artifacts import (
     write_proposal_trajectory_manifest,
 )  # noqa: E402
-from scion.core.research_efficiency_report import (
-    write_research_efficiency_report,
-)  # noqa: E402
 from scion.problems.postrun_inventory import (
     build_problem_inventory as build_inventory,
 )  # noqa: E402
@@ -38,7 +35,6 @@ SCHEMA_VERSION = "scion.postrun_acceptance_rebuild.v1"
 DEFAULT_FAMILIES = (
     "summaries",
     "failures",
-    "research_efficiency",
     "manifests",
     "analysis_brief",
     "inventory",
@@ -116,10 +112,6 @@ def rebuild_postrun_acceptance(
         )
         family_results["summaries"] = _skipped_family("summary", skip_reason)
         family_results["failures"] = _skipped_family("failures", skip_reason)
-        family_results["research_efficiency"] = _skipped_family(
-            "research_efficiency",
-            skip_reason,
-        )
         family_results["manifests"] = _skipped_family("manifests", skip_reason)
     else:
         family_results["summaries"] = _run_cli_report(
@@ -145,20 +137,6 @@ def rebuild_postrun_acceptance(
                 str(report_dir / "failures" / f"{stem}.failures.json"),
             ],
             outputs=[report_dir / "failures" / f"{stem}.failures.json"],
-        )
-        family_results["research_efficiency"] = _write_family(
-            "research_efficiency",
-            [
-                report_dir
-                / "research_efficiency"
-                / f"{stem}.research_efficiency.v1.json"
-            ],
-            lambda: write_research_efficiency_report(
-                campaign_dir,
-                output_path=report_dir
-                / "research_efficiency"
-                / f"{stem}.research_efficiency.v1.json",
-            ),
         )
         family_results["manifests"] = _write_family(
             "manifests",
@@ -401,16 +379,8 @@ def _resolve_report_stem(
         return _safe_stem(explicit)
     manifest = prepared_manifest if isinstance(prepared_manifest, dict) else {}
     problem = _problem_prefix(manifest.get("problem_family"))
-    execution = manifest.get("execution")
-    if isinstance(execution, dict):
-        governance = str(execution.get("measurement_governance") or "on").replace(
-            "-",
-            "_",
-        )
-        ablation = str(execution.get("proposal_context_ablation") or "full").replace(
-            "-", "_"
-        )
-        return _safe_stem(f"{problem}_{governance}_{ablation}")
+    if manifest:
+        return _safe_stem(f"{problem}_direct_v3")
     return _safe_stem(run_root.name)
 
 
@@ -421,12 +391,6 @@ def _resolve_observed_control_arm(
 ) -> str:
     if explicit:
         return explicit
-    manifest = prepared_manifest if isinstance(prepared_manifest, dict) else {}
-    execution = manifest.get("execution")
-    if isinstance(execution, dict):
-        arm = str(execution.get("measurement_governance") or "").replace("-", "_")
-        if arm in OBSERVED_CONTROL_ARMS:
-            return arm
     return "on"
 
 
@@ -560,8 +524,8 @@ def _family_result(
         "outputs_present": {str(path): path.exists() for path in outputs},
         "command": command or [],
         "returncode": returncode,
-        "stdout_tail": _tail(stdout),
-        "stderr_tail": _tail(stderr),
+        "stdout": stdout.strip(),
+        "stderr": stderr.strip(),
         "error": error,
     }
 
@@ -579,13 +543,6 @@ def _utc_now_iso() -> str:
 
 def _stable_json(value: Any) -> str:
     return json.dumps(value, indent=2, sort_keys=True) + "\n"
-
-
-def _tail(text: str, limit: int = 2000) -> str:
-    stripped = text.strip()
-    if len(stripped) <= limit:
-        return stripped
-    return stripped[-limit:]
 
 
 if __name__ == "__main__":

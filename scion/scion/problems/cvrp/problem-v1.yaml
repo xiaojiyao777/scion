@@ -75,11 +75,11 @@ runtime_failure_guidance:
       - solver_design
     discouraged_surfaces: []
     guidance: >-
-      Retry inside the active CVRP algorithm package. Choose the module by
+      Address the failure inside the active CVRP algorithm package. Choose the module by
       mechanism ownership: construction.py for initial solution changes,
       destroy_repair.py for ALNS destroy/repair, local_search.py for VNS move
       operators, acceptance.py for adaptive weights or simulated annealing, and
-      scheduler.py only for lifecycle/runtime-budget wiring.
+      scheduler.py only for lifecycle/solver-time-limit wiring.
 
 canary_case_path: "data/tiny_canary.json"
 
@@ -102,7 +102,7 @@ research_surfaces:
         rng, time_limit_sec, context). Algorithm internals live under
         policies/baseline_modules/ and own construction, ALNS scheduling,
         destroy/repair, adaptive weights, simulated annealing acceptance, VNS
-        local search, state, runtime-budget polling, and telemetry calls.
+        local search, state, solver-time-limit polling, and telemetry calls.
     targets:
       files:
         - "policies/baseline_algorithm.py"

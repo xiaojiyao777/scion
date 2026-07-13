@@ -62,8 +62,9 @@ def test_explore_pipeline_production_wiring_uses_step_history_base_overrides(
         followup_hypothesis,
         followup_record,
     )
+    cm._hyp_store.save(followup_record)
     cm._explore_step_pipeline.generate_code = (
-        lambda _branch, _hypothesis, prior_failure=None: followup_patch
+        lambda _branch, _hypothesis: followup_patch
     )
     cm._contract_gate.validate_hypothesis = lambda *_args, **_kwargs: ContractResult(
         passed=True,
@@ -82,7 +83,7 @@ def test_explore_pipeline_production_wiring_uses_step_history_base_overrides(
 
     result = cm._explore_step_pipeline.run(branch)
 
-    assert result.reason == "patch contract failed"
+    assert result.reason == "patch contract rejected"
     assert cm._step_history[-1].failure_stage == "patch_contract"
     assert captured_overrides
     assert captured_overrides[0][helper_path] == helper_source
@@ -100,7 +101,7 @@ def test_campaign_run_preflights_missing_runtime_dependency_before_proposal(
     )
 
     with pytest.raises(RuntimeDependencyPreflightError) as excinfo:
-        cm.run(max_rounds=1)
+        cm.run(requested_rounds=1)
 
     assert missing in str(excinfo.value)
     assert cm._round_num == 0
@@ -123,7 +124,7 @@ def test_campaign_run_preflights_missing_verification_pytest_before_proposal(
     )
 
     with pytest.raises(RuntimeDependencyPreflightError) as excinfo:
-        cm.run(max_rounds=1)
+        cm.run(requested_rounds=1)
 
     assert "pytest" in str(excinfo.value)
     assert "verification runner" in str(excinfo.value)
@@ -131,132 +132,6 @@ def test_campaign_run_preflights_missing_verification_pytest_before_proposal(
     assert cm._step_history == []
 
 
-class TestFixPatchContractGate:
-    def test_fix_patch_must_pass_contract_gate(self, tmp_path):
-        """fix_code() generated patch must be validated by ContractGate before apply."""
-        from scion.core.models import PatchProposal
-        fix_patch_obj = PatchProposal(
-            file_path="operators/local_search.py",
-            action="modify",
-            code_content="class LocalSearch:\n    def execute(self, solution, rng):\n        return solution\n",
-        )
-        cm = _campaign(
-            tmp_path,
-            verification_gate=_AlwaysFailVerificationLight(),
-        )
-        # Mock fix_code to return a valid patch (bypass LLM)
-        cm._creative.fix_code = MagicMock(return_value=fix_patch_obj)
-
-        validate_patch_calls: List[tuple[Any, Any]] = []
-        original_validate = cm._contract_gate.validate_patch
-
-        def spy_validate_patch(patch, *args, **kwargs):
-            validate_patch_calls.append((patch, kwargs.get("approved_hypothesis")))
-            return original_validate(patch, *args, **kwargs)
-
-        cm._contract_gate.validate_patch = spy_validate_patch
-        cm.run_one_step()
-        # validate_patch called at least twice: once for original patch, once for fix patch
-        assert len(validate_patch_calls) >= 2, (
-            "fix patch should also be validated by ContractGate, "
-            f"but validate_patch was only called {len(validate_patch_calls)} times"
-        )
-        assert all(
-            approved_hypothesis is not None
-            for _, approved_hypothesis in validate_patch_calls[:2]
-        )
-
-    def test_fix_patch_contract_fail_does_not_apply(self, tmp_path):
-        """If fix patch fails ContractGate, it must NOT be applied to the workspace."""
-        from scion.core.models import PatchProposal
-        fix_patch_obj = PatchProposal(
-            file_path="operators/local_search.py",
-            action="modify",
-            code_content="class LocalSearch:\n    def execute(self, solution, rng):\n        return solution\n",
-        )
-        cm = _campaign(
-            tmp_path,
-            verification_gate=_AlwaysFailVerificationLight(),
-        )
-        cm._creative.fix_code = MagicMock(return_value=fix_patch_obj)
-
-        apply_calls: List[Any] = []
-        original_apply = cm._materializer.apply_patch
-
-        def spy_apply_patch(workspace, patch):
-            apply_calls.append(patch)
-            return original_apply(workspace, patch)
-
-        cm._materializer.apply_patch = spy_apply_patch
-
-        # Make validate_patch fail for the fix patch (second call)
-        call_count = [0]
-        original_validate = cm._contract_gate.validate_patch
-
-        def fail_on_fix_validate(patch, *args, **kwargs):
-            call_count[0] += 1
-            if call_count[0] >= 2:
-                return ContractResult(passed=False, checks=(), failure_reason="fix rejected")
-            return original_validate(patch, *args, **kwargs)
-
-        cm._contract_gate.validate_patch = fail_on_fix_validate
-        cm.run_one_step()
-        # apply_patch should only have been called ONCE (for the original patch),
-        # not a second time for the rejected fix patch
-        assert len(apply_calls) == 1, (
-            f"fix patch must not be applied when ContractGate rejects it, "
-            f"but apply_patch was called {len(apply_calls)} times"
-        )
-
-
-class TestPendingHypothesisContractGate:
-    def test_pending_hypothesis_reruns_contract_gate(self, tmp_path):
-        """A pending (code-retry) hypothesis must re-run validate_hypothesis() before Round 2."""
-        # Step 1: hypothesis passes contract, code gen fails → pending
-        # Step 2: pending hypothesis is retried → validate_hypothesis must be called again
-        code_fail_patch = None  # simulate code gen failure by returning no patch
-
-        call_count = [0]
-        validate_hyp_calls = [0]
-        original_validate_hyp = None
-
-        llm = MockLLMClient(
-            hypothesis_response=_VALID_HYPOTHESIS,
-            patch_response=_VALID_PATCH,
-        )
-        cm = _campaign(tmp_path, llm_client=llm)
-        original_validate_hyp = cm._contract_gate.validate_hypothesis
-
-        def spy_validate_hypothesis(hyp, active, blacklist, rejected_hypotheses=None, current_champion_version=0):
-            validate_hyp_calls[0] += 1
-            return original_validate_hyp(hyp, active, blacklist, rejected_hypotheses=rejected_hypotheses,
-                                         current_champion_version=current_champion_version)
-
-        cm._contract_gate.validate_hypothesis = spy_validate_hypothesis
-
-        # Force code gen to fail on first step, succeed on second
-        gen_code_calls = [0]
-        original_generate_code = cm._creative.generate_code
-
-        def fail_first_code_gen(ctx):
-            gen_code_calls[0] += 1
-            if gen_code_calls[0] == 1:
-                from scion.proposal.engine import ProposalValidationError
-                raise ProposalValidationError("forced code gen failure")
-            return original_generate_code(ctx)
-
-        cm._creative.generate_code = fail_first_code_gen
-
-        # Step 1: hypothesis contract passes, code gen fails → pending
-        cm.run_one_step()
-        calls_after_step1 = validate_hyp_calls[0]
-        assert calls_after_step1 >= 1, "validate_hypothesis must be called on step 1"
-
-        # Step 2: pending retry — validate_hypothesis MUST be called again
-        cm.run_one_step()
-        assert validate_hyp_calls[0] > calls_after_step1, (
-            "validate_hypothesis must be called again for pending hypothesis retry"
-        )
 
 
 class TestLastCleanCodeHash:

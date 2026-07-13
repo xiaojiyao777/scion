@@ -3,6 +3,12 @@
 *创建日期: 2026-04-10*
 *最后更新: 2026-04-10*
 
+> 维护说明：本文记录 v0.2/v0.3 warehouse 历史基线流程，只用于复现旧
+> campaign。v0.4 direct-v3 正式实验必须从当前 exact clean commit 使用
+> 两个 direct launcher 重新准备；不要对当前工作树执行下文的历史
+> `git checkout baseline-v1 -- ...` 命令。当前流程见
+> [`experiment-runbook.zh.md`](experiment-runbook.zh.md)。
+
 ---
 
 ## 1. 核心原则

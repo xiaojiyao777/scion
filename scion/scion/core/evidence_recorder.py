@@ -32,10 +32,6 @@ from scion.core.evidence_recording.failure_summary import (
     _secondary_failure_observations,
 )
 from scion.core.evidence_recording.recorder import EvidenceRecorder
-from scion.core.evidence_recording.telemetry_summary import (
-    _telemetry_failed_experiment_category_counts,
-    _telemetry_failed_experiment_details,
-)
 
 __all__ = [
     "EvidenceRecorder",
@@ -58,6 +54,4 @@ __all__ = [
     "_secondary_failure_observations",
     "_serialize_verification_checks",
     "_stage_value",
-    "_telemetry_failed_experiment_category_counts",
-    "_telemetry_failed_experiment_details",
 ]

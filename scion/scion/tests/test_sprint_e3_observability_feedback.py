@@ -61,9 +61,6 @@ class TestT06ObservabilityFields:
                 hypothesis_text="destroy rebuild approach",
             ),
         ]
-        mgr._budget.used = 5
-        mgr._budget.total = 20
-
         mgr._write_campaign_summary()
 
         summary_path = tmp_path / "campaign_summary.json"
@@ -75,8 +72,6 @@ class TestT06ObservabilityFields:
         assert "verification_failure_breakdown" in summary, "Missing verification_failure_breakdown"
         assert "action_locus_coverage" in summary, "Missing action_locus_coverage"
         assert "family_coverage" in summary, "Missing family_coverage"
-        assert "budget_utilization" in summary, "Missing budget_utilization"
-        assert "stagnation_signals" in summary, "Missing stagnation_signals"
         assert "diagnostics" in summary, "Missing diagnostics"
 
         # Cache stats correctness
@@ -84,9 +79,6 @@ class TestT06ObservabilityFields:
         assert cs["total_tokens"] == 2200
         assert cs["cache_read_tokens"] == 900
         assert cs["cache_hit_rate"] == pytest.approx(900 / 2200, abs=1e-4)
-
-        # Budget utilization
-        assert summary["budget_utilization"] == pytest.approx(5 / 20, abs=1e-4)
 
         # Verification failure breakdown has entry
         assert "V8_nondeterminism" in summary["verification_failure_breakdown"]
@@ -111,82 +103,3 @@ class TestT06ObservabilityFields:
         assert not step["code_archive_ref"].startswith("/")
         assert "round_1_abc12345" in step["code_archive_ref"]
         assert step["verification_detail"] is None  # no verification_detail was set
-
-
-class TestT09RicherCaseFeedback:
-    """T09: _render_case_feedback must produce richer, directional output."""
-
-    def _make_case_feedback(
-        self,
-        case_id: str = "scr_l01",
-        dominant_result: str = "win",
-        dominant_decisive_objective: str = "business_aggregation",
-        median_delta_subcategory_splits: Optional[float] = -5.0,
-        median_delta_total_cost: Optional[float] = 1000.0,
-        case_features: Optional[Dict] = None,
-    ) -> CaseAggregateFeedback:
-        median_deltas = {}
-        if median_delta_subcategory_splits is not None:
-            median_deltas["subcategory_splits"] = median_delta_subcategory_splits
-        if median_delta_total_cost is not None:
-            median_deltas["total_cost"] = median_delta_total_cost
-        return CaseAggregateFeedback(
-            case_id=case_id,
-            n_pairs=6,
-            wins=4,
-            losses=2,
-            ties=0,
-            win_rate=0.67,
-            dominant_result=dominant_result,
-            decisive_metric=dominant_decisive_objective,
-            median_deltas=median_deltas,
-            seed_consistency=0.67,
-            case_features=case_features or {"size_bucket": "large", "n_orders": 150},
-            # Deprecated aliases
-            dominant_decisive_objective=dominant_decisive_objective,
-            median_delta_total_cost=median_delta_total_cost,
-            median_delta_subcategory_splits=median_delta_subcategory_splits,
-        )
-
-    def test_feedback_includes_decisive_objective(self):
-        from scion.proposal.context_manager import _render_case_feedback
-        cf = self._make_case_feedback()
-        result = _render_case_feedback(cf)
-        assert "Decisive:" in result
-
-    def test_feedback_shows_directional_change_win(self):
-        from scion.proposal.context_manager import _render_case_feedback
-        cf = self._make_case_feedback(
-            dominant_result="win",
-            dominant_decisive_objective="subcategory_splits",
-            median_delta_subcategory_splits=22.0,
-        )
-        result = _render_case_feedback(cf)
-        assert "↓" in result or "22" in result
-
-    def test_feedback_shows_directional_change_loss(self):
-        from scion.proposal.context_manager import _render_case_feedback
-        # splits_delta negative → candidate worse (more splits) → up arrow
-        cf = self._make_case_feedback(
-            dominant_result="loss",
-            dominant_decisive_objective="business_aggregation",
-            median_delta_subcategory_splits=-2.0,  # negative = candidate worse
-        )
-        result = _render_case_feedback(cf)
-        # Should show ↑ (candidate increased splits)
-        assert "↑" in result or "2.0" in result
-
-    def test_feedback_shows_champion_baseline(self):
-        from scion.proposal.context_manager import _render_case_feedback
-        cf = self._make_case_feedback(
-            case_features={"size_bucket": "large", "n_orders": 150, "champion_splits": 40}
-        )
-        result = _render_case_feedback(cf)
-        assert "Champion baseline" in result or "40" in result
-
-    def test_feedback_shows_result_label(self):
-        from scion.proposal.context_manager import _render_case_feedback
-        for result_str in ["win", "loss", "mixed"]:
-            cf = self._make_case_feedback(dominant_result=result_str)
-            rendered = _render_case_feedback(cf)
-            assert result_str.upper() in rendered

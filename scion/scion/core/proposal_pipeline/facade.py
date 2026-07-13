@@ -5,16 +5,6 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, MutableMapping
 
-from scion.core.branch_hygiene import (
-    branch_hygiene_context,
-    branch_hygiene_guidance,
-    branch_workspace_for_proposal,
-)
-from scion.core.branch_repair_policy import (
-    BRANCH_LIFECYCLE_POLICY_VIOLATION,
-    REPAIR_FIRST_POLICY_VIOLATION,
-    validate_repair_focused_hypothesis,
-)
 from scion.core.models import (
     Branch,
     ChampionState,
@@ -23,125 +13,43 @@ from scion.core.models import (
     HypothesisRecord,
     PatchProposal,
     StepRecord,
-    VerificationResult,
 )
-from scion.core.explore_step.branch_lesson_usage import project_branch_lesson_records
-from scion.core.research_process_guidance_audit import (
-    extract_research_process_guidance_audit,
+from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
+from scion.proposal.engine import (
+    PromptCallReceipt,
+    PromptTurnSnapshot,
+    ProposalValidationError,
+    build_prompt_turn_snapshot,
+    prompt_call_receipt_from_error,
 )
-from scion.core.status_reporter import is_provider_balance_exhausted_detail
-from scion.proposal.agentic_session import AgenticProposalOutput
-from scion.proposal.engine import ProposalValidationError
-from scion.proposal.engine.hypothesis_context_profiles import (
-    filter_hypothesis_context_for_prompt,
-)
-from scion.proposal.context.branch_followup import (
-    validate_weak_positive_followup_hypothesis,
-)
+from scion.proposal.context_owner_maps import proposal_context_snapshot
+from scion.proposal.context_snapshot import ProposalContextSnapshot
 from scion.proposal.llm_client import (
+    LLMAuthError,
     LLMBalanceError,
     LLMFormatError,
+    LLMProviderError,
     LLMRateLimitError,
-    LLMRetryExhaustedError,
     LLMTimeoutError,
-    LLMTransientProviderError,
-    is_llm_transient_api_error,
+    LLMTransportError,
 )
 
-from .agentic_lifecycle import AgenticLifecycleMixin
-from .agentic_refs import AgenticRefsMixin
-from .agentic_requests import AgenticRequestMixin
-from .agentic_validation import AgenticValidationMixin
-from .boundaries import (
-    BoundaryValidationMixin,
-    _active_problem_boundary_surfaces_for_runtime,
-)
+from .direct_attempt_lifecycle import DirectAttemptLifecycle
 from .protocols import (
-    AgenticProposalSessionLike,
     BranchControllerLike,
-    CircuitBreakerLike,
     ClassifierLike,
     CreativeLayerLike,
     HypothesisStoreLike,
     ProblemRuntimeLike,
-)
-from .problem_quality import (
-    validate_problem_hypothesis_quality,
-    validate_problem_patch_quality,
 )
 from .records import ProposalRecordMixin
 
 logger = logging.getLogger(__name__)
 
 
-_PROPOSAL_CONTEXT_SESSION_REF_FIELDS = (
-    "branch_lesson_records",
-    "branch_lesson_usage_requirement",
-    "cross_branch_research_audit_records",
-    "cross_branch_research_status",
-)
-
-
-def _compact_proposal_context_session_ref(
-    context: Mapping[str, Any],
-) -> dict[str, Any]:
-    """Return bounded proposal-visible context metadata for durable refs."""
-
-    ref: dict[str, Any] = {"schema_version": "proposal-context-ref.v1"}
-    records = context.get("branch_lesson_records")
-    compact_records = project_branch_lesson_records(records)
-    if compact_records:
-        ref["branch_lesson_records"] = compact_records
-    requirement = context.get("branch_lesson_usage_requirement")
-    if isinstance(requirement, Mapping):
-        ref["branch_lesson_usage_requirement"] = dict(requirement)
-    audit_records = context.get("cross_branch_research_audit_records")
-    if isinstance(audit_records, (list, tuple)):
-        compact_audit_records = [
-            dict(record)
-            for record in audit_records[:8]
-            if isinstance(record, Mapping)
-        ]
-        if compact_audit_records:
-            ref["cross_branch_research_audit_records"] = compact_audit_records
-    if (
-        ref.get("branch_lesson_records")
-        or ref.get("branch_lesson_usage_requirement")
-        or ref.get("cross_branch_research_audit_records")
-    ):
-        ref["cross_branch_research_status"] = "available"
-    return ref if len(ref) > 1 else {}
-
-
-def _merge_proposal_context_session_ref(
-    existing: Mapping[str, Any] | None,
-    addition: Mapping[str, Any],
-) -> dict[str, Any]:
-    merged = dict(existing or {})
-    if not addition:
-        return merged
-    if not merged.get("schema_version"):
-        merged["schema_version"] = addition.get(
-            "schema_version",
-            "proposal-context-ref.v1",
-        )
-    for key in _PROPOSAL_CONTEXT_SESSION_REF_FIELDS:
-        value = addition.get(key)
-        if value not in (None, "", [], {}, ()):
-            merged[key] = value
-    return merged
-
-
 @dataclass
-class ProposalPipeline(
-    AgenticLifecycleMixin,
-    AgenticRefsMixin,
-    AgenticRequestMixin,
-    AgenticValidationMixin,
-    BoundaryValidationMixin,
-    ProposalRecordMixin,
-):
-    """Own Round 1/Round 2/fix LLM proposal interactions.
+class ProposalPipeline(ProposalRecordMixin):
+    """Own the direct-v3 hypothesis and code provider interactions.
 
     The service may call the injected failure handler for proposal failures, but
     it does not mutate branch promotion/evaluation state. CampaignManager keeps
@@ -158,59 +66,149 @@ class ProposalPipeline(
     champion_lock: Any
     get_champion: Callable[[], ChampionState]
     step_history: list[StepRecord]
-    failure_streak: MutableMapping[str, int]
-    consume_forced_locus: Callable[[], str | None]
-    search_memory: Any
-    get_saturation_analyzer: Callable[[], Any]
-    get_baseline_metrics: Callable[[], dict[str, float] | None]
-    get_latest_weight_opt_result: Callable[[], Any]
-    research_log: Any
     handle_failure: Callable[[Branch, FailureEvent], None]
-    circuit_breaker: CircuitBreakerLike
     mark_balance_exhausted: Callable[[], None]
-    launch_research_focus_provider: Callable[[], Mapping[str, Any]] = lambda: {}
     hypothesis_failure_details: MutableMapping[str, str] = field(default_factory=dict)
-    use_agentic_proposal: bool = False
-    agentic_session: AgenticProposalSessionLike | None = None
-    agentic_artifact_dir: str | None = None
-    agentic_session_timeout_sec: float | None = None
-    agentic_tool_max_steps: int | None = None
-    agentic_tool_max_calls: int | None = None
-    agentic_code_tool_max_calls: int | None = None
-    agentic_observation_max_chars: int | None = None
     lineage_registry: Any | None = None
-    split_manifest: Any | None = None
-    seed_ledger: Any | None = None
     campaign_id: str = ""
     problem_id: str | None = None
     problem_spec_hash: str | None = None
     split_manifest_hash: str | None = None
     seed_ledger_hash: str | None = None
-    production_campaign: bool = False
-    require_agentic_problem_anchors: bool = False
     persistent_forced_locus: str | None = None
     forced_surface_action: str | None = None
     forced_surface_target_file: str | None = None
     forced_surface_diagnostic: bool = False
-    agentic_outputs: MutableMapping[str, AgenticProposalOutput] = field(
-        default_factory=dict
-    )
-    agentic_session_refs: MutableMapping[str, Mapping[str, Any]] = field(
-        default_factory=dict
-    )
-    agentic_recovery_reports: MutableMapping[str, Mapping[str, Any]] = field(
-        default_factory=dict
-    )
-    agentic_quality_feedback: MutableMapping[str, list[Mapping[str, Any]]] = field(
-        default_factory=dict
-    )
-    agentic_code_quality_feedback: MutableMapping[
-        str, list[Mapping[str, Any]]
-    ] = field(default_factory=dict)
+    governance_envelopes: MutableMapping[str, Any] = field(default_factory=dict)
+    _direct_attempts: DirectAttemptLifecycle = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        if self.production_campaign and self._agentic_enabled:
-            self.require_agentic_problem_anchors = True
+        self._direct_attempts = DirectAttemptLifecycle(self)
+
+    @property
+    def prompt_call_receipts(self) -> MutableMapping[
+        str,
+        MutableMapping[str, PromptCallReceipt],
+    ]:
+        return self._direct_attempts.state.prompt_call_receipts
+
+    @property
+    def proposal_attempt_ids(self) -> MutableMapping[str, str]:
+        return self._direct_attempts.state.attempt_ids
+
+    @property
+    def proposal_attempt_refs(self) -> MutableMapping[str, Mapping[str, Any]]:
+        return self._direct_attempts.state.attempt_refs
+
+    @property
+    def approved_hypothesis_bindings(self) -> MutableMapping[
+        str,
+        Mapping[str, str],
+    ]:
+        return self._direct_attempts.state.approved_hypothesis_bindings
+
+    def pop_proposal_attempt_ref(self, branch_id: str) -> Mapping[str, Any] | None:
+        """Transfer the current direct attempt reference exactly once."""
+
+        return self._direct_attempts.state.attempt_refs.pop(branch_id, None)
+
+
+    def _generate_direct_hypothesis(
+        self,
+        branch_id: str,
+        context_snapshot: ProposalContextSnapshot,
+        prompt_snapshot: PromptTurnSnapshot,
+        attempt_audit: Mapping[str, Any],
+    ) -> HypothesisProposal:
+        context = context_snapshot.inputs.provider_context(
+            include_renderer_inputs=True
+        )
+        self._direct_attempts.clear_receipt(branch_id, "hypothesis")
+        method = getattr(
+            self.creative,
+            "generate_direct_hypothesis_with_receipt",
+            None,
+        )
+        if not callable(method):
+            raise TypeError("direct hypothesis requires a receipt-aware API")
+        hypothesis, receipt = method(
+            context,
+            prompt_snapshot,
+            attempt_audit=attempt_audit,
+        )
+        self._direct_attempts.record_receipt(branch_id, "hypothesis", receipt)
+        return hypothesis
+
+    def _generate_direct_code(
+        self,
+        branch_id: str,
+        context_snapshot: ProposalContextSnapshot,
+        prompt_snapshot: PromptTurnSnapshot,
+        attempt_audit: Mapping[str, Any],
+    ) -> PatchProposal:
+        context = context_snapshot.inputs.provider_context(
+            include_renderer_inputs=True
+        )
+        self._direct_attempts.clear_receipt(branch_id, "code")
+        method = getattr(
+            self.creative,
+            "generate_direct_code_with_receipt",
+            None,
+        )
+        if not callable(method):
+            raise TypeError("direct code requires a receipt-aware API")
+        patch, receipt = method(
+            context,
+            prompt_snapshot,
+            attempt_audit=attempt_audit,
+        )
+        self._direct_attempts.record_receipt(branch_id, "code", receipt)
+        return patch
+
+    def _complete_direct_hypothesis(
+        self,
+        *,
+        branch: Branch,
+        champion: ChampionState,
+        hypothesis: HypothesisProposal,
+        post_provider_stage: MutableMapping[str, str],
+    ) -> tuple[HypothesisProposal | None, HypothesisRecord | None]:
+        """Durably identify, bind, and publish one provider hypothesis."""
+
+        bid = branch.branch_id
+        hypothesis_record = self._hypothesis_record(
+            branch,
+            hypothesis,
+            champion=champion,
+        )
+        hypothesis_digest = self._direct_attempts.hypothesis_digest(hypothesis)
+        post_provider_stage["value"] = "hypothesis_store_write"
+        self.hypothesis_store.save(hypothesis_record)
+        post_provider_stage["value"] = "post_store_binding"
+        self._direct_attempts.bind_approved_hypothesis(
+            bid,
+            hypothesis_id=hypothesis_record.hypothesis_id,
+            hypothesis_digest=hypothesis_digest,
+        )
+        post_provider_stage["value"] = "hypothesis_transition_commit"
+        if not self._direct_attempts.commit(
+            branch=branch,
+            champion=champion,
+            phase="hypothesis",
+            status="generated",
+            transition_reason="generated",
+            failure_lane=None,
+            hypothesis=hypothesis,
+            hypothesis_id=hypothesis_record.hypothesis_id,
+            bound_hypothesis_digest=hypothesis_digest,
+        ):
+            self._direct_attempts.discard_approved_binding(bid)
+            self.hypothesis_store.mark_status(
+                hypothesis_record.hypothesis_id,
+                "rejected",
+            )
+            return None, None
+        return hypothesis, hypothesis_record
 
     def generate_hypothesis(
         self,
@@ -218,80 +216,84 @@ class ProposalPipeline(
     ) -> tuple[HypothesisProposal | None, HypothesisRecord | None]:
         bid = branch.branch_id
         self.hypothesis_failure_details.pop(bid, None)
-        siblings = [
-            b for b in self.branch_controller.get_active_branches()
-            if b.branch_id != bid
-        ]
-        branch_workspace = branch_workspace_for_proposal(
-            branch,
-            self.branch_workspaces,
-        )
+        branch_workspace = self.branch_workspaces.get(bid)
         champ_snapshot = self._champion_snapshot()
-        transient_forced_locus = self.consume_forced_locus()
-        forced_locus = self.persistent_forced_locus or transient_forced_locus
+        forced_locus = self.persistent_forced_locus
         forced_action = self.forced_surface_action if forced_locus else None
         forced_target_file = (
             self.forced_surface_target_file if forced_locus else None
         )
         forced_diagnostic = self.forced_surface_diagnostic if forced_locus else False
-        if (
-            forced_locus
-            and self.forced_surface_diagnostic
-            and self.persistent_forced_locus is None
-        ):
-            self.forced_surface_action = None
-            self.forced_surface_target_file = None
-            self.forced_surface_diagnostic = False
         context = self.problem_runtime.build_hypothesis_context(
             branch=branch,
             champion=champ_snapshot,
-            active_hypotheses=self.hypothesis_store.get_by_status("active"),
-            blacklist=self.hypothesis_store.get_by_status("blacklisted"),
-            rejected_hypotheses=self.hypothesis_store.get_by_status("rejected"),
-            sibling_branches=siblings,
             step_history=self.step_history,
             branch_workspace=branch_workspace,
-            failure_streak=dict(self.failure_streak),
             forced_locus=forced_locus,
             forced_action=forced_action,
             forced_target_file=forced_target_file,
             forced_surface_diagnostic=forced_diagnostic,
-            search_memory=self.search_memory,
-            saturation_signals=self._compute_saturation_signals(),
-            weight_opt_result=self.get_latest_weight_opt_result(),
-            research_log=self.research_log,
         )
-        context["branch_hygiene"] = branch_hygiene_context(branch)
-        context["branch_hygiene_guidance"] = branch_hygiene_guidance(branch)
-        guidance_audit = extract_research_process_guidance_audit(
-            context.get("branch_followup_policy_payload")
-        )
-        if guidance_audit:
-            self.agentic_session_refs[bid] = {
-                "schema_version": "proposal-context-ref.v1",
-                "research_process_guidance_audit": guidance_audit,
-            }
-        self._attach_agentic_quality_feedback_context(
-            context,
-            bid,
-            phase="hypothesis",
-        )
-        context_session_ref = _compact_proposal_context_session_ref(context)
-        prompt_context = filter_hypothesis_context_for_prompt(context)
-        if context_session_ref:
-            self.agentic_session_refs[bid] = _merge_proposal_context_session_ref(
-                self.agentic_session_refs.get(bid),
-                context_session_ref,
+        try:
+            authoritative_context = proposal_context_snapshot(
+                "hypothesis",
+                context,
             )
-        if self._agentic_enabled:
-            return self._generate_agentic_hypothesis(
+        except (TypeError, ValueError) as exc:
+            detail = f"proposal_context_validation_failed:{type(exc).__name__}:{exc}"
+            self._direct_attempts.fail_integrity(
+                branch,
+                detail,
+                clear_approved_binding=True,
+            )
+            return None, None
+        self.governance_envelopes[bid] = authoritative_context.governance_envelope
+        if not self._direct_attempts.require_receipt_api(branch, "hypothesis"):
+            return None, None
+        prompt_snapshot = build_prompt_turn_snapshot(
+            "hypothesis",
+            authoritative_context,
+        )
+        attempt_audit = self._direct_attempts.start_provider_call(
+            branch=branch,
+            champion=champ_snapshot,
+            phase="hypothesis",
+            snapshot=prompt_snapshot,
+        )
+        if attempt_audit is None:
+            return None, None
+        try:
+            hypothesis = self._generate_direct_hypothesis(
+                bid,
+                authoritative_context,
+                prompt_snapshot,
+                attempt_audit,
+            )
+        except KeyboardInterrupt as exc:
+            self._direct_attempts.interrupt_provider_call(
                 branch=branch,
                 champion=champ_snapshot,
-                context=prompt_context,
+                phase="hypothesis",
+                error=exc,
+                hypothesis=None,
             )
-        try:
-            hypothesis = self.creative.generate_hypothesis(prompt_context)
+            raise
         except LLMBalanceError as exc:
+            receipt = prompt_call_receipt_from_error(exc)
+            self._direct_attempts.record_receipt(
+                bid,
+                "hypothesis",
+                receipt,
+            )
+            committed = self._direct_attempts.commit(
+                branch=branch,
+                champion=champ_snapshot,
+                phase="hypothesis",
+                status="failed",
+                transition_reason=self._direct_attempts.failure_reason(exc, receipt),
+                failure_lane="infra",
+                hypothesis=None,
+            )
             logger.critical(
                 "Branch %s: API balance exhausted - stopping campaign: %s",
                 bid,
@@ -299,181 +301,223 @@ class ProposalPipeline(
             )
             self.hypothesis_failure_details[bid] = str(exc)
             self.mark_balance_exhausted()
-            self.circuit_breaker.record_failure(str(exc))
+            if not committed:
+                return None, None
+            self._direct_attempts.record_execution_outcome(
+                branch,
+                phase="hypothesis",
+                outcome=ExecutionOutcome.RESOURCE_EXHAUSTED,
+                reason_code="PROVIDER_BALANCE_EXHAUSTED",
+                detail=str(exc),
+                error_type=type(exc).__name__,
+                error_category=(receipt.error_category if receipt else None),
+            )
             return None, None
         except (
-            LLMRetryExhaustedError,
+            LLMAuthError,
             LLMFormatError,
+            LLMProviderError,
             LLMTimeoutError,
-            LLMTransientProviderError,
+            LLMTransportError,
             LLMRateLimitError,
             ProposalValidationError,
         ) as exc:
-            if is_provider_balance_exhausted_detail(exc):
-                logger.critical(
-                    "Branch %s: API balance exhausted - stopping campaign: %s",
-                    bid,
-                    exc,
-                )
-                self.hypothesis_failure_details[bid] = str(exc)
-                self.mark_balance_exhausted()
-                self.circuit_breaker.record_failure(str(exc))
+            receipt = prompt_call_receipt_from_error(exc)
+            self._direct_attempts.record_receipt(
+                bid,
+                "hypothesis",
+                receipt,
+            )
+            invalid_response = isinstance(
+                exc,
+                (LLMFormatError, ProposalValidationError),
+            )
+            category = "proposal" if invalid_response else "infra"
+            committed = self._direct_attempts.commit(
+                branch=branch,
+                champion=champ_snapshot,
+                phase="hypothesis",
+                status="failed",
+                transition_reason=self._direct_attempts.failure_reason(exc, receipt),
+                failure_lane=(
+                    "infra" if category == "infra" else "invalid_response"
+                ),
+                hypothesis=None,
+            )
+            if not committed:
                 return None, None
             logger.warning("Branch %s: hypothesis LLM error: %s", bid, exc)
             self.hypothesis_failure_details[bid] = str(exc)
-            category = "infra" if is_llm_transient_api_error(exc) else "proposal"
-            self.handle_failure(
+            self._direct_attempts.record_execution_outcome(
                 branch,
-                FailureEvent(category=category, detail=str(exc)),
+                phase="hypothesis",
+                outcome=(
+                    ExecutionOutcome.NOT_EVALUATED
+                    if invalid_response
+                    else ExecutionOutcome.BLOCKED_INFRA
+                ),
+                reason_code=(
+                    "PROPOSAL_RESPONSE_INVALID"
+                    if invalid_response
+                    else "PROVIDER_CALL_BLOCKED_INFRA"
+                ),
+                detail=str(exc),
+                error_type=type(exc).__name__,
+                error_category=(receipt.error_category if receipt else None),
             )
-            if category != "infra":
-                self.circuit_breaker.record_failure(str(exc))
-            return None, None
-
-        forced_detail = self._forced_hypothesis_violation(
-            hypothesis,
-            forced_surface=forced_locus,
-            forced_action=forced_action,
-            forced_target_file=forced_target_file,
-        )
-        if forced_detail is not None:
-            self.hypothesis_failure_details[bid] = forced_detail
-            self.handle_failure(branch, FailureEvent(category="proposal", detail=forced_detail))
-            self.circuit_breaker.record_failure(forced_detail)
-            return None, None
-        boundary_detail = self._active_problem_boundary_violation(
-            hypothesis,
-            active_problem_boundary_surfaces=(
-                ()
-                if forced_locus
-                else _active_problem_boundary_surfaces_for_runtime(
-                    self.problem_runtime,
-                )
-            ),
-            forced_surface=forced_locus,
-        )
-        if boundary_detail is not None:
-            self.hypothesis_failure_details[bid] = boundary_detail
-            self.handle_failure(
-                branch,
-                FailureEvent(category="proposal", detail=boundary_detail),
-            )
-            self.circuit_breaker.record_failure(boundary_detail)
-            return None, None
-        repair_check = validate_repair_focused_hypothesis(
-            branch,
-            hypothesis,
-            step_history=self.step_history,
-        )
-        if not repair_check.allowed:
-            self.hypothesis_failure_details[bid] = repair_check.detail
-            if repair_check.violation_code in {
-                BRANCH_LIFECYCLE_POLICY_VIOLATION,
-                REPAIR_FIRST_POLICY_VIOLATION,
-            }:
-                logger.info(
-                    "Branch %s: repair policy blocked proposal: %s",
-                    bid,
-                    repair_check.detail,
-                )
-            else:
+            if not invalid_response:
                 self.handle_failure(
                     branch,
-                    FailureEvent(category="proposal", detail=repair_check.detail),
+                    FailureEvent(category=category, detail=str(exc)),
                 )
-                self.circuit_breaker.record_failure(repair_check.detail)
             return None, None
+        except Exception as exc:
+            if self._direct_attempts.handle_unexpected_receipt_exception(
+                branch=branch,
+                champion=champ_snapshot,
+                phase="hypothesis",
+                error=exc,
+                hypothesis=None,
+            ):
+                return None, None
+            raise
 
-        followup_check = validate_weak_positive_followup_hypothesis(
-            branch,
-            hypothesis,
-            step_history=self.step_history,
-        )
-        if not followup_check.allowed:
-            self.hypothesis_failure_details[bid] = followup_check.detail
-            self.handle_failure(
-                branch,
-                FailureEvent(category="proposal", detail=followup_check.detail),
+        post_provider_stage = {"value": "post_provider_processing"}
+        try:
+            result = self._complete_direct_hypothesis(
+                branch=branch,
+                champion=champ_snapshot,
+                hypothesis=hypothesis,
+                post_provider_stage=post_provider_stage,
             )
-            self.circuit_breaker.record_failure(followup_check.detail)
-            return None, None
-
-        quality_check = validate_problem_hypothesis_quality(
-            self.problem_runtime,
-            branch,
-            hypothesis,
-            step_history=self.step_history,
-        )
-        if not quality_check.allowed:
-            self.hypothesis_failure_details[bid] = quality_check.detail
-            self.handle_failure(
-                branch,
-                FailureEvent(category="proposal", detail=quality_check.detail),
+        except Exception as exc:
+            transition_reason = (
+                "hypothesis_store_write_failed"
+                if post_provider_stage.get("value") == "hypothesis_store_write"
+                else "post_provider_processing_failed"
             )
-            self.circuit_breaker.record_failure(quality_check.detail)
-            return None, None
-
-        self.circuit_breaker.record_success()
-        self._clear_agentic_quality_feedback(bid)
-        return hypothesis, self._hypothesis_record(branch, hypothesis)
+            if self._direct_attempts.handle_unexpected_receipt_exception(
+                branch=branch,
+                champion=champ_snapshot,
+                phase="hypothesis",
+                error=exc,
+                hypothesis=hypothesis,
+                transition_reason_override=transition_reason,
+            ):
+                return None, None
+            raise
+        return result
 
     def pop_hypothesis_failure_detail(self, branch_id: str) -> str | None:
         return self.hypothesis_failure_details.pop(branch_id, None)
+
+    def pop_execution_outcome(
+        self,
+        branch_id: str,
+    ) -> ExecutionOutcomeRecord | None:
+        """Transfer one typed direct-provider outcome to Explore exactly once."""
+
+        return self._direct_attempts.pop_execution_outcome(branch_id)
+
+    def pop_governance_envelope(self, branch_id: str) -> Any | None:
+        """Transfer the immutable host envelope to the outer Contract once."""
+
+        return self.governance_envelopes.pop(branch_id, None)
 
     def generate_code(
         self,
         branch: Branch,
         hypothesis: HypothesisProposal,
-        *,
-        prior_failure: str | None = None,
     ) -> PatchProposal | None:
         bid = branch.branch_id
-        if self._agentic_enabled:
-            return self._generate_agentic_code(
-                branch=branch,
-                hypothesis=hypothesis,
-                prior_failure=prior_failure,
+        if not self._direct_attempts.require_receipt_api(branch, "code"):
+            return None
+        bound_hypothesis_digest = None
+        if self.lineage_registry is not None:
+            bound_hypothesis_digest = self._direct_attempts.prepare_code(
+                branch,
+                hypothesis,
             )
+            if bound_hypothesis_digest is None:
+                return None
+        champ_snapshot = self._champion_snapshot()
         context = self.problem_runtime.build_code_context(
             branch=branch,
             hypothesis=hypothesis,
-            champion=self._champion_snapshot(),
-            prior_failure=prior_failure,
-            branch_workspace=branch_workspace_for_proposal(
-                branch,
-                self.branch_workspaces,
-            ),
+            champion=champ_snapshot,
+            branch_workspace=self.branch_workspaces.get(bid),
             step_history=self.step_history,
         )
-        context["branch_hygiene"] = branch_hygiene_context(branch)
-        context["branch_hygiene_guidance"] = branch_hygiene_guidance(branch)
-        self._attach_agentic_quality_feedback_context(
-            context,
-            bid,
-            phase="code",
-        )
         try:
-            result = self.creative.generate_code(context)
-            quality_check = validate_problem_patch_quality(
-                self.problem_runtime,
+            authoritative_context = proposal_context_snapshot("code", context)
+        except (TypeError, ValueError) as exc:
+            detail = f"proposal_context_validation_failed:{type(exc).__name__}:{exc}"
+            self._direct_attempts.fail_integrity(
                 branch,
-                hypothesis,
-                result,
-                step_history=self.step_history,
+                detail,
+                clear_approved_binding=False,
             )
-            if not quality_check.allowed:
-                self.hypothesis_failure_details[bid] = quality_check.detail
-                self.handle_failure(
-                    branch,
-                    FailureEvent(category="proposal", detail=quality_check.detail),
-                )
-                self.circuit_breaker.record_failure(quality_check.detail)
+            return None
+        result: PatchProposal | None = None
+        prompt_snapshot = build_prompt_turn_snapshot(
+            "code",
+            authoritative_context,
+        )
+        attempt_audit = self._direct_attempts.start_provider_call(
+            branch=branch,
+            champion=champ_snapshot,
+            phase="code",
+            snapshot=prompt_snapshot,
+        )
+        if attempt_audit is None:
+            return None
+        try:
+            result = self._generate_direct_code(
+                bid,
+                authoritative_context,
+                prompt_snapshot,
+                attempt_audit,
+            )
+            if not self._direct_attempts.commit(
+                branch=branch,
+                champion=champ_snapshot,
+                phase="code",
+                status="generated",
+                transition_reason="generated",
+                failure_lane=None,
+                hypothesis=hypothesis,
+                patch=result,
+                bound_hypothesis_digest=bound_hypothesis_digest,
+            ):
                 return None
-            self.circuit_breaker.record_success()
-            self._clear_agentic_quality_feedback(bid)
-            self._clear_agentic_code_quality_feedback(bid)
             return result
+        except KeyboardInterrupt as exc:
+            self._direct_attempts.interrupt_provider_call(
+                branch=branch,
+                champion=champ_snapshot,
+                phase="code",
+                error=exc,
+                hypothesis=hypothesis,
+                bound_hypothesis_digest=bound_hypothesis_digest,
+            )
+            raise
         except LLMBalanceError as exc:
+            receipt = prompt_call_receipt_from_error(exc)
+            self._direct_attempts.record_receipt(
+                bid,
+                "code",
+                receipt,
+            )
+            committed = self._direct_attempts.commit(
+                branch=branch,
+                champion=champ_snapshot,
+                phase="code",
+                status="failed",
+                transition_reason=self._direct_attempts.failure_reason(exc, receipt),
+                failure_lane="infra",
+                hypothesis=hypothesis,
+                bound_hypothesis_digest=bound_hypothesis_digest,
+            )
             logger.critical(
                 "Branch %s: API balance exhausted - stopping campaign: %s",
                 bid,
@@ -481,90 +525,86 @@ class ProposalPipeline(
             )
             self.hypothesis_failure_details[bid] = str(exc)
             self.mark_balance_exhausted()
-            self.circuit_breaker.record_failure(str(exc))
+            if not committed:
+                return None
+            self._direct_attempts.record_execution_outcome(
+                branch,
+                phase="code",
+                outcome=ExecutionOutcome.RESOURCE_EXHAUSTED,
+                reason_code="PROVIDER_BALANCE_EXHAUSTED",
+                detail=str(exc),
+                error_type=type(exc).__name__,
+                error_category=(receipt.error_category if receipt else None),
+            )
             return None
         except (
-            LLMRetryExhaustedError,
+            LLMAuthError,
             LLMFormatError,
+            LLMProviderError,
             LLMTimeoutError,
-            LLMTransientProviderError,
+            LLMTransportError,
             LLMRateLimitError,
             ProposalValidationError,
         ) as exc:
-            if is_provider_balance_exhausted_detail(exc):
-                logger.critical(
-                    "Branch %s: API balance exhausted - stopping campaign: %s",
-                    bid,
-                    exc,
-                )
-                self.hypothesis_failure_details[bid] = str(exc)
-                self.mark_balance_exhausted()
-                self.circuit_breaker.record_failure(str(exc))
+            receipt = prompt_call_receipt_from_error(exc)
+            self._direct_attempts.record_receipt(
+                bid,
+                "code",
+                receipt,
+            )
+            invalid_response = isinstance(
+                exc,
+                (LLMFormatError, ProposalValidationError),
+            )
+            category = "proposal" if invalid_response else "infra"
+            committed = self._direct_attempts.commit(
+                branch=branch,
+                champion=champ_snapshot,
+                phase="code",
+                status="failed",
+                transition_reason=self._direct_attempts.failure_reason(exc, receipt),
+                failure_lane=(
+                    "infra" if category == "infra" else "invalid_response"
+                ),
+                hypothesis=hypothesis,
+                bound_hypothesis_digest=bound_hypothesis_digest,
+            )
+            if not committed:
                 return None
             logger.warning("Branch %s: code LLM error: %s", bid, exc)
             self.hypothesis_failure_details[bid] = str(exc)
-            category = "infra" if is_llm_transient_api_error(exc) else "proposal"
-            self.handle_failure(
+            self._direct_attempts.record_execution_outcome(
                 branch,
-                FailureEvent(category=category, detail=str(exc)),
+                phase="code",
+                outcome=(
+                    ExecutionOutcome.NOT_EVALUATED
+                    if invalid_response
+                    else ExecutionOutcome.BLOCKED_INFRA
+                ),
+                reason_code=(
+                    "PROPOSAL_RESPONSE_INVALID"
+                    if invalid_response
+                    else "PROVIDER_CALL_BLOCKED_INFRA"
+                ),
+                detail=str(exc),
+                error_type=type(exc).__name__,
+                error_category=(receipt.error_category if receipt else None),
             )
-            if category != "infra":
-                self.circuit_breaker.record_failure(str(exc))
-            return None
-
-    def attempt_fix(
-        self,
-        branch: Branch,
-        patch: PatchProposal,
-        verification_result: VerificationResult,
-    ) -> PatchProposal | None:
-        logger.info(
-            "Branch %s: attempting fix_code after %s light verification failure",
-            branch.branch_id,
-            verification_result.first_failure or "unknown",
-        )
-        context = self.problem_runtime.build_fix_context(
-            branch=branch,
-            patch=patch,
-            verification_result=verification_result,
-            failure_streak=dict(self.failure_streak),
-        )
-        try:
-            fixed = self.creative.fix_code(context)
-            if fixed is None:
-                logger.info("Branch %s: fix_code returned no patch", branch.branch_id)
-            else:
-                logger.info(
-                    "Branch %s: fix_code produced patch for %s",
-                    branch.branch_id,
-                    fixed.file_path,
+            if not invalid_response:
+                self.handle_failure(
+                    branch,
+                    FailureEvent(category=category, detail=str(exc)),
                 )
-            return fixed
-        except LLMBalanceError as exc:
-            logger.critical(
-                "Branch %s: API balance exhausted during fix - stopping campaign: %s",
-                branch.branch_id,
-                exc,
-            )
-            self.mark_balance_exhausted()
-            self.circuit_breaker.record_failure(str(exc))
             return None
-        except (
-            LLMRetryExhaustedError,
-            LLMFormatError,
-            LLMTimeoutError,
-            LLMTransientProviderError,
-            LLMRateLimitError,
-            ProposalValidationError,
-        ) as exc:
-            if is_provider_balance_exhausted_detail(exc):
-                logger.critical(
-                    "Branch %s: API balance exhausted during fix - stopping campaign: %s",
-                    branch.branch_id,
-                    exc,
-                )
-                self.mark_balance_exhausted()
-                self.circuit_breaker.record_failure(str(exc))
+        except Exception as exc:
+            if self._direct_attempts.handle_unexpected_receipt_exception(
+                branch=branch,
+                champion=champ_snapshot,
+                phase="code",
+                error=exc,
+                hypothesis=hypothesis,
+                patch=result,
+                bound_hypothesis_digest=bound_hypothesis_digest,
+            ):
                 return None
-            logger.warning("Branch %s: fix LLM error: %s", branch.branch_id, exc)
-            return None
+            raise

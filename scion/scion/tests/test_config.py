@@ -82,7 +82,6 @@ def test_protocol_config_defaults():
     assert config.validation.n_seeds > 0
     # Frozen defaults
     assert config.frozen.n_cases > 0
-    assert config.frozen.max_uses_per_campaign > 0
     # Backward-compat properties
     assert 0.0 < config.screening_win_rate_threshold <= 1.0
     assert 0.0 < config.validation_win_rate_threshold <= 1.0
@@ -314,7 +313,7 @@ def test_protocol_config_from_yaml(tmp_path):
             "expand_to_create": 12,
         },
         "validation": {"n_cases": 5, "n_seeds": 3, "expand_to": 9},
-        "frozen": {"n_cases": 3, "n_seeds": 3, "max_uses_per_campaign": 2},
+        "frozen": {"n_cases": 3, "n_seeds": 3},
         "gates": {
             "screening": {
                 "win_rate_min": 0.6,
@@ -341,7 +340,6 @@ def test_protocol_config_from_yaml(tmp_path):
     assert config.screening.n_cases_create == 8
     assert config.validation.n_cases == 5
     assert config.frozen.n_cases == 3
-    assert config.frozen.max_uses_per_campaign == 2
     assert config.screening_win_rate_threshold == pytest.approx(0.6)
     borderline = config.gates.screening.expanded_borderline_advance
     assert borderline.enabled is True

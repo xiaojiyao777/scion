@@ -27,8 +27,13 @@ import uuid
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
-from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_raw
+from scion.runtime.audit import (
+    format_runtime_audit_failure,
+    runtime_audit_failure_from_raw,
+    runtime_audit_issue_blocks_execution,
+)
 from scion.runtime.runner import Runner, run_solver_with_surface
+from scion.verification.candidate_canary import CandidateCanaryExecution
 from scion.verification.feasibility import _registry_path, resolve_problem_path
 from scion.verification.requirements import (
     declared_objective_metric_names,
@@ -53,11 +58,16 @@ def check_nondeterminism(
     adapter: ProblemAdapter | None = None,
     require_adapter_for_runtime: bool = False,
     runtime_time_limit_sec: int | float = 30,
+    first_execution: CandidateCanaryExecution | None = None,
 ) -> CheckResult:
     """V8_nondeterminism: two same-seed runs must produce equivalent output."""
     t0 = time.monotonic_ns()
 
-    canary = resolve_problem_path(problem_spec, problem_spec.canary_case_path)
+    canary = (
+        first_execution.case_path
+        if first_execution is not None
+        else resolve_problem_path(problem_spec, problem_spec.canary_case_path)
+    )
     if not canary:
         return _cr(True, "skipped: no canary_case_path configured", t0)
 
@@ -88,7 +98,12 @@ def check_nondeterminism(
         except Exception as exc:
             return None, str(exc)
 
-    raw1, err1 = _run()
+    if first_execution is None:
+        raw1, err1 = _run()
+    elif first_execution.raw_output is None:
+        raw1, err1 = None, first_execution.error
+    else:
+        raw1, err1 = dict(first_execution.raw_output), ""
     if raw1 is None:
         detail = f"first run failed: {err1}" if err1 else "first run failed"
         return _cr(False, detail, t0)
@@ -97,7 +112,7 @@ def check_nondeterminism(
         problem_spec=problem_spec,
         selected_surface=selected_surface,
     )
-    if audit_failure is not None:
+    if runtime_audit_issue_blocks_execution(audit_failure):
         return _cr(
             False,
             _failure_detail(
@@ -121,7 +136,7 @@ def check_nondeterminism(
         problem_spec=problem_spec,
         selected_surface=selected_surface,
     )
-    if audit_failure is not None:
+    if runtime_audit_issue_blocks_execution(audit_failure):
         return _cr(
             False,
             _failure_detail(

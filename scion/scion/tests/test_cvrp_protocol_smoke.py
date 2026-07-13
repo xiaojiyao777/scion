@@ -15,7 +15,6 @@ from scion.config.problem import (
 )
 from scion.core.campaign import CampaignManager
 from scion.core.models import ChampionState
-from scion.core.termination import TerminationConfig
 from scion.core.models import ExperimentStage
 from scion.problem.bridge import bridge_problem_spec_v1, load_problem_spec_v1_from_yaml
 from scion.problem.loader import load_problem_adapter
@@ -40,7 +39,7 @@ def _baseline_algorithm_solve_patch(new_solve: str) -> dict:
         "file_path": "policies/baseline_algorithm.py",
         "action": "modify",
         "edit_intent": "exact_replace",
-        "source_digest": source_digest_for_content(source + "\n"),
+        "source_digest": source_digest_for_content(source),
         "old_string": old_solve,
         "new_string": new_solve if new_solve.endswith("\n") else new_solve + "\n",
         "replace_all": False,
@@ -294,7 +293,7 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
     )
     llm = MockLLMClient(
         hypothesis_response={
-            "hypothesis_text": "Add a bounded solver-design no-op for smoke validation.",
+            "hypothesis_text": "Add a solver-design smoke path for plumbing validation.",
             "change_locus": "solver_design",
             "action": "modify",
             "target_file": "policies/baseline_algorithm.py",
@@ -302,21 +301,6 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
             "target_weakness": "campaign wiring",
             "expected_effect": "No behavioral change; validates CVRP campaign plumbing.",
             "suggested_weight": 0.1,
-            "target_objectives": ["total_distance"],
-            "protected_objectives": ["fleet_violation"],
-            "objective_tradeoff_policy": "preserve fleet_violation before distance",
-            "no_op_condition": "always returns the original solution",
-            "risk_to_higher_priority": "none for no-op",
-            "target_runtime_effect": "preserve",
-            "complexity_claim": "O(n) nearest-neighbor construction plus constant smoke probes.",
-            "runtime_budget_strategy": "Use bounded context telemetry calls only.",
-            "novelty_signature": {
-                "algorithm_family": "solver_design_smoke",
-                "construction_strategy": "nearest_neighbor",
-                "improvement_strategy": "bounded_noop_probe",
-                "acceptance_strategy": "none",
-                "runtime_budget_strategy": "constant_probe",
-            },
         },
         patch_response=_baseline_algorithm_solve_patch(
             (
@@ -349,7 +333,6 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
         experiment_protocol=proto,
         adapter=adapter,
         operator_execute_signature=bridge.operator_execute_signature,
-        termination_config=TerminationConfig(max_experiments=5, stagnation_limit=5),
         force_surface="solver_design",
     )
 

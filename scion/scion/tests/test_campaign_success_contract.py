@@ -1,6 +1,7 @@
 """Focused tests split from test_campaign.py."""
 
 from .campaign_test_support import *  # noqa: F401,F403
+from scion.core.execution_outcome import ExecutionOutcome
 
 class TestFullSuccessPath:
     def test_screening_pass_queues_validate(self, tmp_path):
@@ -237,9 +238,45 @@ class TestContractFailure:
 
         assert result.branch_id is not None
         assert result.reason == "workspace setup failed"
+        assert result.execution_outcome is ExecutionOutcome.BLOCKED_INFRA
+        assert result.execution_outcome_reason_code == "WORKSPACE_SETUP_FAILED"
         branch = cm._branch_ctrl.get_branch(result.branch_id)
         assert branch.state == BranchState.BLOCKED_INFRA
         assert cm._failure_streak["infra"] == 1
+        records = cm._hyp_store.get_by_branch(result.branch_id)
+        assert records[-1].status == "blocked_infra"
+        assert cm._step_history[-1].decision is None
+        assert cm._step_history[-1].protocol_result is None
+        assert (
+            cm._step_history[-1].execution_outcome
+            is ExecutionOutcome.BLOCKED_INFRA
+        )
+
+    def test_patch_materialization_failure_routes_as_infra(self, tmp_path):
+        """Post-Contract filesystem failure is not a research rejection."""
+        cm = _campaign(tmp_path)
+
+        def fail_apply_patch(*args, **kwargs):
+            raise OSError("disk write unavailable")
+
+        cm._workspace_lifecycle.apply_patch = fail_apply_patch
+
+        result = cm.run_one_step()
+
+        assert result.branch_id is not None
+        assert result.reason == "apply_patch failed"
+        assert result.execution_outcome is ExecutionOutcome.BLOCKED_INFRA
+        assert (
+            result.execution_outcome_reason_code
+            == "PATCH_MATERIALIZATION_FAILED"
+        )
+        branch = cm._branch_ctrl.get_branch(result.branch_id)
+        assert branch.state == BranchState.BLOCKED_INFRA
+        assert cm._failure_streak["infra"] == 1
+        records = cm._hyp_store.get_by_branch(result.branch_id)
+        assert records[-1].status == "blocked_infra"
+        assert cm._step_history[-1].decision is None
+        assert cm._step_history[-1].protocol_result is None
 
     def test_hypothesis_contract_fail_handled(self, tmp_path):
         """Invalid hypothesis (empty change_locus) routes as contract failure."""
@@ -248,19 +285,24 @@ class TestContractFailure:
             "change_locus": "unknown_category",  # C2 will fail
             "action": "modify",
             "target_file": "operators/local_search.py",
+            "predicted_direction": "improve",
+            "target_weakness": "slow convergence",
+            "expected_effect": "better solutions",
         }
         llm = MockLLMClient(hypothesis_response=bad_hypothesis, patch_response=_VALID_PATCH)
         cm = _campaign(tmp_path, llm_client=llm)
         result = cm.run_one_step()
         assert result.branch_id is not None
         assert result.decision is None
+        records = cm._hyp_store.get_by_branch(result.branch_id)
+        assert len(records) == 1
+        assert records[0].status == "research_rejected"
+        assert result.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
 
-    def test_retry_after_contract_fail(self, tmp_path):
-        """Second step on same branch succeeds after initial contract failure.
+    def test_contract_fail_next_tick_starts_fresh_candidate_same_branch(self, tmp_path):
+        """An explicit next tick starts a fresh candidate on the same branch.
 
-        Step 1's hypothesis gets marked 'rejected' after patch contract fails, but
-        C10_novelty still blocks same-keyed hypothesis within the same champion version.
-        So step 2 needs a distinct hypothesis (different target_file).
+        Step 2 uses a distinct target so the fresh candidate is observable.
         """
         bad_patch = {
             "file_path": "solver.py",  # frozen file
@@ -298,7 +340,10 @@ class TestContractFailure:
                 # hypothesis call — vary target_file so step 2 passes novelty
                 self.hyp_calls += 1
                 return hyp1 if self.hyp_calls == 1 else hyp2
-            def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+            def call_with_tool(
+                self, prompt, tool, model=None, system_blocks=None, request_kind=None
+            ):
+                del request_kind
                 return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
 
         cm = _campaign(

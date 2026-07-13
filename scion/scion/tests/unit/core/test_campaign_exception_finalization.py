@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.step_result import StepResult
 
 from .campaign_control_boundaries_test_support import _campaign
@@ -19,14 +20,15 @@ def test_campaign_run_preflight_exception_writes_terminal_artifacts(
     monkeypatch,
 ) -> None:
     cm = _campaign(tmp_path)
+    exception_message = "synthetic preflight failure " + "x" * 600 + " complete-tail"
 
     def raise_preflight() -> None:
-        raise RuntimeError("synthetic preflight failure")
+        raise RuntimeError(exception_message)
 
     monkeypatch.setattr(cm, "_run_runtime_preflight", raise_preflight)
 
     with pytest.raises(RuntimeError, match="synthetic preflight failure"):
-        cm.run(max_rounds=2)
+        cm.run(requested_rounds=2)
 
     campaign_dir = Path(cm._campaign_dir)
     status = _read_json(campaign_dir / "status.json")
@@ -44,6 +46,9 @@ def test_campaign_run_preflight_exception_writes_terminal_artifacts(
         assert payload["campaign_loop"]["terminal_exception"]["type"] == (
             "RuntimeError"
         )
+        assert payload["campaign_loop"]["terminal_exception"]["message"] == (
+            exception_message
+        )
 
 
 def test_campaign_run_one_step_exception_writes_partial_terminal_artifacts(
@@ -52,8 +57,6 @@ def test_campaign_run_one_step_exception_writes_partial_terminal_artifacts(
 ) -> None:
     cm = _campaign(tmp_path)
     cm._runtime_preflight_checked = True
-    monkeypatch.setattr(cm, "_run_stagnation_check", lambda: None)
-    monkeypatch.setattr(cm, "_check_soft_stagnation", lambda: None)
     calls = 0
 
     def run_one_step() -> StepResult:
@@ -67,13 +70,15 @@ def test_campaign_run_one_step_exception_writes_partial_terminal_artifacts(
                 protocol_stage="screening",
                 formal_protocol_evaluated=True,
                 screened_experiment_effective=True,
+                execution_outcome=ExecutionOutcome.EVALUATED,
+                execution_outcome_reason_code="EVALUATION_COMPLETED",
             )
         raise RuntimeError("synthetic step crash")
 
     monkeypatch.setattr(cm, "run_one_step", run_one_step)
 
     with pytest.raises(RuntimeError, match="synthetic step crash"):
-        cm.run(max_rounds=2)
+        cm.run(requested_rounds=2)
 
     campaign_dir = Path(cm._campaign_dir)
     status = _read_json(campaign_dir / "status.json")
@@ -82,8 +87,6 @@ def test_campaign_run_one_step_exception_writes_partial_terminal_artifacts(
     for payload in (status, summary):
         assert payload["stopped"] is True
         assert payload["stopped_reason"] == "unhandled_exception"
-        assert payload["run_validity"]["status"] == "valid"
-        assert payload["run_validity"]["reason"] == "valid_partial_interrupted"
         assert payload["campaign_loop"]["requested_rounds"] == 2
         assert payload["campaign_loop"]["effective_rounds_completed"] == 1
         assert payload["campaign_loop"]["failure_categories"][
@@ -92,3 +95,7 @@ def test_campaign_run_one_step_exception_writes_partial_terminal_artifacts(
         assert payload["campaign_loop"]["terminal_exception"]["type"] == (
             "RuntimeError"
         )
+    assert status["run_validity"]["status"] == "valid"
+    assert status["run_validity"]["reason"] == "valid_but_incomplete"
+    assert summary["run_validity"]["status"] == "unknown"
+    assert summary["run_validity"]["reason"] == "unknown_historical"

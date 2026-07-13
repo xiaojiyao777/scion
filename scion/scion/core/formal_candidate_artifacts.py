@@ -8,7 +8,7 @@ import logging
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from scion.core.evidence_recording.replay_identity import (
     formal_replay_identity_missing_keys,
@@ -30,6 +30,7 @@ from scion.core.models import (
 )
 from scion.core.paths import normalize_relative_patch_path
 from scion.core.public_refs import public_artifact_ref
+from scion.proposal.context_manager.code_context import SourceLedgerOwner
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ logger = logging.getLogger(__name__)
 class FormalCandidatePatchArtifactRecorder:
     """Persist replayable patch/diff artifacts outside branch workspace cleanup."""
 
-    schema = "scion.formal_candidate_patch_artifact.v1"
+    schema = "scion.formal_candidate_patch_artifact.v2"
 
     def __init__(
         self,
@@ -70,6 +71,7 @@ class FormalCandidatePatchArtifactRecorder:
         decision_reason_codes: Iterable[str] | None = None,
         workspace: str | None = None,
         base_workspace: str | None = None,
+        proposal_attempt_ref: Mapping[str, Any] | None = None,
     ) -> str | None:
         """Write one canonical patch artifact and return its public metadata ref."""
         if protocol_result is None:
@@ -94,6 +96,10 @@ class FormalCandidatePatchArtifactRecorder:
             base_workspace=base_workspace,
         )
         activation_files = _activation_file_paths(proposal_changes, changes)
+        proposal_paths = {
+            normalize_relative_patch_path(change.file_path)
+            for change in proposal_changes
+        }
         patch_digest = _patch_digest(changes) if patch is not None else ""
         replay_identity = (
             formal_replay_identity_payload(
@@ -132,6 +138,10 @@ class FormalCandidatePatchArtifactRecorder:
                 omitted_reasons=omitted_reasons,
             ),
         )
+        proposal_attempt_fields = _proposal_attempt_join_fields(
+            proposal_attempt_ref,
+            hypothesis_id=h_record.hypothesis_id,
+        )
         if omitted_reasons:
             self._record_omitted(
                 branch=branch,
@@ -146,6 +156,7 @@ class FormalCandidatePatchArtifactRecorder:
                 omitted_reasons=omitted_reasons,
                 decision=decision,
                 decision_reason_codes=decision_reason_codes,
+                proposal_attempt_fields=proposal_attempt_fields,
             )
             return None
         assert patch is not None
@@ -190,6 +201,7 @@ class FormalCandidatePatchArtifactRecorder:
             "branch_id": branch.branch_id,
             "lineage_id": getattr(branch, "lineage_id", None) or branch.branch_id,
             "hypothesis_id": h_record.hypothesis_id,
+            **proposal_attempt_fields,
             "experiment_ref": raw_metrics_ref,
             "stage": stage,
             "decision": decision.value,
@@ -224,6 +236,11 @@ class FormalCandidatePatchArtifactRecorder:
             "patch": {
                 "patch_digest": patch_digest,
                 "representation": "full_file_replacement",
+                "normalization_events": [
+                    dict(item)
+                    for item in tuple(patch.repair_attribution or ())
+                    if isinstance(item, Mapping)
+                ],
                 "diff_ref": public_artifact_ref(
                     diff_path,
                     base_dir=self.campaign_dir,
@@ -233,6 +250,11 @@ class FormalCandidatePatchArtifactRecorder:
                         change,
                         workspace=workspace,
                         base_workspace=base_workspace,
+                        is_proposal_change=(
+                            normalize_relative_patch_path(change.file_path)
+                            in proposal_paths
+                        ),
+                        repair_attribution=tuple(patch.repair_attribution or ()),
                     )
                     for change in changes
                 ],
@@ -270,6 +292,7 @@ class FormalCandidatePatchArtifactRecorder:
                 "candidate_id": candidate_id,
                 "branch_id": branch.branch_id,
                 "hypothesis_id": h_record.hypothesis_id,
+                **proposal_attempt_fields,
                 "stage": stage,
                 "branch_code_status": metadata["branch_code_status"],
                 "patch_digest": patch_digest,
@@ -306,6 +329,7 @@ class FormalCandidatePatchArtifactRecorder:
         omitted_reasons: list[str],
         decision: Decision,
         decision_reason_codes: Iterable[str] | None,
+        proposal_attempt_fields: Mapping[str, str],
     ) -> None:
         primary_reason = omitted_reasons[0] if omitted_reasons else "unknown"
         payload = {
@@ -321,6 +345,7 @@ class FormalCandidatePatchArtifactRecorder:
             "branch_id": branch.branch_id,
             "lineage_id": getattr(branch, "lineage_id", None) or branch.branch_id,
             "hypothesis_id": h_record.hypothesis_id,
+            **proposal_attempt_fields,
             "stage": stage,
             "decision": decision.value,
             "decision_reason_codes": list(decision_reason_codes or ()),
@@ -355,6 +380,55 @@ class FormalCandidatePatchArtifactRecorder:
 def _stage_value(protocol_result: ProtocolResult) -> str:
     stage = getattr(protocol_result, "stage", "")
     return str(getattr(stage, "value", stage) or "")
+
+
+def _proposal_attempt_join_fields(
+    proposal_attempt_ref: Mapping[str, Any] | None,
+    *,
+    hypothesis_id: str,
+) -> dict[str, str]:
+    """Project the terminal code-call ref and its hypothesis lineage."""
+
+    if not isinstance(proposal_attempt_ref, Mapping):
+        return {}
+    if proposal_attempt_ref.get("schema_version") != "proposal-attempt-ref.v1":
+        return {}
+    if (
+        proposal_attempt_ref.get("phase") != "code"
+        or proposal_attempt_ref.get("status") != "generated"
+        or str(proposal_attempt_ref.get("hypothesis_id") or "")
+        != str(hypothesis_id or "")
+        or proposal_attempt_ref.get("runtime_mode") != "direct_v3"
+    ):
+        return {}
+    required = {
+        "proposal_attempt_id": proposal_attempt_ref.get("attempt_id"),
+        "proposal_attempt_event_id": proposal_attempt_ref.get("lineage_event_id"),
+        "proposal_runtime_mode": proposal_attempt_ref.get("runtime_mode"),
+    }
+    optional = {
+        "proposal_hypothesis_attempt_id": proposal_attempt_ref.get(
+            "hypothesis_attempt_id"
+        ),
+        "proposal_attempt_continuation_of_attempt_id": proposal_attempt_ref.get(
+            "continuation_of_attempt_id"
+        ),
+    }
+    fields = {
+        key: str(value)
+        for key, value in required.items()
+        if value is not None and str(value)
+    }
+    if len(fields) != len(required):
+        return {}
+    fields.update(
+        {
+            key: str(value)
+            for key, value in optional.items()
+            if value is not None and str(value)
+        }
+    )
+    return fields
 
 
 def _changes_with_activation_files(
@@ -608,21 +682,109 @@ def _change_payload(
     *,
     workspace: str | None,
     base_workspace: str | None,
+    is_proposal_change: bool,
+    repair_attribution: tuple[Mapping[str, Any], ...],
 ) -> dict[str, Any]:
     code = change.code_content or ""
+    base_hash = _workspace_file_sha256(base_workspace, change.file_path)
     payload = {
         "file_path": normalize_relative_patch_path(change.file_path),
         "action": change.action,
         "code_sha256": hashlib.sha256(code.encode("utf-8")).hexdigest(),
         "code_content": code,
+        "source_attribution": _file_source_attribution(
+            change,
+            base_hash=base_hash,
+            is_proposal_change=is_proposal_change,
+            repair_attribution=repair_attribution,
+        ),
     }
     current_hash = _workspace_file_sha256(workspace, change.file_path)
     if current_hash:
         payload["workspace_current_sha256"] = current_hash
-    base_hash = _workspace_file_sha256(base_workspace, change.file_path)
     if base_hash:
         payload["base_sha256"] = base_hash
     return payload
+
+
+_SOURCE_LEDGER_OWNER_VALUES = frozenset(owner.value for owner in SourceLedgerOwner)
+
+
+def _file_source_attribution(
+    change: PatchFileChange,
+    *,
+    base_hash: str | None,
+    is_proposal_change: bool,
+    repair_attribution: tuple[Mapping[str, Any], ...],
+) -> dict[str, Any]:
+    """Return the durable, per-file source identity used to form a patch."""
+
+    path = normalize_relative_patch_path(change.file_path)
+    typed_edits = [
+        item
+        for item in repair_attribution
+        if isinstance(item, Mapping)
+        and item.get("repair_kind") == "typed_edit_normalization"
+        and normalize_relative_patch_path(str(item.get("file_path") or "")) == path
+    ]
+    owner_values = {
+        str(item.get("source_owner") or "")
+        for item in typed_edits
+        if str(item.get("source_owner") or "")
+    }
+    if len(owner_values) > 1 or any(
+        owner not in _SOURCE_LEDGER_OWNER_VALUES for owner in owner_values
+    ):
+        raise ValueError(f"inconsistent source ledger owner attribution: {path}")
+    provenance_values = [
+        str(item.get("source_provenance") or "")
+        for item in typed_edits
+        if str(item.get("source_provenance") or "")
+    ]
+    source_digests = [
+        str(item.get("source_record_digest") or "")
+        for item in typed_edits
+        if str(item.get("source_record_digest") or "")
+    ]
+    owner = next(iter(owner_values), "")
+    source_digest = source_digests[0] if source_digests else base_hash
+
+    if owner:
+        origin = "proposal_source_ledger"
+    elif not is_proposal_change:
+        origin = "runtime_activation"
+    elif change.action == "create":
+        origin = "new_file"
+    else:
+        origin = "base_workspace"
+
+    if change.action == "create":
+        visibility = "new_file_placeholder" if owner else "new_file_absent"
+        source_digest = None
+    elif source_digest:
+        visibility = "full_current"
+    else:
+        visibility = "not_visible"
+
+    provenance = (
+        provenance_values[0]
+        if provenance_values
+        else "runtime_activation"
+        if not is_proposal_change
+        else "new_file"
+        if change.action == "create"
+        else "base_workspace"
+        if base_hash
+        else "missing_current_source"
+    )
+    return {
+        "schema_version": "formal-file-source-attribution.v1",
+        "origin": origin,
+        "source_ledger_owner": owner or None,
+        "source_provenance": provenance,
+        "source_visibility": visibility,
+        "source_digest": source_digest,
+    }
 
 
 def _render_candidate_diff(
@@ -648,16 +810,38 @@ def _render_candidate_diff(
         fromfile = "/dev/null" if change.action == "create" else f"a/{file_rel}"
         tofile = "/dev/null" if change.action == "delete" else f"b/{file_rel}"
         chunks.extend(
-            difflib.unified_diff(
+            _render_unified_diff(
                 old_lines or [],
                 new_lines,
                 fromfile=fromfile,
                 tofile=tofile,
-                lineterm="",
             )
         )
-        chunks.append("")
-    return "\n".join(chunks).rstrip() + "\n"
+    return "".join(chunks)
+
+
+def _render_unified_diff(
+    old_lines: list[str],
+    new_lines: list[str],
+    *,
+    fromfile: str,
+    tofile: str,
+) -> list[str]:
+    """Render a git-parseable diff while preserving missing final newlines."""
+
+    rendered: list[str] = []
+    for line in difflib.unified_diff(
+        old_lines,
+        new_lines,
+        fromfile=fromfile,
+        tofile=tofile,
+        lineterm="\n",
+    ):
+        if line.endswith("\n"):
+            rendered.append(line)
+            continue
+        rendered.append(f"{line}\n\\ No newline at end of file\n")
+    return rendered
 
 
 def _base_lines(base_workspace: str | None, file_rel: str) -> list[str] | None:

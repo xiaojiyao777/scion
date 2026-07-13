@@ -1,58 +1,35 @@
-"""ContextManager orchestration for proposal prompt contexts."""
+"""Direct V3 proposal-context assembly.
+
+The context manager has one job: expose the smallest complete set of research
+facts needed by the two proposal calls.  It does not steer the search through
+quality gates, retry advice, portfolio controls, or host-generated repairs.
+"""
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Mapping, Optional
+from dataclasses import fields, is_dataclass
+from enum import Enum
+from typing import Any, Mapping, Optional
 
 from scion.config.problem import ProblemSpec
-from scion.core.forced_surface import validate_forced_surface_request
+from scion.core.forced_surface import (
+    surface_action_allowed,
+    surface_target_files,
+    validate_forced_surface_request,
+)
 from scion.core.models import (
     Branch,
     ChampionState,
+    ExperimentStage,
     HypothesisProposal,
-    HypothesisRecord,
-    PatchProposal,
     StepRecord,
-    VerificationResult,
-)
-from scion.core.explore_step.branch_lesson_usage import (
-    branch_lesson_usage_requirement_from_records,
-    project_branch_lesson_records,
-)
-from scion.core.repeated_contract_failures import (
-    contract_preview_failure_signature_feedback,
+    patch_file_changes,
 )
 from scion.measurement.consumer_view import measurement_consumer_view
 from scion.problem.providers import (
     active_subject_code_constraints_payload,
-    active_subject_taxonomy_payload,
     resolve_solver_design_prompt_provider,
-)
-from scion.opportunity import opportunity_evidence_commitment_from_summary
-from scion.proposal.context_ablation import normalize_proposal_context_ablation
-from scion.proposal.context.feedback import (
-    _build_agent_quality_feedback,
-    _build_champion_baselines,
-    _build_experiment_history,
-    _filter_hypothesis_prompt_steps,
-)
-from scion.proposal.context.branch_dossier import (
-    build_branch_dossier,
-    render_branch_dossier,
-)
-from scion.proposal.context.branch_followup import (
-    branch_created_files,
-    branch_current_file_sources,
-    branch_touched_files,
-    build_branch_followup_policy,
-    render_branch_followup_policy,
-)
-from scion.proposal.context.cross_branch_research import (
-    build_cross_branch_research_map,
-    render_cross_branch_research_map,
-)
-from scion.proposal.context.research_shape import (
-    build_proposal_research_shape_diagnostics,
+    typed_research_question_payload,
 )
 from scion.proposal.context.problem_adapter import (
     _build_operator_interface_spec,
@@ -62,318 +39,42 @@ from scion.proposal.context.problem_adapter import (
     _get_adapter_problem_spec,
 )
 from scion.proposal.context.surfaces import (
-    _build_forced_surface_constraint,
-    _build_inactive_surface_exclusion_block,
-    _build_research_surfaces_block,
     _find_research_surface,
     _get_research_surfaces,
     _hypothesis_visible_research_surfaces,
     _include_operator_files_for_research_code,
     _is_solver_design_context_surface,
     _solver_design_surface_names,
-    _surface_target_files_for_names,
 )
-from scion.research_guidance import launch_research_guidance_payload_from_env
 
 from .code_context import (
-    _build_solver_design_api_manifest,
-    _build_solver_design_branch_current_integration_files,
+    DURABLE_BRANCH_CREATED_FILES_KEY,
+    DURABLE_BRANCH_TOUCHED_FILES_KEY,
+    SOURCE_LEDGER_KEY,
+    _build_code_source_ledger,
     _read_champion_research_code,
-    _read_reference_operators,
-)
-from .guidance import (
-    _build_failure_pattern_warning,
-    _build_objective_guidance,
-    _build_objective_opportunity_profile,
-    _build_objective_policy_guidance,
-    _build_recent_objective_feedback,
-    _build_search_control_guidance,
-    _build_solver_design_boundary_guidance,
-    _build_strategy_guidance,
-    _get_family_taxonomy,
-)
-from .history import (
-    _build_branch_direction_prompt,
-    _extract_families_from_steps,
-    _summarise_active_hypotheses,
-    _summarise_blacklist,
-    _summarise_siblings,
-    build_exploration_coverage,
+    branch_created_files,
+    branch_current_file_sources,
+    branch_touched_files,
 )
 from .io import (
     _available_hypothesis_actions,
-    _build_champion_stats,
     _expand_surface_targets_for_champion,
     _expand_surface_targets_for_root,
     _list_branch_surface_files,
     _list_champion_operator_files,
     _list_champion_surface_files,
     _read_branch_code,
-    _read_target_file_from_root,
 )
-from .opportunity import problem_opportunity_summary_from_adapter
-from .rendering import _format_hypothesis, _hypothesis_implementation_brief
-from .runtime import _build_runtime_feedback, _build_runtime_failure_guidance
+from scion.proposal.solver_design_guidance import (
+    RENDERER_INPUTS_KEY,
+    SOLVER_DESIGN_GUIDANCE_KEY,
+    materialize_solver_design_prompt_guidance,
+)
+from scion.proposal.prompt_manifest import stable_digest
 
 
-def _normalize_measurement_governance_mode(value: Any | None) -> str:
-    text = "on" if value is None else str(value).strip().lower().replace("-", "_")
-    if text in {"on", "record_only"}:
-        return text
-    raise ValueError("measurement_governance must be on or record_only")
-
-
-def _target_file_exists_in_root(root: str, target_file: Optional[str]) -> bool:
-    if not root or not target_file:
-        return False
-    normalized = str(target_file).replace("\\", "/").lstrip("/")
-    if not normalized:
-        return False
-    candidate = os.path.join(root, normalized)
-    return os.path.isfile(candidate)
-
-
-def _render_branch_current_target_file(target_file: str, content: str) -> str:
-    return (
-        f"File: {target_file}\n"
-        "Provenance: branch_history_current; readable=True; "
-        "source_status=current_branch_source\n"
-        f"```python\n{content}\n```"
-    )
-
-
-def _render_missing_branch_current_target_file(target_file: str) -> str:
-    return (
-        f"File: {target_file}\n"
-        "Provenance: missing_current_source; readable=False; "
-        "source_status=missing_current_source; visibility=not_visible\n"
-        "Current branch source is unavailable. Do not use this placeholder "
-        "as editable source; read the current branch file before exact_replace "
-        "or choose a target with visible current source.\n"
-        f"```python\n# could not read {target_file}\n```"
-    )
-
-
-def _render_new_file_target_placeholder(target_file: str) -> str:
-    return (
-        f"File: {target_file}\n"
-        "Provenance: new_file_placeholder; readable=False; "
-        "source_status=new_file; visibility=new_file_placeholder\n"
-        "This target file does not currently exist and may be created by a "
-        "create_new proposal. Provide full file content for this new target; "
-        "do not use exact_replace against this placeholder.\n"
-        f"```python\n# new file placeholder for {target_file}\n```"
-    )
-
-
-def _build_launch_research_focus() -> dict[str, Any]:
-    """Project prepared launch research guidance into proposal-only context."""
-
-    return launch_research_guidance_payload_from_env()
-
-
-def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
-    """Return a JSON-safe legacy fallback without interpreting problem keys."""
-
-    projected = _project_launch_focus_value(value)
-    return projected if isinstance(projected, dict) else {}
-
-
-def _project_launch_focus_value(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        projected: dict[str, Any] = {}
-        for key, child in value.items():
-            if not isinstance(key, str):
-                continue
-            child_value = _project_launch_focus_value(child)
-            if child_value not in ("", [], {}, None):
-                projected[key] = child_value
-        return projected
-    if isinstance(value, (list, tuple)):
-        items = [
-            child
-            for item in value
-            if (child := _project_launch_focus_value(item)) not in ("", [], {}, None)
-        ]
-        return items
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value.strip() if isinstance(value, str) else value
-    return str(value).strip()
-
-
-def _proposal_material_difference_requirement(
-    branch: Branch,
-    *,
-    launch_research_focus: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    summary = getattr(branch, "branch_evidence_summary", {}) or {}
-    if not isinstance(summary, Mapping):
-        summary = {}
-    raw_requirement = summary.get("material_difference_requirement")
-    if not isinstance(raw_requirement, Mapping):
-        raw_requirement = {}
-        if isinstance(launch_research_focus, Mapping):
-            candidate = launch_research_focus.get("material_difference_requirement")
-            if isinstance(candidate, Mapping):
-                raw_requirement = candidate
-            else:
-                focus = launch_research_focus.get("research_focus")
-                if isinstance(focus, Mapping) and isinstance(
-                    focus.get("material_difference_requirement"),
-                    Mapping,
-                ):
-                    raw_requirement = focus["material_difference_requirement"]
-    if not isinstance(raw_requirement, Mapping) or not raw_requirement:
-        return {}
-    candidates = [
-        _material_difference_candidate_projection(item)
-        for item in summary.get("material_difference_requirement_candidates", []) or []
-        if isinstance(item, Mapping)
-    ]
-    candidates = [item for item in candidates if item]
-    return {
-        key: value
-        for key, value in {
-            "schema_version": "proposal_material_difference_requirement.v1",
-            "required": True,
-            "record_id": str(raw_requirement.get("record_id") or "").strip(),
-            "record_digest": str(raw_requirement.get("record_digest") or "").strip(),
-            "record_type": str(raw_requirement.get("record_type") or "").strip(),
-            "requirement_source": str(
-                raw_requirement.get("requirement_source") or ""
-            ).strip(),
-            "reason": str(raw_requirement.get("reason") or "").strip(),
-            "reason_codes": _string_list(raw_requirement.get("reason_codes")),
-            "required_for": str(
-                raw_requirement.get("required_for")
-                or summary.get("material_difference_required_for")
-                or ""
-            ).strip(),
-            "required_metadata_key": str(
-                raw_requirement.get("required_metadata_key") or ""
-            ).strip(),
-            "candidate_count": _nonnegative_int(
-                raw_requirement.get("candidate_count")
-            ),
-            "candidate_branch_ids": _string_list(
-                raw_requirement.get("candidate_branch_ids")
-            ),
-            "candidate_release_reasons": sorted(
-                {
-                    str(item.get("release_reason") or "").strip()
-                    for item in candidates
-                    if str(item.get("release_reason") or "").strip()
-                }
-            ),
-            "candidate_summaries": candidates[:8],
-            "required_output_field": "material_difference",
-            "required_output_contract": (
-                str(raw_requirement.get("required_output_contract") or "").strip()
-                or "The next hypothesis must include a non-empty, "
-                "non-boilerplate material_difference object with compact "
-                "generic dimensions, signature digests, or evidence-status "
-                "deltas."
-            ),
-            "proposal_visibility_only": True,
-            "proposal_guidance_only": True,
-            "audit_only": True,
-            "decision_features_excluded": True,
-        }.items()
-        if value not in ("", None, [], {}, ())
-    }
-
-
-def _problem_measurement_diagnostics(
-    problem_spec: ProblemSpec,
-    *,
-    adapter: Any | None = None,
-) -> dict[str, Any]:
-    measurement = getattr(problem_spec, "measurement", None)
-    if measurement is None:
-        adapter_payload = _adapter_problem_measurement_diagnostics(adapter)
-        if not adapter_payload:
-            return {}
-        adapter_opportunities = _adapter_opportunity_diagnostics(adapter_payload)
-        payload = {
-            "schema_version": "problem_measurement_proposal_diagnostic.v1",
-            "taint": "problem_owned_proposal_diagnostic",
-            "proposal_visibility_only": True,
-            "decision_features_excluded": True,
-            "adapter_diagnostics": adapter_payload,
-        }
-        payload.update(_adapter_proposal_diagnostic_signals(adapter_payload))
-        if adapter_opportunities:
-            payload["opportunity_diagnostics"] = adapter_opportunities
-        return payload
-    measurement_view = measurement_consumer_view(problem_spec)
-    payload = {
-        "schema_version": "problem_measurement_proposal_diagnostic.v1",
-        "taint": "problem_owned_proposal_diagnostic",
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "policy": (
-            "Measurement/noise readiness facts may guide hypothesis planning "
-            "only; raw calibration rows, BKS/gap details, validation/frozen "
-            "case details, LLM text, prompt ratios, and cross-branch lessons "
-            "remain excluded from DecisionFeatures."
-        ),
-        "runtime_model": measurement_view.runtime_model,
-        "pairing_validity": measurement_view.pairing_validity,
-        "effect_scale": {
-            key: value
-            for key, value in {
-                "metric": measurement_view.effect_metric,
-                "unit": measurement_view.effect_unit,
-                "practical_delta_screen": measurement_view.practical_delta_screen,
-                "practical_delta_validate": measurement_view.practical_delta_validate,
-            }.items()
-            if value not in ("", None, [], {}, ())
-        },
-        "measurement_readiness": measurement_view.to_readiness_status_payload(),
-        "calibration": {
-            key: value
-            for key, value in {
-                "calibration_ref": str(
-                    getattr(measurement, "calibration_ref", "") or ""
-                ),
-                "calibration_max_age_days": getattr(
-                    measurement,
-                    "calibration_max_age_days",
-                    None,
-                ),
-            }.items()
-            if value not in ("", None, [], {}, ())
-        },
-    }
-    adapter_payload = _adapter_problem_measurement_diagnostics(adapter)
-    if adapter_payload:
-        adapter_opportunities = _adapter_opportunity_diagnostics(adapter_payload)
-        payload.update(_adapter_proposal_diagnostic_signals(adapter_payload))
-        if adapter_opportunities:
-            payload["opportunity_diagnostics"] = adapter_opportunities
-        payload["adapter_diagnostics"] = adapter_payload
-    return {
-        key: value
-        for key, value in payload.items()
-        if value not in ("", None, [], {}, ())
-    }
-
-
-def _adapter_problem_measurement_diagnostics(adapter: Any | None) -> dict[str, Any]:
-    hook = getattr(adapter, "render_problem_measurement_diagnostics", None)
-    if not callable(hook):
-        return {}
-    try:
-        payload = hook()
-    except Exception:
-        return {}
-    if not isinstance(payload, Mapping):
-        return {}
-    redacted = _redact_problem_measurement_diagnostic_payload(dict(payload))
-    return dict(redacted) if isinstance(redacted, Mapping) else {}
-
-
-_PROBLEM_MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS = (
+_MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS = (
     "pair_evidence",
     "pair_rows",
     "raw_pair",
@@ -385,246 +86,60 @@ _PROBLEM_MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS = (
     "holdout",
     "prompt_ratio",
     "llm_text",
+    "opportunity",
+    "typed_attribution",
+    "telemetry",
+    "activation",
+    "mechanism",
+    "operator",
 )
 
+CANONICAL_SCREENING_HISTORY_KEY = "canonical_screening_history"
 
-def _redact_problem_measurement_diagnostic_payload(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        projected: dict[str, Any] = {}
-        for key, child in value.items():
-            key_text = str(key)
-            if not _problem_measurement_diagnostic_key_allowed(key_text):
-                continue
-            redacted = _redact_problem_measurement_diagnostic_payload(child)
-            if redacted not in ("", None, [], {}, ()):
-                projected[key_text] = redacted
-        return projected
-    if isinstance(value, (list, tuple)):
-        projected_items = [
-            _redact_problem_measurement_diagnostic_payload(item)
-            for item in value
-        ]
-        return [
-            item
-            for item in projected_items
-            if item not in ("", None, [], {}, ())
-        ]
-    return value
+def _filter_hypothesis_prompt_steps(
+    step_history: list[StepRecord],
+) -> list[StepRecord]:
+    """Expose one canonical evidence record per completed screening experiment."""
 
-
-def _problem_measurement_diagnostic_key_allowed(key: str) -> bool:
-    lowered = key.lower()
-    return not any(
-        fragment in lowered
-        for fragment in _PROBLEM_MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS
-    )
-
-
-def _adapter_opportunity_diagnostics(
-    adapter_payload: Mapping[str, Any],
-) -> list[dict[str, Any]]:
-    raw_items = adapter_payload.get("opportunity_diagnostics")
-    if not isinstance(raw_items, (list, tuple)):
-        return []
-    fields = (
-        "diagnostic_type",
-        "surface",
-        "mechanism_family",
-        "metric",
-        "summary",
-        "recommended_action",
-        "confidence",
-        "reason_codes",
-    )
-    items: list[dict[str, Any]] = []
-    for raw in raw_items:
-        if not isinstance(raw, Mapping):
-            continue
-        projected: dict[str, Any] = {}
-        for field in fields:
-            if field not in raw:
-                continue
-            if field == "reason_codes":
-                value = _string_list(raw.get(field))
-            else:
-                value = raw.get(field)
-                if not isinstance(value, (str, int, float, bool)):
-                    value = str(value) if value not in (None, "", [], {}, ()) else ""
-                if isinstance(value, str):
-                    value = value.strip()
-            if value not in ("", None, [], {}, ()):
-                projected[field] = value
-        if projected:
-            items.append(projected)
-    return items[:8]
-
-
-def _adapter_proposal_diagnostic_signals(
-    adapter_payload: Mapping[str, Any],
-) -> dict[str, Any]:
-    fields = (
-        "measurement_context",
-        "screening_headroom",
-        "default_avoid_directions",
-        "measurable_opportunity_classes",
-        "mechanism_effect_ranking",
-    )
-    return {
-        field: adapter_payload[field]
-        for field in fields
-        if adapter_payload.get(field) not in ("", None, [], {}, ())
-    }
-
-
-def _proposal_branch_lesson_usage_requirement(
-    cross_branch_research_payload: Mapping[str, Any],
-) -> dict[str, Any]:
-    return branch_lesson_usage_requirement_from_records(
-        cross_branch_research_payload.get("branch_lesson_records")
-    )
-
-
-def _record_proposal_branch_lesson_usage_requirement(
-    branch: Branch,
-    *,
-    requirement: Mapping[str, Any],
-    records: list[dict[str, Any]],
-) -> None:
-    summary = getattr(branch, "branch_evidence_summary", None)
-    if not isinstance(summary, dict):
-        return
-    if not requirement:
-        summary.pop("branch_lesson_usage_requirement", None)
-        summary.pop("branch_lesson_records", None)
-        summary.pop("branch_lesson_usage_required_for", None)
-        return
-    summary["branch_lesson_usage_requirement"] = dict(requirement)
-    summary["branch_lesson_records"] = [dict(item) for item in records[:8]]
-    required_for = str(requirement.get("required_for") or "").strip()
-    if required_for:
-        summary["branch_lesson_usage_required_for"] = required_for
-
-
-def _material_difference_candidate_projection(
-    candidate: Mapping[str, Any],
-) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in {
-            "branch_id": str(candidate.get("branch_id") or "").strip(),
-            "release_reason": str(candidate.get("release_reason") or "").strip(),
-            "scheduler_preference": str(
-                candidate.get("scheduler_preference") or ""
-            ).strip(),
-            "lineage_status": str(candidate.get("lineage_status") or "").strip(),
-            "branch_state": str(candidate.get("branch_state") or "").strip(),
-            "branch_code_status": str(
-                candidate.get("branch_code_status") or ""
-            ).strip(),
-            "screening_tier": str(candidate.get("screening_tier") or "").strip(),
-            "candidate_source": str(candidate.get("candidate_source") or "").strip(),
-        }.items()
-        if value not in ("", None, [], {}, ())
-    }
-
-
-def _string_list(value: Any) -> list[str]:
-    if not isinstance(value, (list, tuple, set)):
-        return []
-    return [str(item).strip() for item in value if str(item).strip()]
-
-
-def _nonnegative_int(value: Any) -> int | None:
-    if value in (None, ""):
-        return None
-    try:
-        return max(0, int(value))
-    except (TypeError, ValueError):
-        return None
+    return [
+        step
+        for step in step_history
+        if (
+            step.protocol_result is not None
+            and step.protocol_result.stage == ExperimentStage.SCREENING
+        )
+    ]
 
 
 class ContextManager:
-    """Constructs context dicts for CreativeLayer calls.
-
-    Exposure-control matrix (§5.3):
-    ┌─────────────────────────┬─────────────────────────────────────────┐
-    │ Context type            │ Excluded fields                         │
-    ├─────────────────────────┼─────────────────────────────────────────┤
-    │ hypothesis_context      │ validation/frozen results, raw metrics  │
-    │ code_context            │ experiment stats, branch history        │
-    │ fix_context             │ experiment stats, branch history        │
-    └─────────────────────────┴─────────────────────────────────────────┘
-    """
+    """Build the sole direct-V3 hypothesis and code contexts."""
 
     def __init__(
         self,
         *,
-        adapter=None,
-        runtime_slow_threshold: float = 2.0,
-        measurement_governance: str = "on",
-        proposal_context_ablation: str = "full",
-    ):
+        adapter: Any | None = None,
+    ) -> None:
         self._adapter = adapter
-        self._runtime_slow_threshold = runtime_slow_threshold
-        self._measurement_governance = _normalize_measurement_governance_mode(
-            measurement_governance
-        )
-        self._proposal_context_ablation = normalize_proposal_context_ablation(
-            proposal_context_ablation
-        )
-
-    # ------------------------------------------------------------------
-    # Round 1 — hypothesis context
-    # ------------------------------------------------------------------
 
     def build_hypothesis_context(
         self,
         branch: Branch,
         champion: ChampionState,
         problem_spec: ProblemSpec,
-        active_hypotheses: List[HypothesisRecord],
-        blacklist: List[HypothesisRecord],
-        sibling_branches: Optional[List[Branch]] = None,
-        step_history: Optional[List[StepRecord]] = None,
+        step_history: Optional[list[StepRecord]] = None,
         branch_workspace: Optional[str] = None,
-        failure_streak: Optional[Dict[str, int]] = None,
         forced_locus: Optional[str] = None,
         forced_action: Optional[str] = None,
         forced_target_file: Optional[str] = None,
         forced_surface_diagnostic: bool = False,
-        rejected_hypotheses: Optional[List[HypothesisRecord]] = None,
-        search_memory: Optional[Any] = None,
-        saturation_signals: Optional[List[Any]] = None,
-        weight_opt_result: Optional[Any] = None,
-        research_log: Optional[Any] = None,
-        measurement_governance: Optional[str] = None,
-        proposal_context_ablation: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """Context for generate_hypothesis (Round 1).
+    ) -> dict[str, Any]:
+        """Return the V3 round-one research context.
 
-        Includes full problem summary, champion research code, branch experiment
-        history, and blacklist. Deliberately excludes validation/frozen data.
-
-        If branch_workspace is provided and differs from the champion snapshot,
-        branch_code shows the modified research-surface files so the LLM can
-        build on them.
-
-        If failure_streak is provided, injects a failure pattern warning when
-        any failure code has a streak >= 2.
+        Each prior screening experiment is exposed once. Validation/frozen
+        details, branch status mirrors, host search controls, repair loops,
+        and cross-branch governance artifacts are deliberately absent.
         """
-        problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
-        measurement_governance_mode = _normalize_measurement_governance_mode(
-            self._measurement_governance
-            if measurement_governance is None
-            else measurement_governance
-        )
-        proposal_context_ablation_mode = normalize_proposal_context_ablation(
-            self._proposal_context_ablation
-            if proposal_context_ablation is None
-            else proposal_context_ablation
-        )
-        problem_object = _build_problem_object(adapter=self._adapter)
-        solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
+
         adapter_spec = _get_adapter_problem_spec(self._adapter)
         research_surfaces = _get_research_surfaces(problem_spec, adapter_spec)
         forced_request = (
@@ -638,406 +153,116 @@ class ContextManager:
             if forced_locus
             else None
         )
-        declared_problem_boundary_surfaces = _solver_design_surface_names(
-            research_surfaces
-        )
-        active_problem_boundary_surfaces = (
+        active_boundary_surfaces = (
             []
             if forced_request is not None
-            else declared_problem_boundary_surfaces
+            else _solver_design_surface_names(research_surfaces)
         )
-        visible_research_surfaces = _hypothesis_visible_research_surfaces(
+        visible_surfaces = _hypothesis_visible_research_surfaces(
             research_surfaces,
             forced_surface=forced_request.surface if forced_request else None,
-            active_problem_boundary_surfaces=active_problem_boundary_surfaces,
+            active_problem_boundary_surfaces=active_boundary_surfaces,
         )
-        research_surfaces_block = _build_research_surfaces_block(
-            visible_research_surfaces
+        include_operator_files = _include_operator_files_for_research_code(
+            visible_surfaces
         )
-        legacy_surface_exclusion = _build_inactive_surface_exclusion_block(
-            research_surfaces,
-            visible_research_surfaces=visible_research_surfaces,
-            active_problem_boundary_surfaces=active_problem_boundary_surfaces,
-        )
-        if legacy_surface_exclusion:
-            research_surfaces_block = "\n".join(
-                block
-                for block in (research_surfaces_block, legacy_surface_exclusion)
-                if block
-            )
-        champion_operators_code = _read_champion_research_code(
+        champion_source = _read_champion_research_code(
             champion,
-            research_surfaces=visible_research_surfaces,
-            include_operator_files=_include_operator_files_for_research_code(
-                visible_research_surfaces
-            ),
+            research_surfaces=visible_surfaces,
+            include_operator_files=include_operator_files,
         )
-        family_taxonomy = (
-            _get_family_taxonomy(problem_spec)
-            or _get_family_taxonomy(adapter_spec)
-        )
-        safe_hypothesis_steps = _filter_hypothesis_prompt_steps(step_history or [])
-        experiment_history = _build_experiment_history(
-            safe_hypothesis_steps, branch.branch_id, taxonomy=family_taxonomy
-        )
-        blacklist_summary = _summarise_blacklist(blacklist)
-        solver_design_boundary_guidance = _build_solver_design_boundary_guidance(
-            safe_hypothesis_steps,
-            research_surfaces=research_surfaces,
-            blacklist=blacklist,
-            rejected_hypotheses=rejected_hypotheses or [],
-        )
-        sibling_summary = _summarise_siblings(sibling_branches or [])
-        champion_stats = _build_champion_stats(champion)
-        branch_code = (
+        branch_source = (
             _read_branch_code(
                 branch_workspace,
                 champion,
-                research_surfaces=visible_research_surfaces,
-                include_operator_files=_include_operator_files_for_research_code(
-                    visible_research_surfaces
-                ),
+                research_surfaces=visible_surfaces,
+                include_operator_files=include_operator_files,
             )
             if branch_workspace
             else None
         )
-        branch_direction = _build_branch_direction_prompt(branch)
-
-        # T07: Build family tracking and coverage (J-patch: use global step_history)
-        all_steps = safe_hypothesis_steps
-        targetable_operator_files = _list_champion_operator_files(champion)
-        targetable_surface_files = _list_champion_surface_files(
+        targetable_files = _targetable_files(
             champion,
-            research_surfaces=research_surfaces,
-        )
-        branch_surface_files = (
-            _list_branch_surface_files(
-                branch_workspace,
-                research_surfaces=research_surfaces,
-            )
-            if branch_workspace
-            else []
-        )
-        if branch_surface_files:
-            targetable_surface_files = sorted(
-                set(targetable_surface_files) | set(branch_surface_files)
-            )
-        active_boundary_declared_target_files = _surface_target_files_for_names(
-            research_surfaces,
-            active_problem_boundary_surfaces,
-        )
-        active_boundary_target_files = _expand_surface_targets_for_champion(
-            champion,
-            active_boundary_declared_target_files,
-        )
-        if branch_workspace:
-            active_boundary_target_files = sorted(
-                set(active_boundary_target_files)
-                | set(
-                    item
-                    for item in _expand_surface_targets_for_root(
-                        branch_workspace,
-                        active_boundary_declared_target_files,
-                    )
-                    if "*" not in item
-                )
-            )
-        effective_operator_categories = (
-            active_problem_boundary_surfaces
-            if active_problem_boundary_surfaces
-            else list(problem_spec.operator_categories)
-        )
-        effective_targetable_files = (
-            active_boundary_target_files
-            if active_boundary_target_files
-            else sorted(set(targetable_operator_files) | set(targetable_surface_files))
+            branch_workspace=branch_workspace,
+            research_surfaces=visible_surfaces,
         )
         available_actions = _available_hypothesis_actions(
-            targetable_operator_files,
-            targetable_policy_files=targetable_surface_files,
+            _list_champion_operator_files(champion),
+            targetable_policy_files=_list_champion_surface_files(
+                champion,
+                research_surfaces=visible_surfaces,
+            ),
         )
-        forced_surface_name = (
-            forced_request.surface
-            if forced_request is not None and forced_surface_diagnostic
-            else None
+        safe_steps = _filter_hypothesis_prompt_steps(step_history or [])
+        branch_steps = [
+            step for step in safe_steps if step.branch_id == branch.branch_id
+        ]
+        experiment_history = canonical_screening_history(
+            branch,
+            branch_steps,
         )
-        forced_action_name = (
-            forced_request.action
-            if forced_request is not None and forced_surface_diagnostic
-            else None
-        )
-        effective_available_actions = (
-            {forced_action_name}
-            if forced_action_name
-            else available_actions
-        )
-        families = _extract_families_from_steps(all_steps, taxonomy=family_taxonomy)
-        exploration_coverage = (
-            build_exploration_coverage(
-                families,
-                available_actions=effective_available_actions,
-                forced_action=forced_action_name,
-            )
-            if families
-            else ""
-        )
-
-        # T08: Build strategy guidance from family data (J-patch: global)
-        strategy_guidance = (
-            _build_strategy_guidance(
-                families,
-                problem_spec,
-                available_actions=effective_available_actions,
-                forced_surface=forced_surface_name,
-                forced_action=forced_action_name,
-                active_problem_boundary_surfaces=active_problem_boundary_surfaces,
-            )
-            if families
-            else ""
-        )
-
-        # T10: Champion baseline hints from most recent screening experiment
-        champion_baselines = _build_champion_baselines(safe_hypothesis_steps)
-
-        # Sprint H2 T5: Failure pattern warning
-        failure_pattern_warning = _build_failure_pattern_warning(failure_streak or {})
-
-        # I3: Forced locus diversification / diagnostic surface constraint
-        locus_constraint = ""
-        if forced_request is not None:
-            surface = _find_research_surface(
-                research_surfaces,
-                forced_request.surface,
-            )
-            locus_constraint = _build_forced_surface_constraint(
-                surface=surface,
-                surface_name=forced_request.surface,
-                action=forced_request.action,
-                target_file=forced_request.target_file,
-                diagnostic=forced_surface_diagnostic,
-                blocking_hypotheses=[
-                    *(active_hypotheses or []),
-                    *(blacklist or []),
-                    *(rejected_hypotheses or []),
-                ],
-            )
-
-        # J1: Render search memory (cross-branch search history)
-        search_memory_block = ""
-        if search_memory is not None:
-            try:
-                search_memory_block = search_memory.render(
-                    view="hypothesis",
-                    branch_id=branch.branch_id,
-                )
-            except TypeError:
-                search_memory_block = search_memory.render(view="hypothesis")
-
-        # J2: Render saturation signals
-        saturation_block = ""
-        if saturation_signals:
-            from scion.proposal.saturation import render_saturation_signals
-            saturation_block = render_saturation_signals(saturation_signals)
-
-        # Objective policy/guidance is generic: lexicographic protection or
-        # weighted-sum scalar improvement, plus recent screening tendencies.
-        objective_policy_guidance = _build_objective_policy_guidance(adapter_spec)
-        objective_feedback = _build_recent_objective_feedback(
-            safe_hypothesis_steps, branch.branch_id, adapter_spec
-        )
-        objective_opportunity_profile = _build_objective_opportunity_profile(
-            safe_hypothesis_steps, adapter_spec
-        )
-        objective_guidance = _build_objective_guidance(
-            saturation_signals, objective_feedback=objective_feedback
-        )
-        solver_design_prompt_provider = None
-        if declared_problem_boundary_surfaces:
-            solver_design_prompt_provider = resolve_solver_design_prompt_provider(
+        provider = (
+            resolve_solver_design_prompt_provider(
                 problem_spec=problem_spec,
                 adapter=self._adapter,
             )
-        search_control_guidance = _build_search_control_guidance(
-            families,
-            safe_hypothesis_steps,
-            adapter_spec,
-            forced_surface=forced_surface_name,
-            solver_design_prompt_provider=solver_design_prompt_provider,
+            if active_boundary_surfaces
+            else None
         )
-        runtime_feedback = _build_runtime_feedback(
-            safe_hypothesis_steps,
-            slow_case_threshold=self._runtime_slow_threshold,
-        )
-        runtime_failure_guidance = _build_runtime_failure_guidance(
-            safe_hypothesis_steps,
-            problem_spec=problem_spec,
-            adapter_spec=adapter_spec,
-            forced_surface=forced_surface_name,
-        )
-        agent_quality_feedback = _build_agent_quality_feedback(
-            safe_hypothesis_steps,
-            branch.branch_id,
-        )
-        branch_dossier_payload = build_branch_dossier(
-            branch,
-            safe_hypothesis_steps,
-        )
-        branch_dossier = render_branch_dossier(branch_dossier_payload)
-        cross_branch_research_payload = build_cross_branch_research_map(
-            branch,
-            [branch, *(sibling_branches or [])],
-            safe_hypothesis_steps,
-            available_actions=effective_available_actions,
-        )
-        cross_branch_research = render_cross_branch_research_map(
-            cross_branch_research_payload
-        )
-        research_shape_diagnostics = build_proposal_research_shape_diagnostics(
-            cross_branch_research_payload
-        )
-        branch_followup_policy_payload = build_branch_followup_policy(
-            branch,
-            safe_hypothesis_steps,
-        )
-        branch_followup_policy = render_branch_followup_policy(
-            branch_followup_policy_payload
-        )
-        launch_research_focus = _build_launch_research_focus() or ""
-        material_difference_requirement = _proposal_material_difference_requirement(
-            branch,
-            launch_research_focus=(
-                launch_research_focus
-                if isinstance(launch_research_focus, Mapping)
-                else None
+
+        context: dict[str, Any] = {
+            "problem_summary": _build_problem_summary(
+                problem_spec,
+                adapter=self._adapter,
             ),
-        )
-        branch_lesson_records = project_branch_lesson_records(
-            cross_branch_research_payload.get("branch_lesson_records")
-        )
-        branch_lesson_usage_requirement = (
-            _proposal_branch_lesson_usage_requirement(
-                cross_branch_research_payload
-            )
-        )
-        _record_proposal_branch_lesson_usage_requirement(
-            branch,
-            requirement=branch_lesson_usage_requirement,
-            records=branch_lesson_records,
-        )
-        contract_preview_failure_signature = (
-            contract_preview_failure_signature_feedback(branch)
-        )
-
-        # W10: Weight optimization feedback (coarse-grained operator signals)
-        weight_opt_block = ""
-        if weight_opt_result is not None:
-            from scion.proposal.weight_feedback import render_weight_feedback
-            weight_opt_block = render_weight_feedback(weight_opt_result)
-
-        # J-patch: Render research log (cross-branch trajectory)
-        research_log_block = ""
-        if research_log is not None:
-            research_log_block = research_log.render(view="hypothesis")
-
-        problem_measurement_diagnostics = (
-            _problem_measurement_diagnostics(problem_spec, adapter=self._adapter)
-            if measurement_governance_mode == "on"
-            else {}
-        )
-        problem_opportunity_summary = (
-            problem_opportunity_summary_from_adapter(self._adapter)
-            if measurement_governance_mode == "on"
-            else {}
-        )
-        return {
-            "problem_summary": problem_summary,
-            "problem_object": problem_object,
-            "solver_mechanics": solver_mechanics,
-            "measurement_governance": measurement_governance_mode,
-            "proposal_context_ablation": proposal_context_ablation_mode,
+            "problem_object": _build_problem_object(adapter=self._adapter),
+            "solver_mechanics": _build_solver_mechanics(adapter=self._adapter),
+            "objective_policy_guidance": _build_objective_policy_guidance(
+                adapter_spec
+            ),
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
-            "operator_categories": ", ".join(effective_operator_categories),
-            "research_surfaces": research_surfaces_block,
-            "available_actions": ", ".join(sorted(available_actions)),
-            "targetable_files": ", ".join(effective_targetable_files),
-            "active_problem_boundary_surfaces": ", ".join(
-                active_problem_boundary_surfaces
-            ),
-            "champion_operators_code": champion_operators_code,
-            "champion_stats": champion_stats,
+            "research_surfaces": [
+                _surface_projection(surface) for surface in visible_surfaces
+            ],
+            "available_actions": sorted(available_actions),
+            "targetable_files": targetable_files,
+            "champion_operators_code": champion_source,
+            "champion_stats": _champion_projection(champion),
             "experiment_history": experiment_history,
-            "blacklist_summary": blacklist_summary,
-            "solver_design_boundary_guidance": solver_design_boundary_guidance,
-            "sibling_summary": sibling_summary,
-            "branch_code": branch_code,
-            "branch_direction": branch_direction,
-            "branch_dossier": branch_dossier,
-            "branch_dossier_payload": branch_dossier_payload,
-            "cross_branch_research": cross_branch_research,
-            "cross_branch_research_payload": cross_branch_research_payload,
-            "research_shape_diagnostics": research_shape_diagnostics,
-            "launch_research_focus": launch_research_focus,
-            "cross_branch_research_audit_records": (
-                cross_branch_research_payload.get(
-                    "material_difference_audit_records",
-                    [],
-                )
-            ),
-            "cross_branch_research_session_metadata": (
-                cross_branch_research_payload.get(
-                    "cross_branch_research_metadata",
-                    {},
-                )
-            ),
-            "material_difference_requirement": material_difference_requirement,
-            "branch_lesson_usage_requirement": (
-                branch_lesson_usage_requirement
-            ),
-            "branch_lesson_records": branch_lesson_records,
-            "contract_preview_failure_signature": (
-                contract_preview_failure_signature
-            ),
-            "branch_followup_policy": branch_followup_policy,
-            "branch_followup_policy_payload": branch_followup_policy_payload,
-            "exploration_coverage": exploration_coverage,
-            "strategy_guidance": strategy_guidance,
-            "champion_baselines": champion_baselines,
-            "failure_pattern_warning": failure_pattern_warning,
-            "locus_constraint": locus_constraint,
-            "forced_surface": forced_request.surface if forced_request else "",
-            "forced_action": forced_request.action if forced_request else "",
-            "forced_target_file": (
-                forced_request.target_file if forced_request else ""
-            ),
-            "objective_policy_guidance": objective_policy_guidance,
-            "problem_measurement_diagnostics": problem_measurement_diagnostics,
-            "problem_opportunity_summary": problem_opportunity_summary,
-            "objective_opportunity_profile": objective_opportunity_profile,
-            "objective_guidance": objective_guidance,
-            "solver_design_prompt_provider": solver_design_prompt_provider,
-            "solver_design_prompt_provider_ref": (
-                (
-                    f"{type(solver_design_prompt_provider).__module__}."
-                    f"{type(solver_design_prompt_provider).__qualname__}"
-                )
-                if solver_design_prompt_provider is not None
-                else ""
-            ),
-            "search_control_guidance": search_control_guidance,
-            "runtime_feedback": runtime_feedback,
-            "runtime_failure_guidance": runtime_failure_guidance,
-            "agent_quality_feedback": agent_quality_feedback,
-            "search_memory": search_memory_block,
-            "saturation_signal": saturation_block,
-            "weight_opt_feedback": weight_opt_block,
-            "research_log": research_log_block,
-            "active_hyp_summary": _summarise_active_hypotheses(active_hypotheses),
         }
+        if branch_source:
+            context["branch_current_code"] = branch_source
 
-    # ------------------------------------------------------------------
-    # Round 2 — code context
-    # ------------------------------------------------------------------
+        measurement = _problem_measurement_diagnostics(
+            problem_spec,
+            adapter=self._adapter,
+        )
+        if measurement:
+            context["problem_measurement_diagnostics"] = measurement
+        research_question = typed_research_question_payload(
+            problem_spec=problem_spec,
+            adapter=self._adapter,
+        )
+        if research_question:
+            context["research_question"] = research_question
+        if forced_request is not None:
+            context["forced_research_target"] = _forced_target_projection(
+                forced_request,
+                visible_surfaces,
+                diagnostic=forced_surface_diagnostic,
+            )
+
+        guidance = materialize_solver_design_prompt_guidance(
+            provider,
+            context,
+            phase="hypothesis",
+        )
+        if any(guidance.values()):
+            context[RENDERER_INPUTS_KEY] = {
+                SOLVER_DESIGN_GUIDANCE_KEY: guidance
+            }
+        return context
 
     def build_code_context(
         self,
@@ -1045,267 +270,494 @@ class ContextManager:
         hypothesis: HypothesisProposal,
         champion: ChampionState,
         problem_spec: ProblemSpec,
-        prior_failure: Optional[str] = None,
         branch_workspace: Optional[str] = None,
         step_history: Optional[list[StepRecord]] = None,
-    ) -> Dict[str, Any]:
-        """Context for generate_code (Round 2).
+    ) -> dict[str, Any]:
+        """Return the V3 round-two implementation context only."""
 
-        Contains problem summary, hypothesis details, target file content,
-        research-surface interface spec, and import whitelist.
-        Does NOT contain experiment stats or branch history.
-        If prior_failure is set, a previous code generation attempt failed for
-        this hypothesis — the failure detail is included so the LLM can learn.
-        If branch_workspace is set for a previously verified branch, read the
-        current branch research-object code rather than falling back to the
-        champion snapshot.
-        """
-        problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
-        problem_object = _build_problem_object(adapter=self._adapter)
-        solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
-        hypothesis_detail = _format_hypothesis(hypothesis)
         adapter_spec = _get_adapter_problem_spec(self._adapter)
         research_surfaces = _get_research_surfaces(problem_spec, adapter_spec)
-        surface = _find_research_surface(research_surfaces, hypothesis.change_locus)
+        surface = _find_research_surface(
+            research_surfaces,
+            hypothesis.change_locus,
+        )
         source_root = (
             branch_workspace
             if branch_workspace and os.path.isdir(branch_workspace)
             else champion.code_snapshot_path
         )
-        branch_step_history = step_history or []
         branch_file_sources = branch_current_file_sources(
             branch,
-            branch_step_history,
+            step_history or [],
         )
-        branch_workspace_visible = bool(
+        workspace_visible = bool(
             branch_workspace and os.path.isdir(branch_workspace)
         )
-        branch_created = (
-            branch_created_files(branch, branch_step_history)
-            if branch_workspace_visible or branch_file_sources
+        created = (
+            branch_created_files(branch, step_history or [])
+            if workspace_visible or branch_file_sources
             else ()
         )
-        branch_touched = (
-            branch_touched_files(branch, branch_step_history)
-            if branch_workspace_visible or branch_file_sources
+        touched = (
+            branch_touched_files(branch, step_history or [])
+            if workspace_visible or branch_file_sources
             else ()
         )
-        normalized_target_file = str(hypothesis.target_file or "").replace(
-            "\\",
-            "/",
-        ).lstrip("/")
-        target_file_exists = _target_file_exists_in_root(
-            source_root,
-            hypothesis.target_file,
-        )
-        if normalized_target_file in branch_file_sources:
-            target_file_exists = True
-            target_file_code = _render_branch_current_target_file(
-                normalized_target_file,
-                branch_file_sources[normalized_target_file],
-            )
-        elif (
-            normalized_target_file
-            and normalized_target_file in set(branch_created) | set(branch_touched)
-        ):
-            target_file_exists = False
-            target_file_code = _render_missing_branch_current_target_file(
-                normalized_target_file
-            )
-        elif hypothesis.action == "create_new" and not target_file_exists:
-            target_file_code = _render_new_file_target_placeholder(
-                normalized_target_file
-            )
-        else:
-            target_file_code = _read_target_file_from_root(
-                source_root,
-                hypothesis.target_file,
-            )
-        champion_operators_code = _read_champion_research_code(
-            champion,
-            research_surfaces=research_surfaces,
-        )
-        # Operator surfaces get reference operators as style/interface reference.
-        reference_operators = _read_reference_operators(
-            champion,
-            hypothesis.change_locus,
-            problem_spec,
-            research_surfaces=research_surfaces,
-        )
-        operator_interface_spec = _build_operator_interface_spec(
-            problem_spec,
-            adapter=self._adapter,
-            surface_name=hypothesis.change_locus,
-        )
-        import_whitelist = "\n".join(
-            f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
-        )
-        launch_research_focus = _build_launch_research_focus() or ""
-        material_difference_requirement = _proposal_material_difference_requirement(
-            branch,
-            launch_research_focus=(
-                launch_research_focus
-                if isinstance(launch_research_focus, Mapping)
-                else None
-            ),
-        )
-
-        ctx: Dict[str, Any] = {
-            "problem_summary": problem_summary,
-            "problem_object": problem_object,
-            "solver_mechanics": solver_mechanics,
-            "branch_id": branch.branch_id,
-            "champion_version": champion.version,
-            "hypothesis_detail": hypothesis_detail,
-            "hypothesis_implementation_brief": _hypothesis_implementation_brief(
-                hypothesis
-            ),
-            "target_file": hypothesis.target_file,
-            "target_file_code": target_file_code,
-            "target_file_exists": target_file_exists,
-            "solver_design_source_root": source_root,
-            "solver_design_champion_root": champion.code_snapshot_path,
-            "champion_operators_code": champion_operators_code,
-            "reference_operators": reference_operators,
-            "operator_interface_spec": operator_interface_spec,
-            "launch_research_focus": launch_research_focus,
-            "material_difference_requirement": material_difference_requirement,
-            "research_surface_name": hypothesis.change_locus,
-            "research_surface_kind": getattr(surface, "kind", "operator"),
-            "import_whitelist": import_whitelist,
-            "editable_patterns": ", ".join(problem_spec.search_space.editable),
-            "frozen_patterns": ", ".join(problem_spec.search_space.frozen),
-        }
-        contract_preview_failure_signature = (
-            contract_preview_failure_signature_feedback(branch)
-        )
-        if contract_preview_failure_signature:
-            ctx["contract_preview_failure_signature"] = (
-                contract_preview_failure_signature
-            )
-        if branch_workspace and os.path.isdir(branch_workspace):
-            ctx["branch_workspace"] = branch_workspace
-        active_subject_taxonomy = active_subject_taxonomy_payload(
-            problem_spec=problem_spec,
-            adapter=self._adapter,
-            surface=hypothesis.change_locus,
-        )
-        if active_subject_taxonomy:
-            ctx["active_subject_taxonomy"] = active_subject_taxonomy
-        active_subject_code_constraints = active_subject_code_constraints_payload(
-            context=ctx,
-            problem_spec=problem_spec,
-            adapter=self._adapter,
-            surface=hypothesis.change_locus,
-        )
-        if active_subject_code_constraints:
-            ctx["active_subject_code_constraints"] = active_subject_code_constraints
-        problem_opportunity_summary = problem_opportunity_summary_from_adapter(
-            self._adapter
-        )
-        opportunity_evidence_commitment = (
-            opportunity_evidence_commitment_from_summary(
-                problem_opportunity_summary,
-                hypothesis,
-            )
-        )
-        if opportunity_evidence_commitment:
-            ctx["opportunity_evidence_commitment"] = opportunity_evidence_commitment
-        if _is_solver_design_context_surface(hypothesis.change_locus, surface):
-            solver_design_prompt_provider = resolve_solver_design_prompt_provider(
+        provider = (
+            resolve_solver_design_prompt_provider(
                 problem_spec=problem_spec,
                 adapter=self._adapter,
             )
-            if solver_design_prompt_provider is not None:
-                ctx["solver_design_prompt_provider"] = solver_design_prompt_provider
-                ctx["solver_design_prompt_provider_ref"] = (
-                    f"{type(solver_design_prompt_provider).__module__}."
-                    f"{type(solver_design_prompt_provider).__qualname__}"
-                )
-            ctx["solver_design_api_manifest"] = _build_solver_design_api_manifest(
-                source_root=source_root,
-                champion_root=champion.code_snapshot_path,
-                target_file=hypothesis.target_file,
-                provider=solver_design_prompt_provider,
+            if _is_solver_design_context_surface(
+                hypothesis.change_locus,
+                surface,
             )
-            ctx["solver_design_branch_current_integration_files"] = (
-                _build_solver_design_branch_current_integration_files(
-                    source_root=source_root,
-                    champion_root=champion.code_snapshot_path,
-                    target_file=hypothesis.target_file,
-                    provider=solver_design_prompt_provider,
-                    branch_created_files=branch_created,
-                    branch_touched_files=branch_touched,
-                    branch_current_file_sources=branch_file_sources,
-                )
-            )
-        if prior_failure is not None:
-            ctx["prior_code_failure"] = prior_failure
-            ctx["pending_code_retry_policy"] = {
-                "status": "approved_hypothesis_code_repair",
-                "fresh_proposal_duplicate_gate": "skip_for_same_approved_hypothesis",
-                "rule": (
-                    "Repair code for the already approved hypothesis. Do not "
-                    "rename the mechanism or generate a fresh replacement "
-                    "hypothesis unless the framework explicitly closes this "
-                    "pending retry."
-                ),
-            }
-        return ctx
-
-    # ------------------------------------------------------------------
-    # Fix context — after light verification failure
-    # ------------------------------------------------------------------
-
-    def build_fix_context(
-        self,
-        branch: Branch,
-        patch: PatchProposal,
-        verification_result: VerificationResult,
-        problem_spec: ProblemSpec,
-        failure_streak: Optional[Dict[str, int]] = None,
-    ) -> Dict[str, Any]:
-        """Context for fix_code (after a light verification failure).
-
-        Contains the failed patch, failure details, and operator interface spec.
-        Does NOT contain experiment stats.
-        If failure_streak is provided, injects a failure pattern warning.
-        """
-        problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
-        problem_object = _build_problem_object(adapter=self._adapter)
-        solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
-        failed_checks = [c for c in verification_result.checks if not c.passed]
-        failure_detail = (
-            f"Severity: {verification_result.failure_severity or 'unknown'}\n"
-            f"First failure: {verification_result.first_failure or 'N/A'}\n"
-            "Details:\n"
-            + "\n".join(
-                f"  [{c.name}] ({c.severity}) {c.detail}" for c in failed_checks
-            )
-        ) or "No detail available."
-
-        operator_interface_spec = _build_operator_interface_spec(problem_spec, adapter=self._adapter)
-        import_whitelist = "\n".join(
-            f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
+            else None
         )
-
-        failure_pattern_warning = _build_failure_pattern_warning(failure_streak or {})
-
-        ctx = {
-            "problem_summary": problem_summary,
-            "problem_object": problem_object,
-            "solver_mechanics": solver_mechanics,
-            "branch_id": branch.branch_id,
-            "original_code": (
-                f"File: {patch.file_path}\nAction: {patch.action}\n"
-                f"```python\n{patch.code_content}\n```"
+        source_ledger = _build_code_source_ledger(
+            champion=champion,
+            research_surfaces=research_surfaces,
+            change_locus=hypothesis.change_locus,
+            source_root=source_root,
+            target_file=hypothesis.target_file,
+            target_action=hypothesis.action,
+            provider=provider,
+            branch_created_files=created,
+            branch_touched_files=touched,
+            branch_current_file_sources=branch_file_sources,
+        )
+        context: dict[str, Any] = {
+            "problem_summary": _build_problem_summary(
+                problem_spec,
+                adapter=self._adapter,
             ),
-            "failure_detail": failure_detail,
-            "operator_interface_spec": operator_interface_spec,
-            "import_whitelist": import_whitelist,
-            "editable_patterns": ", ".join(problem_spec.search_space.editable),
-            "frozen_patterns": ", ".join(problem_spec.search_space.frozen),
+            "problem_object": _build_problem_object(adapter=self._adapter),
+            "solver_mechanics": _build_solver_mechanics(adapter=self._adapter),
+            "branch_id": branch.branch_id,
+            "champion_version": champion.version,
+            "approved_hypothesis": _hypothesis_projection(hypothesis),
+            SOURCE_LEDGER_KEY: source_ledger,
+            "operator_interface_spec": _build_operator_interface_spec(
+                problem_spec,
+                adapter=self._adapter,
+                surface_name=hypothesis.change_locus,
+            ),
+            "research_surface": _surface_projection(surface),
+            "import_whitelist": list(problem_spec.search_space.import_whitelist),
+            "editable_patterns": list(problem_spec.search_space.editable),
+            "frozen_patterns": list(problem_spec.search_space.frozen),
         }
-        if failure_pattern_warning:
-            ctx["failure_pattern_warning"] = failure_pattern_warning
-        return ctx
+        code_constraints = active_subject_code_constraints_payload(
+            context=context,
+            problem_spec=problem_spec,
+            adapter=self._adapter,
+            surface=hypothesis.change_locus,
+        )
+        if code_constraints:
+            context["active_subject_code_constraints"] = code_constraints
+        guidance = materialize_solver_design_prompt_guidance(
+            provider,
+            context,
+            phase="code",
+            hypothesis=hypothesis,
+        )
+        if any(guidance.values()):
+            context[RENDERER_INPUTS_KEY] = {
+                SOLVER_DESIGN_GUIDANCE_KEY: guidance
+            }
+        return context
+
+
+def _targetable_files(
+    champion: ChampionState,
+    *,
+    branch_workspace: str | None,
+    research_surfaces: list[Any],
+) -> list[str]:
+    files = set(_list_champion_operator_files(champion))
+    files.update(
+        _list_champion_surface_files(
+            champion,
+            research_surfaces=research_surfaces,
+        )
+    )
+    for surface in research_surfaces:
+        files.update(surface_target_files(surface))
+    if branch_workspace:
+        files.update(
+            _list_branch_surface_files(
+                branch_workspace,
+                research_surfaces=research_surfaces,
+            )
+        )
+        declared = [
+            path
+            for surface in research_surfaces
+            for path in surface_target_files(surface)
+        ]
+        files.update(
+            _expand_surface_targets_for_root(branch_workspace, declared)
+        )
+    else:
+        declared = [
+            path
+            for surface in research_surfaces
+            for path in surface_target_files(surface)
+        ]
+        files.update(_expand_surface_targets_for_champion(champion, declared))
+    return sorted(path for path in files if str(path).strip())
+
+
+def _build_objective_policy_guidance(adapter_spec: Any | None) -> dict[str, Any]:
+    if adapter_spec is None:
+        return {}
+    objectives = sorted(
+        list(getattr(adapter_spec, "objectives", []) or []),
+        key=lambda item: getattr(item, "priority", 0),
+    )
+    policy = getattr(adapter_spec, "objective_policy", None)
+    if not objectives:
+        return {}
+    mode = str(getattr(policy, "mode", "lexicographic") or "lexicographic")
+    projected = [
+        {
+            key: value
+            for key, value in {
+                "name": getattr(objective, "name", ""),
+                "direction": getattr(objective, "direction", ""),
+                "priority": getattr(objective, "priority", None),
+                "tie_tolerance": getattr(objective, "tie_tolerance", None),
+                "weight": (
+                    getattr(objective, "weight", None)
+                    if bool(getattr(policy, "expose_weights_to_llm", False))
+                    else None
+                ),
+            }.items()
+            if value not in (None, "", [], {})
+        }
+        for objective in objectives
+    ]
+    return {
+        "mode": mode,
+        "objectives": projected,
+        "interpretation": (
+            "Improve the weighted aggregate while preserving feasibility."
+            if mode == "weighted_sum"
+            else "Improve the declared objective while preserving feasibility."
+            if mode == "single"
+            else (
+                "Preserve higher-priority objectives within their tie tolerances "
+                "before claiming a lower-priority gain."
+            )
+        ),
+    }
+
+
+def _surface_projection(surface: Any | None) -> dict[str, Any]:
+    if surface is None:
+        return {}
+    projection: dict[str, Any] = {
+        "name": str(getattr(surface, "name", "") or ""),
+        "kind": str(getattr(surface, "kind", "") or ""),
+        "description": str(getattr(surface, "description", "") or ""),
+        "target_files": surface_target_files(surface),
+        "allowed_actions": [
+            action
+            for action in ("create_new", "modify", "remove")
+            if surface_action_allowed(surface, action)
+        ],
+    }
+    for name in ("interface",):
+        value = getattr(surface, name, None)
+        primitive = _primitive(value)
+        if primitive not in (None, "", [], {}):
+            projection[name] = primitive
+    # Prompt/novelty metadata belonged to legacy semantic gates. Direct V3 gets
+    # problem-owned guidance from the explicit provider packet instead.
+    return {
+        key: value
+        for key, value in projection.items()
+        if value not in (None, "", [], {})
+    }
+
+
+def _champion_projection(champion: ChampionState) -> dict[str, Any]:
+    return {
+        "version": champion.version,
+        "code_snapshot_hash": champion.code_snapshot_hash,
+        "solver_config_hash": champion.solver_config_hash,
+        "operators": [
+            {
+                "name": name,
+                "category": getattr(operator, "category", ""),
+                "file_path": getattr(operator, "file_path", ""),
+                "class_name": getattr(operator, "class_name", ""),
+                "weight": getattr(operator, "weight", None),
+            }
+            for name, operator in sorted((champion.operator_pool or {}).items())
+        ],
+    }
+
+
+def _hypothesis_projection(hypothesis: HypothesisProposal) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in {
+            "hypothesis_text": hypothesis.hypothesis_text,
+            "change_locus": hypothesis.change_locus,
+            "action": hypothesis.action,
+            "target_file": hypothesis.target_file,
+            "predicted_direction": hypothesis.predicted_direction,
+            "target_weakness": hypothesis.target_weakness,
+            "expected_effect": hypothesis.expected_effect,
+            "suggested_weight": hypothesis.suggested_weight,
+        }.items()
+        if value not in (None, "", [], {})
+    }
+
+
+def canonical_screening_record(step: StepRecord) -> dict[str, Any]:
+    protocol = step.protocol_result
+    if protocol is None or protocol.stage != ExperimentStage.SCREENING:
+        raise ValueError("canonical hypothesis evidence requires screening result")
+    experiment_evidence = _screening_projection(protocol)
+    screening_attempt_id = stable_digest(
+        {
+            "branch_id": step.branch_id,
+            "hypothesis_id": step.hypothesis_id,
+            "round_num": step.round_num,
+            "raw_metrics_ref": protocol.raw_metrics_ref,
+            "experiment_evidence": experiment_evidence,
+        },
+        length=32,
+    )
+    return {
+        "screening_attempt_id": screening_attempt_id,
+        "attempt_id": step.hypothesis_id or f"{step.branch_id}:{step.round_num}",
+        "round_num": step.round_num,
+        "hypothesis": _hypothesis_projection(step.hypothesis),
+        "experiment_evidence": experiment_evidence,
+    }
+
+
+def canonical_screening_history(
+    branch: Branch,
+    steps: list[StepRecord],
+) -> list[dict[str, Any]]:
+    """Merge durable and current screening facts without dropping evidence."""
+
+    summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
+    durable = summary.get(CANONICAL_SCREENING_HISTORY_KEY, [])
+    if not isinstance(durable, list) or not all(
+        isinstance(item, Mapping) for item in durable
+    ):
+        raise ValueError("branch canonical screening history is invalid")
+    records = [dict(item) for item in durable]
+    positions: dict[str, int] = {}
+    for index, record in enumerate(records):
+        screening_attempt_id = str(
+            record.get("screening_attempt_id") or ""
+        ).strip()
+        if not screening_attempt_id or screening_attempt_id in positions:
+            raise ValueError("branch canonical screening history identity is invalid")
+        positions[screening_attempt_id] = index
+    for step in steps:
+        record = canonical_screening_record(step)
+        screening_attempt_id = str(record["screening_attempt_id"])
+        previous = positions.get(screening_attempt_id)
+        if previous is not None:
+            if records[previous] != record:
+                raise ValueError("canonical screening history conflicts with current step")
+            continue
+        positions[screening_attempt_id] = len(records)
+        records.append(record)
+    return records
+
+
+def persist_canonical_screening_record(
+    branch: Branch,
+    step: StepRecord,
+) -> bool:
+    """Append one lossless screening record to the durable branch owner."""
+
+    protocol = step.protocol_result
+    if protocol is None or protocol.stage != ExperimentStage.SCREENING:
+        return False
+    records = canonical_screening_history(branch, [])
+    record = canonical_screening_record(step)
+    screening_attempt_id = str(record["screening_attempt_id"])
+    for existing in records:
+        if (
+            str(existing.get("screening_attempt_id") or "")
+            != screening_attempt_id
+        ):
+            continue
+        if existing != record:
+            raise ValueError("durable canonical screening record conflict")
+        return False
+    summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
+    summary[CANONICAL_SCREENING_HISTORY_KEY] = [*records, record]
+    created = list(summary.get(DURABLE_BRANCH_CREATED_FILES_KEY, []) or [])
+    touched = list(summary.get(DURABLE_BRANCH_TOUCHED_FILES_KEY, []) or [])
+    if not all(isinstance(path, str) for path in [*created, *touched]):
+        raise ValueError("durable branch source footprint is invalid")
+    if step.verification_passed and step.patch is not None:
+        for change in patch_file_changes(step.patch):
+            path = str(getattr(change, "file_path", "") or "").strip()
+            if path and path not in touched:
+                touched.append(path)
+            if (
+                path
+                and str(getattr(change, "action", "") or "") == "create"
+                and path not in created
+            ):
+                created.append(path)
+    summary[DURABLE_BRANCH_CREATED_FILES_KEY] = created
+    summary[DURABLE_BRANCH_TOUCHED_FILES_KEY] = touched
+    branch.branch_evidence_summary = summary
+    return True
+
+
+def _screening_projection(protocol: Any) -> dict[str, Any]:
+    stats = protocol.stats
+    payload = {
+        "stage": protocol.stage.value,
+        "objective_outcome": {
+            "semantics": protocol.objective_semantics,
+            "aggregate": _primitive(stats),
+        },
+        "case_outcomes": {
+            "case_ids": list(protocol.case_ids or ()),
+            "seed_set": list(protocol.seed_set or ()),
+            "pair_feedback": _primitive(list(protocol.pair_feedback or ())),
+            "case_feedback": _primitive(list(protocol.case_feedback or ())),
+        },
+        "runtime_errors": {
+            "categories": _primitive(
+                protocol.candidate_runtime_failure_categories
+            ),
+            "first_error": _primitive(protocol.candidate_first_runtime_failure),
+        },
+    }
+    return _drop_empty(payload)
+
+
+def _forced_target_projection(
+    request: Any,
+    surfaces: list[Any],
+    *,
+    diagnostic: bool,
+) -> dict[str, Any]:
+    surface = _find_research_surface(surfaces, request.surface)
+    return {
+        "source": "operator_diagnostic" if diagnostic else "campaign_request",
+        "surface": request.surface,
+        "action": request.action,
+        "target_file": request.target_file,
+        "declared_target_files": surface_target_files(surface) if surface else [],
+        "allowed_actions": [
+            action
+            for action in ("create_new", "modify", "remove")
+            if surface is not None and surface_action_allowed(surface, action)
+        ],
+    }
+
+
+def _problem_measurement_diagnostics(
+    problem_spec: ProblemSpec,
+    *,
+    adapter: Any | None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    measurement = getattr(problem_spec, "measurement", None)
+    if measurement is not None:
+        view = measurement_consumer_view(problem_spec)
+        payload["runtime_model"] = view.runtime_model
+        payload["pairing_validity"] = view.pairing_validity
+        payload["effect_scale"] = {
+            "metric": view.effect_metric,
+            "unit": view.effect_unit,
+            "practical_delta_screen": view.practical_delta_screen,
+            "practical_delta_validate": view.practical_delta_validate,
+        }
+        payload["measurement_readiness"] = (
+            view.to_readiness_status_payload()
+        )
+    hook = getattr(adapter, "render_problem_measurement_diagnostics", None)
+    if callable(hook):
+        try:
+            adapter_payload = hook()
+        except Exception:
+            adapter_payload = None
+        if isinstance(adapter_payload, Mapping):
+            redacted = _redact_measurement_payload(adapter_payload)
+            if redacted:
+                payload["problem_owned_diagnostics"] = redacted
+    return {
+        key: value
+        for key, value in payload.items()
+        if value not in (None, "", [], {})
+    }
+
+
+def _redact_measurement_payload(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        projected: dict[str, Any] = {}
+        for raw_key, child in value.items():
+            key = str(raw_key)
+            lowered = key.lower()
+            if any(
+                fragment in lowered
+                for fragment in _MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS
+            ):
+                continue
+            projected[key] = _redact_measurement_payload(child)
+        return projected
+    if isinstance(value, (list, tuple)):
+        return [_redact_measurement_payload(item) for item in value]
+    return _primitive(value)
+
+
+def _primitive(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Enum):
+        return _primitive(value.value)
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            field.name: _primitive(getattr(value, field.name))
+            for field in fields(value)
+        }
+    if isinstance(value, Mapping):
+        return {str(key): _primitive(child) for key, child in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_primitive(child) for child in value]
+    state = getattr(value, "__dict__", None)
+    if isinstance(state, Mapping):
+        return {
+            str(key): _primitive(child)
+            for key, child in state.items()
+            if not str(key).startswith("_")
+        }
+    return str(value)
+
+
+def _drop_empty(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): projected
+            for key, child in value.items()
+            if (projected := _drop_empty(child)) not in (None, "", [], {})
+        }
+    if isinstance(value, list):
+        return [_drop_empty(child) for child in value]
+    return value
+
+
+__all__ = [
+    "CANONICAL_SCREENING_HISTORY_KEY",
+    "ContextManager",
+    "canonical_screening_history",
+    "canonical_screening_record",
+    "persist_canonical_screening_record",
+]

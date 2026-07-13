@@ -258,7 +258,6 @@ def problem_summary_common_input_consistency_detail(
         failures.append("problem_summary_review_axes_actionability_mismatch")
     launch_required_field = {
         "warehouse_followup_summary": "launch_required_before_plateau_conclusion",
-        "cvrp_large_twoopt_summary": "launch_required_before_twoopt_conclusion",
     }.get(summary_key)
     if (
         launch_required_field is not None
@@ -344,11 +343,6 @@ def problem_summary_common_input_consistency_detail(
         failures.append("problem_summary_runtime_review_ready_mismatch")
     if runtime_evidence_raw_available is not runtime_raw_available:
         failures.append("problem_summary_runtime_raw_available_mismatch")
-    if (
-        runtime_evidence.get("drain_status_complete")
-        is not runtime_summary.get("drain_status_complete")
-    ):
-        failures.append("problem_summary_runtime_drain_status_mismatch")
     if _int_mapping(runtime_evidence.get("runtime_model_counts")) != _int_mapping(
         runtime_budget.get("runtime_model_counts")
     ):
@@ -462,12 +456,6 @@ def problem_summary_common_input_consistency_detail(
         "input_runtime_review_ready": runtime_summary.get("review_ready"),
         "summary_runtime_raw_available": runtime_evidence_raw_available,
         "input_runtime_raw_available": runtime_summary.get("available"),
-        "summary_runtime_drain_status_complete": runtime_evidence.get(
-            "drain_status_complete"
-        ),
-        "input_runtime_drain_status_complete": runtime_summary.get(
-            "drain_status_complete"
-        ),
         "summary_runtime_model_counts": _int_mapping(
             runtime_evidence.get("runtime_model_counts")
         ),

@@ -9,13 +9,10 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 
 from scion.core.branch_cards import active_slot_inventory_from_branch_cards
-from scion.core.branch_hygiene import campaign_remaining_branch_classification
 from scion.core.decision_features_serialization import decision_features_to_payload
+from scion.core.execution_outcome import execution_outcome_evidence
 from scion.core.models import ChampionState, StepRecord
 from scion.core.public_refs import public_artifact_ref, public_case_ref, redact_public_refs
-from scion.core.research_process_guidance_audit import (
-    extract_research_process_guidance_audit,
-)
 from scion.core.reason_code_groups import classify_reason_codes
 from scion.core.run_validity import (
     apply_run_completion_aliases,
@@ -23,10 +20,6 @@ from scion.core.run_validity import (
     step_failure_categories,
 )
 from scion.core.screening_visibility import (
-    candidate_intent_counts_for_steps,
-    candidate_intent_visibility_for_step,
-    observability_value_counts_for_steps,
-    observability_value_visibility_for_step,
     runtime_aggregate_exclusion_for_protocol,
     runtime_gate_visibility_for_protocol,
     runtime_evidence_policy_for_protocol,
@@ -39,23 +32,19 @@ from scion.core.status_reporter import (
     normalize_stopped_reason,
 )
 from scion.core.telemetry_validation import (
-    formal_telemetry_guard_failed,
     formal_screening_attempted,
     screened_experiment_effective,
-    telemetry_decision_details,
-    telemetry_effect_zero_diagnostics,
-    telemetry_failure_categories,
-    telemetry_validation_feedback,
 )
 from scion.evidence.formal_readiness import validate_formal_readiness
 
 from .artifact_refs import _screening_rate_fields
 from .accounting import (
     accounting_reconciliation_fields,
+    direct_campaign_loop_facts,
+    is_direct_campaign_loop,
     proposal_accounting_fields,
 )
 from .common import _stage_value, reduced_measurement_readiness_payload
-from .cross_branch_observability import build_cross_branch_research_observability
 from .failure_summary import (
     _contract_not_run_reason,
     _default_final_evidence_closure_refs,
@@ -69,31 +58,43 @@ from .summary_branch_history import (
     _rollback_events,
 )
 from .summary_cache import _campaign_cache_stats
-from .summary_visibility import (
-    _VISIBILITY_AUDIT_CONTAINER_KEYS,
-    _compact_visibility_audit_value,
-    _step_visibility_audit,
-)
-from .telemetry_summary import (
-    _telemetry_failed_experiment_category_counts,
-    _telemetry_failed_experiment_details,
-)
-
 logger = logging.getLogger(__name__)
+
+
+def _execution_outcome_value(step: StepRecord) -> str:
+    outcome = getattr(step, "execution_outcome", None)
+    if outcome is None:
+        return ""
+    return str(getattr(outcome, "value", outcome))
+
+
+def _execution_outcome_projection(step: StepRecord) -> dict[str, Any] | None:
+    outcome = _execution_outcome_value(step)
+    if not outcome:
+        return None
+    return {
+        "outcome": outcome,
+        "reason_code": getattr(step, "execution_outcome_reason_code", ""),
+        "detail": getattr(step, "execution_outcome_detail", ""),
+        "provenance": dict(
+            getattr(step, "execution_outcome_provenance", {}) or {}
+        ),
+    }
+
+
+def _explicitly_not_evaluated(step: StepRecord) -> bool:
+    outcome = _execution_outcome_value(step)
+    return bool(outcome and outcome != "evaluated")
 
 
 def _summary_scope_reconciliation(
     *,
     steps: list[StepRecord],
     branch_rows: Iterable[Mapping[str, Any]],
-    cross_branch_observability: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     branch_row_list = [row for row in branch_rows if isinstance(row, Mapping)]
     protocol_steps = [step for step in steps if step.protocol_result is not None]
     failed_steps = [step for step in steps if step.failure_stage]
-    non_counted_steps = [
-        step for step in steps if not getattr(step, "counts_toward_max_rounds", True)
-    ]
     source_counts = {
         "step_history_total": len(steps),
         "protocol_step_count": len(protocol_steps),
@@ -104,14 +105,9 @@ def _summary_scope_reconciliation(
             1 for step in steps if screened_experiment_effective(step.protocol_result)
         ),
         "failed_step_count": len(failed_steps),
-        "non_counted_step_count": len(non_counted_steps),
         "branch_row_count": len(branch_row_list),
     }
-    if isinstance(cross_branch_observability, Mapping):
-        source_counts["cross_branch_observable_step_count"] = (
-            cross_branch_observability.get("observable_step_count")
-        )
-    return {
+    reconciliation = {
         "schema_version": "evidence_scope_reconciliation.v1",
         "payload": "campaign_summary",
         "step_history_scope": "full_step_history",
@@ -119,9 +115,9 @@ def _summary_scope_reconciliation(
         "last_result_scope": "not_used",
         "protocol_progress_scope": "completed_step_protocol_results",
         "includes_failed_steps": bool(failed_steps),
-        "includes_non_counted_steps": bool(non_counted_steps),
         "source_counts": source_counts,
     }
+    return reconciliation
 
 
 def _summary_current_progress(
@@ -135,17 +131,6 @@ def _summary_current_progress(
     if stopped and progress.get("complete") is not True:
         return None
     return dict(progress)
-
-
-def _proposal_context_records_from_steps(
-    steps: Iterable[StepRecord],
-) -> list[Mapping[str, Any]]:
-    records: list[Mapping[str, Any]] = []
-    for step in steps:
-        ref = getattr(step, "proposal_session_ref", None)
-        if isinstance(ref, Mapping):
-            records.append(ref)
-    return records
 
 
 def _render_campaign_summary_json(summary: Mapping[str, Any]) -> str:
@@ -194,17 +179,13 @@ class CampaignSummaryMixin:
         step_history: Iterable[StepRecord],
         round_num: int,
         champion: ChampionState,
-        budget_used: float = 0.0,
-        budget_total: float = 0.0,
         stopped_reason: str | None = None,
         balance_exhausted: bool = False,
-        circuit_breaker_tripped: bool = False,
-        stagnation_signals: Iterable[Any] = (),
         diagnostics: Any | None = None,
         final_evidence_refs: Mapping[str, Any] | None = None,
-        frozen_budget: Mapping[str, Any] | None = None,
         measurement_governance: str = "on",
         measurement_readiness: Mapping[str, Any] | None = None,
+        proposal_runtime_mode: str | None = None,
     ) -> Dict[str, Any]:
         """Write ``campaign_summary.json`` with the current backward-compatible schema."""
         steps = list(step_history)
@@ -231,10 +212,10 @@ class CampaignSummaryMixin:
 
         family_counter: Dict[str, int] = {}
         try:
-            from scion.proposal.context_manager import _extract_mechanism_label
+            from scion.proposal.mechanism_labels import extract_mechanism_label
 
             for step in steps:
-                label = _extract_mechanism_label(
+                label = extract_mechanism_label(
                     step.hypothesis.hypothesis_text or "",
                     taxonomy=self.family_taxonomy,
                     preferred_label=step.hypothesis.change_locus,
@@ -243,9 +224,6 @@ class CampaignSummaryMixin:
         except Exception as exc:  # pragma: no cover - defensive parity with artifact writing
             logger.debug("family coverage extraction failed: %s", exc)
 
-        budget_utilization = (
-            round(budget_used / budget_total, 4) if budget_total > 0 else 0.0
-        )
         inferred_balance_exhausted = balance_exhausted or any(
             is_provider_balance_exhausted_detail(step.failure_detail)
             or is_provider_balance_exhausted_detail(step.verification_detail)
@@ -254,23 +232,8 @@ class CampaignSummaryMixin:
         effective_stopped_reason = normalize_stopped_reason(
             stopped_reason,
             balance_exhausted=inferred_balance_exhausted,
-            circuit_breaker_tripped=circuit_breaker_tripped,
         )
-        telemetry_failed_experiments = sum(
-            1
-            for step in steps
-            if formal_telemetry_guard_failed(step.protocol_result)
-        )
-        telemetry_failed_experiments_by_category = (
-            _telemetry_failed_experiment_category_counts(
-                step.protocol_result for step in steps
-            )
-        )
-        telemetry_failure_details = _telemetry_failed_experiment_details(steps)
-        telemetry_effect_zero_details = _telemetry_effect_zero_details(steps)
         runtime_budget_diagnostics = _runtime_budget_diagnostic_details(steps)
-        candidate_intent_counts = candidate_intent_counts_for_steps(steps)
-        observability_value_counts = observability_value_counts_for_steps(steps)
         runtime_evidence_policy_counts = runtime_evidence_policy_counts_for_steps(
             steps
         )
@@ -284,9 +247,9 @@ class CampaignSummaryMixin:
             1
             for step in steps
             if screened_experiment_effective(step.protocol_result)
-            and bool(getattr(step, "counts_toward_max_rounds", True))
         )
         effective_rounds_completed = counted_experiment_steps
+        outcome_evidence = execution_outcome_evidence(steps)
         state_screened_experiments: Any | None = None
         if self.state_provider is not None:
             try:
@@ -294,51 +257,15 @@ class CampaignSummaryMixin:
                 state_screened_experiments = state_for_counts.get(
                     "screened_experiments"
                 )
-                state_telemetry_failed = state_for_counts.get(
-                    "telemetry_failed_experiments"
-                )
-                if state_telemetry_failed is not None:
-                    telemetry_failed_experiments = max(
-                        telemetry_failed_experiments,
-                        int(state_telemetry_failed),
-                    )
-                state_category_counts = state_for_counts.get(
-                    "telemetry_failed_experiments_by_category"
-                )
-                if isinstance(state_category_counts, Mapping):
-                    for key, value in state_category_counts.items():
-                        try:
-                            telemetry_failed_experiments_by_category[str(key)] = max(
-                                telemetry_failed_experiments_by_category.get(
-                                    str(key),
-                                    0,
-                                ),
-                                int(value),
-                            )
-                        except (TypeError, ValueError):
-                            continue
-                state_telemetry_details = state_for_counts.get(
-                    "telemetry_failure_details"
-                )
-                if (
-                    not telemetry_failure_details
-                    and isinstance(state_telemetry_details, list)
-                ):
-                    telemetry_failure_details = [
-                        dict(item)
-                        for item in state_telemetry_details
-                        if isinstance(item, Mapping)
-                    ]
             except Exception as exc:  # pragma: no cover - summary is best-effort
                 logger.debug("state snapshot for campaign_summary counts failed: %s", exc)
         if state_screened_experiments is not None:
             screened_experiments = int(state_screened_experiments)
         loop_status = getattr(self, "campaign_loop_status", None)
+        direct_loop = is_direct_campaign_loop(loop_status)
         loop_proposal_attempts = None
         loop_total_rounds = None
         loop_campaign_steps = None
-        loop_telemetry_repair_attempts = None
-        loop_telemetry_repair_counts = None
         if isinstance(loop_status, Mapping):
             loop_proposal_attempts = loop_status.get("proposal_attempts_consumed")
             loop_total_rounds = loop_status.get("total_rounds")
@@ -346,12 +273,6 @@ class CampaignSummaryMixin:
             if loop_campaign_steps is None:
                 loop_campaign_steps = loop_status.get("loop_steps")
             loop_effective_rounds = loop_status.get("effective_rounds_completed")
-            loop_telemetry_repair_attempts = loop_status.get(
-                "telemetry_repair_attempts"
-            )
-            loop_telemetry_repair_counts = loop_status.get(
-                "telemetry_repair_attempts_by_branch_mechanism"
-            )
             if loop_effective_rounds is not None:
                 effective_rounds_completed = int(loop_effective_rounds)
             loop_protocol_metric_results = loop_status.get("protocol_metric_results")
@@ -416,36 +337,9 @@ class CampaignSummaryMixin:
             "screened_rounds": screened_experiments,
             "effective_rounds_completed": effective_rounds_completed,
             "counted_experiment_steps": counted_experiment_steps,
-            "telemetry_repair_attempts": (
-                int(loop_telemetry_repair_attempts)
-                if loop_telemetry_repair_attempts is not None
-                else sum(
-                    1
-                    for step in steps
-                    if str(getattr(step, "attempt_kind", ""))
-                    in {
-                        "telemetry_repair",
-                        "telemetry_repairable",
-                        "validation_repair_required",
-                    }
-                )
-            ),
-            "telemetry_repair_attempts_by_branch_mechanism": (
-                dict(loop_telemetry_repair_counts)
-                if isinstance(loop_telemetry_repair_counts, Mapping)
-                else {}
-            ),
             "screened_experiments": screened_experiments,
-            "telemetry_failed_experiments": telemetry_failed_experiments,
-            "telemetry_failed_experiments_by_category": (
-                telemetry_failed_experiments_by_category
-            ),
-            "telemetry_failure_details": telemetry_failure_details,
-            "telemetry_effect_zero_diagnostics": telemetry_effect_zero_details,
             "runtime_budget_diagnostics": runtime_budget_diagnostics,
             "runtime_budget_diagnostic_count": len(runtime_budget_diagnostics),
-            "candidate_intent_counts": candidate_intent_counts,
-            "observability_value_counts": observability_value_counts,
             "runtime_evidence_policy_counts": runtime_evidence_policy_counts,
             "fresh_champion_required_count": runtime_evidence_policy_counts[
                 "fresh_champion_required_count"
@@ -469,7 +363,6 @@ class CampaignSummaryMixin:
             "stopped_reason": effective_stopped_reason,
             "stopped": effective_stopped_reason not in (None, "run_complete"),
             "balance_exhausted": inferred_balance_exhausted,
-            "circuit_breaker_tripped": circuit_breaker_tripped,
             "cache_stats": {
                 "total_tokens": cache_stats["total_tokens"],
                 "prompt_tokens_total": cache_stats["prompt_tokens_total"],
@@ -531,19 +424,12 @@ class CampaignSummaryMixin:
             "verification_failure_breakdown": vfail_counter,
             "action_locus_coverage": action_locus_counter,
             "family_coverage": family_counter,
-            "budget_utilization": budget_utilization,
-            "stagnation_signals": [
-                {
-                    "kind": s.kind,
-                    "severity": s.severity,
-                    "detail": s.detail,
-                    "suggested_action": s.suggested_action,
-                }
-                for s in stagnation_signals
-            ],
             "diagnostics": diagnostics if diagnostics is not None else [],
             "steps": [],
         }
+        summary.update(outcome_evidence)
+        if proposal_runtime_mode:
+            summary["proposal_runtime_mode"] = str(proposal_runtime_mode)
         state_n_experiments: Any | None = None
         state_protocol_in_flight = bool(getattr(self, "in_flight_protocol", None))
         if self.state_provider is not None:
@@ -574,6 +460,9 @@ class CampaignSummaryMixin:
             failure_categories=failure_categories,
             stopped=True,
             partial_in_flight=state_protocol_in_flight,
+            execution_outcome_counts=summary["execution_outcome_counts"],
+            last_execution_outcome=summary["last_execution_outcome"],
+            unknown_outcome_count=summary["unknown_outcome_count"],
         )
         summary["run_validity_status"] = summary["run_validity"]["reason"]
         lineage_integrity = self.lineage_integrity_snapshot(
@@ -597,53 +486,40 @@ class CampaignSummaryMixin:
             summary["provider_error"] = {
                 "category": PROVIDER_ERROR_CATEGORY_BALANCE_EXHAUSTED,
             }
-        if frozen_budget is not None:
-            summary["frozen_budget"] = dict(frozen_budget)
         if self.campaign_loop_status is not None:
-            summary["campaign_loop"] = dict(self.campaign_loop_status)
-            for key in (
-                "requested_rounds",
-                "effective_rounds_completed",
-                "campaign_steps",
-                "loop_steps",
-                "telemetry_diagnostic_attempts",
-                "branch_lifecycle_policy_blocks",
-                "reconcile_lifecycle_steps",
-                "non_counted_lifecycle_steps",
-                "scheduler_active_slot_blocked_attempts",
-                "active_slot_blocked_attempts",
-                "scheduler_active_slot_blocked_attempt_limit",
-                "active_slot_blocked_attempt_limit",
-                "fresh_runtime_replay_drain",
-                "fresh_runtime_replay_drain_status",
-                "fresh_runtime_replay_drain_attempts",
-                "fresh_runtime_replay_drain_executed",
-                "fresh_runtime_replay_drain_skipped",
-                "fresh_runtime_replay_drain_limit",
-                "fresh_runtime_replay_drain_stopped_reason",
-                "fresh_runtime_replay_drain_accepted_replay_last_result",
-                "fresh_runtime_replay_drain_final_attempt_last_result",
-                "fresh_runtime_replay_drain_blocked_count",
-                "fresh_runtime_replay_drain_unresolved_closures",
-                "stage_transition_drain",
-                "stage_transition_drain_status",
-                "stage_transition_drain_attempts",
-                "stage_transition_drain_executed",
-                "stage_transition_drain_skipped",
-                "stage_transition_drain_limit",
-                "stage_transition_drain_stopped_reason",
-                "stage_transition_drain_accepted_stage_last_result",
-                "stage_transition_drain_final_attempt_last_result",
-                "quality_blocks",
-                "quality_block_ledger",
-                "quality_block_ledger_count",
-                "non_effective_screenings",
-                "non_effective_screening_count",
-                "blocked_attempts",
-            ):
-                value = self.campaign_loop_status.get(key)
-                if value is not None:
-                    summary[key] = value
+            summary["campaign_loop"] = direct_campaign_loop_facts(
+                self.campaign_loop_status
+            )
+            if direct_loop:
+                summary.update(
+                    {
+                        key: value
+                        for key, value in summary["campaign_loop"].items()
+                        if key != "schema_version"
+                    }
+                )
+            else:
+                for key in (
+                    "requested_rounds",
+                    "effective_rounds_completed",
+                    "campaign_steps",
+                    "loop_steps",
+                    "reconcile_lifecycle_steps",
+                    "non_counted_lifecycle_steps",
+                    "scheduler_active_slot_blocked_attempts",
+                    "active_slot_blocked_attempts",
+                    "scheduler_active_slot_blocked_attempt_limit",
+                    "active_slot_blocked_attempt_limit",
+                    "quality_blocks",
+                    "quality_block_ledger",
+                    "quality_block_ledger_count",
+                    "non_effective_screenings",
+                    "non_effective_screening_count",
+                    "blocked_attempts",
+                ):
+                    value = self.campaign_loop_status.get(key)
+                    if value is not None:
+                        summary[key] = value
         summary = apply_run_completion_aliases(summary)
         accounting = proposal_accounting_fields(
             campaign_dir=self.campaign_dir,
@@ -653,25 +529,29 @@ class CampaignSummaryMixin:
             round_num=round_num,
             screened_rounds=screened_experiments,
         )
-        accounting_reconciliation = accounting_reconciliation_fields(
-            steps=steps,
-            loop_status=self.campaign_loop_status,
-            state=summary,
-            round_num=round_num,
-            screened_rounds=screened_experiments,
-            effective_rounds_completed=effective_rounds_completed,
-            counted_experiment_steps=counted_experiment_steps,
-            telemetry_failed_experiments=telemetry_failed_experiments,
-            campaign_dir=self.campaign_dir,
-        )
         summary.update(accounting)
-        summary["accounting_reconciliation"] = accounting_reconciliation
-        summary["proposal_accounting"] = {
-            "proposal_attempts": summary.get("proposal_attempts"),
-            "proposal_attempts_consumed": summary.get("proposal_attempts_consumed"),
-            **accounting,
-            "accounting_reconciliation": accounting_reconciliation,
-        }
+        if direct_loop:
+            summary["proposal_accounting"] = dict(accounting)
+        else:
+            accounting_reconciliation = accounting_reconciliation_fields(
+                steps=steps,
+                loop_status=self.campaign_loop_status,
+                state=summary,
+                round_num=round_num,
+                screened_rounds=screened_experiments,
+                effective_rounds_completed=effective_rounds_completed,
+                counted_experiment_steps=counted_experiment_steps,
+                campaign_dir=self.campaign_dir,
+            )
+            summary["accounting_reconciliation"] = accounting_reconciliation
+            summary["proposal_accounting"] = {
+                "proposal_attempts": summary.get("proposal_attempts"),
+                "proposal_attempts_consumed": summary.get(
+                    "proposal_attempts_consumed"
+                ),
+                **accounting,
+                "accounting_reconciliation": accounting_reconciliation,
+            }
         refs = dict(self.final_evidence_refs)
         if final_evidence_refs:
             refs.update(dict(final_evidence_refs))
@@ -713,10 +593,6 @@ class CampaignSummaryMixin:
                         summary["active_slots"] = existing_active_slots
                 summary["branches"] = branch_rows
                 summary["branch_cards"] = branch_cards
-                if _is_max_rounds_stop(effective_stopped_reason):
-                    summary["remaining_branch_classification"] = (
-                        campaign_remaining_branch_classification(branch_rows)
-                    )
                 summary["branch_history_cards"] = _branch_history_cards(steps, branch_cards)
                 current_progress = _summary_current_progress(
                     state,
@@ -734,29 +610,23 @@ class CampaignSummaryMixin:
             except Exception as exc:  # pragma: no cover - summary is best-effort
                 logger.debug("state snapshot for campaign_summary failed: %s", exc)
 
-        try:
-            summary["cross_branch_research_observability"] = (
-                build_cross_branch_research_observability(
-                    steps=steps,
-                    branch_rows=summary.get("branches") or (),
-                    branch_history_cards=summary.get("branch_history_cards") or (),
-                    context_records=_proposal_context_records_from_steps(steps),
-                )
-            )
-        except Exception as exc:  # pragma: no cover - observability is best-effort
-            logger.debug("cross-branch observability summary failed: %s", exc)
         summary["evidence_scope_reconciliation"] = _summary_scope_reconciliation(
             steps=steps,
             branch_rows=summary.get("branches") or (),
-            cross_branch_observability=summary.get(
-                "cross_branch_research_observability"
-            )
-            if isinstance(summary.get("cross_branch_research_observability"), Mapping)
-            else None,
         )
 
         for step in steps:
             summary["steps"].append(self._build_summary_step(step))
+
+        if direct_loop:
+            for legacy_key in (
+                "total_rounds",
+                "proposal_attempts",
+                "proposal_attempts_consumed",
+                "campaign_steps",
+                "counted_experiment_steps",
+            ):
+                summary.pop(legacy_key, None)
 
         summary = redact_public_refs(summary, base_dir=self.campaign_dir)
         out_path = self.campaign_dir / "campaign_summary.json"
@@ -775,14 +645,6 @@ class CampaignSummaryMixin:
             getattr(step, "diagnostic_reason_codes", ()) or ()
         )
         bypass_reason_codes = list(getattr(step, "bypass_reason_codes", ()) or ())
-        lifecycle_reason_codes = list(
-            getattr(step, "lifecycle_reason_codes", ()) or ()
-        )
-        lifecycle_bookkeeping = dict(
-            getattr(step, "lifecycle_bookkeeping", {}) or {}
-        )
-        candidate_intent_visibility = candidate_intent_visibility_for_step(step)
-        observability_value_visibility = observability_value_visibility_for_step(step)
         code_archive_ref = public_artifact_ref(
             step.code_archive_ref,
             base_dir=self.campaign_dir,
@@ -799,12 +661,9 @@ class CampaignSummaryMixin:
             "branch_id": step.branch_id,
             "decision": step.decision.value if step.decision is not None else None,
             "decision_reason_codes": decision_reason_codes,
-            "decision_layer_source": getattr(step, "decision_layer_source", None),
             "decision_engine_reason_codes": decision_engine_reason_codes,
             "diagnostic_reason_codes": diagnostic_reason_codes,
             "bypass_reason_codes": bypass_reason_codes,
-            "lifecycle_reason_codes": lifecycle_reason_codes,
-            "lifecycle_bookkeeping": lifecycle_bookkeeping,
             "contract_passed": False if contract_not_run_reason else step.contract_passed,
             "contract_diagnostics": list(
                 getattr(step, "contract_diagnostics", ()) or ()
@@ -812,11 +671,6 @@ class CampaignSummaryMixin:
             "verification_passed": step.verification_passed,
             "failure_stage": step.failure_stage,
             "failure_detail": step.failure_detail,
-            "counts_toward_max_rounds": getattr(
-                step,
-                "counts_toward_max_rounds",
-                True,
-            ),
             "attempt_kind": getattr(step, "attempt_kind", "screening"),
             "scheduler_slot": getattr(step, "scheduler_slot", ""),
             "scheduler_reason": getattr(step, "scheduler_reason", ""),
@@ -831,75 +685,64 @@ class CampaignSummaryMixin:
             "code_archive_ref": code_archive_ref,
             "cache_stats": step.cache_stats,
             "hypothesis": {
-                "text": (step.hypothesis.hypothesis_text or "")[:200],
+                "text": step.hypothesis.hypothesis_text or "",
                 "action": step.hypothesis.action,
                 "change_locus": step.hypothesis.change_locus,
                 "target_file": step.hypothesis.target_file,
             },
-            "screened_experiment": step.protocol_result is not None,
-            "screened_experiment_effective": screened_experiment_effective(
-                step.protocol_result
+            "screened_experiment": (
+                step.protocol_result is not None
+                and not _explicitly_not_evaluated(step)
             ),
-            "telemetry_guard_failed": formal_telemetry_guard_failed(
-                step.protocol_result
-            ),
-            "telemetry_failure_categories": list(
-                telemetry_failure_categories(step.protocol_result)
-            ),
-            "telemetry_failure_details": list(
-                telemetry_decision_details(step.protocol_result)
+            "screened_experiment_effective": (
+                False
+                if _explicitly_not_evaluated(step)
+                else screened_experiment_effective(step.protocol_result)
             ),
         }
+        execution_outcome = _execution_outcome_projection(step)
+        if execution_outcome is not None:
+            step_data["execution_outcome"] = execution_outcome["outcome"]
+            step_data["execution_outcome_reason_code"] = execution_outcome[
+                "reason_code"
+            ]
+            step_data["execution_outcome_detail"] = execution_outcome["detail"]
+            step_data["execution_outcome_provenance"] = execution_outcome[
+                "provenance"
+            ]
         canary_payload = _canary_result_payload(
             getattr(step, "canary_result", None),
             base_dir=self.campaign_dir,
         )
         if canary_payload:
             step_data["canary_result"] = canary_payload
-        if candidate_intent_visibility:
-            step_data["candidate_intent"] = candidate_intent_visibility[
-                "candidate_intent"
-            ]
-            step_data["candidate_intent_visibility"] = candidate_intent_visibility
-            if candidate_intent_visibility.get("quality_search_interpretation"):
-                step_data["quality_search_interpretation"] = (
-                    candidate_intent_visibility["quality_search_interpretation"]
-                )
-        if observability_value_visibility:
-            step_data["observability_value_visibility"] = (
-                observability_value_visibility
-            )
         decision_features_snapshot = getattr(step, "decision_features_snapshot", None)
         if decision_features_snapshot is not None:
             step_data["decision_features"] = decision_features_to_payload(
                 decision_features_snapshot
             )
-        step_data["step_visibility_audit"] = _step_visibility_audit(
-            step,
-            candidate_intent_visibility=candidate_intent_visibility,
-            observability_value_visibility=observability_value_visibility,
-        )
         if contract_not_run_reason:
             step_data["contract_not_run_reason"] = contract_not_run_reason
         if primary_failure:
             step_data["primary_failure"] = primary_failure
         if secondary_observations:
             step_data["secondary_observations"] = secondary_observations
-        guidance_audit = (
-            extract_research_process_guidance_audit(step.proposal_session_ref)
-            or extract_research_process_guidance_audit(
-                getattr(step, "scheduler_audit_metadata", {}) or {}
-            )
-        )
-        if guidance_audit:
-            step_data["research_process_guidance_audit"] = guidance_audit
         if step.proposal_session_ref:
             allowed_ref_fields = {
                 "schema_version",
+                "attempt_id",
+                "runtime_mode",
+                "phase",
+                "transition_reason",
+                "failure_lane",
+                "lineage_event_id",
+                "hypothesis_id",
                 "session_id",
                 "request_id",
                 "idempotency_key",
                 "artifact_ref",
+                "prompt_manifest_ref",
+                "prompt_hash",
                 "transcript_digest",
                 "termination_reason",
                 "status",
@@ -913,29 +756,11 @@ class CampaignSummaryMixin:
                 "planner_loop_diagnostic",
                 "diagnostic_only",
                 "formal_round_succeeded",
-                "research_process_guidance_audit",
-                "cross_branch_research_audit_records",
-                "cross_branch_research_audit_ref",
-                "cross_branch_research_payload",
-                "cross_branch_research_status",
-                "material_difference_audit_records",
-                "material_difference_requirement",
-                "material_difference_requirement_ref",
-                "material_difference_requirement_status",
                 "novelty_pressure",
-                "branch_lesson_records",
-                "branch_lessons",
-                "branch_lesson_usage_requirement",
             }
-            audit_ref_fields = _VISIBILITY_AUDIT_CONTAINER_KEYS
             session_ref: dict[str, Any] = {}
             for key, value in dict(step.proposal_session_ref).items():
                 if key not in allowed_ref_fields:
-                    continue
-                if key in audit_ref_fields:
-                    compact_value = _compact_visibility_audit_value(value)
-                    if compact_value:
-                        session_ref[key] = compact_value
                     continue
                 session_ref[key] = value
             step_data["proposal_session_ref"] = session_ref
@@ -956,20 +781,6 @@ class CampaignSummaryMixin:
                 tuple(decision_reason_codes) + tuple(protocol_reason_codes),
                 protocol_reason_codes=protocol_reason_codes,
             )
-            telemetry_details = list(telemetry_decision_details(pr))
-            screening_feedback_payload: dict[str, Any] | None = None
-            if _stage_value(pr.stage) == "screening":
-                try:
-                    from scion.proposal.screening_feedback import (
-                        screening_feedback_summary,
-                    )
-
-                    screening_feedback_payload = screening_feedback_summary(
-                        pr,
-                        decision_reason_codes=tuple(decision_reason_codes),
-                    ).to_payload()
-                except Exception as exc:  # pragma: no cover - summary is best-effort
-                    logger.debug("screening feedback summary failed: %s", exc)
             raw_metrics_public_ref = public_artifact_ref(
                 pr.raw_metrics_ref,
                 base_dir=self.campaign_dir,
@@ -1023,27 +834,16 @@ class CampaignSummaryMixin:
                 "reason_codes": list(pr.reason_codes),
                 "protocol_reason_codes": protocol_reason_codes,
                 "decision_reason_codes": decision_reason_codes,
-                "decision_layer_source": getattr(
-                    step,
-                    "decision_layer_source",
-                    None,
-                ),
                 "decision_engine_reason_codes": decision_engine_reason_codes,
                 "diagnostic_reason_codes": diagnostic_reason_codes,
                 "bypass_reason_codes": bypass_reason_codes,
-                "lifecycle_reason_codes": lifecycle_reason_codes,
-                "lifecycle_bookkeeping": lifecycle_bookkeeping,
                 "auxiliary_protocol_reason_codes": protocol_reason_codes,
                 "effective_reason_codes": effective_reason_codes,
                 "gate_observation_reason_codes": list(
                     reason_code_groups.gate_observation_reason_codes
                 ),
-                "lifecycle_action_reason_codes": list(
-                    reason_code_groups.lifecycle_action_reason_codes
-                ),
                 "effective_reason_source": (
-                    getattr(step, "decision_layer_source", None)
-                    or ("decision_engine" if decision_reason_codes else "protocol_gate")
+                    "decision_engine" if decision_reason_codes else "protocol_gate"
                 ),
                 "raw_metrics_ref": raw_metrics_public_ref,
                 "raw_metrics_public_ref": raw_metrics_public_ref,
@@ -1077,14 +877,6 @@ class CampaignSummaryMixin:
                 ),
                 "runtime_evidence_policy": runtime_evidence_policy,
                 "runtime_gate_visibility": runtime_gate_visibility,
-                "telemetry_guard_failed": formal_telemetry_guard_failed(pr),
-                "telemetry_effect_zero_diagnostics": list(
-                    telemetry_effect_zero_diagnostics(pr)
-                ),
-                "telemetry_failure_categories": list(
-                    telemetry_failure_categories(pr)
-                ),
-                "telemetry_failure_details": telemetry_details,
                 "candidate_runtime_failure_categories": dict(
                     pr.candidate_runtime_failure_categories
                     or step.candidate_runtime_failure_categories
@@ -1136,43 +928,6 @@ class CampaignSummaryMixin:
                 ),
                 "screened_experiment_effective": screened_experiment_effective(pr),
             }
-            step_data["protocol_result"]["candidate_intent"] = (
-                candidate_intent_visibility["candidate_intent"]
-            )
-            step_data["protocol_result"]["candidate_intent_visibility"] = (
-                candidate_intent_visibility
-            )
-            step_data["protocol_result"]["observability_value_visibility"] = (
-                observability_value_visibility
-            )
-            if candidate_intent_visibility.get("quality_search_interpretation"):
-                step_data["protocol_result"]["quality_search_interpretation"] = (
-                    candidate_intent_visibility["quality_search_interpretation"]
-                )
-            if screening_feedback_payload is not None:
-                step_data["protocol_result"][
-                    "screening_feedback"
-                ] = screening_feedback_payload
-                step_data["protocol_result"]["screening_feedback_digest"] = (
-                    screening_feedback_payload.get("feedback_digest")
-                )
-                step_data["protocol_result"]["opportunity_status"] = (
-                    screening_feedback_payload.get("opportunity_status")
-                    or step_data["protocol_result"]["opportunity_status"]
-                )
-                step_data["protocol_result"]["opportunity_diagnostics"] = (
-                    screening_feedback_payload.get("opportunity_diagnostics")
-                    or step_data["protocol_result"]["opportunity_diagnostics"]
-                )
-                step_data["protocol_result"]["mechanism_evidence"] = (
-                    screening_feedback_payload.get("mechanism_evidence")
-                    or step_data["protocol_result"]["mechanism_evidence"]
-                )
-            telemetry_feedback = telemetry_validation_feedback(pr)
-            if telemetry_feedback:
-                step_data["protocol_result"][
-                    "telemetry_validation_feedback"
-                ] = telemetry_feedback
             step_data["protocol_result"].update(_screening_rate_fields(pr))
             if pr.case_feedback:
                 step_data["case_feedback_summary"] = [
@@ -1185,14 +940,18 @@ class CampaignSummaryMixin:
                             else getattr(cf, "dominant_decisive_objective", "")
                         ),
                     }
-                    for cf in pr.case_feedback[:20]
+                    for cf in pr.case_feedback
                 ]
         return step_data
 
 
 def _is_max_rounds_stop(reason: Any) -> bool:
     text = str(reason or "").strip()
-    return text in {"max_rounds", "max_rounds_exhausted"}
+    return text in {
+        "max_rounds",
+        "max_rounds_exhausted",
+        "requested_rounds_completed",
+    }
 
 
 def _canary_result_payload(
@@ -1248,6 +1007,8 @@ def _annotate_proposal_session_ref_diagnostic(
 def _planner_loop_diagnostic_from_ref(
     session_ref: Mapping[str, Any],
 ) -> dict[str, Any]:
+    """Read legacy APS diagnostics; direct-v3 never emits these codes."""
+
     failure_category = str(session_ref.get("failure_category") or "").strip()
     termination_reason = str(session_ref.get("termination_reason") or "").strip()
     diagnostic_codes = {
@@ -1301,24 +1062,4 @@ def _runtime_budget_diagnostic_details(
                 "total_pairs": diagnostic.get("total_pairs"),
             }
         )
-    return details
-
-
-def _telemetry_effect_zero_details(
-    steps: Iterable[StepRecord],
-) -> list[dict[str, Any]]:
-    details: list[dict[str, Any]] = []
-    for step in steps:
-        pr = step.protocol_result
-        if pr is None:
-            continue
-        for diagnostic in telemetry_effect_zero_diagnostics(pr):
-            details.append(
-                {
-                    "branch_id": step.branch_id,
-                    "action": step.hypothesis.action,
-                    "target_file": step.hypothesis.target_file,
-                    **dict(diagnostic),
-                }
-            )
     return details

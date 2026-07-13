@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.evidence_recorder import EvidenceRecorder
 from scion.core.models import (
     Branch,
@@ -86,6 +87,12 @@ def _step(raw_metrics_ref: str = "/tmp/raw_metrics.json") -> StepRecord:
         cache_stats={"total": 100, "cache_read": 25, "cache_create": 75},
         hypothesis_id="hyp-1",
         decision_reason_codes=("screening_positive",),
+        execution_outcome=ExecutionOutcome.EVALUATED,
+        execution_outcome_reason_code="PROTOCOL_EVALUATED",
+        execution_outcome_provenance={
+            "owner": "fixture_evaluation",
+            "stage": "screening",
+        },
     )
 
 
@@ -115,7 +122,6 @@ def _branch() -> Branch:
         base_champion_id=6,
         base_champion_hash="base-hash",
         current_code_hash="candidate-hash",
-        retry_count=1,
         failure_codes=["prior_timeout"],
         weight_revision=2,
     )

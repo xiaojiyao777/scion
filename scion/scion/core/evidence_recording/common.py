@@ -20,7 +20,10 @@ _MEASUREMENT_READINESS_STATUS_FIELDS = (
     "decision_features_excluded",
 )
 
-_NON_FORMAL_FINAL_EVIDENCE_STOP_REASONS = {"max_rounds_exhausted"}
+_NON_FORMAL_FINAL_EVIDENCE_STOP_REASONS = {
+    "max_rounds_exhausted",  # historical artifact compatibility
+    "requested_rounds_completed",
+}
 _DEFAULT_NON_FORMAL_FINAL_EVIDENCE_REASON = (
     "campaign ended normally without an attached formal final evidence package; "
     "recording a non-formal final evidence closure"

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Mapping
 from typing import Any, Callable, List, Optional, Sequence, TYPE_CHECKING
 
 from scion.config.problem import ProtocolConfig
@@ -315,9 +314,6 @@ class ExperimentProtocol:
         expand: bool = False,
         expand_round: int = 1,
         selected_surface: str | None = None,
-        expected_telemetry: Mapping[str, Any] | None = None,
-        mechanism_changes: Sequence[Any] | None = None,
-        protected_objectives: Sequence[str] = (),
         priority_case_ids: Sequence[str] = (),
     ) -> ProtocolResult:
         from .stages import run_experiment
@@ -331,9 +327,6 @@ class ExperimentProtocol:
             expand=expand,
             expand_round=expand_round,
             selected_surface=selected_surface,
-            expected_telemetry=expected_telemetry,
-            mechanism_changes=mechanism_changes,
-            protected_objectives=protected_objectives,
             priority_case_ids=priority_case_ids,
         )
 

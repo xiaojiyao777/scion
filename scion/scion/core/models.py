@@ -5,6 +5,11 @@ from enum import Enum
 from typing import Optional, Literal, Union, Any, Dict, List, Tuple
 import uuid
 
+from scion.core.execution_outcome import (
+    ExecutionOutcome,
+    validate_execution_outcome_projection,
+)
+
 # --- Branch & Campaign Enums ---
 
 class BranchState(Enum):
@@ -37,6 +42,8 @@ class ExperimentStage(Enum):
 
 class Decision(Enum):
     CONTINUE_EXPLORE = "continue_explore"
+    # Historical campaign-resume compatibility only. The direct-v3 Decision
+    # mapper has no producer for this value and never requests model repair.
     VALIDATION_REPAIR_REQUIRED = "validation_repair_required"
     EXPAND_SCREENING = "expand_screening"
     QUEUE_VALIDATE = "queue_validate"
@@ -45,30 +52,8 @@ class Decision(Enum):
     PROMOTE = "promote"
     ABANDON = "abandon"
 
-DecisionLifecycleAction = Literal[
-    "",
-    "retain_head",
-    "retain_checkpoint",
-    "rollback_to_checkpoint",
-    "park_lineage",
-    "archive_lineage",
-]
-
-DecisionLayerSource = Literal[
-    "stage_decision",
-    "lifecycle_policy",
-]
 
 # --- Proposals (Tainted from LLM) ---
-
-MechanismChangeType = Literal["add", "modify", "replace", "remove", "integrate"]
-
-
-@dataclass(frozen=True)
-class MechanismChange:
-    id: str
-    change_type: MechanismChangeType
-
 
 @dataclass
 class HypothesisProposal:
@@ -80,20 +65,6 @@ class HypothesisProposal:
     target_weakness: str = ""
     expected_effect: str = ""
     suggested_weight: Optional[float] = None
-    target_objectives: Tuple[str, ...] = ()
-    protected_objectives: Tuple[str, ...] = ()
-    objective_tradeoff_policy: str = ""
-    no_op_condition: str = ""
-    risk_to_higher_priority: str = ""
-    target_runtime_effect: Optional[str] = None
-    complexity_claim: Optional[str] = None
-    runtime_budget_strategy: Optional[str] = None
-    expected_telemetry: Dict[str, Any] = field(default_factory=dict)
-    novelty_signature: Dict[str, Any] = field(default_factory=dict)
-    material_difference: Dict[str, Any] = field(default_factory=dict)
-    branch_lesson_usage: Dict[str, Any] = field(default_factory=dict)
-    mechanism_changes: Tuple[MechanismChange, ...] = ()
-    schema_repair_attribution: Tuple[Dict[str, Any], ...] = ()
 
 @dataclass
 class PatchFileChange:
@@ -110,15 +81,7 @@ class PatchProposal:
     code_content: str
     test_hint: Optional[str] = None
     additional_changes: Tuple[PatchFileChange, ...] = ()
-    premise_check: Literal[
-        "supported",
-        "contradicted",
-        "duplicate",
-        "wrong_owner",
-    ] = "supported"
-    premise_check_reason: str = ""
     repair_attribution: Tuple[Dict[str, Any], ...] = ()
-    mechanism_changes: Tuple[MechanismChange, ...] = ()
 
     def iter_file_changes(self) -> Tuple[PatchFileChange, ...]:
         return patch_file_changes(self)
@@ -149,38 +112,6 @@ def patch_file_changes(patch: PatchProposal) -> Tuple[PatchFileChange, ...]:
                 )
             )
     return tuple(changes)
-
-
-def mechanism_changes(
-    proposal: HypothesisProposal | PatchProposal | "HypothesisRecord",
-) -> Tuple[MechanismChange, ...]:
-    """Return normalized mechanism changes from a proposal-like object."""
-
-    changes: list[MechanismChange] = []
-    for change in getattr(proposal, "mechanism_changes", ()) or ():
-        if isinstance(change, MechanismChange):
-            changes.append(change)
-        elif isinstance(change, dict):
-            changes.append(MechanismChange(**change))
-        else:
-            changes.append(
-                MechanismChange(
-                    id=getattr(change, "id"),
-                    change_type=getattr(change, "change_type"),
-                )
-            )
-    return tuple(changes)
-
-
-def mechanism_change_dicts(
-    proposal: HypothesisProposal | PatchProposal | "HypothesisRecord",
-) -> Tuple[Dict[str, str], ...]:
-    """Return JSON-ready mechanism change dictionaries."""
-
-    return tuple(
-        {"id": change.id, "change_type": change.change_type}
-        for change in mechanism_changes(proposal)
-    )
 
 
 # --- Results & Stats ---
@@ -344,67 +275,6 @@ class ScreeningPatternSummary:
     key_observations: Tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
-class BranchCheckpointEvidence:
-    """Generic screened-evidence summary attached to a restorable branch checkpoint."""
-
-    wins: int = 0
-    losses: int = 0
-    ties: int = 0
-    median_delta: Optional[float] = None
-    ci_low: Optional[float] = None
-    ci_high: Optional[float] = None
-    runtime_ratio_median: Optional[float] = None
-    runtime_regression_rate: Optional[float] = None
-
-
-@dataclass(frozen=True)
-class BranchCheckpointDiagnostics:
-    """Generic diagnostic reason-code summary for branch checkpoint audit."""
-
-    gate_observation_reason_codes: Tuple[str, ...] = ()
-    lifecycle_action_reason_codes: Tuple[str, ...] = ()
-    telemetry_outcome: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class BranchCheckpointCounters:
-    """Generic lifecycle counters captured with a branch checkpoint."""
-
-    followup_count: int = 0
-    rollback_count: int = 0
-    stale_count: int = 0
-
-
-@dataclass(frozen=True)
-class BranchCheckpointRecord:
-    """Auditable metadata for a branch-lineage checkpoint.
-
-    The record is generic by design: it carries code/evidence/status fields but
-    no problem-object semantics. Problem packages may add richer diagnostics in
-    their own artifacts and reference them through generic reason codes.
-    """
-
-    checkpoint_id: str
-    branch_id: str
-    lineage_id: str
-    parent_checkpoint_id: Optional[str]
-    workspace_ref: str
-    patch_digest: Optional[str]
-    code_hash: Optional[str]
-    branch_code_status: str
-    screening_tier: Optional[str]
-    evidence: BranchCheckpointEvidence = field(
-        default_factory=BranchCheckpointEvidence
-    )
-    diagnostics: BranchCheckpointDiagnostics = field(
-        default_factory=BranchCheckpointDiagnostics
-    )
-    counters: BranchCheckpointCounters = field(
-        default_factory=BranchCheckpointCounters
-    )
-    created_at: datetime = field(default_factory=datetime.now)
-
 # --- Decision Features (The "Safe" Boundary) ---
 
 DecisionRuntimeEvidenceConfidence = Literal[
@@ -420,13 +290,6 @@ DecisionRuntimeEvidenceStatus = Literal[
     "insufficient",
     "fresh_champion_required",
 ]
-DecisionLifecyclePriorEvidenceTier = Literal[
-    "",
-    "weak_positive",
-    "marginal",
-    "no_effect",
-]
-
 @dataclass(frozen=True)
 class DecisionFeatures:
     branch_id: str
@@ -441,9 +304,7 @@ class DecisionFeatures:
     ci_low: Optional[float]
     ci_high: Optional[float]
     stale: bool
-    recent_retry_count: int
     recent_failure_codes: Tuple[str, ...]
-    budget_remaining_ratio: float
     wins: int = 0
     losses: int = 0
     ties: int = 0
@@ -457,6 +318,7 @@ class DecisionFeatures:
     runtime_evidence_confidence: DecisionRuntimeEvidenceConfidence = "high"
     runtime_evidence_status: DecisionRuntimeEvidenceStatus = "sufficient"
     protocol_gate_outcome: Optional[Literal["pass", "fail", "unclear", "expand", "continue"]] = None
+    protocol_reason_codes: Tuple[str, ...] = ()
     total_pairs: int = 0
     attempted_pairs: int = 0
     valid_pairs: int = 0
@@ -468,42 +330,16 @@ class DecisionFeatures:
     pair_ties: int = 0
     statistical_status: Optional[Literal["positive", "negative", "uncertain", "tie"]] = None
     statistical_metric: Optional[str] = None
-    telemetry_validation_repairable: bool = False
-    telemetry_guard_failed: bool = False
-    telemetry_effect_zero_diagnostic: bool = False
-    runtime_budget_saturation_diagnostic: bool = False
-    # Stage-specific expand counters (per v3 §11.5 "screening expand: 1 次 / validation expand: 1 次"
-    # are per-candidate budgets, not per-branch). Reset by campaign._run_explore_step when a new
-    # hypothesis is generated for this branch.
+    # Stage-specific counts for preregistered Protocol sample expansion. These
+    # are scientific stage facts, not provider-call or campaign budgets.
     screening_expand_count: int = 0
     validation_expand_count: int = 0
-    lifecycle_zero_win_streak: int = 0
-    lifecycle_telemetry_diagnostic_streak: int = 0
-    lifecycle_marginal_no_effect_streak: int = 0
-    lifecycle_no_effect_diagnostic_followups: int = 0
-    lifecycle_previous_signal_repeat_count: int = 0
-    lifecycle_signal_matches_previous: bool = False
-    lifecycle_rollback_count: int = 0
-    lifecycle_prior_evidence_tier: DecisionLifecyclePriorEvidenceTier = ""
-    lifecycle_has_checkpoint: bool = False
 
 @dataclass(frozen=True)
 class DecisionOutcome:
     decision: Decision
     reason_codes: Tuple[str, ...]
     features_snapshot: DecisionFeatures
-    stage_decision: Optional[Decision] = None
-    final_decision: Optional[Decision] = None
-    lifecycle_action: DecisionLifecycleAction = ""
-    lifecycle_reason_codes: Tuple[str, ...] = ()
-    decision_layer_source: DecisionLayerSource = "stage_decision"
-    lifecycle_policy_evidence: Dict[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if self.stage_decision is None:
-            object.__setattr__(self, "stage_decision", self.decision)
-        if self.final_decision is None:
-            object.__setattr__(self, "final_decision", self.decision)
 
 # --- Campaign & Branch State ---
 
@@ -536,55 +372,18 @@ class Branch:
     lineage_id: Optional[str] = None
     current_code_hash: Optional[str] = None
     last_clean_code_hash: Optional[str] = None
-    retry_count: int = 0
-    # Stage-specific expand counters. Per v3 §11.5 "screening expand: 1 次 / validation expand: 1 次"
-    # are per-candidate budgets, not per-branch. campaign._run_explore_step resets both when a new
-    # hypothesis is generated on this branch. campaign._run_eval_step increments the corresponding
-    # counter based on branch.state (EXPLORE_EXPAND → screening; VALIDATING_EXPAND → validation).
+    # Stage-specific counts for preregistered Protocol sample expansion. A new
+    # hypothesis resets them; evaluation increments the active stage count.
     screening_expand_count: int = 0
     validation_expand_count: int = 0
     failure_codes: List[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
-    direction: Optional[str] = None  # Branch direction: '{change_locus}: {hypothesis_text[:100]}'
+    direction: Optional[str] = None  # Branch direction: '{change_locus}: {hypothesis_text}'
     weight_revision: int = 0  # weight revision this branch was last evaluated against
     branch_code_status: str = "clean"
-    last_screening_feedback_tier: Optional[str] = None
-    last_telemetry_outcome: Optional[str] = None
-    branch_mechanism_ids: Tuple[str, ...] = ()
-    telemetry_repair_mechanism_ids: Tuple[str, ...] = ()
-    telemetry_repair_attempts: Dict[str, int] = field(default_factory=dict)
-    branch_lifecycle_policy_blocks: int = 0
-    branch_lifecycle_new_mechanism_ineligible: bool = False
-    branch_lifecycle_reroute_reason: Optional[str] = None
-    last_branch_lifecycle_policy_block: Dict[str, Any] = field(
-        default_factory=dict
-    )
-    best_quality_checkpoint_id: Optional[str] = None
-    last_valid_checkpoint_id: Optional[str] = None
-    rollback_count: int = 0
-    last_rollback_reason: Optional[str] = None
-    lifecycle_marginal_no_effect_streak: int = 0
-    lifecycle_no_effect_diagnostic_followups: int = 0
-    lifecycle_last_signal_signature: Optional[str] = None
-    lifecycle_signal_repeat_count: int = 0
     branch_evidence_summary: Dict[str, Any] = field(default_factory=dict)
-    # FailureRouter recovery fields
-    pending_retry: bool = False          # True when retry_llm is in effect; scheduler prioritises
-    blocked_rounds: int = 0              # Rounds spent in BLOCKED_INFRA; auto-unblock at 3
-    consecutive_llm_retries: int = 0    # Consecutive retry_llm actions; downgrade to discard at 3
-    infra_block_count: int = 0          # How many times this branch has been BLOCKED_INFRA
-
-@dataclass
-class HypothesisFamily:
-    """Tracks a mechanism-level family of hypotheses for diversity detection (T07)."""
-    family_id: str
-    mechanism_label: str      # e.g. "local_refinement", "destroy_rebuild"
-    action_pattern: str       # "create_new" / "modify" / "remove"
-    locus_pattern: str        # problem-defined research locus
-    evidence_count: int
-    statuses: List[str]       # ["rejected", "promoted", ...]
-
+    infra_block_count: int = 0          # Observational count only; never drives an infra decision
 
 @dataclass
 class HypothesisRecord:
@@ -603,10 +402,6 @@ class HypothesisRecord:
     created_at: datetime = field(default_factory=datetime.now)
     base_champion_version: int = 0      # champion version at hypothesis creation time
     predicted_direction: Literal["improve", "tradeoff", "exploratory"] = "exploratory"
-    target_objectives: Tuple[str, ...] = ()
-    protected_objectives: Tuple[str, ...] = ()
-    novelty_signature: Dict[str, Any] = field(default_factory=dict)
-    mechanism_changes: Tuple[MechanismChange, ...] = ()
 
 # --- Solver Output ---
 
@@ -636,7 +431,6 @@ class FailureEvent:
     category: Literal["proposal", "contract", "verification_light", "verification_heavy", "infra", "evaluation"]
     detail: str
     timestamp: datetime = field(default_factory=datetime.now)
-    retryable: bool = True
 
 
 @dataclass(frozen=True)
@@ -678,9 +472,7 @@ class StepRecord:
     decision: None means the step did not reach the Decision Engine (early failure).
               Only set to a real Decision value when the Decision Engine actually ran.
     hypothesis_id: the original HypothesisRecord.hypothesis_id for lifecycle tracking.
-    decision_reason_codes: backward-compatible outcome reason-code union.
-                           Prefer the structured provenance fields below for
-                           source-aware consumers.
+    decision_reason_codes: formal Decision outcome reason codes.
     """
     round_num: int
     branch_id: str
@@ -692,22 +484,18 @@ class StepRecord:
     decision: Optional[Decision]
     failure_stage: Optional[str]
     failure_detail: Optional[str]
-    verification_detail: Optional[str] = None  # Full verification failure detail for LLM diagnosis
+    verification_detail: Optional[str] = None  # Complete verification failure evidence
     code_archive_ref: Optional[str] = None  # 归档目录路径
     cache_stats: Optional[Dict[str, int]] = None  # {"total": N, "cache_read": M, "cache_create": K}
     hypothesis_id: Optional[str] = None  # Original HypothesisRecord.hypothesis_id (T04)
-    decision_reason_codes: Optional[Tuple[str, ...]] = None  # Compatibility outcome reason-code union (T04/T05)
-    decision_layer_source: Optional[str] = None
+    decision_reason_codes: Optional[Tuple[str, ...]] = None
     decision_engine_reason_codes: Tuple[str, ...] = ()
     diagnostic_reason_codes: Tuple[str, ...] = ()
     bypass_reason_codes: Tuple[str, ...] = ()
-    lifecycle_reason_codes: Tuple[str, ...] = ()
-    lifecycle_bookkeeping: Dict[str, Any] = field(default_factory=dict)
     decision_features_snapshot: Optional[DecisionFeatures] = None
     contract_diagnostics: Tuple[Dict[str, Any], ...] = ()
     proposal_session_ref: Optional[Dict[str, Any]] = None  # Compact APS artifact/session reference only
     canary_result: Optional[CanaryResult] = None
-    counts_toward_max_rounds: bool = True
     attempt_kind: str = "screening"
     repair_policy_reason: Optional[str] = None
     repair_mechanism_ids: Tuple[str, ...] = ()
@@ -724,3 +512,17 @@ class StepRecord:
     scheduler_slot: str = ""
     scheduler_reason: str = ""
     scheduler_audit_metadata: Dict[str, Any] = field(default_factory=dict)
+    execution_outcome: ExecutionOutcome | None = None
+    execution_outcome_reason_code: str = ""
+    execution_outcome_detail: str = ""
+    execution_outcome_provenance: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        validate_execution_outcome_projection(
+            execution_outcome=self.execution_outcome,
+            reason_code=self.execution_outcome_reason_code,
+            detail=self.execution_outcome_detail,
+            provenance=self.execution_outcome_provenance,
+            decision=self.decision,
+            protocol_result=self.protocol_result,
+        )

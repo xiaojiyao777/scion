@@ -1,10 +1,11 @@
 """CampaignManager — main loop integrating all Scion modules (Phase 5)."""
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from scion.config.problem import ProtocolConfig, ProblemSpec, SplitManifest, SeedLedgerConfig
 from scion.core.campaign_adapters import (
@@ -15,20 +16,20 @@ from scion.core.campaign_adapters import (
     _lookup_decision_reason_codes,
     _workspace_service_for,
 )
-from scion.core.campaign_governance import CampaignGovernanceService
 from scion.core.branch import StateTransitionError
-from scion.core.branch_hygiene import (
-    branch_hygiene_context,
+from scion.core.branch_cards import (
+    branch_card_context,
     branch_prompt_card,
-    campaign_branch_lifecycle_reroute_status,
 )
-from scion.core.circuit_breaker import CircuitBreaker, MAX_CONSECUTIVE_LLM_FAILURES
-from scion.core.explore_step_pipeline import build_verification_detail
-from scion.core.features import BudgetState
+from scion.core.evaluation_orchestrator import EvaluationExecutionResult
+from scion.core.execution_outcome import (
+    branch_execution_hold,
+    clear_branch_execution_hold,
+)
 from scion.core.failure_lifecycle import FailureLifecycleService
 from scion.core.models import (
     Branch, CanaryResult, ChampionState, ContractResult,
-    Decision, DecisionLifecycleAction, ExperimentStage, FailureEvent,
+    Decision, ExperimentStage, FailureEvent,
     HypothesisProposal, HypothesisRecord, PatchProposal, ProtocolResult,
     StepRecord, VerificationResult,
 )
@@ -37,19 +38,9 @@ from scion.core.evidence_recording.accounting import proposal_accounting_fields
 from scion.core.evidence_recording.common import reduced_measurement_readiness_payload
 from scion.core.scheduler import (
     active_slot_inventory,
-    reconcile_active_slot_overflow,
 )
 from scion.core.step_result import StepResult
-from scion.core.telemetry_validation import (
-    formal_telemetry_guard_failed,
-    formal_screening_attempted,
-    telemetry_decision_details,
-    telemetry_failure_categories,
-)
-from scion.core.termination import TerminationConfig
 from scion.core.workspace_lifecycle import WorkspaceLifecycleService
-from scion.failure.router import RetryConfig
-from scion.proposal.saturation import ChampionSaturationAnalyzer
 from scion.verification.gate import VerificationGate
 
 logger = logging.getLogger(__name__)
@@ -60,7 +51,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 class CampaignManager:
-    """Orchestrates the full 14-step Scion campaign loop.
+    """Orchestrate the direct V3 campaign path.
 
     Dependencies:
         problem_spec       — static problem definition
@@ -75,9 +66,6 @@ class CampaignManager:
         verification_gate  — custom VerificationGate; otherwise built from
                              problem/runtime configuration
         experiment_protocol — custom ExperimentProtocol; defaults to None (no runner)
-        budget             — BudgetState; defaults to max_rounds budget
-        termination_config — TerminationConfig; defaults to library defaults
-        retry_config       — RetryConfig; defaults to library defaults
     """
 
     def __init__(
@@ -92,31 +80,13 @@ class CampaignManager:
         *,
         verification_gate: Optional[Any] = None,
         experiment_protocol: Optional[Any] = None,
-        budget: Optional[BudgetState] = None,
-        termination_config: Optional[TerminationConfig] = None,
-        retry_config: Optional[RetryConfig] = None,
         adapter: Optional[Any] = None,
         operator_execute_signature: Optional[str] = None,
-        objective_lower_bounds: Optional[Dict[str, float]] = None,
-        use_objective_lower_bounds_for_early_stop: bool = False,
-        force_continue_early_stop: bool = False,
         allow_non_strict_runtime_verification: bool = False,
         allow_skeleton_mode: bool = False,
-        use_agentic_proposal: bool = False,
-        agentic_artifact_dir: Optional[str] = None,
-        agentic_session_timeout_sec: Optional[float] = None,
-        agentic_tool_max_steps: Optional[int] = None,
-        agentic_tool_max_calls: Optional[int] = None,
-        agentic_code_tool_max_calls: Optional[int] = None,
-        agentic_observation_max_chars: Optional[int] = None,
         force_surface: Optional[str] = None,
         force_action: Optional[str] = None,
         force_target_file: Optional[str] = None,
-        proposal_quality_loop_limit: Optional[int] = None,
-        proposal_attempt_limit: Optional[int] = None,
-        fresh_runtime_replay_drain_limit: Optional[int] = None,
-        stage_transition_drain_limit: Optional[int] = None,
-        proposal_context_ablation: str = "full",
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
         from scion.core.forced_surface import validate_forced_surface_request
@@ -143,53 +113,14 @@ class CampaignManager:
             campaign_dir=campaign_dir,
             verification_gate=verification_gate,
             experiment_protocol=experiment_protocol,
-            budget=budget,
-            termination_config=termination_config,
-            retry_config=retry_config,
             adapter=adapter,
             operator_execute_signature=operator_execute_signature,
-            objective_lower_bounds=objective_lower_bounds,
-            use_objective_lower_bounds_for_early_stop=use_objective_lower_bounds_for_early_stop,
-            force_continue_early_stop=force_continue_early_stop,
             allow_non_strict_runtime_verification=allow_non_strict_runtime_verification,
             allow_skeleton_mode=allow_skeleton_mode,
-            use_agentic_proposal=use_agentic_proposal,
-            agentic_artifact_dir=agentic_artifact_dir,
-            agentic_session_timeout_sec=agentic_session_timeout_sec,
-            agentic_tool_max_steps=agentic_tool_max_steps,
-            agentic_tool_max_calls=agentic_tool_max_calls,
-            agentic_code_tool_max_calls=agentic_code_tool_max_calls,
-            agentic_observation_max_chars=agentic_observation_max_chars,
             force_surface=forced_request.surface if forced_request else None,
             force_action=forced_request.action if forced_request else None,
             force_target_file=forced_request.target_file if forced_request else None,
-            proposal_quality_loop_limit=proposal_quality_loop_limit,
-            proposal_attempt_limit=proposal_attempt_limit,
-            fresh_runtime_replay_drain_limit=fresh_runtime_replay_drain_limit,
-            stage_transition_drain_limit=stage_transition_drain_limit,
-            proposal_context_ablation=proposal_context_ablation,
         )
-
-    # ------------------------------------------------------------------
-    # Backward-compat properties for attributes now owned by PlateauController.
-    # External callers (tests, branch_store) still read these by name.
-    # ------------------------------------------------------------------
-
-    @property
-    def _rounds_since_last_promote(self) -> int:
-        return self._plateau.rounds_since_last_promote
-
-    @_rounds_since_last_promote.setter
-    def _rounds_since_last_promote(self, value: int) -> None:
-        self._plateau._rounds_since_last_promote = value
-
-    @property
-    def _forced_next_locus(self) -> Optional[str]:
-        return self._plateau.forced_next_locus
-
-    @_forced_next_locus.setter
-    def _forced_next_locus(self, value: Optional[str]) -> None:
-        self._plateau._forced_next_locus = value
 
     # ------------------------------------------------------------------
     # Backward-compat properties for attributes now owned by
@@ -244,41 +175,25 @@ class CampaignManager:
     # ------------------------------------------------------------------
 
     def _record_step(self, step: StepRecord) -> None:
-        """Record a completed step and update search memory (J1)."""
-        self._evidence_recorder.record_step(
-            step,
-            self._step_history,
-            search_memory=self._search_memory,
+        """Append one durable step fact to the campaign history."""
+        self._evidence_recorder.record_step(step, self._step_history)
+        from scion.proposal.context_manager.manager import (
+            persist_canonical_screening_record,
         )
-        # J2: Lazily initialize baseline metrics from first champion-side data
-        if self._baseline_metrics is None and step.protocol_result is not None:
-            from scion.proposal.saturation import extract_champion_metrics_from_step
-            _pf_len = len(step.protocol_result.pair_feedback) if step.protocol_result.pair_feedback else 0
-            logger.info("[SATURATION DEBUG] R%d stage=%s pair_feedback_len=%d", step.round_num, step.protocol_result.stage, _pf_len)
-            metrics = extract_champion_metrics_from_step(step)
-            if metrics:
-                logger.info("[SATURATION] Baseline initialized: metrics=%s", metrics)
-                self._baseline_metrics = metrics
-                self._saturation_analyzer = ChampionSaturationAnalyzer(
-                    metrics,
-                    lower_bounds=(
-                        self._objective_lower_bounds
-                        if self._use_objective_lower_bounds_for_early_stop
-                        else None
-                    ),
-                )
-            else:
-                logger.info("[SATURATION DEBUG] extract returned None for stage=%s", step.protocol_result.stage)
+
+        branch = self._branch_ctrl._branches.get(step.branch_id)
+        if branch is not None and persist_canonical_screening_record(branch, step):
+            self._persist_branch_state(step.branch_id)
 
     def _record_scheduler_result(self, result: StepResult) -> None:
         """Persist scheduler metadata after a branch step returns its result."""
         self._evidence_recorder.record_scheduler_result(result, self._step_history)
 
-    def run(self, max_rounds: int = 1000) -> None:
-        """Run the campaign until a termination condition is met."""
+    def run(self, requested_rounds: int) -> None:
+        """Run toward the operator-selected number of formal evaluated rounds."""
         try:
             self._run_runtime_preflight()
-            self._campaign_loop.run(max_rounds=max_rounds)
+            self._campaign_loop.run(requested_rounds=requested_rounds)
         except Exception as exc:
             reason = (
                 "preflight_exception"
@@ -288,7 +203,7 @@ class CampaignManager:
             self._finalize_unhandled_run_exception(
                 reason=reason,
                 exc=exc,
-                max_rounds=max_rounds,
+                requested_rounds=requested_rounds,
             )
             raise
 
@@ -313,6 +228,7 @@ class CampaignManager:
                 logger.exception(
                     "Failed to shut down weight opt after requested stop"
                 )
+        self._persist_all_branch_states()
         self._write_campaign_summary()
         self._write_status(stopped_reason=self._last_stop_reason)
 
@@ -321,7 +237,7 @@ class CampaignManager:
         *,
         reason: str,
         exc: Exception,
-        max_rounds: int,
+        requested_rounds: int,
     ) -> None:
         """Best-effort terminal campaign artifacts for unexpected run crashes."""
         self._last_stop_reason = reason
@@ -335,7 +251,7 @@ class CampaignManager:
         loop_status = self._crashed_campaign_loop_status(
             reason=reason,
             exc=exc,
-            max_rounds=max_rounds,
+            requested_rounds=requested_rounds,
         )
         try:
             self._write_status(
@@ -358,7 +274,7 @@ class CampaignManager:
         *,
         reason: str,
         exc: Exception,
-        max_rounds: int,
+        requested_rounds: int,
     ) -> Dict[str, Any]:
         existing = getattr(self._evidence_recorder, "campaign_loop_status", None)
         loop_status: Dict[str, Any] = (
@@ -366,7 +282,7 @@ class CampaignManager:
         )
         requested_rounds = _positive_int(
             loop_status.get("requested_rounds"),
-            max_rounds,
+            requested_rounds,
             default=1,
         )
         loop_steps = _nonnegative_int(
@@ -377,12 +293,9 @@ class CampaignManager:
             loop_status.get("effective_rounds_completed"),
             default=0,
         )
-        proposal_attempts = _nonnegative_int(
-            loop_status.get(
-                "proposal_attempts_consumed",
-                loop_status.get("proposal_attempts"),
-            ),
-            default=effective_rounds,
+        scheduled_calls = _nonnegative_int(
+            loop_status.get("scheduled_calls"),
+            default=loop_steps,
         )
         failure_categories = dict(loop_status.get("failure_categories") or {})
         failure_categories[reason] = _nonnegative_int(
@@ -392,26 +305,11 @@ class CampaignManager:
         loop_status.update(
             {
                 "requested_rounds": requested_rounds,
-                "attempt_limit": _nonnegative_int(
-                    loop_status.get("attempt_limit"),
-                    default=0,
-                ),
-                "proposal_attempt_limit": _nonnegative_int(
-                    loop_status.get("proposal_attempt_limit"),
-                    loop_status.get("attempt_limit"),
-                    default=0,
-                ),
-                "attempts": proposal_attempts,
                 "total_rounds": _nonnegative_int(
                     loop_status.get("total_rounds"),
                     default=getattr(self, "_round_num", 0),
                 ),
-                "proposal_attempts": proposal_attempts,
-                "proposal_attempts_consumed": proposal_attempts,
-                "proposal_attempts_total": _nonnegative_int(
-                    loop_status.get("proposal_attempts_total"),
-                    default=max(loop_steps, proposal_attempts),
-                ),
+                "scheduled_calls": scheduled_calls,
                 "loop_steps": loop_steps,
                 "campaign_steps": _nonnegative_int(
                     loop_status.get("campaign_steps"),
@@ -423,7 +321,7 @@ class CampaignManager:
                 "terminal_exception": {
                     "reason": reason,
                     "type": type(exc).__name__,
-                    "message": str(exc)[:500],
+                    "message": str(exc),
                 },
             }
         )
@@ -445,41 +343,18 @@ class CampaignManager:
         """Execute one campaign step and return a StepResult."""
         return _branch_step_runner_for(self).run_one_step()
 
-    def run_fresh_runtime_replay_drain_step(self) -> StepResult:
-        """Execute one scheduler-approved fresh-runtime replay drain step."""
-        return _branch_step_runner_for(self).run_fresh_runtime_replay_drain_step()
-
-    def run_stage_transition_drain_step(self) -> StepResult:
-        """Execute one scheduler-approved post-budget validation/frozen step."""
-        return _branch_step_runner_for(self).run_stage_transition_drain_step()
-
     def should_stop(self) -> bool:
         if getattr(self, "_external_stop_requested", False):
             if not self._last_stop_reason:
                 self._last_stop_reason = "external_stop_requested"
             return True
-        return self._governance.should_stop()
+        return False
 
-    @staticmethod
-    def _has_pending_evaluation(branches: List[Branch]) -> bool:
-        """Compatibility wrapper for budget-efficiency early-stop guard."""
-        return CampaignGovernanceService.has_pending_evaluation(branches)
-
-    def get_state(self, *, reconcile_active_slots: bool = True) -> Dict[str, Any]:
+    def get_state(self) -> Dict[str, Any]:
         branches = self._branch_ctrl.get_reportable_branches()
         max_active_branches = int(
             getattr(self._scheduler, "max_active_branches", 0) or 0
         )
-        active_slot_reconciliation = None
-        if reconcile_active_slots:
-            active_slot_reconciliation = reconcile_active_slot_overflow(
-                branches,
-                max_active_branches=max_active_branches,
-            )
-            if active_slot_reconciliation.changed:
-                for branch_id in active_slot_reconciliation.parked_branch_ids:
-                    self._persist_branch_state(branch_id)
-                branches = self._branch_ctrl.get_reportable_branches()
         active_slots = active_slot_inventory(
             branches,
             max_active_branches=max_active_branches,
@@ -487,39 +362,8 @@ class CampaignManager:
         screened_experiments = sum(
             1
             for step in self._step_history
-            if formal_screening_attempted(step.protocol_result)
-        )
-        telemetry_failed_from_steps = sum(
-            1
-            for step in self._step_history
-            if formal_telemetry_guard_failed(step.protocol_result)
-        )
-        telemetry_failed_experiments = max(
-            getattr(self, "_telemetry_failed_experiments", 0),
-            telemetry_failed_from_steps,
-        )
-        telemetry_failed_by_category: Dict[str, int] = {}
-        telemetry_failure_details: list[dict[str, Any]] = []
-        for step in self._step_history:
-            if not formal_telemetry_guard_failed(step.protocol_result):
-                continue
-            categories = telemetry_failure_categories(step.protocol_result) or (
-                "unknown",
-            )
-            for category in categories:
-                telemetry_failed_by_category[category] = (
-                    telemetry_failed_by_category.get(category, 0) + 1
-                )
-            for detail in telemetry_decision_details(step.protocol_result):
-                telemetry_failure_details.append(
-                    {
-                        **detail,
-                        "round": step.round_num,
-                        "branch_id": step.branch_id,
-                    }
-                )
-        branch_lifecycle_reroute_policy = campaign_branch_lifecycle_reroute_status(
-            branches
+            if step.protocol_result is not None
+            and step.protocol_result.stage == ExperimentStage.SCREENING
         )
         branch_rows = [_branch_state_row(b) for b in branches]
         branch_cards = [row["branch_card"] for row in branch_rows]
@@ -533,48 +377,30 @@ class CampaignManager:
         except Exception as exc:  # pragma: no cover - status is best-effort
             logger.debug("branch history card projection failed: %s", exc)
             branch_history_cards = branch_cards
-        checkpoint_inventory: Dict[str, Any] = {}
-        try:
-            checkpoint_inventory = _workspace_service_for(self).checkpoint_summary()
-        except Exception as exc:  # pragma: no cover - status is best-effort
-            logger.debug("checkpoint summary failed: %s", exc)
         protocol_config = getattr(self, "_protocol_config", None)
         measurement_readiness = reduced_measurement_readiness_payload(
             getattr(protocol_config, "measurement_readiness", None)
         )
         state = {
             "campaign_id": self._campaign_id,
+            "proposal_runtime_mode": "direct_v3",
             "n_experiments": self._n_experiments,
             "screened_experiments": screened_experiments,
-            "telemetry_failed_experiments": telemetry_failed_experiments,
-            "telemetry_failed_experiments_by_category": telemetry_failed_by_category,
-            "telemetry_failure_details": telemetry_failure_details[-16:],
             "total_rounds": self._round_num,
-            "proposal_attempts": self._round_num,
-            "proposal_attempts_consumed": self._round_num,
             "n_steps": len(self._step_history),
             "n_active_branches": active_slots["used"],
             "active_slots": active_slots,
             "champion_version": self._champion.version,
             "champion_weight_revision": getattr(self._champion, "weight_revision", 0),
-            "measurement_governance": getattr(
-                protocol_config,
-                "measurement_governance",
-                "on",
-            ),
             "promotion_dossier_ref": getattr(
                 self._champion,
                 "promotion_dossier_ref",
                 None,
             ),
-            "budget_remaining": self._budget.remaining_ratio,
             "balance_exhausted": self._balance_exhausted,
-            "circuit_breaker_tripped": self._circuit_breaker.is_tripped,
-            "frozen_budget": self._frozen_budget_ledger.snapshot(),
             "branches": branch_rows,
             "branch_cards": branch_cards,
             "branch_history_cards": branch_history_cards,
-            "checkpoint_inventory": checkpoint_inventory,
         }
         if measurement_readiness is not None:
             state["measurement_readiness"] = measurement_readiness
@@ -589,26 +415,9 @@ class CampaignManager:
             state=state,
             round_num=self._round_num,
             screened_rounds=screened_experiments,
-            agentic_artifact_dir=getattr(
-                self._proposal_pipeline,
-                "agentic_artifact_dir",
-                None,
-            ),
         )
         state.update(accounting)
-        state["proposal_accounting"] = {
-            "proposal_attempts": state.get("proposal_attempts"),
-            "proposal_attempts_consumed": state.get("proposal_attempts_consumed"),
-            **accounting,
-        }
-        if branch_lifecycle_reroute_policy:
-            state["branch_lifecycle_reroute_policy"] = (
-                branch_lifecycle_reroute_policy
-            )
-        if active_slot_reconciliation is not None and active_slot_reconciliation.changed:
-            state["active_slot_reconciliation"] = (
-                active_slot_reconciliation.as_audit_metadata()
-            )
+        state["proposal_accounting"] = dict(accounting)
         weight_opt_status = self._weight_opt_coord.status_snapshot()
         if (
             weight_opt_status["pending_threads"]
@@ -625,7 +434,7 @@ class CampaignManager:
 
     def get_state_snapshot(self) -> Dict[str, Any]:
         """Read-only state projection for evidence/status generation."""
-        return self.get_state(reconcile_active_slots=False)
+        return self.get_state()
 
     def _write_status(
         self,
@@ -692,16 +501,6 @@ class CampaignManager:
             "target_file": hypothesis.target_file,
             "hypothesis_action": hypothesis.action,
             "hypothesis_text": hypothesis.hypothesis_text,
-            "mechanism_changes": [
-                {
-                    "id": str(getattr(change, "id", "") or ""),
-                    "change_type": str(getattr(change, "change_type", "") or ""),
-                }
-                for change in tuple(
-                    getattr(hypothesis, "mechanism_changes", ()) or ()
-                )
-                if str(getattr(change, "id", "") or "")
-            ],
             "base_champion_id": branch.base_champion_id,
             "branch_weight_revision": getattr(branch, "weight_revision", 0),
             "champion_version": self._champion.version,
@@ -735,10 +534,7 @@ class CampaignManager:
         self._write_status()
 
     def _persist_branch_state(self, branch_id: str) -> None:
-        try:
-            self._branch_store.save(self._branch_ctrl.get_branch(branch_id))
-        except Exception as exc:
-            logger.debug("BranchStore.save(%s) failed: %s", branch_id, exc)
+        self._branch_store.save(self._branch_ctrl.get_branch(branch_id))
 
     def _persist_all_branch_states(self) -> None:
         for branch in list(self._branch_ctrl._branches.values()):
@@ -805,8 +601,14 @@ class CampaignManager:
     def _proposal_failure_detail_for(self, branch_id: str) -> Optional[str]:
         return self._proposal_pipeline.pop_hypothesis_failure_detail(branch_id)
 
+    def _proposal_execution_outcome_for(self, branch_id: str) -> Any | None:
+        return self._proposal_pipeline.pop_execution_outcome(branch_id)
+
     def _proposal_session_ref_for(self, branch_id: str) -> Optional[Dict[str, Any]]:
-        return self._proposal_pipeline.pop_agentic_session_ref(branch_id)
+        return self._proposal_pipeline.pop_proposal_attempt_ref(branch_id)
+
+    def _proposal_governance_envelope_for(self, branch_id: str) -> Any | None:
+        return self._proposal_pipeline.pop_governance_envelope(branch_id)
 
     # ------------------------------------------------------------------
     # Round 2: generate code
@@ -814,22 +616,17 @@ class CampaignManager:
 
     def _round2_generate_code(
         self, branch: Branch, hypothesis: HypothesisProposal,
-        prior_failure: Optional[str] = None,
     ) -> Optional[PatchProposal]:
-        return self._proposal_pipeline.generate_code(
-            branch,
-            hypothesis,
-            prior_failure=prior_failure,
-        )
-
-    # ------------------------------------------------------------------
-    # Fix code (verification_light retry)
-    # ------------------------------------------------------------------
-
-    def _attempt_fix(
-        self, branch: Branch, patch: PatchProposal, vresult: VerificationResult
-    ) -> Optional[PatchProposal]:
-        return self._proposal_pipeline.attempt_fix(branch, patch, vresult)
+        try:
+            return self._proposal_pipeline.generate_code(
+                branch,
+                hypothesis,
+            )
+        finally:
+            explore_pipeline = getattr(self, "_explore_step_pipeline", None)
+            cache = getattr(explore_pipeline, "_proposal_session_ref_cache", None)
+            if isinstance(cache, dict):
+                cache.pop(branch.branch_id, None)
 
     # ------------------------------------------------------------------
     # Workspace setup
@@ -853,62 +650,14 @@ class CampaignManager:
         branch: Branch,
         workspace: str,
         hypothesis: HypothesisProposal,
-    ) -> Tuple[Optional[Decision], Optional[ProtocolResult], CanaryResult]:
+    ) -> EvaluationExecutionResult:
         return _evaluation_orchestrator_for(self).evaluate(
             branch,
             workspace,
             hypothesis,
         )
 
-    def _apply_soft_abandon(
-        self,
-        bid: str,
-        branch: Branch,
-        h_record: Optional[HypothesisRecord],
-    ) -> None:
-        """T4 soft-abandon: discard branch without affecting hard-stagnation counter.
 
-        This path is for wr<0.3 'no signal' results — the branch couldn't beat the
-        champion but there was no framework failure. Does NOT increment
-        _recent_abandoned_count (which tracks framework-level stagnation only).
-        """
-        workspace = self._branch_workspaces.pop(bid, None)
-        if workspace:
-            try:
-                self._materializer.archive_workspace(workspace, bid)
-            except Exception as exc:
-                logger.debug("Branch %s: soft_abandon archive failed: %s", bid, exc)
-            try:
-                self._materializer.cleanup(workspace)
-            except Exception:
-                pass
-
-        self._branch_hypotheses.pop(bid, None)
-        self._branch_telemetry_diagnostic_streaks.pop(bid, None)
-        if h_record is not None:
-            self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
-            self._branch_current_hypothesis.pop(bid, None)
-
-        try:
-            self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
-        except StateTransitionError as exc:
-            logger.debug("Branch %s: soft_abandon apply_decision failed: %s", bid, exc)
-        self._persist_branch_state(bid)
-
-    def _record_hard_abandon(self, branch_id: str, reason: str) -> None:
-        """Count a non-T4 branch abandonment once for hard-stagnation logic."""
-        counted = getattr(self, "_hard_abandon_counted_branches", None)
-        if counted is None:
-            counted = set()
-            self._hard_abandon_counted_branches = counted
-        if branch_id in counted:
-            return
-        counted.add(branch_id)
-        self._recent_abandoned_count += 1
-        logger.debug(
-            "Branch %s: hard abandon counted (%s); recent_abandoned_count=%d",
-            branch_id, reason, self._recent_abandoned_count,
-        )
 
     # ------------------------------------------------------------------
     # Pool/registry sync
@@ -975,32 +724,9 @@ class CampaignManager:
     def _decision_provenance_for(self, branch_id: str) -> Dict[str, Any]:
         return _lookup_decision_provenance(self, branch_id)
 
-    def _decision_lifecycle_action_for(
-        self,
-        branch_id: str,
-        protocol_result: Optional[ProtocolResult],
-    ) -> DecisionLifecycleAction:
-        orchestrator = _evaluation_orchestrator_for(self)
-        actions = getattr(orchestrator, "decision_lifecycle_actions", {}) or {}
-        return actions.get(branch_id, "")
-
-    def _decision_lifecycle_policy_evidence_for(
-        self,
-        branch_id: str,
-    ) -> Dict[str, Any]:
-        orchestrator = _evaluation_orchestrator_for(self)
-        evidence = (
-            getattr(orchestrator, "decision_lifecycle_policy_evidence", {}) or {}
-        )
-        value = evidence.get(branch_id, {})
-        return dict(value) if isinstance(value, dict) else {}
-
     def _increment_round(self) -> int:
         self._round_num += 1
         return self._round_num
-
-    def _increment_rounds_since_last_promote(self) -> None:
-        self._rounds_since_last_promote += 1
 
     # ------------------------------------------------------------------
     # Apply decision and finalise
@@ -1018,7 +744,7 @@ class CampaignManager:
         verification_result: VerificationResult,
         action_label: str,
         decision_reason_codes: Optional[Tuple[str, ...]] = None,
-        lifecycle_action: DecisionLifecycleAction = "",
+        proposal_attempt_ref: Mapping[str, Any] | None = None,
     ) -> StepResult:
         return self._decision_finalizer.apply(
             branch=branch,
@@ -1031,13 +757,7 @@ class CampaignManager:
             verification_result=verification_result,
             action_label=action_label,
             decision_reason_codes=decision_reason_codes,
-            lifecycle_action=(
-                lifecycle_action
-                or self._decision_lifecycle_action_for(branch.branch_id, protocol_result)
-            ),
-            lifecycle_policy_evidence=self._decision_lifecycle_policy_evidence_for(
-                branch.branch_id,
-            ),
+            proposal_attempt_ref=proposal_attempt_ref,
         )
 
     # ------------------------------------------------------------------
@@ -1068,24 +788,11 @@ class CampaignManager:
         """Transition the promoted branch after champion persistence succeeds."""
         self._promotion_lifecycle.transition_promoted_branch(branch_id, new_champion)
 
-    def _begin_promotion_commit(self, plan: PromotionPlan) -> None:
-        """Reset campaign-level stagnation counters for a new champion cycle."""
-        self._promotion_lifecycle.begin_promotion_commit(plan)
 
-    def _reset_promotion_counters(self, branch_id: str) -> None:
-        """Reset campaign-level stagnation counters for a committed champion."""
-        self._recent_abandoned_count = 0
-        self._hard_abandon_counted_branches.clear()
-        self._soft_abandon_streak = 0
-        self._hard_stagnation_escape_used = False
 
     def _commit_promoted_champion_state(self, new_champion: ChampionState) -> None:
         """Install the promoted champion in campaign memory."""
         self._promotion_lifecycle.commit_promoted_champion_state(new_champion)
-
-    def _record_promoted_branch(self, branch_id: str, new_champion: ChampionState) -> None:
-        """Record promotion context in search memory."""
-        self._promotion_lifecycle.record_promoted_branch(branch_id, new_champion)
 
     def _persist_promoted_champion(self, new_champion: ChampionState) -> None:
         """Persist the promoted champion before mutable promotion side effects."""
@@ -1113,30 +820,6 @@ class CampaignManager:
         )
 
     # ------------------------------------------------------------------
-    # Stagnation detection (T25/T23)
-    # ------------------------------------------------------------------
-
-    def _run_stagnation_check(self) -> None:
-        """Check for stagnation signals after each round and log critical ones."""
-        self._governance.run_stagnation_check()
-
-    def _check_soft_stagnation(self) -> None:
-        """If soft_abandon_streak hits limit, force the next branch to diversify locus.
-
-        soft-stagnation means: champion is too strong in current locus, not that the
-        framework is broken. Response = diversify search direction, NOT terminate.
-        """
-        self._governance.check_soft_stagnation()
-
-    def _consume_forced_locus(self) -> Optional[str]:
-        """Consume and return forced locus (set by soft/hard stagnation), or None."""
-        return self._governance.consume_forced_locus()
-
-    def _get_diversification_locus(self) -> Optional[str]:
-        """Determine the best locus to diversify into, using StagnationDetector diagnosis."""
-        return self._governance.get_diversification_locus()
-
-    # ------------------------------------------------------------------
     # Failure handling
     # ------------------------------------------------------------------
 
@@ -1156,12 +839,76 @@ class CampaignManager:
             hypothesis_already_recorded=hypothesis_already_recorded,
         )
 
-    def _tick_blocked_branches(self) -> None:
-        """Increment blocked_rounds for every BLOCKED_INFRA branch; auto-unblock at 3 rounds."""
+    def operator_resume_infra(
+        self,
+        branch_id: str,
+        *,
+        operator_reason: str,
+        operator_ack: str,
+        failed_attempt_id: str | None = None,
+    ) -> bool:
+        """Resume one BLOCKED_INFRA branch through the sole operator API."""
+
         lifecycle = getattr(self, "_failure_lifecycle", None)
         if lifecycle is None:
             lifecycle = FailureLifecycleService.from_owner(self)
-        lifecycle.tick_blocked_branches()
+        return lifecycle.operator_resume_infra(
+            branch_id,
+            operator_reason=operator_reason,
+            operator_ack=operator_ack,
+            failed_attempt_id=failed_attempt_id,
+        )
+
+    def operator_resume_execution_hold(
+        self,
+        branch_id: str,
+        *,
+        operator_reason: str,
+        operator_ack: str,
+    ) -> bool:
+        """Release a non-infra execution hold after a durable operator event."""
+
+        reason = str(operator_reason or "").strip()
+        ack = str(operator_ack or "").strip()
+        if not reason or not ack:
+            raise ValueError("operator_reason and operator_ack are required")
+        branch = self._branch_ctrl.get_branch(branch_id)
+        if branch is None:
+            raise KeyError(f"unknown branch: {branch_id}")
+        marker = branch_execution_hold(branch)
+        if marker is None:
+            raise ValueError(f"branch {branch_id} has no active execution hold")
+
+        event_id = self._registry.record_event(
+            {
+                "campaign_id": self._campaign_id,
+                "branch_id": branch_id,
+                "event_kind": "operator_resume_execution_hold",
+                "stage": "operator",
+                "decision_reason": reason,
+                "audit_payload_json": json.dumps(
+                    {
+                        "schema": "operator-resume-execution-hold.v1",
+                        "operator_reason": reason,
+                        "operator_ack": ack,
+                        "released_execution_hold": marker,
+                    },
+                    sort_keys=True,
+                ),
+            }
+        )
+        clear_branch_execution_hold(branch)
+        try:
+            self._persist_branch_state(branch_id)
+        except Exception:
+            branch.branch_evidence_summary["execution_hold"] = marker
+            raise
+        logger.info(
+            "Branch %s: operator released execution hold via event %s",
+            branch_id,
+            event_id,
+        )
+        return True
 
     # ------------------------------------------------------------------
     # Workspace archiving
@@ -1188,19 +935,8 @@ class CampaignManager:
             step_history=self._step_history,
             round_num=self._round_num,
             champion=self._champion,
-            budget_used=self._budget.used,
-            budget_total=self._budget.total,
             stopped_reason=self._last_stop_reason,
             balance_exhausted=self._balance_exhausted,
-            circuit_breaker_tripped=self._circuit_breaker.is_tripped,
-            stagnation_signals=self._stagnation_signals,
-            diagnostics=self._diagnostics,
-            frozen_budget=self._frozen_budget_ledger.snapshot(),
-            measurement_governance=getattr(
-                getattr(self, "_protocol_config", None),
-                "measurement_governance",
-                "on",
-            ),
             measurement_readiness=reduced_measurement_readiness_payload(
                 getattr(
                     getattr(self, "_protocol_config", None),
@@ -1208,12 +944,8 @@ class CampaignManager:
                     None,
                 )
             ),
+            proposal_runtime_mode="direct_v3",
         )
-
-
-def _build_verification_detail(vresult: VerificationResult) -> Optional[str]:
-    """Compatibility wrapper for the extracted explore-step helper."""
-    return build_verification_detail(vresult)
 
 
 def _nonnegative_int(*values: Any, default: int = 0) -> int:
@@ -1235,55 +967,13 @@ def _positive_int(*values: Any, default: int = 1) -> int:
 
 
 def _branch_state_row(branch: Branch) -> Dict[str, Any]:
-    card = dict(branch_hygiene_context(branch))
+    card = dict(branch_card_context(branch))
     card["branch_card_text"] = branch_prompt_card(branch)
     return {
         "id": branch.branch_id,
         "state": branch.state.value,
         "base_champion_id": branch.base_champion_id,
         "weight_revision": getattr(branch, "weight_revision", 0),
-        "branch_code_status": getattr(branch, "branch_code_status", "clean"),
-        "last_screening_feedback_tier": getattr(
-            branch,
-            "last_screening_feedback_tier",
-            None,
-        ),
-        "last_telemetry_outcome": getattr(branch, "last_telemetry_outcome", None),
-        "branch_mechanism_ids": list(
-            getattr(branch, "branch_mechanism_ids", ()) or ()
-        ),
-        "telemetry_repair_mechanism_ids": list(
-            getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
-        ),
-        "telemetry_repair_attempts": dict(
-            getattr(branch, "telemetry_repair_attempts", {}) or {}
-        ),
-        "branch_lifecycle_policy_blocks": getattr(
-            branch,
-            "branch_lifecycle_policy_blocks",
-            0,
-        ),
-        "branch_lifecycle_new_mechanism_ineligible": getattr(
-            branch,
-            "branch_lifecycle_new_mechanism_ineligible",
-            False,
-        ),
-        "branch_lifecycle_reroute_reason": getattr(
-            branch,
-            "branch_lifecycle_reroute_reason",
-            None,
-        ),
-        "last_branch_lifecycle_policy_block": dict(
-            card.get("last_branch_lifecycle_policy_block") or {}
-        ),
-        "best_quality_checkpoint_id": getattr(
-            branch,
-            "best_quality_checkpoint_id",
-            None,
-        ),
-        "last_valid_checkpoint_id": getattr(branch, "last_valid_checkpoint_id", None),
-        "rollback_count": int(getattr(branch, "rollback_count", 0) or 0),
-        "last_rollback_reason": getattr(branch, "last_rollback_reason", None),
         "branch_card": card,
         "branch_card_text": card["branch_card_text"],
     }
@@ -1301,24 +991,9 @@ def _sync_branch_progress_from_rows(
         card = dict(row.get("branch_card") or {})
         merged["branch_card"] = card
         for key in (
-            "lineage_status",
-            "branch_code_status",
-            "current_head_status",
-            "active_slot_status",
-            "counts_toward_active_slots",
-            "current_head_active_slot_release_reason",
-            "best_checkpoint_status",
-            "best_quality_checkpoint_id",
-            "last_valid_checkpoint_id",
-            "rollback_count",
-            "lineage_retained_checkpoint",
-            "latest_head_failed",
-            "allowed_next_actions",
-            "forbidden_next_actions",
-            "final_branch_classification",
-            "branch_final_classification",
-            "branch_next_action",
-            "branch_classification_reason",
+            "branch_state",
+            "scheduling_status",
+            "evidence_summary",
         ):
             if key in card:
                 merged[key] = card[key]

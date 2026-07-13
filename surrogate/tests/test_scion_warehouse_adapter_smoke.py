@@ -32,6 +32,14 @@ class TestWarehouseSyntheticSmoke:
     def spec(self) -> ProblemSpecV1:
         with open(WAREHOUSE_YAML, encoding="utf-8") as f:
             data = yaml.safe_load(f)
+        # The formal launcher rewrites these problem-owned paths to absolute
+        # runtime paths.  Do the same in this standalone integration fixture so
+        # its behavior does not depend on pytest's current working directory.
+        surrogate_root = REPO_ROOT / "surrogate"
+        data["root_dir"] = str(surrogate_root)
+        canary = data.get("canary_case_path")
+        if canary and not os.path.isabs(canary):
+            data["canary_case_path"] = str(surrogate_root / canary)
         return ProblemSpecV1(**data)
 
     @pytest.fixture
@@ -105,4 +113,3 @@ class TestWarehouseSyntheticSmoke:
             pytest.skip("no canary")
         lb = adapter.estimate_lower_bound("total_cost", [canary])
         assert lb is None
-

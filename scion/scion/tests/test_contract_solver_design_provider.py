@@ -13,7 +13,7 @@ from scion.contract.checks.problem_integration import (
     ProblemIntegrationProviderError,
     resolve_contract_check_provider,
 )
-from scion.core.models import PatchProposal
+from scion.core.models import PatchFileChange, PatchProposal
 from scion.problem.providers import (
     ProblemProviderError,
     active_subject_policy_matches_path,
@@ -157,102 +157,7 @@ def test_contract_gate_labels_solver_design_as_generic_surface_integration() -> 
     assert check.metadata["surface_contract_scope"] == "generic_first_class_surface"
 
 
-def test_production_patch_validation_requires_hypothesis_for_mechanism_surface() -> None:
-    class Provider:
-        def active_subject_policy(self, context=None, *, surface=None, subject_id=None):
-            return {"entrypoint_paths": ("policies/algorithm.py",)}
-
-    class Spec:
-        search_space = SimpleNamespace(
-            editable=("policies/*.py",),
-            frozen=(),
-            import_whitelist=(),
-        )
-        research_surfaces = (
-            SimpleNamespace(
-                name="solver_design",
-                kind="solver_design",
-                targets=SimpleNamespace(files=("policies/algorithm.py",)),
-                evidence=SimpleNamespace(
-                    mechanism_telemetry={
-                        "guided_shift": {
-                            "activation_runtime_fields": ("guided_shift_calls",)
-                        }
-                    }
-                ),
-            ),
-        )
-
-        def active_subject_policy_provider(self):
-            return Provider()
-
-    patch = PatchProposal(
-        file_path="policies/algorithm.py",
-        action="modify",
-        code_content="def solve(instance, rng, time_limit_sec, context):\n    return None\n",
-    )
-
-    result = ContractGate(Spec()).validate_patch(
-        patch,
-        selected_surface="solver_design",
-    )
-
-    c12 = next(check for check in result.checks if check.name == "C12_mechanism_binding")
-    assert not result.passed
-    assert not c12.passed
-    assert "approved_hypothesis is required for production patch validation" in c12.detail
-    assert c12.metadata["reason_code"] == "hypothesis_bound_check_required"
-
-
-def test_preview_patch_validation_marks_hypothesis_bound_check_skipped() -> None:
-    class Provider:
-        def active_subject_policy(self, context=None, *, surface=None, subject_id=None):
-            return {"entrypoint_paths": ("policies/algorithm.py",)}
-
-    class Spec:
-        search_space = SimpleNamespace(
-            editable=("policies/*.py",),
-            frozen=(),
-            import_whitelist=(),
-        )
-        research_surfaces = (
-            SimpleNamespace(
-                name="solver_design",
-                kind="solver_design",
-                targets=SimpleNamespace(files=("policies/algorithm.py",)),
-                evidence=SimpleNamespace(
-                    mechanism_telemetry={
-                        "guided_shift": {
-                            "activation_runtime_fields": ("guided_shift_calls",)
-                        }
-                    }
-                ),
-            ),
-        )
-
-        def active_subject_policy_provider(self):
-            return Provider()
-
-    patch = PatchProposal(
-        file_path="policies/algorithm.py",
-        action="modify",
-        code_content="def solve(instance, rng, time_limit_sec, context):\n    return None\n",
-    )
-
-    result = ContractGate(Spec()).validate_patch(
-        patch,
-        selected_surface="solver_design",
-        validation_mode="preview",
-    )
-
-    c12 = next(check for check in result.checks if check.name == "C12_mechanism_binding")
-    assert c12.passed
-    assert c12.metadata["validation_mode"] == "preview"
-    assert c12.metadata["preview_skipped"] is True
-    assert c12.metadata["skipped_check"] == "C12_patch_mechanism_echo"
-
-
-def test_production_active_subject_provider_lookup_fails_closed() -> None:
+def test_sensitive_api_consumer_fails_closed_without_active_subject_policy() -> None:
     class Spec:
         search_space = SimpleNamespace(
             editable=("policies/*.py",),
@@ -278,16 +183,43 @@ def test_production_active_subject_provider_lookup_fails_closed() -> None:
         selected_surface="solver_design",
     )
 
-    c9f = next(
-        check for check in result.checks if check.name == "C9f_active_subject_provider"
+    c9 = next(
+        check for check in result.checks if check.name == "C9_sensitive_api"
     )
     assert not result.passed
-    assert not c9f.passed
-    assert c9f.metadata["reason_code"] == "active_subject_provider_unavailable"
-    assert "active-subject provider unavailable" in c9f.detail
+    assert not c9.passed
+    assert (
+        c9.metadata["reason_code"]
+        == "active_subject_sensitive_api_policy_unavailable"
+    )
+    assert "sensitive-API policy unavailable" in c9.detail
+    assert all(
+        check.name != "C9f_active_subject_provider" for check in result.checks
+    )
 
 
-def test_preview_active_subject_provider_lookup_marks_degraded() -> None:
+def test_contract_patch_resolves_one_provider_bundle_for_all_files() -> None:
+    factory_calls: list[str] = []
+    policy_calls: list[str | None] = []
+    integration_calls: list[object] = []
+
+    class Provider:
+        def active_subject_policy(self, context=None, *, surface=None, subject_id=None):
+            del context, subject_id
+            policy_calls.append(surface)
+            return {
+                "surface": "solver_design",
+                "entrypoint_paths": ("policies/algorithm.py",),
+                "support_module_globs": ("policies/*.py",),
+                "forbidden_entrypoint_calls": (),
+            }
+
+        def check_solver_design_integration(self, request):
+            integration_calls.append(request)
+            return SimpleNamespace(passed=True, detail="integration ok")
+
+    provider = Provider()
+
     class Spec:
         search_space = SimpleNamespace(
             editable=("policies/*.py",),
@@ -298,29 +230,39 @@ def test_preview_active_subject_provider_lookup_marks_degraded() -> None:
             SimpleNamespace(
                 name="solver_design",
                 kind="solver_design",
-                targets=SimpleNamespace(files=("policies/algorithm.py",)),
+                targets=SimpleNamespace(files=("policies/*.py",)),
             ),
         )
+
+        def contract_check_provider(self):
+            factory_calls.append("contract_check_provider")
+            return provider
 
     patch = PatchProposal(
         file_path="policies/algorithm.py",
         action="modify",
         code_content="def solve(instance, rng, time_limit_sec, context):\n    return None\n",
+        additional_changes=(
+            PatchFileChange(
+                file_path="policies/helper.py",
+                action="create",
+                code_content="def helper():\n    return 1\n",
+            ),
+        ),
     )
 
     result = ContractGate(Spec()).validate_patch(
         patch,
         selected_surface="solver_design",
-        validation_mode="preview",
     )
 
-    c9f = next(
-        check for check in result.checks if check.name == "C9f_active_subject_provider"
+    assert result.passed is True
+    assert factory_calls == ["contract_check_provider"]
+    assert policy_calls == ["solver_design"]
+    assert len(integration_calls) == 1
+    assert all(
+        check.name != "C9f_active_subject_provider" for check in result.checks
     )
-    assert c9f.passed
-    assert c9f.metadata["validation_mode"] == "preview"
-    assert c9f.metadata["preview_degraded"] is True
-    assert c9f.metadata["reason_code"] == "active_subject_provider_unavailable"
 
 
 def test_generic_solver_design_integration_facade_has_no_cvrp_solver_terms() -> None:
@@ -479,6 +421,37 @@ def test_cvrp_adapter_exposes_problem_owned_contract_provider(tmp_path: Path) ->
     assert not result.passed
     assert "new solver_design helper functions are not integrated" in result.detail
     assert "_unused_cvrp_contract_probe" in result.detail
+
+
+def test_cvrp_c9e_rejects_unknown_solver_context_api() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    problem_spec = legacy_problem_spec_from_v1(spec_v1)
+    rel_path = "policies/baseline_modules/local_search.py"
+    base_code = (_CVRP_ROOT / rel_path).read_text(encoding="utf-8")
+    patch = PatchProposal(
+        file_path=rel_path,
+        action="modify",
+        code_content=(
+            base_code
+            + "\n\ndef _unsupported_context_probe(context):\n"
+            + "    context.record_context('guided_shift_iterations', 1)\n"
+        ),
+    )
+
+    result = generic_c9e.check_solver_design_integration(
+        patch,
+        problem_spec=problem_spec,
+        selected_surface="solver_design",
+        champion_file_content=lambda file_rel: (
+            (_CVRP_ROOT / file_rel).read_text(encoding="utf-8")
+            if (_CVRP_ROOT / file_rel).is_file()
+            else None
+        ),
+    )
+
+    assert not result.passed
+    assert "context.record_context" in result.detail
+    assert "context.record_iteration" in result.detail
 
 
 def test_cvrp_active_subject_policy_owns_current_solver_design_paths() -> None:

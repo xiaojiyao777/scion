@@ -379,7 +379,20 @@ class _ALNSVNSSolver:
             and instance.customer_count <= self.vns_threshold
         ):
             phase_ms = self.context.elapsed_ms()
+            before_vns_distance = float(solution.total_cost)
             self.context.record_objective_probe("vns_initial_before", solution)
+            typed_recorder = getattr(self.context, "record_telemetry_event", None)
+            if callable(typed_recorder):
+                typed_recorder(
+                    "attempt",
+                    "vns_initial",
+                    attribution_scope="initial_solution_local_search",
+                    attribution_confidence=1.0,
+                    before_ref=None,
+                    after_ref=None,
+                    missing_refs=("before_ref", "after_ref"),
+                    evidence_ref="runtime.solver_algorithm_objective_probes",
+                )
             _vns(
                 solution,
                 _default_vns_operators(),
@@ -393,6 +406,27 @@ class _ALNSVNSSolver:
                 self.context.elapsed_ms() - phase_ms,
             )
             self.context.record_objective_probe("vns_initial_after", solution)
+            after_vns_distance = float(solution.total_cost)
+            if (
+                callable(typed_recorder)
+                and after_vns_distance + _EPS < before_vns_distance
+            ):
+                typed_recorder(
+                    "direct_effect",
+                    "vns_initial",
+                    attribution_scope="initial_vns_before_after_objective_boundary",
+                    attribution_confidence=1.0,
+                    before_ref=(
+                        "objective_snapshot:vns_initial_before:"
+                        f"total_distance={before_vns_distance:.12g}"
+                    ),
+                    after_ref=(
+                        "objective_snapshot:vns_initial_after:"
+                        f"total_distance={after_vns_distance:.12g}"
+                    ),
+                    missing_refs=(),
+                    evidence_ref="runtime.solver_algorithm_objective_probes",
+                )
         elif self._should_run_size70_two_opt(instance):
             self._run_size70_two_opt_polish(
                 solution,

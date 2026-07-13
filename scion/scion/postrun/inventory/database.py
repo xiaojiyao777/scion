@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import sqlite3
 from collections import Counter
+from pathlib import Path
 from typing import Any
 
+from scion.core.execution_outcome import ExecutionOutcome
+from scion.core.proposal_trajectory_artifacts import (
+    read_proposal_attempt_transitions,
+)
 from scion.postrun.inventory.utils import (
     _branch_id,
     _string_list,
@@ -30,11 +35,13 @@ def _read_db_inventory(db_path: Path) -> dict[str, Any]:
         empty = _empty_db_inventory()
         empty["read_error"] = f"{type(exc).__name__}: {exc}"
         return empty
+    proposal_attempts = read_proposal_attempt_transitions(db_path)["stats"]
     return {
         "branches": branches,
         "events": events,
         "hypotheses": hypotheses,
         "champions": champions,
+        "proposal_attempts": proposal_attempts,
     }
 
 
@@ -44,12 +51,39 @@ def _empty_db_inventory() -> dict[str, Any]:
         "events": _empty_events(),
         "hypotheses": _empty_hypotheses(),
         "champions": _empty_champions(),
+        "proposal_attempts": _empty_proposal_attempts(),
         "read_error": None,
     }
 
 
-def _empty_events() -> dict[str, dict[str, int]]:
-    return {"by_kind": {}, "by_decision": {}, "by_stage": {}}
+def _empty_proposal_attempts() -> dict[str, Any]:
+    return {
+        "source_status": "missing",
+        "row_count": 0,
+        "valid_row_count": 0,
+        "invalid_row_count": 0,
+        "attempt_count": 0,
+        "by_runtime_mode": {},
+        "by_phase": {},
+        "by_status": {},
+        "by_failure_lane": {},
+        "prompt_manifest_ref_count": 0,
+        "invalid_by_reason": {},
+    }
+
+
+def _empty_events() -> dict[str, Any]:
+    return {
+        "by_kind": {},
+        "by_decision": {},
+        "by_stage": {},
+        "execution_outcome_schema_available": False,
+        "by_execution_outcome": {},
+        "explicit_execution_outcome_count": 0,
+        "invalid_execution_outcome_count": 0,
+        "decision_rows_with_non_evaluated_outcome": 0,
+        "decision_outcome_consistency_status": "unknown_historical",
+    }
 
 
 def _empty_hypotheses() -> dict[str, Any]:
@@ -130,11 +164,81 @@ def _branches(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return branches
 
 
-def _events(conn: sqlite3.Connection) -> dict[str, dict[str, int]]:
+def _events(conn: sqlite3.Connection) -> dict[str, Any]:
+    columns = _columns(conn, "experiment_events")
+    outcome_schema = "execution_outcome" in columns
+    by_outcome = (
+        _group_counts(conn, "experiment_events", "execution_outcome")
+        if outcome_schema
+        else {}
+    )
+    allowed = {outcome.value for outcome in ExecutionOutcome}
+    explicit_count = sum(by_outcome.values())
+    invalid_count = sum(
+        count for value, count in by_outcome.items() if value not in allowed
+    )
+    inconsistent_decisions = 0
+    decision_count = 0
+    if "decision" in columns:
+        decision_count = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM experiment_events "
+                "WHERE decision IS NOT NULL AND decision != ''"
+            ).fetchone()[0]
+            or 0
+        )
+        if outcome_schema and explicit_count > 0:
+            identity_columns = {"campaign_id", "branch_id", "hypothesis_id"}
+            if identity_columns.issubset(columns):
+                inconsistent_decisions = int(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM experiment_events AS decision_row "
+                        "WHERE decision_row.decision IS NOT NULL "
+                        "AND decision_row.decision != '' "
+                        "AND COALESCE(decision_row.execution_outcome, '') != ? "
+                        "AND NOT EXISTS ("
+                        "SELECT 1 FROM experiment_events AS outcome_row "
+                        "WHERE outcome_row.execution_outcome = ? "
+                        "AND outcome_row.campaign_id = decision_row.campaign_id "
+                        "AND outcome_row.branch_id = decision_row.branch_id "
+                        "AND (outcome_row.hypothesis_id = decision_row.hypothesis_id "
+                        "OR decision_row.hypothesis_id IS NULL))",
+                        (
+                            ExecutionOutcome.EVALUATED.value,
+                            ExecutionOutcome.EVALUATED.value,
+                        ),
+                    ).fetchone()[0]
+                    or 0
+                )
+            else:
+                inconsistent_decisions = int(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM experiment_events "
+                        "WHERE decision IS NOT NULL AND decision != '' "
+                        "AND execution_outcome IS NOT NULL "
+                        "AND execution_outcome != '' "
+                        "AND execution_outcome != ?",
+                        (ExecutionOutcome.EVALUATED.value,),
+                    ).fetchone()[0]
+                    or 0
+                )
+    if invalid_count or inconsistent_decisions:
+        consistency_status = "invalid"
+    elif explicit_count > 0:
+        consistency_status = "consistent"
+    else:
+        consistency_status = "unknown_historical"
     return {
         "by_kind": _group_counts(conn, "experiment_events", "event_kind"),
         "by_decision": _group_counts(conn, "experiment_events", "decision"),
         "by_stage": _group_counts(conn, "experiment_events", "stage"),
+        "execution_outcome_schema_available": outcome_schema,
+        "by_execution_outcome": by_outcome,
+        "explicit_execution_outcome_count": explicit_count,
+        "invalid_execution_outcome_count": invalid_count,
+        "decision_row_count": decision_count,
+        "decision_rows_with_non_evaluated_outcome": inconsistent_decisions,
+        "decision_outcome_consistency_status": consistency_status,
     }
 
 

@@ -24,9 +24,7 @@ def test_decision_features_field_set_preserves_v3_boundary():
         "ci_low",
         "ci_high",
         "stale",
-        "recent_retry_count",
         "recent_failure_codes",
-        "budget_remaining_ratio",
         "wins",
         "losses",
         "ties",
@@ -40,6 +38,7 @@ def test_decision_features_field_set_preserves_v3_boundary():
         "runtime_evidence_confidence",
         "runtime_evidence_status",
         "protocol_gate_outcome",
+        "protocol_reason_codes",
         "total_pairs",
         "attempted_pairs",
         "valid_pairs",
@@ -51,21 +50,8 @@ def test_decision_features_field_set_preserves_v3_boundary():
         "pair_ties",
         "statistical_status",
         "statistical_metric",
-        "telemetry_validation_repairable",
-        "telemetry_guard_failed",
-        "telemetry_effect_zero_diagnostic",
-        "runtime_budget_saturation_diagnostic",
         "screening_expand_count",
         "validation_expand_count",
-        "lifecycle_zero_win_streak",
-        "lifecycle_telemetry_diagnostic_streak",
-        "lifecycle_marginal_no_effect_streak",
-        "lifecycle_no_effect_diagnostic_followups",
-        "lifecycle_previous_signal_repeat_count",
-        "lifecycle_signal_matches_previous",
-        "lifecycle_rollback_count",
-        "lifecycle_prior_evidence_tier",
-        "lifecycle_has_checkpoint",
     }
     actual_fields = {field.name for field in fields(DecisionFeatures)}
     forbidden_fragments = (
@@ -108,14 +94,12 @@ def test_extract_basic():
         verification=_verification(),
         canary=_canary(),
         protocol=_protocol(),
-        budget=BudgetState(total=100, used=10),
     )
     assert features.contract_passed is True
     assert features.verification_passed is True
     assert features.canary_passed is True
     assert features.win_rate == pytest.approx(0.7)
     assert features.stage == "screening"
-    assert features.budget_remaining_ratio == pytest.approx(0.9)
 
 
 def test_extract_no_protocol():
@@ -127,7 +111,6 @@ def test_extract_no_protocol():
         verification=_verification(),
         canary=_canary(),
         protocol=None,
-        budget=BudgetState(total=100, used=0),
     )
     assert features.win_rate is None
     assert features.n_cases == 0
@@ -142,7 +125,6 @@ def test_extract_stale_flag():
         verification=_verification(),
         canary=_canary(),
         protocol=None,
-        budget=BudgetState(total=100, used=0),
     )
     assert features.stale is True
 
@@ -156,7 +138,6 @@ def test_extract_validation_stage():
         verification=_verification(),
         canary=_canary(),
         protocol=_protocol(stage=ExperimentStage.VALIDATION),
-        budget=BudgetState(total=100, used=0),
     )
     assert features.stage == "validation"
 
@@ -174,7 +155,6 @@ def test_extract_expand_counters_propagate():
         verification=_verification(),
         canary=_canary(),
         protocol=None,
-        budget=BudgetState(total=100, used=0),
     )
     assert features.screening_expand_count == 2
     assert features.validation_expand_count == 1
@@ -206,7 +186,6 @@ def test_extract_runtime_guard_facts_without_free_text():
         verification=verification,
         canary=_canary(),
         protocol=None,
-        budget=BudgetState(total=100, used=0),
     )
     assert features.runtime_guard_passed is True
     assert features.runtime_guard_ratio == pytest.approx(1.25)
@@ -234,7 +213,6 @@ def test_extract_protocol_runtime_facts_without_free_text():
             candidate_failed_pairs=1,
             champion_failed_pairs=1,
         ),
-        budget=BudgetState(total=100, used=0),
     )
     assert features.runtime_ratio_median == pytest.approx(1.42)
     assert features.runtime_delta_median_ms == pytest.approx(37.5)
@@ -267,7 +245,6 @@ def test_extract_ignores_telemetry_free_text_from_exposed_summary():
         verification=_verification(),
         canary=_canary(),
         protocol=protocol,
-        budget=BudgetState(total=100, used=0),
     )
 
     _validate_no_free_text(features)
@@ -290,7 +267,6 @@ def test_extract_protocol_runtime_confidence_from_cached_champion():
             runtime_pairs=8,
             runtime_confidence="low_cached_champion",
         ),
-        budget=BudgetState(total=100, used=0),
     )
 
     assert features.runtime_evidence_confidence == "low_cached_champion"
@@ -306,7 +282,6 @@ def test_extract_protocol_declared_low_runtime_confidence_passes_guard():
         verification=_verification(),
         canary=_canary(),
         protocol=_protocol(runtime_confidence="low"),
-        budget=BudgetState(total=100, used=0),
     )
 
     assert features.runtime_evidence_confidence == "low"
@@ -327,7 +302,6 @@ def test_extract_protocol_low_sample_runtime_confidence_passes_guard():
             runtime_regression_rate=0.25,
             runtime_pairs=2,
         ),
-        budget=BudgetState(total=100, used=0),
     )
 
     assert features.runtime_evidence_confidence == "low_sample_diagnostic"
@@ -343,7 +317,6 @@ def test_extract_protocol_runtime_status_values_pass_guard():
             verification=_verification(),
             canary=_canary(),
             protocol=_protocol(runtime_evidence_status=status),
-            budget=BudgetState(total=100, used=0),
         )
 
         assert features.runtime_evidence_status == status
@@ -359,10 +332,27 @@ def test_extract_legacy_continue_protocol_gate_outcome():
         verification=_verification(),
         canary=_canary(),
         protocol=_protocol(win_rate=0.3, gate_outcome="continue"),
-        budget=BudgetState(total=100, used=0),
     )
     assert features.protocol_gate_outcome == "continue"
+    assert features.protocol_reason_codes == ("SCREENING_PASS",)
     _validate_no_free_text(features)
+
+
+def test_extractor_rejects_unknown_protocol_reason_code():
+    protocol = replace(
+        _protocol(),
+        reason_codes=("free text supplied as a reason",),
+    )
+
+    with pytest.raises(DecisionInputGuardError, match="Unknown protocol reason code"):
+        _extractor.extract(
+            branch=_branch(),
+            hypothesis_action="modify",
+            contract=_contract(),
+            verification=_verification(),
+            canary=_canary(),
+            protocol=protocol,
+        )
 
 
 def test_validate_no_free_text_valid():
@@ -374,7 +364,6 @@ def test_validate_no_free_text_valid():
         verification=_verification(),
         canary=_canary(),
         protocol=None,
-        budget=BudgetState(total=100, used=0),
     )
     # Should not raise
     _validate_no_free_text(features)
@@ -396,9 +385,7 @@ def test_validate_invalid_uuid_raises():
         ci_low=None,
         ci_high=None,
         stale=False,
-        recent_retry_count=0,
         recent_failure_codes=(),
-        budget_remaining_ratio=1.0,
     )
     with pytest.raises(DecisionInputGuardError):
         _validate_no_free_text(features)
@@ -419,9 +406,7 @@ def test_validate_unknown_failure_code_raises():
         ci_low=None,
         ci_high=None,
         stale=False,
-        recent_retry_count=0,
         recent_failure_codes=("FREE_TEXT_FAILURE_REASON",),
-        budget_remaining_ratio=1.0,
     )
     with pytest.raises(DecisionInputGuardError):
         _validate_no_free_text(features)
@@ -443,9 +428,7 @@ def test_validate_statistical_metric_rejects_free_text_prose():
         ci_low=0.1,
         ci_high=2.0,
         stale=False,
-        recent_retry_count=0,
         recent_failure_codes=(),
-        budget_remaining_ratio=1.0,
         statistical_metric="total cost improved because candidate looked better",
     )
 
@@ -462,7 +445,6 @@ def test_validate_runtime_evidence_confidence_known_values(confidence):
         verification=_verification(),
         canary=_canary(),
         protocol=None,
-        budget=BudgetState(total=100, used=0),
     )
 
     _validate_no_free_text(
@@ -479,7 +461,6 @@ def test_validate_runtime_evidence_status_known_values(status):
         verification=_verification(),
         canary=_canary(),
         protocol=None,
-        budget=BudgetState(total=100, used=0),
     )
 
     _validate_no_free_text(replace(features, runtime_evidence_status=status))
@@ -505,7 +486,6 @@ def test_validate_runtime_evidence_unknown_values_fail_closed(field_name, value)
         verification=_verification(),
         canary=_canary(),
         protocol=None,
-        budget=BudgetState(total=100, used=0),
     )
 
     with pytest.raises(DecisionInputGuardError):
@@ -544,5 +524,4 @@ def test_extractor_rejects_statistical_metric_not_declared_in_metric_stats():
             verification=_verification(),
             canary=_canary(),
             protocol=protocol,
-            budget=BudgetState(total=100, used=0),
         )

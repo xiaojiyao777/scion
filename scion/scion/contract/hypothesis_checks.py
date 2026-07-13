@@ -1,30 +1,19 @@
 """Hypothesis and mechanism-binding checks for ContractGate."""
 from __future__ import annotations
 
+import hashlib
+import json
 import time
-from typing import Any
+from typing import Any, Mapping
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import (
     CheckResult,
     HypothesisProposal,
-    HypothesisRecord,
-    PatchProposal,
-    mechanism_changes,
 )
 from scion.contract.result_payload import check_result as _cr
-from scion.contract.schema import (
-    PREDICTED_DIRECTIONS as _PREDICTED_DIRECTIONS,
-    mechanism_changes_schema_error as _mechanism_changes_schema_error,
-    objective_list_schema_error as _objective_list_schema_error,
-    objective_metric_names as _objective_metric_names,
-)
+from scion.contract.schema import PREDICTED_DIRECTIONS as _PREDICTED_DIRECTIONS
 from scion.contract.surface_access import SurfaceAccess
-from scion.contract.telemetry import (
-    mechanism_id_matches_declaration as _mechanism_id_matches_declaration,
-    surface_mechanism_telemetry_declarations as _surface_mechanism_telemetry_declarations,
-)
-from scion.runtime.telemetry_guard import validate_expected_telemetry_contract
 
 
 def check_hypothesis_schema(
@@ -47,21 +36,152 @@ def check_hypothesis_schema(
     elif h.predicted_direction not in _PREDICTED_DIRECTIONS:
         passed = False
         detail = "predicted_direction must be one of improve/tradeoff/exploratory"
-    else:
-        objective_error = _objective_list_schema_error(
-            h,
-            _objective_metric_names(problem_spec),
-        )
-        if objective_error is not None:
-            passed = False
-            detail = objective_error
-        else:
-            mechanism_error = _mechanism_changes_schema_error(h)
-            if mechanism_error is not None:
-                passed = False
-                detail = mechanism_error
-
     return _cr("C1_schema", passed, "heavy", detail, t0)
+
+
+def check_governance_constraints(
+    h: HypothesisProposal,
+    *,
+    governance_envelope: Any | None,
+) -> CheckResult:
+    """Fail closed only on host-owned target and active-surface constraints."""
+
+    t0 = time.monotonic_ns()
+    if governance_envelope is None:
+        return _cr(
+            "C0_governance_constraints",
+            True,
+            "light",
+            "no host governance constraints declared",
+            t0,
+        )
+    to_primitive = getattr(governance_envelope, "to_primitive", None)
+    if not callable(to_primitive):
+        return _cr(
+            "C0_governance_constraints",
+            False,
+            "heavy",
+            "governance envelope does not expose to_primitive()",
+            t0,
+        )
+    payload = to_primitive()
+    if not isinstance(payload, dict):
+        return _cr(
+            "C0_governance_constraints",
+            False,
+            "heavy",
+            "governance envelope primitive must be an object",
+            t0,
+        )
+
+    actual_surface = str(h.change_locus or "").strip()
+    actual_action = str(h.action or "").strip()
+    actual_target = str(h.target_file or "").strip()
+    task_authority = payload.get("provider_task_constraint_authority")
+    forced_constraint_active = False
+    if task_authority is not None:
+        if not isinstance(task_authority, Mapping):
+            return _cr(
+                "C0_governance_constraints",
+                False,
+                "heavy",
+                "provider task constraint authority must be an object",
+                t0,
+            )
+        provider_keys = task_authority.get("provider_keys")
+        expected_digest = str(
+            task_authority.get("provider_values_digest") or ""
+        ).strip()
+        allowed_keys = {
+            "forced_surface",
+            "forced_action",
+            "forced_target_file",
+        }
+        if (
+            not isinstance(provider_keys, list)
+            or not provider_keys
+            or any(key not in allowed_keys for key in provider_keys)
+            or not expected_digest
+        ):
+            return _cr(
+                "C0_governance_constraints",
+                False,
+                "heavy",
+                "provider task constraint authority is incomplete",
+                t0,
+            )
+        inactive_digests = {
+            hashlib.sha256(
+                json.dumps(
+                    {key: inactive for key in provider_keys},
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                    sort_keys=False,
+                ).encode("utf-8")
+            ).hexdigest()
+            for inactive in (None, "")
+        }
+        if expected_digest in inactive_digests:
+            task_authority = None
+        actual_values = {
+            key: {
+                "forced_surface": actual_surface,
+                "forced_action": actual_action,
+                "forced_target_file": actual_target or None,
+            }[key]
+            for key in provider_keys
+        }
+        actual_digest = hashlib.sha256(
+            json.dumps(
+                actual_values,
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        if task_authority is not None and actual_digest != expected_digest:
+            return _cr(
+                "C0_governance_constraints",
+                False,
+                "heavy",
+                "formal hypothesis contradicts provider-visible host task constraints",
+                t0,
+            )
+        forced_constraint_active = (
+            task_authority is not None and "forced_surface" in provider_keys
+        )
+
+    boundary_value = payload.get("active_problem_boundary_surfaces")
+    if isinstance(boundary_value, str):
+        active_surfaces = (boundary_value.strip(),) if boundary_value.strip() else ()
+    elif isinstance(boundary_value, (list, tuple, set, frozenset)):
+        active_surfaces = tuple(
+            str(item or "").strip()
+            for item in boundary_value
+            if str(item or "").strip()
+        )
+    else:
+        active_surfaces = ()
+    if (
+        not forced_constraint_active
+        and active_surfaces
+        and actual_surface not in active_surfaces
+    ):
+        return _cr(
+            "C0_governance_constraints",
+            False,
+            "heavy",
+            "change_locus must stay inside active problem surfaces "
+            f"{list(active_surfaces)!r}; got {actual_surface!r}",
+            t0,
+        )
+    return _cr(
+        "C0_governance_constraints",
+        True,
+        "light",
+        "host target and active-surface constraints satisfied",
+        t0,
+    )
 
 
 def check_change_locus(
@@ -136,181 +256,3 @@ def check_action_target(
         )
 
     return _cr("C3_action_target", passed, "heavy", detail, t0)
-
-
-def check_expected_telemetry(
-    h: HypothesisProposal,
-    *,
-    problem_spec: ProblemSpec,
-) -> CheckResult:
-    t0 = time.monotonic_ns()
-    expected = getattr(h, "expected_telemetry", None)
-    if expected in (None, "", [], (), {}):
-        return _cr(
-            "C11_expected_telemetry",
-            True,
-            "light",
-            "no expected telemetry declared",
-            t0,
-        )
-    if not isinstance(expected, dict):
-        return _cr(
-            "C11_expected_telemetry",
-            False,
-            "heavy",
-            "expected_telemetry must be an object",
-            t0,
-        )
-    try:
-        declared_mechanisms = mechanism_changes(h)
-    except (TypeError, AttributeError):
-        declared_mechanisms = ()
-    errors = validate_expected_telemetry_contract(
-        problem_spec=problem_spec,
-        selected_surface=h.change_locus,
-        expected_telemetry=expected,
-        declared_mechanisms=declared_mechanisms,
-    )
-    if errors:
-        return _cr(
-            "C11_expected_telemetry",
-            False,
-            "heavy",
-            "; ".join(errors),
-            t0,
-        )
-    return _cr(
-        "C11_expected_telemetry",
-        True,
-        "light",
-        "expected telemetry fields declared by selected surface",
-        t0,
-    )
-
-
-def check_hypothesis_mechanism_binding(
-    h: HypothesisProposal,
-    *,
-    surface_access: SurfaceAccess,
-) -> CheckResult:
-    t0 = time.monotonic_ns()
-    schema_error = _mechanism_changes_schema_error(h)
-    if schema_error is not None:
-        return _cr("C12_mechanism_binding", False, "heavy", schema_error, t0)
-
-    surface = surface_access.surface_for_hypothesis(h)
-    declarations = _surface_mechanism_telemetry_declarations(surface)
-    if not declarations:
-        return _cr(
-            "C12_mechanism_binding",
-            True,
-            "light",
-            "surface declares no mechanism telemetry",
-            t0,
-        )
-
-    changes = mechanism_changes(h)
-    if not changes:
-        return _cr(
-            "C12_mechanism_binding",
-            False,
-            "heavy",
-            f"research surface '{h.change_locus}' declares mechanism "
-            "telemetry; hypothesis must declare mechanism_changes",
-            t0,
-        )
-
-    unmatched = [
-        change.id
-        for change in changes
-        if not _mechanism_id_matches_declaration(change.id, declarations)
-    ]
-    if unmatched:
-        return _cr(
-            "C12_mechanism_binding",
-            False,
-            "heavy",
-            "mechanism_changes id(s) do not match declared mechanism "
-            f"telemetry exact/wildcard keys: {', '.join(unmatched)}",
-            t0,
-        )
-
-    return _cr(
-        "C12_mechanism_binding",
-        True,
-        "light",
-        "mechanism changes match selected surface telemetry declarations",
-        t0,
-    )
-
-
-def check_patch_mechanism_binding(
-    patch: PatchProposal,
-    approved_hypothesis: HypothesisProposal | HypothesisRecord | None,
-    *,
-    selected_surface: str | None,
-    surface_access: SurfaceAccess,
-) -> CheckResult:
-    t0 = time.monotonic_ns()
-    schema_error = _mechanism_changes_schema_error(patch)
-    if schema_error is not None:
-        return _cr("C12_mechanism_binding", False, "heavy", schema_error, t0)
-
-    surface = None
-    if selected_surface:
-        surface = surface_access.surface_by_name(selected_surface)
-    if surface is None and approved_hypothesis is not None:
-        surface = surface_access.surface_for_hypothesis(approved_hypothesis)
-    declarations = _surface_mechanism_telemetry_declarations(surface)
-    if not declarations:
-        return _cr(
-            "C12_mechanism_binding",
-            True,
-            "light",
-            "surface declares no mechanism telemetry",
-            t0,
-        )
-    if approved_hypothesis is None:
-        return _cr(
-            "C12_mechanism_binding",
-            True,
-            "light",
-            "no approved hypothesis supplied; mechanism echo skipped",
-            t0,
-        )
-
-    approved_ids = {change.id for change in mechanism_changes(approved_hypothesis)}
-    if not approved_ids:
-        return _cr(
-            "C12_mechanism_binding",
-            False,
-            "heavy",
-            "approved hypothesis declares no mechanism_changes for a "
-            "mechanism-telemetry surface",
-            t0,
-        )
-    patch_ids = {change.id for change in mechanism_changes(patch)}
-    if patch_ids != approved_ids:
-        missing = sorted(approved_ids - patch_ids)
-        extra = sorted(patch_ids - approved_ids)
-        detail_parts: list[str] = []
-        if missing:
-            detail_parts.append("missing approved mechanism id(s): " + ", ".join(missing))
-        if extra:
-            detail_parts.append("unexpected mechanism id(s): " + ", ".join(extra))
-        return _cr(
-            "C12_mechanism_binding",
-            False,
-            "heavy",
-            "patch mechanism_changes must echo approved hypothesis "
-            "mechanism ids; " + "; ".join(detail_parts),
-            t0,
-        )
-
-    return _cr(
-        "C12_mechanism_binding",
-        True,
-        "light",
-        "patch echoes approved mechanism ids",
-        t0,
-    )

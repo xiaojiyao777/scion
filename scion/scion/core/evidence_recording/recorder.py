@@ -5,9 +5,6 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, MutableSequence
 
 from scion.core.models import StepRecord
-from scion.core.research_process_guidance_audit import (
-    extract_research_process_guidance_audit,
-)
 from scion.core.status_reporter import StatusReporter
 
 from .common import StateProvider
@@ -56,13 +53,9 @@ class EvidenceRecorder(StatusWriterMixin, LineageRecorderMixin, CampaignSummaryM
         self,
         step: StepRecord,
         step_history: MutableSequence[StepRecord],
-        *,
-        search_memory: Any | None = None,
     ) -> None:
-        """Append a completed step and update optional search memory."""
+        """Append a completed step to the durable campaign history."""
         step_history.append(step)
-        if search_memory is not None:
-            search_memory.update(step)
 
     def record_scheduler_result(
         self,
@@ -93,16 +86,6 @@ class EvidenceRecorder(StatusWriterMixin, LineageRecorderMixin, CampaignSummaryM
                 if audit_metadata:
                     candidate.scheduler_audit_metadata = audit_metadata
                 break
-        guidance_audit = extract_research_process_guidance_audit(audit_metadata)
-        if not guidance_audit and step is not None:
-            guidance_audit = extract_research_process_guidance_audit(
-                getattr(step, "proposal_session_ref", None)
-            )
-        if guidance_audit:
-            audit_metadata["research_process_guidance_audit"] = guidance_audit
-            result.scheduler_audit_metadata = audit_metadata
-            if step is not None:
-                step.scheduler_audit_metadata = audit_metadata
         self.record_scheduler_result_lineage(result=result, step=step)
 
     def attach_final_evidence_refs(self, refs: Mapping[str, Any]) -> None:

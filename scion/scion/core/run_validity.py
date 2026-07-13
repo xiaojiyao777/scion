@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from scion.core.branch_repair_policy import is_branch_lifecycle_policy_block_detail
+from scion.core.execution_outcome import (
+    ExecutionOutcome,
+    execution_outcome_evidence_from_counts,
+)
 
 RUN_VALIDITY_VALID = "valid"
 RUN_VALIDITY_VALID_BUT_INCOMPLETE = "valid_but_incomplete"
@@ -12,6 +15,11 @@ RUN_VALIDITY_INVALID_NO_EFFECTIVE_ROUNDS = "invalid_no_effective_rounds"
 RUN_VALIDITY_INVALID_INFRA_ONLY = "invalid_infra_only"
 RUN_VALIDITY_INVALID_NO_EXPERIMENTS = "invalid_no_experiments"
 RUN_VALIDITY_INVALID_NO_PROTOCOL_ROWS = "invalid_no_protocol_rows"
+RUN_VALIDITY_INVALID_RESEARCH_REJECTED_ONLY = "invalid_research_rejected_only"
+RUN_VALIDITY_INVALID_NOT_EVALUATED_ONLY = "invalid_not_evaluated_only"
+RUN_VALIDITY_INVALID_RESOURCE_EXHAUSTED_ONLY = "invalid_resource_exhausted_only"
+RUN_VALIDITY_INVALID_INTERRUPTED_ONLY = "invalid_interrupted_only"
+RUN_VALIDITY_UNKNOWN_HISTORICAL = "unknown_historical"
 
 _INFRA_CATEGORY_MARKERS = {
     "infra",
@@ -68,12 +76,6 @@ def failure_category_for_run_validity(
     session_ref: Mapping[str, Any] | None = None,
 ) -> str:
     """Return a coarse failure category suitable for run-validity accounting."""
-    if _is_branch_lifecycle_routing_diagnostic(
-        detail=detail,
-        failure_stage=failure_stage,
-        session_ref=session_ref,
-    ):
-        return ""
     explicit_category = _first_text(
         category,
         _nested(session_ref, "primary_failure", "category"),
@@ -139,6 +141,9 @@ def build_run_validity(
     failure_categories: Mapping[str, Any] | None = None,
     stopped: bool = True,
     partial_in_flight: Any = None,
+    execution_outcome_counts: Mapping[str, Any] | None = None,
+    last_execution_outcome: Mapping[str, Any] | None = None,
+    unknown_outcome_count: Any = 0,
 ) -> dict[str, Any]:
     """Build a stable validity record for wrapper/report consumers.
 
@@ -155,29 +160,51 @@ def build_run_validity(
         default=_coerce_int(effective_protocol_rounds, default=experiments),
     )
     counts = _normalized_counts(failure_categories or {})
-    stopped_reason_infra = _is_infra_category(stopped_reason) or _is_infra_text(
-        stopped_reason
+    typed_outcomes_available = execution_outcome_counts is not None
+    outcome_evidence = execution_outcome_evidence_from_counts(
+        execution_outcome_counts,
+        last_execution_outcome=last_execution_outcome,
+        unknown_count=_coerce_int(unknown_outcome_count, default=0),
+    )
+    outcome_counts = outcome_evidence["execution_outcome_counts"]
+    evaluated_count = outcome_evidence["evaluated_count"]
+    non_evaluated_count = outcome_evidence["non_evaluated_count"]
+    stopped_reason_infra = (
+        False
+        if typed_outcomes_available
+        else _is_infra_category(stopped_reason) or _is_infra_text(stopped_reason)
     )
     if stopped_reason_infra and not counts:
         counts["infra"] = 1
-    infra_failures = sum(
-        count for category, count in counts.items() if _is_infra_category(category)
+    infra_failures = (
+        outcome_counts[ExecutionOutcome.BLOCKED_INFRA.value]
+        if typed_outcomes_available
+        else sum(
+            count
+            for category, count in counts.items()
+            if _is_infra_category(category)
+        )
     )
     total_failures = sum(counts.values())
     noninfra_failures = max(0, total_failures - infra_failures)
     completed_requested = bool(requested <= 0 or effective >= requested)
     stopped_reason_text = str(stopped_reason or "")
-    interrupted = bool(
-        stopped
-        and stopped_reason_text
-        and stopped_reason_text
-        not in {
-            "max_rounds",
-            "max_rounds_exhausted",
-            "run_complete",
-            "completed",
-            "complete",
-        }
+    interrupted = (
+        outcome_counts[ExecutionOutcome.INTERRUPTED.value] > 0
+        if typed_outcomes_available
+        else bool(
+            stopped
+            and stopped_reason_text
+            and stopped_reason_text
+            not in {
+                "max_rounds",
+                "max_rounds_exhausted",
+                "requested_rounds_completed",
+                "run_complete",
+                "completed",
+                "complete",
+            }
+        )
     )
     protocol_in_flight = _coerce_bool(partial_in_flight, default=False)
     partial_hint = _coerce_bool(
@@ -188,6 +215,58 @@ def build_run_validity(
     if not stopped:
         reason = "running"
         status = "pending"
+        valid = None
+    elif typed_outcomes_available and evaluated_count > 0:
+        if completed_requested and non_evaluated_count == 0:
+            reason = RUN_VALIDITY_VALID
+        else:
+            reason = (
+                RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED
+                if interrupted
+                else RUN_VALIDITY_VALID_BUT_INCOMPLETE
+            )
+        status = "valid"
+        valid = True
+    elif typed_outcomes_available and non_evaluated_count > 0:
+        if (
+            outcome_counts[ExecutionOutcome.BLOCKED_INFRA.value]
+            == non_evaluated_count
+        ):
+            reason = RUN_VALIDITY_INVALID_INFRA_ONLY
+        elif (
+            outcome_counts[ExecutionOutcome.RESOURCE_EXHAUSTED.value]
+            == non_evaluated_count
+        ):
+            reason = RUN_VALIDITY_INVALID_RESOURCE_EXHAUSTED_ONLY
+        elif (
+            outcome_counts[ExecutionOutcome.INTERRUPTED.value]
+            == non_evaluated_count
+        ):
+            reason = RUN_VALIDITY_INVALID_INTERRUPTED_ONLY
+        elif (
+            outcome_counts[ExecutionOutcome.RESEARCH_REJECTED.value]
+            == non_evaluated_count
+        ):
+            reason = RUN_VALIDITY_INVALID_RESEARCH_REJECTED_ONLY
+        elif (
+            outcome_counts[ExecutionOutcome.NOT_EVALUATED.value]
+            == non_evaluated_count
+        ):
+            reason = RUN_VALIDITY_INVALID_NOT_EVALUATED_ONLY
+        else:
+            reason = RUN_VALIDITY_INVALID_NO_EFFECTIVE_ROUNDS
+        status = "invalid"
+        valid = False
+    elif typed_outcomes_available and outcome_evidence["unknown_outcome_count"] > 0:
+        # Historical rows which predate the typed outcome field stay unknown.
+        # In particular, failure text and missing protocol rows must not silently
+        # turn them into evaluated, negative, or infrastructure-only evidence.
+        reason = RUN_VALIDITY_UNKNOWN_HISTORICAL
+        status = "unknown"
+        valid = None
+    elif typed_outcomes_available and (attempts > 0 or effective > 0 or experiments > 0):
+        reason = RUN_VALIDITY_UNKNOWN_HISTORICAL
+        status = "unknown"
         valid = None
     elif effective > 0 and experiments <= 0 and protocol_rows <= 0:
         reason = RUN_VALIDITY_INVALID_NO_PROTOCOL_ROWS
@@ -223,6 +302,11 @@ def build_run_validity(
 
     if completed_requested:
         partial_campaign = False
+    elif typed_outcomes_available and evaluated_count > 0 and (
+        non_evaluated_count > 0
+        or outcome_evidence["unknown_outcome_count"] > 0
+    ):
+        partial_campaign = True
     elif reason == RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED:
         partial_campaign = True
     elif status == "invalid":
@@ -256,6 +340,7 @@ def build_run_validity(
         "failure_categories": counts,
         "infra_failure_attempts": infra_failures,
         "noninfra_failure_attempts": noninfra_failures,
+        **outcome_evidence,
     }
     if reason == RUN_VALIDITY_INVALID_INFRA_ONLY:
         record["operator_action"] = (
@@ -270,6 +355,16 @@ def build_run_validity(
         record["operator_action"] = (
             "Do not treat this invocation as scientific evidence until at least "
             "one effective screening round completes."
+        )
+    elif reason in {
+        RUN_VALIDITY_INVALID_RESEARCH_REJECTED_ONLY,
+        RUN_VALIDITY_INVALID_NOT_EVALUATED_ONLY,
+        RUN_VALIDITY_INVALID_RESOURCE_EXHAUSTED_ONLY,
+        RUN_VALIDITY_INVALID_INTERRUPTED_ONLY,
+    }:
+        record["operator_action"] = (
+            "Do not draw algorithm-quality conclusions: this invocation has "
+            "no evaluated execution outcome."
         )
     elif reason in {
         RUN_VALIDITY_VALID_BUT_INCOMPLETE,
@@ -350,29 +445,6 @@ def _nested(mapping: Mapping[str, Any] | None, *keys: str) -> Any:
     return current
 
 
-def _is_branch_lifecycle_routing_diagnostic(
-    *,
-    detail: Any = None,
-    failure_stage: Any = None,
-    session_ref: Mapping[str, Any] | None = None,
-) -> bool:
-    if is_branch_lifecycle_policy_block_detail(detail):
-        return True
-    combined = " ".join(
-        part
-        for part in (
-            str(failure_stage or ""),
-            str(_nested(session_ref, "primary_failure", "reason") or ""),
-            str(_nested(session_ref, "primary_failure", "detail") or ""),
-            str(_nested(session_ref, "primary_failure", "code") or ""),
-            str(_nested(session_ref, "failure_code") or ""),
-            str(_nested(session_ref, "termination_reason") or ""),
-        )
-        if part
-    )
-    return is_branch_lifecycle_policy_block_detail(combined)
-
-
 def _coerce_int(value: Any, *, default: int) -> int:
     try:
         return int(value)
@@ -415,6 +487,11 @@ __all__ = [
     "RUN_VALIDITY_INVALID_INFRA_ONLY",
     "RUN_VALIDITY_INVALID_NO_EFFECTIVE_ROUNDS",
     "RUN_VALIDITY_INVALID_NO_EXPERIMENTS",
+    "RUN_VALIDITY_INVALID_NOT_EVALUATED_ONLY",
+    "RUN_VALIDITY_INVALID_RESEARCH_REJECTED_ONLY",
+    "RUN_VALIDITY_INVALID_RESOURCE_EXHAUSTED_ONLY",
+    "RUN_VALIDITY_INVALID_INTERRUPTED_ONLY",
+    "RUN_VALIDITY_UNKNOWN_HISTORICAL",
     "RUN_VALIDITY_VALID",
     "RUN_VALIDITY_VALID_BUT_INCOMPLETE",
     "RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED",

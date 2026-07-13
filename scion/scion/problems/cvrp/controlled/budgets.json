@@ -6,7 +6,6 @@
     "final": {
       "csv": "final.csv",
       "manifest": "manifests/final.json",
-      "max_cases": 12,
       "seeds": [
         0,
         1
@@ -16,7 +15,6 @@
     "frozen": {
       "csv": "frozen.csv",
       "manifest": "manifests/frozen.json",
-      "max_cases": 8,
       "seeds": [
         0,
         1
@@ -26,7 +24,6 @@
     "screening": {
       "csv": "screening.csv",
       "manifest": "manifests/screening.json",
-      "max_cases": 12,
       "seeds": [
         0
       ],
@@ -35,7 +32,6 @@
     "validation": {
       "csv": "validation.csv",
       "manifest": "manifests/validation.json",
-      "max_cases": 8,
       "seeds": [
         0,
         1

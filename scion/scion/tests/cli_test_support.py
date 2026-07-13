@@ -13,13 +13,6 @@ from scion.cli.main import app
 from scion.core.models import Branch, BranchState, HypothesisRecord
 from scion.lineage.registry import LineageRegistry
 from scion.lineage.branch_store import BranchStore, HypothesisStore
-from scion.proposal.agentic_session import (
-    AgenticProposalOutput,
-    AgenticProposalStatus,
-    AgenticTerminationReason,
-    FileAgenticSessionArtifactStore,
-)
-
 runner = CliRunner()
 
 

@@ -9,7 +9,7 @@ import signal
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Mapping, Optional
+from typing import Any, Mapping, Optional
 
 import typer
 
@@ -108,6 +108,7 @@ class _RunAudit:
             "ended_at": None,
             "wrapper_exit_status": None,
             "wrapper_signal": None,
+            "proposal_runtime_mode": "direct_v3",
             "stdout": _fd_target(1),
             "stderr": _fd_target(2),
         }
@@ -350,44 +351,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
         rounds: int = typer.Option(
             10,
             "--rounds",
-            help="Maximum number of campaign rounds",
-        ),
-        proposal_quality_loop_limit: Optional[int] = typer.Option(
-            None,
-            "--proposal-quality-loop-limit",
-            help=(
-                "Maximum proposal-quality blocks before stopping; defaults to "
-                "rounds + max(6, rounds * 2), or SCION_PROPOSAL_QUALITY_LOOP_LIMIT; "
-                "use 0 to disable this research-headroom cap"
-            ),
-        ),
-        proposal_attempt_limit: Optional[int] = typer.Option(
-            None,
-            "--proposal-attempt-limit",
-            help=(
-                "Maximum user-visible LLM proposal attempts before stopping; "
-                "defaults to rounds + max(6, rounds * 2), or "
-                "SCION_PROPOSAL_ATTEMPT_LIMIT; use 0 to disable this "
-                "research-headroom cap"
-            ),
-        ),
-        fresh_runtime_replay_drain_limit: Optional[int] = typer.Option(
-            None,
-            "--fresh-runtime-replay-drain-limit",
-            help=(
-                "Maximum post-budget fresh-runtime replay drain attempts; "
-                "defaults to SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT or the "
-                "core legacy default; use 0 to disable this drain"
-            ),
-        ),
-        stage_transition_drain_limit: Optional[int] = typer.Option(
-            None,
-            "--stage-transition-drain-limit",
-            help=(
-                "Maximum post-budget validation/frozen stage-transition drain "
-                "attempts; defaults to SCION_STAGE_TRANSITION_DRAIN_LIMIT or "
-                "the core legacy default; use 0 to disable this drain"
-            ),
+            help="Target number of typed formal protocol evaluated rounds",
         ),
         campaign_dir: str = typer.Option(
             "campaign_out",
@@ -422,32 +386,6 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 "solver.time_limit_sec"
             ),
         ),
-        measurement_governance: Literal["on", "record-only"] = typer.Option(
-            "on",
-            "--measurement-governance",
-            help=(
-                "Use problem measurement to govern protocol behavior, or "
-                "record reduced readiness status only"
-            ),
-        ),
-        proposal_context_ablation: Literal[
-            "full",
-            "compact-measurement-diagnostics",
-            "no-measurement-diagnostics",
-            "minimal-research-context",
-        ] = typer.Option(
-            "full",
-            "--proposal-context-ablation",
-            help=(
-                "Ablate only proposal-prompt visible context; does not change "
-                "protocol measurement governance or DecisionFeatures"
-            ),
-        ),
-        disable_early_stop: bool = typer.Option(
-            False,
-            "--disable-early-stop",
-            help="Diagnostic mode: do not stop early on idle/stagnation signals",
-        ),
         force_surface: Optional[str] = typer.Option(
             None,
             "--force-surface",
@@ -462,53 +400,6 @@ def register_init_run_commands(app: typer.Typer) -> None:
             None,
             "--force-target-file",
             help="Diagnostic mode: force the target_file for --force-surface",
-        ),
-        agentic_proposal: bool = typer.Option(
-            False,
-            "--agentic-proposal",
-            help="Enable AgenticProposalSession for proposal generation",
-        ),
-        agentic_artifact_dir: Optional[str] = typer.Option(
-            None,
-            "--agentic-artifact-dir",
-            help=(
-                "APS artifact directory; defaults to campaign_dir/agentic_sessions "
-                "when --agentic-proposal is enabled"
-            ),
-        ),
-        agentic_session_timeout_sec: Optional[float] = typer.Option(
-            None,
-            "--agentic-session-timeout-sec",
-            help="APS max wall time per session in seconds",
-        ),
-        agentic_tool_max_steps: Optional[int] = typer.Option(
-            None,
-            "--agentic-tool-max-steps",
-            help=(
-                "APS max planning/code loop steps per proposal session; use 0 "
-                "to disable this cap"
-            ),
-        ),
-        agentic_tool_max_calls: Optional[int] = typer.Option(
-            None,
-            "--agentic-tool-max-calls",
-            help="APS max tool calls per proposal session; use 0 to disable this cap",
-        ),
-        agentic_code_tool_max_calls: Optional[int] = typer.Option(
-            None,
-            "--agentic-code-tool-max-calls",
-            help=(
-                "APS max code-phase tool calls per proposal session; use 0 to "
-                "disable this cap"
-            ),
-        ),
-        agentic_observation_max_chars: Optional[int] = typer.Option(
-            None,
-            "--agentic-observation-max-chars",
-            help=(
-                "APS max retained observation characters per proposal session; "
-                "use 0 to disable this cap"
-            ),
         ),
         allow_skeleton: bool = typer.Option(
             False,
@@ -549,22 +440,6 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 err=True,
             )
             raise typer.Exit(code=1)
-        for option_name, option_value in (
-            ("--agentic-tool-max-steps", agentic_tool_max_steps),
-            ("--agentic-tool-max-calls", agentic_tool_max_calls),
-            ("--agentic-code-tool-max-calls", agentic_code_tool_max_calls),
-            ("--agentic-observation-max-chars", agentic_observation_max_chars),
-        ):
-            if option_value is not None and option_value < 0:
-                typer.echo(f"ERROR: {option_name} must be >= 0", err=True)
-                raise typer.Exit(code=1)
-        if (
-            agentic_session_timeout_sec is not None
-            and agentic_session_timeout_sec < 1
-        ):
-            typer.echo("ERROR: --agentic-session-timeout-sec must be >= 1", err=True)
-            raise typer.Exit(code=1)
-
         from scion.config.problem import (
             ProblemSpec,
             ProtocolConfig,
@@ -641,7 +516,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
             )
         proto_cfg = proto_cfg.with_problem_measurement(
             problem_v1 or spec,
-            governance_mode=measurement_governance,
+            governance_mode="on",
         )
 
         if split:
@@ -793,14 +668,6 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 typer.echo(f"ERROR: failed to create LLMClient: {exc}", err=True)
                 raise typer.Exit(code=1)
 
-        resolved_agentic_artifact_dir = (
-            str(Path(agentic_artifact_dir).resolve())
-            if agentic_artifact_dir is not None
-            else str(campaign_path / "agentic_sessions")
-            if agentic_proposal
-            else None
-        )
-
         try:
             mgr = CampaignManager(
                 problem_spec=spec,
@@ -814,38 +681,26 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 experiment_protocol=experiment_protocol,
                 adapter=adapter,
                 operator_execute_signature=operator_execute_signature,
-                force_continue_early_stop=disable_early_stop,
-                use_agentic_proposal=agentic_proposal,
-                agentic_artifact_dir=resolved_agentic_artifact_dir,
-                agentic_session_timeout_sec=agentic_session_timeout_sec,
-                agentic_tool_max_steps=agentic_tool_max_steps,
-                agentic_tool_max_calls=agentic_tool_max_calls,
-                agentic_code_tool_max_calls=agentic_code_tool_max_calls,
-                agentic_observation_max_chars=agentic_observation_max_chars,
                 allow_skeleton_mode=allow_skeleton,
                 force_surface=forced_request.surface if forced_request else None,
                 force_action=forced_request.action if forced_request else None,
                 force_target_file=forced_request.target_file if forced_request else None,
-                proposal_quality_loop_limit=proposal_quality_loop_limit,
-                proposal_attempt_limit=proposal_attempt_limit,
-                fresh_runtime_replay_drain_limit=fresh_runtime_replay_drain_limit,
-                stage_transition_drain_limit=stage_transition_drain_limit,
-                proposal_context_ablation=proposal_context_ablation,
             )
 
             forced_surface_note = (
                 f", force_surface={forced_request.surface}" if forced_request else ""
             )
+            requested_rounds = rounds
             typer.echo(
                 f"Starting campaign: {spec.name} "
-                f"(max_rounds={rounds}, mock_llm={mock_llm}, "
-                f"disable_early_stop={disable_early_stop}{forced_surface_note})"
+                f"(requested_rounds={requested_rounds}, mock_llm={mock_llm}"
+                f"{forced_surface_note})"
             )
             run_audit = _RunAudit(campaign_path)
             run_audit.start()
             try:
                 with _campaign_signal_handlers(mgr):
-                    mgr.run(max_rounds=rounds)
+                    mgr.run(requested_rounds=requested_rounds)
             except _CampaignSignalStop as exc:
                 mgr.finalize_requested_stop(exc.reason)
                 run_audit.finish(

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from scion.problem.bridge import load_problem_spec_v1_from_yaml
+from scion.problem.loader import load_problem_adapter
 from scion.problems.warehouse_delivery.research_guidance import (
     WarehouseResearchGuidanceProvider,
     build_warehouse_legacy_research_focus,
@@ -19,22 +21,38 @@ from scion.research_guidance import (
 
 SCION_DIR = Path(__file__).resolve().parents[3]
 PROBLEM_V1 = SCION_DIR / "scion" / "problems" / "warehouse_delivery" / "problem-v1.yaml"
+FORBIDDEN_PROMPT_PHRASES = (
+    "champion_v2",
+    "post-v2",
+    "validation",
+    "frozen",
+    "holdout",
+    "top-k",
+    "top_k",
+    "candidate cap",
+    "runtime budget",
+    "quality-block",
+    "retry",
+)
 
 
-def test_warehouse_provider_contract_has_guidance_sections() -> None:
+def _assert_no_forbidden_prompt_controls(text: str) -> None:
+    lowered = text.lower()
+    assert not [phrase for phrase in FORBIDDEN_PROMPT_PHRASES if phrase in lowered]
+
+
+def test_warehouse_provider_keeps_both_algorithm_surfaces_open() -> None:
     diagnostics = {
         "metric": "total_cost",
+        "unit": "raw_delta",
         "runtime_model": "comparative",
         "pairing_validity": "trajectory_divergent",
+        "practical_screen_delta": 0.001,
+        "practical_validate_delta": 0.001,
         "screening_mde_at_power_80": 577.5,
-        "summary": "Warehouse screening is low-power for raw total_cost effects.",
-        "reason_codes": [
-            "WAREHOUSE_MDE_EXCEEDS_PRACTICAL_DELTA",
-            "TRAJECTORY_DIVERGENT_LOW_SNR",
-        ],
+        "summary": "Aggregate total_cost effects must be read against noise.",
     }
-    provider = WarehouseResearchGuidanceProvider()
-    contract = provider.build_guidance_contract(
+    contract = WarehouseResearchGuidanceProvider().build_guidance_contract(
         GuidanceContext(
             problem_family="warehouse_delivery",
             metadata={"measurement_opportunity_diagnostics": diagnostics},
@@ -45,27 +63,15 @@ def test_warehouse_provider_contract_has_guidance_sections() -> None:
     rendered = render_research_guidance_contract(contract)
 
     assert contract.problem_family == "warehouse_delivery"
-    assert contract.required_mechanisms
-    assert {
-        mechanism.mechanism_id: mechanism.hypothesis_mechanism_binding
-        for mechanism in contract.required_mechanisms
-    } == {
-        "warehouse_champion_v2_checkpoint": "context_only",
-        "validation_transfer_continuation": "context_only",
-        "warehouse_runtime_model_handoff": "context_only",
-    }
+    assert contract.required_mechanisms == ()
     assert contract.evidence_requirements
-    assert contract.avoid_rules
     assert contract.guidance_blocks
-    assert contract.measurement_summary is not None
-    assert any(
-        "cost_delta_sum" in requirement.required_fields
-        for requirement in contract.evidence_requirements
-    )
-    assert any("split_delta_sum==0" in rule.description for rule in contract.avoid_rules)
-    assert "warehouse_champion_v2_checkpoint" in rendered.text
-    assert "warehouse_measurement_runtime_handoff" in rendered.text
+    assert "order_level" in rendered.text
+    assert "vehicle_level" in rendered.text
+    assert "Neither surface nor operator family is preferred" in rendered.text
+    assert "optional" in rendered.text.lower()
     assert "excluded from DecisionFeatures" in rendered.text
+    _assert_no_forbidden_prompt_controls(rendered.text)
 
     launch_payload = launch_research_guidance_payload(
         manifest_path="/tmp/prepared_run_manifest.v1.json",
@@ -75,14 +81,25 @@ def test_warehouse_provider_contract_has_guidance_sections() -> None:
         },
     )
     assert launch_payload["required_mechanism_ids"] == []
-    assert (
-        "required_mechanisms.warehouse_champion_v2_checkpoint"
-        in launch_payload["rendered_paths"]
-    )
-    assert (
-        "hypothesis_mechanism_binding=context_only"
-        in launch_payload["guidance_text"]
-    )
+    assert "warehouse_open_research_surfaces" in launch_payload["guidance_text"]
+
+
+def test_warehouse_adapter_hypothesis_context_has_no_hidden_outcomes_or_controls() -> None:
+    spec = load_problem_spec_v1_from_yaml(PROBLEM_V1)
+    adapter = load_problem_adapter(spec)
+
+    summary = adapter.render_problem_summary()
+    order_context = adapter.render_research_surface_interface("order_level")
+    vehicle_context = adapter.render_research_surface_interface("vehicle_level")
+
+    assert "Both order-level and vehicle-level research remain open" in summary
+    assert "order-level idea" in order_context
+    assert "vehicle-level idea" in vehicle_context
+    assert "optional observability" in order_context.lower()
+    assert "optional" in vehicle_context.lower()
+    _assert_no_forbidden_prompt_controls(summary)
+    _assert_no_forbidden_prompt_controls(order_context)
+    _assert_no_forbidden_prompt_controls(vehicle_context)
 
 
 def test_warehouse_contract_rejects_non_warehouse_context() -> None:
@@ -96,30 +113,23 @@ def test_warehouse_contract_rejects_non_warehouse_context() -> None:
         raise AssertionError("warehouse contract accepted a non-warehouse context")
 
 
-def test_warehouse_legacy_research_focus_preserves_manifest_fields() -> None:
+def test_warehouse_focus_preserves_safe_complete_aggregate_measurement() -> None:
     focus = build_warehouse_legacy_research_focus(SCION_DIR, PROBLEM_V1)
 
     assert focus["schema_version"] == "scion.warehouse_research_focus.v1"
     assert focus["scope"] == "report_only_prepared_handoff"
-    assert "Champion v2" in focus["accepted_checkpoint"]
-    assert "post-v2 plateau" in focus["current_question"]
-    assert len(focus["required_evidence"]) >= 5
-    assert any(
-        "cost_delta" in item and "split_delta" in item
-        for item in focus["required_evidence"]
-    )
-    assert any(
-        "split_delta_sum==0" in item
-        for item in focus["default_avoid_directions"]
-    )
+    assert "current champion source" in focus["accepted_checkpoint"].lower()
+    assert "order-level or vehicle-level" in focus["current_question"]
+    assert len(focus["required_evidence"]) == 5
     assert "DecisionFeatures" in focus["decision_boundary"]
 
     measurement = focus["measurement_opportunity_diagnostics"]
-    assert measurement["schema_version"] == "warehouse_measurement_runtime_handoff.v1"
+    assert measurement["schema_version"] == "warehouse_measurement_opportunity.v2"
     assert measurement["source"] == "problem_v1.measurement.calibration_ref"
     assert measurement["proposal_visibility_only"] is True
     assert measurement["decision_features_excluded"] is True
     assert measurement["metric"] == "total_cost"
+    assert measurement["unit"] == "raw_delta"
     assert measurement["runtime_model"] == "comparative"
     assert measurement["pairing_validity"] == "trajectory_divergent"
     assert measurement["screening_mde_at_power_80"] == 577.5
@@ -130,14 +140,19 @@ def test_warehouse_legacy_research_focus_preserves_manifest_fields() -> None:
     assert "WAREHOUSE_MDE_EXCEEDS_PRACTICAL_DELTA" in measurement["reason_codes"]
     assert "TRAJECTORY_DIVERGENT_LOW_SNR" in measurement["reason_codes"]
     assert measurement["adapter_payload_schema"] == (
-        "warehouse_validation_transfer_diagnostic.v1"
+        "warehouse_research_opportunity_diagnostic.v2"
     )
-    assert "transfer_risk" in measurement
-    assert "required_diagnostics" in measurement
-    assert "measurable_opportunity_classes" in measurement
-    assert "opportunity_diagnostics" in measurement
+    assert set(measurement["measurable_opportunity_classes"][0]) == {
+        "surface",
+        "research_question",
+    }
+    assert {
+        item["surface"] for item in measurement["measurable_opportunity_classes"]
+    } == {"order_level", "vehicle_level"}
+    assert "optional_observability" in measurement
+    assert "runtime_policy" not in measurement["calibration"]
+    assert "calibration_run" not in measurement["calibration"]
 
     rendered = json.dumps(focus, sort_keys=True)
-    assert "validation_case" not in rendered
-    assert "frozen_case" not in rendered
+    _assert_no_forbidden_prompt_controls(rendered)
     assert "pair_evidence" not in rendered

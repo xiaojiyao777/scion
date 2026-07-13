@@ -10,7 +10,11 @@ from scion.core.forced_surface import surface_target_files
 from scion.core.models import ChampionState
 from scion.proposal.context.surfaces import _surface_file_targets
 
-def _read_champion_operators(champion: ChampionState) -> str:
+def _read_champion_operators(
+    champion: ChampionState,
+    *,
+    excluded_paths: tuple[str, ...] = (),
+) -> str:
     """Read all operator .py files from the champion snapshot directory."""
     operators_dir = os.path.join(champion.code_snapshot_path, "operators")
     if not os.path.isdir(operators_dir):
@@ -25,7 +29,13 @@ def _read_champion_operators(champion: ChampionState) -> str:
     except OSError as exc:
         return f"(could not list operators directory: {exc})"
 
+    excluded = {
+        str(item or "").replace("\\", "/").lstrip("/")
+        for item in excluded_paths
+    }
     for fname in filenames:
+        if f"operators/{fname}" in excluded:
+            continue
         fpath = os.path.join(operators_dir, fname)
         try:
             with open(fpath, encoding="utf-8") as fh:
@@ -81,17 +91,28 @@ def _list_champion_surface_files(
     *,
     research_surfaces: list[Any],
 ) -> list[str]:
-    files: set[str] = set()
+    declared_targets: list[str] = []
     for surface in research_surfaces:
         if getattr(surface, "kind", None) == "operator":
             continue
         for target in surface_target_files(surface):
-            if "*" in str(target):
-                continue
-            file_rel = str(target).lstrip("/")
-            if os.path.isfile(os.path.join(champion.code_snapshot_path, file_rel)):
-                files.add(file_rel)
-    return sorted(files)
+            target_text = str(target or "").strip().lstrip("/")
+            if target_text and target_text not in declared_targets:
+                declared_targets.append(target_text)
+
+    # Research surfaces may declare package ownership with a wildcard.  H and
+    # C must see the concrete current source files behind that declaration;
+    # exposing only the wildcard/file names makes the provider choose and edit
+    # mechanisms without seeing their implementation.
+    expanded = _expand_surface_targets_for_champion(champion, declared_targets)
+    return sorted(
+        {
+            file_rel
+            for file_rel in expanded
+            if "*" not in file_rel
+            and os.path.isfile(os.path.join(champion.code_snapshot_path, file_rel))
+        }
+    )
 
 def _available_hypothesis_actions(
     targetable_operator_files: List[str],
@@ -227,16 +248,27 @@ def _read_solver_design_context_artifact(
     for root, source_kind in roots:
         path = root / normalized
         try:
-            if not path.is_file() or path.is_symlink():
+            resolved_root = root.resolve(strict=True)
+            if root.is_symlink():
+                continue
+            cursor = root
+            if any(
+                (cursor := cursor / part).is_symlink()
+                for part in Path(normalized).parts
+            ):
+                continue
+            resolved_path = path.resolve(strict=True)
+            resolved_path.relative_to(resolved_root)
+            if not resolved_path.is_file():
                 continue
             return {
-                "path": path,
+                "path": resolved_path,
                 "source": source_kind,
                 "readable": True,
                 "reason": "ok",
-                "content": path.read_text(encoding="utf-8"),
+                "content": resolved_path.read_text(encoding="utf-8"),
             }
-        except OSError:
+        except (OSError, ValueError):
             continue
     return {
         "path": Path(source_root or champion_root or "") / normalized,
@@ -248,8 +280,16 @@ def _read_solver_design_context_artifact(
 
 def _python_api_manifest_for_file(path: Path) -> str:
     try:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-    except (OSError, SyntaxError, UnicodeDecodeError):
+        content = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ""
+    return _python_api_manifest_for_content(content)
+
+
+def _python_api_manifest_for_content(content: str) -> str:
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
         return ""
     exports: list[str] = []
     imports: list[str] = []
@@ -263,7 +303,7 @@ def _python_api_manifest_for_file(path: Path) -> str:
                 if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
             ]
             if methods:
-                exports.append(f"class {node.name}: " + "; ".join(methods[:8]))
+                exports.append(f"class {node.name}: " + "; ".join(methods))
             else:
                 exports.append(f"class {node.name}")
         elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
@@ -281,9 +321,9 @@ def _python_api_manifest_for_file(path: Path) -> str:
                 imports.append(f"from {dots}{node.module or ''} import {imported}")
     parts: list[str] = []
     if exports:
-        parts.append("exports " + "; ".join(exports[:14]))
+        parts.append("exports " + "; ".join(exports))
     if imports:
-        parts.append("current imports " + "; ".join(imports[:8]))
+        parts.append("current imports " + "; ".join(imports))
     return " | ".join(parts)
 
 def _python_signature_text(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:

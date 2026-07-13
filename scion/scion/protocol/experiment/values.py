@@ -4,11 +4,8 @@ import json
 from typing import Any
 
 
-def _bounded_text(value: Any, limit: int) -> str:
-    text = " ".join(str(value or "").split())
-    if len(text) <= limit:
-        return text
-    return text[: max(0, limit - 3)] + "..."
+def _text_value(value: Any) -> str:
+    return str(value or "")
 
 
 def _as_int(value: Any) -> int:
@@ -37,26 +34,17 @@ def _is_json_scalar(value: object) -> bool:
     return value is None or isinstance(value, (bool, int, float, str))
 
 
-def _bounded_json_value(value: Any, *, max_items: int = 20, max_chars: int = 500) -> Any:
+def _json_value(value: Any) -> Any:
     if _is_json_scalar(value):
-        if isinstance(value, str) and len(value) > max_chars:
-            return value[: max(0, max_chars - 3)] + "..."
         return value
     if isinstance(value, (list, tuple)):
-        return [
-            _bounded_json_value(item, max_items=max_items, max_chars=max_chars)
-            for item in list(value)[:max_items]
-        ]
+        return [_json_value(item) for item in value]
     if isinstance(value, dict):
-        bounded: dict[str, Any] = {}
-        for key in sorted(value, key=str)[:max_items]:
-            bounded[str(key)] = _bounded_json_value(
-                value[key],
-                max_items=max_items,
-                max_chars=max_chars,
-            )
-        return bounded
-    return _bounded_text(value, max_chars)
+        return {
+            str(key): _json_value(value[key])
+            for key in sorted(value, key=str)
+        }
+    return _text_value(value)
 
 
 def _coerce_number(value: Any) -> float | None:
@@ -108,8 +96,8 @@ def _as_truthy(value: Any) -> bool:
 __all__ = [
     "_as_int",
     "_as_truthy",
-    "_bounded_json_value",
-    "_bounded_text",
+    "_json_value",
+    "_text_value",
     "_coerce_number",
     "_increment_category",
     "_is_json_scalar",

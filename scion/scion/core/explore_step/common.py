@@ -19,12 +19,7 @@ _AGENT_GROUNDING_FAILURE = "agent_grounding_failure"
 _ALGORITHM_SMOKE_FAILURE = "algorithm_smoke_failure"
 _PROPOSAL_ACTIVATION_DIAGNOSTIC = "proposal_activation_diagnostic"
 _ACTIVATION_NOT_OBSERVED_DIAGNOSTIC = "activation_not_observed_diagnostic"
-_DUPLICATE_MECHANISM = "duplicate_mechanism"
-_MECHANISM_NOVELTY_REJECTED = "mechanism_novelty_rejected"
 _SCHEMA_QUALITY_BLOCK = "schema_quality_block"
-_MECHANISM_DUPLICATE_ID_CONFLICT = "mechanism_changes_duplicate_id_conflict"
-_AGENTIC_BUDGET_CONTROL = "agentic_budget_control"
-_AGENTIC_SESSION_TIMEOUT = "agentic_session_timeout"
 _SOFT_NOVELTY_DIAGNOSTIC_MARKERS = (
     "mechanism_premise_warning",
     "mechanism_novelty_warning",
@@ -67,7 +62,6 @@ def _is_agent_quality_blocked_detail(detail: str | None) -> bool:
         or _ALGORITHM_SMOKE_FAILURE in text
         or _PROPOSAL_ACTIVATION_DIAGNOSTIC in text
         or _SCHEMA_QUALITY_BLOCK in text
-        or _MECHANISM_DUPLICATE_ID_CONFLICT in text
         or "algorithm smoke did not pass" in text_lower
         or "runtime_smoke.telemetry_guard" in text_lower
     )
@@ -79,10 +73,7 @@ def _is_soft_novelty_diagnostic_detail(detail_lower: str) -> bool:
 
 def _is_schema_quality_block_detail(detail: str | None) -> bool:
     text = str(detail or "").lower()
-    return (
-        _SCHEMA_QUALITY_BLOCK in text
-        or _MECHANISM_DUPLICATE_ID_CONFLICT in text
-    )
+    return _SCHEMA_QUALITY_BLOCK in text
 
 
 def _is_algorithm_smoke_failure_detail(detail: str | None) -> bool:
@@ -162,37 +153,15 @@ def _agent_quality_failure_detail(
     return prefix
 
 
-def _is_agentic_control_timeout_detail(detail: str | None) -> bool:
-    text = str(detail or "").lower()
-    return (
-        "agentic_budget_control" in text
-        or "agentic_proposal:session_timeout" in text
-        or ("max_wall_time_sec" in text and "agentic" in text)
-        or "contract preview skipped by agentic session_timeout/budget control" in text
-        or (
-            "session_timeout" in text
-            and ("agentic" in text or "budget control" in text)
-        )
-        or (
-            "insufficient wall-time reserve" in text
-            and "agentic" in text
-        )
-    )
-
-
 def _proposal_failure_stage(detail: str | None, default: str) -> str:
     if _is_agent_quality_blocked_detail(detail):
         return _AGENT_QUALITY_BLOCKED
-    if _is_agentic_control_timeout_detail(detail):
-        return _AGENTIC_BUDGET_CONTROL
     return default
 
 
 def _proposal_failure_reason(detail: str | None, default: str) -> str:
     if _is_agent_quality_blocked_detail(detail):
         return _AGENT_QUALITY_BLOCKED
-    if _is_agentic_control_timeout_detail(detail):
-        return _AGENTIC_SESSION_TIMEOUT
     return default
 
 

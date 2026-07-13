@@ -11,11 +11,9 @@ from .feedback import (
     _pair_feedback_counts,
 )
 from .runtime_observation import (
-    _append_guard_runtime,
     _build_runtime_stats,
     _candidate_runtime_observation,
     _format_runtime_summary,
-    _format_telemetry_guard_summary,
     _merge_runtime_observation,
     _record_runtime_sample,
     _runtime_audit_summary,
@@ -25,14 +23,14 @@ from .surface_runtime import (
     _finalize_surface_runtime_summary,
     _record_surface_runtime_sample,
     _surface_runtime_summary_template,
-    _surface_runtime_summary_with_guard,
+    _surface_runtime_summary_with_diagnostics,
 )
 from .failures import (
-    _bounded_runtime_failure,
-    _bounded_runtime_failure_from_audit,
     _candidate_audit_failure_category,
     _candidate_process_failure_category,
     _format_runtime_failure_categories,
+    _runtime_failure_summary,
+    _runtime_failure_summary_from_audit,
 )
 from .surface_runtime import (
     _is_empty_runtime_evidence_value,
@@ -47,14 +45,14 @@ from .surface_runtime import (
 from .values import (
     _as_int,
     _as_truthy,
-    _bounded_json_value,
-    _bounded_text,
     _coerce_number,
     _increment_category,
     _is_json_scalar,
+    _json_value,
     _parse_int,
     _round_runtime_number,
     _safe_int,
+    _text_value,
 )
 
 __all__ = [

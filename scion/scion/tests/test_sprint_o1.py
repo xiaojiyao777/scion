@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
+
 import pytest
 
+from scion.core.campaign import CampaignManager
 from scion.core.models import HypothesisRecord
 from scion.lineage.registry import LineageRegistry
 from scion.lineage.branch_store import HypothesisStore
@@ -11,6 +14,15 @@ from scion.proposal.classifier import (
     ClassificationResult,
     HypothesisFamilyClassifier,
     TAXONOMY_VERSION,
+)
+from scion.proposal.mock_client import MockLLMClient
+from scion.tests.campaign_test_support import (
+    AlwaysPassVerificationGate,
+    _make_champion,
+    _make_problem_spec,
+    _make_protocol_config,
+    _make_seed_ledger,
+    _make_split_manifest,
 )
 from scion.tests.taxonomy_helpers import warehouse_family_taxonomy
 
@@ -51,6 +63,77 @@ class TestClassifierWiring:
         import inspect
         src = inspect.getsource(campaign_composition.compose_campaign_services)
         assert "HypothesisFamilyClassifier" in src
+
+    def test_composed_campaign_classifies_full_text_without_provider_call(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        class CountingClient(MockLLMClient):
+            def __init__(self, hypothesis_response) -> None:
+                super().__init__(hypothesis_response=hypothesis_response)
+                self.classifier_call_count = 0
+
+            def call_text(self, prompt, model=None):
+                del prompt, model
+                self.classifier_call_count += 1
+                return "subcategory_consolidation"
+
+        code_dir = tmp_path / "champion_code"
+        operators_dir = code_dir / "operators"
+        operators_dir.mkdir(parents=True)
+        source = (
+            "class LocalSearch:\n"
+            "    def execute(self, solution, rng):\n"
+            "        return solution\n"
+        )
+        (operators_dir / "local_search.py").write_text(source, encoding="utf-8")
+        (code_dir / "solver.py").write_text(source, encoding="utf-8")
+        problem_spec = _make_problem_spec(str(code_dir))
+        object.__setattr__(
+            problem_spec,
+            "family_taxonomy",
+            WAREHOUSE_MECHANISM_TAXONOMY,
+        )
+        full_hypothesis_text = (
+            "neutral mechanism context " * 30
+            + "merge subcategories using a deterministic consolidation move"
+        )
+        assert len(full_hypothesis_text) > 500
+        assert "merge subcategories" not in full_hypothesis_text[:500]
+        client = CountingClient(
+            {
+                "hypothesis_text": full_hypothesis_text,
+                "change_locus": "local_search",
+                "action": "modify",
+                "target_file": "operators/local_search.py",
+                "predicted_direction": "improve",
+                "target_weakness": "The current merge policy is too coarse.",
+                "expected_effect": "Improve consolidation deterministically.",
+            }
+        )
+        campaign = CampaignManager(
+            problem_spec=problem_spec,
+            protocol_config=_make_protocol_config(),
+            split_manifest=_make_split_manifest(),
+            seed_ledger=_make_seed_ledger(),
+            llm_client=client,
+            champion=_make_champion(str(code_dir)),
+            campaign_dir=str(tmp_path / "campaign"),
+            verification_gate=AlwaysPassVerificationGate(),
+        )
+        branch = campaign._branch_ctrl.create_branch(campaign._champion)
+
+        hypothesis, record = campaign._round1_generate_hypothesis(branch)
+
+        assert hypothesis is not None
+        assert record is not None
+        assert not hasattr(campaign._classifier, "_client")
+        assert client.call_count == 1
+        assert client.classifier_call_count == 0
+        assert record.hypothesis_text == full_hypothesis_text
+        assert record.family_id == "subcategory_consolidation"
+        assert record.family_source == "keyword"
+        assert record.taxonomy_version == WAREHOUSE_MECHANISM_TAXONOMY.version
 
 
 # ---------------------------------------------------------------------------

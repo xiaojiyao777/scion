@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import uuid
-from types import SimpleNamespace
 
 import pytest
 
 from scion.core.evaluation_pipeline import EvaluationPipeline, EvaluationRequest
-from scion.core.features import BudgetState
 from scion.core.models import (
     BranchState,
     CanaryResult,
@@ -14,28 +12,17 @@ from scion.core.models import (
     CheckResult,
     EvalStats,
     ExperimentStage,
-    MechanismChange,
     PairwiseCaseFeedback,
     ProtocolResult,
     VerificationResult,
 )
 from scion.core.runtime_budget_diagnostics import SCREENING_RUNTIME_BUDGET_SATURATION
-from scion.core.telemetry_validation import (
-    SCREENING_TELEMETRY_REPAIRABLE,
-    TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
-    TELEMETRY_VALIDATION_REPAIRABLE,
-    VALIDATION_TELEMETRY_REPAIRABLE,
-)
 
 
 def _request(
     *,
     state: BranchState = BranchState.EXPLORE,
-    action: str = "modify",
-    expand: bool = False,
-    expand_round: int = 0,
     selected_surface: str | None = None,
-    mechanism_changes: tuple[object, ...] = (),
     priority_case_ids: tuple[str, ...] = (),
     force_fresh_champion: bool = False,
 ) -> EvaluationRequest:
@@ -44,11 +31,8 @@ def _request(
         branch_state=state,
         candidate_workspace="/tmp/candidate",
         champion_workspace="/tmp/champion",
-        hypothesis_action=action,
-        expand=expand,
-        expand_round=expand_round,
+        hypothesis_action="modify",
         selected_surface=selected_surface,
-        mechanism_changes=mechanism_changes,
         priority_case_ids=priority_case_ids,
         force_fresh_champion=force_fresh_champion,
     )
@@ -57,13 +41,10 @@ def _request(
 def _protocol_result(
     *,
     stage: ExperimentStage = ExperimentStage.SCREENING,
-    raw_metrics_ref: str = "/tmp/metrics.json",
+    reason_codes: tuple[str, ...] = ("SCREENING_PASS",),
+    gate_outcome: str = "pass",
     pair_feedback: tuple[PairwiseCaseFeedback, ...] = (),
     case_feedback: tuple[CaseAggregateFeedback, ...] = (),
-    case_ids: tuple[str, ...] = (),
-    seed_set: tuple[int, ...] = (),
-    reason_codes: tuple[str, ...] | None = None,
-    exposed_summary: str = "aggregate summary",
     candidate_surface_runtime_summary: dict | None = None,
 ) -> ProtocolResult:
     return ProtocolResult(
@@ -74,255 +55,99 @@ def _protocol_result(
             losses=1,
             ties=0,
             win_rate=0.75,
-            median_delta=0.12,
-            ci_low=0.02,
+            median_delta=0.1,
+            ci_low=0.01,
             ci_high=0.2,
-            statistical_status="positive",
-            statistical_metric="total_cost",
         ),
-        gate_outcome="pass",
-        reason_codes=reason_codes or (f"{stage.value.upper()}_PASS",),
-        exposed_summary=exposed_summary,
-        raw_metrics_ref=raw_metrics_ref,
-        case_ids=case_ids,
-        seed_set=seed_set,
+        gate_outcome=gate_outcome,
+        reason_codes=reason_codes,
+        exposed_summary="aggregate summary",
+        raw_metrics_ref="/tmp/metrics.json",
         pair_feedback=pair_feedback,
         case_feedback=case_feedback,
-        candidate_surface_runtime_summary=candidate_surface_runtime_summary or {},
+        case_ids=("case-A",),
+        seed_set=(1,),
+        candidate_surface_runtime_summary=(
+            candidate_surface_runtime_summary or {}
+        ),
     )
 
 
 class RecordingProtocol:
     def __init__(self, result: ProtocolResult) -> None:
         self.result = result
-        self.canary_calls: list[tuple[str, str]] = []
-        self.experiment_calls: list[dict[str, object]] = []
-
-    def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
-        self.canary_calls.append((candidate_ws, champion_ws))
-        return CanaryResult(passed=True, reason=None)
-
-    def run_experiment(self, **kwargs: object) -> ProtocolResult:
-        self.experiment_calls.append(kwargs)
-        return self.result
-
-
-class RuntimePolicyRecordingProtocol(RecordingProtocol):
-    def __init__(self, result: ProtocolResult) -> None:
-        super().__init__(result)
-        self.config = SimpleNamespace(
-            runtime=SimpleNamespace(
-                champion_runtime_policy="fresh_required_for_runtime_tie"
-            )
-        )
-        self.policies_seen: list[str] = []
-
-    def run_experiment(self, **kwargs: object) -> ProtocolResult:
-        self.policies_seen.append(self.config.runtime.champion_runtime_policy)
-        return super().run_experiment(**kwargs)
-
-
-class SurfaceRecordingProtocol:
-    def __init__(self, result: ProtocolResult) -> None:
-        self.problem_spec = SimpleNamespace(
-            research_surfaces=[SimpleNamespace(name="dispatch_policy")]
-        )
-        self.result = result
-        self.canary_calls: list[dict[str, object]] = []
-        self.experiment_calls: list[dict[str, object]] = []
+        self._problem_spec = {
+            "research_surfaces": [{"name": "dispatch_policy"}],
+        }
+        self.canary_calls: list[dict] = []
+        self.experiment_calls: list[dict] = []
 
     def run_canary(
         self,
         candidate_ws: str,
         champion_ws: str,
-        **kwargs: object,
+        *,
+        selected_surface: str | None = None,
     ) -> CanaryResult:
         self.canary_calls.append(
             {
                 "candidate_ws": candidate_ws,
                 "champion_ws": champion_ws,
-                **kwargs,
+                "selected_surface": selected_surface,
             }
         )
-        return CanaryResult(passed=True, reason=None)
+        return CanaryResult(passed=True)
 
-    def run_experiment(self, **kwargs: object) -> ProtocolResult:
-        self.experiment_calls.append(kwargs)
+    def run_experiment(
+        self,
+        *,
+        selected_surface: str | None = None,
+        **kwargs,
+    ) -> ProtocolResult:
+        self.experiment_calls.append(
+            {"selected_surface": selected_surface, **dict(kwargs)}
+        )
         return self.result
 
 
-class FailingIfCalledProtocol:
-    def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
-        raise AssertionError("protocol should not run after verification failure")
+class FailingCanaryProtocol(RecordingProtocol):
+    def run_canary(self, *_args, **_kwargs) -> CanaryResult:
+        return CanaryResult(passed=False, reason="algorithm canary failed")
 
-    def run_experiment(self, **kwargs: object) -> ProtocolResult:
-        raise AssertionError("protocol should not run after verification failure")
-
-
-class MissingCanaryProtocol:
-    def __init__(self) -> None:
-        self.experiment_called = False
-
-    def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
-        raise ValueError("Canary split not configured")
-
-    def run_experiment(self, **kwargs: object) -> ProtocolResult:
-        self.experiment_called = True
-        return _protocol_result()
+    def run_experiment(self, **kwargs) -> ProtocolResult:  # pragma: no cover
+        raise AssertionError(f"experiment must not run after canary failure: {kwargs}")
 
 
-class PathSafetyCanaryProtocol:
-    def __init__(self) -> None:
-        self.experiment_called = False
-
-    def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
-        return CanaryResult(
-            passed=False,
-            reason=(
-                "case path /tmp/outside.json failed strict resolution: "
-                "absolute_outside_roots outside workspace and safe_data_roots"
-            ),
-        )
-
-    def run_experiment(self, **kwargs: object) -> ProtocolResult:
-        self.experiment_called = True
-        return _protocol_result()
-
-
-class OrdinaryFailingCanaryProtocol:
-    def __init__(self) -> None:
-        self.experiment_called = False
-
-    def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
-        return CanaryResult(
-            passed=False,
-            reason="Candidate infeasible on canary_x (champion was feasible)",
-        )
-
-    def run_experiment(self, **kwargs: object) -> ProtocolResult:
-        self.experiment_called = True
-        return _protocol_result()
-
-
-def test_screening_pass_generates_expected_decision_features() -> None:
+def test_screening_result_generates_numeric_decision_features() -> None:
     protocol = RecordingProtocol(_protocol_result())
-    pipeline = EvaluationPipeline(
-        experiment_protocol=protocol,
-        budget_provider=lambda: BudgetState(total=10, used=3),
-    )
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
 
-    outcome = pipeline.evaluate(
-        _request(state=BranchState.EXPLORE, expand=True, expand_round=1)
-    )
+    outcome = pipeline.evaluate(_request(selected_surface="dispatch_policy"))
 
-    features = outcome.decision_features
-    assert features.stage == "screening"
-    assert features.contract_passed is True
-    assert features.verification_passed is True
-    assert features.canary_passed is True
-    assert features.n_cases == 4
-    assert features.win_rate == pytest.approx(0.75)
-    assert features.median_delta == pytest.approx(0.12)
-    assert features.ci_low == pytest.approx(0.02)
-    assert features.statistical_status == "positive"
-    assert features.statistical_metric == "total_cost"
-    assert features.budget_remaining_ratio == pytest.approx(0.7)
+    assert outcome.protocol_result is not None
+    assert outcome.decision_features.stage == "screening"
+    assert outcome.decision_features.win_rate == pytest.approx(0.75)
     assert outcome.raw_metrics_ref == "/tmp/metrics.json"
-    assert protocol.experiment_calls == [
-        {
-            "stage": ExperimentStage.SCREENING,
-            "candidate_ws": "/tmp/candidate",
-            "champion_ws": "/tmp/champion",
-            "hypothesis_action": "modify",
-            "expand": True,
-            "expand_round": 1,
-        }
-    ]
+    assert protocol.experiment_calls[0]["selected_surface"] == "dispatch_policy"
+    assert "expected_telemetry" not in protocol.experiment_calls[0]
+    assert "mechanism_changes" not in protocol.experiment_calls[0]
+    assert "protected_objectives" not in protocol.experiment_calls[0]
 
 
-def test_force_fresh_champion_temporarily_bypasses_champion_cache_policy() -> None:
-    protocol = RuntimePolicyRecordingProtocol(_protocol_result())
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    pipeline.evaluate(
-        _request(state=BranchState.EXPLORE, force_fresh_champion=True)
-    )
-
-    assert protocol.policies_seen == ["fresh_always"]
-    assert protocol.config.runtime.champion_runtime_policy == (
-        "fresh_required_for_runtime_tie"
-    )
-
-
-def test_priority_case_ids_forward_to_protocol() -> None:
+def test_priority_cases_forward_as_protocol_measurement_input() -> None:
     protocol = RecordingProtocol(_protocol_result())
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    pipeline.evaluate(
-        _request(
-            state=BranchState.EXPLORE_EXPAND,
-            expand=True,
-            expand_round=1,
-            priority_case_ids=("CMT2.vrp", "CMT4.vrp"),
-        )
+    outcome = EvaluationPipeline(experiment_protocol=protocol).evaluate(
+        _request(priority_case_ids=("CMT2.vrp", "CMT4.vrp"))
     )
 
+    assert outcome.canary_result.passed is True
     assert protocol.experiment_calls[0]["priority_case_ids"] == (
         "CMT2.vrp",
         "CMT4.vrp",
     )
 
 
-def test_selected_surface_forwards_to_surface_aware_protocol() -> None:
-    protocol = SurfaceRecordingProtocol(_protocol_result())
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(
-        _request(
-            state=BranchState.EXPLORE,
-            selected_surface="dispatch_policy",
-        )
-    )
-
-    assert outcome.canary_result.passed is True
-    assert protocol.canary_calls == [
-        {
-            "candidate_ws": "/tmp/candidate",
-            "champion_ws": "/tmp/champion",
-            "selected_surface": "dispatch_policy",
-        }
-    ]
-    assert protocol.experiment_calls == [
-        {
-            "stage": ExperimentStage.SCREENING,
-            "candidate_ws": "/tmp/candidate",
-            "champion_ws": "/tmp/champion",
-            "hypothesis_action": "modify",
-            "expand": False,
-            "expand_round": 0,
-            "selected_surface": "dispatch_policy",
-        }
-    ]
-
-
-def test_mechanism_changes_forward_to_protocol() -> None:
-    mechanism_changes = (MechanismChange(id="target_probe", change_type="modify"),)
-    protocol = SurfaceRecordingProtocol(_protocol_result())
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(
-        _request(
-            state=BranchState.EXPLORE,
-            selected_surface="dispatch_policy",
-            mechanism_changes=mechanism_changes,
-        )
-    )
-
-    assert outcome.canary_result.passed is True
-    assert protocol.experiment_calls[0]["mechanism_changes"] == mechanism_changes
-
-
-def test_verification_failure_generates_failed_features_and_detail() -> None:
+def test_verification_failure_skips_protocol() -> None:
     failed = CheckResult(
         name="V6_feasibility",
         passed=False,
@@ -339,581 +164,124 @@ def test_verification_failure_generates_failed_features_and_detail() -> None:
             first_failure="V6_feasibility",
         )
 
-    pipeline = EvaluationPipeline(
+    protocol = RecordingProtocol(_protocol_result())
+    outcome = EvaluationPipeline(
         verification_evaluator=verification,
-        experiment_protocol=FailingIfCalledProtocol(),
-    )
+        experiment_protocol=protocol,
+    ).evaluate(_request())
 
-    outcome = pipeline.evaluate(_request())
-
+    assert outcome.verification_result.passed is False
     assert outcome.protocol_result is None
-    assert outcome.raw_metrics_ref is None
-    assert outcome.decision_features.contract_passed is True
-    assert outcome.decision_features.verification_passed is False
-    assert outcome.decision_features.canary_passed is True
-    assert outcome.decision_features.n_cases == 0
-    assert outcome.verification_detail is not None
-    assert "severity=heavy" in outcome.verification_detail
-    assert "V6_feasibility" in outcome.verification_detail
-    assert "capacity violation" in outcome.verification_detail
+    assert protocol.experiment_calls == []
 
 
-def test_missing_canary_fails_closed_and_skips_protocol_experiment() -> None:
-    protocol = MissingCanaryProtocol()
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+def test_canary_failure_skips_protocol_experiment() -> None:
+    outcome = EvaluationPipeline(
+        experiment_protocol=FailingCanaryProtocol(_protocol_result())
+    ).evaluate(_request())
 
-    outcome = pipeline.evaluate(_request(state=BranchState.FROZEN_TESTING))
-
-    assert outcome.protocol_result is None
-    assert outcome.raw_metrics_ref is None
     assert outcome.canary_result.passed is False
-    assert outcome.decision_features.canary_passed is False
-    assert protocol.experiment_called is False
-    assert "Canary split not configured" in (outcome.canary_result.reason or "")
-    assert outcome.canary_result.failure_category == "configuration_error"
-    assert outcome.canary_result.reason_codes == ("CANARY_CONFIG_ERROR",)
-
-
-def test_path_safety_canary_failure_is_config_reason_code() -> None:
-    protocol = PathSafetyCanaryProtocol()
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
-
     assert outcome.protocol_result is None
-    assert outcome.raw_metrics_ref is None
-    assert outcome.canary_result.passed is False
     assert outcome.decision_features.canary_passed is False
-    assert protocol.experiment_called is False
-    assert outcome.canary_result.failure_category == "configuration_error"
-    assert outcome.canary_result.reason_codes == ("CANARY_CONFIG_ERROR",)
-
-
-def test_ordinary_canary_failure_keeps_algorithm_reason_code() -> None:
-    protocol = OrdinaryFailingCanaryProtocol()
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
-
-    assert outcome.protocol_result is None
-    assert outcome.canary_result.passed is False
-    assert outcome.decision_features.canary_passed is False
-    assert protocol.experiment_called is False
-    assert outcome.canary_result.failure_category == "candidate_failure"
-    assert outcome.canary_result.reason_codes == ("CANARY_FAILED",)
-
-
-def test_required_experiment_protocol_none_fails_closed() -> None:
-    pipeline = EvaluationPipeline(
-        experiment_protocol=None,
-        require_experiment_protocol=True,
-    )
-
-    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
-
-    assert outcome.protocol_result is None
-    assert outcome.canary_result.passed is False
-    assert outcome.decision_features.canary_passed is False
-    assert "experiment_protocol is required" in (outcome.canary_result.reason or "")
-    assert "skeleton fallback disabled" in (outcome.canary_result.reason or "")
-    assert outcome.canary_result.failure_category == "configuration_error"
-    assert outcome.canary_result.reason_codes == ("CANARY_CONFIG_ERROR",)
 
 
 @pytest.mark.parametrize(
     ("branch_state", "stage"),
-    [
+    (
         (BranchState.VALIDATING, ExperimentStage.VALIDATION),
         (BranchState.FROZEN_TESTING, ExperimentStage.FROZEN),
-    ],
+    ),
 )
-def test_validation_and_frozen_strip_per_case_feedback(
+def test_validation_and_frozen_keep_aggregate_but_hide_pair_feedback(
     branch_state: BranchState,
     stage: ExperimentStage,
 ) -> None:
-    pair_feedback = (
-        PairwiseCaseFeedback(
-            case_id="case-A",
-            seed=1,
-            comparison="win",
-            delta=0.1,
-        ),
+    pair = PairwiseCaseFeedback(
+        case_id="case-A",
+        seed=1,
+        comparison="win",
+        delta=0.1,
     )
-    case_feedback = (
-        CaseAggregateFeedback(
-            case_id="case-A",
-            n_pairs=1,
-            wins=1,
-            losses=0,
-            ties=0,
-            win_rate=1.0,
-            dominant_result="win",
-        ),
+    case = CaseAggregateFeedback(
+        case_id="case-A",
+        n_pairs=1,
+        wins=1,
+        losses=0,
+        ties=0,
+        win_rate=1.0,
+        dominant_result="win",
     )
-    protocol = RecordingProtocol(
-        _protocol_result(
-            stage=stage,
-            raw_metrics_ref="/tmp/private-full-metrics.json",
-            pair_feedback=pair_feedback,
-            case_feedback=case_feedback,
-            case_ids=("case-A",),
-            seed_set=(1,),
-            exposed_summary="case-A should not be exposed",
+    outcome = EvaluationPipeline(
+        experiment_protocol=RecordingProtocol(
+            _protocol_result(
+                stage=stage,
+                reason_codes=(f"{stage.value.upper()}_PASS",),
+                pair_feedback=(pair,),
+                case_feedback=(case,),
+            )
         )
-    )
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(_request(state=branch_state))
+    ).evaluate(_request(state=branch_state))
 
     assert outcome.protocol_result is not None
-    assert outcome.protocol_result.raw_metrics_ref == "/tmp/private-full-metrics.json"
-    assert outcome.raw_metrics_ref == "/tmp/private-full-metrics.json"
-    assert outcome.protocol_result.stats.n_cases == 4
     assert outcome.protocol_result.pair_feedback == ()
     assert outcome.protocol_result.case_feedback == ()
     assert outcome.protocol_result.case_ids == ("case-A",)
     assert outcome.protocol_result.seed_set == (1,)
-    assert "case-A" not in outcome.protocol_result.exposed_summary
-    assert "raw_metrics_ref=" not in outcome.protocol_result.exposed_summary
-    assert "/tmp/private-full-metrics.json" not in outcome.protocol_result.exposed_summary
-    assert outcome.decision_features.stage == stage.value
-    assert outcome.decision_features.n_cases == 4
-    assert outcome.decision_features.win_rate == pytest.approx(0.75)
 
 
-def test_telemetry_activation_failure_is_marked_repairable() -> None:
-    guard = {
-        "schema": "scion.telemetry_guard.v1",
+def test_legacy_telemetry_guard_payload_is_observation_not_gate() -> None:
+    legacy_guard = {
         "passed": False,
-        "candidate_runs": 16,
         "failures": [
             {
-                "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                "code": "TELEMETRY_ACTIVITY_NOT_OBSERVED",
                 "severity": "fail",
-                "category": "activation",
-                "mechanism": "iterated_local_search_perturbation",
-                "field": (
-                    "solver_algorithm_context_records."
-                    "iterated_local_search_perturbation_iterations"
-                ),
-                "candidate_missing": 16,
-                "candidate_present": 0,
-                "candidate_positive": 0,
-            }
-        ],
-        "mechanism_diagnostics": [
-            {
-                "mechanism": "iterated_local_search_perturbation",
-                "activation_status": "missing",
-                "repair_guidance": [
-                    "Add direct activation telemetry for declared mechanism "
-                    "iterated_local_search_perturbation."
-                ],
             }
         ],
     }
-    protocol = RecordingProtocol(
-        _protocol_result(
-            stage=ExperimentStage.SCREENING,
-            exposed_summary="screening win_rate=0",
-            candidate_surface_runtime_summary={
-                "selected_surface": "solver_design",
-                "telemetry_guard": guard,
-            },
+    outcome = EvaluationPipeline(
+        experiment_protocol=RecordingProtocol(
+            _protocol_result(
+                reason_codes=("SCREENING_PASS",),
+                candidate_surface_runtime_summary={
+                    "selected_surface": "solver_design",
+                    "telemetry_guard": legacy_guard,
+                },
+            )
         )
-    )
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
+    ).evaluate(_request())
 
     assert outcome.protocol_result is not None
-    assert outcome.decision_features.telemetry_validation_repairable is True
-    assert outcome.decision_features.telemetry_guard_failed is True
-    assert TELEMETRY_VALIDATION_REPAIRABLE in outcome.protocol_result.reason_codes
-    assert SCREENING_TELEMETRY_REPAIRABLE in outcome.protocol_result.reason_codes
-    assert "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED" in (
-        outcome.protocol_result.reason_codes
-    )
-    assert "iterated_local_search_perturbation" in outcome.protocol_result.exposed_summary
-    assert "candidate_missing=16" in outcome.protocol_result.exposed_summary
+    assert outcome.protocol_result.reason_codes == ("SCREENING_PASS",)
+    assert outcome.protocol_result.gate_outcome == "pass"
+    assert not hasattr(outcome.decision_features, "telemetry_guard_failed")
+    assert not hasattr(outcome.decision_features, "telemetry_validation_repairable")
 
 
-def test_activity_all_zero_failure_is_marked_repairable() -> None:
-    guard = {
-        "schema": "scion.telemetry_guard.v1",
-        "passed": False,
-        "candidate_runs": 16,
-        "failures": [
-            {
-                "code": "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO",
-                "severity": "fail",
-                "category": "activity",
-                "runtime_role": "activity",
-                "mechanism": "branch_local_activity_probe",
-                "field": "solver_algorithm_neutral_accepted_moves",
-                "candidate_missing": 0,
-                "candidate_present": 16,
-                "candidate_positive": 0,
-                "champion_positive": 16,
-            }
-        ],
-    }
-    protocol = RecordingProtocol(
-        _protocol_result(
-            stage=ExperimentStage.SCREENING,
-            exposed_summary="screening activity all-zero",
-            candidate_surface_runtime_summary={
-                "selected_surface": "solver_design",
-                "telemetry_guard": guard,
-            },
-        )
-    )
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
-
-    assert outcome.protocol_result is not None
-    assert outcome.decision_features.telemetry_validation_repairable is True
-    assert outcome.decision_features.telemetry_guard_failed is True
-    assert TELEMETRY_VALIDATION_REPAIRABLE in outcome.protocol_result.reason_codes
-    assert SCREENING_TELEMETRY_REPAIRABLE in outcome.protocol_result.reason_codes
-    assert "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO" in outcome.protocol_result.reason_codes
-    assert "candidate_present=16" in outcome.protocol_result.exposed_summary
-    assert "candidate_positive=0" in outcome.protocol_result.exposed_summary
-
-
-def test_budget_starved_failure_is_marked_repairable() -> None:
-    guard = {
-        "schema": "scion.telemetry_guard.v1",
-        "passed": False,
-        "candidate_runs": 16,
-        "failures": [
-            {
-                "code": "TELEMETRY_BUDGET_STARVED",
-                "severity": "fail",
-                "category": "budget",
-                "runtime_role": "budget",
-                "mechanism": "sa_reheat_on_stagnation",
-                "field": "solver_algorithm_phase_runtime_ms.sa_reheat_on_stagnation",
-                "candidate_missing": 13,
-                "candidate_present": 3,
-                "candidate_positive": 0,
-                "champion_positive": 0,
-            }
-        ],
-    }
-    protocol = RecordingProtocol(
-        _protocol_result(
-            stage=ExperimentStage.SCREENING,
-            exposed_summary="screening budget starved",
-            candidate_surface_runtime_summary={
-                "selected_surface": "solver_design",
-                "telemetry_guard": guard,
-            },
-        )
-    )
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
-
-    assert outcome.protocol_result is not None
-    assert outcome.decision_features.telemetry_validation_repairable is True
-    assert outcome.decision_features.telemetry_guard_failed is True
-    assert TELEMETRY_VALIDATION_REPAIRABLE in outcome.protocol_result.reason_codes
-    assert SCREENING_TELEMETRY_REPAIRABLE in outcome.protocol_result.reason_codes
-    assert "TELEMETRY_BUDGET_STARVED" in outcome.protocol_result.reason_codes
-    assert "sa_reheat_on_stagnation" in outcome.protocol_result.exposed_summary
-    assert "candidate_present=3" in outcome.protocol_result.exposed_summary
-    assert "candidate_positive=0" in outcome.protocol_result.exposed_summary
-
-
-def test_activation_and_budget_missing_repairable_feedback_marks_repair_focus() -> None:
-    guard = {
-        "schema": "scion.telemetry_guard.v1",
-        "passed": False,
-        "candidate_runs": 16,
-        "failures": [
-            {
-                "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
-                "severity": "fail",
-                "category": "activation",
-                "runtime_role": "activation",
-                "mechanism": "route_merge_probe",
-                "field": "solver_algorithm_activity.route_merge_probe",
-                "candidate_missing": 16,
-                "candidate_present": 0,
-                "candidate_positive": 0,
-                "champion_positive": 0,
-            },
-            {
-                "code": "TELEMETRY_BUDGET_STARVED",
-                "severity": "fail",
-                "category": "budget",
-                "runtime_role": "budget",
-                "mechanism": "route_merge_probe",
-                "field": "solver_algorithm_phase_runtime_ms.route_merge_probe",
-                "candidate_missing": 14,
-                "candidate_present": 2,
-                "candidate_positive": 0,
-                "champion_positive": 0,
-            },
-        ],
-    }
-    protocol = RecordingProtocol(
-        _protocol_result(
-            stage=ExperimentStage.SCREENING,
-            exposed_summary="screening activation budget diagnostic",
-            candidate_surface_runtime_summary={
-                "selected_surface": "solver_design",
-                "telemetry_guard": guard,
-            },
-        )
-    )
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
-
-    assert outcome.protocol_result is not None
-    assert TELEMETRY_VALIDATION_REPAIRABLE in outcome.protocol_result.reason_codes
-    assert "TELEMETRY_BUDGET_STARVED" in outcome.protocol_result.reason_codes
-    assert "categories=activation,budget" in outcome.protocol_result.exposed_summary
-    assert (
-        "repair_focus=wiring_suspect_requires_repair"
-        in outcome.protocol_result.exposed_summary
-    )
-
-
-def test_effect_zero_with_observed_activation_is_not_repairable_failure() -> None:
-    guard = {
-        "schema": "scion.telemetry_guard.v1",
-        "passed": False,
-        "candidate_runs": 16,
-        "failures": [
-            {
-                "code": "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
-                "severity": "fail",
-                "category": "effect",
-                "mechanism": "iterated_local_search_perturbation",
-                "field": "solver_algorithm_best_delta.ils",
-                "diagnostic_type": "mechanism_executed_no_improvement",
-                "telemetry_outcome": "no_effect",
-                "candidate_missing": 0,
-                "candidate_present": 16,
-                "candidate_positive": 0,
-            }
-        ],
-        "mechanism_diagnostics": [
-            {
-                "mechanism": "iterated_local_search_perturbation",
-                "diagnostic_type": "mechanism_executed_no_improvement",
-                "telemetry_outcome": "no_effect",
-                "activation_status": "observed",
-                "runtime_status": "observed",
-                "effect_status": "zero",
-                "activation_observed": True,
-                "runtime_observed": True,
-                "effect_observed": False,
-            }
-        ],
-    }
-    protocol = RecordingProtocol(
-        _protocol_result(
-            stage=ExperimentStage.SCREENING,
-            exposed_summary="screening no effect",
-            candidate_surface_runtime_summary={
-                "selected_surface": "solver_design",
-                "telemetry_guard": guard,
-            },
-        )
-    )
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
-
-    assert outcome.protocol_result is not None
-    assert outcome.decision_features.telemetry_validation_repairable is False
-    assert outcome.decision_features.telemetry_guard_failed is False
-    assert outcome.decision_features.telemetry_effect_zero_diagnostic is True
-    assert TELEMETRY_VALIDATION_REPAIRABLE not in outcome.protocol_result.reason_codes
-    assert SCREENING_TELEMETRY_REPAIRABLE not in outcome.protocol_result.reason_codes
-    assert TELEMETRY_EFFECT_ZERO_DIAGNOSTIC in outcome.protocol_result.reason_codes
-    assert "telemetry_effect_zero=diagnostic" in (
-        outcome.protocol_result.exposed_summary
-    )
-
-
-def test_runtime_budget_saturation_is_decision_feature_and_reason_code() -> None:
+def test_runtime_budget_diagnostic_remains_protocol_observation() -> None:
     diagnostic = {
         "schema": "scion.runtime_budget_diagnostic.v1",
         "code": SCREENING_RUNTIME_BUDGET_SATURATION,
         "stage": "screening",
         "severity": "warn",
-        "repairable": True,
         "total_pairs": 16,
-        "threshold_ratio": 0.9,
         "saturation_ratio": 0.97,
     }
-    protocol = RecordingProtocol(
-        _protocol_result(
-            stage=ExperimentStage.SCREENING,
-            reason_codes=("SCREENING_FAIL_WIN_RATE",),
-            exposed_summary="screening runtime saturated",
-            candidate_surface_runtime_summary={
-                "selected_surface": "solver_design",
-                "runtime_budget_diagnostic": diagnostic,
-            },
+    outcome = EvaluationPipeline(
+        experiment_protocol=RecordingProtocol(
+            _protocol_result(
+                reason_codes=("SCREENING_FAIL_WIN_RATE",),
+                gate_outcome="fail",
+                candidate_surface_runtime_summary={
+                    "selected_surface": "solver_design",
+                    "runtime_budget_diagnostic": diagnostic,
+                },
+            )
         )
-    )
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
+    ).evaluate(_request())
 
     assert outcome.protocol_result is not None
-    assert outcome.decision_features.runtime_budget_saturation_diagnostic is True
-    assert SCREENING_RUNTIME_BUDGET_SATURATION in (
-        outcome.protocol_result.reason_codes
-    )
-    assert (
-        "runtime_budget_diagnostic=SCREENING_RUNTIME_BUDGET_SATURATION"
-        in outcome.protocol_result.exposed_summary
-    )
-
-
-def test_mixed_activity_and_protected_telemetry_failure_is_not_repairable() -> None:
-    guard = {
-        "schema": "scion.telemetry_guard.v1",
-        "passed": False,
-        "candidate_runs": 16,
-        "failures": [
-            {
-                "code": "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO",
-                "severity": "fail",
-                "category": "activity",
-                "runtime_role": "activity",
-                "field": "solver_algorithm_neutral_accepted_moves",
-                "candidate_missing": 0,
-                "candidate_present": 16,
-                "candidate_positive": 0,
-                "champion_positive": 16,
-            },
-            {
-                "code": "TELEMETRY_PROTECTED_EFFECT_NOT_OBSERVED",
-                "severity": "fail",
-                "category": "effect",
-                "runtime_role": "protected_outcome",
-                "field": "solver_algorithm_feasibility_violation",
-                "candidate_missing": 16,
-                "candidate_present": 0,
-                "candidate_positive": 0,
-                "champion_positive": 16,
-            },
-        ],
-    }
-    protocol = RecordingProtocol(
-        _protocol_result(
-            stage=ExperimentStage.SCREENING,
-            exposed_summary="screening mixed telemetry failure",
-            candidate_surface_runtime_summary={
-                "selected_surface": "solver_design",
-                "telemetry_guard": guard,
-            },
-        )
-    )
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
-
-    assert outcome.protocol_result is not None
-    assert outcome.decision_features.telemetry_validation_repairable is False
-    assert outcome.decision_features.telemetry_guard_failed is True
-    assert TELEMETRY_VALIDATION_REPAIRABLE not in outcome.protocol_result.reason_codes
-    assert SCREENING_TELEMETRY_REPAIRABLE not in outcome.protocol_result.reason_codes
-
-
-def test_frozen_activity_all_zero_failure_is_not_repairable() -> None:
-    guard = {
-        "schema": "scion.telemetry_guard.v1",
-        "passed": False,
-        "candidate_runs": 16,
-        "failures": [
-            {
-                "code": "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO",
-                "severity": "fail",
-                "category": "activity",
-                "runtime_role": "activity",
-                "field": "solver_algorithm_neutral_accepted_moves",
-                "candidate_missing": 0,
-                "candidate_present": 16,
-                "candidate_positive": 0,
-                "champion_positive": 16,
-            }
-        ],
-    }
-    protocol = RecordingProtocol(
-        _protocol_result(
-            stage=ExperimentStage.FROZEN,
-            exposed_summary="frozen activity all-zero",
-            candidate_surface_runtime_summary={
-                "selected_surface": "solver_design",
-                "telemetry_guard": guard,
-            },
-        )
-    )
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(_request(state=BranchState.FROZEN_TESTING))
-
-    assert outcome.protocol_result is not None
-    assert outcome.decision_features.stage == "frozen"
-    assert outcome.decision_features.telemetry_validation_repairable is False
-    assert outcome.decision_features.telemetry_guard_failed is True
-    assert TELEMETRY_VALIDATION_REPAIRABLE not in outcome.protocol_result.reason_codes
-    assert SCREENING_TELEMETRY_REPAIRABLE not in outcome.protocol_result.reason_codes
-
-
-def test_validation_telemetry_activation_failure_has_stage_specific_reason() -> None:
-    guard = {
-        "schema": "scion.telemetry_guard.v1",
-        "passed": False,
-        "candidate_runs": 16,
-        "failures": [
-            {
-                "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
-                "severity": "fail",
-                "category": "activation",
-                "mechanism": "iterated_local_search_perturbation",
-                "field": (
-                    "solver_algorithm_context_records."
-                    "iterated_local_search_perturbation_iterations"
-                ),
-                "candidate_missing": 16,
-                "candidate_present": 0,
-                "candidate_positive": 0,
-            }
-        ],
-    }
-    protocol = RecordingProtocol(
-        _protocol_result(
-            stage=ExperimentStage.VALIDATION,
-            exposed_summary="validation telemetry missing",
-            candidate_surface_runtime_summary={
-                "selected_surface": "solver_design",
-                "telemetry_guard": guard,
-            },
-        )
-    )
-    pipeline = EvaluationPipeline(experiment_protocol=protocol)
-
-    outcome = pipeline.evaluate(_request(state=BranchState.VALIDATING))
-
-    assert outcome.protocol_result is not None
-    assert outcome.decision_features.stage == "validation"
-    assert outcome.decision_features.telemetry_validation_repairable is True
-    assert outcome.decision_features.telemetry_guard_failed is True
-    assert outcome.protocol_result.reason_codes[:2] == (
-        VALIDATION_TELEMETRY_REPAIRABLE,
-        TELEMETRY_VALIDATION_REPAIRABLE,
-    )
-    assert "validation_telemetry_repairable" in (
-        outcome.protocol_result.exposed_summary
-    )
+    assert outcome.protocol_result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
+    assert outcome.protocol_result.candidate_surface_runtime_summary[
+        "runtime_budget_diagnostic"
+    ] == diagnostic

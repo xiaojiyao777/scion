@@ -58,9 +58,7 @@ def _decision_features(
         ci_low=0.03,
         ci_high=0.21,
         stale=False,
-        recent_retry_count=1,
         recent_failure_codes=(),
-        budget_remaining_ratio=0.8,
         runtime_guard_passed=True,
         runtime_guard_ratio=1.2,
         runtime_ratio_median=1.18,
@@ -317,8 +315,6 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
         "internal_audit_payload",
         "verification_checks",
         "runtime_guard",
-        "telemetry_failure_details",
-        "telemetry_validation_feedback",
     }
     assert audit_only_keys.isdisjoint(metadata)
     assert "perf ok:" not in event["decision_features_json"]
@@ -341,10 +337,6 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
     assert audit_payload["verification_checks"][2]["detail"] == (
         "perf ok: case=case-1 candidate=120ms champion=100ms ratio=1.20x timeout=60s"
     )
-    assert audit_payload["telemetry_failure_details"][0]["surface_field_id"] == (
-        "activation_probe"
-    )
-    assert "candidate_missing=16" in audit_payload["telemetry_validation_feedback"]
     payload_features = json.loads(decision_payload["features_json"])
     assert audit_only_keys.isdisjoint(payload_features)
     assert payload_features["runtime_guard_passed"] is True
@@ -380,9 +372,10 @@ def test_protocol_decision_persists_explicit_decision_features_snapshot(
         ),
     )
 
+    hypothesis_text = "Free-text hypothesis must stay out. " * 20 + "complete-tail"
     event = recorder.build_step_lineage_event(
         branch=branch,
-        hypothesis=_hypothesis("Free-text hypothesis must stay out."),
+        hypothesis=_hypothesis(hypothesis_text),
         patch=_patch(),
         contract_result=ContractResult(passed=True, checks=()),
         verification_result=verification_result,
@@ -420,6 +413,7 @@ def test_protocol_decision_persists_explicit_decision_features_snapshot(
     assert event_features["runtime_guard_passed"] is True
     assert event_features["runtime_ratio_median"] == 1.18
     assert event_features["recent_failure_codes"] == []
+    assert event["hypothesis_text"] == hypothesis_text
 
     forbidden_keys = {
         "hypothesis_text",
@@ -428,8 +422,6 @@ def test_protocol_decision_persists_explicit_decision_features_snapshot(
         "verification_checks",
         "runtime_guard_elapsed_ms",
         "runtime_stats",
-        "telemetry_failure_details",
-        "telemetry_validation_feedback",
         "current_champion_version",
     }
     assert forbidden_keys.isdisjoint(event_features)
@@ -444,7 +436,7 @@ def test_protocol_decision_persists_explicit_decision_features_snapshot(
 
     outcome = recorder.record_step_lineage(
         branch=branch,
-        hypothesis=_hypothesis("Free-text hypothesis must stay out."),
+        hypothesis=_hypothesis(hypothesis_text),
         patch=_patch(),
         contract_result=ContractResult(passed=True, checks=()),
         verification_result=verification_result,

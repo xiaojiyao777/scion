@@ -9,11 +9,7 @@ SECTION_FINGERPRINT_SCHEMA = "scion.prompt_section_visibility_fingerprint.v1"
 PROBLEM_OPPORTUNITY_VISIBILITY_SCHEMA = (
     "scion.postrun_problem_opportunity_visibility_summary.v1"
 )
-OPPORTUNITY_COMMITMENT_VISIBILITY_SCHEMA = (
-    "scion.postrun_opportunity_evidence_commitment_visibility_summary.v1"
-)
 PROBLEM_OPPORTUNITY_SECTION = "problem_opportunity_summary"
-OPPORTUNITY_COMMITMENT_SECTION = "opportunity_evidence_commitment"
 
 
 def problem_opportunity_visibility_fingerprint(
@@ -26,24 +22,6 @@ def problem_opportunity_visibility_fingerprint(
         section_name=PROBLEM_OPPORTUNITY_SECTION,
         context_visibility_key="problem_opportunity_summary_visibility",
         context_prompt_key="problem_opportunity_summary_prompt_key",
-    )
-
-
-def opportunity_commitment_visibility_fingerprint(
-    prompt_manifest: Mapping[str, Any],
-) -> dict[str, Any]:
-    """Project prompt-manifest visibility for the code-phase commitment."""
-
-    commitment_summary = _mapping(
-        prompt_manifest.get("opportunity_evidence_commitment_summary")
-    )
-    return _section_visibility_fingerprint(
-        prompt_manifest,
-        section_name=OPPORTUNITY_COMMITMENT_SECTION,
-        extra={
-            "commitment_summary_available": bool(commitment_summary),
-            "commitment_summary": commitment_summary,
-        },
     )
 
 
@@ -66,9 +44,7 @@ def _section_visibility_fingerprint(
         or ledger_entry.get("visibility_status")
         or ("absent" if not present else "unknown")
     )
-    visible = status in {"included", "full", "summary", "dedicated_projection"}
-    if status == "truncated":
-        visible = True
+    visible = status in {"included", "full", "dedicated_projection"}
     visibility_status = str(ledger_entry.get("visibility_status") or status)
     return _drop_empty(
         {
@@ -114,43 +90,11 @@ def empty_problem_opportunity_visibility_aggregate() -> dict[str, Any]:
         "section_visible_trace_count": 0,
         "hypothesis_generation_section_visible_trace_count": 0,
         "full_section_visible_trace_count": 0,
-        "truncated_section_trace_count": 0,
-        "omitted_or_absent_trace_count": 0,
+        "not_visible_trace_count": 0,
         "section_status_counts": {},
         "visibility_status_counts": {},
         "block_family_counts": {},
         "context_visibility_counts": {},
-    }
-
-
-def empty_opportunity_commitment_visibility_aggregate() -> dict[str, Any]:
-    """Return an empty report-only aggregate for commitment visibility."""
-
-    return {
-        "schema_version": OPPORTUNITY_COMMITMENT_VISIBILITY_SCHEMA,
-        "report_only": True,
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "quality_judgment": False,
-        "trace_count": 0,
-        "code_trace_count": 0,
-        "section_present_trace_count": 0,
-        "code_section_present_trace_count": 0,
-        "section_visible_trace_count": 0,
-        "code_section_visible_trace_count": 0,
-        "full_section_visible_trace_count": 0,
-        "truncated_section_trace_count": 0,
-        "omitted_or_absent_trace_count": 0,
-        "commitment_summary_trace_count": 0,
-        "commitment_summary_without_section_count": 0,
-        "code_commitment_summary_without_section_count": 0,
-        "section_status_counts": {},
-        "visibility_status_counts": {},
-        "block_family_counts": {},
-        "selected_mechanism_id_counts": {},
-        "requirement_id_counts": {},
-        "source_summary_digest_counts": {},
-        "commitment_digest_counts": {},
     }
 
 
@@ -182,11 +126,9 @@ def add_problem_opportunity_visibility(
         if is_hypothesis_generation:
             target["hypothesis_generation_section_visible_trace_count"] += 1
     else:
-        target["omitted_or_absent_trace_count"] += 1
+        target["not_visible_trace_count"] += 1
     if full_visible:
         target["full_section_visible_trace_count"] += 1
-    if status == "truncated" or visibility_status == "truncated":
-        target["truncated_section_trace_count"] += 1
     _increment_count(target["section_status_counts"], status)
     _increment_count(target["visibility_status_counts"], visibility_status)
     _increment_count(
@@ -197,65 +139,6 @@ def add_problem_opportunity_visibility(
         target["context_visibility_counts"],
         str(summary.get("context_visibility") or "unknown"),
     )
-
-
-def add_opportunity_commitment_visibility(
-    target: dict[str, Any],
-    raw_summary: Any,
-    *,
-    is_code_generation: bool,
-) -> None:
-    """Accumulate one code-phase commitment-section fingerprint."""
-
-    summary = _mapping(raw_summary)
-    if not summary:
-        return
-    target["trace_count"] += 1
-    if is_code_generation:
-        target["code_trace_count"] += 1
-    present = summary.get("section_present") is True
-    visible = summary.get("section_visible") is True
-    full_visible = summary.get("full_section_visible") is True
-    status = str(summary.get("section_status") or "unknown")
-    visibility_status = str(summary.get("visibility_status") or status)
-    if present:
-        target["section_present_trace_count"] += 1
-        if is_code_generation:
-            target["code_section_present_trace_count"] += 1
-    if visible:
-        target["section_visible_trace_count"] += 1
-        if is_code_generation:
-            target["code_section_visible_trace_count"] += 1
-    else:
-        target["omitted_or_absent_trace_count"] += 1
-    if full_visible:
-        target["full_section_visible_trace_count"] += 1
-    if status == "truncated" or visibility_status == "truncated":
-        target["truncated_section_trace_count"] += 1
-    _increment_count(target["section_status_counts"], status)
-    _increment_count(target["visibility_status_counts"], visibility_status)
-    _increment_count(
-        target["block_family_counts"],
-        str(summary.get("block_family") or "unknown"),
-    )
-    commitment = _mapping(summary.get("commitment_summary"))
-    if not commitment:
-        return
-    target["commitment_summary_trace_count"] += 1
-    if not present:
-        target["commitment_summary_without_section_count"] += 1
-        if is_code_generation:
-            target["code_commitment_summary_without_section_count"] += 1
-    for mechanism_id in _string_items(commitment.get("selected_mechanism_ids")):
-        _increment_count(target["selected_mechanism_id_counts"], mechanism_id)
-    for requirement_id in _string_items(commitment.get("requirement_ids")):
-        _increment_count(target["requirement_id_counts"], requirement_id)
-    source_digest = str(commitment.get("source_summary_digest") or "").strip()
-    if source_digest:
-        _increment_count(target["source_summary_digest_counts"], source_digest)
-    commitment_digest = str(commitment.get("commitment_digest") or "").strip()
-    if commitment_digest:
-        _increment_count(target["commitment_digest_counts"], commitment_digest)
 
 
 def merge_problem_opportunity_visibility(
@@ -274,8 +157,7 @@ def merge_problem_opportunity_visibility(
         "section_visible_trace_count",
         "hypothesis_generation_section_visible_trace_count",
         "full_section_visible_trace_count",
-        "truncated_section_trace_count",
-        "omitted_or_absent_trace_count",
+        "not_visible_trace_count",
     ):
         target[key] += _int(source.get(key))
     for key in (
@@ -283,41 +165,6 @@ def merge_problem_opportunity_visibility(
         "visibility_status_counts",
         "block_family_counts",
         "context_visibility_counts",
-    ):
-        _merge_counts(target[key], _mapping(source.get(key)))
-
-
-def merge_opportunity_commitment_visibility(
-    target: dict[str, Any],
-    source: Mapping[str, Any],
-) -> None:
-    """Merge one commitment visibility aggregate into another."""
-
-    if not source:
-        return
-    for key in (
-        "trace_count",
-        "code_trace_count",
-        "section_present_trace_count",
-        "code_section_present_trace_count",
-        "section_visible_trace_count",
-        "code_section_visible_trace_count",
-        "full_section_visible_trace_count",
-        "truncated_section_trace_count",
-        "omitted_or_absent_trace_count",
-        "commitment_summary_trace_count",
-        "commitment_summary_without_section_count",
-        "code_commitment_summary_without_section_count",
-    ):
-        target[key] += _int(source.get(key))
-    for key in (
-        "section_status_counts",
-        "visibility_status_counts",
-        "block_family_counts",
-        "selected_mechanism_id_counts",
-        "requirement_id_counts",
-        "source_summary_digest_counts",
-        "commitment_digest_counts",
     ):
         _merge_counts(target[key], _mapping(source.get(key)))
 
@@ -349,12 +196,7 @@ def problem_opportunity_visibility_signature(value: Any) -> dict[str, Any]:
         "full_section_visible_trace_count": _int(
             summary.get("full_section_visible_trace_count")
         ),
-        "truncated_section_trace_count": _int(
-            summary.get("truncated_section_trace_count")
-        ),
-        "omitted_or_absent_trace_count": _int(
-            summary.get("omitted_or_absent_trace_count")
-        ),
+        "not_visible_trace_count": _int(summary.get("not_visible_trace_count")),
         "section_status_counts": _int_counts(summary.get("section_status_counts")),
         "visibility_status_counts": _int_counts(
             summary.get("visibility_status_counts")
@@ -362,64 +204,6 @@ def problem_opportunity_visibility_signature(value: Any) -> dict[str, Any]:
         "block_family_counts": _int_counts(summary.get("block_family_counts")),
         "context_visibility_counts": _int_counts(
             summary.get("context_visibility_counts")
-        ),
-    }
-
-
-def opportunity_commitment_visibility_signature(value: Any) -> dict[str, Any]:
-    """Return a stable comparison signature for commitment visibility."""
-
-    summary = _mapping(value)
-    if not summary:
-        return {}
-    return {
-        "schema_version": str(summary.get("schema_version") or ""),
-        "trace_count": _int(summary.get("trace_count")),
-        "code_trace_count": _int(summary.get("code_trace_count")),
-        "section_present_trace_count": _int(
-            summary.get("section_present_trace_count")
-        ),
-        "code_section_present_trace_count": _int(
-            summary.get("code_section_present_trace_count")
-        ),
-        "section_visible_trace_count": _int(
-            summary.get("section_visible_trace_count")
-        ),
-        "code_section_visible_trace_count": _int(
-            summary.get("code_section_visible_trace_count")
-        ),
-        "full_section_visible_trace_count": _int(
-            summary.get("full_section_visible_trace_count")
-        ),
-        "truncated_section_trace_count": _int(
-            summary.get("truncated_section_trace_count")
-        ),
-        "omitted_or_absent_trace_count": _int(
-            summary.get("omitted_or_absent_trace_count")
-        ),
-        "commitment_summary_trace_count": _int(
-            summary.get("commitment_summary_trace_count")
-        ),
-        "commitment_summary_without_section_count": _int(
-            summary.get("commitment_summary_without_section_count")
-        ),
-        "code_commitment_summary_without_section_count": _int(
-            summary.get("code_commitment_summary_without_section_count")
-        ),
-        "section_status_counts": _int_counts(summary.get("section_status_counts")),
-        "visibility_status_counts": _int_counts(
-            summary.get("visibility_status_counts")
-        ),
-        "block_family_counts": _int_counts(summary.get("block_family_counts")),
-        "selected_mechanism_id_counts": _int_counts(
-            summary.get("selected_mechanism_id_counts")
-        ),
-        "requirement_id_counts": _int_counts(summary.get("requirement_id_counts")),
-        "source_summary_digest_counts": _int_counts(
-            summary.get("source_summary_digest_counts")
-        ),
-        "commitment_digest_counts": _int_counts(
-            summary.get("commitment_digest_counts")
         ),
     }
 

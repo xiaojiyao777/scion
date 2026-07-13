@@ -58,9 +58,6 @@ def _quality_block_ledger_from_steps(
                 "failure_category": _step_failure_category(step),
                 "failure_reason": failure_reason,
                 "source_result_reason": failure_reason,
-                "counts_toward_max_rounds": bool(
-                    getattr(step, "counts_toward_max_rounds", True)
-                ),
                 "pre_protocol": getattr(step, "protocol_result", None) is None,
                 "loop_step": getattr(step, "round_num", None),
                 "source": "step_history",
@@ -96,7 +93,6 @@ def _aggregate_quality_block_entries(*, start: int, count: int) -> list[dict[str
             "failure_category": None,
             "failure_reason": "quality_block_record_missing_legacy_aggregate",
             "source_result_reason": "",
-            "counts_toward_max_rounds": False,
             "pre_protocol": True,
             "source": "aggregate_reconciliation",
         }

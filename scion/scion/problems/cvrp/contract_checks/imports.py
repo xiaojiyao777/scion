@@ -55,7 +55,7 @@ def _solver_design_import_export_error(
                         "line": getattr(node, "lineno", None),
                         "module": target_rel,
                         "missing": missing_names,
-                        "available_exports": sorted(exports)[:80],
+                        "available_exports": sorted(exports),
                     }
                 )
     if not missing:

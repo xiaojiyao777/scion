@@ -4,6 +4,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from scion.postrun.inventory import PreparedRunContractInventoryPort
 from scion.postrun.inventory import loader
 from scion.postrun.inventory import prepared_contract
@@ -54,7 +56,34 @@ def test_postrun_inventory_loader_source_is_problem_neutral() -> None:
     assert not [token for token in forbidden_tokens if token in source]
 
 
-def test_prepared_contract_port_builds_legacy_generic_contract(tmp_path: Path) -> None:
+def test_prepared_contract_rejects_removed_agentic_configuration() -> None:
+    with pytest.raises(ValueError, match="must be direct_v3"):
+        prepared_contract.prepared_execution_runtime_mode(
+            {
+                "proposal_runtime_mode": "agentic_ablation",
+                "agentic_proposal": True,
+            }
+        )
+
+
+def test_direct_prepared_contract_omits_removed_runtime_controls() -> None:
+    execution = prepared_contract.prepared_contract_execution(
+        {
+            "proposal_runtime_mode": "direct_v3",
+            "rounds": 3,
+            "time_limit_sec": 30,
+        }
+    )
+
+    assert execution["proposal_runtime_mode"] == "direct_v3"
+    assert execution["rounds"] == 3
+    assert not any("agentic" in key for key in execution)
+    assert "proposal_attempt_limit" not in execution
+    assert "proposal_quality_loop_limit" not in execution
+    assert "stage_transition_drain_limit" not in execution
+
+
+def test_prepared_contract_port_builds_direct_generic_contract(tmp_path: Path) -> None:
     repo_dir = Path(__file__).resolve().parents[4]
     scion_project_dir = repo_dir / "scion"
     run_root = tmp_path / "prepared-run"
@@ -71,7 +100,8 @@ def test_prepared_contract_port_builds_legacy_generic_contract(tmp_path: Path) -
         f"--protocol {config_dir / 'protocol.yaml'} "
         f"--split {config_dir / 'split.yaml'} "
         f"--seeds {config_dir / 'seeds.yaml'} "
-        f"--campaign-dir {campaign_dir} --rounds 1 --disable-early-stop"
+        f"--campaign-dir {campaign_dir} --rounds 1 "
+        f"--time-limit-sec 30"
     )
     manifest_path = run_root / "prepared_run_manifest.v1.json"
     manifest = {
@@ -87,7 +117,7 @@ def test_prepared_contract_port_builds_legacy_generic_contract(tmp_path: Path) -
         "analysis_intent": "Prepared generic analysis intent.",
         "acceptance_focus": ["Keep evidence out of DecisionFeatures."],
         "command": command,
-        "model": {"name": "gpt-5.5", "completion_preflight": True},
+        "model": {"name": "gpt-5.6-sol", "completion_preflight": True},
         "git": {
             "commit": _git_head_short(repo_dir),
             "runtime_guard_paths": "scion/tools",
@@ -98,7 +128,11 @@ def test_prepared_contract_port_builds_legacy_generic_contract(tmp_path: Path) -
             "split": str(config_dir / "split.yaml"),
             "seeds": str(config_dir / "seeds.yaml"),
         },
-        "execution": {"rounds": 1, "disable_early_stop": True},
+        "execution": {
+            "rounds": 1,
+            "time_limit_sec": 30,
+            "proposal_runtime_mode": "direct_v3",
+        },
         "report_metadata": {
             "control_pair_key": "fixture.prepared:rep01",
             "postrun_reports": True,
@@ -135,11 +169,44 @@ def test_prepared_contract_port_builds_legacy_generic_contract(tmp_path: Path) -
     assert contract["contract_complete"] is True
     assert contract["problem_family"] == "fixture_problem"
     assert contract["problem_family_inferred"] is True
-    assert contract["model"] == "gpt-5.5"
+    assert contract["model"] == "gpt-5.6-sol"
+    assert contract["checks"]["model_name_present"]["passed"] is True
     assert contract["execution"]["rounds"] == 1
+    assert contract["execution"]["proposal_runtime_mode"] == "direct_v3"
+    assert not any("agentic" in key for key in contract["execution"])
     assert contract["checks"]["manifest_schema"]["passed"] is True
     assert contract["checks"]["config_paths_resolvable"]["passed"] is True
     assert contract["checks"]["git_runtime_consistent"]["passed"] is True
+
+
+def test_prepared_contract_fails_closed_when_runtime_mode_is_unknown(
+    tmp_path: Path,
+) -> None:
+    repo_dir = Path(__file__).resolve().parents[4]
+    run_root = tmp_path / "unknown-mode"
+    run_root.mkdir()
+    (run_root / "prepared_run_manifest.v1.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "scion.launcher_prepared_run_manifest.v1",
+                "execution": {"rounds": 1},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = PreparedRunContractInventoryPort(
+        repo_dir=repo_dir,
+        scion_project_dir=repo_dir / "scion",
+        postrun_report_dirs=POSTRUN_REPORT_DIRS,
+    ).build(run_root)
+
+    check = result.contract["checks"][
+        "execution_proposal_runtime_mode_consistent"
+    ]
+    assert check["passed"] is False
+    assert "direct_v3" in str(check["detail"])
+    assert result.contract["contract_complete"] is False
 
 
 def _git_head_short(repo_dir: Path) -> str:

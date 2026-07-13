@@ -4,7 +4,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Mapping
 
-from scion.core.models import Branch, HypothesisProposal, HypothesisRecord, PatchProposal, VerificationResult
+from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
+from scion.core.models import Branch, ContractResult, HypothesisProposal, PatchProposal
 
 from .common import (
     _AGENT_QUALITY_BLOCKED,
@@ -19,20 +20,56 @@ class ExploreStepEventMixin:
         self,
         branch_id: str,
         hypothesis: HypothesisProposal,
-        failure_reason: str,
-    ) -> None:
-        try:
-            self.registry.record_contract_failure(
-                campaign_id=self.campaign_id,
-                branch_id=branch_id,
-                hypothesis_text=hypothesis.hypothesis_text or "",
-                change_locus=hypothesis.change_locus,
-                action=hypothesis.action,
-                target_file=hypothesis.target_file,
-                failure_reason=failure_reason,
-            )
-        except Exception:
-            pass
+        result: ContractResult,
+        *,
+        stage: str,
+        hypothesis_id: str,
+        patch: PatchProposal | None = None,
+    ) -> ExecutionOutcomeRecord:
+        reason_code = (
+            "HYPOTHESIS_CONTRACT_REJECTED"
+            if stage == "hypothesis_contract"
+            else "PATCH_CONTRACT_REJECTED"
+        )
+        checks = [
+            {
+                "name": check.name,
+                "passed": check.passed,
+                "severity": check.severity,
+                "detail": check.detail,
+                "elapsed_ms": check.elapsed_ms,
+                "metadata": dict(check.metadata or {}),
+            }
+            for check in result.checks
+        ]
+        detail = result.failure_reason or ""
+        provenance = {
+            "owner": "outer_contract",
+            "stage": stage,
+            "contract_checks": checks,
+        }
+        record = ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            reason_code=reason_code,
+            detail=detail,
+            provenance=provenance,
+        )
+        self.registry.record_contract_failure(
+            campaign_id=self.campaign_id,
+            branch_id=branch_id,
+            hypothesis_id=hypothesis_id,
+            hypothesis_text=hypothesis.hypothesis_text or "",
+            change_locus=hypothesis.change_locus,
+            action=patch.action if patch is not None else hypothesis.action,
+            target_file=(
+                patch.file_path if patch is not None else hypothesis.target_file
+            ),
+            failure_reason=detail,
+            stage=stage,
+            reason_code=reason_code,
+            contract_checks=checks,
+        )
+        return record
 
     def _record_agent_quality_branch_signal(
         self,
@@ -68,44 +105,13 @@ class ExploreStepEventMixin:
                     "branch_id": branch_id,
                     "timestamp": datetime.now().isoformat(),
                     "event_kind": "proposal_fail",
-                    "hypothesis_text": f"Proposal generation failed: {failure_detail}"[:500],
+                    "hypothesis_text": f"Proposal generation failed: {failure_detail}",
                     "contract_result": "skipped",
                     "verification_result": "skipped",
                     "canary_result": "skipped",
                     "stage": "proposal",
-                    "decision_reason": failure_detail[:500],
+                    "decision_reason": failure_detail,
                 }
             )
         except Exception:
             pass
-
-    def _record_verification_fail_event(
-        self,
-        *,
-        bid: str,
-        h_record: HypothesisRecord,
-        hypothesis: HypothesisProposal,
-        patch: PatchProposal,
-        vresult: VerificationResult,
-        decision_reason: str,
-    ) -> None:
-        try:
-            self.registry.record_event(
-                {
-                    "campaign_id": self.campaign_id,
-                    "branch_id": bid,
-                    "hypothesis_id": h_record.hypothesis_id,
-                    "timestamp": datetime.now().isoformat(),
-                    "event_kind": "verification_fail",
-                    "contract_passed": True,
-                    "verification_passed": False,
-                    "verification_result": vresult.first_failure,
-                    "patch_file": patch.file_path if patch else None,
-                    "hypothesis_text": (hypothesis.hypothesis_text or "")[:200],
-                    "stage": "verification",
-                    "decision_reason": decision_reason,
-                }
-            )
-        except Exception:
-            pass
-

@@ -22,7 +22,6 @@ import pytest
 from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig
 from scion.core.campaign import CampaignManager
 from scion.core.models import ChampionState, Decision, ExperimentStage
-from scion.core.termination import TerminationConfig
 from scion.proposal.mock_client import MockLLMClient
 from scion.protocol.experiment import ExperimentProtocol, SplitManager, SeedLedger
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
@@ -138,7 +137,6 @@ def _build_real_campaign(
     seed_ledger: SeedLedgerConfig,
     llm_client: MockLLMClient,
     *,
-    max_experiments: int = 50,
     time_limit_sec: int = 30,
 ) -> CampaignManager:
     """Build a CampaignManager wired to real solver + ExperimentProtocol."""
@@ -180,10 +178,6 @@ def _build_real_campaign(
         champion=champion,
         campaign_dir=campaign_dir,
         experiment_protocol=experiment_protocol,
-        termination_config=TerminationConfig(
-            max_experiments=max_experiments,
-            stagnation_limit=50,
-        ),
     )
 
 
@@ -243,8 +237,9 @@ class TestSolverSubprocess:
         # SolverOutput must have the fields ExperimentProtocol expects
         assert hasattr(result.output, "feasible")
         assert hasattr(result.output, "objective")
-        assert hasattr(result.output, "vehicles")
-        assert hasattr(result.output, "assignment")
+        assert hasattr(result.output, "solution_payload")
+        assert "vehicles" in result.output.solution_payload
+        assert "assignment" in result.output.solution_payload
 
 
 # ===========================================================================
@@ -333,7 +328,7 @@ class TestFullPipelineRealSolver:
         llm_client = _make_mock_llm()
         cm = _build_real_campaign(
             tmp_path, problem_spec, protocol_config, split_manifest, seed_ledger,
-            llm_client, max_experiments=5, time_limit_sec=30,
+            llm_client, time_limit_sec=30,
         )
 
         result = cm.run_one_step()
@@ -348,7 +343,7 @@ class TestFullPipelineRealSolver:
         llm_client = _make_mock_llm()
         cm = _build_real_campaign(
             tmp_path, problem_spec, protocol_config, split_manifest, seed_ledger,
-            llm_client, max_experiments=5, time_limit_sec=30,
+            llm_client, time_limit_sec=30,
         )
 
         cm.run_one_step()
@@ -375,7 +370,7 @@ class TestFullPipelineRealSolver:
         llm_client = _make_mock_llm()  # default: comment-only change
         cm = _build_real_campaign(
             tmp_path, problem_spec, protocol_config, split_manifest, seed_ledger,
-            llm_client, max_experiments=5, time_limit_sec=30,
+            llm_client, time_limit_sec=30,
         )
 
         cm.run_one_step()
@@ -397,10 +392,10 @@ class TestFullPipelineRealSolver:
         llm_client = _make_mock_llm()
         cm = _build_real_campaign(
             tmp_path, problem_spec, protocol_config, split_manifest, seed_ledger,
-            llm_client, max_experiments=10, time_limit_sec=30,
+            llm_client, time_limit_sec=30,
         )
 
-        cm.run(max_rounds=3)
+        cm.run(requested_rounds=3)
 
         state = cm.get_state()
         assert state["champion_version"] == 1, "Trivial patch should not promote"

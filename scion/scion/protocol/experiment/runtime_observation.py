@@ -16,8 +16,8 @@ from scion.runtime.surface_telemetry import (
     runtime_path_present,
     runtime_path_value,
 )
-from .failures import _bounded_runtime_failure
-from .values import _as_int, _bounded_json_value, _increment_category, _is_json_scalar
+from .failures import _runtime_failure_summary
+from .values import _as_int, _increment_category, _is_json_scalar, _json_value
 
 
 _DEFAULT_RUNTIME_COUNTERS = (
@@ -90,7 +90,7 @@ def _candidate_runtime_observation(
             continue
         categories[category] = categories.get(category, 0) + count
         if first_failure is None:
-            first_failure = _bounded_runtime_failure(
+            first_failure = _runtime_failure_summary(
                 category=category,
                 code=counter_name,
                 surface=None,
@@ -171,15 +171,6 @@ def _runtime_fields(
     return fields
 
 
-def _append_guard_runtime(
-    target: list[Mapping[str, Any]],
-    result: RunResult | None,
-) -> None:
-    runtime = getattr(getattr(result, "output", None), "runtime", None)
-    if isinstance(runtime, Mapping):
-        target.append(runtime)
-
-
 def _runtime_audit_summary(
     result: RunResult | None,
     *,
@@ -207,7 +198,7 @@ def _runtime_audit_summary(
     }
     for field in declared_fields:
         if runtime_path_present(runtime, field):
-            summary[field] = _bounded_json_value(runtime_path_value(runtime, field))
+            summary[field] = _json_value(runtime_path_value(runtime, field))
     event_fields = set(_DEFAULT_EVENT_FIELDS)
     for field in declared_fields:
         if str(field).replace(".", "_").endswith("events"):
@@ -216,7 +207,7 @@ def _runtime_audit_summary(
     for field in sorted(event_fields):
         events = runtime_path_value(runtime, field)
         if isinstance(events, list):
-            summary[field] = events[:5]
+            summary[field] = list(events)
     return summary
 
 
@@ -234,7 +225,7 @@ def _format_runtime_counter_summary(counters: Mapping[str, int]) -> str:
     ]
     if declared_parts:
         return default_parts + " candidate_runtime_counters=" + ";".join(
-            declared_parts[:12]
+            declared_parts
         )
     return default_parts
 
@@ -301,44 +292,10 @@ def _format_runtime_summary(stats: EvalStats) -> str:
     )
 
 
-def _format_telemetry_guard_summary(summary: Mapping[str, Any]) -> str:
-    if not summary:
-        return ""
-    if not (
-        summary.get("selected_surface")
-        or summary.get("expected_telemetry_present")
-        or summary.get("failures")
-        or summary.get("warnings")
-    ):
-        return ""
-    failures = summary.get("failures")
-    warnings = summary.get("warnings")
-    failure_codes = [
-        str(item.get("code"))
-        for item in failures or []
-        if isinstance(item, Mapping) and item.get("code")
-    ]
-    warning_codes = [
-        str(item.get("code"))
-        for item in warnings or []
-        if isinstance(item, Mapping) and item.get("code")
-    ]
-    if not failure_codes and not warning_codes:
-        return " telemetry_guard=pass"
-    parts = []
-    if failure_codes:
-        parts.append("failures=" + ",".join(failure_codes[:4]))
-    if warning_codes:
-        parts.append("warnings=" + ",".join(warning_codes[:4]))
-    return " telemetry_guard=" + ";".join(parts)
-
-
 __all__ = [
-    "_append_guard_runtime",
     "_build_runtime_stats",
     "_candidate_runtime_observation",
     "_format_runtime_summary",
-    "_format_telemetry_guard_summary",
     "_merge_runtime_observation",
     "_record_runtime_sample",
     "_runtime_audit_summary",

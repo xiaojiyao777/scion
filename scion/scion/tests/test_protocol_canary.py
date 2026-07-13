@@ -63,7 +63,7 @@ def test_run_canary_fail_candidate_operator_runtime_error(tmp_path):
     assert "runtime audit failed" in (result.reason or "")
 
 
-def test_run_canary_selected_surface_runtime_fields_fail_closed(tmp_path):
+def test_run_canary_selected_surface_runtime_fields_are_diagnostic(tmp_path):
     runner = MagicMock()
     runner.run_solver.return_value = _make_run_result(
         1,
@@ -83,6 +83,6 @@ def test_run_canary_selected_surface_runtime_fields_fail_closed(tmp_path):
         selected_surface="dispatch_policy",
     )
 
-    assert result.passed is False
-    assert "runtime audit failed" in (result.reason or "")
-    assert "dispatch_errors" in (result.reason or "")
+    assert result.passed is True
+    assert "runtime audit failed" not in (result.reason or "")
+    assert runner.run_solver.call_count == 4

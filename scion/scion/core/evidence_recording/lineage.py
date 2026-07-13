@@ -22,11 +22,7 @@ from scion.core.models import (
 from scion.core.public_refs import public_artifact_ref, public_case_ref
 from scion.core.reason_code_groups import classify_reason_codes
 from scion.core.telemetry_validation import (
-    formal_telemetry_guard_failed,
     screened_experiment_effective,
-    telemetry_decision_details,
-    telemetry_failure_categories,
-    telemetry_validation_feedback,
 )
 from scion.contract.result_payload import diagnostic_checks
 
@@ -40,7 +36,6 @@ from .replay_identity import formal_replay_identity_payload, stable_patch_digest
 
 logger = logging.getLogger(__name__)
 
-_LINEAGE_ERROR_MESSAGE_LIMIT = 240
 _LINEAGE_DEGRADED_WARNING = "lineage_registry_write_degraded"
 
 
@@ -52,8 +47,6 @@ def _stable_patch_digest(patch: PatchProposal | None) -> str:
 
 def _lineage_error(exc: Exception) -> Dict[str, Any]:
     message = " ".join(str(exc).split())
-    if len(message) > _LINEAGE_ERROR_MESSAGE_LIMIT:
-        message = f"{message[:_LINEAGE_ERROR_MESSAGE_LIMIT]}..."
     return {
         "type": type(exc).__name__,
         "message": message,
@@ -136,7 +129,7 @@ def lineage_integrity_snapshot(
         "event_recording_failures": event_failures,
         "decision_recording_failures": decision_failures,
         "warning": _LINEAGE_DEGRADED_WARNING if degraded else None,
-        "recent_degraded_outcomes": degraded[-5:],
+        "degraded_outcomes": degraded,
     }
     if expected_step_count is not None:
         snapshot["expected_step_count"] = expected_step_count
@@ -227,7 +220,6 @@ class LineageRecorderMixin:
             for case in (protocol_result.case_ids if protocol_result else ())
         ]
         public_case_ids = [case for case in public_case_ids if case is not None]
-        telemetry_details = list(telemetry_decision_details(protocol_result))
         protocol_reason_codes = (
             list(protocol_result.reason_codes) if protocol_result else []
         )
@@ -240,7 +232,6 @@ class LineageRecorderMixin:
             base_dir=self.campaign_dir,
         )
         runtime_guard = _extract_runtime_guard_evidence(verification_result)
-        telemetry_feedback = telemetry_validation_feedback(protocol_result)
         selected_surface = (
             (protocol_result.selected_surface if protocol_result else None)
             or hypothesis.change_locus
@@ -284,8 +275,6 @@ class LineageRecorderMixin:
             },
             "verification_checks": verification_checks,
             "runtime_guard": runtime_guard,
-            "telemetry_failure_details": telemetry_details,
-            "telemetry_validation_feedback": telemetry_feedback,
             "replay_identity": replay_identity,
         }
         evidence_metadata = {
@@ -293,21 +282,6 @@ class LineageRecorderMixin:
             "branch_base_champion_id": branch.base_champion_id,
             "branch_weight_revision": getattr(branch, "weight_revision", 0),
             "branch_code_status": getattr(branch, "branch_code_status", "clean"),
-            "last_screening_feedback_tier": getattr(
-                branch,
-                "last_screening_feedback_tier",
-                None,
-            ),
-            "last_telemetry_outcome": getattr(branch, "last_telemetry_outcome", None),
-            "branch_mechanism_ids": list(
-                getattr(branch, "branch_mechanism_ids", ()) or ()
-            ),
-            "telemetry_repair_mechanism_ids": list(
-                getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
-            ),
-            "telemetry_repair_attempts": dict(
-                getattr(branch, "telemetry_repair_attempts", {}) or {}
-            ),
             "current_champion_version": champion.version,
             "current_champion_weight_revision": getattr(champion, "weight_revision", 0),
             "selected_surface": selected_surface,
@@ -316,16 +290,9 @@ class LineageRecorderMixin:
             "gate_observation_reason_codes": list(
                 reason_code_groups.gate_observation_reason_codes
             ),
-            "lifecycle_action_reason_codes": list(
-                reason_code_groups.lifecycle_action_reason_codes
-            ),
             "auxiliary_protocol_reason_codes": protocol_reason_codes,
             "screened_experiment_effective": screened_experiment_effective(
                 protocol_result
-            ),
-            "telemetry_guard_failed": formal_telemetry_guard_failed(protocol_result),
-            "telemetry_failure_categories": list(
-                telemetry_failure_categories(protocol_result)
             ),
         }
         evidence_metadata.update(_runtime_guard_decision_features(runtime_guard))
@@ -343,7 +310,7 @@ class LineageRecorderMixin:
             "code_hash": branch.current_code_hash or "",
             "patch_action": patch.action if patch else "",
             "patch_file": patch.file_path if patch else "",
-            "hypothesis_text": (hypothesis.hypothesis_text or "")[:500],
+            "hypothesis_text": hypothesis.hypothesis_text or "",
             "contract_passed": str(contract_result.passed),
             "contract_diagnostics_json": json.dumps(
                 list(diagnostic_checks(contract_result)),
@@ -362,13 +329,6 @@ class LineageRecorderMixin:
             "screening_median_delta": stats.median_delta if stats else None,
             "screening_ci_low": stats.ci_low if stats else None,
             "screening_ci_high": stats.ci_high if stats else None,
-            "telemetry_guard_failed": int(
-                formal_telemetry_guard_failed(protocol_result)
-            ),
-            "telemetry_failure_categories_json": json.dumps(
-                list(telemetry_failure_categories(protocol_result))
-            ),
-            "telemetry_failure_details_json": json.dumps(telemetry_details),
             "decision_features_json": decision_features_json,
             "decision": decision.value,
             "model_id": self.model_id,
@@ -411,42 +371,15 @@ class LineageRecorderMixin:
             "canary_passed": canary_result.passed,
             "win_rate": stats.win_rate if stats else None,
             "median_delta": stats.median_delta if stats else None,
-            "retry_count": branch.retry_count,
             "failure_codes": branch.failure_codes,
             "branch_code_status": getattr(branch, "branch_code_status", "clean"),
-            "last_screening_feedback_tier": getattr(
-                branch,
-                "last_screening_feedback_tier",
-                None,
-            ),
-            "last_telemetry_outcome": getattr(
-                branch,
-                "last_telemetry_outcome",
-                None,
-            ),
-            "branch_mechanism_ids": list(
-                getattr(branch, "branch_mechanism_ids", ()) or ()
-            ),
-            "telemetry_repair_mechanism_ids": list(
-                getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
-            ),
-            "telemetry_repair_attempts": dict(
-                getattr(branch, "telemetry_repair_attempts", {}) or {}
-            ),
             "runtime_stats": runtime_stats,
             "auxiliary_protocol_reason_codes": protocol_reason_codes,
             "gate_observation_reason_codes": list(
                 reason_code_groups.gate_observation_reason_codes
             ),
-            "lifecycle_action_reason_codes": list(
-                reason_code_groups.lifecycle_action_reason_codes
-            ),
             "screened_experiment_effective": screened_experiment_effective(
                 protocol_result
-            ),
-            "telemetry_guard_failed": formal_telemetry_guard_failed(protocol_result),
-            "telemetry_failure_categories": list(
-                telemetry_failure_categories(protocol_result)
             ),
         }
         features.update(
@@ -589,9 +522,6 @@ class LineageRecorderMixin:
             "result_reason": str(getattr(result, "reason", "") or ""),
             "branch_id": branch_id,
             "decision": decision_value,
-            "counts_toward_max_rounds": bool(
-                getattr(result, "counts_toward_max_rounds", True)
-            ),
             "attempt_kind": str(getattr(result, "attempt_kind", "screening") or ""),
             "step_round": getattr(step, "round_num", None),
             "step_branch_id": getattr(step, "branch_id", None),

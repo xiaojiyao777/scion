@@ -21,7 +21,6 @@ from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.campaign import CampaignManager
 from scion.core.models import ChampionState
 from scion.core.telemetry_validation import screened_experiment_effective
-from scion.core.termination import TerminationConfig
 from scion.evidence import attach_final_evidence_package
 from scion.problems.cvrp.evidence import (
     CvrpManifestEvaluationConfig,
@@ -225,7 +224,6 @@ def _make_campaign(output_dir: Path) -> CampaignManager:
         experiment_protocol=protocol,
         adapter=adapter,
         operator_execute_signature=bridge.operator_execute_signature,
-        termination_config=TerminationConfig(max_experiments=5, stagnation_limit=5),
         force_surface="solver_design",
     )
 

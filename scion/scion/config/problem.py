@@ -36,7 +36,7 @@ class _StrictBase(BaseModel):
 
 
 class ParameterSearchConfig(_StrictBase):
-    enabled: bool = True
+    enabled: bool = False
     trigger: Literal["on_promote"] = "on_promote"
     target: Literal["operator_weights"] = "operator_weights"
     strategy: Literal["random_local", "bayesian"] = "random_local"

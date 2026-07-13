@@ -1,171 +1,120 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import pytest
+
 from scion.problems.cvrp.postrun_handoff import CvrpPreparedHandoffReviewPort
-from scion.problems.cvrp.research_guidance import build_cvrp_legacy_research_focus
 from scion.problems.warehouse_delivery.postrun_handoff import (
     WarehousePreparedHandoffReviewPort,
 )
-from scion.problems.warehouse_delivery.research_guidance import (
-    build_warehouse_legacy_research_focus,
+from scion.postrun.handoff.prompt_context_readiness import (
+    build_prepared_prompt_context_readiness,
 )
 
 
-def test_cvrp_prepared_handoff_port_builds_legacy_checks_and_phase4(
-    tmp_path: Path,
-) -> None:
-    split_path = tmp_path / "split.yaml"
-    split_path.write_text("screening:\n  - CMT2\n  - CMT4\n", encoding="utf-8")
-    protocol_path = tmp_path / "protocol.yaml"
-    protocol_path.write_text(
-        "screening:\n  priority_case_ids:\n    - CMT2\n    - CMT4\n",
-        encoding="utf-8",
-    )
-    manifest = {
-        "problem_family": "cvrp",
-        "decision_features_excluded": True,
-        "config": {"protocol": str(protocol_path), "split": str(split_path)},
-        "research_focus": build_cvrp_legacy_research_focus(
-            measurement_opportunity_diagnostics=_measurement(
-                reason_codes=[
-                    "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
-                    "TRAJECTORY_DIVERGENT_LOW_SNR",
-                ],
-            )
+@pytest.mark.parametrize(
+    ("port", "problem_family", "check_name", "signal_name", "problem_v1"),
+    (
+        (
+            CvrpPreparedHandoffReviewPort(),
+            "cvrp",
+            "cvrp_problem_guidance_non_gating",
+            "cvrp_problem_guidance_context",
+            "scion/scion/problems/cvrp/problem-v1.yaml",
         ),
+        (
+            WarehousePreparedHandoffReviewPort(),
+            "warehouse_delivery",
+            "warehouse_problem_guidance_non_gating",
+            "warehouse_problem_guidance_context",
+            "scion/scion/problems/warehouse_delivery/problem-v1.yaml",
+        ),
+    ),
+)
+def test_problem_prepared_handoff_guidance_is_report_only(
+    port: object,
+    problem_family: str,
+    check_name: str,
+    signal_name: str,
+    problem_v1: str,
+) -> None:
+    research_focus = {
+        "current_question": "Choose a source-grounded algorithmic direction.",
+        "decision_boundary": "Excluded from decisions and protocol.",
     }
-    port = CvrpPreparedHandoffReviewPort()
+    manifest = {
+        "problem_family": problem_family,
+        "research_focus": research_focus,
+    }
 
     checks = port.prepared_contract_checks(
         manifest,
-        local_run_root=tmp_path,
-        repo_dir=Path(__file__).resolve().parents[4],
-        scion_project_dir=Path(__file__).resolve().parents[4] / "scion",
+        repo_dir=Path.cwd(),
+        scion_project_dir=Path.cwd() / "scion",
     )
     phase4 = port.phase4_requirements(manifest, _coverage_item)
-    signals = port.prepared_prompt_context_signals(
-        manifest,
-        manifest["research_focus"],
-    )
+    signals = port.prepared_prompt_context_signals(manifest, research_focus)
     spec = port.prompt_bridge_spec()
-
-    assert checks["cvrp_measurement_handoff_present"]["passed"] is True
-    assert checks["cvrp_protected_cases_in_split"]["passed"] is True
-    assert (
-        checks["cvrp_protected_cases_in_priority_selection"]["passed"] is True
-    )
-    assert checks["cvrp_large_twoopt_bounded_constraints_present"]["passed"] is True
-    assert phase4["cvrp_large_twoopt_seed_handoff"]["available"] is True
-    assert phase4["cvrp_cmt_case_protection_handoff"]["available"] is True
-    assert signals["cvrp_measurement_opportunity_handoff"]["available"] is True
-    assert signals["cvrp_resume_continuity_requirements"]["available"] is True
-    assert spec.measurement_signal_name == (
-        "cvrp_problem_measurement_diagnostics_prompt_bridge"
-    )
-    assert spec.active_subject_signal_name == (
-        "cvrp_active_subject_code_constraints_prompt_bridge"
-    )
-    assert spec.active_subject_surface == "solver_design"
-    assert "profile_projection" in spec.measurement_source_markers
-    assert "large_twoopt_runtime_guard" in spec.active_subject_provider_markers
-    assert callable(spec.measurement_prompt_summary_builder)
-    assert callable(spec.active_subject_prompt_summary_builder)
-    assert "mechanism_rank_count" in spec.measurement_prompt_summary_compare_fields
-    assert (
-        "large_twoopt_runtime_guard_present"
-        in spec.active_subject_prompt_summary_compare_fields
+    prompt_summary = spec.measurement_prompt_summary(
+        problem_v1_path=Path(problem_v1)
     )
 
-
-def test_warehouse_prepared_handoff_port_builds_legacy_checks_and_phase4() -> None:
-    manifest = {
-        "problem_family": "warehouse_delivery",
-        "decision_features_excluded": True,
-        "research_focus": build_warehouse_legacy_research_focus(
-            ".",
-            ".",
-            measurement_diagnostics=_measurement(
-                reason_codes=[
-                    "WAREHOUSE_MDE_EXCEEDS_PRACTICAL_DELTA",
-                    "TRAJECTORY_DIVERGENT_LOW_SNR",
-                ],
-                schema_version="warehouse_measurement_runtime_handoff.v1",
-            ),
-        ),
+    assert checks == {
+        check_name: {
+            "passed": True,
+            "detail": {
+                "report_only": True,
+                "decision_features_excluded": True,
+                "content_required_for_launch": False,
+            },
+        }
     }
-    port = WarehousePreparedHandoffReviewPort()
-
-    checks = port.prepared_contract_checks(manifest)
-    phase4 = port.phase4_requirements(manifest, _coverage_item)
-    signals = port.prepared_prompt_context_signals(
-        manifest,
-        manifest["research_focus"],
-    )
-    spec = port.prompt_bridge_spec()
-
-    assert checks["warehouse_followup_handoff_present"]["passed"] is True
-    assert checks["warehouse_followup_required_evidence_complete"]["passed"] is True
-    assert checks["warehouse_measurement_handoff_reason_codes"]["passed"] is True
-    assert phase4["warehouse_v2_checkpoint_handoff"]["available"] is True
-    assert phase4["warehouse_required_evidence_handoff"]["available"] is True
-    assert signals["warehouse_measurement_runtime_handoff"]["available"] is True
-    assert signals["warehouse_required_evidence"]["available"] is True
-    assert spec.measurement_signal_name == (
-        "warehouse_problem_measurement_diagnostics_prompt_bridge"
-    )
-    assert spec.active_subject_signal_name == (
-        "warehouse_active_subject_code_constraints_prompt_bridge"
-    )
-    assert spec.active_subject_surface == "order_level"
-    assert "profile_projection" in spec.measurement_source_markers
-    assert "bounded_scan_guard" in spec.active_subject_provider_markers
-    assert callable(spec.measurement_prompt_summary_builder)
-    assert callable(spec.active_subject_prompt_summary_builder)
-    assert (
-        "opportunity_diagnostic_count"
-        in spec.measurement_prompt_summary_compare_fields
-    )
-    assert (
-        "warehouse_lexicographic_guard_present"
-        in spec.active_subject_prompt_summary_compare_fields
-    )
-
-
-def _measurement(
-    *,
-    reason_codes: list[str],
-    schema_version: str = "cvrp_measurement_opportunity_handoff.v1",
-) -> dict[str, object]:
-    return {
-        "schema_version": schema_version,
-        "source": "problem_v1.measurement.calibration_ref",
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "screening_mde_at_power_80": 9.9,
-        "practical_screen_delta": 5.0,
-        "reason_codes": reason_codes,
-        "screening_headroom": {"status": "available"},
-        "mechanism_effect_ranking": [{"mechanism": "example"}],
-        "opportunity_diagnostics": [{"kind": "example"}],
-        "measurable_opportunity_classes": [{"id": "example"}],
-        "transfer_risk": {"status": "bounded"},
-        "required_diagnostics": {"items": ["example"]},
-        "metric": "objective",
-        "runtime_model": "bounded",
-        "pairing_validity": "valid",
-        "measurement_readiness": {
-            "status": "ready",
-            "reason_code": "ok",
-        },
-        "calibration": {
-            "schema": "scion.aa_noise_floor.v1",
-            "ref": "calibration.json",
-            "decision_features_excluded": True,
-        },
-    }
+    assert phase4 == {}
+    assert signals[signal_name]["available"] is True
+    assert signals[signal_name]["required"] is False
+    assert spec.measurement_signal_name.startswith(problem_family.split("_")[0])
+    assert not any(name.startswith("active_subject_") for name in vars(spec))
+    assert prompt_summary["available"] is True
+    assert prompt_summary["lossless_context_handoff"] is True
+    assert prompt_summary["forbidden_prompt_tokens_present"] == []
 
 
 def _coverage_item(count: int | None, source: str) -> dict[str, object]:
     safe_count = int(count or 0)
     return {"available": safe_count > 0, "count": safe_count, "source": source}
+
+
+@pytest.mark.parametrize(
+    ("problem_family", "port"),
+    (
+        ("cvrp", CvrpPreparedHandoffReviewPort()),
+        ("warehouse_delivery", WarehousePreparedHandoffReviewPort()),
+    ),
+)
+def test_missing_problem_guidance_does_not_block_prompt_readiness(
+    tmp_path: Path,
+    problem_family: str,
+    port: object,
+) -> None:
+    manifest = {
+        "problem_family": problem_family,
+        "execution": {"proposal_runtime_mode": "direct_v3"},
+    }
+    (tmp_path / "prepared_run_manifest.v1.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+
+    report = build_prepared_prompt_context_readiness(
+        tmp_path,
+        repo_dir=Path.cwd(),
+        ports_by_family={problem_family: port},
+    )
+
+    assert report["readiness"]["ready_for_launch_prompt_audit"] is True
+    assert report["readiness"]["missing_required"] == []
+    assert report["signals"]["prepared_research_focus"]["required"] is False
+    assert report["signals"]["research_focus_decision_boundary"]["required"] is False
+    assert report["signals"]["prepared_research_focus_projection"]["required"] is False

@@ -21,7 +21,10 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from scion.postrun.inventory.prepared_contract import (
+    REMOVED_RUNTIME_COMMAND_OPTIONS,
+    REMOVED_RUNTIME_ENV_KEYS,
     command_has_shell_flag,
+    prepared_execution_runtime_mode,
 )  # noqa: E402
 from scion.postrun.handoff.prompt_context_readiness_validation import (  # noqa: E402
     check_prepared_prompt_context_readiness,
@@ -34,15 +37,6 @@ SCHEMA_VERSION = "scion.launch_readiness.v1"
 PREPARED_HANDOFF_REBUILD_SCHEMA = "scion.prepared_handoff_rebuild.v1"
 ANALYSIS_BRIEF_SCHEMA = "scion.postrun_analysis_brief.v1"
 UNREADY_EXIT = 64
-REQUIRED_SCION_MODEL = "gpt-5.5"
-MIN_PREPARED_PROPOSAL_HEADROOM = 64
-MIN_PREPARED_AGENTIC_SESSION_TIMEOUT_SEC = 3600
-MIN_PREPARED_AGENTIC_TOOL_MAX_STEPS = 240
-MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS = 200
-MIN_PREPARED_AGENTIC_CODE_TOOL_MAX_CALLS = MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS
-MIN_PREPARED_AGENTIC_OBSERVATION_MAX_CHARS = 2_000_000
-MIN_PREPARED_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT = 1
-MIN_PREPARED_STAGE_TRANSITION_DRAIN_LIMIT = 1
 REPO_DIR = Path(__file__).resolve().parents[2]
 PROBLEM_SPECIFIC_CONTRACT_PREFIXES = {
     "cvrp": ("cvrp_",),
@@ -55,23 +49,6 @@ PREPARED_ONLY_REQUIRED_QUESTION_MARKER = (
 CURRENT_RUN_REQUIRED_QUESTION_MARKER = (
     "Did the agent perform effective research, or only satisfy framework controls?"
 )
-DEFERRED_REVIEW_AXES_ACTIONABILITY = (
-    "not_actionable_before_launch_current_run_evidence_required"
-)
-PREPARED_PROBLEM_SUMMARY_REQUIREMENTS = {
-    "cvrp": {
-        "field": "cvrp_large_twoopt_summary",
-        "schema": "scion.postrun_cvrp_large_twoopt_summary.v1",
-        "conclusion_flag": "launch_required_before_twoopt_conclusion",
-        "evidence_gap": "launch_required_before_bounded_twoopt_conclusion",
-    },
-    "warehouse_delivery": {
-        "field": "warehouse_followup_summary",
-        "schema": "scion.postrun_warehouse_followup_summary.v1",
-        "conclusion_flag": "launch_required_before_plateau_conclusion",
-        "evidence_gap": "launch_required_before_plateau_conclusion",
-    },
-}
 PREPARED_HANDOFF_REBUILD_FAMILIES = (
     "analysis_brief",
     "inventory",
@@ -99,12 +76,8 @@ PROBLEM_RUNTIME_GUARD_PATHS = {
 RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER = "-m scion.cli.main run"
 RUN_SCRIPT_RUNTIME_GUARD_MARKERS = (
     (
-        "guard_pathspec_array",
-        'read -r -a _GIT_RUNTIME_GUARD_PATHS <<< "$GIT_RUNTIME_GUARD_PATHS"',
-    ),
-    (
         "dirty_status_check",
-        'git -C "$REPO_ROOT" status --porcelain -- "${_GIT_RUNTIME_GUARD_PATHS[@]}"',
+        'git -C "$REPO_ROOT" status --porcelain',
     ),
     ("dirty_failure_marker", "GIT_RUNTIME_DIRTY"),
     (
@@ -115,19 +88,10 @@ RUN_SCRIPT_RUNTIME_GUARD_MARKERS = (
         "commit_compare",
         'if [[ "$_ACTUAL_GIT_COMMIT" != "$GIT_COMMIT" ]]; then',
     ),
-    (
-        "runtime_path_diff_check",
-        'git -C "$REPO_ROOT" diff --quiet "$GIT_COMMIT" HEAD -- "${_GIT_RUNTIME_GUARD_PATHS[@]}"',
-    ),
-    (
-        "doc_only_mismatch_allowance_marker",
-        "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED",
-    ),
     ("commit_mismatch_failure_marker", "GIT_COMMIT_MISMATCH"),
 )
 RUN_SCRIPT_RUNTIME_GUARD_ECHO_MARKERS = {
     "dirty_failure_marker",
-    "doc_only_mismatch_allowance_marker",
     "commit_mismatch_failure_marker",
 }
 
@@ -174,8 +138,21 @@ def build_readiness(
         if isinstance(inventory, dict)
         else {}
     )
+    proposal_runtime = (
+        inventory.get("proposal_runtime") if isinstance(inventory, dict) else {}
+    )
 
     add_check("inventory_loaded", "ok", str(root))
+    add_check(
+        "proposal_runtime_mode_resolved",
+        (
+            "ok"
+            if isinstance(proposal_runtime, dict)
+            and proposal_runtime.get("status") == "resolved"
+            else "failed"
+        ),
+        proposal_runtime,
+    )
     add_check(
         "prepared_only_not_started",
         (
@@ -330,12 +307,24 @@ def build_readiness(
         *_run_script_campaign_contract_consistency(root, run_sh, prepared_contract),
     )
     add_check(
-        "run_script_no_early_stop_enforced",
-        *_run_script_no_early_stop_enforced(root, run_sh, prepared_contract),
+        "manifest_campaign_command_cli_parse",
+        *_manifest_campaign_command_cli_parse(root, prepared_contract),
     )
     add_check(
-        "run_script_proposal_headroom_enforced",
-        *_run_script_proposal_headroom_enforced(root, run_sh, prepared_contract),
+        "run_script_direct_runtime_controls_absent",
+        *_run_script_direct_runtime_controls_absent(
+            root,
+            run_sh,
+            prepared_contract,
+        ),
+    )
+    add_check(
+        "formal_research_target_unbound",
+        *_formal_research_target_unbound(root, prepared_contract),
+    )
+    add_check(
+        "formal_research_clean_start",
+        *_formal_research_clean_start(root, prepared_contract),
     )
     add_check(
         "run_script_strict_postrun_rebuild",
@@ -549,8 +538,8 @@ def _completion_preflight_summary(item: Any) -> dict[str, Any]:
         "code": chat_map.get("code"),
         "message": chat_map.get("message"),
         "auth_pool": auth_pool if isinstance(auth_pool, dict) else None,
-        "model": action_map.get("model"),
-        "base_url": action_map.get("base_url"),
+        "model": detail_map.get("model") or action_map.get("model"),
+        "base_url": detail_map.get("base_url") or action_map.get("base_url"),
         "login_url": detail_map.get("login_url") or action_map.get("login_url"),
     }
     if action_map:
@@ -699,7 +688,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--completion-preflight",
         action="store_true",
-        help="Require a real gpt-5.5 chat completion before reporting ready.",
+        help="Require a real completion from the prepared model before reporting ready.",
     )
     parser.add_argument(
         "--require-launch-ready",
@@ -793,7 +782,7 @@ def _git_runtime_worktree_clean(prepared_contract: Any) -> tuple[str, Any]:
             },
         )
     result = subprocess.run(
-        ["git", "-C", str(REPO_DIR), "status", "--porcelain", "--", *pathspecs],
+        ["git", "-C", str(REPO_DIR), "status", "--porcelain"],
         text=True,
         capture_output=True,
         check=False,
@@ -802,15 +791,16 @@ def _git_runtime_worktree_clean(prepared_contract: Any) -> tuple[str, Any]:
         "repo_dir": str(REPO_DIR),
         "runtime_guard_paths": raw_paths,
         "pathspecs": pathspecs,
+        "cleanliness_scope": "whole_repository",
         "git_status_exit_code": result.returncode,
         "dirty_entries": result.stdout.splitlines(),
     }
     if result.returncode != 0:
         detail["reason"] = "git_status_failed"
-        detail["stderr"] = result.stderr[-2000:]
+        detail["stderr"] = result.stderr
         return "failed", detail
     if result.stdout.strip():
-        detail["reason"] = "runtime_guard_worktree_dirty"
+        detail["reason"] = "worktree_dirty"
         return "failed", detail
     return "ok", detail
 
@@ -844,38 +834,14 @@ def _git_runtime_guard_commit_consistent(prepared_contract: Any) -> tuple[str, A
     detail["git_rev_parse_exit_code"] = head_result.returncode
     if head_result.returncode != 0:
         detail["reason"] = "git_rev_parse_failed"
-        detail["stderr"] = head_result.stderr[-2000:]
+        detail["stderr"] = head_result.stderr
         return "failed", detail
     actual_commit = head_result.stdout.strip()
     detail["actual_commit"] = actual_commit
     if actual_commit == prepared_commit:
         detail["reason"] = "runtime_guard_commit_matches"
         return "ok", detail
-    diff_result = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(REPO_DIR),
-            "diff",
-            "--quiet",
-            prepared_commit,
-            "HEAD",
-            "--",
-            *pathspecs,
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    detail["git_diff_exit_code"] = diff_result.returncode
-    if diff_result.returncode == 0:
-        detail["reason"] = "runtime_guard_paths_unchanged_since_prepare"
-        return "ok", detail
-    if diff_result.returncode == 1:
-        detail["reason"] = "runtime_guard_paths_changed_since_prepare"
-        return "failed", detail
-    detail["reason"] = "git_diff_failed"
-    detail["stderr"] = diff_result.stderr[-2000:]
+    detail["reason"] = "prepared_commit_mismatch"
     return "failed", detail
 
 
@@ -1307,6 +1273,15 @@ def _run_script_runtime_guard_enforced(run_sh: Path) -> tuple[str, Any]:
         if campaign_position >= 0 and position > campaign_position
     ]
     failures: list[dict[str, Any]] = []
+    permissive_markers = [
+        marker
+        for marker in (
+            "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED",
+            'status --porcelain -- "${_GIT_RUNTIME_GUARD_PATHS[@]}"',
+            'diff --quiet "$GIT_COMMIT" HEAD',
+        )
+        if marker in text
+    ]
     if missing_markers:
         failures.append(
             {
@@ -1328,6 +1303,13 @@ def _run_script_runtime_guard_enforced(run_sh: Path) -> tuple[str, Any]:
                 "markers": markers_after_campaign,
             }
         )
+    if permissive_markers:
+        failures.append(
+            {
+                "reason": "permissive_runtime_guard_present",
+                "markers": permissive_markers,
+            }
+        )
 
     detail = {
         "run_script": str(run_sh),
@@ -1335,6 +1317,7 @@ def _run_script_runtime_guard_enforced(run_sh: Path) -> tuple[str, Any]:
         "required_markers": [name for name, _ in RUN_SCRIPT_RUNTIME_GUARD_MARKERS],
         "missing_markers": missing_markers,
         "markers_after_campaign_command": markers_after_campaign,
+        "permissive_markers": permissive_markers,
         "ignored_non_executable_marker_counts": ignored_marker_counts,
         "failures": failures,
     }
@@ -1638,7 +1621,7 @@ def _run_script_completion_preflight_enforced(
     preflight_pos = run_text.find('if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then')
     proxy_pos, _proxy_block = _shell_command_block_containing_marker(
         run_text,
-        "tools/check_gpt55_proxy.py",
+        "tools/check_completion_proxy.py",
     )
     campaign_pos = _campaign_command_position(run_text)
     if source_pos < 0:
@@ -1691,7 +1674,7 @@ def _run_script_campaign_execution_marker_enforced(run_sh: Path) -> tuple[str, A
     campaign_pos = _campaign_command_position(run_text)
     preflight_proxy_pos, _proxy_block = _shell_command_block_containing_marker(
         run_text,
-        "tools/check_gpt55_proxy.py",
+        "tools/check_completion_proxy.py",
     )
     preflight_failure_exit_pos = _find_line_after(
         run_text,
@@ -1923,18 +1906,19 @@ def _run_script_model_route_enforced(
     env_model = _shell_assignment_value(launch_env_text, "SCION_MODEL")
     env_base_url = _shell_assignment_value(launch_env_text, "SCION_BASE_URL")
 
+    if not manifest_model:
+        failures.append(
+            {
+                "reason": "manifest_model_missing",
+                "manifest": str(
+                    manifest.get("manifest_path")
+                    or root / "prepared_run_manifest.v1.json"
+                ),
+            }
+        )
     if not env_model:
         failures.append(
             {"reason": "scion_model_missing", "launch_env": str(launch_env)}
-        )
-    elif env_model != REQUIRED_SCION_MODEL:
-        failures.append(
-            {
-                "reason": "scion_model_not_gpt55",
-                "launch_env": str(launch_env),
-                "expected": REQUIRED_SCION_MODEL,
-                "actual": env_model,
-            }
         )
     if manifest_model and env_model and env_model != manifest_model:
         failures.append(
@@ -1964,7 +1948,7 @@ def _run_script_model_route_enforced(
     base_export_pos = _export_assignment_position(run_text, "SCION_BASE_URL")
     proxy_pos, proxy_block = _shell_command_block_containing_marker(
         run_text,
-        "tools/check_gpt55_proxy.py",
+        "tools/check_completion_proxy.py",
     )
     proxy_model_ok = _shell_command_has_option_value(
         proxy_block,
@@ -2017,7 +2001,7 @@ def _run_script_model_route_enforced(
     detail = {
         "launch_env": str(launch_env),
         "run_script": str(run_sh),
-        "required_model": REQUIRED_SCION_MODEL,
+        "model_authority": "prepared_manifest",
         "manifest_model": manifest_model,
         "env_model": env_model,
         "manifest_base_url": manifest_base_url,
@@ -2105,16 +2089,6 @@ def _run_script_campaign_contract_consistency(
             "env": "TIME_LIMIT_SEC",
             "option": "--time-limit-sec",
             "kind": "int",
-        },
-        "measurement_governance": {
-            "env": "MEASUREMENT_GOVERNANCE",
-            "option": "--measurement-governance",
-            "kind": "string",
-        },
-        "proposal_context_ablation": {
-            "env": "PROPOSAL_CONTEXT_ABLATION",
-            "option": "--proposal-context-ablation",
-            "kind": "string",
         },
     }
 
@@ -2321,110 +2295,13 @@ def _run_script_campaign_contract_consistency(
     return ("ok" if not failures else "failed"), detail
 
 
-def _run_script_no_early_stop_enforced(
+def _run_script_direct_runtime_controls_absent(
     root: Path,
     run_sh: Path,
     prepared_contract: Any,
 ) -> tuple[str, Any]:
     launch_env = root / "launch.env"
     failures: list[dict[str, Any]] = []
-    try:
-        launch_env_text = launch_env.read_text(encoding="utf-8")
-    except OSError as exc:
-        launch_env_text = ""
-        failures.append(
-            {
-                "reason": "unable_to_read_launch_env",
-                "launch_env": str(launch_env),
-                "error": str(exc),
-            }
-        )
-    try:
-        run_text = run_sh.read_text(encoding="utf-8")
-    except OSError as exc:
-        run_text = ""
-        failures.append(
-            {
-                "reason": "unable_to_read_run_script",
-                "run_script": str(run_sh),
-                "error": str(exc),
-            }
-        )
-
-    manifest = _prepared_manifest_from_contract(root, prepared_contract)
-    manifest_command = manifest.get("command")
-    env_disable_early_stop = _shell_assignment_value(
-        launch_env_text,
-        "DISABLE_EARLY_STOP",
-    )
-    campaign_pos = _campaign_command_position(run_text)
-    campaign_status_pos = run_text.find("STATUS=$?", campaign_pos)
-    campaign_end_pos = (
-        campaign_status_pos if campaign_status_pos >= 0 else len(run_text)
-    )
-    campaign_command_block = (
-        run_text[campaign_pos:campaign_end_pos] if campaign_pos >= 0 else ""
-    )
-    command_has_flag = isinstance(manifest_command, str) and command_has_shell_flag(
-        manifest_command, "--disable-early-stop"
-    )
-    run_script_has_flag = command_has_shell_flag(
-        campaign_command_block,
-        "--disable-early-stop",
-    )
-
-    if env_disable_early_stop != "1":
-        failures.append(
-            {
-                "reason": "disable_early_stop_not_enabled",
-                "launch_env": str(launch_env),
-                "actual": env_disable_early_stop,
-            }
-        )
-    if not command_has_flag:
-        failures.append(
-            {
-                "reason": "manifest_command_missing_disable_early_stop",
-                "manifest_path": manifest.get("manifest_path"),
-            }
-        )
-    if campaign_pos < 0:
-        failures.append(
-            {
-                "reason": "missing_campaign_command_marker",
-                "marker": RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER,
-            }
-        )
-    elif not run_script_has_flag:
-        failures.append(
-            {
-                "reason": "run_script_campaign_command_missing_disable_early_stop",
-                "run_script": str(run_sh),
-            }
-        )
-
-    detail = {
-        "launch_env": str(launch_env),
-        "run_script": str(run_sh),
-        "disable_early_stop": env_disable_early_stop,
-        "manifest_command_has_disable_early_stop": command_has_flag,
-        "run_script_campaign_command_has_disable_early_stop": run_script_has_flag,
-        "campaign_command_position": campaign_pos,
-        "campaign_status_position": campaign_status_pos,
-        "failures": failures,
-    }
-    return ("ok" if not failures else "failed"), detail
-
-
-def _run_script_proposal_headroom_enforced(
-    root: Path,
-    run_sh: Path,
-    prepared_contract: Any,
-) -> tuple[str, Any]:
-    launch_env = root / "launch.env"
-    failures: list[dict[str, Any]] = []
-    warnings: list[dict[str, Any]] = []
-    disabled: list[dict[str, Any]] = []
     try:
         launch_env_text = launch_env.read_text(encoding="utf-8")
     except OSError as exc:
@@ -2453,6 +2330,16 @@ def _run_script_proposal_headroom_enforced(
     execution = manifest.get("execution")
     if not isinstance(execution, dict):
         execution = {}
+    try:
+        proposal_runtime_mode = prepared_execution_runtime_mode(execution)
+    except ValueError as exc:
+        proposal_runtime_mode = None
+        failures.append(
+            {
+                "reason": "proposal_runtime_mode_unknown_or_conflicting",
+                "detail": str(exc),
+            }
+        )
 
     campaign_pos = _campaign_command_position(run_text)
     campaign_status_pos = run_text.find("STATUS=$?", campaign_pos)
@@ -2463,143 +2350,44 @@ def _run_script_proposal_headroom_enforced(
         run_text[campaign_pos:campaign_end_pos] if campaign_pos >= 0 else ""
     )
 
-    fields = {
-        "agentic_session_timeout_sec": {
-            "env": "AGENTIC_SESSION_TIMEOUT_SEC",
-            "option": "--agentic-session-timeout-sec",
-            "min": MIN_PREPARED_AGENTIC_SESSION_TIMEOUT_SEC,
-        },
-        "agentic_tool_max_steps": {
-            "env": "AGENTIC_TOOL_MAX_STEPS",
-            "option": "--agentic-tool-max-steps",
-            "min": MIN_PREPARED_AGENTIC_TOOL_MAX_STEPS,
-            "zero_disables": True,
-        },
-        "agentic_tool_max_calls": {
-            "env": "AGENTIC_TOOL_MAX_CALLS",
-            "option": "--agentic-tool-max-calls",
-            "min": MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS,
-            "zero_disables": True,
-        },
-        "agentic_code_tool_max_calls": {
-            "env": "AGENTIC_CODE_TOOL_MAX_CALLS",
-            "option": "--agentic-code-tool-max-calls",
-            "min": MIN_PREPARED_AGENTIC_CODE_TOOL_MAX_CALLS,
-            "zero_disables": True,
-        },
-        "agentic_observation_max_chars": {
-            "env": "AGENTIC_OBSERVATION_MAX_CHARS",
-            "option": "--agentic-observation-max-chars",
-            "min": MIN_PREPARED_AGENTIC_OBSERVATION_MAX_CHARS,
-            "zero_disables": True,
-        },
-        "proposal_attempt_limit": {
-            "env": "PROPOSAL_ATTEMPT_LIMIT",
-            "option": "--proposal-attempt-limit",
-            "min": MIN_PREPARED_PROPOSAL_HEADROOM,
-            "zero_disables": True,
-        },
-        "proposal_quality_loop_limit": {
-            "env": "PROPOSAL_QUALITY_LOOP_LIMIT",
-            "option": "--proposal-quality-loop-limit",
-            "min": MIN_PREPARED_PROPOSAL_HEADROOM,
-            "zero_disables": True,
-        },
-        "fresh_runtime_replay_drain_limit": {
-            "env": "SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT",
-            "option": "--fresh-runtime-replay-drain-limit",
-            "min": MIN_PREPARED_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT,
-            "zero_disables": True,
-        },
-        "stage_transition_drain_limit": {
-            "env": "SCION_STAGE_TRANSITION_DRAIN_LIMIT",
-            "option": "--stage-transition-drain-limit",
-            "min": MIN_PREPARED_STAGE_TRANSITION_DRAIN_LIMIT,
-            "zero_disables": True,
-        },
-    }
-    detail_fields: dict[str, Any] = {}
-    for field, spec in fields.items():
-        env_key = str(spec["env"])
-        option = str(spec["option"])
-        expected_min = int(spec["min"])
-        zero_disables = bool(spec.get("zero_disables"))
-        env_raw = _shell_assignment_value(launch_env_text, env_key)
-        env_value = _parse_nonnegative_int(env_raw)
-        manifest_value = _parse_nonnegative_int(execution.get(field))
-        manifest_command_raw = (
-            _shell_command_option_value(manifest_command, option)
-            if isinstance(manifest_command, str)
-            else None
+    if proposal_runtime_mode != "direct_v3":
+        failures.append({"reason": "prepared_runtime_is_not_direct_v3"})
+    present_env_controls = [
+        key
+        for key in REMOVED_RUNTIME_ENV_KEYS
+        if _shell_assignment_value(launch_env_text, key) is not None
+    ]
+    present_manifest_options = [
+        option
+        for option in REMOVED_RUNTIME_COMMAND_OPTIONS
+        if command_has_shell_flag(manifest_command, option)
+    ]
+    present_run_script_options = [
+        option
+        for option in REMOVED_RUNTIME_COMMAND_OPTIONS
+        if command_has_shell_flag(campaign_command_block, option)
+    ]
+    if present_env_controls:
+        failures.append(
+            {
+                "reason": "removed_runtime_controls_in_launch_env",
+                "keys": present_env_controls,
+            }
         )
-        manifest_command_value = _parse_nonnegative_int(manifest_command_raw)
-        run_script_uses_env = _shell_command_has_option_value(
-            campaign_command_block,
-            option,
-            {f"${env_key}", f"${{{env_key}}}"},
+    if present_manifest_options:
+        failures.append(
+            {
+                "reason": "removed_runtime_controls_in_manifest_command",
+                "options": present_manifest_options,
+            }
         )
-        detail_fields[field] = {
-            "env_key": env_key,
-            "expected_min": expected_min,
-            "env_value": env_value,
-            "manifest_execution_value": manifest_value,
-            "manifest_command_value": manifest_command_value,
-            "run_script_campaign_uses_env": run_script_uses_env,
-            "zero_disables": zero_disables,
-        }
-        for source, value in (
-            ("launch_env", env_value),
-            ("manifest_execution", manifest_value),
-            ("manifest_command", manifest_command_value),
-        ):
-            if value is None:
-                failures.append(
-                    {
-                        "reason": f"{field}_{source}_missing_or_invalid",
-                        "field": field,
-                        "source": source,
-                        "expected_min": expected_min,
-                        "actual": (
-                            env_raw
-                            if source == "launch_env"
-                            else (
-                                execution.get(field)
-                                if source == "manifest_execution"
-                                else manifest_command_raw
-                            )
-                        ),
-                    }
-                )
-            elif value == 0 and zero_disables:
-                disabled.append(
-                    {
-                        "field": field,
-                        "source": source,
-                        "actual": value,
-                        "semantic": "disabled",
-                    }
-                )
-            elif value < expected_min:
-                failures.append(
-                    {
-                        "reason": f"{field}_{source}_below_minimum",
-                        "field": field,
-                        "source": source,
-                        "recommended_min": expected_min,
-                        "actual": value,
-                    }
-                )
-        if not run_script_uses_env:
-            failures.append(
-                {
-                    "reason": f"{field}_run_script_campaign_command_missing_env",
-                    "field": field,
-                    "option": option,
-                    "expected_env": env_key,
-                    "run_script": str(run_sh),
-                }
-            )
-
+    if present_run_script_options:
+        failures.append(
+            {
+                "reason": "removed_runtime_controls_in_run_script",
+                "options": present_run_script_options,
+            }
+        )
     if campaign_pos < 0:
         failures.append(
             {
@@ -2611,32 +2399,206 @@ def _run_script_proposal_headroom_enforced(
     detail = {
         "launch_env": str(launch_env),
         "run_script": str(run_sh),
-        "min_prepared_proposal_headroom": MIN_PREPARED_PROPOSAL_HEADROOM,
-        "min_prepared_agentic_session_timeout_sec": (
-            MIN_PREPARED_AGENTIC_SESSION_TIMEOUT_SEC
-        ),
-        "min_prepared_agentic_tool_max_steps": MIN_PREPARED_AGENTIC_TOOL_MAX_STEPS,
-        "min_prepared_agentic_tool_max_calls": MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS,
-        "min_prepared_agentic_code_tool_max_calls": (
-            MIN_PREPARED_AGENTIC_CODE_TOOL_MAX_CALLS
-        ),
-        "min_prepared_agentic_observation_max_chars": (
-            MIN_PREPARED_AGENTIC_OBSERVATION_MAX_CHARS
-        ),
-        "min_prepared_fresh_runtime_replay_drain_limit": (
-            MIN_PREPARED_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT
-        ),
-        "min_prepared_stage_transition_drain_limit": (
-            MIN_PREPARED_STAGE_TRANSITION_DRAIN_LIMIT
-        ),
+        "proposal_runtime_mode": proposal_runtime_mode,
+        "removed_runtime_env_keys_present": present_env_controls,
+        "removed_manifest_command_options_present": present_manifest_options,
+        "removed_run_script_options_present": present_run_script_options,
         "campaign_command_position": campaign_pos,
         "campaign_status_position": campaign_status_pos,
-        "fields": detail_fields,
-        "disabled": disabled,
         "failures": failures,
-        "warnings": warnings,
     }
     return ("ok" if not failures else "failed"), detail
+
+
+def _manifest_campaign_command_cli_parse(
+    root: Path,
+    prepared_contract: Any,
+) -> tuple[str, Any]:
+    """Ask the real CLI to parse the prepared command without running it."""
+
+    manifest = _prepared_manifest_from_contract(root, prepared_contract)
+    command = manifest.get("command")
+    detail: dict[str, Any] = {
+        "manifest_path": manifest.get("manifest_path"),
+        "command": command,
+        "parse_only": True,
+        "failures": [],
+    }
+    failures = detail["failures"]
+    if not isinstance(command, str) or not command.strip():
+        failures.append({"reason": "manifest_command_missing"})
+        return "failed", detail
+    try:
+        tokens = shlex.split(command, comments=False, posix=True)
+    except ValueError as exc:
+        failures.append({"reason": "manifest_command_shell_parse_failed", "error": str(exc)})
+        return "failed", detail
+    if len(tokens) < 4 or tokens[1:4] != ["-m", "scion.cli.main", "run"]:
+        failures.append(
+            {
+                "reason": "manifest_command_not_scion_run",
+                "prefix": tokens[:4],
+            }
+        )
+        return "failed", detail
+
+    parse_command = [*tokens, "--help"]
+    env = dict(os.environ)
+    current_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        str(SCION_PROJECT_DIR)
+        if not current_pythonpath
+        else str(SCION_PROJECT_DIR) + os.pathsep + current_pythonpath
+    )
+    try:
+        result = subprocess.run(
+            parse_command,
+            cwd=REPO_DIR,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        failures.append(
+            {
+                "reason": "manifest_command_cli_parse_unavailable",
+                "error": str(exc),
+            }
+        )
+        return "failed", detail
+    detail.update(
+        {
+            "parse_command": parse_command,
+            "returncode": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+        }
+    )
+    if result.returncode != 0:
+        failures.append(
+            {
+                "reason": "manifest_command_cli_parse_failed",
+                "returncode": result.returncode,
+            }
+        )
+    return ("ok" if not failures else "failed"), detail
+
+
+def _formal_research_target_unbound(
+    root: Path,
+    prepared_contract: Any,
+) -> tuple[str, Any]:
+    """Reject diagnostic target forcing from completion/formal launch roots."""
+
+    launch_env = root / "launch.env"
+    try:
+        launch_env_text = launch_env.read_text(encoding="utf-8")
+    except OSError as exc:
+        return "failed", {
+            "launch_env": str(launch_env),
+            "failures": [
+                {
+                    "reason": "unable_to_read_launch_env",
+                    "error": str(exc),
+                }
+            ],
+        }
+    manifest = _prepared_manifest_from_contract(root, prepared_contract)
+    command = manifest.get("command")
+    forced_env = {
+        key: _shell_assignment_value(launch_env_text, key)
+        for key in ("FORCE_SURFACE", "FORCE_ACTION", "FORCE_TARGET_FILE")
+    }
+    active_env = {key: value for key, value in forced_env.items() if value}
+    forced_options = [
+        option
+        for option in ("--force-surface", "--force-action", "--force-target-file")
+        if command_has_shell_flag(command, option)
+    ]
+    failures: list[dict[str, Any]] = []
+    if active_env:
+        failures.append(
+            {
+                "reason": "formal_launch_contains_forced_target_env",
+                "values": active_env,
+            }
+        )
+    if forced_options:
+        failures.append(
+            {
+                "reason": "formal_launch_contains_forced_target_options",
+                "options": forced_options,
+            }
+        )
+    return ("ok" if not failures else "failed"), {
+        "launch_env": str(launch_env),
+        "manifest_path": manifest.get("manifest_path"),
+        "forced_env": forced_env,
+        "forced_command_options": forced_options,
+        "failures": failures,
+    }
+
+
+def _formal_research_clean_start(
+    root: Path,
+    prepared_contract: Any,
+) -> tuple[str, Any]:
+    """Require formal evidence to start without restored campaign state."""
+
+    launch_env = root / "launch.env"
+    try:
+        launch_env_text = launch_env.read_text(encoding="utf-8")
+    except OSError as exc:
+        return "failed", {
+            "launch_env": str(launch_env),
+            "failures": [
+                {
+                    "reason": "unable_to_read_launch_env",
+                    "error": str(exc),
+                }
+            ],
+        }
+    manifest = _prepared_manifest_from_contract(root, prepared_contract)
+    command = manifest.get("command")
+    env_resume = _shell_assignment_value(launch_env_text, "RESUME_FROM_CAMPAIGN")
+    manifest_resume = manifest.get("resume_from_campaign")
+    resume_options = [
+        option
+        for option in ("--resume-from-campaign",)
+        if command_has_shell_flag(command, option)
+    ]
+    failures: list[dict[str, Any]] = []
+    if env_resume:
+        failures.append(
+            {
+                "reason": "formal_launch_contains_resume_env",
+                "value": env_resume,
+            }
+        )
+    if manifest_resume:
+        failures.append(
+            {
+                "reason": "formal_launch_contains_resume_manifest",
+                "value": manifest_resume,
+            }
+        )
+    if resume_options:
+        failures.append(
+            {
+                "reason": "formal_launch_contains_resume_options",
+                "options": resume_options,
+            }
+        )
+    return ("ok" if not failures else "failed"), {
+        "launch_env": str(launch_env),
+        "manifest_path": manifest.get("manifest_path"),
+        "resume_env": env_resume,
+        "resume_manifest": manifest_resume,
+        "resume_command_options": resume_options,
+        "failures": failures,
+    }
 
 
 def _prepared_manifest_from_contract(
@@ -3581,7 +3543,6 @@ def _prepared_analysis_brief_failures(
     if CURRENT_RUN_REQUIRED_QUESTION_MARKER in questions_list:
         failures.append({"reason": "current_run_required_question_present"})
 
-    failures.extend(_prepared_problem_summary_failures(payload))
     return failures
 
 
@@ -3803,154 +3764,6 @@ def _prepared_contract_checks_comparison_value(
     return normalized
 
 
-def _prepared_problem_summary_failures(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    failures: list[dict[str, Any]] = []
-    contract = payload.get("prepared_run_contract")
-    contract_dict = contract if isinstance(contract, dict) else {}
-    problem_family = str(contract_dict.get("problem_family") or "")
-    required = PREPARED_PROBLEM_SUMMARY_REQUIREMENTS.get(problem_family)
-    if required:
-        field = str(required["field"])
-        summary = payload.get(field)
-        if not isinstance(summary, dict) or summary.get("available") is not True:
-            return [
-                {
-                    "reason": "problem_summary_missing_for_problem_family",
-                    "problem_family": problem_family,
-                    "expected_summary": field,
-                    "available": (
-                        summary.get("available") if isinstance(summary, dict) else None
-                    ),
-                }
-            ]
-        failures.extend(
-            {
-                "summary": field,
-                **failure,
-            }
-            for failure in _prepared_problem_summary_field_failures(
-                summary,
-                expected_schema=str(required["schema"]),
-                conclusion_flag=str(required["conclusion_flag"]),
-                evidence_gap=str(required["evidence_gap"]),
-            )
-        )
-        for other_family, other in PREPARED_PROBLEM_SUMMARY_REQUIREMENTS.items():
-            other_field = str(other["field"])
-            if other_family == problem_family:
-                continue
-            other_summary = payload.get(other_field)
-            if (
-                isinstance(other_summary, dict)
-                and other_summary.get("available") is True
-            ):
-                failures.append(
-                    {
-                        "summary": other_field,
-                        "reason": "unexpected_problem_summary_available",
-                        "problem_family": problem_family,
-                    }
-                )
-        return failures
-
-    for field, required in (
-        (str(item["field"]), item)
-        for item in PREPARED_PROBLEM_SUMMARY_REQUIREMENTS.values()
-    ):
-        summary = payload.get(field)
-        if not isinstance(summary, dict) or summary.get("available") is not True:
-            continue
-        failures.extend(
-            {
-                "summary": field,
-                **failure,
-            }
-            for failure in _prepared_problem_summary_field_failures(
-                summary,
-                expected_schema=str(required["schema"]),
-                conclusion_flag=str(required["conclusion_flag"]),
-                evidence_gap=str(required["evidence_gap"]),
-            )
-        )
-    return failures
-
-
-def _prepared_problem_summary_field_failures(
-    summary: dict[str, Any],
-    *,
-    expected_schema: str,
-    conclusion_flag: str,
-    evidence_gap: str,
-) -> list[dict[str, Any]]:
-    failures: list[dict[str, Any]] = []
-    if summary.get("schema_version") != expected_schema:
-        failures.append(
-            {
-                "reason": "problem_summary_schema_mismatch",
-                "expected": expected_schema,
-                "actual": summary.get("schema_version"),
-            }
-        )
-    boundary_expectations = {
-        "report_only": True,
-        "quality_judgment": False,
-        "decision_features_excluded": True,
-    }
-    for key, expected in boundary_expectations.items():
-        if summary.get(key) is not expected:
-            failures.append(
-                {
-                    "reason": "problem_summary_boundary_flag_mismatch",
-                    "field": key,
-                    "expected": expected,
-                    "actual": summary.get(key),
-                }
-            )
-    if summary.get("current_run_evidence") is not False:
-        failures.append(
-            {
-                "reason": "problem_summary_current_run_evidence_not_false",
-                "current_run_evidence": summary.get("current_run_evidence"),
-            }
-        )
-    if summary.get("interpretation") != "prepared_only_launch_required":
-        failures.append(
-            {
-                "reason": "problem_summary_interpretation_mismatch",
-                "interpretation": summary.get("interpretation"),
-            }
-        )
-    if summary.get(conclusion_flag) is not True:
-        failures.append(
-            {
-                "reason": "problem_summary_launch_required_flag_missing",
-                "field": conclusion_flag,
-                "actual": summary.get(conclusion_flag),
-            }
-        )
-    gaps = summary.get("evidence_gaps")
-    if not isinstance(gaps, list) or evidence_gap not in gaps:
-        failures.append(
-            {
-                "reason": "problem_summary_launch_required_gap_missing",
-                "expected": evidence_gap,
-                "actual": gaps,
-            }
-        )
-    deferred_axes = summary.get("deferred_review_axes")
-    if not isinstance(deferred_axes, list) or not deferred_axes:
-        failures.append({"reason": "problem_summary_deferred_review_axes_missing"})
-    if summary.get("review_axes_actionability") != DEFERRED_REVIEW_AXES_ACTIONABILITY:
-        failures.append(
-            {
-                "reason": "problem_summary_review_axes_actionability_mismatch",
-                "expected": DEFERRED_REVIEW_AXES_ACTIONABILITY,
-                "actual": summary.get("review_axes_actionability"),
-            }
-        )
-    return failures
-
-
 def _read_json(path: Path) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -4007,7 +3820,7 @@ def _completion_preflight_check(
 
     command = [
         sys.executable,
-        str(TOOLS_DIR / "check_gpt55_proxy.py"),
+        str(TOOLS_DIR / "check_completion_proxy.py"),
         "--base-url",
         base_url,
         "--model",
@@ -4031,8 +3844,8 @@ def _completion_preflight_check(
         payload = json.loads(result.stdout)
     except json.JSONDecodeError:
         payload = {
-            "stdout": result.stdout[-2000:],
-            "stderr": result.stderr[-2000:],
+            "stdout": result.stdout,
+            "stderr": result.stderr,
         }
     payload = _with_completion_preflight_action(
         payload,
@@ -4060,7 +3873,10 @@ def _with_completion_preflight_action(
     login_url = str(detail.get("login_url") or "")
     action: dict[str, Any] = {
         "classification": classification,
-        "summary": "Resolve the GPT-5.5 proxy preflight before starting this prepared campaign.",
+        "summary": (
+            f"Resolve the {model} completion preflight before starting this "
+            "prepared campaign."
+        ),
         "rerun_command": (
             "python scion/tools/check_launch_readiness.py <run_root> "
             "--require-launch-ready --format json"
@@ -4081,7 +3897,7 @@ def _with_completion_preflight_action(
             action["login_url"] = login_url
     elif classification == "no_available_accounts":
         action["next_step"] = (
-            "Wait for an active GPT-5.5 account or refresh the proxy account pool, "
+            f"Wait for an active {model} account or refresh the proxy account pool, "
             "then rerun launch readiness."
         )
     elif classification == "rate_limited":
@@ -4090,7 +3906,7 @@ def _with_completion_preflight_action(
         )
     elif classification == "transport_error":
         action["next_step"] = (
-            "Start or repair the local GPT-5.5 proxy endpoint, then rerun launch readiness."
+            f"Start or repair the local {model} proxy endpoint, then rerun launch readiness."
         )
     else:
         action["next_step"] = (

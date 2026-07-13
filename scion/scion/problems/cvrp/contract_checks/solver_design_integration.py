@@ -24,6 +24,7 @@ from scion.problems.cvrp.contract_checks.result import SolverDesignIntegrationRe
 from scion.problems.cvrp.contract_checks.state_bridge import (
     _state_model_bridge_api_error,
 )
+from scion.problems.cvrp.solver_design.static_quality import static_smoke_issue
 
 
 class CvrpContractCheckProvider:
@@ -131,6 +132,10 @@ def check_solver_design_integration(
 ) -> SolverDesignIntegrationResult:
     if not selected_surface_is_solver_design(selected_surface, patch):
         return SolverDesignIntegrationResult(True, "not a solver_design patch")
+
+    context_api_issue = static_smoke_issue(patch=patch, hypothesis=None)
+    if context_api_issue is not None:
+        return SolverDesignIntegrationResult(False, context_api_issue)
 
     reachability = ReachabilityState()
     candidate_sources: dict[str, str] = {}

@@ -82,9 +82,6 @@ class FrozenConfig(BaseModel):
     expose: str = "pass_fail_aggregate"
     """暴露控制级别。"""
 
-    max_uses_per_campaign: int = Field(gt=0, default=3)
-    """每次 campaign 中 frozen holdout 的最大使用次数。"""
-
 
 class CanaryProtocolConfig(BaseModel):
     """Canary regression check 配置。"""
@@ -360,16 +357,6 @@ class SmokePrescreenConfig(BaseModel):
     notes: str = ""
 
 
-class RetryConfig(BaseModel):
-    """重试配置。"""
-
-    infra_max: int = Field(ge=0, default=2)
-    """基础设施故障最大重试次数。"""
-
-    llm_fix_max: int = Field(ge=0, default=2)
-    """LLM fix 最大重试次数。"""
-
-
 class ExpandedBorderlineAdvanceConfig(BaseModel):
     """Policy for advancing borderline candidates after screening expand is exhausted."""
 
@@ -506,9 +493,6 @@ class ProtocolConfig(BaseModel):
 
     canary: CanaryProtocolConfig = Field(default_factory=CanaryProtocolConfig)
     """Canary regression check 配置。"""
-
-    retry: RetryConfig = Field(default_factory=RetryConfig)
-    """重试配置。"""
 
     gates: GatesConfig = Field(default_factory=GatesConfig)
     """门控阈值配置。"""

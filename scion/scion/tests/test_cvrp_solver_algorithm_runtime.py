@@ -4,7 +4,9 @@ from scion.problems.cvrp.policies.baseline_modules import scheduler as baseline_
 from scion.problems.cvrp.policies.baseline_modules.state import _Route, _Solution
 from scion.problems.cvrp.solver_runtime.algorithm_runtime import (
     SolverAlgorithmContext,
+    _record_solver_algorithm_event,
     solver_algorithm_defaults,
+    typed_events_from_legacy_record_move,
 )
 from scion.tests.cvrp_solver_runtime_support import *
 from scion.runtime.audit import (
@@ -24,6 +26,67 @@ def _actionability_summary() -> dict[str, object]:
         "runtime_budget_hit": False,
         "phases": {},
     }
+
+
+def test_solver_algorithm_audit_preserves_every_event() -> None:
+    audit: dict[str, object] = {"solver_algorithm_path": "fixture.py"}
+
+    for index in range(25):
+        _record_solver_algorithm_event(audit, "ok", f"event-{index}")
+
+    events = audit["solver_algorithm_events"]
+    assert isinstance(events, list)
+    assert len(events) == 25
+    assert events[-1]["detail"] == "event-24"
+
+
+def test_legacy_record_move_compat_never_claims_direct_effect() -> None:
+    events = typed_events_from_legacy_record_move(
+        "elite_pool_admission",
+        attempted=1,
+        accepted=1,
+        delta=17.0,
+        best_improved=True,
+    )
+
+    assert [event.lane for event in events] == ["attempt", "associated_outcome"]
+    assert all(event.lane != "direct_effect" for event in events)
+    assert events[1].attribution_scope == "legacy_record_move_ambiguous"
+    assert events[1].before_ref is None
+    assert events[1].after_ref is None
+    assert set(events[1].missing_refs) == {"before_ref", "after_ref"}
+
+
+def test_typed_state_transition_does_not_increment_legacy_accepted_moves() -> None:
+    instance = _line_instance(3)
+    audit, context = _runtime_context_for_instance(instance)
+    context.record_move(
+        "legacy_elite_pool_admission",
+        attempted=1,
+        accepted=1,
+        delta=17.0,
+        best_improved=True,
+    )
+
+    assert "typed_telemetry_events" not in audit
+    legacy_accepted = audit["solver_algorithm_accepted_moves"]
+
+    context.record_telemetry_event(
+        "state_transition",
+        "elite_solution_pool",
+        attribution_scope="pool_anchor_selection",
+        attribution_confidence=1.0,
+        before_ref="anchor:old",
+        after_ref="anchor:new",
+        missing_refs=(),
+        evidence_ref="runtime.pool_anchor_transition.17",
+    )
+
+    assert legacy_accepted == 1
+    assert audit["solver_algorithm_accepted_moves"] == legacy_accepted
+    summary = audit["typed_telemetry_summary"]
+    assert summary["lane_counts"]["state_transition"] == 1
+    assert summary["lane_counts"]["direct_effect"] == 0
 
 
 def test_solver_design_surface_declares_active_algorithm_runtime_fields(
@@ -396,12 +459,11 @@ def test_solver_design_context_exposes_objective_and_budget_helpers(
     best_update_summary = runtime["solver_algorithm_best_update_summary"]
     assert best_update_summary["schema"] == "scion.cvrp.best_update_summary.v1"
     assert best_update_summary["best_update_count"] == 0
-    assert best_update_summary["trace_truncated"] is False
     assert summary["best_update_summary"]["best_update_count"] == 0
     assert runtime["solver_algorithm_solution_valid"] is True
 
 
-def test_solver_design_best_update_trace_is_bounded_and_summarized(
+def test_solver_design_best_update_trace_is_complete_and_summarized(
     tmp_path: Path,
 ) -> None:
     workspace = _workspace(tmp_path)
@@ -448,10 +510,10 @@ def test_solver_design_best_update_trace_is_bounded_and_summarized(
     assert runtime["solver_algorithm_errors"] == 0
     assert runtime["solver_algorithm_best_improving_moves"] == 40
     assert runtime["solver_algorithm_phase_improvement_counts"]["alns"] == 40
-    assert len(trace) == summary["trace_limit"] == 32
+    assert len(trace) == 40
     assert trace[0]["phase"] == "alns"
     assert trace[0]["iteration"] == 1
-    assert trace[-1]["iteration"] == 32
+    assert trace[-1]["iteration"] == 40
     assert trace[0]["delta_from_previous_best"] == 1.5
     assert trace[0]["destroy_operator"] == "shaw"
     assert trace[0]["repair_operator"] == "regret2"
@@ -461,7 +523,6 @@ def test_solver_design_best_update_trace_is_bounded_and_summarized(
     assert trace[0]["objective"]["total_distance"] == trace[0]["total_distance"]
     assert summary["schema"] == "scion.cvrp.best_update_summary.v1"
     assert summary["best_update_count"] == 40
-    assert summary["trace_truncated"] is True
     assert summary["first_iteration"] == 1
     assert summary["last_iteration"] == 40
     assert summary["first_elapsed_ms"] is not None
@@ -473,7 +534,7 @@ def test_solver_design_best_update_trace_is_bounded_and_summarized(
     assert actionability["best_update_summary"]["best_update_count"] == 40
 
 
-def test_solver_design_alns_iteration_trace_is_bounded(tmp_path: Path) -> None:
+def test_solver_design_alns_iteration_trace_is_complete(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path)
     _write_operator_case(workspace)
     (workspace / "policies" / "baseline_algorithm.py").write_text(
@@ -516,9 +577,9 @@ def test_solver_design_alns_iteration_trace_is_bounded(tmp_path: Path) -> None:
     assert runtime["solver_algorithm_active"] is True
     assert runtime["solver_algorithm_errors"] == 0
     assert runtime["solver_algorithm_search_iterations"] == 40
-    assert len(trace) == 32
+    assert len(trace) == 40
     assert trace[0]["iteration"] == 1
-    assert trace[-1]["iteration"] == 32
+    assert trace[-1]["iteration"] == 40
     assert trace[0]["q"] == 3
     assert trace[0]["destroy_operator"] == "shaw"
     assert trace[0]["repair_operator"] == "regret3"
@@ -751,7 +812,8 @@ def test_below_size70_keeps_existing_vns_initial_path(
 
     def fake_vns(solution, operators, max_no_improve, context, reserve):
         vns_calls.append(len(operators))
-        return False
+        # A claimed improvement without an objective change is not direct effect.
+        return True
 
     def fail_two_opt(*args, **kwargs):
         raise AssertionError("below-size70 path must keep full VNS behavior")
@@ -777,3 +839,64 @@ def test_below_size70_keeps_existing_vns_initial_path(
     assert best.routes_as_tuples()[0][:4] == (1, 3, 2, 4)
     assert "vns_initial" in audit["solver_algorithm_phase_runtime_ms"]
     assert "size70_two_opt_initial" not in audit["solver_algorithm_phase_runtime_ms"]
+    assert audit["solver_algorithm_accepted_moves"] == 0
+    assert [
+        event["lane"] for event in audit["typed_telemetry_events"]
+    ] == ["attempt"]
+    assert audit["typed_telemetry_summary"]["lane_counts"]["direct_effect"] == 0
+
+
+def test_initial_vns_records_direct_effect_only_for_local_objective_improvement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instance = _line_instance(4)
+    initial = _Solution(instance, [_Route(instance, [1, 3, 2, 4])])
+
+    def improving_vns(solution, operators, max_no_improve, context, reserve):
+        del operators, max_no_improve, context, reserve
+        solution.routes[0].customers = [1, 2, 3, 4]
+        solution.rebuild_index()
+        return True
+
+    monkeypatch.setattr(
+        baseline_scheduler,
+        "_sweep_construction",
+        lambda current_instance: initial.copy(),
+    )
+    monkeypatch.setattr(baseline_scheduler, "_vns", improving_vns)
+    audit, context = _runtime_context_for_instance(instance)
+    solver = _scheduler_with_thresholds(
+        context,
+        use_vns=True,
+        vns_threshold=4,
+        alns_threshold=0,
+    )
+
+    best = solver.solve(instance, random.Random(1))
+
+    assert best.routes_as_tuples() == ((1, 2, 3, 4),)
+    assert audit["solver_algorithm_move_attempts"] == 0
+    assert audit["solver_algorithm_accepted_moves"] == 0
+    events = audit["typed_telemetry_events"]
+    assert [event["lane"] for event in events] == ["attempt", "direct_effect"]
+    effect = events[1]
+    assert effect["mechanism_id"] == "vns_initial"
+    assert effect["attribution_scope"] == (
+        "initial_vns_before_after_objective_boundary"
+    )
+    assert effect["before_ref"].startswith(
+        "objective_snapshot:vns_initial_before:total_distance="
+    )
+    assert effect["after_ref"].startswith(
+        "objective_snapshot:vns_initial_after:total_distance="
+    )
+    probes = audit["solver_algorithm_objective_probes"]
+    before_probe = next(item for item in probes if item["name"] == "vns_initial_before")
+    after_probe = next(item for item in probes if item["name"] == "vns_initial_after")
+    assert before_probe["total_distance"] > after_probe["total_distance"]
+    assert audit["typed_telemetry_summary"]["lane_counts"] == {
+        "attempt": 1,
+        "state_transition": 0,
+        "direct_effect": 1,
+        "associated_outcome": 0,
+    }

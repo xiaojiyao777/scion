@@ -16,12 +16,10 @@ from scion.core.models import (
     ExperimentStage,
     HypothesisProposal,
     HypothesisRecord,
-    MechanismChange,
     OperatorConfig,
     PatchProposal,
     ProtocolResult,
 )
-from scion.core.branch_lifecycle_policy import BRANCH_LIFECYCLE_ARCHIVE_LINEAGE
 from scion.core.decision_finalizer import _sync_terminal_branch_evidence
 from scion.lineage.branch_store import BranchStore, HypothesisStore
 from scion.lineage.champion_store import ChampionStore
@@ -181,11 +179,9 @@ class TestBranchStore:
         b = _make_branch("br_upd")
         store.save(b)
         b.state = BranchState.READY_VALIDATE
-        b.retry_count = 2
         store.save(b)
         loaded = store.load("br_upd")
         assert loaded.state == BranchState.READY_VALIDATE
-        assert loaded.retry_count == 2
 
     def test_load_all_active_excludes_terminal(self, tmp_path):
         reg = LineageRegistry(str(tmp_path / "scion.db"))
@@ -198,9 +194,7 @@ class TestBranchStore:
         parked = _make_branch("br_parked")
         parked.state = BranchState.PARKED_LINEAGE
         parked.branch_code_status = "parked_lineage"
-        legacy_parked = _make_branch("br_legacy_parked")
-        legacy_parked.branch_code_status = "parked_lineage"
-        for b in (active, abandoned, promoted, parked, legacy_parked):
+        for b in (active, abandoned, promoted, parked):
             store.save(b)
         results = store.load_all_active()
         ids = {b.branch_id for b in results}
@@ -208,8 +202,6 @@ class TestBranchStore:
         assert "br_abandoned" not in ids
         assert "br_promoted" not in ids
         assert "br_parked" not in ids
-        assert "br_legacy_parked" not in ids
-        assert store.load("br_legacy_parked").state == BranchState.PARKED_LINEAGE
 
     def test_failure_codes_roundtrip(self, tmp_path):
         reg = LineageRegistry(str(tmp_path / "scion.db"))
@@ -220,171 +212,7 @@ class TestBranchStore:
         loaded = store.load("br_fc")
         assert loaded.failure_codes == ["CONTRACT", "VERIFICATION"]
 
-    def test_runtime_fields_roundtrip(self, tmp_path):
-        reg = LineageRegistry(str(tmp_path / "scion.db"))
-        store = BranchStore(reg)
-        b = _make_branch("br_runtime")
-        b.screening_expand_count = 2
-        b.validation_expand_count = 1
-        b.direction = "local_search: try 2-opt"
-        b.weight_revision = 3
-        b.branch_code_status = "active_no_effect"
-        b.last_screening_feedback_tier = "no_effect"
-        b.last_telemetry_outcome = "no_objective_effect"
-        b.branch_mechanism_ids = ("active_probe",)
-        b.telemetry_repair_mechanism_ids = ("probe",)
-        b.telemetry_repair_attempts = {"probe": 2}
-        b.branch_lifecycle_policy_blocks = 1
-        b.branch_lifecycle_new_mechanism_ineligible = True
-        b.branch_lifecycle_reroute_reason = (
-            "clean_fork_after_branch_lifecycle_policy_block"
-        )
-        b.last_branch_lifecycle_policy_block = {
-            "reason": "new_mechanism_requires_clean_fork",
-            "block_count": 1,
-        }
-        b.branch_evidence_summary = {
-            "tier": "no_effect",
-            "runtime_evidence_confidence": "low_cached_champion",
-            "case_level_winners": [
-                {
-                    "case_id": "case-a",
-                    "result": "win",
-                    "delta": 0.1,
-                    "effect_counters": {"wins": 1, "losses": 0, "ties": 0},
-                }
-            ],
-        }
-        b.pending_retry = True
-        b.blocked_rounds = 2
-        b.consecutive_llm_retries = 1
-        b.infra_block_count = 4
-        b.lineage_id = "lineage-runtime"
-        b.best_quality_checkpoint_id = "checkpoint-best"
-        b.last_valid_checkpoint_id = "checkpoint-last"
-        b.rollback_count = 2
-        b.last_rollback_reason = "screening_regression"
 
-        store.save(b)
-        loaded = store.load("br_runtime")
-
-        assert loaded is not None
-        assert loaded.screening_expand_count == 2
-        assert loaded.validation_expand_count == 1
-        assert loaded.direction == "local_search: try 2-opt"
-        assert loaded.weight_revision == 3
-        assert loaded.branch_code_status == "active_no_effect"
-        assert loaded.last_screening_feedback_tier == "no_effect"
-        assert loaded.last_telemetry_outcome == "no_objective_effect"
-        assert loaded.branch_mechanism_ids == ("active_probe",)
-        assert loaded.telemetry_repair_mechanism_ids == ("probe",)
-        assert loaded.telemetry_repair_attempts == {"probe": 2}
-        assert loaded.branch_lifecycle_policy_blocks == 1
-        assert loaded.branch_lifecycle_new_mechanism_ineligible is True
-        assert loaded.branch_lifecycle_reroute_reason == (
-            "clean_fork_after_branch_lifecycle_policy_block"
-        )
-        assert loaded.last_branch_lifecycle_policy_block == {
-            "reason": "new_mechanism_requires_clean_fork",
-            "block_count": 1,
-        }
-        assert loaded.branch_evidence_summary["runtime_evidence_confidence"] == (
-            "low_cached_champion"
-        )
-        assert loaded.branch_evidence_summary["case_level_winners"][0][
-            "case_id"
-        ] == "case-a"
-        assert loaded.lineage_id == "lineage-runtime"
-        assert loaded.best_quality_checkpoint_id == "checkpoint-best"
-        assert loaded.last_valid_checkpoint_id == "checkpoint-last"
-        assert loaded.rollback_count == 2
-        assert loaded.last_rollback_reason == "screening_regression"
-        assert loaded.pending_retry is True
-        assert loaded.blocked_rounds == 2
-        assert loaded.consecutive_llm_retries == 1
-        assert loaded.infra_block_count == 4
-
-    def test_terminal_branch_evidence_roundtrip_is_not_clean_empty(self, tmp_path):
-        reg = LineageRegistry(str(tmp_path / "scion.db"))
-        store = BranchStore(reg)
-        branch = _make_branch("br_terminal")
-        branch.state = BranchState.ABANDONED
-        hypothesis = HypothesisProposal(
-            hypothesis_text="Try a bounded generic search refinement.",
-            change_locus="generic_search",
-            action="modify",
-            mechanism_changes=(
-                MechanismChange(id="bounded_search_refine", change_type="modify"),
-            ),
-        )
-        patch = PatchProposal(
-            file_path="solver/generic.py",
-            action="modify",
-            code_content="",
-            mechanism_changes=(
-                MechanismChange(id="candidate_filter_probe", change_type="modify"),
-            ),
-        )
-        protocol = ProtocolResult(
-            stage=ExperimentStage.SCREENING,
-            stats=EvalStats(
-                n_cases=4,
-                wins=0,
-                losses=3,
-                ties=1,
-                win_rate=0.0,
-                median_delta=-2.5,
-                ci_low=-4.0,
-                ci_high=-1.0,
-                runtime_ratio_median=1.2,
-                runtime_regression_rate=0.5,
-                runtime_pairs=4,
-            ),
-            gate_outcome="fail",
-            reason_codes=("SCREENING_FAIL_WIN_RATE",),
-            exposed_summary="screening failed",
-            raw_metrics_ref="",
-        )
-
-        _sync_terminal_branch_evidence(
-            branch,
-            hypothesis=hypothesis,
-            patch=patch,
-            protocol_result=protocol,
-            decision_reason_codes=(
-                "SCREENING_FAIL_WIN_RATE",
-                BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
-            ),
-            lifecycle_action="archive_lineage",
-        )
-        store.save(branch)
-        loaded = store.load("br_terminal")
-
-        assert loaded is not None
-        assert loaded.state == BranchState.ABANDONED
-        assert loaded.branch_code_status != "clean"
-        assert loaded.branch_mechanism_ids == (
-            "bounded_search_refine",
-            "candidate_filter_probe",
-        )
-        assert loaded.failure_codes == [
-            "SCREENING_FAIL_WIN_RATE",
-            BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
-        ]
-        evidence = loaded.branch_evidence_summary
-        assert evidence["terminal_status"] == "abandoned"
-        assert evidence["terminal_reason"] == "SCREENING_FAIL_WIN_RATE"
-        assert evidence["terminal_reason_codes"] == [
-            "SCREENING_FAIL_WIN_RATE",
-            BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
-        ]
-        assert evidence["wins"] == 0
-        assert evidence["losses"] == 3
-        assert evidence["median_delta"] == -2.5
-        assert evidence["mechanism_ids"] == [
-            "bounded_search_refine",
-            "candidate_filter_probe",
-        ]
 
 
 # ---------------------------------------------------------------------------

@@ -80,6 +80,12 @@ def production_boundary_errors(
     """Return production boundary violations for a non-skeleton campaign."""
 
     errors: list[str] = []
+    parameter_search = _attr(problem_spec, "parameter_search", None)
+    if _attr(parameter_search, "enabled", False) is True:
+        errors.append(
+            "parameter_search.enabled must be false for direct-v3 production "
+            "campaigns"
+        )
     if adapter is None:
         errors.append("problem adapter is required")
     if experiment_protocol is None:

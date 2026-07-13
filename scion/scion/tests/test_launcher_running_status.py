@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -9,8 +10,8 @@ from pathlib import Path
 
 SCION_DIR = Path(__file__).resolve().parents[2]
 TOOL = SCION_DIR / "tools" / "write_launcher_running_status.py"
-CVRP_LAUNCHER = SCION_DIR / "tools" / "launch_cvrp_agentic_campaign.py"
-WAREHOUSE_LAUNCHER = SCION_DIR / "tools" / "launch_warehouse_agentic_campaign.py"
+CVRP_LAUNCHER = SCION_DIR / "tools" / "launch_cvrp_direct_campaign.py"
+WAREHOUSE_LAUNCHER = SCION_DIR / "tools" / "launch_warehouse_direct_campaign.py"
 
 
 def _load_tool_module():
@@ -51,6 +52,7 @@ def test_build_status_marks_prepared_root_running(tmp_path: Path) -> None:
         "scion_base_url": "http://127.0.0.1:8080",
         "completion_preflight": True,
         "postrun_reports": False,
+        "proposal_runtime_mode": "direct_v3",
     }
 
 
@@ -123,7 +125,7 @@ def test_cvrp_launcher_marks_root_running_before_campaign(tmp_path: Path) -> Non
         check=True,
     )
     run_root = _run_root_from_stdout(result.stdout)
-    _rewrite_runtime_guard_to_stable_file(run_root, problem="cvrp")
+    _use_clean_git_guard_root(run_root / "launch.env", tmp_path / "cvrp-runtime")
     run_sh_text = (run_root / "run.sh").read_text(encoding="utf-8")
 
     run_result = subprocess.run(
@@ -140,7 +142,7 @@ def test_cvrp_launcher_marks_root_running_before_campaign(tmp_path: Path) -> Non
         in run_sh_text
     )
     assert run_sh_text.index("tools/write_launcher_running_status.py") < (
-        run_sh_text.index("tools/check_gpt55_proxy.py")
+        run_sh_text.index("tools/check_completion_proxy.py")
     )
     assert run_sh_text.index("tools/write_launcher_running_status.py") < (
         run_sh_text.index('"$PY" -m scion.cli.main run')
@@ -177,7 +179,9 @@ def test_warehouse_launcher_marks_root_running_before_campaign(tmp_path: Path) -
         check=True,
     )
     run_root = _run_root_from_stdout(result.stdout)
-    _rewrite_runtime_guard_to_stable_file(run_root, problem="warehouse")
+    _use_clean_git_guard_root(
+        run_root / "launch.env", tmp_path / "warehouse-runtime"
+    )
     run_sh_text = (run_root / "run.sh").read_text(encoding="utf-8")
 
     run_result = subprocess.run(
@@ -197,7 +201,7 @@ def test_warehouse_launcher_marks_root_running_before_campaign(tmp_path: Path) -
         run_sh_text.index("tools/write_launcher_running_status.py")
     )
     assert run_sh_text.index("tools/write_launcher_running_status.py") < (
-        run_sh_text.index("tools/check_gpt55_proxy.py")
+        run_sh_text.index("tools/check_completion_proxy.py")
     )
     assert run_sh_text.index("tools/write_launcher_running_status.py") < (
         run_sh_text.index('"$PY" -m scion.cli.main run')
@@ -249,30 +253,40 @@ def _run_root_from_stdout(stdout: str) -> Path:
     return Path(run_root_line.removeprefix("RUN_ROOT="))
 
 
-def _rewrite_runtime_guard_to_stable_file(run_root: Path, *, problem: str) -> None:
-    launch_env = run_root / "launch.env"
-    text = launch_env.read_text(encoding="utf-8")
-    if problem == "cvrp":
-        old = (
-            "GIT_RUNTIME_GUARD_PATHS="
-            "'scion/scion :(exclude)scion/scion/tests scion/tools "
-            "scion/problems/cvrp vrp'"
-        )
-    elif problem == "warehouse":
-        old = (
-            "GIT_RUNTIME_GUARD_PATHS="
-            "'scion/scion :(exclude)scion/scion/tests scion/tools "
-            "scion/problems/warehouse_delivery surrogate'"
-        )
-    else:
-        raise AssertionError(f"unknown problem {problem!r}")
-    launch_env.write_text(
-        text.replace(old, "GIT_RUNTIME_GUARD_PATHS=scion/design/scion-architecture-v3.md"),
-        encoding="utf-8",
+def _use_clean_git_guard_root(launch_env: Path, repo: Path) -> None:
+    """Run wrapper behavior against the same exact-clean contract as production."""
+
+    repo.mkdir()
+    (repo / "README.md").write_text("runtime guard fixture\n", encoding="utf-8")
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=repo,
+        check=True,
     )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"], cwd=repo, check=True
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture"], cwd=repo, check=True)
+    commit = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+
+    text = launch_env.read_text(encoding="utf-8")
+    text = re.sub(r"(?m)^REPO_ROOT=.*$", f"REPO_ROOT={repo}", text)
+    text = re.sub(r"(?m)^GIT_COMMIT=.*$", f"GIT_COMMIT={commit}", text)
+    launch_env.write_text(text, encoding="utf-8")
 
 
-def _assert_running_status(status_before_campaign: Path, run_root: Path) -> None:
+def _assert_running_status(
+    status_before_campaign: Path,
+    run_root: Path,
+) -> None:
     running_status = json.loads(status_before_campaign.read_text(encoding="utf-8"))
     assert running_status["schema"] == "outer-wrapper.v1"
     assert running_status["status"] == "running"
@@ -284,6 +298,7 @@ def _assert_running_status(status_before_campaign: Path, run_root: Path) -> None
     assert running_status["scion_base_url"] == "http://127.0.0.1:8080"
     assert running_status["completion_preflight"] is False
     assert running_status["postrun_reports"] is False
+    assert running_status["proposal_runtime_mode"] == "direct_v3"
     assert isinstance(running_status["pid"], int)
     assert running_status["pid"] > 0
 

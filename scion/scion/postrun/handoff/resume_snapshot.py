@@ -62,11 +62,10 @@ def resume_snapshot_artifact_path(
     return None
 
 
-def build_resume_top_branch_summaries(
+def build_resume_branch_summaries(
     *,
     branches: list[dict[str, Any]],
     summary: Mapping[str, Any],
-    limit: int = 10,
 ) -> list[dict[str, Any]]:
     by_id: dict[str, dict[str, Any]] = {}
     for branch in branches:
@@ -107,7 +106,7 @@ def build_resume_top_branch_summaries(
             str(branch.get("branch_id") or ""),
         ),
     )
-    return ordered[:limit]
+    return ordered
 
 
 def _resume_branch_cards(summary: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -122,7 +121,7 @@ def _resume_branch_cards(summary: Mapping[str, Any]) -> list[Mapping[str, Any]]:
                 continue
             branch_id = _branch_id(value) or ""
             card_text = _string_or_none(value.get("branch_card_text")) or ""
-            identity = f"{key}:{branch_id}:{card_text[:80]}"
+            identity = f"{key}:{branch_id}:{card_text}"
             if identity in seen:
                 continue
             seen.add(identity)
@@ -184,7 +183,7 @@ def _resume_branch_card_summary(card: Mapping[str, Any]) -> dict[str, Any]:
                 scheduling.get("next_action"),
                 scheduling.get("branch_next_action"),
             ),
-            "mechanism_ids": _resume_branch_mechanism_ids(card, nested_card),
+            "mechanism_ids": _resume_mechanism_ids(card, nested_card),
             "followup_recommended": _first_present(
                 card.get("followup_recommended"),
                 nested_card.get("followup_recommended"),
@@ -212,31 +211,23 @@ def _resume_branch_card_summary(card: Mapping[str, Any]) -> dict[str, Any]:
             "why_abandoned_reason_codes": _string_list(
                 card.get("why_abandoned_reason_codes")
             ),
-            "branch_card_text": _truncate_text(
-                _string_or_none(card.get("branch_card_text")),
-                1200,
+            "branch_card_text": _normalized_text_or_none(
+                _string_or_none(card.get("branch_card_text"))
             ),
         }
     )
 
 
-def _resume_branch_mechanism_ids(
+def _resume_mechanism_ids(
     card: Mapping[str, Any],
     nested_card: Mapping[str, Any],
 ) -> list[str]:
     values: list[str] = []
     for source in (card, nested_card):
-        values.extend(_string_list(source.get("branch_mechanism_ids")))
         values.extend(_string_list(source.get("mechanism_ids")))
         primary = _string_or_none(source.get("primary_mechanism_id"))
         if primary:
             values.append(primary)
-        contract = source.get("mechanism_evidence_contract")
-        if isinstance(contract, Mapping):
-            values.extend(_string_list(contract.get("declared_mechanism_ids")))
-            primary = _string_or_none(contract.get("primary_mechanism_id"))
-            if primary:
-                values.append(primary)
     unique: list[str] = []
     seen: set[str] = set()
     for value in values:
@@ -315,13 +306,10 @@ def _first_present(*values: Any) -> Any:
     return None
 
 
-def _truncate_text(value: str | None, limit: int) -> str | None:
+def _normalized_text_or_none(value: str | None) -> str | None:
     if value is None:
         return None
-    text = " ".join(value.split())
-    if len(text) <= limit:
-        return text
-    return f"{text[: limit - 3]}..."
+    return " ".join(value.split())
 
 
 def _string_list(value: Any) -> list[str]:

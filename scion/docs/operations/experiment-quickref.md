@@ -6,8 +6,8 @@
 > 维护说明：本文是 v0.3 实验概念速查，保留用于理解历史 campaign 输出。
 > v0.4 本地运行、监控和分析请优先使用
 > [`experiment-runbook.zh.md`](experiment-runbook.zh.md)。旧的 v0.2/v0.3
-> launcher/direct-runner 脚本已归档到 `../../archive/run-scripts/`，当前
-> v0.4 CVRP formal 实验入口是 `python -m scion.cli.main run`。
+> launcher/direct-runner 脚本已归档到 `../../archive/run-scripts/`。当前
+> v0.4 正式入口与验收命令只以 `experiment-runbook.zh.md` 为准。
 
 ---
 

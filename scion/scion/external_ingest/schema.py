@@ -15,7 +15,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from scion.core.models import (
     HypothesisProposal,
-    MechanismChange,
     PatchFileChange,
 )
 from scion.core.paths import normalize_relative_patch_path
@@ -23,11 +22,6 @@ from scion.core.paths import normalize_relative_patch_path
 
 class _StrictBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
-
-class ExternalMechanismChange(_StrictBase):
-    id: str
-    change_type: Literal["add", "modify", "replace", "remove", "integrate"]
 
 
 class ExternalHypothesis(_StrictBase):
@@ -38,17 +32,6 @@ class ExternalHypothesis(_StrictBase):
     predicted_direction: Literal["improve", "tradeoff", "exploratory"] = "exploratory"
     target_weakness: str = ""
     expected_effect: str = ""
-    target_objectives: list[str] = Field(default_factory=list)
-    protected_objectives: list[str] = Field(default_factory=list)
-    objective_tradeoff_policy: str = ""
-    no_op_condition: str = ""
-    risk_to_higher_priority: str = ""
-    target_runtime_effect: str | None = None
-    complexity_claim: str | None = None
-    runtime_budget_strategy: str | None = None
-    expected_telemetry: dict[str, Any] = Field(default_factory=dict)
-    novelty_signature: dict[str, Any] = Field(default_factory=dict)
-    mechanism_changes: list[ExternalMechanismChange] = Field(default_factory=list)
 
     def to_proposal(self) -> HypothesisProposal:
         return HypothesisProposal(
@@ -59,20 +42,6 @@ class ExternalHypothesis(_StrictBase):
             predicted_direction=self.predicted_direction,
             target_weakness=self.target_weakness,
             expected_effect=self.expected_effect,
-            target_objectives=tuple(self.target_objectives),
-            protected_objectives=tuple(self.protected_objectives),
-            objective_tradeoff_policy=self.objective_tradeoff_policy,
-            no_op_condition=self.no_op_condition,
-            risk_to_higher_priority=self.risk_to_higher_priority,
-            target_runtime_effect=self.target_runtime_effect,
-            complexity_claim=self.complexity_claim,
-            runtime_budget_strategy=self.runtime_budget_strategy,
-            expected_telemetry=dict(self.expected_telemetry),
-            novelty_signature=dict(self.novelty_signature),
-            mechanism_changes=tuple(
-                MechanismChange(id=change.id, change_type=change.change_type)
-                for change in self.mechanism_changes
-            ),
         )
 
 
@@ -181,7 +150,6 @@ __all__ = [
     "ExternalBoundaryDigest",
     "ExternalHypothesis",
     "ExternalInlineFileChange",
-    "ExternalMechanismChange",
     "ExternalPatchSource",
     "ExternalProposalManifest",
     "ExternalProvenance",

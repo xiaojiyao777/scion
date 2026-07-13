@@ -52,70 +52,6 @@ class SolverDesignPromptProvider(Protocol):
     def solver_design_target_api_guidance(self, target_file: str) -> str:
         """Return problem-owned target-specific code-stage API guidance."""
 
-    def solver_design_expected_telemetry_preview(self, hypothesis: Any) -> Any:
-        """Return optional problem-owned pre-code telemetry preview guidance."""
-
-
-class SolverDesignSmokeProvider(Protocol):
-    """Optional problem-owned solver-design smoke interpretation."""
-
-    def is_runtime_patch_path(self, path: str | None) -> bool:
-        """Return whether a patch path can be smoke-run by this provider."""
-
-    def solver_design_smoke_cases(
-        self,
-        *,
-        context: Any = None,
-        split_manifest: Any = None,
-        seed_ledger: Any = None,
-    ) -> Sequence[Any]:
-        """Return problem-owned representative cases for algorithm smoke."""
-
-    def requires_smoke_effect_observation(self, hypothesis: Any = None) -> bool:
-        """Return true when smoke must see positive effect, not just activation."""
-
-
-class ActiveSolverDesignProvider(Protocol):
-    """Optional problem-owned active solver-design facts for proposal tools."""
-
-    def active_solver_algorithm_file_manifest(self, context: Any) -> Sequence[Any]:
-        """Return problem-owned algorithm files and roles for active solver reads."""
-
-
-class ActiveSolverMapProvider(Protocol):
-    """Optional problem-owned active solver map for generic APS context tools."""
-
-    def read_active_solver_map(
-        self,
-        context: Any,
-        *,
-        surface: str | None = None,
-        subject_id: str | None = None,
-    ) -> Any:
-        """Return a problem-generic active solver map payload."""
-
-    def read_operator_registry(
-        self,
-        context: Any,
-        *,
-        registry_id: str,
-        surface: str | None = None,
-        subject_id: str | None = None,
-    ) -> Any:
-        """Return a problem-generic operator registry read payload."""
-
-    def read_algorithm_slice(
-        self,
-        context: Any,
-        *,
-        slice_id: str,
-        surface: str | None = None,
-        subject_id: str | None = None,
-        max_chars: int | None = None,
-    ) -> Any:
-        """Return a bounded problem-generic algorithm slice payload."""
-
-
 class ActiveSubjectPolicyProvider(Protocol):
     """Optional problem-owned active algorithm subject policy."""
 
@@ -155,32 +91,6 @@ class ActiveSubjectCodeConstraintProvider(Protocol):
         """Return provider-owned code-stage object-model/API constraints."""
 
 
-class MechanismEvidencePolicyProvider(Protocol):
-    """Optional problem-owned mechanism evidence interpretation policy."""
-
-    def apply_mechanism_evidence_policy(
-        self,
-        summary: Mapping[str, Any],
-        *,
-        context: Mapping[str, Any],
-    ) -> Mapping[str, Any] | None:
-        """Return a rewritten telemetry summary, or ``None`` to keep it."""
-
-
-def resolve_active_solver_map_provider(
-    *,
-    problem_spec: Any = None,
-    adapter: Any = None,
-) -> Any | None:
-    """Return an optional problem-owned active solver map provider."""
-
-    return _resolve_provider(
-        problem_spec=problem_spec,
-        adapter=adapter,
-        factory_names=("active_solver_map_provider",),
-    )
-
-
 def resolve_active_subject_policy_provider(
     *,
     problem_spec: Any = None,
@@ -195,8 +105,6 @@ def resolve_active_subject_policy_provider(
             "active_subject_policy_provider",
             "contract_check_provider",
             "contract_checks_provider",
-            "active_solver_map_provider",
-            "active_solver_design_provider",
             "solver_design_provider",
         ),
     )
@@ -222,6 +130,29 @@ def active_subject_policy_payload(
         if strict:
             raise
         return {}
+    return active_subject_policy_payload_from_provider(
+        provider,
+        context=context,
+        surface=surface,
+        subject_id=subject_id,
+        strict=strict,
+    )
+
+
+def active_subject_policy_payload_from_provider(
+    provider: Any | None,
+    *,
+    context: Any = None,
+    surface: str | None = None,
+    subject_id: str | None = None,
+    strict: bool = False,
+) -> dict[str, Any]:
+    """Materialize policy from an already-resolved provider.
+
+    Contract uses this entry point so one capability owner resolves a provider
+    once and every static check consumes the same immutable policy snapshot.
+    """
+
     if provider is None:
         if strict:
             raise ProblemProviderError("active subject policy provider unavailable")
@@ -379,8 +310,6 @@ def _active_subject_code_constraint_providers(
         ("solver_design_prompt_provider",),
         ("proposal_prompt_provider",),
         ("prompt_provider",),
-        ("active_solver_design_provider",),
-        ("active_solver_map_provider",),
         ("contract_check_provider", "contract_checks_provider"),
     )
     owners = (adapter, problem_spec)
@@ -417,23 +346,6 @@ def _active_subject_code_constraint_providers(
     return tuple(providers)
 
 
-def resolve_active_solver_design_provider(
-    *,
-    problem_spec: Any = None,
-    adapter: Any = None,
-) -> Any | None:
-    """Return an optional problem-owned active solver-design provider."""
-
-    return _resolve_provider(
-        problem_spec=problem_spec,
-        adapter=adapter,
-        factory_names=(
-            "active_solver_design_provider",
-            "solver_design_provider",
-        ),
-    )
-
-
 def resolve_solver_design_prompt_provider(
     *,
     problem_spec: Any = None,
@@ -452,36 +364,43 @@ def resolve_solver_design_prompt_provider(
     )
 
 
-def resolve_solver_design_smoke_provider(
+def typed_research_question_payload(
     *,
     problem_spec: Any = None,
     adapter: Any = None,
-) -> Any | None:
-    """Return an optional problem-owned solver-design smoke provider."""
+) -> dict[str, str]:
+    """Return only the current typed problem-owned research question."""
 
-    return _resolve_provider(
+    provider = _resolve_provider(
         problem_spec=problem_spec,
         adapter=adapter,
-        factory_names=(
-            "solver_design_smoke_provider",
-            "algorithm_smoke_provider",
-            "smoke_provider",
-        ),
+        factory_names=("research_guidance_provider",),
+    )
+    if provider is None:
+        return {}
+    build = getattr(provider, "build_guidance_contract", None)
+    if not callable(build):
+        return {}
+    from scion.research_guidance import (
+        GuidanceContext,
+        ResearchGuidanceContract,
+        validate_research_guidance_contract,
     )
 
-
-def resolve_mechanism_evidence_policy_provider(
-    *,
-    problem_spec: Any = None,
-    adapter: Any = None,
-) -> Any | None:
-    """Return an optional problem-owned mechanism evidence policy provider."""
-
-    return _resolve_provider(
-        problem_spec=problem_spec,
-        adapter=adapter,
-        factory_names=("mechanism_evidence_policy_provider",),
-    )
+    problem_family = _problem_id(problem_spec)
+    if not problem_family:
+        return {}
+    contract = build(GuidanceContext(problem_family=problem_family))
+    if not isinstance(contract, ResearchGuidanceContract):
+        raise ProblemProviderError(
+            "research guidance provider returned an untyped contract"
+        )
+    validate_research_guidance_contract(contract)
+    return {
+        "schema_version": "scion.typed_research_question.v1",
+        "problem_family": contract.problem_family,
+        "current_question": contract.current_question,
+    }
 
 
 def _resolve_provider(
@@ -764,22 +683,15 @@ def _validate_adapter_identity(
 
 __all__ = [
     "ActiveSubjectCodeConstraintProvider",
-    "ActiveSolverMapProvider",
     "ActiveSubjectPolicyProvider",
     "ActiveSubjectTaxonomyProvider",
-    "ActiveSolverDesignProvider",
-    "MechanismEvidencePolicyProvider",
     "ProblemProviderError",
     "SolverDesignPromptProvider",
-    "SolverDesignSmokeProvider",
     "active_subject_policy_matches_path",
     "active_subject_code_constraints_payload",
     "active_subject_policy_payload",
     "active_subject_taxonomy_payload",
-    "resolve_active_solver_map_provider",
     "resolve_active_subject_policy_provider",
-    "resolve_active_solver_design_provider",
-    "resolve_mechanism_evidence_policy_provider",
     "resolve_solver_design_prompt_provider",
-    "resolve_solver_design_smoke_provider",
+    "typed_research_question_payload",
 ]

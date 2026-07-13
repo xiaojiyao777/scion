@@ -15,7 +15,6 @@ validation:
 frozen:
   n_cases: 8
   n_seeds: 3
-  max_uses_per_campaign: 2
 canary:
   cases:
   - controlled/data/synthetic_controlled_canary_5.vrp

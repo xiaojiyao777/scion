@@ -284,9 +284,10 @@ def test_load_cases_and_cli_dry_run_write_manifest_and_results(
     output_dir = tmp_path / "matrix"
     tool = _load_tool()
 
-    cases = load_case_entries(manifest_path, case_limit=1)
+    cases = load_case_entries(manifest_path)
     assert cases[0].case_family == "A"
     assert cases[0].case_slice == "size_le_70"
+    assert [case.case_id for case in cases] == ["A-n64-k9", "P-n76-k4", "CMT4"]
 
     status = tool.main(
         [
@@ -311,23 +312,22 @@ def test_load_cases_and_cli_dry_run_write_manifest_and_results(
     assert status == 0
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     results = json.loads((output_dir / "results.json").read_text(encoding="utf-8"))
-    assert len(manifest["jobs"]) == 3
-    assert len(results["jobs"]) == 3
+    assert len(manifest["jobs"]) == 9
+    assert len(results["jobs"]) == 9
     assert {row["status"] for row in results["jobs"]} == {"planned"}
     assert (output_dir / "summary.csv").exists()
 
 
-def test_case_id_filter_selects_exact_cases_before_case_limit(tmp_path: Path) -> None:
+def test_case_id_filter_selects_every_exact_case(tmp_path: Path) -> None:
     manifest_path = tmp_path / "cases.json"
     _case_manifest(manifest_path)
 
     cases = load_case_entries(
         manifest_path,
         case_id_filter=("P-n76-k4", "CMT4"),
-        case_limit=1,
     )
 
-    assert [case.case_id for case in cases] == ["P-n76-k4"]
+    assert [case.case_id for case in cases] == ["P-n76-k4", "CMT4"]
 
 
 def test_cli_dry_run_accepts_repeatable_case_id_filter(tmp_path: Path) -> None:
@@ -352,8 +352,6 @@ def test_cli_dry_run_accepts_repeatable_case_id_filter(tmp_path: Path) -> None:
             "P-n76-k4",
             "--case-id",
             "CMT4",
-            "--case-limit",
-            "2",
             "--seed",
             "11",
             "--time-budget-sec",
@@ -415,7 +413,7 @@ def test_cli_dry_run_accepts_focused_mechanism_selection(tmp_path: Path) -> None
 
     assert status == 0
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert [job["mechanism_id"] for job in manifest["jobs"]] == [
+    expected_mechanisms = [
         "initial_vns_disabled",
         "pure_alns_no_polish",
         "adaptive_embedded_vns_cadence4",
@@ -425,6 +423,12 @@ def test_cli_dry_run_accepts_focused_mechanism_selection(tmp_path: Path) -> None
         "adaptive_embedded_vns_share70_cadence2",
         "adaptive_embedded_vns_improve_only",
     ]
+    assert len(manifest["jobs"]) == 3 * len(expected_mechanisms)
+    for offset in range(0, len(manifest["jobs"]), len(expected_mechanisms)):
+        assert [
+            job["mechanism_id"]
+            for job in manifest["jobs"][offset : offset + len(expected_mechanisms)]
+        ] == expected_mechanisms
 
 
 def test_early8_cadence2_overlay_patches_config(tmp_path: Path) -> None:

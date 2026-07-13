@@ -117,8 +117,8 @@ def render_markdown(inventory: dict[str, Any]) -> str:
                 f"- Hypotheses: {_display(resume_snapshot.get('hypothesis_count'))}",
             ]
         )
-        top_branches = resume_snapshot.get("top_branches")
-        if isinstance(top_branches, list) and top_branches:
+        branches = resume_snapshot.get("branches")
+        if isinstance(branches, list) and branches:
             lines.extend(
                 [
                     "",
@@ -127,7 +127,7 @@ def render_markdown(inventory: dict[str, Any]) -> str:
                     "|---|---|---|---|---|---|---|",
                 ]
             )
-            for branch in top_branches:
+            for branch in branches:
                 if not isinstance(branch, Mapping):
                     continue
                 followup = _resume_branch_followup_text(branch)

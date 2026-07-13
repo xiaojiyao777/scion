@@ -11,9 +11,8 @@ class TestCampaignSummaryJson:
         cm = _campaign(
             tmp_path,
             experiment_protocol=None,
-            termination_config=TerminationConfig(max_experiments=1000),
         )
-        cm.run(max_rounds=3)
+        cm.run(requested_rounds=3)
 
         summary_path = Path(cm._campaign_dir) / "campaign_summary.json"
         assert summary_path.exists()
@@ -35,9 +34,8 @@ class TestCampaignSummaryJson:
             tmp_path,
             verification_gate=AlwaysFailVerificationGate(),
             experiment_protocol=None,
-            termination_config=TerminationConfig(max_experiments=1000),
         )
-        cm.run(max_rounds=2)
+        cm.run(requested_rounds=2)
 
         summary_path = Path(cm._campaign_dir) / "campaign_summary.json"
         assert summary_path.exists()
@@ -137,7 +135,7 @@ class TestPromoteWeightOptimizationHook:
         protocol = MockExperimentProtocol(results=[])
         protocol.runner = object()
         cm._experiment_protocol = protocol
-        # spec.parameter_search.enabled is True by default
+        cm._spec.parameter_search.enabled = True
 
         class FakeWeightOptCoordinator:
             def spawn_for_promoted_champion(

@@ -62,7 +62,6 @@ def _in_flight_protocol_snapshot(progress: Mapping[str, Any]) -> dict[str, Any]:
     raw_metrics_ref = progress.get("raw_metrics_ref")
     target_file = progress.get("target_file")
     hypothesis_action = progress.get("hypothesis_action")
-    mechanism_changes = progress.get("mechanism_changes")
     complete = bool(progress.get("complete", False))
     snapshot = {
         "phase": phase or (f"formal_{stage}" if stage else "formal_protocol"),
@@ -77,7 +76,6 @@ def _in_flight_protocol_snapshot(progress: Mapping[str, Any]) -> dict[str, Any]:
                 "branch_id": progress.get("branch_id"),
                 "target_file": target_file,
                 "hypothesis_action": hypothesis_action,
-                "mechanism_changes": mechanism_changes,
             }
         ),
         "hypothesis": _drop_none(
@@ -85,7 +83,6 @@ def _in_flight_protocol_snapshot(progress: Mapping[str, Any]) -> dict[str, Any]:
                 "text": progress.get("hypothesis_text"),
                 "action": hypothesis_action,
                 "target_file": target_file,
-                "mechanism_changes": mechanism_changes,
             }
         ),
         "partial_metrics_ref": raw_metrics_ref,
@@ -125,16 +122,10 @@ def _in_flight_protocol_snapshot(progress: Mapping[str, Any]) -> dict[str, Any]:
 
 
 
-_VERIFICATION_CHECK_DETAIL_LIMIT = 1000
-
-
 def _audit_check_detail(detail: Any, *, base_dir: str | Path | None = None) -> str:
     text = str(detail or "")
     redacted = redact_public_refs(text, base_dir=base_dir)
-    clean = str(redacted)
-    if len(clean) > _VERIFICATION_CHECK_DETAIL_LIMIT:
-        return f"{clean[:_VERIFICATION_CHECK_DETAIL_LIMIT]}..."
-    return clean
+    return str(redacted)
 
 
 def _serialize_verification_checks(

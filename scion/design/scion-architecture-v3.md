@@ -19,6 +19,15 @@
 
 > **面向组合优化算法的自动研究框架——让"提假设 → 改算子 → 验证 → 统计判断 → 晋升/淘汰"的过程可信、可控、可追溯。**
 
+### v0.4 实现解释
+
+本文档的职责边界、tainted-data 原则、两轮 Proposal、实验隔离和
+Decision Input Guard 仍是基石不变量。正文中的 retry、budget、novelty、
+blacklist 和 context compression 是早期实现示例，不是必须恢复的框架
+机制。v0.4 在实验审计后采用的冲突解释与取代关系见
+[`scion-architecture-v3-v0.4-direct-runtime-addendum.md`](scion-architecture-v3-v0.4-direct-runtime-addendum.md)。
+该 addendum 只收窄运行机制，不改变本文件的权威边界。
+
 ---
 
 ## 1. 设计原则

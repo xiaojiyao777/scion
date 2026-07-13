@@ -47,50 +47,6 @@ def test_contract_gate_rejects_scheduler_additional_change_added_time_budget_loo
     )
 
 
-def test_contract_gate_rejects_scheduler_additional_change_added_uncapped_loop(
-    tmp_path: Path,
-) -> None:
-    construction_path = "policies/baseline_modules/construction.py"
-    scheduler_path = "policies/baseline_modules/scheduler.py"
-    gate, codes = _gate_with_cvrp_champion(
-        tmp_path,
-        (construction_path, scheduler_path),
-    )
-    scheduler_code = codes[scheduler_path].replace(
-        "        while self._within_budget(start_ms, reserve):\n",
-        "        while True:\n"
-        "            candidate = current.copy()\n"
-        "            if candidate.is_feasible():\n"
-        "                break\n\n"
-        "        while self._within_budget(start_ms, reserve):\n",
-        1,
-    )
-
-    result = gate.validate_patch(
-        PatchProposal(
-            file_path=construction_path,
-            action="modify",
-            code_content=codes[construction_path],
-            additional_changes=(
-                SimpleNamespace(
-                    file_path=scheduler_path,
-                    action="modify",
-                    code_content=scheduler_code,
-                ),
-            ),
-        ),
-        selected_surface="solver_design",
-    )
-
-    c9c = next(
-        check
-        for check in result.checks
-        if check.name == "additional_changes[0].C9c_complexity_bound"
-    )
-    assert not c9c.passed
-    assert "uncapped while loop" in c9c.detail
-
-
 def test_contract_gate_rejects_scheduler_additional_change_replaced_solve_loop(
     tmp_path: Path,
 ) -> None:

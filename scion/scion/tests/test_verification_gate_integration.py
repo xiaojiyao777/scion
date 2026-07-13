@@ -43,7 +43,7 @@ class TestVerificationGateIntegration:
         assert "V6_feasibility" in check_names
         assert "V7_objective" in check_names
         assert "V8_nondeterminism" in check_names
-        assert "V9_perf_guard" in check_names
+        assert "V9_perf_guard" not in check_names
 
     def test_strict_runtime_checks_fail_without_runner_or_spec(self):
         gate = VerificationGate(strict_runtime_checks=True)
@@ -67,21 +67,16 @@ class TestVerificationGateIntegration:
         assert result.first_failure == "V_runtime_config"
         assert "canary_case_path" in result.checks[-1].detail
 
-    def test_strict_runtime_checks_fail_without_champion_workspace(self, tmp_path):
+    def test_strict_runtime_config_does_not_require_champion_workspace(self, tmp_path):
+        from scion.verification.gate import _validate_runtime_config
+
         canary = tmp_path / "small.json"
         canary.write_text("{}")
         spec = _make_spec(canary=str(canary))
-        runner = _mock_runner()
-        gate = VerificationGate(
-            problem_spec=spec,
-            runner=runner,
-            strict_runtime_checks=True,
-        )
-        patch = _make_patch(_VALID_CODE)
-        result = gate.run(str(tmp_path), str(tmp_path / "missing_champion"), patch)
-        assert result.passed is False
-        assert result.first_failure == "V_runtime_config"
-        assert "champion workspace" in result.checks[-1].detail
+
+        result = _validate_runtime_config(spec)
+
+        assert result is None
 
     def test_strict_runtime_config_resolves_problem_relative_canary(self, tmp_path):
         from scion.verification.gate import _validate_runtime_config
@@ -93,7 +88,7 @@ class TestVerificationGateIntegration:
             update={"root_dir": str(tmp_path)}
         )
 
-        result = _validate_runtime_config(spec, str(tmp_path))
+        result = _validate_runtime_config(spec)
 
         assert result is None
 
@@ -117,7 +112,7 @@ class TestVerificationGateIntegration:
         assert "problem adapter is required" in result.checks[-1].detail
         assert "legacy runtime fallback disabled" in result.checks[-1].detail
 
-    def test_strict_v9_champion_failure_fails_verification_result(
+    def test_verification_does_not_run_comparative_champion_guard(
         self,
         tmp_path,
         monkeypatch,
@@ -188,16 +183,20 @@ class TestVerificationGateIntegration:
 
         result = gate.run(str(tmp_path), str(champion_ws), _make_patch(_VALID_CODE))
 
-        assert result.passed is False
-        assert result.first_failure == "V9_perf_guard"
-        assert result.checks[-1].metadata["comparison_valid"] is False
+        assert result.passed is True
+        assert result.first_failure is None
+        assert all(
+            call.kwargs["workdir"] != str(champion_ws)
+            for call in runner.run_solver.call_args_list
+        )
+        assert "V9_perf_guard" not in [check.name for check in result.checks]
         runtime_checks = [
             check for check in result.checks if check.name.startswith("V")
-        ][-5:]
+        ][-4:]
         assert [
             check.metadata["verification_time_limit_sec"]
             for check in runtime_checks
-        ] == [17, 17, 17, 17, 17]
+        ] == [17, 17, 17, 17]
 
     def test_v9_budget_exhausting_checks_candidate_budget_not_champion_ratio(
         self,
@@ -405,7 +404,7 @@ class TestVerificationGateIntegration:
         result = gate.run("/tmp", "", patch)
         assert result.passed is True
 
-    def test_selected_surface_missing_runtime_field_fails_closed(self, tmp_path):
+    def test_selected_surface_missing_runtime_field_is_not_v5_gate(self, tmp_path):
         canary = tmp_path / "small.json"
         canary.write_text("{}")
         spec = _make_surface_spec(
@@ -438,9 +437,8 @@ class TestVerificationGateIntegration:
         )
 
         assert result.passed is False
-        assert result.first_failure == "V5_solution_consistency"
-        assert "failed runtime evidence contract" in result.checks[-1].detail
-        assert "missing=policy_errors" in result.checks[-1].detail
+        assert result.first_failure == "V6_feasibility"
+        assert "runtime evidence contract" not in result.checks[-1].detail
 
     def test_unknown_selected_surface_fails_at_v2_interface(self, tmp_path):
         canary = tmp_path / "small.json"
@@ -511,9 +509,8 @@ class TestVerificationGateIntegration:
         )
 
         assert result.passed is False
-        assert result.first_failure == "V5_solution_consistency"
-        assert "failed runtime evidence contract" in result.checks[-1].detail
-        assert "missing=policy_errors" in result.checks[-1].detail
+        assert result.first_failure == "V6_feasibility"
+        assert "runtime evidence contract" not in result.checks[-1].detail
 
     def test_run_verification_gate_helper_forwards_hypothesis_surface(
         self,
@@ -555,5 +552,5 @@ class TestVerificationGateIntegration:
         )
 
         assert result.passed is False
-        assert result.first_failure == "V5_solution_consistency"
-        assert "failed=dispatch_executed" in result.checks[-1].detail
+        assert result.first_failure == "V6_feasibility"
+        assert "runtime evidence contract" not in result.checks[-1].detail

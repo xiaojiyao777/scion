@@ -4,15 +4,18 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from .config import (
+    _ANTHROPIC_REQUIRED_MAX_TOKENS,
     _CODE_REQUEST_KINDS,
-    _DEFAULT_CODE_MAX_RETRIES,
     _DEFAULT_CODE_TIMEOUT_SEC,
-    _DEFAULT_TRANSIENT_PROVIDER_MAX_RETRIES,
     _env_float,
-    _env_int,
+    _is_openai_model,
     _normalize_request_kind,
     _request_kind_env_key,
 )
+
+
+_PROVIDER_MANAGED_OUTPUT = "provider_managed"
+_PROVIDER_NATIVE_REQUIRED_OUTPUT = "provider_native_required"
 
 
 class PolicyMixin:
@@ -21,21 +24,23 @@ class PolicyMixin:
         *,
         request_kind: str | None = None,
         tool: Dict[str, Any] | None = None,
+        model: str | None = None,
     ) -> Dict[str, Any]:
-        """Return the effective timeout/retry policy for one LLM request.
+        """Return the effective transport/output policy for one LLM request.
 
         Code-generation requests are long non-streaming tool calls.  By default
-        they get a longer client timeout and no same-prompt transport retry, so
-        Scion does not abandon requests that often finish just after 60 seconds
-        and then duplicate them in the provider backend.
+        they get a longer client timeout.  Every request is a single transport
+        call; timeout is a process-safety boundary, never a retry trigger.
+
+        OpenAI-compatible proposal calls leave output length to the provider.
+        Anthropic's SDK requires ``max_tokens``; that provider-native transport
+        requirement is reported explicitly and is not a Scion retry policy.
         """
         normalized = _normalize_request_kind(request_kind=request_kind, tool=tool)
         timeout_sec = self.timeout_sec
-        max_retries = self.max_retries
 
         if normalized in _CODE_REQUEST_KINDS:
             timeout_sec = max(self.timeout_sec, _DEFAULT_CODE_TIMEOUT_SEC)
-            max_retries = _DEFAULT_CODE_MAX_RETRIES
 
         env_key = _request_kind_env_key(normalized)
         if env_key:
@@ -43,21 +48,28 @@ class PolicyMixin:
                 f"SCION_LLM_{env_key}_TIMEOUT_SEC",
                 timeout_sec,
             )
-            max_retries = _env_int(
-                f"SCION_LLM_{env_key}_MAX_RETRIES",
-                max_retries,
-            )
-        transient_max_retries = _env_int(
-            "SCION_LLM_TRANSIENT_PROVIDER_MAX_RETRIES",
-            _DEFAULT_TRANSIENT_PROVIDER_MAX_RETRIES,
-        )
+        effective_model = str(model or self.model)
+        provider_managed_output = _is_openai_model(effective_model)
 
         return {
             "request_kind": normalized or "default",
             "timeout_sec": timeout_sec,
-            "max_retries": max_retries,
-            "transient_max_retries": transient_max_retries,
-            "sdk_max_retries": self.sdk_max_retries,
-            "max_tokens": self.max_tokens,
+            "provider": (
+                "openai_compatible" if provider_managed_output else "anthropic"
+            ),
+            "output_token_policy": (
+                _PROVIDER_MANAGED_OUTPUT
+                if provider_managed_output
+                else _PROVIDER_NATIVE_REQUIRED_OUTPUT
+            ),
+            "output_token_parameter": (
+                "omitted"
+                if provider_managed_output
+                else "max_tokens"
+            ),
+            "provider_transport_output_ceiling_tokens": (
+                None
+                if provider_managed_output
+                else _ANTHROPIC_REQUIRED_MAX_TOKENS
+            ),
         }
-

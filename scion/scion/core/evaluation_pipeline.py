@@ -9,7 +9,7 @@ from scion.core.canary_failure import (
     canary_configuration_error,
     normalize_canary_result,
 )
-from scion.core.features import BudgetState, SafeFeatureExtractor
+from scion.core.features import SafeFeatureExtractor
 from scion.core.models import (
     Branch,
     BranchState,
@@ -24,13 +24,6 @@ from scion.core.models import (
 from scion.core.runtime_budget_diagnostics import (
     format_runtime_budget_diagnostic,
     protocol_runtime_budget_diagnostic,
-    runtime_budget_diagnostic_reason_codes,
-)
-from scion.core.telemetry_validation import (
-    TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
-    telemetry_effect_zero_detected,
-    telemetry_validation_failure_codes,
-    telemetry_validation_feedback,
 )
 
 
@@ -44,12 +37,8 @@ class EvaluationRequest:
     expand: bool = False
     expand_round: int = 0
     selected_surface: str | None = None
-    expected_telemetry: Mapping[str, Any] | None = None
-    mechanism_changes: tuple[Any, ...] = ()
-    protected_objectives: tuple[str, ...] = ()
     priority_case_ids: tuple[str, ...] = ()
     patch: Optional[PatchProposal] = None
-    retry_count: int = 0
     screening_expand_count: int = 0
     validation_expand_count: int = 0
     failure_codes: tuple[str, ...] = ()
@@ -86,9 +75,6 @@ class ExperimentProtocolLike(Protocol):
         expand: bool = False,
         expand_round: int = 1,
         selected_surface: str | None = None,
-        expected_telemetry: Mapping[str, Any] | None = None,
-        mechanism_changes: tuple[Any, ...] = (),
-        protected_objectives: tuple[str, ...] = (),
         priority_case_ids: tuple[str, ...] = (),
     ) -> ProtocolResult:
         ...
@@ -96,9 +82,6 @@ class ExperimentProtocolLike(Protocol):
 
 ContractEvaluator = Callable[[EvaluationRequest], ContractResult]
 VerificationEvaluator = Callable[[EvaluationRequest], VerificationResult]
-BudgetProvider = Callable[[], BudgetState]
-
-
 class EvaluationPipeline:
     """Service shell for evaluation-stage orchestration.
 
@@ -116,14 +99,12 @@ class EvaluationPipeline:
         experiment_protocol: ExperimentProtocolLike | None = None,
         require_experiment_protocol: bool = False,
         feature_extractor: SafeFeatureExtractor | None = None,
-        budget_provider: BudgetProvider | None = None,
     ) -> None:
         self._contract_evaluator = contract_evaluator or _default_contract_evaluator
         self._verification_evaluator = verification_evaluator or _default_verification_evaluator
         self._experiment_protocol = experiment_protocol
         self._require_experiment_protocol = require_experiment_protocol
         self._feature_extractor = feature_extractor or SafeFeatureExtractor()
-        self._budget_provider = budget_provider or (lambda: BudgetState(total=0, used=0))
 
     def evaluate(self, request: EvaluationRequest) -> EvaluationOutcome:
         branch = _request_to_branch(request)
@@ -159,20 +140,8 @@ class EvaluationPipeline:
                         expand=request.expand,
                         expand_round=request.expand_round,
                         selected_surface=request.selected_surface,
-                        expected_telemetry=request.expected_telemetry,
-                        mechanism_changes=request.mechanism_changes,
-                        protected_objectives=request.protected_objectives,
                         priority_case_ids=request.priority_case_ids,
                         force_fresh_champion=request.force_fresh_champion,
-                    )
-                    protocol_result = _annotate_telemetry_validation_failure(
-                        protocol_result
-                    )
-                    protocol_result = _annotate_telemetry_effect_zero_diagnostic(
-                        protocol_result
-                    )
-                    protocol_result = _annotate_runtime_budget_diagnostic(
-                        protocol_result
                     )
                     protocol_result = _sanitize_protocol_exposure(protocol_result)
             else:
@@ -199,7 +168,6 @@ class EvaluationPipeline:
             verification=verification_result,
             canary=canary_result,
             protocol=protocol_result,
-            budget=self._budget_provider(),
         )
 
         return EvaluationOutcome(
@@ -219,7 +187,6 @@ def _request_to_branch(request: EvaluationRequest) -> Branch:
         state=request.branch_state,
         base_champion_id=0,
         base_champion_hash="",
-        retry_count=request.retry_count,
         screening_expand_count=request.screening_expand_count,
         validation_expand_count=request.validation_expand_count,
     )
@@ -240,27 +207,6 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         return result
 
     stats = result.stats
-    telemetry_guard = ""
-    surface_summary = result.candidate_surface_runtime_summary or {}
-    if isinstance(surface_summary, Mapping):
-        guard = surface_summary.get("telemetry_guard")
-        if isinstance(guard, Mapping):
-            failures = guard.get("failures")
-            warnings = guard.get("warnings")
-            failure_count = len(failures) if isinstance(failures, list) else 0
-            warning_count = len(warnings) if isinstance(warnings, list) else 0
-            telemetry_guard = (
-                f" telemetry_guard_passed={bool(guard.get('passed'))}"
-                f" telemetry_guard_failures={failure_count}"
-                f" telemetry_guard_warnings={warning_count}"
-            )
-    telemetry_feedback = telemetry_validation_feedback(result)
-    telemetry_feedback_suffix = f" {telemetry_feedback}" if telemetry_feedback else ""
-    telemetry_effect_zero_suffix = (
-        " telemetry_effect_zero=diagnostic"
-        if telemetry_effect_zero_detected(result)
-        else ""
-    )
     runtime_budget_suffix = format_runtime_budget_diagnostic(
         protocol_runtime_budget_diagnostic(result)
     )
@@ -281,9 +227,6 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         f" champion_cache_misses={result.champion_cache_misses}"
         f" champion_cached_runtime_pairs={result.champion_cached_runtime_pairs}"
         f" runtime_confidence={result.runtime_confidence}"
-        f"{telemetry_guard}"
-        f"{telemetry_feedback_suffix}"
-        f"{telemetry_effect_zero_suffix}"
         f"{runtime_budget_suffix}"
     )
     return replace(
@@ -292,63 +235,6 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         pair_feedback=(),
         case_feedback=(),
         pattern_summary=None,
-    )
-
-
-def _annotate_telemetry_validation_failure(
-    result: ProtocolResult,
-) -> ProtocolResult:
-    codes = telemetry_validation_failure_codes(result)
-    if not codes:
-        return result
-    reason_codes = tuple(dict.fromkeys([*codes, *result.reason_codes]))
-    feedback = telemetry_validation_feedback(result)
-    exposed_summary = result.exposed_summary or ""
-    if feedback and feedback not in exposed_summary:
-        exposed_summary = (exposed_summary + " " + feedback).strip()
-    return replace(
-        result,
-        reason_codes=reason_codes,
-        exposed_summary=exposed_summary,
-    )
-
-
-def _annotate_telemetry_effect_zero_diagnostic(
-    result: ProtocolResult,
-) -> ProtocolResult:
-    if not telemetry_effect_zero_detected(result):
-        return result
-    reason_codes = tuple(
-        dict.fromkeys((*tuple(result.reason_codes), TELEMETRY_EFFECT_ZERO_DIAGNOSTIC))
-    )
-    exposed_summary = result.exposed_summary or ""
-    suffix = "telemetry_effect_zero=diagnostic"
-    if suffix not in exposed_summary:
-        exposed_summary = (exposed_summary + " " + suffix).strip()
-    return replace(
-        result,
-        reason_codes=reason_codes,
-        exposed_summary=exposed_summary,
-    )
-
-
-def _annotate_runtime_budget_diagnostic(
-    result: ProtocolResult,
-) -> ProtocolResult:
-    codes = runtime_budget_diagnostic_reason_codes(result)
-    if not codes:
-        return result
-    reason_codes = tuple(dict.fromkeys((*tuple(result.reason_codes), *codes)))
-    exposed_summary = result.exposed_summary or ""
-    suffix = format_runtime_budget_diagnostic(
-        protocol_runtime_budget_diagnostic(result)
-    ).strip()
-    if suffix and suffix not in exposed_summary:
-        exposed_summary = (exposed_summary + " " + suffix).strip()
-    return replace(
-        result,
-        reason_codes=reason_codes,
-        exposed_summary=exposed_summary,
     )
 
 
@@ -373,9 +259,6 @@ def _run_protocol_experiment(
     **kwargs: object,
 ) -> ProtocolResult:
     selected_surface = kwargs.pop("selected_surface", None)
-    expected_telemetry = kwargs.pop("expected_telemetry", None)
-    mechanism_changes = kwargs.pop("mechanism_changes", None)
-    protected_objectives = kwargs.pop("protected_objectives", None)
     priority_case_ids = tuple(
         str(case_id).strip()
         for case_id in (kwargs.pop("priority_case_ids", None) or ())
@@ -388,24 +271,6 @@ def _run_protocol_experiment(
         selected_surface,
     ):
         kwargs["selected_surface"] = selected_surface
-    if expected_telemetry and _method_accepts_keyword(
-        protocol,
-        "run_experiment",
-        "expected_telemetry",
-    ):
-        kwargs["expected_telemetry"] = expected_telemetry
-    if mechanism_changes and _method_accepts_keyword(
-        protocol,
-        "run_experiment",
-        "mechanism_changes",
-    ):
-        kwargs["mechanism_changes"] = mechanism_changes
-    if protected_objectives and _method_accepts_keyword(
-        protocol,
-        "run_experiment",
-        "protected_objectives",
-    ):
-        kwargs["protected_objectives"] = protected_objectives
     if priority_case_ids and _method_accepts_keyword(
         protocol,
         "run_experiment",

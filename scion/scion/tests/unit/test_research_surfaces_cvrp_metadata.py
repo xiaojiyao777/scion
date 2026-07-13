@@ -66,8 +66,6 @@ def test_cvrp_contract_accepts_active_baseline_algorithm_patch() -> None:
             code_content=(
                 "def solve(instance, rng, time_limit_sec, context):\n"
                 "    solution = context.nearest_neighbor()\n"
-                "    context.record_iteration('contract_probe', 1)\n"
-                "    context.record_move('contract_probe', attempted=1, accepted=0)\n"
                 "    return solution\n"
             ),
         ),
@@ -77,15 +75,6 @@ def test_cvrp_contract_accepts_active_baseline_algorithm_patch() -> None:
             action="modify",
             target_file="policies/baseline_algorithm.py",
             predicted_direction="preserve",
-            target_objectives=["total_distance"],
-            protected_objectives=["fleet_violation"],
-            novelty_signature={
-                "algorithm_family": "contract_probe",
-                "construction_strategy": "nearest_neighbor",
-                "improvement_strategy": "bounded_probe",
-                "acceptance_strategy": "none",
-                "runtime_budget_strategy": "constant",
-            },
         ),
     )
 
@@ -107,8 +96,6 @@ def test_cvrp_contract_rejects_deleted_legacy_surface_target() -> None:
             action="modify",
             target_file="policies/search_policy.py",
             predicted_direction="preserve",
-            target_objectives=["total_distance"],
-            protected_objectives=["fleet_violation"],
         ),
     )
 

@@ -10,10 +10,7 @@ from scion.postrun.inventory.constants import HANDOFF_DOC
 from scion.postrun.inventory.lifecycle import _launch_root_without_current_run
 from scion.postrun.inventory.prepared_ports import PreparedHandoffReviewPort
 from scion.postrun.inventory.traces import (
-    _is_target_intent_trace,
     _prompt_manifest_ref_present,
-    _session_index_entries,
-    _trace_index_entries,
 )
 from scion.postrun.inventory.utils import (
     _contains_key_fragment,
@@ -31,15 +28,16 @@ def _phase4_evidence_coverage(
     campaign_dir: Path,
     campaign_status: Any,
     summary: Any,
-    trace_index: Any,
-    session_index: Any,
     llm_traces: dict[str, Any],
+    proposal_attempts: Mapping[str, Any],
+    proposal_runtime: Mapping[str, Any],
     lifecycle: Mapping[str, Any],
     prepared_manifest: Any = None,
     prepared_handoff_ports: Mapping[str, PreparedHandoffReviewPort] | None = None,
 ) -> dict[str, Any]:
     """Return report-only coverage flags for Phase 4 postrun analysis inputs."""
 
+    proposal_runtime_mode = str(proposal_runtime.get("resolved_mode") or "")
     problem_specific_requirements = _problem_specific_phase4_requirements(
         prepared_manifest,
         prepared_handoff_ports=prepared_handoff_ports or {},
@@ -78,19 +76,18 @@ def _phase4_evidence_coverage(
             "invalid_infra_only": lifecycle.get("invalid_infra_only") is True,
             "current_run_evidence": False,
             "requirements": _empty_phase4_requirements("not current-run evidence"),
+            "proposal_runtime": dict(proposal_runtime),
             "problem_specific_requirements": problem_specific_requirements,
             "analysis_handoff": HANDOFF_DOC,
         }
 
     trace_coverage = _phase4_trace_coverage(
         campaign_dir=campaign_dir,
-        trace_index=trace_index,
-        session_index=session_index,
     )
-    research_docs = _postrun_json_docs(run_root, "research_efficiency")
+    attempt_phase_counts = _mapping_or_empty(proposal_attempts.get("by_phase"))
     manifest_docs = _postrun_json_docs(run_root, "manifests")
     source_docs = [
-        doc for doc in (summary, campaign_status, *research_docs, *manifest_docs) if doc
+        doc for doc in (summary, campaign_status, *manifest_docs) if doc
     ]
     formal_rows = _jsonl_row_count(
         campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
@@ -100,53 +97,14 @@ def _phase4_evidence_coverage(
         for doc in manifest_docs
     )
     prompt_signal_density_count = _prompt_signal_density_summary_count(manifest_docs)
-    prompt_manifest_refs = trace_coverage.get("prompt_manifest_ref_count", 0)
+    prompt_manifest_refs = max(
+        trace_coverage.get("prompt_manifest_ref_count", 0),
+        _int_or_zero(proposal_attempts.get("prompt_manifest_ref_count")),
+    )
     measurement_readiness_count = sum(
         1
-        for doc in (summary, campaign_status, *research_docs)
+        for doc in (summary, campaign_status)
         if _contains_key_fragment(doc, ("measurement_readiness",))
-    )
-    effect_vs_mde_count = sum(
-        1
-        for doc in research_docs
-        if _contains_key_fragment(doc, ("protocol_effects_vs_mde", "mde_source"))
-    )
-    protocol_accounting_count = _protocol_accounting_summary_count(research_docs)
-    validation_frozen_stage_count = _validation_frozen_stage_accounting_count(
-        research_docs
-    )
-    branch_lesson_count = sum(
-        1
-        for doc in source_docs
-        if _contains_key_fragment(doc, ("branch_lesson", "cross_branch"))
-    )
-    research_continuity_count = sum(
-        1
-        for doc in research_docs
-        if _contains_key_fragment(
-            doc,
-            (
-                "research_continuity",
-                "same_mechanism_followup",
-                "weak_positive_transfer",
-            ),
-        )
-    )
-    same_mechanism_followup_count = _research_continuity_field_count(
-        research_docs,
-        "same_mechanism_followup",
-    )
-    branch_lesson_usage_count = _research_continuity_field_count(
-        research_docs,
-        "branch_lesson_usage",
-    )
-    weak_positive_transfer_count = _research_continuity_field_count(
-        research_docs,
-        "weak_positive_transfer",
-    )
-    branch_research_shape_count = _research_continuity_field_count(
-        research_docs,
-        "research_shape_summary",
     )
     runtime_feedback_count = sum(
         1
@@ -156,7 +114,6 @@ def _phase4_evidence_coverage(
             (
                 "runtime_feedback",
                 "runtime_budget",
-                "fresh_runtime_replay",
                 "runtime_regression",
             ),
         )
@@ -170,7 +127,6 @@ def _phase4_evidence_coverage(
         )
     )
     code_source_visibility_count = _code_source_visibility_summary_count(manifest_docs)
-
     return {
         "schema_version": "scion.postrun_phase4_evidence_coverage.v1",
         "report_only": True,
@@ -183,18 +139,35 @@ def _phase4_evidence_coverage(
         ),
         "invalid_infra_only": lifecycle.get("invalid_infra_only") is True,
         "current_run_evidence": True,
+        "proposal_runtime_mode": proposal_runtime_mode or None,
+        "proposal_runtime": dict(proposal_runtime),
+        "proposal_attempts": dict(proposal_attempts),
         "requirements": {
-            "target_intent_trace": _coverage_item(
-                trace_coverage.get("target_intent_trace_count", 0),
-                "llm_traces or trace_index",
+            "proposal_attempt_transition": _coverage_item(
+                _int_or_zero(proposal_attempts.get("valid_row_count")),
+                "campaign/scion.db proposal_attempt_transition",
+            ),
+            "proposal_attempt_hypothesis_phase": _coverage_item(
+                _int_or_zero(attempt_phase_counts.get("hypothesis")),
+                "campaign/scion.db proposal_attempt_transition",
+            ),
+            "proposal_attempt_code_phase": _coverage_item(
+                _int_or_zero(attempt_phase_counts.get("code")),
+                "campaign/scion.db proposal_attempt_transition",
             ),
             "hypothesis_trace": _coverage_item(
-                _int_or_zero(llm_traces.get("by_kind", {}).get("hypothesis")),
-                "llm_traces",
+                max(
+                    _int_or_zero(llm_traces.get("by_kind", {}).get("hypothesis")),
+                    _int_or_zero(attempt_phase_counts.get("hypothesis")),
+                ),
+                "llm_traces or proposal attempt transitions",
             ),
             "code_trace": _coverage_item(
-                _int_or_zero(llm_traces.get("by_kind", {}).get("code")),
-                "llm_traces",
+                max(
+                    _int_or_zero(llm_traces.get("by_kind", {}).get("code")),
+                    _int_or_zero(attempt_phase_counts.get("code")),
+                ),
+                "llm_traces or proposal attempt transitions",
             ),
             "formal_candidate_artifact": _coverage_item(
                 formal_rows,
@@ -212,53 +185,13 @@ def _phase4_evidence_coverage(
                 prompt_signal_density_count,
                 "proposal trajectory prompt block-family accounting",
             ),
-            "research_efficiency_report": _coverage_item(
-                len(research_docs),
-                "postrun_acceptance/research_efficiency",
-            ),
             "measurement_readiness": _coverage_item(
                 measurement_readiness_count,
-                "campaign summary/status or research-efficiency report",
-            ),
-            "protocol_effect_vs_mde": _coverage_item(
-                effect_vs_mde_count,
-                "research-efficiency protocol_effects_vs_mde",
-            ),
-            "protocol_accounting": _coverage_item(
-                protocol_accounting_count,
-                "research-efficiency protocol_rows/formal_candidates/stage_rows",
-            ),
-            "validation_frozen_stage_accounting": _coverage_item(
-                validation_frozen_stage_count,
-                "research-efficiency validation/frozen stage accounting",
-            ),
-            "branch_lesson_transfer": _coverage_item(
-                branch_lesson_count,
-                "summary/status, research-efficiency, or trajectory manifest",
-            ),
-            "research_continuity": _coverage_item(
-                research_continuity_count,
-                "research-efficiency research_continuity",
-            ),
-            "same_mechanism_followup": _coverage_item(
-                same_mechanism_followup_count,
-                "research-efficiency research_continuity.same_mechanism_followup",
-            ),
-            "branch_lesson_usage": _coverage_item(
-                branch_lesson_usage_count,
-                "research-efficiency research_continuity.branch_lesson_usage",
-            ),
-            "weak_positive_transfer": _coverage_item(
-                weak_positive_transfer_count,
-                "research-efficiency research_continuity.weak_positive_transfer",
-            ),
-            "branch_research_shape": _coverage_item(
-                branch_research_shape_count,
-                "research-efficiency research_continuity.research_shape_summary",
+                "campaign summary/status",
             ),
             "runtime_feedback": _coverage_item(
                 runtime_feedback_count,
-                "summary/status or research-efficiency runtime fields",
+                "campaign summary/status runtime fields",
             ),
             "source_visibility": _coverage_item(
                 source_visibility_count,
@@ -290,7 +223,6 @@ def _problem_specific_phase4_requirements(
 
 def _empty_phase4_requirements(reason: str) -> dict[str, dict[str, Any]]:
     sources = {
-        "target_intent_trace": "llm_traces or trace_index",
         "hypothesis_trace": "llm_traces",
         "code_trace": "llm_traces",
         "formal_candidate_artifact": "campaign/artifacts/formal_candidates/index.jsonl",
@@ -299,34 +231,8 @@ def _empty_phase4_requirements(reason: str) -> dict[str, dict[str, Any]]:
             "proposal_trajectory_manifest or trace_index prompt_manifest refs"
         ),
         "prompt_signal_density": ("proposal trajectory prompt block-family accounting"),
-        "research_efficiency_report": "postrun_acceptance/research_efficiency",
-        "measurement_readiness": (
-            "campaign summary/status or research-efficiency report"
-        ),
-        "protocol_effect_vs_mde": "research-efficiency protocol_effects_vs_mde",
-        "protocol_accounting": (
-            "research-efficiency protocol_rows/formal_candidates/stage_rows"
-        ),
-        "validation_frozen_stage_accounting": (
-            "research-efficiency validation/frozen stage accounting"
-        ),
-        "branch_lesson_transfer": (
-            "summary/status, research-efficiency, or trajectory manifest"
-        ),
-        "research_continuity": "research-efficiency research_continuity",
-        "same_mechanism_followup": (
-            "research-efficiency research_continuity.same_mechanism_followup"
-        ),
-        "branch_lesson_usage": (
-            "research-efficiency research_continuity.branch_lesson_usage"
-        ),
-        "weak_positive_transfer": (
-            "research-efficiency research_continuity.weak_positive_transfer"
-        ),
-        "branch_research_shape": (
-            "research-efficiency research_continuity.research_shape_summary"
-        ),
-        "runtime_feedback": "summary/status or research-efficiency runtime fields",
+        "measurement_readiness": "campaign summary/status",
+        "runtime_feedback": "campaign summary/status runtime fields",
         "source_visibility": "prompt manifests or trajectory visibility fingerprints",
         "code_source_visibility_guarantees": (
             "trajectory manifest code-phase source visibility guarantees"
@@ -335,58 +241,6 @@ def _empty_phase4_requirements(reason: str) -> dict[str, dict[str, Any]]:
     return {
         key: _coverage_item(0, f"{source}; {reason}") for key, source in sources.items()
     }
-
-
-def _protocol_accounting_summary_count(docs: list[Any]) -> int:
-    return sum(
-        1
-        for doc in docs
-        if isinstance(doc, dict) and _has_protocol_accounting_summary(doc)
-    )
-
-
-def _has_protocol_accounting_summary(doc: dict[str, Any]) -> bool:
-    return any(
-        isinstance(doc.get(key), dict) and bool(doc.get(key))
-        for key in (
-            "effective_budget",
-            "protocol_rows",
-            "formal_candidates",
-            "formal_candidate_artifacts",
-            "stage_rows",
-        )
-    )
-
-
-def _validation_frozen_stage_accounting_count(docs: list[Any]) -> int:
-    return sum(
-        1
-        for doc in docs
-        if isinstance(doc, dict) and _has_validation_frozen_stage_accounting(doc)
-    )
-
-
-def _has_validation_frozen_stage_accounting(doc: dict[str, Any]) -> bool:
-    stage_rows = _mapping_or_empty(doc.get("stage_rows"))
-    if "validation" in stage_rows or "frozen" in stage_rows:
-        return True
-    protocol_rows = _mapping_or_empty(doc.get("protocol_rows"))
-    stage_counts = _mapping_or_empty(protocol_rows.get("stage_counts"))
-    return "validation" in stage_counts or "frozen" in stage_counts
-
-
-def _research_continuity_field_count(docs: list[Any], field: str) -> int:
-    count = 0
-    for doc in docs:
-        if not isinstance(doc, dict):
-            continue
-        continuity = doc.get("research_continuity")
-        if not isinstance(continuity, dict):
-            continue
-        value = continuity.get(field)
-        if isinstance(value, dict) and value:
-            count += 1
-    return count
 
 
 def _prompt_signal_density_summary_count(docs: list[Any]) -> int:
@@ -439,31 +293,13 @@ def _has_code_source_visibility_summary(value: dict[str, Any]) -> bool:
 def _phase4_trace_coverage(
     *,
     campaign_dir: Path,
-    trace_index: Any,
-    session_index: Any,
 ) -> dict[str, int]:
-    file_target_intent_count = 0
-    index_target_intent_count = 0
     prompt_manifest_ref_count = 0
     for path in sorted((campaign_dir / "llm_traces").glob("*.json")):
         doc = _read_json(path)
-        if _is_target_intent_trace(doc, path):
-            file_target_intent_count += 1
         if _prompt_manifest_ref_present(doc):
             prompt_manifest_ref_count += 1
-    for entry in _trace_index_entries(trace_index):
-        if _is_target_intent_trace(entry, None):
-            index_target_intent_count += 1
-        if _prompt_manifest_ref_present(entry):
-            prompt_manifest_ref_count += 1
-    for entry in _session_index_entries(session_index):
-        if _prompt_manifest_ref_present(entry):
-            prompt_manifest_ref_count += 1
     return {
-        "target_intent_trace_count": max(
-            file_target_intent_count,
-            index_target_intent_count,
-        ),
         "prompt_manifest_ref_count": prompt_manifest_ref_count,
     }
 

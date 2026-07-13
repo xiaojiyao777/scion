@@ -5,30 +5,32 @@ import asyncio
 import inspect
 import json
 import logging
+import re
 from typing import Any, Dict
 
 from .cache import gpt_prompt_cache_key
 from .config import (
+    _ANTHROPIC_REQUIRED_MAX_TOKENS,
     _is_deepseek_model,
     _is_gpt_codex_model,
     _is_openai_model,
     _normalize_request_kind,
 )
 from .errors import (
+    LLMAuthError,
     LLMBalanceError,
     LLMError,
     LLMFormatError,
+    LLMProviderError,
     LLMRateLimitError,
     LLMTimeoutError,
-    LLMTransientProviderError,
+    LLMTransportError,
     _is_timeout_error_text,
     _is_transient_provider_error,
     _parse_retry_after,
 )
-from .timeout import _llm_hard_timeout
 
 logger = logging.getLogger(__name__)
-
 
 class TransportMixin:
     def close_provider_clients(self) -> None:
@@ -66,17 +68,15 @@ class TransportMixin:
         tool: Dict[str, Any],
         model: str,
         system_blocks: "list[dict] | None",
-        max_tokens: int,
         timeout_sec: float,
-    ) -> tuple[Dict[str, Any], bool]:
-        """Execute one tool call. Returns (result_dict, was_truncated)."""
+    ) -> Dict[str, Any]:
+        """Execute one tool call and return the provider's typed payload."""
         if _is_openai_model(model):
             return self._tool_call_once_openai(
                 prompt,
                 tool,
                 model,
                 system_blocks,
-                max_tokens,
                 timeout_sec,
             )
         return self._tool_call_once_anthropic(
@@ -84,17 +84,16 @@ class TransportMixin:
             tool,
             model,
             system_blocks,
-            max_tokens,
             timeout_sec,
         )
 
     def _tool_call_once_anthropic(
-        self, prompt, tool, model, system_blocks, max_tokens, timeout_sec,
-    ) -> tuple[Dict[str, Any], bool]:
+        self, prompt, tool, model, system_blocks, timeout_sec,
+    ) -> Dict[str, Any]:
         client = self._get_anthropic_client()
         kwargs: Dict[str, Any] = {
             "model": model,
-            "max_tokens": max_tokens,
+            "max_tokens": _ANTHROPIC_REQUIRED_MAX_TOKENS,
             "tools": [tool],
             "tool_choice": {"type": "tool", "name": tool["name"]},
             "messages": [{"role": "user", "content": prompt}],
@@ -131,21 +130,19 @@ class TransportMixin:
                 )
 
         stop_reason = getattr(response, "stop_reason", None)
-        if stop_reason in ("max_tokens", "length"):
-            return {}, True
 
         for block in response.content:
             if hasattr(block, "type") and block.type == "tool_use":
                 if block.name == tool["name"]:
-                    return block.input, False
+                    return block.input
 
         raise LLMFormatError(
             f"LLM did not call tool '{tool['name']}'. Stop reason: {stop_reason}"
         )
 
     def _tool_call_once_openai(
-        self, prompt, tool, model, system_blocks, max_tokens, timeout_sec,
-    ) -> tuple[Dict[str, Any], bool]:
+        self, prompt, tool, model, system_blocks, timeout_sec,
+    ) -> Dict[str, Any]:
         client = self._get_openai_client()
         # Merge system blocks into user prompt to avoid incompatibility
         # (some models like minimax reject system messages + tool_use together)
@@ -173,7 +170,6 @@ class TransportMixin:
         response = client.chat.completions.create(
             **self._openai_chat_kwargs(
                 model=model,
-                max_tokens=max_tokens,
                 messages=messages,
                 timeout_sec=timeout_sec,
                 tools=[openai_tool],
@@ -207,9 +203,6 @@ class TransportMixin:
                 )
 
         choice = response.choices[0]
-        if choice.finish_reason in ("length",):
-            return {}, True
-
         tool_calls = getattr(choice.message, "tool_calls", None)
         if not tool_calls:
             raise LLMFormatError(
@@ -217,130 +210,19 @@ class TransportMixin:
                 f"Finish reason: {choice.finish_reason}"
             )
 
-        result = json.loads(tool_calls[0].function.arguments)
-        return result, False
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _call_once(
-        self,
-        prompt: str,
-        model: str,
-        system_blocks: "list[dict] | None" = None,
-    ) -> str:
-        if _is_openai_model(model):
-            return self._call_once_openai(prompt, model, system_blocks)
-        return self._call_once_anthropic(prompt, model, system_blocks)
-
-    def _call_once_anthropic(
-        self,
-        prompt: str,
-        model: str,
-        system_blocks: "list[dict] | None" = None,
-    ) -> str:
-        """Anthropic SDK path."""
-        client = self._get_anthropic_client()
         try:
-            kwargs: Dict[str, Any] = {
-                "model": model,
-                "max_tokens": self.max_tokens,
-                "messages": [{"role": "user", "content": prompt}],
-                "timeout": self.timeout_sec,
-            }
-            if system_blocks:
-                kwargs["system"] = system_blocks
-            message = client.messages.create(**kwargs)
-            usage = getattr(message, "usage", None)
-            if usage:
-                cache_create = getattr(usage, "cache_creation_input_tokens", 0)
-                cache_read = getattr(usage, "cache_read_input_tokens", 0)
-                input_tokens = getattr(usage, "input_tokens", 0)
-                output_tokens = getattr(usage, "output_tokens", 0)
-                self._record_anthropic_usage(
-                    usage,
-                    model=model,
-                    request_kind="llm_call",
-                )
-                if cache_create or cache_read:
-                    logger.info(
-                        "Cache: created=%d read=%d uncached=%d",
-                        cache_create, cache_read, input_tokens,
-                    )
-                if self._token_tracker is not None:
-                    self._token_tracker.record(
-                        request_kind="llm_call",
-                        model_id=model,
-                        prompt_tokens=input_tokens,
-                        completion_tokens=output_tokens,
-                        cache_read_tokens=cache_read,
-                        cache_create_tokens=cache_create,
-                    )
-            return message.content[0].text
-        except Exception as exc:
-            self._raise_classified(exc)
-
-    def _call_once_openai(
-        self,
-        prompt: str,
-        model: str,
-        system_blocks: "list[dict] | None" = None,
-    ) -> str:
-        """OpenAI SDK path (GPT models via aihubmix)."""
-        client = self._get_openai_client()
-        try:
-            messages: list[Dict[str, Any]] = []
-            if system_blocks:
-                for block in system_blocks:
-                    text = block.get("text", "") if isinstance(block, dict) else str(block)
-                    messages.append({"role": "system", "content": text})
-            messages.append({"role": "user", "content": prompt})
-
-            response = client.chat.completions.create(
-                **self._openai_chat_kwargs(
-                    model=model,
-                    max_tokens=self.max_tokens,
-                    messages=messages,
-                    timeout_sec=self.timeout_sec,
-                    request_kind="llm_call",
-                    system_blocks=system_blocks,
-                )
-            )
-            usage = response.usage
-            if usage:
-                cache_read, cache_miss = self._openai_cache_usage(usage)
-                input_tokens = (
-                    cache_miss if cache_read or cache_miss else usage.prompt_tokens or 0
-                )
-                output_tokens = usage.completion_tokens or 0
-                self._cache_stats["calls"] += 1
-                self._cache_stats["cache_read_tokens"] += cache_read
-                self._cache_stats["uncached_tokens"] += input_tokens
-                self._record_openai_usage(
-                    usage,
-                    model=model,
-                    request_kind="llm_call",
-                    prompt_cache_key=self._last_prompt_cache_key,
-                )
-                if self._token_tracker is not None:
-                    self._token_tracker.record(
-                        request_kind="llm_call",
-                        model_id=model,
-                        prompt_tokens=input_tokens,
-                        completion_tokens=output_tokens,
-                        cache_read_tokens=cache_read,
-                        cache_create_tokens=0,
-                    )
-            return response.choices[0].message.content
-        except Exception as exc:
-            self._raise_classified(exc)
+            result = json.loads(tool_calls[0].function.arguments)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise LLMFormatError(
+                f"LLM tool '{tool_name}' returned invalid JSON arguments. "
+                f"Finish reason: {choice.finish_reason}"
+            ) from exc
+        return result
 
     def _openai_chat_kwargs(
         self,
         *,
         model: str,
-        max_tokens: int,
         messages: list[Dict[str, Any]],
         timeout_sec: float,
         tools: list[Dict[str, Any]] | None = None,
@@ -350,7 +232,6 @@ class TransportMixin:
     ) -> Dict[str, Any]:
         kwargs: Dict[str, Any] = {
             "model": model,
-            "max_completion_tokens": max_tokens,
             "messages": messages,
             "timeout": timeout_sec,
         }
@@ -523,18 +404,34 @@ class TransportMixin:
 
     @staticmethod
     def _raise_classified(exc: Exception) -> None:
-        """Classify a raw SDK exception and re-raise as the appropriate LLM* type."""
+        """Classify one raw SDK exception at the transport boundary."""
+        if isinstance(exc, LLMError):
+            raise exc
         raw_error = str(exc)
         err_str = raw_error.lower()
-        if _is_timeout_error_text(err_str):
+        status_code = _provider_status_code(exc, raw_error=raw_error)
+        type_name = type(exc).__name__.lower()
+
+        if (
+            status_code == 408
+            or isinstance(exc, TimeoutError)
+            or "timeout" in type_name
+            or _is_timeout_error_text(err_str)
+        ):
             raise LLMTimeoutError(f"Request timed out: {exc}") from exc
-        if "403" in err_str and ("balance" in err_str or "insufficient" in err_str):
+        if status_code == 403 and _is_balance_error_text(err_str):
             raise LLMBalanceError(f"API balance exhausted: {exc}") from exc
-        if _is_transient_provider_error(err_str):
-            raise LLMTransientProviderError(f"Transient provider error: {exc}") from exc
-        if "429" in raw_error or "rate_limit" in err_str or "ratelimit" in err_str:
+        if status_code in {401, 403} or _is_auth_error_text(err_str):
+            raise LLMAuthError(f"API authentication failed: {exc}") from exc
+        if status_code == 429 or "rate_limit" in err_str or "ratelimit" in err_str:
             retry_after = _parse_retry_after(exc)
             raise LLMRateLimitError(f"Rate limited: {exc}", retry_after=retry_after) from exc
+        if _is_transport_exception(exc, err_str=err_str, type_name=type_name):
+            raise LLMTransportError(f"Provider transport failed: {exc}") from exc
+        if (status_code is not None and 500 <= status_code <= 599) or (
+            _is_transient_provider_error(err_str)
+        ):
+            raise LLMProviderError(f"Provider request failed: {exc}") from exc
         raise LLMError(f"API error: {exc}") from exc
 
     def get_cache_stats(self) -> dict:
@@ -544,25 +441,6 @@ class TransportMixin:
         hit_rate = s["cache_read_tokens"] / total_in if total_in > 0 else 0
         return {"hit_rate": f"{hit_rate:.1%}", **s}
 
-    def call_text(
-        self,
-        prompt: str,
-        model: str | None = None,
-    ) -> str:
-        """Call LLM and return raw text response (no JSON parsing).
-
-        Single attempt with timeout handling. Used by classifier and other
-        lightweight calls that don't need structured output.
-        """
-        effective_model = model or self.model
-        try:
-            with _llm_hard_timeout(self.timeout_sec):
-                return self._call_once(prompt, effective_model)
-        except (LLMTimeoutError, LLMRateLimitError, LLMTransientProviderError):
-            raise
-        except Exception as exc:
-            raise LLMError(f"call_text failed: {exc}") from exc
-
     def _get_anthropic_client(self) -> Any:
         if self._anthropic_client is not None:
             return self._anthropic_client
@@ -571,13 +449,12 @@ class TransportMixin:
             self._anthropic_client = anthropic.Anthropic(
                 api_key=self.api_key,
                 base_url=self.base_url,
-                max_retries=self.sdk_max_retries,
+                max_retries=0,
             )
             logger.info(
-                "Anthropic client initialized: model=%s base_url=%s sdk_max_retries=%d",
+                "Anthropic client initialized: model=%s base_url=%s sdk_retries=disabled",
                 self.model,
                 self.base_url,
-                self.sdk_max_retries,
             )
             return self._anthropic_client
         except ImportError as exc:
@@ -599,16 +476,91 @@ class TransportMixin:
             self._openai_client = openai.OpenAI(
                 api_key=self.api_key,
                 base_url=base,
-                max_retries=self.sdk_max_retries,
+                max_retries=0,
             )
             logger.info(
-                "OpenAI client initialized: model=%s base_url=%s sdk_max_retries=%d",
+                "OpenAI client initialized: model=%s base_url=%s sdk_retries=disabled",
                 self.model,
                 base,
-                self.sdk_max_retries,
             )
             return self._openai_client
         except ImportError as exc:
             raise LLMError(
                 "The 'openai' package is not installed. pip install openai"
             ) from exc
+
+
+def _provider_status_code(exc: Exception, *, raw_error: str) -> int | None:
+    value = getattr(exc, "status_code", None)
+    if value is None:
+        response = getattr(exc, "response", None)
+        value = getattr(response, "status_code", None)
+    if value is not None:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            pass
+    match = re.search(
+        r"(?:error|status)\s+code\s*:\s*(\d{3})|\bhttp\s+(\d{3})\b",
+        raw_error,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return None
+    return int(match.group(1) or match.group(2))
+
+
+def _is_balance_error_text(err_str: str) -> bool:
+    return any(
+        marker in err_str
+        for marker in (
+            "insufficient balance",
+            "balance is insufficient",
+            "balance exhausted",
+            "credit balance",
+            "no credits",
+            "please recharge",
+        )
+    )
+
+
+def _is_auth_error_text(err_str: str) -> bool:
+    return any(
+        marker in err_str
+        for marker in (
+            "invalid api key",
+            "invalid_api_key",
+            "authentication failed",
+            "authentication error",
+            "unauthorized",
+            "forbidden",
+        )
+    )
+
+
+def _is_transport_exception(
+    exc: Exception,
+    *,
+    err_str: str,
+    type_name: str,
+) -> bool:
+    if isinstance(exc, (ConnectionError, OSError)):
+        return True
+    if any(
+        marker in type_name
+        for marker in ("connectionerror", "connecterror", "networkerror")
+    ):
+        return True
+    return any(
+        marker in err_str
+        for marker in (
+            "connection reset",
+            "connection aborted",
+            "connection error",
+            "remote end closed connection",
+            "server disconnected",
+            "network is unreachable",
+            "temporary failure in name resolution",
+            "name or service not known",
+        )
+    )

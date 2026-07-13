@@ -87,7 +87,7 @@ class WarehousePostrunSummaryProvider:
 
 
 class WarehouseFollowupReviewPort:
-    """Problem-owned readiness adapter for the warehouse follow-up summary."""
+    """Expose the historical warehouse follow-up as report-only context."""
 
     problem_family = WAREHOUSE_PROBLEM_FAMILY
     review_key = "warehouse_followup_summary"
@@ -98,28 +98,26 @@ class WarehouseFollowupReviewPort:
             return ProblemReviewSummary(
                 problem_family=self.problem_family,
                 review_key=self.review_key,
-                status="missing",
+                status="not_reported",
                 interpretation="missing_warehouse_followup_summary",
-                ready=False,
-                failed_required_checks=("missing_warehouse_followup_summary",),
-                detail={"summary_available": False},
+                ready=True,
+                detail={
+                    "summary_available": False,
+                    "readiness_input": False,
+                },
             )
         gaps = _string_items(summary.get("evidence_gaps"))
-        failed = tuple(
-            gap for gap in gaps if gap in _BLOCKING_WAREHOUSE_FOLLOWUP_GAPS
-        )
-        ready = summary.get("available") is True and not failed
         return ProblemReviewSummary(
             problem_family=self.problem_family,
             review_key=self.review_key,
-            status="ready" if ready else "not_ready",
+            status="reported",
             interpretation=str(summary.get("interpretation") or ""),
-            ready=ready,
-            failed_required_checks=failed,
+            ready=True,
             detail={
                 "summary_schema_version": summary.get("schema_version"),
                 "current_run_evidence": summary.get("current_run_evidence"),
                 "evidence_gaps": gaps,
+                "readiness_input": False,
                 "review_axes_actionability": summary.get(
                     "review_axes_actionability"
                 ),
@@ -171,7 +169,7 @@ def warehouse_followup_summary(
         phase4=phase4,
         contract=contract,
     )
-    handoff_complete = bool(handoff_requirements) and all(
+    handoff_complete = all(
         item.get("available") is True for item in handoff_requirements.values()
     )
     counters = _mapping_or_empty(inventory.get("counters"))
@@ -195,8 +193,6 @@ def warehouse_followup_summary(
         measurement_effect_summary
     )
     runtime = _mapping_or_empty(runtime_feedback_summary.get("aggregate"))
-    fresh_runtime = _mapping_or_empty(runtime.get("fresh_runtime_replay_drain"))
-    stage_drain = _mapping_or_empty(runtime.get("stage_transition_drain"))
     runtime_budget = _mapping_or_empty(runtime.get("runtime_budget_diagnostics"))
     continuity_signal = warehouse_followup_continuity_signal(
         research_continuity_summary
@@ -257,21 +253,6 @@ def warehouse_followup_summary(
         "runtime": {
             "available": runtime_raw_available,
             "review_ready": runtime_available,
-            "drain_status_complete": runtime_feedback_summary.get(
-                "drain_status_complete"
-            )
-            is True,
-            "fresh_runtime_status_counts": _int_mapping(
-                fresh_runtime.get("status_counts")
-            ),
-            "fresh_runtime_attempts": _int_or_zero(fresh_runtime.get("attempts")),
-            "fresh_runtime_executed": _int_or_zero(fresh_runtime.get("executed")),
-            "fresh_runtime_protocol_results": _int_or_zero(
-                fresh_runtime.get("protocol_results")
-            ),
-            "stage_transition_status_counts": _int_mapping(
-                stage_drain.get("status_counts")
-            ),
             "runtime_model_counts": _int_mapping(
                 runtime_budget.get("runtime_model_counts")
             ),
@@ -404,11 +385,6 @@ def warehouse_followup_input_consistency(
     for field in (
         "substantive",
         "max_branch_depth",
-        "same_mechanism_selected",
-        "same_mechanism_observed",
-        "same_mechanism_missed",
-        "branch_lessons_satisfied",
-        "branch_lessons_required",
         "weak_positive_accepted",
         "weak_positive_observed",
     ):
@@ -477,24 +453,6 @@ def warehouse_followup_input_consistency(
             ),
             "input_continuity_max_branch_depth": continuity_signal.get(
                 "max_branch_depth"
-            ),
-            "summary_continuity_same_mechanism_selected": continuity_evidence.get(
-                "same_mechanism_selected"
-            ),
-            "input_continuity_same_mechanism_selected": continuity_signal.get(
-                "same_mechanism_selected"
-            ),
-            "summary_continuity_same_mechanism_missed": continuity_evidence.get(
-                "same_mechanism_missed"
-            ),
-            "input_continuity_same_mechanism_missed": continuity_signal.get(
-                "same_mechanism_missed"
-            ),
-            "summary_continuity_branch_lessons_satisfied": continuity_evidence.get(
-                "branch_lessons_satisfied"
-            ),
-            "input_continuity_branch_lessons_satisfied": continuity_signal.get(
-                "branch_lessons_satisfied"
             ),
             "summary_continuity_weak_positive_accepted": continuity_evidence.get(
                 "weak_positive_accepted"
@@ -679,32 +637,13 @@ def _problem_research_continuity_signal(
     max_branch_depth = _int_or_zero(aggregate.get("max_branch_depth"))
     mechanism_family_counts = _int_mapping(aggregate.get("mechanism_family_counts"))
     active_shape_counts = _int_mapping(aggregate.get("active_shape_counts"))
-    same_mechanism_observed = counts["same_mechanism_observed"]
-    same_mechanism_selected = counts["same_mechanism_selected"]
-    same_mechanism_missed = max(
-        0,
-        same_mechanism_observed - same_mechanism_selected,
-    )
-    missed_all_same_mechanism_opportunities = (
-        same_mechanism_observed > 0 and same_mechanism_selected <= 0
-    )
     substantive = (
-        (
-            max_branch_depth >= 2
-            or same_mechanism_selected > 0
-            or counts["branch_lessons_satisfied"] > 0
-            or counts["weak_positive_accepted"] > 0
-        )
-        and not missed_all_same_mechanism_opportunities
+        max_branch_depth >= 2
+        or counts["weak_positive_accepted"] > 0
     )
     return {
         "substantive": substantive,
         "max_branch_depth": max_branch_depth,
-        "same_mechanism_observed": same_mechanism_observed,
-        "same_mechanism_selected": same_mechanism_selected,
-        "same_mechanism_missed": same_mechanism_missed,
-        "branch_lessons_required": counts["branch_lessons_required"],
-        "branch_lessons_satisfied": counts["branch_lessons_satisfied"],
         "weak_positive_observed": counts["weak_positive_observed"],
         "weak_positive_accepted": counts["weak_positive_accepted"],
         "mechanism_family_counts": mechanism_family_counts,
@@ -714,11 +653,6 @@ def _problem_research_continuity_signal(
 
 def _research_continuity_action_counts(entries: Any) -> dict[str, int]:
     counts = {
-        "same_mechanism_selected": 0,
-        "same_mechanism_observed": 0,
-        "branch_lessons_satisfied": 0,
-        "branch_lessons_required": 0,
-        "branch_lesson_semantic_gap_count": 0,
         "weak_positive_accepted": 0,
         "weak_positive_observed": 0,
     }
@@ -727,24 +661,7 @@ def _research_continuity_action_counts(entries: Any) -> dict[str, int]:
     for entry in entries:
         if not isinstance(entry, Mapping):
             continue
-        same_mechanism = _mapping_or_empty(entry.get("same_mechanism_followup"))
-        lessons = _mapping_or_empty(entry.get("branch_lesson_usage"))
         transfer = _mapping_or_empty(entry.get("weak_positive_transfer"))
-        counts["same_mechanism_selected"] += _int_or_zero(
-            same_mechanism.get("selected_same_branch_refinement_count")
-        )
-        counts["same_mechanism_observed"] += _int_or_zero(
-            same_mechanism.get("observed_opportunity_count")
-        )
-        counts["branch_lessons_satisfied"] += _int_or_zero(
-            lessons.get("satisfied_count")
-        )
-        counts["branch_lessons_required"] += _int_or_zero(
-            lessons.get("requirement_count")
-        )
-        counts["branch_lesson_semantic_gap_count"] += _int_or_zero(
-            lessons.get("semantic_gap_count")
-        )
         counts["weak_positive_accepted"] += _int_or_zero(
             transfer.get("accepted_count")
         )
@@ -766,10 +683,7 @@ def _summary_from_inventory(
 
 
 def _runtime_feedback_review_ready(summary: Mapping[str, Any]) -> bool:
-    return (
-        summary.get("available") is True
-        and summary.get("drain_status_complete") is True
-    )
+    return summary.get("available") is True and summary.get("review_ready") is True
 
 
 def _review_axes_actionability(

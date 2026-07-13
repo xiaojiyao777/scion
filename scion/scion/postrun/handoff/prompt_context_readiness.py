@@ -15,62 +15,16 @@ DEFAULT_SCION_PROJECT_DIR = _MODULE_PATH.parents[3]
 DEFAULT_REPO_DIR = _MODULE_PATH.parents[4]
 
 from scion.postrun.handoff.prepared_prompt_context import (
-    research_shape_prompt_summary,
-    research_focus_prompt_summary,
     research_focus_projection_summary,
+)
+from scion.postrun.inventory.prepared_contract import (
+    prepared_execution_runtime_mode,
 )
 
 
 SourceMarker = tuple[str, str]
 MeasurementPromptSummaryBuilder = Callable[..., dict[str, Any]]
-ActiveSubjectPromptSummaryBuilder = Callable[..., dict[str, Any]]
-PositiveFieldCheck = tuple[str, str]
 PROMPT_CONTEXT_READINESS_SCHEMA = "scion.prepared_prompt_context_readiness.v1"
-ACTIVE_SUBJECT_CODE_CONSTRAINT_PROVIDER_SUMMARY_SCHEMA = (
-    "scion.active_subject_code_constraints_provider_payload_summary.v1"
-)
-RESEARCH_SHAPE_PROMPT_MARKERS = {
-    "context_builder": (
-        "scion/scion/proposal/context_manager/manager.py",
-        "research_shape_diagnostics",
-    ),
-    "shape_builder": (
-        "scion/scion/proposal/context/research_shape.py",
-        "proposal_research_shape_prompt_summary.v1",
-    ),
-    "prompt_renderer": (
-        "scion/scion/proposal/engine/hypothesis_prompts.py",
-        "research_shape",
-    ),
-}
-LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS = {
-    "manifest_env_reader": (
-        "scion/scion/research_guidance/manifest.py",
-        "PREPARED_RUN_MANIFEST",
-    ),
-    "context_payload": (
-        "scion/scion/proposal/context_manager/manager.py",
-        "launch_research_focus",
-    ),
-    "prompt_renderer": (
-        "scion/scion/proposal/engine/hypothesis_prompts.py",
-        "launch_research_focus",
-    ),
-}
-ACTIVE_SUBJECT_CODE_CONSTRAINT_PROMPT_MARKERS = {
-    "context_provider_payload": (
-        "scion/scion/proposal/context_manager/manager.py",
-        "active_subject_code_constraints_payload(",
-    ),
-    "context_key": (
-        "scion/scion/proposal/context_manager/manager.py",
-        "active_subject_code_constraints",
-    ),
-    "code_prompt_renderer": (
-        "scion/scion/proposal/engine/code_prompts.py",
-        "Active Subject Code Constraints",
-    ),
-}
 
 
 @dataclass(frozen=True)
@@ -88,23 +42,10 @@ class ProblemPromptBridgeSpec:
     measurement_prompt_summary_builder: MeasurementPromptSummaryBuilder
     measurement_prompt_summary_compare_fields: tuple[str, ...]
     measurement_prompt_summary_positive_fields: tuple[str, ...]
-    active_subject_signal_name: str
-    active_subject_failure_prefix: str
-    active_subject_surface: str
-    active_subject_provider_markers: Mapping[str, SourceMarker]
-    active_subject_marker_group: str
-    active_subject_prompt_summary_schema: str
-    active_subject_prompt_summary_builder: ActiveSubjectPromptSummaryBuilder
-    active_subject_prompt_summary_compare_fields: tuple[str, ...]
-    active_subject_prompt_summary_positive_checks: tuple[PositiveFieldCheck, ...]
 
     @property
     def measurement_marker_group_name(self) -> str:
         return self.measurement_marker_group
-
-    @property
-    def active_subject_marker_group_name(self) -> str:
-        return self.active_subject_marker_group
 
     def measurement_prompt_summary(
         self,
@@ -115,18 +56,6 @@ class ProblemPromptBridgeSpec:
             problem_v1_path=problem_v1_path,
             problem_family=self.problem_family,
         )
-
-    def active_subject_prompt_summary(
-        self,
-        *,
-        problem_v1_path: Path | str | None,
-    ) -> dict[str, Any]:
-        return self.active_subject_prompt_summary_builder(
-            problem_v1_path=problem_v1_path,
-            problem_family=self.problem_family,
-            surface=self.active_subject_surface,
-        )
-
 
 def resolve_problem_v1_path(
     *,
@@ -150,73 +79,6 @@ def resolve_problem_v1_path(
         if candidate.is_file():
             return candidate.resolve()
     return None
-
-
-def active_subject_code_constraints_provider_payload_summary(
-    *,
-    root: Path,
-    manifest: Mapping[str, Any],
-    repo_dir: Path,
-    spec: ProblemPromptBridgeSpec,
-) -> dict[str, Any]:
-    problem_v1 = resolve_problem_v1_path(
-        root=root,
-        manifest=manifest,
-        repo_dir=repo_dir,
-        spec=spec,
-    )
-    base = {
-        "schema_version": ACTIVE_SUBJECT_CODE_CONSTRAINT_PROVIDER_SUMMARY_SCHEMA,
-        "problem_family": spec.problem_family,
-        "surface": spec.active_subject_surface,
-        "problem_v1_path": str(problem_v1) if problem_v1 else "",
-        "report_only": True,
-        "quality_judgment": False,
-        "decision_features_excluded": True,
-        "raw_payload_excluded": True,
-    }
-    if not problem_v1:
-        return {**base, "available": False, "reason": "problem_v1_not_found"}
-    try:
-        from scion.problem.bridge import load_problem_spec_v1_from_yaml
-        from scion.problem.loader import load_problem_adapter
-        from scion.problem.providers import active_subject_code_constraints_payload
-
-        problem_spec = load_problem_spec_v1_from_yaml(problem_v1)
-        adapter = load_problem_adapter(problem_spec)
-        payload = active_subject_code_constraints_payload(
-            problem_spec=problem_spec,
-            adapter=adapter,
-            surface=spec.active_subject_surface,
-        )
-    except Exception as exc:  # pragma: no cover - surfaced as readiness detail.
-        return {
-            **base,
-            "available": False,
-            "reason": "provider_payload_error",
-            "error_type": type(exc).__name__,
-            "error": str(exc),
-        }
-
-    counts = {
-        "constraint_count": _sequence_count(payload.get("constraints")),
-        "object_model_hint_count": _sequence_count(payload.get("object_model_hints")),
-        "api_contract_count": _sequence_count(payload.get("api_contracts")),
-        "forbidden_pattern_count": _sequence_count(payload.get("forbidden_patterns")),
-    }
-    total = sum(counts.values())
-    version = str(payload.get("version") or "").strip()
-    available = bool(payload) and bool(version) and total > 0
-    return {
-        **base,
-        "available": available,
-        "reason": "ok" if available else "empty_payload",
-        "version": version,
-        "subject_id": str(payload.get("subject_id") or "").strip(),
-        **counts,
-        "total_guidance_item_count": total,
-    }
-
 
 def build_prepared_prompt_context_readiness(
     run_root: Path | str,
@@ -258,6 +120,11 @@ def build_prepared_prompt_context_readiness(
     execution = _mapping_or_empty(manifest_dict.get("execution"))
     resume_from_campaign = str(manifest_dict.get("resume_from_campaign") or "").strip()
     copied_campaign_required = bool(resume_from_campaign)
+    proposal_runtime = _prepared_prompt_runtime(
+        execution=execution,
+        summary=summary_dict,
+        status=status_dict,
+    )
 
     signals: dict[str, dict[str, Any]] = {}
     _add_signal(
@@ -270,9 +137,17 @@ def build_prepared_prompt_context_readiness(
     )
     _add_signal(
         signals,
+        "proposal_runtime_mode",
+        available=proposal_runtime["status"] == "resolved",
+        required=True,
+        source="prepared manifest and copied campaign status",
+        detail=proposal_runtime,
+    )
+    _add_signal(
+        signals,
         "prepared_research_focus",
         available=bool(research_focus),
-        required=True,
+        required=False,
         source="prepared_run_manifest.research_focus",
         detail={
             "schema_version": research_focus.get("schema_version"),
@@ -286,7 +161,7 @@ def build_prepared_prompt_context_readiness(
         required=copied_campaign_required,
         source=str(summary_source),
         detail={
-            "keys": sorted(summary_dict)[:12],
+            "keys": sorted(summary_dict),
             "resume_from_campaign": resume_from_campaign,
             "source_kind": summary_source_kind,
         },
@@ -298,7 +173,7 @@ def build_prepared_prompt_context_readiness(
         required=copied_campaign_required,
         source=str(status_source),
         detail={
-            "keys": sorted(status_dict)[:12],
+            "keys": sorted(status_dict),
             "resume_from_campaign": resume_from_campaign,
             "source_kind": status_source_kind,
         },
@@ -317,34 +192,15 @@ def build_prepared_prompt_context_readiness(
         research_focus,
         ports_by_family=port_registry,
     )
-    _add_campaign_state_signals(signals, summary_dict, status_dict)
-    _add_research_shape_prompt_signal(
+    _add_campaign_state_signals(
         signals,
-        campaign_summary=summary_dict,
-        campaign_status=status_dict,
-        repo_dir=resolved_repo_dir,
+        summary_dict,
+        status_dict,
+        proposal_runtime=proposal_runtime,
     )
-    _add_launch_research_focus_prompt_signal(
+    _add_launch_research_focus_projection_signal(
         signals,
         root=root,
-        required=bool(research_focus),
-        repo_dir=resolved_repo_dir,
-    )
-    _add_active_subject_code_constraints_prompt_signal(
-        signals,
-        root=root,
-        manifest=manifest_dict,
-        problem_family=manifest_dict.get("problem_family"),
-        repo_dir=resolved_repo_dir,
-        ports_by_family=port_registry,
-    )
-    _add_problem_measurement_diagnostics_prompt_signal(
-        signals,
-        root=root,
-        manifest=manifest_dict,
-        problem_family=manifest_dict.get("problem_family"),
-        repo_dir=resolved_repo_dir,
-        ports_by_family=port_registry,
     )
 
     missing_required = [
@@ -371,8 +227,7 @@ def build_prepared_prompt_context_readiness(
         "prepared_manifest_path": str(manifest_path),
         "problem_family": manifest_dict.get("problem_family"),
         "model": model.get("name"),
-        "measurement_governance": execution.get("measurement_governance"),
-        "proposal_context_ablation": execution.get("proposal_context_ablation"),
+        "proposal_runtime": proposal_runtime,
         "prepared_manifest_commit": _manifest_commit(manifest_dict),
         "checkout_commit": _git_output(("rev-parse", "--short", "HEAD"), resolved_repo_dir),
         "readiness": {
@@ -551,16 +406,60 @@ def _add_focus_signals(
             and "promotion" in boundary
             and "scheduler" in boundary
         ),
-        required=port is not None,
+        required=False,
         source="prepared_run_manifest.research_focus.decision_boundary",
         detail={"problem_family": family},
     )
+
+
+def _prepared_prompt_runtime(
+    *,
+    execution: Mapping[str, Any],
+    summary: Mapping[str, Any],
+    status: Mapping[str, Any],
+) -> dict[str, Any]:
+    sources: dict[str, str] = {}
+    errors: list[str] = []
+    try:
+        sources["prepared_manifest.execution"] = prepared_execution_runtime_mode(
+            execution
+        )
+    except ValueError as exc:
+        errors.append(str(exc))
+    for name, payload in (("campaign_summary", summary), ("campaign_status", status)):
+        value = payload.get("proposal_runtime_mode")
+        if value not in (None, ""):
+            sources[name] = str(value)
+    invalid_sources = {
+        name: value
+        for name, value in sources.items()
+        if value != "direct_v3"
+    }
+    if errors or invalid_sources:
+        runtime_status = "invalid"
+        resolved = None
+    elif sources and all(value == "direct_v3" for value in sources.values()):
+        runtime_status = "resolved"
+        resolved = "direct_v3"
+    else:
+        runtime_status = "unknown"
+        resolved = None
+    return {
+        "status": runtime_status,
+        "resolved_mode": resolved,
+        "sources": sources,
+        "errors": errors,
+        "invalid_sources": invalid_sources,
+        "fail_closed": runtime_status != "resolved",
+    }
 
 
 def _add_campaign_state_signals(
     signals: dict[str, dict[str, Any]],
     summary: dict[str, Any],
     status: dict[str, Any],
+    *,
+    proposal_runtime: Mapping[str, Any],
 ) -> None:
     summary_branch_count = _sequence_count(summary.get("branches"))
     status_branch_count = _sequence_count(status.get("branches"))
@@ -578,20 +477,6 @@ def _add_campaign_state_signals(
         runtime_generated_after_launch=branch_count == 0,
     )
 
-    trace_index_present = bool(
-        _mapping_or_empty(summary.get("agentic_session_trace_index"))
-        or _mapping_or_empty(status.get("agentic_session_trace_index"))
-    )
-    _add_signal(
-        signals,
-        "agentic_session_trace_index",
-        available=trace_index_present,
-        required=False,
-        source="campaign_summary/status agentic_session_trace_index",
-        detail={"present": trace_index_present},
-        runtime_generated_after_launch=not trace_index_present,
-    )
-
     prompt_manifest_ref_count = _count_prompt_manifest_refs(summary) + (
         _count_prompt_manifest_refs(status)
     )
@@ -606,96 +491,13 @@ def _add_campaign_state_signals(
     )
 
 
-def _add_research_shape_prompt_signal(
-    signals: dict[str, dict[str, Any]],
-    *,
-    campaign_summary: dict[str, Any],
-    campaign_status: dict[str, Any],
-    repo_dir: Path,
-) -> None:
-    marker_results = {
-        name: _source_contains(repo_dir, relative_path, marker)
-        for name, (relative_path, marker) in RESEARCH_SHAPE_PROMPT_MARKERS.items()
-    }
-    prompt_summary = research_shape_prompt_summary(
-        campaign_summary=campaign_summary,
-        campaign_status=campaign_status,
-    )
-    _add_signal(
-        signals,
-        "research_shape_prompt_signal",
-        available=(
-            all(marker_results.values())
-            and prompt_summary.get("available") is True
-        ),
-        required=True,
-        source=(
-            "copied campaign research-shape diagnostics plus current checkout "
-            "hypothesis prompt renderer"
-        ),
-        detail={
-            "markers": marker_results,
-            "prompt_summary": prompt_summary,
-            "boundary": (
-                "report-only research continuity signal; branch-depth and "
-                "mechanism-family shape guide proposal planning and stay out "
-                "of DecisionFeatures"
-            ),
-        },
-    )
-
-
-def _add_launch_research_focus_prompt_signal(
+def _add_launch_research_focus_projection_signal(
     signals: dict[str, dict[str, Any]],
     *,
     root: Path,
-    required: bool,
-    repo_dir: Path,
 ) -> None:
-    source_marker_results = {
-        name: _source_contains(repo_dir, relative_path, marker)
-        for name, (relative_path, marker) in (
-            LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS.items()
-        )
-    }
-    launch_marker_results = {
-        "prepared_manifest_exists": (root / "prepared_run_manifest.v1.json").is_file(),
-        "launch_env_assignment": _path_contains(
-            root / "launch.env",
-            "PREPARED_RUN_MANIFEST=",
-        ),
-        "run_sh_exports_manifest": _path_contains(
-            root / "run.sh",
-            "PREPARED_RUN_MANIFEST",
-        )
-        and _path_contains(root / "run.sh", "export ")
-        and _path_contains(root / "run.sh", "scion.cli.main run"),
-    }
     manifest_path = root / "prepared_run_manifest.v1.json"
     manifest = _mapping_or_empty(_read_json(manifest_path))
-    prompt_summary = research_focus_prompt_summary(
-        manifest_path=manifest_path,
-        manifest=manifest,
-    )
-    _add_signal(
-        signals,
-        "prepared_research_focus_prompt_bridge",
-        available=(
-            all(source_marker_results.values())
-            and all(launch_marker_results.values())
-            and (required is not True or prompt_summary.get("available") is True)
-        ),
-        required=required,
-        source=(
-            "prepared root launch environment plus current checkout "
-            "prepared-run manifest reader and hypothesis prompt renderer"
-        ),
-        detail={
-            "source_markers": source_marker_results,
-            "launch_markers": launch_marker_results,
-            "prompt_summary": prompt_summary,
-        },
-    )
     projection_summary = research_focus_projection_summary(
         manifest_path=manifest_path,
         manifest=manifest,
@@ -703,142 +505,13 @@ def _add_launch_research_focus_prompt_signal(
     _add_signal(
         signals,
         "prepared_research_focus_projection",
-        available=(
-            required is not True
-            or projection_summary.get("available") is True
-        ),
-        required=required,
+        available=projection_summary.get("available") is True,
+        required=False,
         source=(
-            "prepared_run_manifest.research_focus projected through "
-            "scion.proposal.context_manager.manager._project_launch_research_focus"
+            "prepared_run_manifest.research_focus typed projection"
         ),
         detail=projection_summary,
     )
-
-
-def _add_active_subject_code_constraints_prompt_signal(
-    signals: dict[str, dict[str, Any]],
-    *,
-    root: Path,
-    manifest: dict[str, Any],
-    problem_family: Any,
-    repo_dir: Path,
-    ports_by_family: Mapping[str, Any],
-) -> None:
-    family = str(problem_family or "")
-    spec = _problem_prompt_bridge_spec(family, ports_by_family)
-    if spec is None:
-        return
-    problem_v1 = resolve_problem_v1_path(
-        root=root,
-        manifest=manifest,
-        repo_dir=repo_dir,
-        spec=spec,
-    )
-    provider_payload = active_subject_code_constraints_provider_payload_summary(
-        root=root,
-        manifest=manifest,
-        repo_dir=repo_dir,
-        spec=spec,
-    )
-    code_prompt_summary = spec.active_subject_prompt_summary(
-        problem_v1_path=problem_v1,
-    )
-    source_marker_results = {
-        name: _source_contains(repo_dir, relative_path, marker)
-        for name, (relative_path, marker) in (
-            ACTIVE_SUBJECT_CODE_CONSTRAINT_PROMPT_MARKERS.items()
-        )
-    }
-    provider_marker_results = {
-        name: _source_contains(repo_dir, relative_path, marker)
-        for name, (relative_path, marker) in spec.active_subject_provider_markers.items()
-    }
-    _add_signal(
-        signals,
-        spec.active_subject_signal_name,
-        available=(
-            all(source_marker_results.values())
-            and all(provider_marker_results.values())
-            and provider_payload.get("available") is True
-            and code_prompt_summary.get("available") is True
-        ),
-        required=True,
-        source=(
-            f"current checkout {family} active subject code constraint provider plus "
-            "code prompt renderer"
-        ),
-        detail={
-            "source_markers": source_marker_results,
-            "provider_markers": provider_marker_results,
-            "provider_payload": provider_payload,
-            "code_prompt_summary": code_prompt_summary,
-            "boundary": (
-                "report-only source bridge; provider constraints guide code "
-                "generation and stay out of DecisionFeatures"
-            ),
-        },
-    )
-
-
-def _add_problem_measurement_diagnostics_prompt_signal(
-    signals: dict[str, dict[str, Any]],
-    *,
-    root: Path,
-    manifest: dict[str, Any],
-    problem_family: Any,
-    repo_dir: Path,
-    ports_by_family: Mapping[str, Any],
-) -> None:
-    family = str(problem_family or "")
-    spec = _problem_prompt_bridge_spec(family, ports_by_family)
-    if spec is None:
-        return
-    problem_v1 = resolve_problem_v1_path(
-        root=root,
-        manifest=manifest,
-        repo_dir=repo_dir,
-        spec=spec,
-    )
-    diagnostic_summary = spec.measurement_prompt_summary(
-        problem_v1_path=problem_v1,
-    )
-    source_marker_results = {
-        name: _source_contains(repo_dir, relative_path, marker)
-        for name, (relative_path, marker) in spec.measurement_source_markers.items()
-    }
-    _add_signal(
-        signals,
-        spec.measurement_signal_name,
-        available=(
-            all(source_marker_results.values())
-            and diagnostic_summary.get("available") is True
-        ),
-        required=True,
-        source=(
-            f"current checkout {family} problem measurement diagnostics adapter, "
-            "context projection, and hypothesis prompt renderer"
-        ),
-        detail={
-            "source_markers": source_marker_results,
-            "diagnostic_summary": diagnostic_summary,
-            "boundary": (
-                "report-only problem-owned diagnostics bridge; "
-                f"{spec.measurement_bridge_scope} guide proposal planning and stay out of "
-                "DecisionFeatures"
-            ),
-        },
-    )
-
-
-def _problem_prompt_bridge_spec(
-    family: str,
-    ports_by_family: Mapping[str, Any],
-) -> Any | None:
-    port = ports_by_family.get(family)
-    if port is None:
-        return None
-    return port.prompt_bridge_spec()
 
 
 def _add_signal(

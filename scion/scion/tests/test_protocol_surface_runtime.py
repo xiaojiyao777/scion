@@ -25,8 +25,8 @@ def test_run_experiment_records_tiny_runtime_budget_saturation(tmp_path):
         "modify",
     )
 
-    assert TINY_RUNTIME_BUDGET_SATURATION in result.reason_codes
-    assert CANDIDATE_RUNTIME_BUDGET_SATURATION in result.reason_codes
+    assert TINY_RUNTIME_BUDGET_SATURATION not in result.reason_codes
+    assert CANDIDATE_RUNTIME_BUDGET_SATURATION not in result.reason_codes
     assert CHAMPION_RUNTIME_BUDGET_SATURATION not in result.reason_codes
     diagnostic = result.candidate_surface_runtime_summary[
         "runtime_budget_diagnostic"
@@ -62,7 +62,7 @@ def test_run_experiment_records_champion_only_runtime_budget_saturation(tmp_path
 
     assert TINY_RUNTIME_BUDGET_SATURATION not in result.reason_codes
     assert CANDIDATE_RUNTIME_BUDGET_SATURATION not in result.reason_codes
-    assert CHAMPION_RUNTIME_BUDGET_SATURATION in result.reason_codes
+    assert CHAMPION_RUNTIME_BUDGET_SATURATION not in result.reason_codes
     diagnostic = result.candidate_surface_runtime_summary[
         "runtime_budget_diagnostic"
     ]
@@ -77,7 +77,7 @@ def test_run_experiment_records_champion_only_runtime_budget_saturation(tmp_path
     ] == diagnostic
 
 
-def test_run_experiment_selected_surface_runtime_fields_fail_closed(tmp_path):
+def test_run_experiment_selected_surface_runtime_fields_are_diagnostic(tmp_path):
     runner = MagicMock()
     champ = _make_run_result(2, 1000, runtime={})
     cand = _make_run_result(
@@ -100,15 +100,11 @@ def test_run_experiment_selected_surface_runtime_fields_fail_closed(tmp_path):
         selected_surface="dispatch_policy",
     )
 
-    assert result.gate_outcome == "fail"
-    assert result.stats.failed_pairs == 4
-    assert result.stats.candidate_failed_pairs == 4
-    assert result.candidate_runtime_failure_categories == {
-        "surface_contract_error": 4,
-    }
-    assert result.candidate_first_runtime_failure is not None
-    assert result.candidate_first_runtime_failure["surface"] == "dispatch_policy"
-    assert "dispatch_errors" in result.candidate_first_runtime_failure["detail_summary"]
+    assert result.gate_outcome == "pass"
+    assert result.stats.failed_pairs == 0
+    assert result.stats.candidate_failed_pairs == 0
+    assert result.candidate_runtime_failure_categories == {}
+    assert result.candidate_first_runtime_failure is None
     surface_summary = result.candidate_surface_runtime_summary
     assert surface_summary["candidate_pairs"] == 4
     assert surface_summary["fields"]["dispatch_loaded"]["present"] == 4
@@ -118,7 +114,7 @@ def test_run_experiment_selected_surface_runtime_fields_fail_closed(tmp_path):
     assert raw["candidate_surface_runtime_summary"] == surface_summary
 
 
-def test_run_experiment_counts_false_active_runtime_field_as_failed(tmp_path):
+def test_run_experiment_false_active_runtime_field_is_diagnostic(tmp_path):
     runner = MagicMock()
     champ = _make_run_result(2, 1000, runtime={})
     cand = _make_run_result(
@@ -152,13 +148,9 @@ def test_run_experiment_counts_false_active_runtime_field_as_failed(tmp_path):
         selected_surface="solver_design",
     )
 
-    assert result.gate_outcome == "fail"
-    assert result.stats.candidate_failed_pairs == 4
-    assert result.candidate_first_runtime_failure is not None
-    assert (
-        "solver_algorithm_active"
-        in result.candidate_first_runtime_failure["detail_summary"]
-    )
+    assert result.gate_outcome == "pass"
+    assert result.stats.candidate_failed_pairs == 0
+    assert result.candidate_first_runtime_failure is None
     surface_summary = result.candidate_surface_runtime_summary
     assert surface_summary["fields"]["solver_algorithm_active"]["present"] == 4
     assert surface_summary["fields"]["solver_algorithm_active"]["failed"] == 4
@@ -282,123 +274,6 @@ def test_run_experiment_preserves_selected_surface_required_runtime_metrics(
         "intra_route_2opt",
         "inter_route_relocate",
     ]
-
-
-def test_run_experiment_fails_closed_on_declared_zero_activity_probe(tmp_path):
-    runner = MagicMock()
-    candidate_runtime = {
-        "generic_solver_loaded": True,
-        "generic_solver_active": True,
-        "generic_solver_errors": 0,
-        "generic_solver_search_iterations": 0,
-    }
-    champion_runtime = {
-        "generic_solver_search_iterations": 8,
-    }
-    pair = [
-        _make_run_result(2, 1000, elapsed_ms=100, runtime=champion_runtime),
-        _make_run_result(1, 900, elapsed_ms=125, runtime=candidate_runtime),
-    ]
-    runner.run_solver.side_effect = pair * 4
-    proto = _make_protocol(
-        runner,
-        tmp_path,
-        problem_spec=_surface_problem_spec(
-            name="generic_solver",
-            required_runtime_fields=(
-                "generic_solver_loaded",
-                "generic_solver_active",
-                "generic_solver_errors",
-                "generic_solver_search_iterations",
-            ),
-        ),
-    )
-
-    result = proto.run_experiment(
-        ExperimentStage.SCREENING,
-        "/cand",
-        "/champ",
-        "modify",
-        selected_surface="generic_solver",
-        expected_telemetry={"activity": ["generic_solver_search_iterations"]},
-    )
-
-    assert result.gate_outcome == "fail"
-    assert "TELEMETRY_GUARD_FAILED" in result.reason_codes
-    assert "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO" in result.reason_codes
-    guard = result.candidate_surface_runtime_summary["telemetry_guard"]
-    assert guard["passed"] is False
-    assert guard["failures"][0]["code"] == "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO"
-    assert guard["failures"][0]["field"] == "generic_solver_search_iterations"
-    assert "telemetry_guard=" in result.exposed_summary
-
-
-def test_run_experiment_does_not_fail_activation_when_effect_is_observed(tmp_path):
-    runner = MagicMock()
-    candidate_runtime = {
-        "generic_solver_loaded": True,
-        "generic_solver_active": True,
-        "generic_solver_errors": 0,
-        "mechanism_activation": {"target_probe": 0, "other_probe": 1},
-        "mechanism_effect": {"target_probe": 3.0},
-    }
-    champion_runtime = {
-        "mechanism_activation": {"target_probe": 1},
-        "mechanism_effect": {"target_probe": 4.0},
-    }
-    pair = [
-        _make_run_result(2, 1000, elapsed_ms=100, runtime=champion_runtime),
-        _make_run_result(1, 900, elapsed_ms=125, runtime=candidate_runtime),
-    ]
-    runner.run_solver.side_effect = pair * 4
-    proto = _make_protocol(
-        runner,
-        tmp_path,
-        problem_spec=SimpleNamespace(
-            research_surfaces=[
-                SimpleNamespace(
-                    name="generic_solver",
-                    evidence=SimpleNamespace(
-                        required_runtime_fields=[
-                            "generic_solver_loaded",
-                            "generic_solver_active",
-                            "generic_solver_errors",
-                        ],
-                        activation_runtime_fields={
-                            "{mechanism}": ["mechanism_activation"]
-                        },
-                        effect_probe_runtime_fields={
-                            "{mechanism}": ["mechanism_effect"]
-                        },
-                    ),
-                )
-            ]
-        ),
-    )
-
-    result = proto.run_experiment(
-        ExperimentStage.SCREENING,
-        "/cand",
-        "/champ",
-        "modify",
-        selected_surface="generic_solver",
-        mechanism_changes=(
-            MechanismChange(id="target_probe", change_type="modify"),
-        ),
-    )
-
-    assert result.gate_outcome == "pass"
-    assert "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED" not in result.reason_codes
-    guard = result.candidate_surface_runtime_summary["telemetry_guard"]
-    assert guard["passed"] is True
-    assert guard["failures"] == []
-    assert guard["warnings"] == []
-    assert (
-        guard["mechanisms"]["target_probe"]["fields"]["mechanism_activation"][
-            "candidate_positive"
-        ]
-        == 0
-    )
 
 
 def test_run_experiment_normalizes_solver_algorithm_surface_alias(tmp_path):

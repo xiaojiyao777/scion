@@ -175,6 +175,37 @@ def runtime_audit_failure_from_runtime(
     return _runtime_error_issue(runtime, runtime_error_counts)
 
 
+def runtime_audit_issue_blocks_execution(
+    issue: Mapping[str, Any] | None,
+) -> bool:
+    """Return whether an audit issue invalidates solver execution evidence.
+
+    Runtime errors and fallback execution remain blocking.  Missing diagnostic
+    fields and inconsistent phase attribution remain observable audit issues,
+    but do not invalidate an otherwise successful, parseable solver result.
+    """
+
+    if issue is None:
+        return False
+    category = str(issue.get("error_category") or "").strip()
+    if category == "surface_runtime_contract_error":
+        diagnostic_fields = (
+            "required_runtime_fields",
+            "missing_runtime_fields",
+            "empty_runtime_fields",
+            "failed_runtime_fields",
+        )
+        # Declared telemetry completeness/actionability is diagnostic. Invalid
+        # surface selection/configuration has no declared field payload and
+        # remains a blocking host contract error.
+        return not any(issue.get(field) for field in diagnostic_fields)
+    if category == "surface_runtime_telemetry_error":
+        return False
+    if category.endswith("_runtime_telemetry_error"):
+        return False
+    return True
+
+
 def _declared_surface_runtime_error_failure(
     runtime: Mapping[str, Any],
     *,
@@ -200,7 +231,7 @@ def _declared_surface_runtime_error_failure(
             "runtime_error_field": error_field,
             "runtime_error_count": count,
             "runtime_event_fields": event_fields,
-            "runtime_events": events[:5],
+            "runtime_events": list(events),
             error_field: count,
             "detail": f"solver runtime audit reported {error_field}={count}",
         }
@@ -311,7 +342,7 @@ def _runtime_error_issue(
         "runtime_error_count": first_count,
         "runtime_error_counts": dict(counts),
         "runtime_event_fields": event_fields,
-        "runtime_events": events[:5],
+        "runtime_events": list(events),
         first_field: first_count,
         "detail": f"solver runtime audit reported {first_field}={first_count}",
     }
@@ -347,7 +378,7 @@ def _surface_runtime_fallback_failure(
             "selected_surface": normalize_surface_name(selected_surface),
             "runtime_event_field": field,
             "runtime_event_fields": (field,),
-            "runtime_events": events[:5],
+            "runtime_events": list(events),
             field: events,
             "detail": (
                 f"solver runtime audit reported fallback event in {field}: "

@@ -12,6 +12,7 @@ from scion.problem.bridge import (
     legacy_problem_spec_from_v1,
     load_problem_spec_v1_from_yaml,
 )
+from scion.problem.loader import load_problem_adapter
 from scion.proposal.context_manager.manager import _problem_measurement_diagnostics
 
 
@@ -88,18 +89,25 @@ def test_checked_in_problem_measurement_diagnostics_stay_reduced(
     spec_v1 = load_problem_spec_v1_from_yaml(problem_path)
     legacy = legacy_problem_spec_from_v1(spec_v1)
 
-    diagnostics = _problem_measurement_diagnostics(legacy)
+    diagnostics = _problem_measurement_diagnostics(
+        legacy,
+        adapter=load_problem_adapter(spec_v1),
+    )
     rendered = json.dumps(diagnostics, sort_keys=True, default=str)
+    problem_owned = diagnostics["problem_owned_diagnostics"]
 
-    assert diagnostics["schema_version"] == "problem_measurement_proposal_diagnostic.v1"
-    assert diagnostics["taint"] == "problem_owned_proposal_diagnostic"
-    assert diagnostics["proposal_visibility_only"] is True
-    assert diagnostics["decision_features_excluded"] is True
+    assert diagnostics["runtime_model"]
+    assert diagnostics["pairing_validity"]
+    assert diagnostics["effect_scale"]["metric"] == (
+        spec_v1.measurement.effect_scale.metric
+    )
     assert diagnostics["measurement_readiness"]["status"] == "ready"
     assert diagnostics["measurement_readiness"]["decision_features_excluded"] is True
-    assert diagnostics["calibration"]["calibration_ref"]
+    assert problem_owned["schema_version"]
+    assert problem_owned["proposal_visibility_only"] is True
+    assert problem_owned["decision_features_excluded"] is True
     _assert_forbidden_raw_measurement_fields_absent(diagnostics)
-    assert "DecisionFeatures" in diagnostics["policy"]
+    assert "calibration_ref" not in rendered
     assert "pair_evidence" not in rendered
     assert "raw_calibration" not in rendered
 

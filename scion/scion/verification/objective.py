@@ -8,8 +8,13 @@ from typing import TYPE_CHECKING, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
-from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_raw
+from scion.runtime.audit import (
+    format_runtime_audit_failure,
+    runtime_audit_failure_from_raw,
+    runtime_audit_issue_blocks_execution,
+)
 from scion.runtime.runner import Runner, run_solver_with_surface
+from scion.verification.candidate_canary import CandidateCanaryExecution
 from scion.verification.feasibility import (
     _import_oracle,
     _registry_path,
@@ -33,50 +38,65 @@ def check_objective(
     selected_surface: str | None = None,
     require_adapter_for_runtime: bool = False,
     runtime_time_limit_sec: int | float = 30,
+    canary_execution: CandidateCanaryExecution | None = None,
 ) -> CheckResult:
     """V7_objective: oracle.recompute_objective must match solver-reported objective."""
     t0 = time.monotonic_ns()
 
-    canary = resolve_problem_path(problem_spec, problem_spec.canary_case_path)
+    canary = (
+        canary_execution.case_path
+        if canary_execution is not None
+        else resolve_problem_path(problem_spec, problem_spec.canary_case_path)
+    )
     if not canary:
         return _cr(True, "heavy", "skipped: no canary_case_path configured", t0)
 
     if not os.path.isfile(canary):
         return _cr(True, "heavy", f"skipped: canary file not found: {canary}", t0)
 
-    try:
-        result = run_solver_with_surface(
-            runner,
-            workdir=candidate_workspace,
-            instance_path=canary,
-            seed=43,
-            time_limit_sec=runtime_time_limit_sec,
-            registry_path=_registry_path(candidate_workspace),
-            selected_surface=selected_surface,
-        )
-    except Exception as exc:
-        return _cr(False, "heavy", f"runner error: {exc}", t0)
+    if canary_execution is not None:
+        if canary_execution.raw_output is None:
+            return _cr(
+                False,
+                "heavy",
+                canary_execution.error or "solver produced no output",
+                t0,
+            )
+        raw = dict(canary_execution.raw_output)
+    else:
+        try:
+            result = run_solver_with_surface(
+                runner,
+                workdir=candidate_workspace,
+                instance_path=canary,
+                seed=43,
+                time_limit_sec=runtime_time_limit_sec,
+                registry_path=_registry_path(candidate_workspace),
+                selected_surface=selected_surface,
+            )
+        except Exception as exc:
+            return _cr(False, "heavy", f"runner error: {exc}", t0)
 
-    if not result.success or result.output_path is None:
-        return _cr(
-            False, "heavy",
-            f"solver failed: exit={result.exit_code} "
-            f"category={result.error_category}",
-            t0,
-        )
+        if not result.success or result.output_path is None:
+            return _cr(
+                False, "heavy",
+                f"solver failed: exit={result.exit_code} "
+                f"category={result.error_category}",
+                t0,
+            )
 
-    try:
-        with open(result.output_path, encoding="utf-8") as f:
-            raw = json.load(f)
-    except Exception as exc:
-        return _cr(False, "heavy", f"cannot read solver output: {exc}", t0)
+        try:
+            with open(result.output_path, encoding="utf-8") as f:
+                raw = json.load(f)
+        except Exception as exc:
+            return _cr(False, "heavy", f"cannot read solver output: {exc}", t0)
 
     audit_failure = runtime_audit_failure_from_raw(
         raw,
         problem_spec=problem_spec,
         selected_surface=selected_surface,
     )
-    if audit_failure is not None:
+    if runtime_audit_issue_blocks_execution(audit_failure):
         return _cr(
             False,
             "heavy",

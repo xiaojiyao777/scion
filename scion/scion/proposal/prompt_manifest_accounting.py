@@ -10,9 +10,6 @@ import hashlib
 import json
 from typing import Any, Mapping
 
-from scion.proposal.agentic_utils import _sanitize_agentic_value
-
-
 def _json_chars(value: Any) -> int:
     return len(json.dumps(value, sort_keys=True, default=str))
 
@@ -45,7 +42,9 @@ def _system_block_records(
                 "content_hash": _text_digest(text, length=16),
                 "cacheable": bool(cache_control),
                 "cache_control": (
-                    _sanitize_agentic_value(cache_control) if cache_control else {}
+                    dict(cache_control)
+                    if isinstance(cache_control, Mapping)
+                    else (str(cache_control) if cache_control else {})
                 ),
             }
         )

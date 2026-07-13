@@ -16,9 +16,9 @@ def _llm_hard_timeout(timeout_sec: float):
 
     SDK timeout knobs are not consistently total-request deadlines across
     OpenAI-compatible providers. In the campaign main thread, SIGALRM gives
-    Scion a final budget-control backstop. Non-main threads fall back to SDK
-    timeout behavior because Python signals can only be installed in the main
-    thread.
+    Scion a final process-safety deadline for the one provider call. It never
+    schedules a retry. Non-main threads fall back to SDK timeout behavior
+    because Python signals can only be installed in the main thread.
     """
     if (
         timeout_sec <= 0
@@ -48,4 +48,3 @@ def _llm_hard_timeout(timeout_sec: float):
                 previous_timer[0],
                 previous_timer[1],
             )
-

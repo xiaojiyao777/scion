@@ -105,9 +105,11 @@ def test_strict_adapter_backed_verification_gate_passes_cvrp_tiny(
 ) -> None:
     canary = str(TINY_5)
     raw = _raw([[1, 2], [3, 4]])
+    calls: list[tuple[str, int]] = []
 
     class StaticRunner:
         def run_solver(self, workdir, instance_path, seed, time_limit_sec, registry_path):
+            calls.append((workdir, seed))
             fd, output_path = tempfile.mkstemp(suffix=".json")
             os.close(fd)
             with open(output_path, "w", encoding="utf-8") as f:
@@ -163,10 +165,10 @@ def test_strict_adapter_backed_verification_gate_passes_cvrp_tiny(
     result = gate.run(str(CVRP_DIR), str(CVRP_DIR), patch)
 
     assert result.passed is True
-    assert [check.name for check in result.checks][-5:] == [
+    assert [check.name for check in result.checks][-4:] == [
         "V5_solution_consistency",
         "V6_feasibility",
         "V7_objective",
         "V8_nondeterminism",
-        "V9_perf_guard",
     ]
+    assert calls == [(str(CVRP_DIR), 77), (str(CVRP_DIR), 77)]

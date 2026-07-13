@@ -194,8 +194,6 @@
     }
   ],
   "config": {
-    "max_cases_per_subset": null,
-    "max_cases_total": 24,
     "require_benchmark_feasible": true,
     "require_bks": true,
     "require_bks_routes": true,

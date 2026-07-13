@@ -1,1000 +1,139 @@
-"""Tests for scion/core/scheduler.py — Scheduler."""
+"""State, FIFO, and active-slot tests for the V3 scheduler."""
 from __future__ import annotations
-import uuid
-from datetime import datetime, timedelta
-import pytest
 
-from scion.core.branch_hygiene import (
-    MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON,
+from datetime import datetime, timedelta
+
+from scion.core.execution_outcome import (
+    ExecutionOutcome,
+    ExecutionOutcomeRecord,
+    install_branch_execution_hold,
 )
-from scion.core.branch_lifecycle_policy import BRANCH_LIFECYCLE_PARK_LINEAGE
 from scion.core.models import Branch, BranchState
 from scion.core.scheduler import (
     Scheduler,
     active_slot_inventory,
-    branch_active_slot_release_reason,
     branch_scheduling_status,
-    reclaim_active_slot_for_new_branch,
-)
-from scion.core.scheduling.signals import (
-    scheduler_owned_active_slot_release_reason as signal_active_slot_release_reason,
 )
 
 
-def _branch(
-    state: BranchState,
-    created_offset_s: float = 0,
-    updated_offset_s: float | None = None,
-) -> Branch:
-    created_at = datetime(2026, 1, 1) + timedelta(seconds=created_offset_s)
+def _branch(state: BranchState, name: str, offset: int = 0) -> Branch:
+    timestamp = datetime(2026, 1, 1) + timedelta(seconds=offset)
     return Branch(
-        branch_id=str(uuid.uuid4()),
+        branch_id=name,
         state=state,
         base_champion_id=0,
-        base_champion_hash="h",
-        created_at=created_at,
-        updated_at=(
-            datetime(2026, 1, 1)
-            + timedelta(
-                seconds=created_offset_s
-                if updated_offset_s is None
-                else updated_offset_s
-            )
+        base_champion_hash="champion",
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+
+
+def test_empty_portfolio_creates_branch_when_slot_available() -> None:
+    action = Scheduler(max_active_branches=3).select_next([])
+    assert action.action == "create_new"
+    assert action.slot == "explore_new"
+    assert action.reason == "active_slot_available"
+
+
+def test_default_serial_iteration_reuses_existing_explore_branch() -> None:
+    scheduler = Scheduler()
+    branch = _branch(BranchState.EXPLORE, "scientific-direction")
+
+    assert scheduler.max_active_branches == 1
+    assert scheduler.select_next([]).action == "create_new"
+
+    action = scheduler.select_next([branch])
+
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.reason == "state_priority_explore_fifo"
+
+
+def test_state_priority_is_frozen_validate_stale_then_running() -> None:
+    branches = [
+        _branch(BranchState.FROZEN_TESTING, "running", 0),
+        _branch(BranchState.STALE, "stale", 1),
+        _branch(BranchState.READY_VALIDATE, "validate", 2),
+        _branch(BranchState.READY_FROZEN, "frozen", 3),
+    ]
+    action = Scheduler(max_active_branches=4).select_next(branches)
+    assert action.action == "run_existing"
+    assert action.branch is branches[3]
+    assert action.reason == "state_priority_1:ready_frozen"
+
+
+def test_same_state_uses_created_at_then_branch_id_fifo() -> None:
+    branches = [
+        _branch(BranchState.READY_VALIDATE, "z", 0),
+        _branch(BranchState.READY_VALIDATE, "a", 0),
+        _branch(BranchState.READY_VALIDATE, "older", -1),
+    ]
+    first = Scheduler(max_active_branches=3).select_next(branches)
+    assert first.branch is branches[2]
+    second = Scheduler(max_active_branches=3).select_next(branches[:2])
+    assert second.branch is branches[1]
+
+
+def test_free_slot_admission_does_not_read_research_evidence() -> None:
+    branch = _branch(BranchState.EXPLORE, "existing")
+    branch.direction = "ignored"
+    branch.branch_evidence_summary = {
+        "median_delta": -100,
+        "runtime_ratio_median": 9,
+        "telemetry_outcome": "ignored",
+    }
+    action = Scheduler(max_active_branches=2).select_next([branch])
+    assert action.action == "create_new"
+    assert action.branch is None
+
+
+def test_full_portfolio_runs_explore_fifo() -> None:
+    branches = [
+        _branch(BranchState.EXPLORE, "newer", 2),
+        _branch(BranchState.EXPLORE, "older", 1),
+    ]
+    action = Scheduler(max_active_branches=2).select_next(branches)
+    assert action.action == "run_existing"
+    assert action.branch is branches[1]
+    assert action.reason == "state_priority_explore_fifo"
+
+
+def test_blocked_infra_and_execution_hold_are_not_schedulable_but_hold_slots() -> None:
+    blocked = _branch(BranchState.BLOCKED_INFRA, "blocked")
+    held = _branch(BranchState.EXPLORE, "held")
+    install_branch_execution_hold(
+        held,
+        ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.NOT_EVALUATED,
+            reason_code="OPERATOR_RESUME_REQUIRED",
         ),
     )
+    action = Scheduler(max_active_branches=2).select_next([blocked, held])
+    assert action.action == "at_capacity"
+    assert action.slot == "capacity_blocked"
+    assert action.audit_metadata["branch_ids"] == ["blocked", "held"]
+    assert branch_scheduling_status(blocked).lane == "blocked_infra"
+    assert branch_scheduling_status(held).lane == "execution_hold"
 
 
-sched = Scheduler()
-
-
-def test_no_branches_creates_new():
-    action = sched.select_next([])
-    assert action.action == "create_new"
-    assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason == "new_exploration_slot_available"
-
-
-def test_parked_lineage_does_not_consume_active_slot_or_schedule():
-    parked = _branch(BranchState.PARKED_LINEAGE)
-    parked.branch_code_status = "parked_lineage"
-
-    action = Scheduler(max_active_branches=1).select_next([parked])
-    inventory = active_slot_inventory([parked], max_active_branches=1)
-
-    assert action.action == "create_new"
-    assert action.reason == "new_exploration_slot_available"
+def test_terminal_states_release_slots() -> None:
+    branches = [
+        _branch(BranchState.PROMOTED, "promoted"),
+        _branch(BranchState.ABANDONED, "abandoned"),
+        _branch(BranchState.PARKED_LINEAGE, "historical-parked"),
+    ]
+    inventory = active_slot_inventory(branches, max_active_branches=1)
     assert inventory["used"] == 0
     assert inventory["available"] == 1
-    assert inventory["parked_lineage_ids"] == [parked.branch_id]
-
-
-def test_ready_frozen_has_highest_priority():
-    branches = [
-        _branch(BranchState.READY_VALIDATE),
-        _branch(BranchState.EXPLORE),
-        _branch(BranchState.READY_FROZEN),
-        _branch(BranchState.STALE),
-    ]
-    action = sched.select_next(branches)
-    assert action.action == "run_existing"
-    assert action.branch.state == BranchState.READY_FROZEN
-
-
-def test_ready_validate_over_stale():
-    branches = [
-        _branch(BranchState.STALE),
-        _branch(BranchState.READY_VALIDATE),
-        _branch(BranchState.EXPLORE),
-    ]
-    action = sched.select_next(branches)
-    assert action.branch.state == BranchState.READY_VALIDATE
-
-
-def test_stale_over_explore():
-    branches = [
-        _branch(BranchState.EXPLORE),
-        _branch(BranchState.STALE),
-    ]
-    action = sched.select_next(branches)
-    assert action.branch.state == BranchState.STALE
-
-
-def test_unestablished_explore_over_create_new():
-    branches = [_branch(BranchState.EXPLORE)]
-    action = sched.select_next(branches)
-    assert action.action == "run_existing"
-    assert action.branch.state == BranchState.EXPLORE
-
-
-def test_established_explore_under_capacity_creates_new_branch():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: bounded construction"
-
-    action = Scheduler(max_active_branches=3).select_next([branch])
-
-    assert action.action == "create_new"
-    assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason == "established_branch_portfolio_expansion"
-
-
-def test_verified_code_hash_without_direction_does_not_create_new_branch():
-    branch = _branch(BranchState.EXPLORE)
-    branch.current_code_hash = "candidate"
-    branch.last_clean_code_hash = "candidate"
-
-    action = Scheduler(max_active_branches=3).select_next([branch])
-
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.reason == "active_branch_refinement"
-
-
-def test_pending_retry_under_capacity_runs_existing_branch():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: bounded construction"
-    branch.pending_retry = True
-
-    action = Scheduler(max_active_branches=3).select_next([branch])
-
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.reason == "pending_retry_diagnostic_followup"
-
-
-def test_lifecycle_blocked_research_branch_reroutes_to_clean_branch():
-    blocked = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=0,
-        updated_offset_s=0,
-    )
-    blocked.direction = "solver: established"
-    blocked.branch_code_status = "active_no_effect"
-    blocked.branch_lifecycle_new_mechanism_ineligible = True
-    blocked.branch_lifecycle_reroute_reason = (
-        "clean_fork_after_branch_lifecycle_policy_block"
-    )
-    clean = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=10,
-        updated_offset_s=10,
-    )
-
-    action = Scheduler(max_active_branches=3).select_next([blocked, clean])
-
-    assert action.action == "run_existing"
-    assert action.branch is clean
-
-
-def test_lifecycle_blocked_research_branches_do_not_create_clean_fork_at_capacity():
-    branches = []
-    for offset in (0, 10, 20):
-        branch = _branch(
-            BranchState.EXPLORE,
-            created_offset_s=offset,
-            updated_offset_s=offset,
-        )
-        branch.direction = "solver: established"
-        branch.branch_code_status = "active_no_effect"
-        branch.branch_lifecycle_new_mechanism_ineligible = True
-        branch.branch_lifecycle_reroute_reason = (
-            "clean_fork_after_branch_lifecycle_policy_block"
-        )
-        branches.append(branch)
-
-    action = Scheduler(max_active_branches=3).select_next(branches)
-
-    assert action.action == "at_capacity"
-    assert action.branch is None
-    assert action.reason == "active_branch_limit_reached"
-    assert action.slot == "capacity_blocked"
-
-
-def test_lifecycle_blocked_research_branch_under_capacity_creates_clean_fork():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: established"
-    branch.branch_code_status = "active_no_effect"
-    branch.branch_lifecycle_new_mechanism_ineligible = True
-    branch.branch_lifecycle_reroute_reason = (
-        "clean_fork_after_branch_lifecycle_policy_block"
-    )
-
-    action = Scheduler(max_active_branches=2).select_next([branch])
-
-    assert action.action == "create_new"
-    assert action.branch is None
-    assert action.reason == "clean_fork_after_branch_lifecycle_policy_block"
-    assert action.slot == "repair_diagnostic"
-
-
-def test_no_effect_without_actionable_diagnostic_runs_same_mechanism_at_capacity():
-    branch = _branch(BranchState.EXPLORE)
-    branch.branch_code_status = "active_no_effect"
-    branch.branch_mechanism_ids = ("bounded_probe",)
-
-    action = Scheduler(max_active_branches=1).select_next([branch])
-
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.slot == "repair_diagnostic"
-    assert action.reason == "no_effect_same_mechanism_followup"
-
-
-def test_repeated_activation_zero_effect_without_marker_keeps_active_slot():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: repeated zero-effect follow-up"
-    branch.branch_code_status = "active_no_effect"
-    branch.last_screening_feedback_tier = "no_effect"
-    branch.branch_mechanism_ids = ("bounded_probe",)
-    branch.branch_evidence_summary = {
-        "activation_zero_effect_summary": {
-            "streak": 2,
-            "activation_status": "observed",
-            "effect_status": "no_objective_effect",
-            "proposal_guidance_only": True,
-            "decision_features_excluded": True,
-        }
-    }
-
-    action = Scheduler(max_active_branches=1).select_next([branch])
-    inventory = active_slot_inventory([branch], max_active_branches=1)
-
-    assert inventory["used"] == 1
-    assert inventory["available"] == 0
-    assert inventory["branch_ids"] == [branch.branch_id]
-    assert inventory["released_active_slot_ids"] == []
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.slot == "repair_diagnostic"
-    assert action.reason == "no_effect_same_mechanism_followup"
-
-
-def test_no_effect_head_with_retained_checkpoint_runs_same_mechanism_followup():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: weakened checkpoint follow-up"
-    branch.branch_code_status = "active_no_effect"
-    branch.last_screening_feedback_tier = "no_effect"
-    branch.best_quality_checkpoint_id = "checkpoint-best"
-    branch.last_valid_checkpoint_id = "checkpoint-last"
-    branch.branch_mechanism_ids = ("retained_probe",)
-
-    action = Scheduler(max_active_branches=3).select_next([branch])
-    inventory = active_slot_inventory([branch], max_active_branches=3)
-
-    assert inventory["used"] == 1
-    assert inventory["available"] == 2
-    assert inventory["branch_ids"] == [branch.branch_id]
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.slot == "repair_diagnostic"
-    assert action.reason == "no_effect_same_mechanism_followup"
-
-
-def test_no_effect_with_actionable_diagnostic_runs_existing_branch():
-    branch = _branch(BranchState.EXPLORE)
-    branch.branch_code_status = "active_no_effect"
-    branch.branch_mechanism_ids = ("bounded_probe",)
-    branch.failure_codes = ["diagnostic_requires_repair"]
-
-    action = Scheduler(max_active_branches=2).select_next([branch])
-
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.slot == "repair_diagnostic"
-    assert action.reason == "effect_diagnostic_followup"
-
-
-def test_quality_regression_without_actionable_diagnostic_releases_active_slot():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "generic quality-regression follow-up"
-    branch.branch_code_status = "active_quality_regression"
-    branch.last_screening_feedback_tier = "quality_regression"
-    branch.branch_mechanism_ids = ("quality_probe",)
-    branch.branch_evidence_summary = {
-        "tier": "quality_regression",
-        "wins": 0,
-        "losses": 1,
-        "ties": 7,
-        "runtime_evidence_pressure_count": 1,
-    }
-
-    action = Scheduler(max_active_branches=1).select_next([branch])
-    inventory = active_slot_inventory([branch], max_active_branches=1)
-
-    assert branch_active_slot_release_reason(branch) == (
-        "quality_regression_without_actionable_diagnostic_slot_release"
-    )
-    assert inventory["used"] == 0
-    assert inventory["available"] == 1
-    assert inventory["branch_ids"] == []
-    assert inventory["released_active_slot_ids"] == [branch.branch_id]
-    assert action.action == "create_new"
-    assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason == "new_exploration_slot_available"
-    assert action.audit_metadata["low_value_active_slot_release"] is True
-
-
-def test_quality_regression_mechanism_contract_followup_beats_clean_fork_pressure():
-    diagnostic = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=10,
-        updated_offset_s=10,
-    )
-    diagnostic.branch_id = "mechanism-contract-diagnostic"
-    diagnostic.direction = "generic mechanism diagnostic"
-    diagnostic.branch_code_status = "active_quality_regression"
-    diagnostic.last_screening_feedback_tier = "quality_regression"
-    diagnostic.branch_mechanism_ids = ("quality_probe",)
-    diagnostic.branch_evidence_summary = {
-        "stage": "screening",
-        "tier": "quality_regression",
-        "wins": 0,
-        "losses": 1,
-        "ties": 7,
-        "mechanism_evidence_contract": {
-            "schema_version": "scion.mechanism_evidence_contract.v1",
-            "primary_status": "declared_not_triggered",
-            "followup_required": True,
-            "decision_features_excluded": True,
-            "repair_mechanism_ids": ["quality_probe"],
-            "reason_codes": ["MECHANISM_DECLARED_NOT_TRIGGERED"],
-        },
-    }
-    pressure = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=0,
-        updated_offset_s=0,
-    )
-    pressure.branch_id = "runtime-pressure-no-effect"
-    pressure.direction = "generic runtime pressure"
-    pressure.branch_code_status = "active_no_effect"
-    pressure.last_screening_feedback_tier = "no_effect"
-    pressure.branch_mechanism_ids = ("runtime_probe",)
-    pressure.branch_evidence_summary = {
-        "stage": "screening",
-        "tier": "no_effect",
-        "wins": 0,
-        "losses": 0,
-        "ties": 8,
-        "runtime_evidence_confidence": "low_cached_champion",
-        "runtime_evidence_status": "insufficient",
-        "runtime_evidence_pressure_count": 2,
-    }
-
-    action = Scheduler(max_active_branches=3).select_next([pressure, diagnostic])
-    inventory = active_slot_inventory([pressure, diagnostic], max_active_branches=3)
-    status = branch_scheduling_status(diagnostic)
-
-    assert status.lane == "diagnostic_followup"
-    assert status.next_action_reason == (
-        MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON
-    )
-    assert branch_active_slot_release_reason(diagnostic) == ""
-    assert inventory["used"] == 2
-    assert action.action == "run_existing"
-    assert action.branch is diagnostic
-    assert action.slot == "repair_diagnostic"
-    assert action.reason == MECHANISM_CONTRACT_BRANCH_LOCAL_FOLLOWUP_REASON
-
-
-def test_scheduler_facade_uses_extracted_low_value_release_signal():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "generic quality-regression follow-up"
-    branch.branch_code_status = "active_quality_regression"
-    branch.last_screening_feedback_tier = "quality_regression"
-    branch.branch_mechanism_ids = ("quality_probe",)
-    branch.branch_evidence_summary = {"tier": "quality_regression"}
-
-    assert signal_active_slot_release_reason(branch) == (
-        "quality_regression_without_actionable_diagnostic_slot_release"
-    )
-    assert branch_active_slot_release_reason(branch) == (
-        signal_active_slot_release_reason(branch)
-    )
-
-
-def test_quality_regression_actionable_diagnostic_runs_existing_branch():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "generic quality-regression diagnostic"
-    branch.branch_code_status = "active_quality_regression"
-    branch.last_screening_feedback_tier = "quality_regression"
-    branch.branch_mechanism_ids = ("quality_probe",)
-    branch.failure_codes = ["diagnostic_requires_repair"]
-
-    action = Scheduler(max_active_branches=1).select_next([branch])
-    inventory = active_slot_inventory([branch], max_active_branches=1)
-
-    assert branch_active_slot_release_reason(branch) == ""
-    assert inventory["used"] == 1
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.slot == "repair_diagnostic"
-    assert action.reason == "effect_diagnostic_followup"
-
-
-def test_quality_regression_with_weak_positive_signal_is_not_slot_released():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "generic weak-positive quality diagnostic"
-    branch.branch_code_status = "active_quality_regression"
-    branch.last_screening_feedback_tier = "weak_positive"
-    branch.branch_mechanism_ids = ("quality_probe",)
-    branch.branch_evidence_summary = {
-        "tier": "weak_positive",
-        "wins": 1,
-        "losses": 0,
-    }
-
-    action = Scheduler(max_active_branches=1).select_next([branch])
-    inventory = active_slot_inventory([branch], max_active_branches=1)
-
-    assert branch_active_slot_release_reason(branch) == ""
-    assert inventory["used"] == 1
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.slot == "repair_diagnostic"
-
-
-def test_non_clean_followup_branch_under_capacity_runs_same_mechanism():
-    branch = _branch(BranchState.EXPLORE)
-    branch.branch_code_status = "active_no_effect"
-    branch.branch_mechanism_ids = ("bounded_probe",)
-
-    action = Scheduler(max_active_branches=2).select_next([branch])
-
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.slot == "repair_diagnostic"
-    assert action.reason == "no_effect_same_mechanism_followup"
-
-
-def test_non_actionable_no_effect_followup_branches_select_oldest_same_mechanism():
-    branches = []
-    for offset in (1, 2):
-        branch = _branch(BranchState.EXPLORE, created_offset_s=offset)
-        branch.branch_code_status = "active_no_effect"
-        branch.branch_mechanism_ids = (f"bounded_probe_{offset}",)
-        branches.append(branch)
-
-    action = Scheduler(max_active_branches=3).select_next(branches)
-
-    assert action.action == "run_existing"
-    assert action.branch is branches[0]
-    assert action.reason == "no_effect_same_mechanism_followup"
-
-
-def test_runtime_regression_diagnostic_runs_before_clean_fork():
-    branch = _branch(BranchState.EXPLORE)
-    branch.branch_code_status = "active_runtime_regression"
-    branch.branch_mechanism_ids = ("bounded_probe",)
-
-    action = Scheduler(max_active_branches=3).select_next([branch])
-
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.slot == "repair_diagnostic"
-    assert action.reason == "runtime_diagnostic_followup"
-
-
-def test_at_capacity_prefers_same_mechanism_followup_over_clean_research_candidate():
-    clean = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=20,
-        updated_offset_s=20,
-    )
-    followup = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=0,
-        updated_offset_s=0,
-    )
-    followup.branch_code_status = "active_no_effect"
-    followup.branch_mechanism_ids = ("bounded_probe",)
-
-    action = Scheduler(max_active_branches=2).select_next([followup, clean])
-
-    assert action.action == "run_existing"
-    assert action.branch is followup
-    assert action.reason == "no_effect_same_mechanism_followup"
-
-
-def test_under_capacity_prefers_same_mechanism_followup_over_clean_candidate():
-    clean = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=20,
-        updated_offset_s=20,
-    )
-    followup = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=0,
-        updated_offset_s=0,
-    )
-    followup.direction = "solver: same-mechanism follow-up"
-    followup.branch_code_status = "active_no_effect"
-    followup.branch_mechanism_ids = ("bounded_probe",)
-
-    action = Scheduler(max_active_branches=3).select_next([followup, clean])
-
-    assert action.action == "run_existing"
-    assert action.branch is followup
-    assert action.reason == "no_effect_same_mechanism_followup"
-
-
-def test_at_capacity_multiple_explore_branches_selects_oldest_updated_at():
-    b_recent = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=0,
-        updated_offset_s=30,
-    )
-    b_oldest_updated = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=10,
-        updated_offset_s=5,
-    )
-    b_middle = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=20,
-        updated_offset_s=15,
-    )
-    for branch in (b_recent, b_oldest_updated, b_middle):
-        branch.direction = "solver: established"
-
-    action = Scheduler(max_active_branches=3).select_next(
-        [b_recent, b_middle, b_oldest_updated]
-    )
-
-    assert action.action == "run_existing"
-    assert action.branch.branch_id == b_oldest_updated.branch_id
-    assert action.slot == "refine_active"
-
-
-def test_weak_positive_branch_uses_exploit_slot_at_capacity():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: established"
-    branch.branch_code_status = "active_weak_positive"
-    branch.last_screening_feedback_tier = "weak_positive"
-
-    action = Scheduler(max_active_branches=1).select_next([branch])
-
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.slot == "exploit_weak_positive"
-    assert action.reason == "weak_positive_signal_followup"
-
-
-def test_restored_checkpoint_priority_over_marginal_and_no_effect():
-    restored = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=20,
-        updated_offset_s=20,
-    )
-    restored.direction = "solver: restored checkpoint"
-    restored.branch_code_status = "regressed_followup"
-    restored.best_quality_checkpoint_id = "checkpoint-best"
-    restored.rollback_count = 1
-
-    marginal = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=0,
-        updated_offset_s=0,
-    )
-    marginal.direction = "solver: marginal"
-    marginal.branch_code_status = "active_marginal"
-    marginal.last_screening_feedback_tier = "marginal"
-
-    no_effect = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=10,
-        updated_offset_s=10,
-    )
-    no_effect.direction = "solver: no effect"
-    no_effect.branch_code_status = "active_no_effect"
-
-    action = Scheduler(max_active_branches=3).select_next(
-        [marginal, no_effect, restored]
-    )
-
-    assert action.action == "run_existing"
-    assert action.branch is restored
-    assert action.slot == "refine_active"
-    assert action.reason == "restored_checkpoint_followup"
-
-
-def test_weak_positive_rollback_checkpoint_stays_exploit_slot():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: restored weak positive"
-    branch.branch_code_status = "regressed_followup"
-    branch.last_screening_feedback_tier = "weak_positive"
-    branch.best_quality_checkpoint_id = "checkpoint-best"
-    branch.rollback_count = 1
-
-    action = Scheduler(max_active_branches=3).select_next([branch])
-
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.slot == "exploit_weak_positive"
-    assert action.reason == "restored_weak_positive_checkpoint_followup"
-
-
-def test_rollback_budget_exhausted_branch_does_not_bypass_hard_cap():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: restored weak positive"
-    branch.branch_code_status = "active_weak_positive"
-    branch.last_screening_feedback_tier = "weak_positive"
-    branch.best_quality_checkpoint_id = "checkpoint-best"
-    branch.rollback_count = 2
-
-    action = Scheduler(max_active_branches=1).select_next([branch])
-
-    assert action.action == "at_capacity"
-    assert action.branch is None
-    assert action.slot == "capacity_blocked"
-    assert action.reason == "active_branch_limit_reached"
-
-
-def test_repeated_marginal_loop_runs_same_mechanism_followup():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: repeated marginal"
-    branch.branch_code_status = "active_marginal"
-    branch.last_screening_feedback_tier = "marginal"
-    branch.lifecycle_marginal_no_effect_streak = 2
-    branch.lifecycle_signal_repeat_count = 2
-    branch.lifecycle_last_signal_signature = (
-        "wins=3;losses=3;ties=6;median_delta=0"
-    )
-
-    action = Scheduler(max_active_branches=1).select_next([branch])
-
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.slot == "refine_active"
-    assert action.reason == "active_branch_refinement"
-
-
-def test_marginal_plateau_prefers_same_mechanism_followup():
-    plateau = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=0,
-        updated_offset_s=0,
-    )
-    plateau.direction = "solver: plateau marginal"
-    plateau.branch_code_status = "active_marginal"
-    plateau.last_screening_feedback_tier = "marginal"
-    plateau.lifecycle_marginal_no_effect_streak = 2
-
-    clean = _branch(
-        BranchState.EXPLORE,
-        created_offset_s=10,
-        updated_offset_s=10,
-    )
-
-    action = Scheduler(max_active_branches=2).select_next([plateau, clean])
-
-    assert action.action == "run_existing"
-    assert action.branch is plateau
-
-
-def test_repeated_weak_signal_does_not_bypass_hard_cap():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: repeated weak signal"
-    branch.branch_code_status = "active_weak_positive"
-    branch.last_screening_feedback_tier = "weak_positive"
-    branch.lifecycle_signal_repeat_count = 2
-
-    action = Scheduler(max_active_branches=1).select_next([branch])
-    inventory = active_slot_inventory([branch], max_active_branches=1)
-
-    assert action.action == "at_capacity"
-    assert action.branch is None
-    assert action.slot == "capacity_blocked"
-    assert action.reason == "active_branch_limit_reached"
-    assert inventory["used"] == 1
-    assert inventory["available"] == 0
-    assert inventory["branch_ids"] == [branch.branch_id]
-
-
-def test_copied_nonactionable_weak_positive_heads_do_not_fill_active_slots():
-    copied_heads = []
-    for index, offset in enumerate((0, 10)):
-        branch = _branch(BranchState.EXPLORE, created_offset_s=offset)
-        branch.branch_id = f"copied-weak-{index}"
-        branch.direction = "generic copied weak signal"
-        branch.branch_code_status = "active_weak_positive"
-        branch.last_screening_feedback_tier = (
-            "weak_positive" if index == 0 else "inactive"
-        )
-        branch.best_quality_checkpoint_id = f"checkpoint-{index}"
-        branch.rollback_count = 1
-        branch.branch_evidence_summary = {
-            "stage": "screening",
-            "tier": "inactive",
-            "activation_status": "inactive",
-            "decision_features_excluded": True,
-        }
-        copied_heads.append(branch)
-    diagnostic = _branch(BranchState.EXPLORE, created_offset_s=20)
-    diagnostic.branch_id = "current-diagnostic"
-    diagnostic.direction = "generic diagnostic follow-up"
-    diagnostic.branch_code_status = "telemetry_wiring_suspect"
-    diagnostic.last_screening_feedback_tier = "inactive"
-    diagnostic.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
-    diagnostic.telemetry_repair_mechanism_ids = ("activation_probe",)
-
-    branches = [*copied_heads, diagnostic]
-    action = Scheduler(max_active_branches=3).select_next(branches)
-    inventory = active_slot_inventory(branches, max_active_branches=3)
-
-    assert action.action == "run_existing"
-    assert action.branch is diagnostic
-    assert action.slot == "repair_diagnostic"
-    assert action.reason == "telemetry_diagnostic_followup"
-    assert inventory["used"] == 1
-    assert inventory["available"] == 2
-    assert inventory["branch_ids"] == [diagnostic.branch_id]
     assert inventory["released_active_slot_ids"] == [
-        branch.branch_id for branch in copied_heads
+        "promoted",
+        "abandoned",
+        "historical-parked",
     ]
-    assert set(inventory["released_active_slot_reasons"].values()) == {
-        "inactive_current_evidence_slot_release"
-    }
-    assert all(
-        branch_scheduling_status(branch).lane == "not_schedulable"
-        for branch in copied_heads
-    )
-    assert branch_scheduling_status(diagnostic).lane == "diagnostic_followup"
 
 
-def test_current_weak_positive_head_keeps_active_slot_priority():
-    weak = _branch(BranchState.EXPLORE, created_offset_s=10)
-    weak.branch_id = "current-weak"
-    weak.direction = "generic current weak signal"
-    weak.branch_code_status = "active_weak_positive"
-    weak.last_screening_feedback_tier = "weak_positive"
-    weak.branch_evidence_summary = {
-        "stage": "screening",
-        "tier": "weak_positive",
-        "decision_features_excluded": True,
-    }
-    clean = _branch(BranchState.EXPLORE, created_offset_s=0)
-    clean.branch_id = "clean-open"
-
-    action = Scheduler(max_active_branches=3).select_next([clean, weak])
-    inventory = active_slot_inventory([clean, weak], max_active_branches=3)
-    status = branch_scheduling_status(weak)
-
-    assert action.action == "run_existing"
-    assert action.branch is weak
-    assert action.slot == "exploit_weak_positive"
-    assert action.reason == "weak_positive_signal_followup"
-    assert status.lane == "weak_positive_followup"
-    assert status.consumes_active_slot is True
-    assert weak.branch_id in inventory["branch_ids"]
-
-
-def test_current_quality_regression_releases_stale_weak_positive_slot():
-    branch = _branch(BranchState.EXPLORE)
-    branch.branch_id = "current-quality-regression"
-    branch.direction = "generic stale weak signal"
-    branch.branch_code_status = "active_weak_positive"
-    branch.last_screening_feedback_tier = "quality_regression"
-    branch.branch_evidence_summary = {
-        "stage": "screening",
-        "tier": "quality_regression",
-        "decision_features_excluded": True,
-    }
-
-    action = Scheduler(max_active_branches=1).select_next([branch])
-    inventory = active_slot_inventory([branch], max_active_branches=1)
-    status = branch_scheduling_status(branch)
-
-    assert action.action == "create_new"
-    assert action.slot == "explore_new"
-    assert inventory["used"] == 0
-    assert inventory["available"] == 1
-    assert inventory["released_active_slot_ids"] == [branch.branch_id]
-    assert status.release_reason == (
-        "quality_regression_without_actionable_diagnostic_slot_release"
-    )
-    assert status.decision_features_excluded is True
-
-
-@pytest.mark.parametrize(
-    "status,tier,extra",
-    [
-        ("active_no_effect", "no_effect", {"branch_mechanism_ids": ("probe",)}),
-        (
-            "active_marginal",
-            "marginal",
-            {
-                "lifecycle_marginal_no_effect_streak": 2,
-                "lifecycle_signal_repeat_count": 2,
-            },
-        ),
-        (
-            "active_weak_positive",
-            "weak_positive",
-            {"lifecycle_signal_repeat_count": 2},
-        ),
-    ],
-)
-def test_low_value_branch_reclaim_without_marker_does_not_scheduler_origin_park(
-    status: str,
-    tier: str,
-    extra: dict,
-) -> None:
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: repeated low signal"
-    branch.branch_code_status = status
-    branch.last_screening_feedback_tier = tier
-    for key, value in extra.items():
-        setattr(branch, key, value)
-
-    reconciliation = reclaim_active_slot_for_new_branch(
-        [branch],
-        max_active_branches=1,
-    )
-    inventory = active_slot_inventory([branch], max_active_branches=1)
-
-    assert reconciliation.changed is False
-    assert reconciliation.blocked is False
-    assert reconciliation.candidate_branch_ids == ()
-    assert reconciliation.marker_missing_branch_ids == ()
-    assert reconciliation.scheduler_origin_parked_branch_ids == ()
-    assert reconciliation.after_used == 1
-    assert branch.state == BranchState.EXPLORE
-    assert branch.branch_code_status == status
-    audit = reconciliation.as_audit_metadata()
-    assert "lifecycle_action" not in audit
-    assert "reclaimed_branch_ids" not in audit
-    assert "scheduler_origin_reclaimed_branch_ids" not in audit
-    assert "decision_origin_marker_required" not in audit
-    assert inventory["used"] == 1
-    assert inventory["parked_lineage_ids"] == []
-
-
-def test_branch_without_reclaim_signal_still_blocks_when_slots_full() -> None:
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: still actionable"
-
-    reconciliation = reclaim_active_slot_for_new_branch(
-        [branch],
-        max_active_branches=1,
-    )
-    inventory = active_slot_inventory([branch], max_active_branches=1)
-
-    assert reconciliation.changed is False
-    assert reconciliation.blocked is False
-    assert reconciliation.candidate_branch_ids == ()
-    assert reconciliation.after_used == 1
-    assert branch.state == BranchState.EXPLORE
-    assert inventory["used"] == 1
-    assert inventory["parked_lineage_ids"] == []
-
-
-def test_low_value_branch_reclaim_with_decision_marker_parks_and_releases_active_slot():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: decision-marked low signal"
-    branch.branch_code_status = "active_no_effect"
-    branch.last_screening_feedback_tier = "no_effect"
-    branch.branch_mechanism_ids = ("probe",)
-    branch.last_branch_lifecycle_policy_block = {
-        "reason": "park_lineage",
-        "lifecycle_action_reason_codes": [BRANCH_LIFECYCLE_PARK_LINEAGE],
-    }
-
-    reconciliation = reclaim_active_slot_for_new_branch(
-        [branch],
-        max_active_branches=1,
-    )
-    inventory = active_slot_inventory([branch], max_active_branches=1)
-
-    assert reconciliation.changed is True
-    assert reconciliation.blocked is False
-    assert reconciliation.parked_branch_ids == (branch.branch_id,)
-    assert reconciliation.after_used == 0
-    assert branch.state == BranchState.PARKED_LINEAGE
-    assert branch.branch_code_status == "parked_lineage"
-    assert branch.last_branch_lifecycle_policy_block[
-        "active_slot_reconciliation"
-    ]["mode"] == "new_branch_reclaim"
-    assert inventory["used"] == 0
-    assert inventory["parked_lineage_ids"] == [branch.branch_id]
-
-
-def test_parked_lineage_does_not_block_clean_fork_capacity():
-    branches = []
-    for offset in (0, 10, 20):
-        branch = _branch(
-            BranchState.PARKED_LINEAGE,
-            created_offset_s=offset,
-            updated_offset_s=offset,
-        )
-        branch.direction = "solver: parked"
-        branch.branch_code_status = "parked_lineage"
-        branch.best_quality_checkpoint_id = f"checkpoint-{offset}"
-        branches.append(branch)
-
-    action = Scheduler(max_active_branches=3).select_next(branches)
-
-    assert action.action == "create_new"
-    assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason == "new_exploration_slot_available"
-
-
-def test_regressed_followup_with_stale_weak_positive_tier_is_not_exploited():
-    branch = _branch(BranchState.EXPLORE)
-    branch.direction = "solver: established"
-    branch.branch_code_status = "regressed_followup"
-    branch.last_screening_feedback_tier = "weak_positive"
-
-    action = Scheduler(max_active_branches=1).select_next([branch])
-
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.slot == "repair_diagnostic"
-    assert action.reason == "effect_diagnostic_followup"
-
-
-def test_capacity_blocked_slot_is_auditable():
-    branches = []
-    for offset in (0, 10, 20):
-        branch = _branch(BranchState.BLOCKED_INFRA, created_offset_s=offset)
-        branch.direction = "solver: established"
-        branches.append(branch)
-
-    action = Scheduler(max_active_branches=3).select_next(branches)
-
-    assert action.action == "at_capacity"
-    assert action.slot == "capacity_blocked"
-    assert action.reason == "active_branch_limit_reached"
-
-
-def test_fifo_within_same_tier_for_unestablished_branches():
-    b_old = _branch(BranchState.EXPLORE, created_offset_s=0)
-    b_new = _branch(BranchState.EXPLORE, created_offset_s=10)
-    action = sched.select_next([b_new, b_old])
-    assert action.branch.branch_id == b_old.branch_id
-
-
-def test_ready_validate_prioritized_over_create_new_under_capacity():
-    explore = _branch(BranchState.EXPLORE)
-    explore.direction = "solver: established"
-    ready = _branch(BranchState.READY_VALIDATE)
-
-    action = Scheduler(max_active_branches=3).select_next([explore, ready])
-
-    assert action.action == "run_existing"
-    assert action.branch.branch_id == ready.branch_id
-
-
-def test_ready_frozen_prioritized_over_create_new_under_capacity():
-    explore = _branch(BranchState.EXPLORE)
-    explore.current_code_hash = "candidate"
-    ready = _branch(BranchState.READY_FROZEN)
-
-    action = Scheduler(max_active_branches=3).select_next([explore, ready])
-
-    assert action.action == "run_existing"
-    assert action.branch.branch_id == ready.branch_id
-
-
-def test_explore_expand_prioritized_over_create_new_under_capacity():
-    explore = _branch(BranchState.EXPLORE)
-    explore.direction = "solver: established"
-    expand = _branch(BranchState.EXPLORE_EXPAND)
-
-    action = Scheduler(max_active_branches=3).select_next([explore, expand])
-
-    assert action.action == "run_existing"
-    assert action.branch.branch_id == expand.branch_id
-
-
-def test_only_terminal_branches_creates_new():
-    from scion.core.models import BranchState
-    branches = [
-        _branch(BranchState.PROMOTED),
-        _branch(BranchState.ABANDONED),
-    ]
-    action = sched.select_next(branches)
-    assert action.action == "create_new"
+def test_scheduler_selection_is_pure() -> None:
+    branch = _branch(BranchState.READY_VALIDATE, "candidate")
+    before = (branch.state, branch.updated_at, dict(branch.branch_evidence_summary))
+    Scheduler(max_active_branches=1).select_next([branch])
+    assert (branch.state, branch.updated_at, branch.branch_evidence_summary) == before

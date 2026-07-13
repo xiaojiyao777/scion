@@ -1,9 +1,14 @@
+from dataclasses import asdict, replace
+
 import pytest
 import os
 import uuid
 from scion.core.models import Branch, BranchState, HypothesisRecord
+from scion.core.proposal_pipeline.direct_attempt_lifecycle import DirectAttemptLifecycle
 from scion.lineage.registry import LineageRegistry
 from scion.lineage.branch_store import BranchStore, HypothesisStore
+from scion.proposal.engine import _parse_hypothesis
+from scion.proposal.prompt_manifest import stable_digest
 
 def test_branch_store_save_load(tmp_path):
     db_path = str(tmp_path / "scion.db")
@@ -46,6 +51,40 @@ def test_hypothesis_store_save(tmp_path):
         row = conn.execute("SELECT * FROM hypotheses WHERE hypothesis_id = 'h1'").fetchone()
         assert row is not None
         assert row[0] == "h1"
+
+
+def test_minimal_hypothesis_survives_store_and_attempt_digest(tmp_path):
+    raw = {
+        "hypothesis_text": "Persist a minimal provider hypothesis.",
+        "change_locus": "solver_design",
+        "action": "modify",
+        "target_file": "policies/baseline_algorithm.py",
+        "predicted_direction": "improve",
+        "target_weakness": "slow convergence",
+        "expected_effect": "faster convergence",
+    }
+    proposal = _parse_hypothesis(raw)
+    registry = LineageRegistry(str(tmp_path / "scion.db"))
+    store = HypothesisStore(registry)
+    store.save(
+        HypothesisRecord(
+            hypothesis_id="direct-lossless",
+            branch_id="direct-branch",
+            change_locus=proposal.change_locus,
+            action=proposal.action,
+            status="active",
+            target_file=proposal.target_file,
+            hypothesis_text=proposal.hypothesis_text,
+        )
+    )
+
+    loaded = store.get_one("direct-lossless")
+    assert loaded is not None
+    assert loaded.hypothesis_text == proposal.hypothesis_text
+    digest = DirectAttemptLifecycle.hypothesis_digest(proposal)
+    assert digest == stable_digest(asdict(proposal), length=64)
+    changed = replace(proposal, expected_effect="more stable convergence")
+    assert DirectAttemptLifecycle.hypothesis_digest(changed) != digest
 
 
 def test_hypothesis_store_mark_status(tmp_path):

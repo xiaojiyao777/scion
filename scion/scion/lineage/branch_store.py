@@ -11,8 +11,6 @@ from scion.core.models import (
     Branch,
     BranchState,
     HypothesisRecord,
-    MechanismChange,
-    mechanism_change_dicts,
 )
 
 if TYPE_CHECKING:
@@ -23,13 +21,6 @@ _REJECTED_STATUS_ALIASES = (
     "contract_failed",
     "smoke_failed",
     "screening_no_effect",
-    "screening_telemetry_failed",
-    "validation_telemetry_failed",
-)
-_PARKED_BRANCH_CODE_STATUSES = (
-    "parked",
-    "parked_lineage",
-    "lineage_parked",
 )
 
 
@@ -43,87 +34,32 @@ def _json_mapping(raw: object) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def _json_string_tuple(raw: object) -> tuple[str, ...]:
-    if not raw:
-        return ()
-    try:
-        value = json.loads(str(raw))
-    except (TypeError, ValueError):
-        return ()
-    if not isinstance(value, list):
-        return ()
-    return tuple(
-        str(item).strip()
-        for item in value
-        if str(item).strip()
-    )
-
-
-def _json_mechanism_changes(raw: object) -> tuple[MechanismChange, ...]:
-    if not raw:
-        return ()
-    try:
-        value = json.loads(str(raw))
-    except (TypeError, ValueError):
-        return ()
-    if not isinstance(value, list):
-        return ()
-    changes: list[MechanismChange] = []
-    for item in value:
-        if not isinstance(item, dict):
-            continue
-        mechanism_id = str(item.get("id") or "").strip()
-        change_type = str(item.get("change_type") or "").strip()
-        if not mechanism_id or not change_type:
-            continue
-        changes.append(MechanismChange(id=mechanism_id, change_type=change_type))
-    return tuple(changes)
-
-
 class BranchStore:
     def __init__(self, registry: "LineageRegistry") -> None:
         self.registry = registry
 
     def save(self, branch: Branch) -> None:
-        state_value = (
-            BranchState.PARKED_LINEAGE.value
-            if str(getattr(branch, "branch_code_status", "") or "")
-            in _PARKED_BRANCH_CODE_STATUSES
-            else branch.state.value
-        )
         with sqlite3.connect(self.registry.db_path) as conn:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO branches
                 (branch_id, state, base_champion_id, base_champion_hash,
-                 lineage_id, current_code_hash, last_clean_code_hash, retry_count,
+                 lineage_id, current_code_hash, last_clean_code_hash,
                  screening_expand_count, validation_expand_count,
                  failure_codes, created_at, updated_at, direction,
                  weight_revision, branch_code_status,
-                 last_screening_feedback_tier, last_telemetry_outcome,
-                 branch_mechanism_ids_json,
-                 telemetry_repair_mechanism_ids_json,
-                 telemetry_repair_attempts_json,
-                 branch_lifecycle_policy_blocks,
-                 branch_lifecycle_new_mechanism_ineligible,
-                 branch_lifecycle_reroute_reason,
-                 last_branch_lifecycle_policy_block_json,
-                 best_quality_checkpoint_id, last_valid_checkpoint_id,
-                 rollback_count, last_rollback_reason,
                  branch_evidence_summary_json,
-                 pending_retry, blocked_rounds,
-                 consecutive_llm_retries, infra_block_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 infra_block_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     branch.branch_id,
-                    state_value,
+                    branch.state.value,
                     branch.base_champion_id,
                     branch.base_champion_hash,
                     branch.lineage_id or branch.branch_id,
                     branch.current_code_hash,
                     branch.last_clean_code_hash,
-                    branch.retry_count,
                     branch.screening_expand_count,
                     branch.validation_expand_count,
                     json.dumps(branch.failure_codes),
@@ -132,25 +68,7 @@ class BranchStore:
                     branch.direction,
                     branch.weight_revision,
                     branch.branch_code_status,
-                    branch.last_screening_feedback_tier,
-                    branch.last_telemetry_outcome,
-                    json.dumps(list(branch.branch_mechanism_ids or ())),
-                    json.dumps(list(branch.telemetry_repair_mechanism_ids or ())),
-                    json.dumps(dict(branch.telemetry_repair_attempts or {})),
-                    branch.branch_lifecycle_policy_blocks,
-                    1 if branch.branch_lifecycle_new_mechanism_ineligible else 0,
-                    branch.branch_lifecycle_reroute_reason,
-                    json.dumps(
-                        dict(branch.last_branch_lifecycle_policy_block or {})
-                    ),
-                    branch.best_quality_checkpoint_id,
-                    branch.last_valid_checkpoint_id,
-                    branch.rollback_count,
-                    branch.last_rollback_reason,
                     json.dumps(dict(branch.branch_evidence_summary or {})),
-                    1 if branch.pending_retry else 0,
-                    branch.blocked_rounds,
-                    branch.consecutive_llm_retries,
                     branch.infra_block_count,
                 ),
             )
@@ -169,19 +87,14 @@ class BranchStore:
         """Return branches that remain in the active scheduling pool."""
         terminal = ("promoted", "abandoned", "parked_lineage")
         terminal_placeholders = ",".join("?" * len(terminal))
-        parked_placeholders = ",".join(
-            "?" * len(_PARKED_BRANCH_CODE_STATUSES)
-        )
         with sqlite3.connect(self.registry.db_path) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 (
                     "SELECT * FROM branches "
-                    f"WHERE state NOT IN ({terminal_placeholders}) "
-                    "AND COALESCE(branch_code_status, '') "
-                    f"NOT IN ({parked_placeholders})"
+                    f"WHERE state NOT IN ({terminal_placeholders})"
                 ),
-                (*terminal, *_PARKED_BRANCH_CODE_STATUSES),
+                terminal,
             ).fetchall()
             return [self._row_to_branch(r) for r in rows]
 
@@ -196,7 +109,6 @@ class BranchStore:
             lineage_id=d.get("lineage_id") or d["branch_id"],
             current_code_hash=d.get("current_code_hash"),
             last_clean_code_hash=d.get("last_clean_code_hash"),
-            retry_count=d.get("retry_count", 0),
             screening_expand_count=d.get("screening_expand_count") or 0,
             validation_expand_count=d.get("validation_expand_count") or 0,
             failure_codes=json.loads(d["failure_codes"]) if d.get("failure_codes") else [],
@@ -205,39 +117,9 @@ class BranchStore:
             direction=d.get("direction"),
             weight_revision=d.get("weight_revision") or 0,
             branch_code_status=d.get("branch_code_status") or "clean",
-            last_screening_feedback_tier=d.get("last_screening_feedback_tier"),
-            last_telemetry_outcome=d.get("last_telemetry_outcome"),
-            branch_mechanism_ids=_json_string_tuple(
-                d.get("branch_mechanism_ids_json")
-            ),
-            telemetry_repair_mechanism_ids=_json_string_tuple(
-                d.get("telemetry_repair_mechanism_ids_json")
-            ),
-            telemetry_repair_attempts=_json_mapping(
-                d.get("telemetry_repair_attempts_json")
-            ),
-            branch_lifecycle_policy_blocks=(
-                d.get("branch_lifecycle_policy_blocks") or 0
-            ),
-            branch_lifecycle_new_mechanism_ineligible=bool(
-                d.get("branch_lifecycle_new_mechanism_ineligible") or 0
-            ),
-            branch_lifecycle_reroute_reason=d.get(
-                "branch_lifecycle_reroute_reason"
-            ),
-            last_branch_lifecycle_policy_block=_json_mapping(
-                d.get("last_branch_lifecycle_policy_block_json")
-            ),
-            best_quality_checkpoint_id=d.get("best_quality_checkpoint_id"),
-            last_valid_checkpoint_id=d.get("last_valid_checkpoint_id"),
-            rollback_count=d.get("rollback_count") or 0,
-            last_rollback_reason=d.get("last_rollback_reason"),
             branch_evidence_summary=_json_mapping(
                 d.get("branch_evidence_summary_json")
             ),
-            pending_retry=bool(d.get("pending_retry") or 0),
-            blocked_rounds=d.get("blocked_rounds") or 0,
-            consecutive_llm_retries=d.get("consecutive_llm_retries") or 0,
             infra_block_count=d.get("infra_block_count") or 0,
         )
 
@@ -255,10 +137,8 @@ class HypothesisStore:
                  target_file, parent_hypothesis_id, suggested_weight,
                  hypothesis_text, created_at, base_champion_version,
                  family_id, family_source, taxonomy_version,
-                 predicted_direction, target_objectives_json,
-                 protected_objectives_json, novelty_signature_json,
-                 mechanism_changes_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 predicted_direction)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     hyp.hypothesis_id,
@@ -276,10 +156,6 @@ class HypothesisStore:
                     hyp.family_source,
                     hyp.taxonomy_version,
                     hyp.predicted_direction,
-                    json.dumps(list(hyp.target_objectives)),
-                    json.dumps(list(hyp.protected_objectives)),
-                    json.dumps(hyp.novelty_signature or {}, sort_keys=True),
-                    json.dumps(mechanism_change_dicts(hyp), sort_keys=True),
                 ),
             )
 
@@ -356,7 +232,7 @@ class HypothesisStore:
                 "change_locus": h.change_locus,
                 "target_file": h.target_file,
                 "status": h.status,
-                "hypothesis_text": (h.hypothesis_text or "")[:200],
+                "hypothesis_text": h.hypothesis_text or "",
             }
 
         return {
@@ -383,12 +259,6 @@ class HypothesisStore:
             created_at=datetime.fromisoformat(d["created_at"]) if d.get("created_at") else datetime.now(),
             base_champion_version=d.get("base_champion_version") or 0,
             predicted_direction=d.get("predicted_direction") or "exploratory",
-            target_objectives=tuple(json.loads(d.get("target_objectives_json") or "[]")),
-            protected_objectives=tuple(json.loads(d.get("protected_objectives_json") or "[]")),
-            novelty_signature=_json_mapping(d.get("novelty_signature_json")),
-            mechanism_changes=_json_mechanism_changes(
-                d.get("mechanism_changes_json")
-            ),
         )
 
     # ---------------------------------------------------------------
@@ -408,7 +278,7 @@ class HypothesisStore:
                     family_id,
                     COUNT(*) as total,
                     SUM(CASE WHEN status = 'promoted' THEN 1 ELSE 0 END) as promoted,
-                    SUM(CASE WHEN status IN ('rejected', 'abandoned', 'blacklisted', 'contract_failed', 'smoke_failed', 'screening_no_effect', 'screening_telemetry_failed', 'validation_telemetry_failed') THEN 1 ELSE 0 END) as rejected,
+                    SUM(CASE WHEN status IN ('rejected', 'abandoned', 'blacklisted', 'contract_failed', 'smoke_failed', 'screening_no_effect') THEN 1 ELSE 0 END) as rejected,
                     SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active
                 FROM hypotheses
                 WHERE family_id IS NOT NULL

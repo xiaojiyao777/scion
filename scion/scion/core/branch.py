@@ -3,10 +3,6 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from scion.core.branch_hygiene import (
-    SUSPECT_BRANCH_CODE_STATUSES,
-    branch_is_parked_lineage,
-)
 from scion.core.models import (
     Branch, BranchState, ChampionState, Decision, ExperimentStage,
 )
@@ -37,8 +33,8 @@ _DECISION_TRANSITIONS: Dict[Decision, Dict[BranchState, BranchState]] = {
         BranchState.EXPLORE_EXPAND: BranchState.EXPLORE,
     },
     Decision.VALIDATION_REPAIR_REQUIRED: {
-        # Validation activation repair is branch-local and distinct from weak
-        # screening CONTINUE_EXPLORE.
+        # Historical resume compatibility for already-durable campaigns. The
+        # current direct-v3 Decision mapper cannot produce this transition.
         BranchState.VALIDATING: BranchState.EXPLORE,
         BranchState.VALIDATING_EXPAND: BranchState.EXPLORE,
     },
@@ -210,8 +206,12 @@ class BranchController:
         branch.state = BranchState.BLOCKED_INFRA
         branch.updated_at = datetime.now()
 
-    def unblock_infra(self, branch_id: str) -> None:
-        """Restore a BLOCKED_INFRA branch to its previous state."""
+    def resume_infra_after_operator_event(self, branch_id: str) -> None:
+        """Restore BLOCKED_INFRA after its operator event was durably written.
+
+        This is the controller primitive for FailureLifecycleService only; it
+        does not itself authorize or record an operator resume.
+        """
         branch = self._get(branch_id)
         if branch.state != BranchState.BLOCKED_INFRA:
             raise StateTransitionError(
@@ -226,18 +226,11 @@ class BranchController:
         Return the code-base identifier for the branch (§4.5):
         - "champion"          if branch is STALE, or current_code_hash is None,
                               or last_clean_code_hash is None (never passed verification)
-                              or the last verified branch code has telemetry wiring
-                              suspicion that should not seed the next proposal
         - "branch_workspace"  if both hashes are set — caller should reuse the
                               existing branch workspace rather than copying from champion
         """
         branch = self._get(branch_id)
         if branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
-            return "champion"
-        if (
-            getattr(branch, "branch_code_status", "clean")
-            in SUSPECT_BRANCH_CODE_STATUSES
-        ):
             return "champion"
         if branch.current_code_hash is None:
             return "champion"
@@ -301,7 +294,7 @@ class BranchController:
         return [
             b
             for b in self._branches.values()
-            if b.state not in terminal and not branch_is_parked_lineage(b)
+            if b.state not in terminal
         ]
 
     def get_reportable_branches(self) -> List[Branch]:

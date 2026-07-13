@@ -252,8 +252,8 @@ def run_job(
                 "status": "timeout_expired",
                 "timeout_after_sec": int(job.time_limit_sec) + int(timeout_padding_sec),
                 "wall_elapsed_sec": time.perf_counter() - started,
-                "stdout_tail": _tail_text(exc.stdout),
-                "stderr_tail": _tail_text(exc.stderr),
+                "stdout": _full_text(exc.stdout),
+                "stderr": _full_text(exc.stderr),
             }
         )
         return row
@@ -262,8 +262,8 @@ def run_job(
         {
             "returncode": completed.returncode,
             "wall_elapsed_sec": time.perf_counter() - started,
-            "stdout_tail": _tail_text(completed.stdout),
-            "stderr_tail": _tail_text(completed.stderr),
+            "stdout": _full_text(completed.stdout),
+            "stderr": _full_text(completed.stderr),
         }
     )
     if completed.returncode != 0 or not job.output_path.exists():
@@ -429,13 +429,12 @@ def _float_or_none(value: Any) -> float | None:
         return None
 
 
-def _tail_text(value: Any, limit: int = 2000) -> str:
+def _full_text(value: Any) -> str:
     if value is None:
         return ""
     if isinstance(value, bytes):
         value = value.decode("utf-8", errors="replace")
-    text = str(value)
-    return text[-limit:]
+    return str(value)
 
 
 def _clean_str(value: object) -> str:

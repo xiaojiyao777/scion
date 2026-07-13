@@ -1,112 +1,25 @@
-"""Helpers for audit grouping of decision reason codes."""
+"""Audit grouping for formal protocol and Decision reason codes."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable
 
-from scion.core.branch_lifecycle_policy import (
-    BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
-    BRANCH_LIFECYCLE_PARK_LINEAGE,
-    BRANCH_LIFECYCLE_RETAIN_CHECKPOINT,
-    BRANCH_LIFECYCLE_RETAIN_HEAD,
-    BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT,
-    SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
-    SCREENING_MARGINAL_NO_EFFECT_LOOP_EXHAUSTED,
-    SCREENING_MARGINAL_SIGNAL_CONTINUE,
-    SCREENING_NEUTRAL_SIGNAL_CONTINUE,
-    SCREENING_NO_EFFECT_FOLLOWUP_EXHAUSTED,
-    SCREENING_REPEATED_SIGNAL_SIGNATURE_EXHAUSTED,
-    SCREENING_RUNTIME_SATURATION_DIAGNOSTIC,
-    SCREENING_RUNTIME_SATURATION_REROUTE,
-    SCREENING_ROLLBACK_BUDGET_EXHAUSTED,
-    SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE,
-    SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
-    SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN,
-    SCREENING_SOFT_ABANDON_NEGATIVE_DELTA,
-    SCREENING_SOFT_ABANDON_NON_POSITIVE_CI,
-    SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE,
-    SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN,
-    SCREENING_STALE_RESCREEN_FAIL,
-    SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
-    SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
-    SCREENING_TELEMETRY_EFFECT_ZERO_REROUTE,
-    SCREENING_WEAK_SIGNAL_CONTINUE,
-    SCREENING_ZERO_WIN_STREAK_CONTINUE,
-    SCREENING_ZERO_WIN_STREAK_EXHAUSTED,
-    TELEMETRY_DIAGNOSTIC_CANDIDATE_RUNTIME_FAILURE,
-    TELEMETRY_DIAGNOSTIC_NEGATIVE_DELTA,
-    TELEMETRY_DIAGNOSTIC_RUNTIME_REGRESSION_RATE,
-    TELEMETRY_DIAGNOSTIC_RUNTIME_SLOWDOWN,
-    TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
-    VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY,
-)
-
-
-_LIFECYCLE_ACTION_CODES = frozenset(
-    {
-        BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
-        BRANCH_LIFECYCLE_PARK_LINEAGE,
-        BRANCH_LIFECYCLE_RETAIN_CHECKPOINT,
-        BRANCH_LIFECYCLE_RETAIN_HEAD,
-        BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT,
-        SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
-        SCREENING_MARGINAL_NO_EFFECT_LOOP_EXHAUSTED,
-        SCREENING_MARGINAL_SIGNAL_CONTINUE,
-        SCREENING_NEUTRAL_SIGNAL_CONTINUE,
-        SCREENING_NO_EFFECT_FOLLOWUP_EXHAUSTED,
-        SCREENING_REPEATED_SIGNAL_SIGNATURE_EXHAUSTED,
-        SCREENING_RUNTIME_SATURATION_DIAGNOSTIC,
-        SCREENING_RUNTIME_SATURATION_REROUTE,
-        SCREENING_ROLLBACK_BUDGET_EXHAUSTED,
-        SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE,
-        SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
-        SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN,
-        SCREENING_SOFT_ABANDON_NEGATIVE_DELTA,
-        SCREENING_SOFT_ABANDON_NON_POSITIVE_CI,
-        SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE,
-        SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN,
-        SCREENING_STALE_RESCREEN_FAIL,
-        SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
-        SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
-        SCREENING_TELEMETRY_EFFECT_ZERO_REROUTE,
-        SCREENING_WEAK_SIGNAL_CONTINUE,
-        SCREENING_ZERO_WIN_STREAK_CONTINUE,
-        SCREENING_ZERO_WIN_STREAK_EXHAUSTED,
-        TELEMETRY_DIAGNOSTIC_CANDIDATE_RUNTIME_FAILURE,
-        TELEMETRY_DIAGNOSTIC_NEGATIVE_DELTA,
-        TELEMETRY_DIAGNOSTIC_RUNTIME_REGRESSION_RATE,
-        TELEMETRY_DIAGNOSTIC_RUNTIME_SLOWDOWN,
-        TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
-        VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY,
-    }
-)
 
 _GATE_OBSERVATION_PREFIXES = (
-    "SCREENING_FAIL",
-    "SCREENING_PASS",
-    "SCREENING_EXPAND",
-    "SCREENING_INCONCLUSIVE",
-    "SCREENING_TELEMETRY_FAILED",
-    "SCREENING_TELEMETRY_REPAIRABLE",
-    "SCREENING_UNCLEAR",
-    "TELEMETRY_VALIDATION_REPAIRABLE",
-    "VALIDATION_FAIL",
-    "VALIDATION_PASS",
-    "VALIDATION_TELEMETRY_FAILED",
-    "VALIDATION_TELEMETRY_REPAIRABLE",
-    "FROZEN_FAIL",
-    "FROZEN_PASS",
-    "CANARY_FAIL",
-    "CANARY_PASS",
-    "CANARY_CONFIG",
+    "SCREENING_",
+    "VALIDATION_",
+    "FROZEN_",
+    "CANARY_",
     "NO_SCREENING_STATS",
+    "RUNTIME_",
+    "CANDIDATE_RUNTIME_FAILURE",
+    "INCOMPLETE_RUNTIME_EVIDENCE",
 )
 
 
 @dataclass(frozen=True)
 class ReasonCodeGroups:
     gate_observation_reason_codes: tuple[str, ...] = ()
-    lifecycle_action_reason_codes: tuple[str, ...] = ()
 
 
 def classify_reason_codes(
@@ -114,19 +27,14 @@ def classify_reason_codes(
     *,
     protocol_reason_codes: Iterable[str] | None = None,
 ) -> ReasonCodeGroups:
-    """Split compatible reason codes into gate observations and lifecycle actions."""
-
     protocol_set = set(_clean_codes(protocol_reason_codes))
-    gate: list[str] = []
-    lifecycle: list[str] = []
-    for code in _clean_codes(reason_codes):
-        if code in _LIFECYCLE_ACTION_CODES:
-            lifecycle.append(code)
-        elif code in protocol_set or _is_gate_observation_code(code):
-            gate.append(code)
+    gate = [
+        code
+        for code in _clean_codes(reason_codes)
+        if code in protocol_set or code.upper().startswith(_GATE_OBSERVATION_PREFIXES)
+    ]
     return ReasonCodeGroups(
         gate_observation_reason_codes=tuple(dict.fromkeys(gate)),
-        lifecycle_action_reason_codes=tuple(dict.fromkeys(lifecycle)),
     )
 
 
@@ -136,12 +44,4 @@ def _clean_codes(codes: Iterable[str] | None) -> tuple[str, ...]:
     )
 
 
-def _is_gate_observation_code(code: str) -> bool:
-    upper = code.upper()
-    return upper.startswith(_GATE_OBSERVATION_PREFIXES)
-
-
-__all__ = [
-    "ReasonCodeGroups",
-    "classify_reason_codes",
-]
+__all__ = ["ReasonCodeGroups", "classify_reason_codes"]

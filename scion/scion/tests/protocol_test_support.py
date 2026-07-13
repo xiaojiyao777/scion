@@ -11,7 +11,6 @@ from types import SimpleNamespace
 
 from scion.core.models import (
     ExperimentStage, EvalStats, ProtocolResult, RunResult, SolverOutput, CanaryResult,
-    MechanismChange,
 )
 from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
 from scion.protocol.evaluation import lexicographic_compare, compute_delta

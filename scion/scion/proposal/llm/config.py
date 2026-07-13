@@ -7,35 +7,20 @@ from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
-_BACKOFF_DELAYS = (5.0, 15.0)
-
-# Truncation recovery
-MAX_TRUNCATION_RETRIES = 2
-MAX_MAX_TOKENS = 16384
-
 # Default config — aihubmix Anthropic endpoint
 _DEFAULT_BASE_URL = "https://aihubmix.com"
 _DEFAULT_MODEL = "claude-opus-4-6"
 _DEFAULT_TIMEOUT_SEC = 60.0
-_DEFAULT_MAX_RETRIES = 2
-_DEFAULT_SDK_MAX_RETRIES = 0
-_DEFAULT_MAX_TOKENS = 16384
 _DEFAULT_CODE_TIMEOUT_SEC = 180.0
-_DEFAULT_CODE_MAX_RETRIES = 0
-_DEFAULT_TRANSIENT_PROVIDER_MAX_RETRIES = 1
-LLM_TRANSIENT_API_ERROR_CATEGORY = "llm_transient_api_error"
-
+_ANTHROPIC_REQUIRED_MAX_TOKENS = 16384
 _ANTHROPIC_MODEL_PREFIXES = ("claude-",)
 _DEEPSEEK_MODEL_PREFIXES = ("deepseek-",)
 _GPT_CODEX_MODEL_PREFIXES = ("gpt-", "codex-")
 _DEEPSEEK_MAX_ALIASES = {"v4pro-max", "deepseek-v4-pro-max"}
-_CODE_REQUEST_KINDS = {"code", "fix"}
+_CODE_REQUEST_KINDS = {"code"}
 _TOOL_REQUEST_KIND_BY_NAME = {
     "generate_patch": "code",
-    "fix_patch": "fix",
     "generate_hypothesis": "hypothesis",
-    "select_hypothesis_target_intent": "hypothesis_target_intent",
-    "plan_proposal_tool_call": "tool_selection",
 }
 
 
@@ -86,17 +71,6 @@ def _request_kind_env_key(request_kind: str | None) -> str | None:
         for char in str(request_kind)
     ).strip("_")
     return cleaned or None
-
-
-def _env_int(name: str, default: int) -> int:
-    raw = os.environ.get(name)
-    if raw is None or raw.strip() == "":
-        return int(default)
-    try:
-        return max(0, int(raw))
-    except ValueError:
-        logger.warning("Ignoring invalid %s=%r; using %d", name, raw, default)
-        return int(default)
 
 
 def _env_float(name: str, default: float) -> float:

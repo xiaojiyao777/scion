@@ -4,7 +4,6 @@ import importlib.util
 import json
 from pathlib import Path
 
-from scion.core import proposal_trajectory_artifacts as trajectory
 from scion.postrun.opportunity_visibility import (
     PROBLEM_OPPORTUNITY_VISIBILITY_SCHEMA,
     add_problem_opportunity_visibility,
@@ -49,42 +48,6 @@ def test_problem_opportunity_visibility_fingerprint_is_manifest_based() -> None:
     assert aggregate["full_section_visible_trace_count"] == 1
     assert aggregate["section_status_counts"] == {"included": 1}
     assert aggregate["block_family_counts"] == {"research_signal": 1}
-
-
-def test_proposal_trajectory_fingerprint_carries_opportunity_visibility(
-    tmp_path: Path,
-) -> None:
-    campaign_dir = tmp_path / "campaign"
-    agentic_dir = campaign_dir / "agentic_sessions"
-    prompt_dir = agentic_dir / "prompt_manifests"
-    prompt_dir.mkdir(parents=True)
-    prompt_ref = "agentic_sessions/prompt_manifests/hypothesis.json"
-    (campaign_dir / prompt_ref).write_text(
-        json.dumps(_prompt_manifest(), indent=2),
-        encoding="utf-8",
-    )
-
-    fingerprints, ref_count, loaded_count = trajectory._trace_fingerprints(
-        {
-            "traces": [
-                {
-                    "trace_id": "trace-hypothesis",
-                    "call_kind": "hypothesis",
-                    "prompt_manifest_artifact_ref": prompt_ref,
-                }
-            ]
-        },
-        session_prompt_refs=[],
-        campaign_dir=campaign_dir,
-        agentic_dir=agentic_dir,
-    )
-
-    assert ref_count == 1
-    assert loaded_count == 1
-    visibility = fingerprints[0]["problem_opportunity_visibility"]
-    assert visibility["section_name"] == "problem_opportunity_summary"
-    assert visibility["section_visible"] is True
-    assert visibility["block_family"] == "research_signal"
 
 
 def test_postrun_brief_and_checker_compare_opportunity_visibility(

@@ -139,7 +139,7 @@ class TestObjectiveCheck:
         assert r.passed is False
         assert "adapter recomputation missing declared metrics: penalty" in r.detail
 
-    def test_selected_surface_missing_runtime_field_preempts_adapter_required(
+    def test_selected_surface_missing_runtime_field_does_not_preempt_adapter_required(
         self,
         tmp_path,
     ):
@@ -171,9 +171,8 @@ class TestObjectiveCheck:
         )
 
         assert r.passed is False
-        assert "solver runtime audit failed" in r.detail
-        assert "missing=policy_loaded" in r.detail
-        assert "problem adapter is required" not in r.detail
+        assert "solver runtime audit failed" not in r.detail
+        assert "problem adapter is required" in r.detail
 
 
 class TestStateleakCheck:
@@ -351,7 +350,7 @@ class TestStateleakCheck:
             (1, "second"),
         ],
     )
-    def test_selected_surface_runtime_audit_fails_on_either_run(
+    def test_selected_surface_runtime_diagnostic_does_not_preempt_adapter_boundary(
         self,
         tmp_path,
         bad_run,
@@ -390,12 +389,10 @@ class TestStateleakCheck:
 
         assert r.passed is False
         detail = json.loads(r.detail)
-        assert detail["comparison_mode"] == "runtime_audit"
+        assert detail["comparison_mode"] == "adapter_required_missing"
         assert detail["selected_surface"] == "search_policy"
-        assert detail["run"] == expected_run
-        assert f"{expected_run} run runtime audit failed" in detail["error"]
-        assert "missing=policy_loaded" in detail["error"]
-        assert "problem adapter is required" not in detail["error"]
+        assert "problem adapter is required" in detail["error"]
+        assert "runtime audit failed" not in detail["error"]
 
 
 class TestPerfGuardCheck:
@@ -446,6 +443,51 @@ class TestPerfGuardCheck:
         assert r.metadata["champion_ms"] == 1000
         assert r.metadata["ratio"] == pytest.approx(0.5)
         assert r.metadata["candidate_timeout"] is False
+
+    def test_runtime_telemetry_diagnostic_is_nonblocking_and_preserved(
+        self,
+        tmp_path,
+    ):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        champ_ws = str(tmp_path / "champ")
+        Path(champ_ws).mkdir()
+        spec = _make_spec(canary=canary).model_copy(
+            update={
+                "research_surfaces": [
+                    {
+                        "name": "search_policy",
+                        "kind": "policy",
+                        "target_files": ["policies/search_policy.py"],
+                        "evidence": {
+                            "required_runtime_fields": ["policy_loaded"],
+                        },
+                    }
+                ],
+            }
+        )
+        output = _solver_output_dict()
+        output["runtime"] = {}
+        runner = _mock_runner(output_dict=output)
+
+        r = check_perf(
+            spec,
+            runner,
+            str(tmp_path),
+            champ_ws,
+            selected_surface="search_policy",
+        )
+
+        assert r.passed is True
+        assert r.metadata["comparison_valid"] is True
+        assert (
+            r.metadata["candidate_runtime_audit_diagnostic"]["error_category"]
+            == "surface_runtime_contract_error"
+        )
+        assert (
+            r.metadata["champion_runtime_audit_diagnostic"]["error_category"]
+            == "surface_runtime_contract_error"
+        )
 
     def test_slow_candidate_fails(self, tmp_path):
         canary = str(tmp_path / "small.json")

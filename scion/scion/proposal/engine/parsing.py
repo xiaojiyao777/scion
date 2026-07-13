@@ -8,16 +8,13 @@ from pydantic import ValidationError
 
 from scion.core.models import (
     HypothesisProposal,
-    MechanismChange,
     PatchFileChange,
     PatchProposal,
 )
 from scion.proposal.schemas import (
     HypothesisProposalInput,
-    HypothesisTargetIntentInput,
     PatchSchemaPreflightError,
     PatchProposalInput,
-    normalize_mechanism_changes_with_repair_attribution,
     normalize_patch_output_with_repair_attribution,
     preflight_patch_exact_replace_shape,
 )
@@ -25,17 +22,12 @@ from scion.proposal.edit_protocol import (
     PatchEditProtocolError,
     normalize_patch_typed_edits,
 )
-from scion.proposal.target_intent_binding import target_intent_mechanism_identity
-
 from .exceptions import ProposalValidationError
 
 _PATCH_TOP_LEVEL_FIELDS = frozenset(
     {
-        "premise_check",
-        "premise_check_reason",
         "file_path",
         "action",
-        "code_content",
         "edit_intent",
         "source_digest",
         "old_string",
@@ -43,18 +35,15 @@ _PATCH_TOP_LEVEL_FIELDS = frozenset(
         "replace_all",
         "content_after",
         "full_file_reason",
-        "derived_diff_ref",
         "evidence_refs",
         "test_hint",
         "additional_changes",
-        "mechanism_changes",
     }
 )
 _PATCH_ADDITIONAL_CHANGE_FIELDS = frozenset(
     {
         "file_path",
         "action",
-        "code_content",
         "edit_intent",
         "source_digest",
         "old_string",
@@ -62,27 +51,18 @@ _PATCH_ADDITIONAL_CHANGE_FIELDS = frozenset(
         "replace_all",
         "content_after",
         "full_file_reason",
-        "derived_diff_ref",
         "evidence_refs",
         "test_hint",
     }
 )
 
 
-def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
+def _parse_hypothesis(
+    raw: Dict[str, Any],
+) -> HypothesisProposal:
     """Convert a validated LLM response dict into a HypothesisProposal."""
-    normalized_raw = dict(raw)
-    normalized_raw.pop("schema_repair_attribution", None)
-    repair_attribution: tuple[dict[str, Any], ...] = ()
-    if "mechanism_changes" in normalized_raw:
-        mechanism_changes, repair_attribution = (
-            normalize_mechanism_changes_with_repair_attribution(
-                normalized_raw.get("mechanism_changes")
-            )
-        )
-        normalized_raw["mechanism_changes"] = mechanism_changes
     try:
-        validated = HypothesisProposalInput(**normalized_raw)
+        validated = HypothesisProposalInput(**dict(raw))
     except ValidationError as exc:
         raise ProposalValidationError(str(exc)) from exc
     return HypothesisProposal(
@@ -94,53 +74,7 @@ def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
         target_weakness=validated.target_weakness,
         expected_effect=validated.expected_effect,
         suggested_weight=validated.suggested_weight,
-        target_objectives=tuple(validated.target_objectives or ()),
-        protected_objectives=tuple(validated.protected_objectives or ()),
-        objective_tradeoff_policy=validated.objective_tradeoff_policy,
-        no_op_condition=validated.no_op_condition,
-        risk_to_higher_priority=validated.risk_to_higher_priority,
-        target_runtime_effect=validated.target_runtime_effect,
-        complexity_claim=validated.complexity_claim,
-        runtime_budget_strategy=validated.runtime_budget_strategy,
-        expected_telemetry=dict(validated.expected_telemetry or {}),
-        novelty_signature=dict(validated.novelty_signature or {}),
-        material_difference=dict(validated.material_difference or {}),
-        branch_lesson_usage=dict(validated.branch_lesson_usage or {}),
-        mechanism_changes=tuple(
-            MechanismChange(id=change.id, change_type=change.change_type)
-            for change in validated.mechanism_changes
-        ),
-        schema_repair_attribution=repair_attribution,
     )
-
-
-def _parse_hypothesis_target_intent(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate and normalize a hypothesis target-intent preflight payload."""
-    try:
-        validated = HypothesisTargetIntentInput(**dict(raw))
-    except ValidationError as exc:
-        raise ProposalValidationError(str(exc)) from exc
-    change_locus = (validated.change_locus or validated.surface or "").strip()
-    action = "create_new" if validated.action == "create" else validated.action
-    mechanism_identity = target_intent_mechanism_identity(
-        mechanism_id=validated.mechanism_id,
-        mechanism_family=validated.mechanism_family,
-        mechanism_sketch=validated.mechanism_sketch,
-    )
-    return {
-        key: value
-        for key, value in {
-            "change_locus": change_locus,
-            "surface": change_locus,
-            "action": action,
-            "target_file": validated.target_file,
-            **mechanism_identity,
-            "mechanism_sketch": validated.mechanism_sketch,
-            "confidence": validated.confidence,
-            "notes": validated.notes,
-        }.items()
-        if value not in (None, "", [], {}, ())
-    }
 
 
 def _parse_patch(
@@ -181,13 +115,7 @@ def _parse_patch(
             )
             for change in validated.additional_changes
         ),
-        premise_check=validated.premise_check,
-        premise_check_reason=validated.premise_check_reason,
         repair_attribution=repair_attribution,
-        mechanism_changes=tuple(
-            MechanismChange(id=change.id, change_type=change.change_type)
-            for change in validated.mechanism_changes
-        ),
     )
 
 
@@ -208,9 +136,7 @@ def _preflight_patch_output_shape(raw: Dict[str, Any]) -> None:
     if isinstance(additional_changes, str) and additional_changes.strip():
         raise ProposalValidationError(
             "additional_changes must be a JSON array, not a JSON-encoded string. "
-            "Shape-only retry: preserve the same hypothesis, target_file, "
-            "mechanism_changes ids, and patch intent; emit additional_changes "
-            "as an array of edit objects instead of a string."
+            "Emit additional_changes as an array of typed edit objects."
         )
     if isinstance(additional_changes, list):
         for index, item in enumerate(additional_changes):

@@ -315,7 +315,6 @@ def available_cvrp_mechanisms() -> tuple[CvrpMechanismSpec, ...]:
 def load_case_entries(
     manifest_path: str | Path,
     *,
-    case_limit: int | None = None,
     case_id_filter: Sequence[str] = (),
     family_filter: Sequence[str] = (),
     slice_filter: Sequence[str] = (),
@@ -345,8 +344,6 @@ def load_case_entries(
         if slice_allow and case.case_slice not in slice_allow:
             continue
         cases.append(case)
-        if case_limit is not None and len(cases) >= case_limit:
-            break
     if not cases:
         raise ValueError("CVRP mechanism matrix selected no cases")
     return tuple(cases)

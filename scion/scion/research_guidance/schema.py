@@ -10,7 +10,6 @@ SUPPORTED_VISIBILITY_POLICIES = ("proposal_only",)
 SUPPORTED_HYPOTHESIS_MECHANISM_BINDINGS = (
     "required",
     "context_only",
-    "target_intent_required",
 )
 
 

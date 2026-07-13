@@ -6,7 +6,11 @@ import time
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
-from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_result
+from scion.runtime.audit import (
+    format_runtime_audit_failure,
+    runtime_audit_failure_from_result,
+    runtime_audit_issue_blocks_execution,
+)
 from scion.runtime.runner import Runner, run_solver_with_surface
 from scion.verification.feasibility import _registry_path, resolve_problem_path
 
@@ -94,7 +98,9 @@ def check_perf(
             problem_spec=problem_spec,
             selected_surface=selected_surface,
         )
-        if audit_failure is not None:
+        if audit_failure is not None and runtime_audit_issue_blocks_execution(
+            audit_failure
+        ):
             return {
                 "success": False,
                 "elapsed_ms": r.elapsed_ms,
@@ -108,6 +114,7 @@ def check_perf(
             "elapsed_ms": r.elapsed_ms,
             "timeout": False,
             "error_category": None,
+            "runtime_audit_diagnostic": audit_failure,
         }
 
     cand = _run(candidate_workspace)
@@ -126,6 +133,9 @@ def check_perf(
             "candidate_error_category": cand["error_category"],
             "champion_error_category": None,
             "candidate_runtime_audit": cand.get("runtime_audit"),
+            "candidate_runtime_audit_diagnostic": cand.get(
+                "runtime_audit_diagnostic"
+            ),
         }
         detail = (
             f"candidate solver run failed: case={case_id} "
@@ -152,6 +162,9 @@ def check_perf(
             "champion_timeout": False,
             "candidate_error_category": cand["error_category"],
             "champion_error_category": None,
+            "candidate_runtime_audit_diagnostic": cand.get(
+                "runtime_audit_diagnostic"
+            ),
         }
         detail = (
             f"budget compliant: case={case_id} candidate={cand_ms}ms "
@@ -173,6 +186,10 @@ def check_perf(
             "champion_timeout": bool(champ["timeout"]),
             "candidate_error_category": cand["error_category"],
             "champion_error_category": champ["error_category"],
+            "candidate_runtime_audit_diagnostic": cand.get(
+                "runtime_audit_diagnostic"
+            ),
+            "champion_runtime_audit": champ.get("runtime_audit"),
         }
         detail = (
             "skipped: champion solver run failed"
@@ -210,6 +227,12 @@ def check_perf(
                 "champion_timeout": bool(champ["timeout"]),
                 "candidate_error_category": cand["error_category"],
                 "champion_error_category": "zero_runtime",
+                "candidate_runtime_audit_diagnostic": cand.get(
+                    "runtime_audit_diagnostic"
+                ),
+                "champion_runtime_audit_diagnostic": champ.get(
+                    "runtime_audit_diagnostic"
+                ),
             },
         )
 
@@ -228,6 +251,12 @@ def check_perf(
         "champion_timeout": bool(champ["timeout"]),
         "candidate_error_category": cand["error_category"],
         "champion_error_category": champ["error_category"],
+        "candidate_runtime_audit_diagnostic": cand.get(
+            "runtime_audit_diagnostic"
+        ),
+        "champion_runtime_audit_diagnostic": champ.get(
+            "runtime_audit_diagnostic"
+        ),
     }
     detail = (
         f"case={case_id} candidate={cand_ms}ms "

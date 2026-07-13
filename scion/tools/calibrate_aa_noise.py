@@ -73,11 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         hypothesis_action=args.hypothesis_action,
         expand_round=0,
     )
-    if args.max_cases:
-        cases = cases[: args.max_cases]
     seeds = select_seeds(seed_ledger=SeedLedger(seed_ledger), stage=stage)
-    if args.max_seeds:
-        seeds = seeds[: args.max_seeds]
     if not cases or not seeds:
         raise SystemExit("calibration requires at least one case and one seed")
 
@@ -321,8 +317,6 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--memory-mb", type=int, default=4096)
     parser.add_argument("--bootstrap-samples", type=int, default=400)
-    parser.add_argument("--max-cases", type=int, default=0)
-    parser.add_argument("--max-seeds", type=int, default=0)
     parser.add_argument("--selected-surface", default=None)
     parser.add_argument("--champion-version", default="")
     return parser.parse_args(argv)

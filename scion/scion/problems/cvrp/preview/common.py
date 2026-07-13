@@ -260,7 +260,7 @@ def _call_preview_function(
         issues.append(f"{name} raised during synthetic preview: {exc}")
         checks.append({"name": name, "passed": False, "detail": str(exc)})
         return _PREVIEW_FAILED
-    checks.append({"name": name, "passed": True, "detail": repr(value)[:200]})
+    checks.append({"name": name, "passed": True, "detail": repr(value)})
     return value
 
 def _check_number(

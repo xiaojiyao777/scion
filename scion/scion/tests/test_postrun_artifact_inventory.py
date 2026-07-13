@@ -8,6 +8,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from scion.postrun.inventory.prepared_contract import prepared_contract_execution
+from scion.postrun.handoff.resume_snapshot import build_resume_branch_summaries
+
 TOOL_PATH = Path(__file__).parents[2] / "tools" / "postrun_artifact_inventory.py"
 SPEC = importlib.util.spec_from_file_location("postrun_artifact_inventory", TOOL_PATH)
 assert SPEC is not None
@@ -16,423 +19,46 @@ assert SPEC.loader is not None
 SPEC.loader.exec_module(inventory_tool)
 
 
-def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
-    run_root = tmp_path / "run-a"
-    campaign_dir = run_root / "campaign"
-    traces_dir = campaign_dir / "llm_traces"
-    sessions_dir = campaign_dir / "agentic_sessions"
-    traces_dir.mkdir(parents=True)
-    sessions_dir.mkdir()
+def test_resume_branch_summaries_preserve_every_branch_and_full_card_identity() -> None:
+    branches = [
+        {"branch_id": f"branch-{index:02d}", "event_count": index}
+        for index in range(15)
+    ]
+    common_prefix = "x" * 80
+    summary = {
+        "branch_cards": [
+            {
+                "branch_id": "branch-00",
+                "branch_card_text": common_prefix + "-first",
+                "branch_next_action": "first-action",
+            },
+            {
+                "branch_id": "branch-00",
+                "branch_card_text": common_prefix + "-second",
+                "branch_next_action": "second-action",
+            },
+        ]
+    }
 
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_name": "normal-run",
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "last_stop_reason": "max_rounds_exhausted",
-            "wrapper_exit_status": 0,
-            "requested_rounds": 2,
-        },
-    )
-    (run_root / "run.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
-    (run_root / "launch.env").write_text("SCION_MODEL=gpt-5.5\n", encoding="utf-8")
-    (run_root / "command.txt").write_text("./run.sh\n", encoding="utf-8")
-    (run_root / "run.log").write_text(
-        "\n".join(
-            [
-                "POSTRUN_REPORTS_STARTED_AT:2026-06-18T00:00:00Z",
-                "POSTRUN_REPORT_DIR:/tmp/run-a/postrun_acceptance",
-                "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED:expected=a actual=b paths=docs",
-                "POSTRUN_REPORTS_EXIT_STATUS:0",
-                "POSTRUN_READINESS_EXIT_STATUS:0",
-                "POSTRUN_REPORTS_FINISHED_AT:2026-06-18T00:01:00Z",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    (run_root / "exit.txt").write_text(
-        "\n".join(
-            [
-                "WRAPPER_EXIT_STATUS:0",
-                "POSTRUN_ACCEPTANCE_DIR:/tmp/run-a/postrun_acceptance",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    postrun_payloads = {
-        ("summaries", "normal.summary.json"): {},
-        ("failures", "normal.failures.json"): {},
-        (
-            "research_efficiency",
-            "normal.research_efficiency.v1.json",
-        ): {
-            "measurement_readiness": {
-                "status": "ready",
-                "mde_at_power_80": 9.9,
-            },
-            "protocol_effects_vs_mde": {
-                "mde_source": "measurement_readiness.mde_at_power_80",
-            },
-            "effective_budget": {
-                "requested_rounds": 2,
-                "effective_rounds_completed": 2,
-            },
-            "protocol_rows": {
-                "protocol_metric_results": 2,
-                "protocol_evaluated_candidates": 1,
-                "stage_counts": {
-                    "screening": 2,
-                    "validation": 0,
-                    "frozen": 0,
-                },
-            },
-            "formal_candidates": {
-                "formal_screened_candidates": 1,
-                "protocol_evaluated_candidates": 1,
-            },
-            "stage_rows": {
-                "screening": 2,
-                "validation": 0,
-                "frozen": 0,
-                "fresh_runtime_replay": 0,
-            },
-            "cross_branch_observability": {"branch_lesson_record_count": 1},
-            "research_continuity": {
-                "same_mechanism_followup": {"selection_rate": 1.0},
-                "branch_lesson_usage": {"satisfaction_rate": 1.0},
-                "weak_positive_transfer": {"acceptance_rate": 1.0},
-                "research_shape_summary": {
-                    "max_branch_depth": 2,
-                    "mechanism_family_count": 1,
-                },
-            },
-            "fresh_runtime_replay_drain": {"attempts": 1},
-        },
-        (
-            "manifests",
-            "normal.proposal_trajectory_manifest.v1.json",
-        ): {
-            "counts": {"prompt_manifest_loaded_count": 2},
-            "branch_lesson_usage_accounting": {
-                "field_counts": {"avoided_lessons": 1},
-            },
-            "sessions": [
-                {
-                    "trace_fingerprints": [
-                        {
-                            "visibility_ledger_digest": "visibility-ledger-1",
-                            "block_family_summary": {
-                                "families": {
-                                    "research_signal": {
-                                        "char_count": 80,
-                                        "token_estimate": 20,
-                                    },
-                                    "source_code": {
-                                        "char_count": 60,
-                                        "token_estimate": 15,
-                                    },
-                                    "governance": {
-                                        "char_count": 40,
-                                        "token_estimate": 10,
-                                    },
-                                },
-                            },
-                        },
-                        {
-                            "source_visibility_summary": {
-                                "schema_version": (
-                                    "scion.prompt_source_visibility_fingerprint.v1"
-                                ),
-                                "code_phase_guarantees": {
-                                    "schema_version": (
-                                        "code-phase-source-visibility-guarantees.v1"
-                                    ),
-                                    "target_source_visible": True,
-                                    "required_integration_source_visible": True,
-                                    "algorithm_file_read_source_visible": True,
-                                    "protected_source_visible": True,
-                                },
-                                "code_file_visibility": {
-                                    "schema_version": (
-                                        "code-file-visibility-ledger.v1"
-                                    ),
-                                    "target_source_status": ("current_branch_source"),
-                                    "target_prompt_visibility_status": (
-                                        "full_current_source_visible"
-                                    ),
-                                },
-                            }
-                        },
-                    ],
-                }
-            ],
-        },
-        (
-            "analysis_brief",
-            "normal.postrun_analysis_brief.v1.json",
-        ): {},
-        ("inventory", "normal.postrun_artifact_inventory.v1.json"): {},
-        ("rebuild", "rebuild_manifest.v1.json"): {},
-    }
-    for (subdir, filename), payload in postrun_payloads.items():
-        _write_json(run_root / "postrun_acceptance" / subdir / filename, payload)
-    _write_json(
-        campaign_dir / "status.json",
-        {
-            "effective_rounds_completed": 2,
-            "screened_experiments": 1,
-            "proposal_attempts_total": 3,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 1,
-        },
-    )
-    _write_json(
-        sessions_dir / "agentic_session_trace_index.json",
-        {
-            "session_count": 1,
-            "trace_count": 4,
-            "sessions": [
-                {
-                    "session_id": "s-1",
-                    "branch_id": "branch-1",
-                    "traces": [
-                        {"trace_id": "t-tool", "request_kind": "tool_selection"},
-                        {"trace_id": "t-hyp", "request_kind": "hypothesis"},
-                        {
-                            "trace_id": "t-target",
-                            "request_kind": "target_intent",
-                            "prompt_manifest_artifact_ref": "prompt-manifest-1",
-                        },
-                        {"trace_id": "t-code", "request_kind": "code"},
-                    ],
-                }
-            ],
-        },
-    )
-    _write_json(
-        sessions_dir / "agentic_session_index.json",
-        {
-            "sessions": [
-                {
-                    "session_id": "s-1",
-                    "branch_id": "branch-1",
-                    "prompt_manifest_refs": ["prompt-manifest-1"],
-                }
-            ]
-        },
-    )
-    _write_json(
-        traces_dir / "20260606T000000_tool_selection_branch_1.json",
-        {"request_kind": "tool_selection", "ok": True, "branch_id": "branch-1"},
-    )
-    _write_json(
-        traces_dir / "20260606T000000_hypothesis_branch_1.json",
-        {"request_kind": "hypothesis", "ok": True, "branch_id": "branch-1"},
-    )
-    _write_json(
-        traces_dir / "20260606T000000_target_intent_branch_1.json",
-        {
-            "request_kind": "hypothesis",
-            "ok": True,
-            "branch_id": "branch-1",
-            "target_intent": {"change_locus": "solver_design"},
-            "prompt_manifest_ref": "prompt-manifest-1",
-        },
-    )
-    _write_json(
-        traces_dir / "20260606T000001_code_branch_1.json",
-        {"trace_kind": "code", "status": "failed", "branch_id": "branch-1"},
-    )
-    formal_index = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-    formal_index.parent.mkdir(parents=True)
-    formal_index.write_text('{"candidate_id":"cand-1"}\n', encoding="utf-8")
-    _write_db(campaign_dir / "scion.db")
+    rows = build_resume_branch_summaries(branches=branches, summary=summary)
 
-    data = inventory_tool.build_inventory(run_root)
-    markdown = inventory_tool.render_markdown(data)
+    assert len(rows) == 15
+    branch_zero = next(row for row in rows if row["branch_id"] == "branch-00")
+    assert branch_zero["next_action"] == "second-action"
 
-    assert data["run_root"] == str(run_root)
-    assert data["campaign_dir"] == str(campaign_dir)
-    assert data["run_name"] == "normal-run"
-    assert data["lifecycle"]["prepared_only"] is False
-    assert data["lifecycle"]["evidence_scope"] == "postrun_campaign"
-    assert data["validity"]["invalid_infra_only"] is False
-    assert data["counters"]["requested_rounds"] == 2
-    assert data["counters"]["effective_rounds_completed"] == 2
-    assert data["counters"]["formal_screened_candidates"] == 1
-    assert data["llm_traces"]["trace_count"] == 4
-    assert data["llm_traces"]["by_kind"] == {
-        "code": 1,
-        "hypothesis": 1,
-        "hypothesis_target_intent": 1,
-        "tool_selection": 1,
-    }
-    assert data["llm_traces"]["by_status"] == {"failed": 1, "ok": 3}
-    assert data["llm_traces"]["index_trace_count"] == 4
-    assert data["llm_traces"]["index_session_count"] == 1
-    assert data["launcher"]["artifacts"] == {
-        "campaign_execution_marker.v1.json": False,
-        "command.txt": True,
-        "exit.txt": True,
-        "launch.env": True,
-        "prepared_handoff": False,
-        "pre_campaign_completion_preflight.v1.json": False,
-        "prepared_run_manifest.md": False,
-        "prepared_run_manifest.v1.json": False,
-        "run.log": True,
-        "run.sh": True,
-    }
-    prepared_contract = data["launcher"]["prepared_run_contract"]
-    assert prepared_contract["schema_version"] == (
-        "scion.prepared_run_contract_inventory.v1"
-    )
-    assert prepared_contract["report_only"] is True
-    assert prepared_contract["quality_judgment"] is False
-    assert prepared_contract["decision_features_excluded"] is True
-    assert prepared_contract["contract_complete"] is False
-    assert prepared_contract["checks"]["manifest_present"]["passed"] is False
-    assert data["launcher"]["status_fields"] == {"wrapper_exit_status": 0}
-    assert data["launcher"]["run_log_markers"] == {
-        "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED": 1,
-        "POSTRUN_REPORT_DIR": 1,
-        "POSTRUN_REPORTS_EXIT_STATUS": 1,
-        "POSTRUN_REPORTS_FINISHED_AT": 1,
-        "POSTRUN_REPORTS_STARTED_AT": 1,
-        "POSTRUN_READINESS_EXIT_STATUS": 1,
-    }
-    assert data["launcher"]["exit_markers"] == {
-        "POSTRUN_ACCEPTANCE_DIR": 1,
-        "WRAPPER_EXIT_STATUS": 1,
-    }
-    assert data["postrun_reports"]["exists"] is True
-    assert data["postrun_reports"]["counts"] == {
-        "analysis_brief": 1,
-        "failures": 1,
-        "inventory": 1,
-        "manifests": 1,
-        "readiness": 0,
-        "rebuild": 1,
-        "research_efficiency": 1,
-        "summaries": 1,
-    }
-    assert data["analysis_handoff"] == (
-        "scion/docs/operations/postrun-analysis-handoff.md"
-    )
-    phase4 = data["phase4_evidence_coverage"]
-    assert phase4["report_only"] is True
-    assert phase4["quality_judgment"] is False
-    assert phase4["decision_features_excluded"] is True
-    requirements = phase4["requirements"]
-    for key in (
-        "target_intent_trace",
-        "hypothesis_trace",
-        "code_trace",
-        "formal_candidate_artifact",
-        "proposal_trajectory_manifest",
-        "prompt_manifest_loaded",
-        "prompt_signal_density",
-        "research_efficiency_report",
-        "measurement_readiness",
-        "protocol_effect_vs_mde",
-        "protocol_accounting",
-        "validation_frozen_stage_accounting",
-        "branch_lesson_transfer",
-        "research_continuity",
-        "same_mechanism_followup",
-        "branch_lesson_usage",
-        "weak_positive_transfer",
-        "branch_research_shape",
-        "runtime_feedback",
-        "source_visibility",
-        "code_source_visibility_guarantees",
-    ):
-        assert requirements[key]["available"] is True
-    assert requirements["target_intent_trace"]["count"] == 1
-    assert requirements["formal_candidate_artifact"]["count"] == 1
-    assert requirements["prompt_manifest_loaded"]["count"] == 2
-    assert requirements["prompt_signal_density"]["count"] == 1
-    assert requirements["protocol_accounting"]["count"] == 1
-    assert requirements["validation_frozen_stage_accounting"]["count"] == 1
-    assert requirements["research_continuity"]["count"] == 1
-    assert requirements["same_mechanism_followup"]["count"] == 1
-    assert requirements["branch_lesson_usage"]["count"] == 1
-    assert requirements["weak_positive_transfer"]["count"] == 1
-    assert requirements["branch_research_shape"]["count"] == 1
-    assert requirements["code_source_visibility_guarantees"]["count"] == 1
-    assert "## Phase 4 Evidence Coverage" in markdown
-    assert "## Launcher Artifacts" in markdown
-    assert "### Prepared Run Contract Checks" in markdown
-    assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown
-    assert (
-        "| protocol_accounting | True | 1 | "
-        "research-efficiency protocol_rows/formal_candidates/stage_rows |"
-    ) in markdown
-    assert (
-        "| validation_frozen_stage_accounting | True | 1 | "
-        "research-efficiency validation/frozen stage accounting |"
-    ) in markdown
-    assert (
-        "| research_continuity | True | 1 | "
-        "research-efficiency research_continuity |"
-    ) in markdown
-    assert (
-        "| prompt_signal_density | True | 1 | "
-        "proposal trajectory prompt block-family accounting |"
-    ) in markdown
-    assert (
-        "| same_mechanism_followup | True | 1 | "
-        "research-efficiency research_continuity.same_mechanism_followup |"
-    ) in markdown
-    assert (
-        "| branch_research_shape | True | 1 | "
-        "research-efficiency research_continuity.research_shape_summary |"
-    ) in markdown
-    assert (
-        "| code_source_visibility_guarantees | True | 1 | "
-        "trajectory manifest code-phase source visibility guarantees |"
-    ) in markdown
 
-    assert len(data["branches"]) == 1
-    branch = data["branches"][0]
-    assert branch["branch_id"] == "branch-1"
-    assert branch["state"] == "ready_validate"
-    assert branch["lineage_id"] == "lineage-1"
-    assert branch["base_champion_hash"] == "basehash"
-    assert branch["current_code_hash"] == "codehash"
-    assert branch["best_quality_checkpoint_id"] == "checkpoint-best"
-    assert branch["last_valid_checkpoint_id"] == "checkpoint-last"
-    assert branch["rollback_count"] == 1
-    assert branch["failure_codes"] == ["CONTRACT"]
-    assert branch["hypothesis_count"] == 2
-    assert branch["event_count"] == 3
-    assert branch["session_count"] == 1
-    assert branch["trace_count"] == 4
-    assert data["events"]["by_kind"] == {"decision": 1, "experiment": 2}
-    assert data["events"]["by_decision"] == {
-        "continue_explore": 1,
-        "queue_validate": 1,
-    }
-    assert data["events"]["by_stage"] == {"screening": 2}
-    assert data["hypotheses"]["count"] == 2
-    assert data["hypotheses"]["by_status"] == {"active": 1, "rejected": 1}
-    assert data["hypotheses"]["by_action"] == {"create_new": 1, "modify": 1}
-    assert data["hypotheses"]["by_change_locus"] == {"solver_design": 2}
-    assert data["champions"]["table_present"] is True
-    assert data["champions"]["count"] == 2
-    assert data["champions"]["max_version"] == 2
-    assert data["champions"]["max_weight_revision"] == 0
-    assert data["champions"]["versions"] == [1, 2]
-    assert data["champions"]["promotion_experiment_count"] == 1
-    assert data["champions"]["promotion_dossier_count"] == 1
-    assert data["champions"]["promoted_at_count"] == 1
-    assert data["champions"]["latest_promotion_experiment_id"] == "exp-promote-2"
-    assert data["champions"]["latest_promotion_dossier_ref"] == "dossier-2"
+def test_prepared_contract_runtime_mode_accepts_exact_direct_only() -> None:
+    direct = prepared_contract_execution({"proposal_runtime_mode": "direct_v3"})
+    missing = prepared_contract_execution({})
+    unknown = prepared_contract_execution({"proposal_runtime_mode": "unknown"})
+    extra = prepared_contract_execution(
+        {"proposal_runtime_mode": "direct_v3", "unexpected": True}
+    )
+
+    assert direct["proposal_runtime_mode"] == "direct_v3"
+    assert missing["proposal_runtime_mode"] is None
+    assert unknown["proposal_runtime_mode"] is None
+    assert extra["proposal_runtime_mode"] is None
 
 
 def test_phase4_coverage_separates_generic_and_code_source_visibility(
@@ -484,74 +110,99 @@ def test_phase4_coverage_separates_generic_and_code_source_visibility(
     assert requirements["code_source_visibility_guarantees"]["count"] == 0
 
 
-def test_phase4_coverage_tracks_continuity_subsignals(
+def test_direct_proposal_attempt_inventory_and_mode_neutral_coverage(
     tmp_path: Path,
 ) -> None:
-    run_root = tmp_path / "run-continuity-coverage"
+    run_root = tmp_path / "run-direct-attempts"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
     _write_json(
         run_root / "run_status.json",
         {
-            "run_name": "continuity-coverage-run",
+            "run_name": "direct-attempt-run",
             "run_validity_status": "valid",
             "run_completeness_status": "complete",
         },
     )
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "continuity.research_efficiency.v1.json",
-        {
-            "research_continuity": {
-                "same_mechanism_followup": {"selection_rate": 1.0},
-                "branch_lesson_usage": {"satisfaction_rate": 1.0},
-            }
-        },
-    )
     _write_minimal_campaign_execution_docs(run_root)
+    hypothesis_started = _direct_attempt_payload(
+        phase="hypothesis",
+        status="started",
+    )
+    hypothesis = _direct_attempt_payload(
+        phase="hypothesis",
+        status="generated",
+    )
+    code_started = _direct_attempt_payload(
+        phase="code",
+        status="started",
+    )
+    code_failure = _direct_attempt_payload(
+        phase="code",
+        status="failed",
+    )
+    with sqlite3.connect(campaign_dir / "scion.db") as conn:
+        conn.execute(
+            "CREATE TABLE experiment_events ("
+            "event_id TEXT PRIMARY KEY, event_kind TEXT, stage TEXT, "
+            "audit_payload_json TEXT)"
+        )
+        conn.executemany(
+            "INSERT INTO experiment_events VALUES (?, ?, ?, ?)",
+            [
+                (
+                    "event-hypothesis-started",
+                    "proposal_attempt_transition",
+                    "proposal_hypothesis",
+                    json.dumps(hypothesis_started),
+                ),
+                (
+                    "event-hypothesis",
+                    "proposal_attempt_transition",
+                    "proposal_hypothesis",
+                    json.dumps(hypothesis),
+                ),
+                (
+                    "event-code-started",
+                    "proposal_attempt_transition",
+                    "proposal_code",
+                    json.dumps(code_started),
+                ),
+                (
+                    "event-code-failed",
+                    "proposal_attempt_transition",
+                    "proposal_code",
+                    json.dumps(code_failure),
+                ),
+                (
+                    "event-malformed",
+                    "proposal_attempt_transition",
+                    "proposal_code",
+                    "{malformed",
+                ),
+            ],
+        )
 
     data = inventory_tool.build_inventory(run_root)
 
-    requirements = data["phase4_evidence_coverage"]["requirements"]
-    assert requirements["research_continuity"]["available"] is True
-    assert requirements["same_mechanism_followup"]["available"] is True
-    assert requirements["branch_lesson_usage"]["available"] is True
-    assert requirements["weak_positive_transfer"]["available"] is False
-    assert requirements["branch_research_shape"]["available"] is False
-
-
-def test_phase4_coverage_requires_protocol_accounting_fields(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "run-protocol-coverage"
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_name": "protocol-coverage-run",
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-        },
-    )
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "effect_only.research_efficiency.v1.json",
-        {
-            "measurement_readiness": {"status": "ready"},
-            "protocol_effects_vs_mde": {
-                "mde_source": "measurement_readiness.mde_at_power_80"
-            },
-        },
-    )
-    _write_minimal_campaign_execution_docs(run_root)
-
-    data = inventory_tool.build_inventory(run_root)
-
-    requirements = data["phase4_evidence_coverage"]["requirements"]
-    assert requirements["protocol_effect_vs_mde"]["available"] is True
-    assert requirements["protocol_accounting"]["available"] is False
-    assert requirements["validation_frozen_stage_accounting"]["available"] is False
+    attempts = data["database"]["proposal_attempts"]
+    assert attempts["row_count"] == 5
+    assert attempts["valid_row_count"] == 4
+    assert attempts["invalid_row_count"] == 1
+    assert attempts["attempt_count"] == 2
+    assert attempts["by_runtime_mode"] == {"direct_v3": 4}
+    assert attempts["by_phase"] == {"code": 2, "hypothesis": 2}
+    assert attempts["by_status"] == {
+        "failed": 1,
+        "generated": 1,
+        "started": 2,
+    }
+    assert attempts["by_failure_lane"] == {"proposal_repair": 1}
+    phase4 = data["phase4_evidence_coverage"]
+    assert phase4["proposal_runtime_mode"] == "direct_v3"
+    assert phase4["requirements"]["proposal_attempt_transition"]["count"] == 4
+    assert phase4["requirements"]["hypothesis_trace"]["available"] is True
+    assert phase4["requirements"]["code_trace"]["available"] is True
 
 
 def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
@@ -564,7 +215,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     config_dir.mkdir()
     for name in ("problem.yaml", "protocol.yaml", "split.yaml", "seeds.yaml"):
         (config_dir / name).write_text("ok: true\n", encoding="utf-8")
-    (config_dir / "split.yaml").write_text(
+        (config_dir / "split.yaml").write_text(
         "\n".join(
             [
                 "version: fixture",
@@ -577,8 +228,20 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
                 "",
             ]
         ),
-        encoding="utf-8",
-    )
+            encoding="utf-8",
+        )
+        (config_dir / "protocol.yaml").write_text(
+            "\n".join(
+                [
+                    "screening:",
+                    "  priority_case_ids:",
+                    "  - cvrplib/CMT/CMT2.vrp",
+                    "  - cvrplib/CMT/CMT4.vrp",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
 
     remote_root = f"/home/xjy-ubuntu/research/scion-experiments/{run_root.name}"
     command = (
@@ -588,12 +251,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         f"--split {remote_root}/config/split.yaml "
         f"--seeds {remote_root}/config/seeds.yaml "
         f"--campaign-dir {remote_root}/campaign "
-        "--agentic-session-timeout-sec 3600 "
-        "--agentic-tool-max-steps 240 "
-        "--agentic-tool-max-calls 200 "
-        "--agentic-code-tool-max-calls 200 "
-        "--agentic-observation-max-chars 2000000 "
-        "--rounds 1 --agentic-proposal --disable-early-stop"
+        "--rounds 1 --time-limit-sec 30"
     )
     _write_json(
         run_root / "prepared_run_manifest.v1.json",
@@ -613,7 +271,6 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
                 "Interpret evidence against A/A MDE.",
                 "Keep manifest evidence out of DecisionFeatures.",
             ],
-            "research_focus": _cvrp_research_focus(),
             "resume_from_campaign": f"{remote_root}/previous/campaign",
             "command": command,
             "model": {
@@ -635,17 +292,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
             "execution": {
                 "rounds": 1,
                 "time_limit_sec": 30,
-                "agentic_session_timeout_sec": 3600,
-                "agentic_tool_max_steps": 240,
-                "agentic_tool_max_calls": 200,
-                "agentic_code_tool_max_calls": 200,
-                "agentic_observation_max_chars": 2000000,
-                "proposal_attempt_limit": 64,
-                "proposal_quality_loop_limit": 64,
-                "measurement_governance": "on",
-                "proposal_context_ablation": "full",
-                "agentic_proposal": True,
-                "disable_early_stop": True,
+                "proposal_runtime_mode": "direct_v3",
             },
             "report_metadata": {
                 "control_pair_key": "cvrp.prepared:rep01",
@@ -690,75 +337,22 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     assert contract["control_pair_key"] == "cvrp.prepared:rep01"
     assert contract["analysis_intent"] == "Prepared CVRP analysis intent."
     assert contract["execution"]["rounds"] == 1
-    assert contract["execution"]["disable_early_stop"] is True
+    assert contract["execution"]["proposal_runtime_mode"] == "direct_v3"
     assert contract["acceptance_focus"] == [
         "Interpret evidence against A/A MDE.",
         "Keep manifest evidence out of DecisionFeatures.",
     ]
     assert contract["resume_from_campaign"] == f"{remote_root}/previous/campaign"
-    assert (
-        contract["research_focus"]["measurement_opportunity_diagnostics"][
-            "screening_mde_at_power_80"
-        ]
-        == 9.9
-    )
-    assert contract["checks"]["cvrp_measurement_handoff_present"]["passed"] is True
-    assert contract["checks"]["cvrp_measurement_handoff_reason_codes"]["passed"] is True
-    assert contract["checks"]["cvrp_default_avoid_directions_present"]["passed"] is True
-    assert (
-        contract["checks"]["cvrp_measurable_opportunity_classes_present"]["passed"]
-        is True
-    )
-    assert (
-        "large_instance_intra_route_two_opt_seed"
-        not in contract["checks"]["cvrp_measurable_opportunity_classes_present"][
-            "detail"
-        ]["missing"]
-    )
-    assert (
-        "unbounded large-instance two-opt fallback"
-        not in contract["checks"]["cvrp_default_avoid_directions_present"]["detail"][
-            "missing"
-        ]
-    )
-    assert contract["checks"]["cvrp_direct_effect_rules_present"]["passed"] is True
-    assert contract["checks"]["cvrp_cmt_case_protection_present"]["passed"] is True
-    assert (
-        contract["checks"]["cvrp_large_twoopt_bounded_constraints_present"]["passed"]
-        is True
-    )
-    assert contract["checks"]["execution_disable_early_stop"]["passed"] is True
-    assert contract["checks"]["command_disable_early_stop"]["passed"] is True
-    problem_specific = data["phase4_evidence_coverage"]["problem_specific_requirements"]
-    for key in (
-        "cvrp_measurement_mde_handoff",
-        "cvrp_low_snr_reason_handoff",
-        "cvrp_measurable_opportunity_handoff",
-        "cvrp_default_avoid_handoff",
-        "cvrp_large_twoopt_seed_handoff",
-        "cvrp_large_twoopt_unbounded_default_avoid_handoff",
-        "cvrp_large_twoopt_bounded_constraints_handoff",
-        "cvrp_direct_effect_rules_handoff",
-        "cvrp_cmt_case_protection_handoff",
-        "cvrp_decision_boundary_handoff",
-    ):
-        assert problem_specific[key]["available"] is True
+    assert contract["checks"]["command_removed_runtime_controls_absent"]["passed"] is True
     assert all(item["passed"] for item in contract["checks"].values())
     assert contract["git"]["consistent"] is True
     assert contract["git"]["commit"] == contract["git"]["manifest_commit"]
     assert "- Prepared contract complete: True" in markdown
     assert "| config_paths_resolvable | True |  |" in markdown
-    assert "### Problem-Specific Phase 4 Evidence Coverage" in markdown
-    assert "- Case-protection requirements:" in markdown
-    assert "cvrp_default_avoid_handoff" in markdown
-    assert "cvrp_cmt_case_protection_handoff" in markdown
-    assert "cvrp_large_twoopt_seed_handoff" in markdown
-    assert "cvrp_large_twoopt_unbounded_default_avoid_handoff" in markdown
-    assert "cvrp_large_twoopt_bounded_constraints_handoff" in markdown
 
     manifest_path = run_root / "prepared_run_manifest.v1.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["execution"]["disable_early_stop"] = False
+    manifest["execution"]["disable_early_stop"] = True
     manifest_path.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -768,16 +362,16 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         "prepared_run_contract"
     ]
     assert failed_contract["contract_complete"] is False
-    assert failed_contract["checks"]["execution_disable_early_stop"] == {
+    assert failed_contract["checks"]["execution_proposal_runtime_mode_consistent"] == {
         "passed": False,
-        "detail": False,
+        "detail": (
+            "prepared direct_v3 execution contains unsupported fields: "
+            "disable_early_stop"
+        ),
     }
 
-    manifest["execution"]["disable_early_stop"] = True
-    manifest["command"] = manifest["command"].replace(
-        "--disable-early-stop",
-        "--disable-early-stopper",
-    )
+    manifest["execution"].pop("disable_early_stop")
+    manifest["command"] += " --disable-early-stop"
     manifest_path.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -787,230 +381,10 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         "prepared_run_contract"
     ]
     assert failed_contract["contract_complete"] is False
-    assert failed_contract["checks"]["command_disable_early_stop"]["passed"] is False
-
-
-def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "prepared-run"
-    campaign_dir = run_root / "campaign"
-    config_dir = run_root / "config"
-    campaign_dir.mkdir(parents=True)
-    config_dir.mkdir()
-    for name in ("problem.yaml", "protocol.yaml", "split.yaml", "seeds.yaml"):
-        (config_dir / name).write_text("ok: true\n", encoding="utf-8")
-
-    command = (
-        f"{sys.executable} -m scion.cli.main run "
-        f"--problem {config_dir / 'problem.yaml'} "
-        f"--protocol {config_dir / 'protocol.yaml'} "
-        f"--split {config_dir / 'split.yaml'} "
-        f"--seeds {config_dir / 'seeds.yaml'} "
-        f"--campaign-dir {campaign_dir} --rounds 1 --agentic-proposal"
-    )
-    _write_json(
-        run_root / "prepared_run_manifest.v1.json",
-        {
-            "schema_version": "scion.launcher_prepared_run_manifest.v1",
-            "report_only": True,
-            "quality_judgment": False,
-            "decision_features_excluded": True,
-            "campaign_state_mutated": False,
-            "scheduler_state_mutated": False,
-            "promotion_state_mutated": False,
-            "run_root": str(run_root),
-            "campaign_dir": str(campaign_dir),
-            "problem_family": "cvrp",
-            "analysis_intent": "Prepared CVRP analysis intent.",
-            "acceptance_focus": [
-                "Interpret evidence against A/A MDE.",
-                "Keep manifest evidence out of DecisionFeatures.",
-            ],
-            "resume_from_campaign": "/tmp/source-campaign",
-            "command": command,
-            "model": {
-                "name": "gpt-5.5",
-                "base_url": "http://127.0.0.1:8080",
-                "completion_preflight": True,
-            },
-            "git": {
-                "commit": _git_head_short(),
-                "runtime_guard_paths": "scion/tools",
-            },
-            "config": {
-                "problem": str(config_dir / "problem.yaml"),
-                "protocol": str(config_dir / "protocol.yaml"),
-                "split": str(config_dir / "split.yaml"),
-                "seeds": str(config_dir / "seeds.yaml"),
-            },
-            "report_metadata": {
-                "control_pair_key": "cvrp.prepared:rep01",
-                "postrun_reports": True,
-                "postrun_acceptance_families": [
-                    "summaries",
-                    "failures",
-                    "research_efficiency",
-                    "manifests",
-                    "analysis_brief",
-                    "inventory",
-                    "readiness",
-                    "rebuild",
-                ],
-            },
-        },
-    )
-    (run_root / "prepared_run_manifest.md").write_text("# prepared\n", encoding="utf-8")
-    (run_root / "command.txt").write_text(
-        "\n".join(
-            [
-                "report_metadata:",
-                f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}",
-                "",
-                "command:",
-                command,
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    data = inventory_tool.build_inventory(run_root)
-
-    contract = data["launcher"]["prepared_run_contract"]
-    assert contract["contract_complete"] is False
-    assert contract["checks"]["cvrp_measurement_handoff_present"]["passed"] is False
-    assert (
-        contract["checks"]["cvrp_measurement_handoff_reason_codes"]["passed"] is False
-    )
-    assert (
-        contract["checks"]["cvrp_default_avoid_directions_present"]["passed"] is False
-    )
-    assert contract["checks"]["cvrp_direct_effect_rules_present"]["passed"] is False
-    assert (
-        contract["checks"]["cvrp_large_twoopt_bounded_constraints_present"]["passed"]
-        is False
-    )
-    problem_specific = data["phase4_evidence_coverage"]["problem_specific_requirements"]
-    assert problem_specific["cvrp_measurement_mde_handoff"]["available"] is False
-    assert problem_specific["cvrp_default_avoid_handoff"]["available"] is False
-    assert problem_specific["cvrp_large_twoopt_seed_handoff"]["available"] is False
-    assert (
-        problem_specific["cvrp_large_twoopt_unbounded_default_avoid_handoff"][
-            "available"
-        ]
-        is False
-    )
-    assert (
-        problem_specific["cvrp_large_twoopt_bounded_constraints_handoff"]["available"]
-        is False
-    )
-
-
-def test_prepared_manifest_contract_requires_warehouse_followup_handoff(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "prepared-warehouse"
-    campaign_dir = run_root / "campaign"
-    config_dir = run_root / "config"
-    campaign_dir.mkdir(parents=True)
-    config_dir.mkdir()
-    for name in ("problem.yaml", "protocol.yaml", "split.yaml", "seeds.yaml"):
-        (config_dir / name).write_text("ok: true\n", encoding="utf-8")
-
-    command = (
-        f"{sys.executable} -m scion.cli.main run "
-        f"--problem {config_dir / 'problem.yaml'} "
-        f"--protocol {config_dir / 'protocol.yaml'} "
-        f"--split {config_dir / 'split.yaml'} "
-        f"--seeds {config_dir / 'seeds.yaml'} "
-        f"--campaign-dir {campaign_dir} --rounds 1 --agentic-proposal"
-    )
-    _write_json(
-        run_root / "prepared_run_manifest.v1.json",
-        {
-            "schema_version": "scion.launcher_prepared_run_manifest.v1",
-            "report_only": True,
-            "quality_judgment": False,
-            "decision_features_excluded": True,
-            "campaign_state_mutated": False,
-            "scheduler_state_mutated": False,
-            "promotion_state_mutated": False,
-            "run_root": str(run_root),
-            "campaign_dir": str(campaign_dir),
-            "problem_family": "warehouse_delivery",
-            "analysis_intent": "Prepared warehouse analysis intent.",
-            "acceptance_focus": ["Assess warehouse v2 follow-up."],
-            "research_focus": {
-                "scope": "report_only_prepared_handoff",
-                "accepted_checkpoint": "Champion v2 promoted.",
-                "current_question": "Check one more warehouse idea.",
-                "required_evidence": ["preserve promotion behavior"],
-                "default_avoid_directions": ["restart from baseline"],
-                "decision_boundary": "Keep this out of DecisionFeatures.",
-            },
-            "resume_from_campaign": "/tmp/source-campaign",
-            "command": command,
-            "model": {
-                "name": "gpt-5.5",
-                "base_url": "http://127.0.0.1:8080",
-                "completion_preflight": True,
-            },
-            "git": {
-                "commit": _git_head_short(),
-                "runtime_guard_paths": "scion/tools",
-            },
-            "config": {
-                "problem": str(config_dir / "problem.yaml"),
-                "protocol": str(config_dir / "protocol.yaml"),
-                "split": str(config_dir / "split.yaml"),
-                "seeds": str(config_dir / "seeds.yaml"),
-            },
-            "report_metadata": {
-                "control_pair_key": "warehouse.prepared:rep01",
-                "postrun_reports": True,
-                "postrun_acceptance_families": [
-                    "summaries",
-                    "failures",
-                    "research_efficiency",
-                    "manifests",
-                    "analysis_brief",
-                    "inventory",
-                    "readiness",
-                    "rebuild",
-                ],
-            },
-        },
-    )
-    (run_root / "prepared_run_manifest.md").write_text("# prepared\n", encoding="utf-8")
-    (run_root / "command.txt").write_text(
-        "\n".join(
-            [
-                "report_metadata:",
-                f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}",
-                "",
-                "command:",
-                command,
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    data = inventory_tool.build_inventory(run_root)
-    markdown = inventory_tool.render_markdown(data)
-
-    contract = data["launcher"]["prepared_run_contract"]
-    checks = contract["checks"]
-    assert contract["problem_family"] == "warehouse_delivery"
-    assert contract["contract_complete"] is False
-    assert checks["warehouse_followup_handoff_present"]["passed"] is True
-    assert checks["warehouse_followup_v2_checkpoint_present"]["passed"] is False
-    assert checks["warehouse_followup_required_evidence_complete"]["passed"] is False
-    assert checks["warehouse_followup_default_avoid_complete"]["passed"] is False
-    problem_specific = data["phase4_evidence_coverage"]["problem_specific_requirements"]
-    assert problem_specific["warehouse_v2_checkpoint_handoff"]["available"] is False
-    assert problem_specific["warehouse_required_evidence_handoff"]["available"] is False
-    assert "### Problem-Specific Phase 4 Evidence Coverage" in markdown
-    assert "warehouse_required_evidence_handoff" in markdown
+    assert failed_contract["checks"]["command_removed_runtime_controls_absent"] == {
+        "passed": False,
+        "detail": ["--disable-early-stop"],
+    }
 
 
 def test_inventory_marks_prepared_only_resume_snapshot_not_current_run(
@@ -1417,7 +791,7 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
                     "branch_id": "branch-1",
                     "branch_state": "explore_expand",
                     "lineage_id": "lineage-1",
-                    "branch_mechanism_ids": ["bounded_resume_probe"],
+                    "mechanism_ids": ["bounded_resume_probe"],
                     "branch_next_action": "refine_checkpoint",
                     "branch_scheduling_lane": "weak_positive_followup",
                     "followup_recommended": True,
@@ -1440,20 +814,6 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
     _write_json(
         traces_dir / "20260606T000000_hypothesis_branch_1.json",
         {"request_kind": "hypothesis", "ok": True, "branch_id": "branch-1"},
-    )
-    _write_json(
-        campaign_dir / "agentic_sessions" / "agentic_session_trace_index.json",
-        {
-            "session_count": 1,
-            "trace_count": 1,
-            "sessions": [
-                {
-                    "session_id": "s-1",
-                    "branch_id": "branch-1",
-                    "traces": [{"trace_id": "t-hyp", "request_kind": "hypothesis"}],
-                }
-            ],
-        },
     )
     _write_db(campaign_dir / "scion.db")
 
@@ -1479,15 +839,15 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
         "decision": 1,
         "experiment": 2,
     }
-    assert data["resume_snapshot"]["top_branches"][0]["branch_id"] == "branch-1"
-    assert data["resume_snapshot"]["top_branches"][0]["state"] == "explore_expand"
-    assert data["resume_snapshot"]["top_branches"][0]["mechanism_ids"] == [
+    assert data["resume_snapshot"]["branches"][0]["branch_id"] == "branch-1"
+    assert data["resume_snapshot"]["branches"][0]["state"] == "explore_expand"
+    assert data["resume_snapshot"]["branches"][0]["mechanism_ids"] == [
         "bounded_resume_probe"
     ]
-    assert data["resume_snapshot"]["top_branches"][0]["next_action"] == (
+    assert data["resume_snapshot"]["branches"][0]["next_action"] == (
         "refine_checkpoint"
     )
-    assert data["resume_snapshot"]["top_branches"][0]["followup_recommended"] is True
+    assert data["resume_snapshot"]["branches"][0]["followup_recommended"] is True
     assert (
         data["launcher"]["artifacts"]["pre_campaign_completion_preflight.v1.json"]
         is True
@@ -1529,7 +889,6 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
     assert phase4["pre_campaign_completion_preflight_failed"] is True
     assert phase4["requirements"]["formal_candidate_artifact"]["available"] is False
     assert phase4["requirements"]["measurement_readiness"]["available"] is False
-    assert phase4["requirements"]["research_continuity"]["available"] is False
     assert "PRE-CAMPAIGN PREFLIGHT FAILED" in markdown
     assert "## Resume Snapshot" in markdown
     assert "### Resume Snapshot Branches" in markdown
@@ -1843,175 +1202,73 @@ def _write_minimal_campaign_execution_docs(run_root: Path) -> None:
     )
 
 
-def _cvrp_research_focus() -> dict[str, object]:
-    return {
-        "schema_version": "scion.cvrp_research_focus.v1",
-        "scope": "report_only_prepared_handoff",
-        "measurement_opportunity_diagnostics": {
-            "schema_version": "cvrp_measurement_opportunity_handoff.v1",
-            "proposal_visibility_only": True,
-            "decision_features_excluded": True,
-            "practical_screen_delta": 2.0,
-            "screening_mde_at_power_80": 9.9,
-            "source": "problem_v1.measurement.calibration_ref",
-            "measurement_readiness": {
-                "status": "ready",
-                "reason_code": "ok",
-            },
-            "calibration": {
-                "schema": "scion.aa_noise_floor.v1",
-                "ref": "formal/calibration/aa_noise_floor.json",
-                "decision_features_excluded": True,
-            },
-            "reason_codes": [
-                "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
-                "TRAJECTORY_DIVERGENT_LOW_SNR",
-                "BUDGET_EXHAUSTING_RUNTIME_REPORT_ONLY",
-            ],
-        },
-        "measurable_opportunity_classes": [
-            "construction_seed_portfolio",
-            "destroy_repair_selection",
-            "bounded_local_search_variant",
-            "large_instance_intra_route_two_opt_seed",
-            "acceptance_or_adaptive_weighting",
-            "post_repair_effect_credit_weighting",
-        ],
-        "default_avoid_directions": [
-            "unchanged broad VNS removal",
-            "pure ALNS/no-polish",
-            "simple initial-VNS disablement",
-            "unbounded large-instance two-opt fallback without deadline or wall-clock evidence",
-            "raw cadence-2",
-            "tested share70 cap/rescue variants",
-            "route-merge absorption",
-            "demand-slack regret insertion",
-            "cross-route 2-opt reconnect",
-            "cluster-biased worst removal",
-            "route-limit seed diversification",
-        ],
-        "large_instance_two_opt_constraints": _large_twoopt_constraints(),
-        "case_protection_requirements": _cmt_case_protection_requirements(),
-        "resume_continuity_requirements": _resume_continuity_requirements(),
-        "route_merge_exception_rule": (
-            "Only continue route_merge_repair when the proposal names a causal "
-            "path beyond tested variants and defines direct activation-to-objective-effect evidence."
-        ),
-        "construction_seed_rule": (
-            "Require same-run seed baseline or same-mechanism accepted delta "
-            "for construction seed objective-effect claims."
-        ),
-        "missing_primary_telemetry_rule": (
-            "If telemetry says the declared primary mechanism is "
-            "not_evaluated/not_triggered or missing, treat weak_positive "
-            "sparse two-opt feedback as missing primary mechanism telemetry; "
-            "do not continue without active large_instance_intra_route_two_opt_seed "
-            "evidence."
-        ),
-        "decision_boundary": (
-            "This focus must not enter DecisionFeatures, Protocol gates, "
-            "promotion input, or scheduler state."
-        ),
-    }
-
-
-def _cmt_case_protection_requirements() -> dict[str, object]:
-    return {
-        "schema_version": "scion.cvrp_case_protection_requirements.v1",
-        "scope": "proposal_only_prepared_handoff",
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "protected_cases": ["CMT2", "CMT4"],
-        "rules": [
-            (
-                "Target intent or hypothesis must name the CMT2/CMT4 "
-                "protection plan before revisiting construction, route-merge, "
-                "demand-slack, VNS, or share70-derived mechanisms."
-            ),
-            (
-                "Same-branch follow-up should keep CMT2 and CMT4 in formal "
-                "coverage when those cases are available."
-            ),
-            (
-                "A materially different problem-owned solver mechanism must "
-                "still explain how it avoids repeating the CMT2/CMT4 losses."
-            ),
-            "Do not hardcode case ids, BKS values, seeds, or split membership.",
-        ],
-        "required_evidence": [
-            "live target-intent or hypothesis trace mentions CMT2/CMT4 protection",
-            "formal screening includes CMT2 and CMT4 or records a case-selection caveat",
-            "case-level total_distance deltas for CMT2 and CMT4",
-        ],
-    }
-
-
-def _large_twoopt_constraints() -> dict[str, object]:
-    return {
-        "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
-        "scope": "proposal_only_prepared_handoff",
-        "seed_report": (
-            "scion/docs/experiments/v0.4/"
-            "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md"
-        ),
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "implementation_constraints": [
-            "derive a deadline from the solver time_limit and monotonic start time",
-            "check wall-clock remaining time before each route and sweep",
-            "do not call unbounded two_opt_intra above the vns_threshold",
-        ],
-        "required_pair_evidence": [
-            "total_distance delta by case and seed",
-            "feasibility before and after",
-            "route count before and after",
-            "wall-clock elapsed status",
-        ],
-        "default_reject_directions": [
-            "unbounded two_opt_intra fallback",
-            "activation claims without wall-clock evidence",
-        ],
-    }
-
-
-def _resume_continuity_requirements() -> dict[str, object]:
-    return {
-        "schema_version": "scion.cvrp_resume_continuity_requirements.v1",
-        "scope": "proposal_only_prepared_handoff",
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "fallback_sources": [
-            "prepared_research_focus",
-            "copied_agentic_session_trace_index",
-            "copied_target_intent_or_hypothesis_traces",
-        ],
-        "rules": [
-            (
-                "A sparse resume with zero branch cards must use copied "
-                "target-intent or hypothesis traces before treating the run "
-                "as empty."
-            ),
-            (
-                "First CVRP branch must continue bounded large-instance "
-                "two-opt with CMT2/CMT4 protection or name a different "
-                "problem-owned causal path."
-            ),
-        ],
-        "required_evidence": [
-            (
-                "live hypothesis references copied target-intent or "
-                "hypothesis evidence when branch cards are absent"
-            ),
-            "branch-continuity caveat is recorded if copied branch cards remain absent",
-        ],
-    }
-
-
 def _git_head_short() -> str:
     return subprocess.check_output(
         ["git", "rev-parse", "--short", "HEAD"],
         text=True,
     ).strip()
+
+
+def _direct_attempt_payload(*, phase: str, status: str) -> dict[str, object]:
+    prompt_ref = f"artifacts/llm_traces/direct-{phase}.json"
+    failed = status == "failed"
+    started = status == "started"
+    payload: dict[str, object] = {
+        "schema_version": "proposal-attempt-transition.v1",
+        "attempt_id": f"attempt-direct-{phase}",
+        "campaign_id": "campaign-direct",
+        "branch_id": "branch-direct",
+        "runtime_mode": "direct_v3",
+        "attempt_kind": (
+            "approved_code_continuation" if phase == "code" else "initial"
+        ),
+        "phase": phase,
+        "status": status,
+        "transition_reason": (
+            "provider_call_started"
+            if started
+            else "response_parse_failed" if failed else "generated"
+        ),
+        "failure_lane": "proposal_repair" if failed else None,
+        "hypothesis_id": (
+            None if started and phase == "hypothesis" else "hypothesis-direct"
+        ),
+        "hypothesis_digest": (
+            None if started and phase == "hypothesis" else "hypothesis-digest"
+        ),
+        "patch_digest": None,
+        "prompt_call": {
+            "request_kind": phase,
+            "context_digest": f"context-digest-{phase}",
+            "prompt_hash": f"prompt-hash-{phase}",
+            "trace_ref": None if started else prompt_ref,
+            "prompt_manifest_ref": (
+                None if started else f"{prompt_ref}#/prompt_manifest"
+            ),
+            "raw_response_ref": None if started else f"{prompt_ref}#/response",
+            "provider_ok": None if started else not failed,
+            "ok": None if started else not failed,
+            "error_category": (
+                "response_parse_failed" if failed else None
+            ),
+            "error_type": "ProposalValidationError" if failed else None,
+        },
+        "anchors": {
+            "problem_id": "cvrp",
+            "problem_spec_hash": "problem-hash",
+            "split_manifest_hash": "split-hash",
+            "seed_ledger_hash": "seed-hash",
+            "champion_version": 1,
+            "champion_weight_revision": 0,
+            "champion_code_snapshot_hash": "champion-code-hash",
+            "branch_base_champion_id": 1,
+            "branch_base_champion_hash": "branch-base-hash",
+        },
+        "tainted_artifact_refs": [] if started else [prompt_ref],
+    }
+    if phase == "code":
+        payload["continuation_of_attempt_id"] = "attempt-direct-hypothesis"
+    return payload
 
 
 def _write_db(path: Path) -> None:

@@ -26,7 +26,6 @@ from scion.core.models import (
     WeightOptimizationResult,
 )
 from scion.problem.spec import ObjectiveMetricSpec
-from scion.core.termination import TerminationConfig
 from scion.proposal.mock_client import MockLLMClient
 
 
@@ -144,7 +143,6 @@ def _make_campaign(tmp_path: Path, experiment_protocol: Any = None,
         campaign_dir=campaign_dir,
         verification_gate=_AlwaysPassVerification(),
         experiment_protocol=experiment_protocol,
-        termination_config=TerminationConfig(max_experiments=100, stagnation_limit=50),
     )
 
 

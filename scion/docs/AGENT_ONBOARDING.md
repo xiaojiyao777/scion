@@ -1,684 +1,238 @@
-# Scion Agent Onboarding
+# Scion v0.4 direct-v3 Onboarding
 
-*Last updated: 2026-06-11*
+*Last updated: 2026-07-13*
 
-This is the first document an agent or developer should read before working on
-Scion. Keep it short. Its job is to establish the project model, the
-non-negotiable boundaries, and where to read next.
+本文是维护者进入当前 Scion 的源码导览，不是历史实验汇总。v0.4 的目标是让同一套精简 V3 runtime 在 warehouse 与 CVRP 上都能进行有效算法研究，同时保留确定性的安全、科学与证据边界。
 
-## Minimal Start
+## 先读什么
 
-Always read only these first:
+不要从旧报告、旧实验记录或工程地图开始。按下面顺序建立当前事实：
 
-1. This document.
-2. [v0.4 current state](status/current-state.md).
+1. [`scion/TASK.md`](../TASK.md)：当前任务、已接受实现、阻塞点与下一步。
+2. [`current-state.md`](status/current-state.md)：当前工作树、验证状态与运行环境。
+3. [`scion-architecture-v3.md`](../design/scion-architecture-v3.md)：组件所有权与信任边界的基石设计。
+4. [`scion-architecture-v3-v0.4-direct-runtime-addendum.md`](../design/scion-architecture-v3-v0.4-direct-runtime-addendum.md)：当 V3 的早期运行示例与 v0.4 冲突时，以此收窄运行语义。
 
-For architecture, audit, or experiment interpretation work, also read:
+准备或分析实验时，再读：
 
-3. [`design/scion-architecture-v3.md`](../design/scion-architecture-v3.md) as
-   the governing framework boundary.
-4. [`reports/v04-audit-agent-experiment-guide-20260609.md`](../reports/v04-audit-agent-experiment-guide-20260609.md)
-   before drawing conclusions from campaign artifacts.
+- [`operations/README.md`](operations/README.md)：当前操作文档入口；
+- [`experiment-runbook.zh.md`](operations/experiment-runbook.zh.md)：direct-v3 准备、启动、低频监控与验收；
+- [`postrun-analysis-handoff.md`](operations/postrun-analysis-handoff.md)：运行后逐层还原证据的方法。
 
-Then choose a task-specific reading profile from
-[Reading Profiles](READING_PROFILES.md). Do not automatically read all design
-docs, all engineering docs, historical status logs, raw experiment records, or
-source trees.
+历史 experiment、planning、review 和 archive 文档只能解释历史产物，不能覆盖上述当前来源或当前源码。
 
-## Project Definition
+## 一句话模型
 
-Scion is a governed autoresearch framework for combinatorial optimization
-algorithms. LLMs propose research changes, but deterministic layers decide
-whether evidence is strong enough to continue, validate, freeze, promote, or
-abandon.
-
-Scion's job is boundary control, protocol control, auditability, and
-traceability. The research core should still be a real agent doing algorithmic
-research: it must be able to inspect the declared problem object, allowed
-history, branch state, memory, and screening/runtime feedback inside Scion's
-exposure policy. Do not turn Scion into prompt-only field exposure or a set of
-forced component knobs.
-
-The core loop is:
+Scion 让模型提出算法假设和代码，但不让模型决定这些改动是否安全、是否有效、是否晋升。当前正式路径是：
 
 ```text
-Creative Layer proposal
-  -> Contract
+完整且安全的问题/源码上下文
+  -> 最多一次 Hypothesis provider call
+  -> Hypothesis Contract
+  -> 仅在 H 批准后，最多一次 Code provider call
+  -> Patch Contract
+  -> transactional Workspace
   -> Verification
   -> Protocol
-  -> Decision
-  -> evidence/docs update
+  -> Safe Features
+  -> deterministic Decision
+  -> Evidence + Lineage
 ```
 
-Key idea: proposal text and proposal-tool observations are tainted. They may
-guide later proposals, but they do not directly decide promotions. Decision
-reads deterministic `DecisionFeatures`, not raw LLM reasoning.
+H 或 C 的结构化响应无效、provider/infra 失败、Contract 拒绝或 Verification 失败时，当前 campaign invocation 停止；框架不会自动重放同一调用、修补模型响应或恢复半次 provider call。新的模型调用只能来自显式的新 invocation，并形成新的 durable attempt。
 
-## Scion Logic
+## 不可变边界
 
-- Scion core owns generic governance: campaign lifecycle, proposal orchestration,
-  Contract, Verification, Protocol, Decision, evidence refs, and lineage.
-- Problem packages own domain semantics: objective, feasibility, solver hooks,
-  allowed research surfaces, runtime audit field meanings, prompt rendering,
-  and problem-owned tests.
-- A research surface is the declared object the agent may modify or tune:
-  operator, policy, config, portfolio, construction, acceptance/restart, or a
-  solver-design boundary.
-- `solver_design` is a generic v0.4 Scion surface kind for an algorithm-level
-  research object. Core may route it as a first-class surface, but concrete
-  solver APIs, telemetry field meanings, smoke behavior, and integration checks
-  remain problem-owned declarations/providers.
-- Runtime evidence is part of the contract. Missing, empty, or invalid required
-  fields fail closed when the selected surface declares them.
-- Frozen/holdout detail is exposure-controlled. Proposal agents should receive
-  bounded aggregate feedback, not raw validation or benchmark records.
-- Branch governance follows v3: one branch is one research direction and may
-  evolve through multiple hypotheses. A weak but non-regressive screening result
-  is not automatically abandoned; Scion may preserve that branch for same-branch
-  follow-up while the scheduler opens sibling branches up to the active-branch
-  cap. Clear regressions, boundary failures, runtime failures, and exhausted
-  zero-signal streaks can still abandon.
-- `--rounds` / `max_rounds` is the requested effective screened/formal candidate
-  budget. It is not total loop iterations, proposal attempts, or repair/lifecycle
-  attempts. Read `effective_rounds_completed`, `formal_screened_candidates`,
-  `protocol_evaluated_candidates`, `proposal_attempts_consumed`, and the
-  non-counted repair/lifecycle counters separately in status/summary artifacts.
-- Scheduler governance is not a Decision-layer shortcut and should not be
-  reduced to a simple fixed-priority queue. v0.4 still prioritizes ready
-  validation/frozen/stale work, but current branch selection also includes
-  active-slot capacity, lifecycle routing, same-mechanism follow-up, clean-fork
-  preference, park/reclaim, and diagnostic repair routing.
+### 模型只拥有创造性提案
 
-## Architecture Governance
+- 模型输出始终是 tainted input。
+- H 描述研究假设、改动位置和预期因果机制；C 必须绑定已经批准的 H。
+- 模型不能写入 Protocol 结果、DecisionFeatures、分支状态、调度状态或 promotion 状态。
+- prompt 中的说明不能替代 Contract、Verification 或 Protocol 的确定性证据。
 
-The current P0 priority is evidence-power and research-object readiness before
-more validation experiments. Architecture debt remains a control risk, but the
-latest 6/9-6/11 evidence says the generic v3 loop is not the current blocker.
-Scion must remain an elegant v3 framework, not a pile of local experiment
-patches.
+### 上下文必须完整、安全且有来源
 
-- v3 is the design baseline: the framework controls boundaries, protocol,
-  lineage, audit, and deterministic decisions; problem packages provide
-  domain semantics through declared adapters/providers/hooks.
-- Do not add CVRP, ALNS/VNS, route/capacity/demand, or `_ALNSVNSSolver`
-  semantics directly to generic `core`, `proposal`, `contract`, `protocol`, or
-  `runtime` modules. Put problem-specific behavior under
-  `scion/problems/cvrp/` or behind a problem-owned provider hook.
-- Active algorithm facts are adapter-owned. Generic Scion code may request an
-  active-solver design snapshot through a provider hook and may carry the
-  returned schema/digest/provenance, but it must not synthesize hidden
-  domain-specific facts.
-- The proposal agent and semantic gates must share the same active-algorithm
-  fact packet. If a novelty or premise gate rejects a proposal, the rejection
-  must cite fact ids plus the packet digest/provenance that the agent could
-  also see. A gate must not be better informed than the agent.
-- The planner/tool-selection context must carry an active-facts anchor after
-  the facts tool has run. Hypothesis and code prompts may include fuller
-  rendered fact packets, but every phase must be traceable to the same
-  adapter-owned digest/provenance.
-- This active-facts anchor invariant applies to every LLM tool-selection call,
-  including code-phase targeted reads, diagnosis, and repair follow-up tool
-  selection. The anchor should stay compact but must preserve packet digest,
-  snapshot digest, provenance, source observation/tool id when available, and
-  compact fact ids.
-- APS prompts must render `agentic_active_algorithm_facts` as a concise,
-  high-signal block before raw proposal-tool observations. Raw observations
-  are audit/debug support and may be compacted; active facts should not be
-  buried inside a large truncated observation blob.
-- Proposal-smoke activation-missing evidence is a diagnostic signal, not an
-  ordinary solver-quality screening loss. Keep it distinct from formal
-  validation telemetry gates and feed the diagnosis back into branch lifecycle
-  and repair context.
-- Agent-quality blocks such as contradicted premises, duplicate mechanisms, or
-  activation diagnostics are not infrastructure failures, but they are also not
-  disposable. They must be preserved as branch-local research feedback and
-  rendered into the next hypothesis context so the agent can change direction
-  instead of restarting from a blank prompt.
-- After every experiment, audit provider-quality rejections across StepRecord,
-  DB state, branch failure codes/history, planner-facing experiment history, and
-  compact negative memory. The same rejection should stay in an agent-quality
-  category such as `agent_quality_blocked:proposal_premise_contradicted` or
-  `agent_quality_blocked:proposal_activation_diagnostic`; it must not be
-  persisted as `hypothesis_contract`, `FAILED_HYPOTHESIS_CONTRACT`, or branch
-  `CONTRACT`.
-- Proposal failures that do not count as effective screened rounds still belong
-  in tainted proposal feedback. Keep this negative memory compact and
-  branch-local: attempt/session id, branch id, mechanism id, stage,
-  category/code, exact failure summary, fact packet digest/provenance, and
-  provider variant guidance when present. This feedback is not a Decision
-  input.
-- Problem-owned premise/novelty providers should cite exact contradicted or
-  matched spans when rejecting a claim. If a proposal is an allowed variant of
-  an existing mechanism, provider feedback should say that explicitly instead
-  of escalating to premise contradiction.
-- Proposal/contract schema or candidate-quality failures are not infrastructure
-  failures. They may trigger LLM repair or candidate discard; only real
-  verification/runtime infrastructure evidence, including branch-local repeated
-  light-verification failures, may become `infra_suspected`.
-- Treat roughly 800 lines as a design warning, not a mechanical hard number.
-  A source or test file above that size needs a clear ownership reason and a
-  split plan. Files above 1000 lines are active architecture debt; files above
-  3000 lines require stop-the-line attention or an assigned migration owner.
-- Test files are part of the architecture. A 4000-line test file is the same
-  maintainability failure as a 4000-line runtime module.
-- "Extracted helpers" is not sufficient modularization if the original file
-  keeps the same broad responsibilities. Modules should be split by stable
-  responsibility boundaries and public compatibility facades where needed.
-- Do not run longer validation experiments while the active blocker is
-  measurement power, copied-config uncertainty, or research-object readiness.
-  First apply the audit guide, calibrate the protocol when needed, and only
-  then spend formal rounds.
+- `ProblemRuntime` 构建 H/C 输入；`ProposalContextSnapshot` 是 provider 调用前的不可变上下文所有者。
+- H 获得当前问题事实、允许修改的研究对象、当前安全源码事实，以及每个可见 screening attempt 的一条 canonical record。
+- C 获得一个批准的 H 和完整 `SourceLedger`。ledger 对每个可见文件保留唯一 owner、provenance、完整内容和 digest；多文件算法改动不是例外路径。
+- validation/frozen 原始记录、Decision 输入和其他禁止暴露的事实不得进入 proposal context。
+- production proposal path 不设置 Scion semantic token/item/file/tool/session budget，不做 top-N、截断、compact-to-fit、遗漏标记或摘要替代。
+- provider 必需的 transport ceiling 与 solver/subprocess 的科学 time limit 必须显式记录；它们不是 Scion 的语义研究预算或隐藏终止策略。
 
-Current large-file audit:
-[`08-large-file-modularization-audit-20260519.md`](reviews/scion-code-audit-20260517/08-large-file-modularization-audit-20260519.md).
+### Gate 只保护自己的边界
 
-## Current Version
+| Owner | 只负责什么 | 不负责什么 |
+|---|---|---|
+| Contract | schema、editable/frozen path、action、source digest、import/API/interface、patch graph、C 与批准 H 的绑定 | 评价想法是否新颖、偏好某种算法机制、用 telemetry 文本给研究风格打分 |
+| Verification | syntax、接口执行、state isolation、feasibility、objective recomputation、nondeterminism、crash、timeout、invalid solver output | 用比较性能提前替代 Protocol，因诊断 telemetry 不完整而要求模型重写 |
+| Protocol | screening/validation/frozen 隔离、seed/split、成对比较、统计与 typed scientific verdict | 请求另一轮 H/C，修改候选代码或把自由文本交给 Decision |
+| Decision | 把可信 Protocol verdict 与 hard-safety facts 确定性映射为 branch action | 重算统计阈值、解释模型 reasoning、按机制偏好改判 |
+| Scheduler | runnable state、priority/FIFO、active slots 与显式 execution hold | 判断科学真伪、用历史建议替代 Decision、引导模型复刻某个 successor |
 
-Active version: v0.4 on `v0.4-dev`.
+diagnostic telemetry 可以帮助人分析运行，但不能越权成为另一套研究 gate。问题特有的 objective、feasibility、solver、surface 与 telemetry 含义属于 problem package；generic core 不得内嵌 warehouse 或 CVRP 算法知识。
 
-Current operating mode: v0.4 remains the implementation line, but the latest
-6/9-6/11 audit evidence changes the research posture. The generic v3 boundary
-and v0.4 governance path are considered healthy enough for analysis; the
-current blocker is evidence quality, runtime semantics, branch-depth research,
-and problem-object fit, not another broad governance expansion. v0.4 must still
-produce meaningful VRP/CVRP and warehouse research evidence before v0.5. First
-resolve measurement/readiness questions using the 2026-06-09 audit guide and
-the 2026-06-11 evidence-uplift roadmap, then run focused validation.
+### 证据和晋升必须可追溯
 
-The previous architecture-cleanup and large-file modularization work remains
-valid engineering debt control. Do not add major behavior to oversized modules
-without a split plan, and do not move CVRP/ALNS/VNS semantics into generic
-framework layers. The new priority is narrower: make current v0.4 experiments
-scientifically interpretable, preserve runtime-improvement promotion semantics
-where quality is non-regressive, and strengthen branch-depth exploration before
-the v0.5 experiment matrix evaluates Scion's value at larger scale.
+- provider call、context identity、H/C receipt、Contract、Verification、Protocol 与 Decision 必须能通过 durable refs 串起来。
+- lineage 是 append-only 事实；summary、analysis brief 和 inventory 是索引或投影，不是新的事实来源。
+- promotion 必须拥有完整 formal evidence，并通过原子 prepare/commit/recovery 边界。
+- `invalid_response`、`research_rejected`、`blocked_infra`、`interrupted` 与 `evaluated` 是不同结果，不能为了报表整洁而合并。
 
-Current work centers on CVRP as the second real problem class after the
-warehouse/surrogate path. The current direction is no longer incremental
-component exposure. `solver_design` is now the CVRP problem-object boundary
-for the algorithm itself, backed primarily by
-`policies/baseline_algorithm.py` plus focused modules under
-`policies/baseline_modules/`.
-Candidates keep the stable `solve(instance, rng, time_limit_sec, context)`
-entrypoint and may add, delete, or modify branch-owned modules for
-construction, improvement, destroy/repair, recombination, acceptance,
-restart/perturbation, telemetry, and runtime scheduling.
-For multi-file solver-design edits, the primary patch path must match the
-approved `target_file`; integration edits to the entrypoint, scheduler, or
-sibling modules belong in `additional_changes`. New helper functions must be
-called from the branch algorithm path in the same candidate patch. Scion should
-reject inert helper drops before official screening.
-The adapter/solver remains authoritative for parsing, feasibility, objective
-recomputation, seeds, protocol splits, time limits, and Decision rules. The
-old `policies/solver_algorithm.py` compatibility hook has been deleted from
-the active CVRP research path.
+## 按执行顺序阅读源码
 
-Latest framework repair: `proposal.tools` is a package, not a monolithic
-module. Tool definitions remain tainted proposal-layer capabilities; they are
-registered through `scion.proposal.tools.ProposalToolRegistry` and exposed to
-the LLM through prompt/tool-spec protocol, not as Decision inputs. Contract is
-the authoritative boundary for static solver-design invariants. Prompt text,
-APS preview, and algorithm smoke may give earlier feedback, but core Contract
-must fail closed for boundary rules such as dynamic sensitive APIs, instance
-identity leaks, inert helper additions, and preferred
-`baseline_algorithm.py` wrappers around `context.baseline`.
+下面的顺序比按目录通读更容易看清真实所有权。`CampaignManager` 是组合 facade，不要只读它就推断整个 runtime。
 
-Code-phase context must describe the branch-current algorithm, not only the
-champion or the approved target file. For `solver_design`, mandatory surface
-reads and branch-current integration files are expected so `additional_changes`
-can make minimal scheduler/entrypoint/module wiring against the actual branch
-state. This is still inside v3's model: the LLM proposes code, while Contract,
-Verification, Protocol, and Decision remain deterministic control layers.
+### 1. Campaign loop 与一次 branch step
 
-The older component-policy and lifecycle-table surfaces have been removed from
-the active CVRP research path. Do not route new CVRP optimization work through
-forced component-policy or lifecycle-table diagnostics.
+先读：
 
-Important current interpretation:
+- `scion/scion/core/campaign.py`：对外 facade 和 runtime 组合入口；
+- `scion/scion/core/campaign_composition.py`：各 owner 的实际装配；
+- `scion/scion/core/campaign_loop.py`：以 typed formal evaluated rounds 为目标的外层循环；
+- `scion/scion/core/branch_step_runner.py`：scheduler action 到 explore/eval/reconcile 的分派；
+- `scion/scion/core/explore_step/pipeline.py`：H、H Contract、C、Patch Contract、Workspace、Verification 与 evaluation 的主路径；
+- `scion/scion/core/evaluation_orchestrator.py`、`evaluation_pipeline.py`：候选进入 Protocol 与结果回传的边界；
+- `scion/scion/core/decision_finalizer.py`：Decision 后的状态与证据收口。
 
-- `solver_design` targets `policies/baseline_algorithm.py` and focused
-  support modules under `policies/baseline_modules/*.py`. It requires the
-  stable entrypoint
-  `solve(instance, rng, time_limit_sec, context)`. When `solver_design` is
-  selected, the subprocess runs the branch copy of
-  `policies/baseline_algorithm.py`, which imports the branch-owned module
-  package as the algorithm under research. A solver-design candidate must
-  return a feasible `CvrpSolution`, a routes object, or `{"routes": ...}`.
-- The allowed algorithm API is explicit: use `instance.depot`,
-  `instance.customer_ids`, `instance.customer_count`, `instance.demands`,
-  `instance.capacity`, `instance.distance`, `instance.route_load`,
-  `instance.route_distance`, and `context` helpers such as
-  `nearest_neighbor`, `make_solution`, `objective`,
-  `objective_key`, `is_better`, `is_valid`, `remaining_time`, `elapsed_ms`,
-  `record_phase`, `record_iteration`, `record_move`, and `set_stop_reason`.
-  `nearest_neighbor()` takes no arguments and returns a `CvrpSolution`; use it
-  directly as a candidate solution. `make_solution(...)` accepts route
-  iterables and is idempotent for an existing solution object.
-  `baseline_algorithm.py` candidates must study and modify the controlled
-  algorithm body instead of calling `context.baseline`.
-  `context.objective` is still a mapping, but now also compares
-  lexicographically as `(fleet_violation, total_distance)`.
-  The `time` module is whitelisted for monotonic timing; use context time
-  helpers for budget decisions and never add sleeps.
-- The boundary is fixed. Candidates may change the algorithm, but must not
-  change objective semantics, capacity/fleet constraints, parser behavior,
-  benchmark data, protocol splits, seeds, Decision thresholds, or solver/
-  adapter internals.
-- Runtime evidence for this boundary is `solver_algorithm_*`, including
-  loaded/active/errors, elapsed time, phase runtime, solution validity,
-  route count, objective, total distance, fleet violation, search iterations,
-  move attempts, accepted moves, improving moves, neutral accepted moves,
-  phase delta telemetry, and stop reason. `accepted_moves` is search activity,
-  not proof of objective improvement.
-- Runtime is an optimization signal under protocol control. A candidate that
-  ties the lexicographic objective, has complete runtime evidence, has no
-  runtime failures, and meets `runtime.tie_speedup_ratio` can progress through
-  screening/validation/frozen with `*_PASS_RUNTIME_TIE_IMPROVEMENT`; it still
-  cannot bypass the three-layer protocol.
-- Low-win screening is now lifecycle-classified instead of single-round T4
-  killed. Weak-positive or mostly-tie branches preserve their branch workspace
-  for further hypothesis/code iterations; clearly regressive branches are still
-  soft-abandoned. The scheduler complements this with a portfolio rule: once an
-  explore branch has an established direction and capacity remains, Scion can
-  create sibling branches and later rotate research branches by last update.
-- Solver-design algorithm smoke must use the active campaign split/seed
-  configuration, not a tiny split copied into a branch workspace. Smoke now
-  runs canary plus a deterministic spread of screening cases so framework
-  validation sees the same problem scale that formal screening will use.
-- `context.remaining_time()` returns seconds. Use
-  `context.remaining_time_ms()` for millisecond comparisons; Contract preview
-  rejects preferred `baseline_algorithm.py` patches that compare seconds to
-  millisecond-derived variables.
-- `novelty_signature` for `solver_design` now describes algorithm identity:
-  `algorithm_family`, `construction_strategy`, `improvement_strategy`,
-  `acceptance_strategy`, and `runtime_budget_strategy`, alongside
-  `predicted_direction` and `target_objectives`.
-- A failed `solver_design` implementation should be retried with a different
-  full-algorithm idea. A zero-movement screening failure is a candidate design
-  failure, not permission to switch the top-level research goal to an isolated
-  component policy.
-- Active `solver_design` boundary control is now live-validated: free-surface
-  APS sessions stayed on `solver_design` after heavy Verification and
-  zero/low-movement screening failures.
-- The first direct `solver_algorithm` launch also stayed on `solver_design`,
-  but hit pre-evaluation framework friction: generated full-algorithm code
-  used natural bounded `while` loops, `time` for timing, baseline seed/time
-  aliases, and direct objective comparisons. Those are now supported without
-  weakening the fixed objective/constraint boundary.
-- Active-boundary tool guidance is now live-validated as an active problem
-  boundary, not a fake forced-surface diagnostic.
-- The APS Contract-preview budget repair is now live-validated: completed code
-  sessions retained terminal Contract-preview pass/fail evidence under the
-  64k observation budget instead of failing as `result_too_large`.
-- `solver_design` semantic identity is now fail-closed on declared algorithm
-  identity fields. Free-text rationale is not novelty identity.
-- Latest short diagnostics validate forced-surface control, APS feedback,
-  perturbation-schedule runtime evidence, selected-surface audit, and real
-  `destroy_repair_policy` selector semantics.
-- They do not yet validate solver efficacy. The latest short diagnostic has
-  formal route-pool phase-best movement, but median movement remains zero and
-  the screening candidate still abandoned on win-rate threshold.
-- Do not spend more rounds on shallow solver-design knob reshuffles or
-  prompt-only exposure repairs. The latest useful signal came from a
-  code-level whole-solution route-pool quality repair inside `solver_design`,
-  not from another exposed singleton policy.
-- The current adapter repair goes deeper than prompt exposure:
-  `policies/baseline_algorithm.py` is the stable entrypoint for a
-  branch-owned ALNS/VNS-style solver-design package. New candidates should
-  materially rework the branch-owned modules under
-  `policies/baseline_modules/` or, when needed, the entrypoint itself. A
-  candidate that calls `context.baseline(...)` from this preferred target,
-  changes only baseline budget/params, or adds a tiny post-baseline polish is
-  a design failure.
-- The main-search execution-semantics repair was necessary but insufficient:
-  bounded destroy/repair now ranks repair insertions globally, preserves
-  fallback budget, honors the fallback toggle, and lets recovery-only accepted
-  moves continue without consuming the phase-best accept limit, but live
-  screening still showed zero phase-best movement.
-- Current code-level repair adds a stronger package-owned whole-solution
-  primitive: `route_pool_recombination`. It builds a route pool from complete
-  CVRP solutions and recombines routes under the `solver_design` boundary, so
-  APS can study the problem object rather than another forced singleton
-  policy. Runtime auto-adds it to old route-pair plus bounded-destroy/repair
-  plans unless explicitly disabled, and screening feedback now preserves its
-  source-solution, sample-count, route-pool size, branch-call, and
-  recombined-route telemetry.
-- The latest route-pool quality diagnostic produced the first formal positive
-  route-pool signal: 16/16 valid screening pairs, 0 timeouts, 2 wins, 14 ties,
-  `main_search_route_pool_recombined_routes=12`, and
-  `main_search_component_phase_delta_sum.route_pool_recombination=5.0`.
-  The run still abandoned on win-rate/median movement and later agentic
-  proposals hit Contract-preview failures, so this is not long-validation
-  evidence.
-- The previous algorithm-body/lifecycle diagnostics showed a small positive
-  route-pool signal but also proved the componentized lifecycle table was the
-  wrong research object: candidates were still optimizing exposed knobs rather
-  than studying the whole algorithm. The current engineering slice replaces
-  that with a direct full-algorithm hook while keeping Scion's governance and
-  objective/constraint boundaries intact.
-- The latest forced `destroy_repair_policy` enum-interface rerun validates
-  selector clarity but exhausts that surface for the current solver-owned
-  mechanism: valid candidates still produced zero accepted movement.
-- Do not start another forced single-policy diagnostic, including
-  `route_pair_candidate_policy`, while whole-lifecycle quality under the
-  problem-object/top-level `solver_design` boundary is still sparse.
-- Do not run long CVRP solver-quality validation until short diagnostics show
-  repeated solver-design improvement, not only isolated wins on one screening
-  candidate.
-- The latest direct full-solver short run validated the boundary but exposed a
-  deeper APS issue: hypothesis/planning used proposal tools, while code
-  generation was still a single static `generate_patch` call. Three screened
-  candidates were valid but failed to beat the repo-local ALNS+VNS champion,
-  and the next distinct population/recombination code attempt timed out on a
-  large static prompt. This is both a framework interaction problem and an
-  algorithm-quality problem.
-- APS now has a code-phase tool loop after ContractGate-approved hypotheses.
-  Code phase may use exposure-controlled reads for the full selected surface,
-  problem/objective context, branch state, memory, and screening/runtime
-  feedback before emitting the final `PatchProposal`. A failed Contract preview
-  can be fed back into one bounded regeneration attempt. The proposal agent
-  still cannot write workspaces, read validation/frozen raw metrics, or change
-  objective/constraint semantics.
-- Code phase also runs `proposal.algorithm_smoke` after a static Contract
-  preview passes. This is tainted, non-promotional debug evidence. For
-  approved `solver_design` patches to `policies/baseline_algorithm.py` or
-  `policies/baseline_modules/*.py`, the smoke applies the patch in a temporary
-  workspace and runs the configured canary case through the stable
-  solver-design entrypoint before official evaluation. Its only purpose is
-  debugging/repair; promotion evidence still comes exclusively from Contract,
-  Verification, Protocol, and Decision.
-- C9c complexity preview now recognizes a local helper such as
-  `while within_budget():` only when that helper's return expression directly
-  references runtime guards like `context.remaining_time()` or
-  `context.elapsed_ms()`. True unbounded `while` loops and unbounded
-  improvement-flag loops still fail closed. This is needed for complete
-  algorithm-body work, where budget checks are often factored into helper
-  functions.
-- The latest 5-round exploratory `solver_design` run exposed a preview-time
-  hang after successful code generation. Treat this as a boundary-control
-  issue, not a reason to return to componentized policy exposure.
-- Current preview repair: unbounded boolean-flag `while` loops fail C9c unless
-  explicitly bounded, while route-construction `while True` loops are allowed
-  only when they have a visible counter-bound break or directly shrink a finite
-  collection on each non-break iteration. CVRP synthetic preview times out
-  `solve(...)`, and APS turns a hung `proposal.contract_preview` into a
-  controlled tool error. For current `solver_design` framework validation,
-  run at least a 3-round smoke before any longer CVRP solver-quality
-  validation; 1-2 rounds are debugging probes only.
-- Latest C9c/smoke boundary repair: C9c now also accepts explicit bounded
-  collection-size loops such as `while len(removed) < q` when the collection is
-  visibly grown toward the bound and the bound is either directly bounded or
-  assigned from `min(...)`/`max(...)` earlier in the same block. It still rejects
-  true unbounded improvement-flag loops such as `while improved:`. Algorithm
-  smoke also makes copied temporary smoke-workspace files writable before
-  applying a patch, because champion snapshots are intentionally read-only.
-- Research-object granularity repair: `PatchProposal` still carries complete
-  file contents, but `solver_design` no longer forces every change through one
-  monolithic `baseline_algorithm.py`. The branch-owned algorithm subject is
-  split into controlled modules under `policies/baseline_modules/`, while
-  `baseline_algorithm.py::solve(...)` stays the stable entrypoint. The agent
-  may add, delete, or modify modules inside that declared solver-design package;
-  `context.read_surface` returns bounded support-module previews so hypothesis
-  and code phases can inspect the actual algorithm internals, not only the
-  tiny entrypoint. Scion's hard boundary remains the fixed objective, constraints,
-  adapter-owned parsing/feasibility/objective recomputation, seeds, protocol
-  splits, and promotion.
-- The preview-repair smoke itself did not reach preview: both rounds failed at
-  final `generate_patch` after three provider timeouts. The important finding
-  was duplicated code-phase context, not solver quality: the target file was
-  present in `Target File` and again inside full surface-read observations,
-  code phase repeated selected-surface reads, and planner sanitization turned
-  `feedback.query_holdout_summary` into an empty model-facing tool name.
-- Current prompt/tool-loop repair: code generation receives compact
-  observation payloads that omit duplicated `content_preview` code, code-phase
-  agentic context has a tighter cap, the code-phase planner stops after a
-  successful full selected-surface read, holdout summary is filtered from
-  model-facing planner specs while remaining callable directly, and timeout
-  retries ask for one compact bounded algorithm body.
-- A compact-prompt smoke from commit `7f7ef04` reached Contract,
-  Verification, and screening in round 2, but round 1 still timed out at final
-  `generate_patch`. Current repair is therefore stricter: final code prompts
-  keep only code-relevant feedback plus the latest full selected-surface read
-  metadata, and separately cap solver-design problem object, mechanics,
-  interface, hypothesis, observation, and diagnosis text.
-- A follow-up no-op-feedback smoke from commit `a653388` still did not reach
-  Contract preview: both rounds timed out at final `generate_patch`. This is
-  now treated as APS code-scope control, not missing problem exposure. Code
-  phase reached the full `solver_design` target; the remaining failure was
-  broad one-shot hybrid baseline/ILS/destroy-repair implementation scope.
-- Current framework repair: solver-design code prompts default to a compact
-  whole-algorithm body with one construction or seeding path plus one bounded
-  improvement/search loop, allow the replacement file to be much shorter than
-  the inactive template, and perform one in-session compact semantic retry
-  after final `generate_patch` timeout.
-- The latest 2-round code-scope smoke passed the first gate: final
-  `generate_patch` returned in all three code traces, and round 1 reached
-  Contract, Verification, and screening. It also exposed the next control
-  issue: screening/runtime feedback consumed nearly all of the 64k APS
-  observation budget, so round 2 could not retain terminal Contract-preview
-  evidence and failed with `result_too_large`.
-- Current APS repair compacts screening/runtime feedback before charging it
-  to session observation budget, keeps self-check observation reserve through
-  code phase, skips late feedback pulls when that reserve is at risk, and
-  reuses successful same-session feedback instead of re-querying it.
-- Current solver-design scope is stricter: one construction/seeding path, one
-  bounded improvement loop, no more than two move families, and a hard target
-  around 180 lines/six helpers for a generated target module. This still means
-  algorithm code that participates in the branch-owned solver-design package,
-  not a component knob or baseline-only wrapper.
-- The latest Sonnet 1-round smoke validated the first gate: candidates target
-  and modify `baseline_algorithm.py` as the algorithm body, pass Contract plus
-  algorithm smoke, pass Verification, and run 16/16 formal screening pairs with
-  required `solver_algorithm_*` telemetry. Solver quality remains weak, so the
-  next step is an 8-round Sonnet validation, not promotion-quality claims.
-- The latest 6-round solver-design validation reached official screening for
-  three candidates and correctly abandoned all three on solver quality. The
-  other three rounds exposed pre-screen control issues: C9e falsely rejected
-  helpers called from solver class methods/runtime aliases, and C6 did not
-  compile parsed code to catch repeated keyword arguments. C6 now parses and
-  compiles patch code; C9e now treats the runtime solver class `solve(...)`
-  call chain as an integration root while still rejecting helpers reachable
-  only from detached classes.
-- The follow-up Sonnet/Opus integration smokes showed that code-stage repair
-  feedback still needed to be more actionable. Current repair tolerates
-  JSON-string `additional_changes`, makes C9e report inert helpers and
-  recognized integration roots, preserves solver object-model repair guidance
-  from algorithm smoke, and adds a tainted non-promotional candidate-vs-champion
-  canary micro-benchmark. This micro-benchmark may reject a candidate that
-  loses every comparable smoke case before official screening, but it cannot
-  promote or validate a candidate.
-- Code-stage preview repair now has two bounded attempts. This is intentional:
-  a repair can fix one Contract issue and introduce a different one, such as
-  changing an inert-helper failure into a new forbidden `instance.name` use.
-  Contract remains fail-closed after the bounded attempts are exhausted.
-- The latest 2-round Sonnet smoke validated that loop in live APS: one round
-  passed directly through Contract preview and algorithm smoke to screening;
-  the next repaired an algorithm-smoke runtime failure, then repaired a C9c
-  failure, then reached screening. Both candidates were abandoned for solver
-  quality (`win_rate=0.0`), so this is framework-path evidence, not
-  solver-quality evidence.
-- Solver-design target diversity is now an active control. Wildcard module
-  targets are expanded into concrete `policies/baseline_modules/*.py` files,
-  and repeated scheduler-only win-rate-zero failures should push hypotheses
-  toward the module that owns the mechanism, such as construction,
-  destroy/repair, local search, or acceptance. Scheduler should be wiring or
-  orchestration unless the scheduler itself is the mechanism.
-- C9e solver-design integration now recognizes first-class operator-list
-  references. A local-search helper returned from `_default_vns_operators()`
-  and consumed by `_vns(...)` is integrated; a helper that is never reachable
-  from the branch solver path is still rejected. The latest smoke validated
-  this path by screening a `local_search.py` candidate that would previously
-  have been falsely rejected, then correctly abandoning it for worse and
-  slower solver quality.
-- C9e also checks newly added class methods and integration contracts. A method
-  added to helper classes such as `_SimulatedAnnealing` must be called from the
-  active solver path. Multi-module solver-design patches may integrate through
-  `scheduler.py` / `baseline_algorithm.py` in `additional_changes`, but they
-  must preserve the stable runtime API: `baseline_algorithm.py` calls
-  `_ALNSVNSSolver(...).solve(instance, rng)` with no extra seed or
-  `initial_solution` arguments, and `scheduler.py` keeps the class-based
-  `_ALNSVNSSolver.__init__(self, *, time_limit, destroy_ratio, segment_length,
-  reaction_factor, vns_max_no_improve, use_vns, cw_threshold, vns_threshold,
-  alns_threshold, max_destroy_customers, max_routes, context)` plus
-  `_ALNSVNSSolver.solve(self, instance, rng)` path without adding top-level
-  `solve`/`run`/`main` entrypoints. If a module-level change needs a new seed
-  or initial-state hook, integrate it inside scheduler methods rather than
-  changing the entrypoint call protocol.
-- Solver-design cross-module imports are statically audited against the
-  candidate workspace after applying `additional_changes`. If a scheduler or
-  entrypoint edit imports a sibling helper, that exact symbol must exist in the
-  candidate or champion module. Do not invent helper names such as
-  `_clarke_wright` unless the matching module defines them.
-- `proposal.algorithm_smoke` failure detail must preserve actionable subprocess
-  information (`exit_code`, `error_category`, elapsed time, and bounded
-  stdout/stderr) so code repair can respond to the actual runtime failure
-  rather than a generic `solver run failed`.
-- Proposal tool code is intentionally being decomposed. Solver-design runtime
-  smoke and its audit helpers now live in `scion/proposal/solver_design_smoke.py`;
-  `scion/proposal/tools/` is the proposal-tool package. Keep registry/call
-  orchestration in `tools/registry.py`, public context readers in
-  `tools/context.py`, surface reads in `tools/surface.py`, feedback tools in
-  `tools/feedback.py`, preview tools in `tools/preview.py`, and shared models
-  or helpers in `tools/models.py`, `tools/base.py`, and `tools/utils.py`.
-  Agentic proposal tool tests are split by topic under
-  `test_agentic_proposal_tools_*.py`; avoid adding new large test blocks back
-  into the legacy aggregate file.
-- APS itself is decomposed. Shared models, artifact storage, diagnostics,
-  code-context shaping, preview/self-check helpers, utilities, and session
-  phase logic live in focused `scion/proposal/agentic_*.py` and
-  `scion/proposal/agentic_session_*.py` modules. `agentic_session.py` is only
-  a compatibility facade. Do not add new behavior to that facade, and do not
-  grow `agentic_session_common.py` into a new hidden monolith.
-- Agentic session tests are split by behavior phase under
-  `test_agentic_session_*.py` with shared support in
-  `agentic_session_test_support.py`. Do not append new APS scenarios back into
-  the legacy aggregate `test_agentic_proposal_tools_session.py` placeholder.
-- Repeated branch object-model API mistakes are framework-relevant. The
-  `_Solution` object in `baseline_modules/state.py` does not expose
-  `from_public`, `from_routes`, `from_cvrp_solution`, or `to_public`, and
-  candidates must not add those bridge APIs to state. Use `_Route` objects plus
-  `context.make_solution(solution.routes_as_tuples())` at the boundary. C9e
-  now rejects invented bridge calls/definitions, and repeated failures are
-  classified as `object_model_loop` with `inspect_agent_trace` guidance rather
-  than a generic infra loop.
-- APS default session wall time is 240 seconds. This intentionally exceeds the
-  180 second default code/fix LLM request timeout so a repaired patch can still
-  receive terminal Contract/smoke preview. Use
-  `--agentic-session-timeout-sec` only for deliberate diagnostics.
-- `proposal.algorithm_smoke` rejects solver-design candidates that claim or
-  touch search-bearing solver code but record zero
-  `solver_algorithm_search_iterations` and zero
-  `solver_algorithm_move_attempts` on every successful smoke case. This catches
-  wrapper/constructor rewrites that pass validity by avoiding the algorithm
-  search rather than improving it.
-- It also rejects low-effort search-bearing candidates when every successful
-  smoke case stops almost immediately with only a handful of iterations/move
-  attempts, no smoke micro-benchmark win, and a `no_improvement`-style stop
-  reason. Runtime speedup is still a valid objective, but not when it comes
-  from truncating the active search loop the hypothesis claims to improve.
-- Algorithm smoke now uses the active campaign split/seed first, not the
-  branch workspace's tiny split. For framework validation in this area, run at
-  least 3 rounds; 2-round smokes are only debugging probes.
-- `ContractGate` is being decomposed incrementally. C9e now lives in
-  `contract/checks/solver_design_integration.py`; `gate.py` remains the
-  orchestrator that wraps focused checks into auditable `CheckResult`s. Use
-  this pattern for future C7/C9b/C9c extraction instead of growing the
-  monolithic gate file.
-- During the current v0.4 experiment stage, real-cost Scion experiments should
-  be launched explicitly through the local codex-proxy path:
-  `SCION_MODEL=gpt-5.5`, `SCION_BASE_URL=http://127.0.0.1:8080`, and a local
-  `SCION_API_KEY`. Do not set `SCION_REASONING_EFFORT` for routine short
-  experiments; use the model/provider default for faster iteration. Sonnet,
-  Opus, DeepSeek, or explicit high-reasoning runs require an explicit
-  diagnostic reason in the launch note.
-- Provider SDK retries are disabled by default through `SCION_SDK_MAX_RETRIES=0`
-  semantics in `LLMClient`; Scion's own `SCION_LLM_MAX_RETRIES` controls the
-  audited retry count. Do not multiply hidden SDK retries by Scion retries in
-  experiment runs.
+阅读时逐个追踪 `ExecutionOutcome` 和 `StepResult`。任何非 `EVALUATED` 结果都会停止当前 outer-loop invocation；不要从 `--rounds` 猜测 provider 调用次数。
 
-Read [current-state.md](status/current-state.md) for the exact latest status.
-For post-run audits, follow
-[`v04-audit-agent-experiment-guide-20260609.md`](../reports/v04-audit-agent-experiment-guide-20260609.md)
-before interpreting counters, copied configs, prompt visibility, or CVRP
-screening failures.
+### 2. Proposal 与 Context
 
-## Hard Rules
+继续读：
 
-- Keep framework core problem-agnostic. CVRP, warehouse, and future problem
-  semantics belong in problem packages/adapters unless a generic design
-  contract changes.
-- Treat `design/scion-architecture-v3.md` as the foundational Scion framework
-  blueprint. Do not confuse it with historical v0.3 implementation docs or
-  v0.3 experiment reports. v0.4 work may change implementation details, but it
-  must preserve the v3 separation: tainted Creative Layer proposes,
-  deterministic Contract/Verification/Protocol/Safe Feature Extractor/Decision
-  layers control evidence and promotion.
-- Treat architecture debt as a control risk, not style cleanup. Before starting
-  another validation experiment, check current-state, the audit guide, and the
-  large-file audit. Files over 3000 lines require an active migration owner;
-  files over 1000 lines should not receive major new behavior without a split
-  plan; test files follow the same rule as production files.
-- Do not read raw experiment artifacts in the main session by default. Use
-  bounded experiment docs or delegate raw-artifact analysis when needed.
-- After every real-cost experiment, do not stop at summary metrics. Inspect or
-  delegate a trace-level review of each round: hypothesis prompt/output, code
-  prompt/output, APS transcript tool calls, preview/smoke results, branch patch,
-  and Decision evidence. Classify failures as framework boundary/control,
-  prompt/API/object-model, repair-loop, provider/infra, or genuine
-  algorithm-quality abandonment before starting the next repair.
-- For audit/reporting work, use the 2026-06-09 audit guide. Resolve the
-  effective launched configuration from `launch.env`, `run.sh`, copied champion
-  files, metrics, status, and summary before using current source as context.
-  Count proposal attempts, quality blocks, protocol metric rows, and formal
-  candidate artifacts separately. Do not infer "framework broken" from no
-  promotion, and do not put BKS/gap/case-hardness facts into `DecisionFeatures`.
-- For v0.4 APS experiments, trace review is mandatory before claiming a short
-  experiment is healthy. For every round, audit both agent stages separately:
-  hypothesis-stage context and every proposal-tool call/result, then code-stage
-  context and every proposal-tool call/result. The review must answer whether
-  the agent saw enough of the declared problem object, whether tool use was
-  relevant and non-looping, whether output followed the active boundary, and
-  whether Scion's framework behavior matched v3 control semantics. A 3-round
-  validation is acceptable only when this trace-level review finds no framework
-  control regression; aggregate `campaign_summary.json` metrics alone are not
-  sufficient.
-- For branch-governance experiments, do not frame the analysis only as isolated
-  round outcomes. Reconstruct branch lineage and lifecycle: which branch was
-  selected, whether the step was a clean fork or same-branch refinement, how
-  weak-positive, marginal, no-effect, diagnostic, and abandoned states evolved,
-  and whether later agent context used branch-local evidence correctly. Round
-  trace analysis remains required, but the final judgment should be branch
-  health and search trajectory rather than a list of independent attempts.
-- Do not read source code by default for design or experiment interpretation.
-  Use engineering maps first, then inspect only relevant paths for code tasks.
-- Use the project Python:
-  `/home/clawd/miniconda3/envs/claw/bin/python`.
-- Update docs as part of the work. Code changes usually require engineering
-  map updates; experiment analysis requires an experiment doc and current-state
-  update when the project state changes.
-- Stage and commit only the files that belong to the current slice.
+- `scion/scion/core/problem_runtime.py`：问题层如何提供 H/C 上下文；
+- `scion/scion/core/proposal_pipeline/facade.py`：direct H/C 调用的 host 边界；
+- `scion/scion/core/proposal_pipeline/direct_attempt_lifecycle.py`：durable attempt、receipt、绑定与 typed failure lane；
+- `scion/scion/proposal/context_snapshot.py`、`context_owner_maps.py`：安全字段、不可变 snapshot 与 provider-visible projection；
+- `scion/scion/proposal/context_manager/manager.py`：context 组合；
+- `scion/scion/proposal/context_manager/code_context.py`：`proposal-source-ledger.v2` 的构建与验证；
+- `scion/scion/proposal/engine/`：H/C prompt、provider call 与结构化解析；
+- `scion/scion/proposal/schemas/`：H 与 typed multi-file patch schema；
+- `scion/scion/proposal/llm/`：transport、timeout、错误分类与 SDK policy。
 
-## Task Workflow
+检查某次失败时，先确认 snapshot identity、durable attempt transition 和 receipt，再判断是 response invalid、infra failure 还是后续 gate 拒绝。不要仅凭日志里的自然语言归因。
 
-For non-trivial work:
+### 3. Contract -> Verification -> Protocol -> Decision
 
-1. Define the slice: problem, surface, gate, evidence, files, and expected
-   result.
-2. Read the smallest matching profile from [Reading Profiles](READING_PROFILES.md).
-3. Implement or analyze through the right boundary.
-4. Verify with focused evidence first; broaden tests only when the risk
-   justifies it.
-5. Review Scion invariants: no problem semantics leaked into core, tainted data
-   does not enter Decision, runtime failures fail closed where required.
-6. Update docs and commit cleanly when asked to ship.
+按 owner 边界读：
 
-## Required Handoff
+- `scion/scion/contract/gate.py` 以及同目录的 `hypothesis_checks.py`、`patch_paths.py`、`patch_graph.py`、`surface_interface.py`；
+- `scion/scion/verification/gate.py` 以及同目录的 syntax、interface、state、feasibility、objective、nondeterminism 与 candidate canary checks；
+- `scion/scion/protocol/evaluation.py`、`gates.py`、`stats.py`；
+- `scion/scion/core/features.py`、`decision.py`、`decision_coordinator.py`、`decision_finalizer.py`。
 
-Before ending a task, state:
+审核 gate 时问三个问题：输入是否来自它有权信任的 owner；拒绝是否只基于它拥有的规则；结果是否越过 typed boundary 去改变别层的判断。
 
-- what docs/source/raw artifacts were read;
-- files changed;
-- tests or validation commands run;
-- docs updated;
-- residual risks or next action;
-- whether the working tree was committed or left dirty.
+### 4. Evidence 与 Lineage
+
+接着读：
+
+- `scion/scion/core/evidence_recording/`：durable event、accounting、summary 和 artifact refs；
+- `scion/scion/core/formal_candidate_artifacts.py`：formal candidate 与 source/context 身份；
+- `scion/scion/core/proposal_trajectory_artifacts.py`、`proposal_trajectory_attempts.py`：direct attempt 轨迹；
+- `scion/scion/lineage/registry.py`、`branch_store.py`、`champion_store.py`；
+- `scion/scion/core/public_refs.py`、`promotion_service.py`、`promotion_lifecycle.py`。
+
+报告字段与 durable event 不一致时，以 durable event、formal candidate、Protocol raw metrics 和 lineage refs 为依据，并把投影漂移本身记为框架缺陷。
+
+### 5. Generic/problem 边界
+
+再读：
+
+- `scion/scion/problem/contracts.py`、`providers.py`、`loader.py`、`bridge.py`；
+- `scion/scion/config/problem.py`、`protocol_config.py`、`split_manifest.py`、`seed_ledger.py`；
+- `scion/scion/core/problem_runtime.py` 和 `research_surface_index.py`。
+
+generic 层可以声明接口、传递 typed facts、执行通用安全/科学流程，但不得推断 route、capacity、warehouse assignment、某种 local search 或某个历史 successor 的算法语义。新问题应通过 problem-owned spec、adapter、provider 和 checks 接入，而不是在 core 中增加问题名分支。
+
+### 6. Warehouse
+
+warehouse 是 assignment/bin-packing 型 surrogate，不是 routing 问题。阅读：
+
+- `scion/problems/warehouse_delivery/problem.yaml` 与 `problem-v1.yaml`：问题身份、research surfaces、editable/frozen 边界；
+- `scion/problems/warehouse_delivery/protocol_prod.yaml`、`split_manifest_prod.yaml`、`seed_ledger.yaml`：正式科学协议；
+- `surrogate/solver.py`、`vns.py`、`models.py`、`oracle.py`：实际 solver 与权威检查；
+- `surrogate/operators/`：当前可研究的算法对象。
+
+不要把 CVRP 的 route、distance、2-opt 或 capacity-route 假设带入 warehouse gate 或 prompt。
+
+### 7. CVRP
+
+CVRP 的主要研究对象是完整 solver design。阅读：
+
+- `scion/scion/problems/cvrp/problem.yaml`、`problem-v1.yaml`：问题和 surface 声明；
+- `scion/scion/problems/cvrp/adapter.py`、`solver.py`、`solution_checks.py`：解析、执行、可行性与 objective 权威；
+- `scion/scion/problems/cvrp/solver_design_provider.py` 与 `solver_design/`：problem-owned 源码/能力事实；
+- `scion/scion/problems/cvrp/policies/baseline_algorithm.py` 与 `policies/baseline_modules/`：当前可研究算法；
+- `scion/scion/problems/cvrp/contract_checks/`：CVRP 专属静态边界；
+- `scion/scion/problems/cvrp/formal/protocol.yaml`、`formal/split_manifest.yaml`、`formal/seed_ledger.yaml`：当前 formal launcher 的科学协议输入。
+
+generic Contract 可以调用 CVRP-owned checks，但不得复制其中的 solver 结构或算法偏好。prompt 应开放研究对象，不得注入 successor 排名、denylist、target-file hint 或指定机制配方。
+
+## 测试通过证明什么
+
+测试分三层理解：
+
+1. 单元/集成测试证明 owner、schema、failure lane 和模块组合符合预期。
+2. direct warehouse/CVRP outer smoke 证明控制流能够穿过 Contract -> Verification -> Protocol -> Decision。
+3. 从 exact clean commit 运行的正式 warehouse 与 open CVRP control，才可能证明模型做出了有效研究。
+
+框架测试、HTTP 200、非空 completion、生成 patch、进程正常退出或 postrun readiness 都不能单独证明算法研究有效。研究验收必须阅读实际 H、批准绑定、完整 patch、solver 行为变化、Protocol 结果与 full-solver outcome。
+
+## 修改纪律
+
+- 优先删除重复 owner 和兼容层，不为单次实验失败叠加 helper、特殊 gate 或 prompt steering。
+- 一个事实只保留一个权威 owner；summary 与 report 只能引用或投影它。
+- 保持 problem semantics 在 problem package，保持 generic core 问题无关。
+- 修改热路径前先定位对应 Contract/Verification/Protocol/Decision 边界和 durable evidence；同步更新针对该边界的测试。
+- 不恢复自动 provider retry、响应修补、partial resume、上下文压缩、语义预算、novelty/material-difference gate 或 telemetry-quality gate。
+- 不用 forced surface/action/target 的诊断运行充当正式研究证据。
+- 不用历史 campaign 的成功命名、自然语言总结或 successor 关系替代当前源码和当前运行证据。
+
+## 正式运行纪律
+
+正式实验只通过当前 direct launchers 准备：
+
+- `scion/tools/launch_warehouse_direct_campaign.py`；
+- `scion/tools/launch_cvrp_direct_campaign.py`。
+
+共同边界：
+
+- exact clean commit 和 clean worktree；
+- 对配置模型完成真实、非空 completion preflight；
+- prepared command 由当前真实 CLI 解析；
+- 不使用 forced surface/action/target；
+- 不从旧 campaign resume；
+- warehouse control 先行，通过逐层证据审核后再运行 clean/open CVRP；
+- 按 [`experiment-runbook.zh.md`](operations/experiment-runbook.zh.md) 低频监控，不用高频轮询干扰长实验分析。
+
+当前 worktree 是否获准 stage、commit、prepare 或 launch，只以 `TASK.md` 和 `current-state.md` 为准；不要从本文推断授权。
+
+## 运行环境
+
+Server `claw`：
+
+- repo：`/home/clawd/research/or-autoresearch-agent`；
+- Python：`/home/clawd/miniconda3/envs/claw/bin/python`；
+- 用于聚焦测试和一次正式运行。
+
+WSL `scion`：
+
+- repo：`/home/xjy-ubuntu/research/or-autoresearch-agent`；
+- runner copy：`/home/xjy-ubuntu/research/or-autoresearch-agent-v04dev-runner-20260629`；
+- Python：`/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`；
+- 仅在重新确认连接、代码同步和 completion preflight 后用于大型或并发验证。
+
+两边必须分别从相同 clean commit 重新生成 prepared root。不要跨机器复用 `run.sh`、`launch.env`、campaign state 或 readiness 结果，也不要假设 shell 环境变量会跨命令持久存在。
+
+## 开始工作前的检查
+
+- 我是否先读了 `TASK.md` 和 `current-state.md`？
+- 我的判断是否服从 V3 与 v0.4 addendum 的 owner 边界？
+- 我是否沿真实控制流定位了问题，而不是只看 facade 或 summary？
+- 我是否保持完整安全上下文和 `SourceLedger`，没有引入内容丢失？
+- 我新增或修改的 gate 是否只保护它有权拥有的边界？
+- 我是否区分框架正确、运行有效和算法研究有效？
+- 若涉及正式实验，我是否确认 clean commit、completion preflight、无 forced binding、无 resume 和当前明确授权？
+
+如果其中任何一项答案不明确，先补证据，不要通过新增控制机制来掩盖不确定性。

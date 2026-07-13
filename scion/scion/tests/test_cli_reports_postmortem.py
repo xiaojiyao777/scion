@@ -104,11 +104,9 @@ class TestPostmortemJsonFlag:
             "campaign_id": "test-campaign",
             "total_rounds": 5,
             "champion_version": 2,
-            "budget_utilization": 0.6,
             "family_coverage": {"order_level": 3, "route_level": 1},
             "verification_failure_breakdown": {"infra": 1},
             "action_locus_coverage": {"modify:order_level": 2},
-            "stagnation_signals": [],
             "diagnostics": [],
             "cache_stats": {},
             "steps": [
@@ -131,7 +129,6 @@ class TestPostmortemJsonFlag:
         assert data["campaign_id"] == "test-campaign"
         assert data["total_rounds"] == 5
         assert "family_coverage" in data
-        assert "stagnation_signals" in data
 
     def test_postmortem_default_markdown(self, tmp_path):
         """Default postmortem output is markdown."""

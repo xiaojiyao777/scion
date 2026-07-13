@@ -6,7 +6,6 @@ from typing import Any, Mapping, Sequence
 from scion.core.models import RunResult
 from .values import (
     _as_truthy,
-    _bounded_json_value,
     _coerce_number,
     _parse_int,
     _round_runtime_number,
@@ -101,7 +100,7 @@ def _finalize_surface_runtime_summary(summary: dict[str, Any]) -> dict[str, Any]
                     for value, count in sorted(
                         (field_summary.get("values") or {}).items(),
                         key=lambda item: (-int(item[1]), item[0]),
-                    )[:5]
+                    )
                 ],
             }
             for field, field_summary in fields.items()
@@ -109,19 +108,11 @@ def _finalize_surface_runtime_summary(summary: dict[str, Any]) -> dict[str, Any]
     }
 
 
-def _surface_runtime_summary_with_guard(
+def _surface_runtime_summary_with_diagnostics(
     summary: dict[str, Any],
-    telemetry_guard: Mapping[str, Any],
     runtime_budget_diagnostic: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload = _finalize_surface_runtime_summary(summary)
-    if telemetry_guard and (
-        payload
-        or telemetry_guard.get("expected_telemetry_present")
-        or telemetry_guard.get("failures")
-        or telemetry_guard.get("warnings")
-    ):
-        payload["telemetry_guard"] = dict(telemetry_guard)
     if runtime_budget_diagnostic:
         payload["runtime_budget_diagnostic"] = dict(runtime_budget_diagnostic)
     return payload
@@ -191,12 +182,10 @@ def _numeric_mapping_summary(values: dict[str, int]) -> dict[str, Any]:
         if item_count <= 0:
             continue
         for key, raw_value in parsed.items():
-            if len(by_key) >= 16 and str(key) not in by_key:
-                continue
             number = _coerce_number(raw_value)
             if number is None:
                 continue
-            key_text = str(key)[:80]
+            key_text = str(key)
             stats = by_key.setdefault(
                 key_text,
                 {
@@ -245,14 +234,10 @@ def _parse_surface_runtime_value(value_key: str) -> Any:
 
 
 def _surface_runtime_value_key(value: Any) -> str:
-    bounded = _bounded_json_value(value, max_items=12, max_chars=240)
     try:
-        text = json.dumps(bounded, sort_keys=True, separators=(",", ":"), default=str)
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
     except TypeError:
-        text = str(bounded)
-    if len(text) <= 240:
-        return text
-    return text[:237] + "..."
+        return str(value)
 
 
 def _is_empty_runtime_evidence_value(value: Any) -> bool:
@@ -288,6 +273,6 @@ __all__ = [
     "_record_surface_runtime_sample",
     "_surface_runtime_numeric_summary",
     "_surface_runtime_summary_template",
-    "_surface_runtime_summary_with_guard",
+    "_surface_runtime_summary_with_diagnostics",
     "_surface_runtime_value_key",
 ]

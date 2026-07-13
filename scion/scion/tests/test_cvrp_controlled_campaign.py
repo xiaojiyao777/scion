@@ -9,7 +9,6 @@ import yaml
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.campaign import CampaignManager
 from scion.core.models import ChampionState, Decision, ExperimentStage
-from scion.core.termination import TerminationConfig
 from scion.evidence import attach_final_evidence_package
 from scion.problems.cvrp.evidence import (
     CvrpManifestEvaluationConfig,
@@ -42,7 +41,7 @@ def _baseline_algorithm_solve_patch(new_solve: str) -> dict:
         "file_path": "policies/baseline_algorithm.py",
         "action": "modify",
         "edit_intent": "exact_replace",
-        "source_digest": source_digest_for_content(source + "\n"),
+        "source_digest": source_digest_for_content(source),
         "old_string": old_solve,
         "new_string": new_solve if new_solve.endswith("\n") else new_solve + "\n",
         "replace_all": False,
@@ -93,21 +92,6 @@ def _mock_llm() -> MockLLMClient:
             "target_weakness": "controlled CVRP route ordering",
             "expected_effect": "Improve only the checked-in synthetic controlled route shapes.",
             "suggested_weight": 0.1,
-            "target_objectives": ["total_distance"],
-            "protected_objectives": ["fleet_violation"],
-            "objective_tradeoff_policy": "preserve fleet_violation before distance",
-            "no_op_condition": "unrecognized controlled customer sets return the original solution",
-            "risk_to_higher_priority": "none for route-count preserving controlled changes",
-            "target_runtime_effect": "preserve",
-            "complexity_claim": "O(n log n) route ordering with one bounded pass.",
-            "runtime_budget_strategy": "Use one deterministic pass and emit solver-design telemetry.",
-            "novelty_signature": {
-                "algorithm_family": "controlled_solver_design_smoke",
-                "construction_strategy": "ascending_single_route_when_capacity_allows",
-                "improvement_strategy": "bounded_route_ordering",
-                "acceptance_strategy": "strict_capacity_preserving",
-                "runtime_budget_strategy": "single_pass",
-            },
         },
         patch_response=_baseline_algorithm_solve_patch(
             (
@@ -160,7 +144,6 @@ def _make_campaign(tmp_path: Path) -> CampaignManager:
         experiment_protocol=proto,
         adapter=adapter,
         operator_execute_signature=bridge.operator_execute_signature,
-        termination_config=TerminationConfig(max_experiments=5, stagnation_limit=5),
         force_surface="solver_design",
     )
 

@@ -7,11 +7,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scion.problems.cvrp.large_twoopt_review import CVRP_LARGE_TWOOPT_REVIEW_AXES
-from scion.problems.warehouse_delivery.postrun_review import (
-    WAREHOUSE_FOLLOWUP_REVIEW_AXES,
-)
-
 TOOL_PATH = Path(__file__).parents[2] / "tools" / "postrun_analysis_brief.py"
 SPEC = importlib.util.spec_from_file_location("postrun_analysis_brief", TOOL_PATH)
 assert SPEC is not None
@@ -20,33 +15,143 @@ assert SPEC.loader is not None
 SPEC.loader.exec_module(brief_tool)
 
 
-def test_formal_hypothesis_generation_call_kind_classification() -> None:
-    formal_kinds = {
-        "hypothesis",
-        "hypothesis_retry",
-        "hypothesis_preview_retry",
-        "hypothesis_grounding_retry",
-        "hypothesis_semantic_retry",
+def _evaluated_campaign_summary(
+    payload: dict[str, object],
+) -> dict[str, object]:
+    """Build a modern summary with one explicit evaluated execution step."""
+    return {
+        **payload,
+        "execution_outcome_counts": {
+            "evaluated": 1,
+            "research_rejected": 0,
+            "not_evaluated": 0,
+            "blocked_infra": 0,
+            "resource_exhausted": 0,
+            "interrupted": 0,
+        },
+        "evaluated_count": 1,
+        "non_evaluated_count": 0,
+        "unknown_outcome_count": 0,
+        "total_outcome_subject_count": 1,
+        "last_execution_outcome": {
+            "outcome": "evaluated",
+            "reason_code": "protocol_evaluation_complete",
+            "provenance_refs": {
+                "source": "test_fixture",
+                "stage": "screening",
+                "protocol_result_ref": "protocol-result-1",
+            },
+        },
+        "steps": [
+            {
+                "round": 1,
+                "branch_id": "branch-1",
+                "stage": "screening",
+                "execution_outcome": "evaluated",
+                "execution_outcome_reason_code": "protocol_evaluation_complete",
+                "execution_outcome_provenance": {
+                    "source": "test_fixture",
+                    "stage": "screening",
+                    "protocol_result_ref": "protocol-result-1",
+                },
+                "screened_experiment": True,
+                "screened_experiment_effective": True,
+                "decision": "continue_explore",
+                "decision_reason_codes": ["SCREENING_SIGNAL"],
+                "protocol_result": {
+                    "stage": "screening",
+                    "result_ref": "protocol-result-1",
+                },
+            }
+        ],
     }
-    for call_kind in formal_kinds:
-        assert brief_tool._is_hypothesis_generation_call_kind(call_kind) is True
-    for call_kind in (
-        "hypothesis_target_intent",
-        "hypothesis_diagnostic",
-        "code",
-        "tool_selection",
-        "",
-    ):
-        assert brief_tool._is_hypothesis_generation_call_kind(call_kind) is False
+
+
+def _non_evaluated_campaign_summary(
+    payload: dict[str, object],
+    *,
+    outcome: str,
+    reason_code: str,
+) -> dict[str, object]:
+    counts = {
+        "evaluated": 0,
+        "research_rejected": 0,
+        "not_evaluated": 0,
+        "blocked_infra": 0,
+        "resource_exhausted": 0,
+        "interrupted": 0,
+    }
+    counts[outcome] = 1
+    provenance = {
+        "source": "test_fixture",
+        "stage": "pre_evaluation",
+    }
+    return {
+        **payload,
+        "execution_outcome_counts": counts,
+        "evaluated_count": 0,
+        "non_evaluated_count": 1,
+        "unknown_outcome_count": 0,
+        "total_outcome_subject_count": 1,
+        "last_execution_outcome": {
+            "outcome": outcome,
+            "reason_code": reason_code,
+            "provenance_refs": provenance,
+        },
+        "steps": [
+            {
+                "round": 1,
+                "branch_id": "branch-1",
+                "stage": "pre_evaluation",
+                "execution_outcome": outcome,
+                "execution_outcome_reason_code": reason_code,
+                "execution_outcome_provenance": provenance,
+                "screened_experiment": False,
+                "screened_experiment_effective": False,
+            }
+        ],
+    }
+
+
+def _assert_historical_execution_outcome_unknown(
+    brief: dict[str, object],
+) -> None:
+    outcomes = brief["execution_outcomes"]
+    assert isinstance(outcomes, dict)
+    assert outcomes["source"] == "unknown_historical"
+    assert outcomes["evaluated_count"] == 0
+    assert outcomes["non_evaluated_count"] == 0
+    eligibility = outcomes["research_conclusion_eligibility"]
+    assert isinstance(eligibility, dict)
+    assert eligibility["status"] == "unknown_historical"
+    assert eligibility["eligible"] is None
+    assert eligibility["algorithm_conclusions_allowed"] is False
+
+
+def _assert_non_evaluated_execution_outcome(
+    brief: dict[str, object],
+    *,
+    outcome: str,
+) -> None:
+    outcomes = brief["execution_outcomes"]
+    assert isinstance(outcomes, dict)
+    assert outcomes["evaluated_count"] == 0
+    assert outcomes["non_evaluated_count"] == 1
+    assert outcomes["execution_outcome_counts"][outcome] == 1
+    eligibility = outcomes["research_conclusion_eligibility"]
+    assert isinstance(eligibility, dict)
+    assert eligibility["status"] == "ineligible_zero_evaluated"
+    assert eligibility["eligible"] is False
+    assert eligibility["algorithm_conclusions_allowed"] is False
+    assert outcomes["step_invariants"]["status"] == "valid"
+    assert outcomes["step_invariants"]["violations"] == []
 
 
 def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     run_root = tmp_path / "run-a"
     campaign_dir = run_root / "campaign"
     traces_dir = campaign_dir / "llm_traces"
-    sessions_dir = campaign_dir / "agentic_sessions"
     traces_dir.mkdir(parents=True)
-    sessions_dir.mkdir()
 
     _write_json(
         run_root / "run_status.json",
@@ -55,6 +160,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             "run_validity_status": "valid",
             "run_completeness_status": "complete",
             "requested_rounds": 1,
+            "proposal_runtime_mode": "direct_v3",
         },
     )
     (run_root / "run.log").write_text("POSTRUN_REPORT_DIR:/tmp/run\n", encoding="utf-8")
@@ -68,7 +174,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     )
     _write_json(
         campaign_dir / "campaign_summary.json",
-        {
+        _evaluated_campaign_summary({
             "formal_screened_candidates": 1,
             "protocol_evaluated_candidates": 1,
             "runtime_budget_diagnostics": [
@@ -87,40 +193,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                     "total_pairs": 32,
                 }
             ],
-        },
-    )
-    _write_json(
-        sessions_dir / "agentic_session_trace_index.json",
-        {
-            "sessions": [
-                {
-                    "session_id": "s-1",
-                    "branch_id": "branch-1",
-                    "traces": [
-                        {"trace_id": "t-hyp", "request_kind": "hypothesis"},
-                        {"trace_id": "t-code", "request_kind": "code"},
-                        {
-                            "trace_id": "t-target",
-                            "request_kind": "target_intent",
-                            "prompt_manifest_ref": "manifest-1",
-                        },
-                    ],
-                }
-            ]
-        },
-    )
-    _write_json(
-        sessions_dir / "agentic_session_index.json",
-        {"sessions": [{"session_id": "s-1", "branch_id": "branch-1"}]},
-    )
-    _write_json(
-        traces_dir / "20260618T000000_target_intent_branch_1.json",
-        {
-            "request_kind": "target_intent",
-            "ok": True,
-            "branch_id": "branch-1",
-            "prompt_manifest_ref": "manifest-1",
-        },
+        }),
     )
     _write_json(
         traces_dir / "20260618T000001_hypothesis_branch_1.json",
@@ -172,11 +245,10 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                 "unreadable_rows": 0,
                 "semantics": "formal candidate artifact rows",
             },
-            "stage_rows": {
-                "screening": 2,
-                "validation": 0,
-                "frozen": 0,
-                "fresh_runtime_replay": 0,
+                "stage_rows": {
+                    "screening": 2,
+                    "validation": 0,
+                    "frozen": 0,
             },
             "reconciliation": {
                 "formal_candidate_count_reconciliation": {
@@ -252,26 +324,6 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                     }
                 ],
             },
-            "fresh_runtime_replay_drain": {
-                "status": "not_selected_no_pending",
-                "attempts": 1,
-                "executed": 0,
-                "skipped": 1,
-                "blocked": 0,
-                "protocol_results": 0,
-                "stopped_reason": "no_fresh_runtime_replay_pending",
-                "counts_toward_max_rounds": False,
-            },
-            "stage_transition_drain": {
-                "status": "not_started",
-                "attempts": 0,
-                "executed": 0,
-                "skipped": 0,
-                "limit": 0,
-                "stopped_reason": "",
-                "counts_toward_max_rounds": False,
-                "generates_new_hypothesis": False,
-            },
             "proposal_quality": {
                 "proposal_attempts_total": 3,
                 "proposal_attempts_consumed": 2,
@@ -287,7 +339,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                     "observations": 2,
                     "source_counts": {"campaign_steps": 1, "run_log": 1},
                     "examples": [
-                        "agentic_proposal:code_generation_failed old_string_not_found"
+                        "proposal:code_generation_failed old_string_not_found"
                     ],
                     "sources": [{"kind": "campaign_step", "index": 1}],
                 },
@@ -311,43 +363,12 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                 "run_completeness_status": "complete",
                 "wrapper_exit_status": 0,
             },
-            "research_continuity": {
-                "same_mechanism_followup": {
-                    "selected_same_branch_refinement_count": 1,
-                    "not_selected_same_branch_refinement_count": 0,
-                    "observed_opportunity_count": 1,
-                    "selection_rate": 1.0,
-                    "interpretation": (
-                        "all_observed_same_mechanism_followups_selected"
-                    ),
-                },
-                "branch_lesson_usage": {
-                    "requirement_count": 3,
-                    "present_count": 3,
-                    "satisfied_count": 2,
-                    "missing_block_count": 0,
-                    "present_not_semantic_count": 1,
-                    "metadata_only_count": 0,
-                    "metadata_only_block_count": 0,
-                    "linkage_unrecognized_count": 0,
-                    "linkage_unrecognized_block_count": 0,
-                    "semantic_mismatch_count": 1,
-                    "semantic_mismatch_block_count": 1,
-                    "semantic_failure_counts": {"semantic_mismatch": 1},
-                    "semantic_block_counts": {"semantic_mismatch": 1},
-                    "satisfaction_rate": 0.666667,
-                    "present_rate": 1.0,
-                    "semantic_gap_count": 1,
-                    "semantic_gap_rate": 0.333333,
-                },
-                "weak_positive_transfer": {
+                "research_continuity": {
+                    "weak_positive_transfer": {
                     "accepted_count": 1,
                     "rejected_count": 0,
                     "observed_opportunity_count": 1,
                     "acceptance_rate": 1.0,
-                },
-                "lesson_action_counts": {
-                    "preserved_same_branch": 2,
                 },
                 "research_shape_summary": {
                     "max_branch_depth": 3,
@@ -397,7 +418,6 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         / "normal.proposal_trajectory_manifest.v1.json",
         {
             "counts": {"prompt_manifest_loaded_count": 1},
-            "branch_lesson_usage_accounting": {"field_counts": {"avoided_lessons": 1}},
             "sessions": [
                 {
                     "trace_fingerprints": [
@@ -441,8 +461,6 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                                     },
                                 },
                             },
-                            "omitted_sections": ["hidden_validation"],
-                            "truncated_sections": ["long_feedback"],
                         },
                         {
                             "call_kind": "code",
@@ -477,22 +495,6 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                                     "algorithm_file_read_count": 1,
                                     "algorithm_file_reads_full_content_visible_count": 1,
                                 },
-                                "active_subject_code_constraints_visibility": {
-                                    "schema_version": (
-                                        "active-subject-code-constraints-visibility.v1"
-                                    ),
-                                    "required": True,
-                                    "section_present": True,
-                                    "section_status": "included",
-                                    "section_visible": True,
-                                    "full_section_visible": True,
-                                    "payload_digest": "constraint-digest-1",
-                                    "constraint_count": 3,
-                                    "object_model_hint_count": 1,
-                                    "api_contract_count": 1,
-                                    "forbidden_pattern_count": 1,
-                                    "missing_reason": "",
-                                },
                             },
                             "block_family_summary": {
                                 "total_chars": 80,
@@ -516,11 +518,17 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             ],
         },
     )
-    _write_db(campaign_dir / "scion.db")
+    _write_db(campaign_dir / "scion.db", typed_evaluated=True)
 
     brief = brief_tool.build_brief(run_root)
     markdown = brief_tool.render_markdown(brief)
 
+    outcomes = brief["execution_outcomes"]
+    assert outcomes["evaluated_count"] == 1
+    assert outcomes["non_evaluated_count"] == 0
+    assert outcomes["research_conclusion_eligibility"]["eligible"] is True
+    assert outcomes["summary_step_counts_consistent"] is True
+    assert outcomes["summary_lineage_counts_consistent"] is True
     assert brief["schema_version"] == "scion.postrun_analysis_brief.v1"
     assert brief["report_only"] is True
     assert brief["quality_judgment"] is False
@@ -530,12 +538,6 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert brief["promotion_state_mutated"] is False
     assert brief["lifecycle"]["prepared_only"] is False
     assert brief["branches"]["ids"] == ["branch-1"]
-    assert (
-        brief["phase4_evidence_coverage"]["requirements"]["target_intent_trace"][
-            "available"
-        ]
-        is True
-    )
     branch_state = brief["branch_research_state_summary"]
     assert branch_state["schema_version"] == (
         "scion.postrun_branch_research_state_summary.v1"
@@ -553,7 +555,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "branch_state_counts": {"ready_validate": 1},
         "branches_with_hypotheses": 1,
         "branches_with_events": 1,
-        "branches_with_sessions": 1,
+        "branches_with_sessions": 0,
         "branches_with_traces": 1,
         "rollback_count_total": 1,
         "branches_with_rollback": 1,
@@ -566,15 +568,15 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "events_by_decision": {"continue_explore": 1, "queue_validate": 1},
         "events_by_stage": {"screening": 2},
     }
-    assert branch_state["top_branches"] == [
+    assert branch_state["branches"] == [
         {
             "branch_id": "branch-1",
             "state": "ready_validate",
             "lineage_id": "lineage-1",
             "hypothesis_count": 2,
             "event_count": 3,
-            "session_count": 1,
-            "trace_count": 3,
+            "session_count": 0,
+            "trace_count": 2,
             "rollback_count": 1,
             "failure_codes": ["CONTRACT"],
         }
@@ -616,11 +618,10 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             "unreadable_rows": 0,
             "index_status_counts": {"available": 1},
         },
-        "stage_rows": {
-            "screening": 2,
-            "validation": 0,
-            "frozen": 0,
-            "fresh_runtime_replay": 0,
+            "stage_rows": {
+                "screening": 2,
+                "validation": 0,
+                "frozen": 0,
         },
         "reconciliation_status_counts": {
             "available": 1,
@@ -700,32 +701,9 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert runtime_summary["decision_features_excluded"] is True
     assert runtime_summary["available"] is True
     assert runtime_summary["current_run_evidence"] is True
-    assert runtime_summary["runtime_report_count"] == 1
+    assert runtime_summary["runtime_report_count"] == 0
     assert runtime_summary["budget_diagnostic_source_count"] == 1
     runtime_aggregate = runtime_summary["aggregate"]
-    assert runtime_aggregate["fresh_runtime_replay_drain"] == {
-        "status_counts": {"not_selected_no_pending": 1},
-        "stopped_reason_counts": {"no_fresh_runtime_replay_pending": 1},
-        "attempts": 1,
-        "executed": 0,
-        "skipped": 1,
-        "blocked": 0,
-        "protocol_results": 0,
-        "counts_toward_max_rounds_true": 0,
-        "counts_toward_max_rounds_false": 1,
-        "reports_with_unresolved_closures": 0,
-    }
-    assert runtime_aggregate["stage_transition_drain"] == {
-        "status_counts": {"not_started": 1},
-        "stopped_reason_counts": {"none": 1},
-        "attempts": 0,
-        "executed": 0,
-        "skipped": 0,
-        "counts_toward_max_rounds_true": 0,
-        "counts_toward_max_rounds_false": 1,
-        "generates_new_hypothesis_true": 0,
-        "generates_new_hypothesis_false": 1,
-    }
     assert runtime_aggregate["runtime_budget_diagnostics"] == {
         "source_count": 1,
         "diagnostic_count": 1,
@@ -735,7 +713,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "side_counts": {"champion": 1},
         "repairable_counts": {"false": 1},
         "runtime_model_counts": {"budget_exhausting": 1},
-        "top_diagnostics": [
+        "diagnostics": [
             {
                 "branch_id": "branch-1",
                 "stage": "screening",
@@ -792,13 +770,13 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "requested_rounds_complete": 1
     }
     failure_entry = failure_summary["entries"][0]
-    assert failure_entry["top_failure_keys"] == ["code_generation", "tool_timeout"]
+    assert failure_entry["failure_keys"] == ["code_generation", "tool_timeout"]
     assert failure_entry["failure_observations_total"] == 3
-    assert failure_entry["top_examples"] == [
+    assert failure_entry["examples"] == [
         {
             "report": "normal.research_efficiency.v1.json",
             "failure_key": "code_generation",
-            "example": "agentic_proposal:code_generation_failed old_string_not_found",
+            "example": "proposal:code_generation_failed old_string_not_found",
         },
         {
             "report": "normal.research_efficiency.v1.json",
@@ -824,8 +802,6 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert aggregate["block_family_trace_count"] == 2
     assert aggregate["hypothesis_generation_trace_count"] == 1
     assert aggregate["hypothesis_generation_block_family_trace_count"] == 1
-    assert aggregate["omitted_section_trace_count"] == 1
-    assert aggregate["truncated_section_trace_count"] == 1
     assert aggregate["call_kind_counts"] == {"code": 1, "hypothesis": 1}
     assert aggregate["block_family_totals"] == {
         "governance": {"char_count": 60, "token_estimate": 15, "trace_count": 2},
@@ -854,40 +830,17 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             "trace_count": 1,
         },
     }
-    assert aggregate["source_visibility"] == {
-        "schema_version": "scion.postrun_prompt_source_visibility_summary.v1",
-        "report_only": True,
-        "decision_features_excluded": True,
-        "trace_count": 2,
-        "code_trace_count": 1,
-        "code_target_source_visible_count": 1,
-        "code_target_source_missing_count": 0,
-        "code_protected_source_visible_count": 1,
-        "code_protected_source_missing_count": 0,
-        "code_required_integration_source_visible_count": 1,
-        "code_algorithm_file_read_source_visible_count": 1,
-        "code_missing_required_source_trace_count": 0,
-        "code_missing_required_source_path_counts": {},
-        "code_target_source_status_counts": {"current_branch_source": 1},
-        "code_target_visibility_status_counts": {"full_current_source_visible": 1},
-        "hypothesis_target_source_trace_count": 1,
-        "hypothesis_target_source_required_count": 1,
-        "hypothesis_target_source_visible_count": 1,
-        "hypothesis_target_source_not_visible_count": 0,
-        "hypothesis_target_visibility_status_counts": {
-            "full_dedicated_source_visible": 1
-        },
-        "active_subject_code_constraints_trace_count": 1,
-        "active_subject_code_constraints_required_count": 1,
-        "active_subject_code_constraints_full_visible_count": 1,
-        "active_subject_code_constraints_partial_visible_count": 0,
-        "active_subject_code_constraints_not_full_visible_count": 0,
-        "active_subject_code_constraints_not_required_count": 0,
-        "active_subject_code_constraints_constraint_count_total": 3,
-        "active_subject_code_constraints_forbidden_pattern_count_total": 1,
-        "active_subject_code_constraints_status_counts": {"included": 1},
-        "active_subject_code_constraints_missing_reason_counts": {"none": 1},
-    }
+    source_visibility = aggregate["source_visibility"]
+    assert source_visibility["schema_version"] == (
+        "scion.postrun_prompt_source_visibility_summary.v1"
+    )
+    assert source_visibility["report_only"] is True
+    assert source_visibility["decision_features_excluded"] is True
+    assert source_visibility["code_target_source_visible_count"] == 1
+    assert source_visibility["code_target_source_missing_count"] == 0
+    assert source_visibility["code_required_integration_source_visible_count"] == 1
+    assert source_visibility["code_algorithm_file_read_source_visible_count"] == 1
+    assert source_visibility["code_missing_required_source_path_counts"] == {}
     assert aggregate["signal_density"] == {
         "schema_version": "scion.postrun_prompt_signal_density.v1",
         "report_only": True,
@@ -932,11 +885,6 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert continuity["continuity_report_count"] == 1
     continuity_entry = continuity["entries"][0]
     assert continuity_entry["report"] == "normal.research_efficiency.v1.json"
-    assert continuity_entry["same_mechanism_followup"]["selection_rate"] == 1.0
-    assert continuity_entry["branch_lesson_usage"]["semantic_gap_count"] == 1
-    assert continuity_entry["branch_lesson_usage"]["semantic_failure_counts"] == {
-        "semantic_mismatch": 1
-    }
     assert continuity_entry["weak_positive_transfer"]["acceptance_rate"] == 1.0
     assert continuity["aggregate"] == {
         "max_branch_depth": 3,
@@ -950,68 +898,20 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             "regret_insertion": 3,
             "route_merge": 1,
         },
-        "branch_lesson_semantic_failure_counts": {"semantic_mismatch": 1},
-        "branch_lesson_semantic_block_counts": {"semantic_mismatch": 1},
-        "lesson_action_counts": {
-            "preserved_same_branch": 2,
-        },
     }
     actionability = brief["research_context_actionability_summary"]
-    assert actionability == {
-        "schema_version": ("scion.postrun_research_context_actionability_summary.v1"),
-        "report_only": True,
-        "quality_judgment": False,
-        "decision_features_excluded": True,
-        "current_run_evidence": True,
-        "available": True,
-        "prompt_context_available": True,
-        "research_continuity_available": True,
-        "guidance_status": "context_actionability_review_required",
-        "indicators": {
-            "schema_version": "scion.research_context_actionability_indicators.v1",
-            "research_continuity_max_branch_depth": 3,
-            "same_mechanism_selected": 1,
-            "same_mechanism_observed": 1,
-            "same_mechanism_missed": 0,
-            "branch_lessons_satisfied": 2,
-            "branch_lessons_required": 3,
-            "branch_lesson_semantic_gap_count": 1,
-            "branch_lesson_semantic_failure_count": 1,
-            "branch_lesson_semantic_failure_counts": {
-                "semantic_mismatch": 1,
-            },
-            "branch_lesson_semantic_block_count": 1,
-            "branch_lesson_semantic_block_counts": {
-                "semantic_mismatch": 1,
-            },
-            "weak_positive_accepted": 1,
-            "weak_positive_observed": 1,
-            "weak_positive_missed": 0,
-            "research_signal_tokens": 20,
-            "source_code_tokens": 15,
-            "cross_branch_tokens": 5,
-            "governance_tokens": 15,
-            "research_plus_source_to_governance_ratio": 2.333333,
-            "omitted_section_trace_count": 1,
-            "truncated_section_trace_count": 1,
-            "hypothesis_generation_trace_count": 1,
-            "hypothesis_generation_block_family_trace_count": 1,
-            "hypothesis_generation_research_signal_tokens": 20,
-            "hypothesis_generation_source_code_tokens": 0,
-            "hypothesis_generation_cross_branch_tokens": 5,
-            "hypothesis_generation_governance_tokens": 10,
-            "hypothesis_generation_research_plus_source_to_governance_ratio": 2.0,
-        },
-        "actionability_gaps": [
-            "branch_lesson_semantic_gap_despite_cross_branch_prompt_signal",
-            "research_signal_sections_omitted_or_truncated_during_semantic_gap",
-        ],
-        "recommendations": [
-            "inspect branch_lesson_usage records for semantic mismatch causes",
-            "inspect omitted_sections and truncated_sections in prompt manifests",
-            "inspect lesson ids, changed dimensions, and borrow/contrast/reject semantics",
-        ],
-    }
+    assert actionability["schema_version"] == (
+        "scion.postrun_research_context_actionability_summary.v1"
+    )
+    assert actionability["report_only"] is True
+    assert actionability["decision_features_excluded"] is True
+    assert actionability["current_run_evidence"] is True
+    assert actionability["available"] is True
+    assert actionability["guidance_status"] == "continuity_signals_context_actionable"
+    assert actionability["actionability_gaps"] == []
+    indicators = actionability["indicators"]
+    assert indicators["weak_positive_accepted"] == 1
+    assert indicators["weak_positive_observed"] == 1
     checklist = {item["name"]: item["present"] for item in brief["artifact_checklist"]}
     assert checklist["outer_command"] is True
     assert checklist["campaign_database"] is True
@@ -1029,19 +929,18 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "## Prepared Run Contract" in markdown
     assert "Acceptance focus" in markdown
     assert "DecisionFeatures" in markdown
-    assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown
     assert "## Branch Research State Summary" in markdown
     assert "- Branches / lineages: 1 / 1" in markdown
     assert "- Branch states: ready_validate=1" in markdown
     assert (
-        "| branch-1 | ready_validate | lineage-1 | 2 | 3 | 1 | 3 | 1 | CONTRACT |"
+        "| branch-1 | ready_validate | lineage-1 | 2 | 3 | 0 | 2 | 1 | CONTRACT |"
         in markdown
     )
     assert "## Protocol Accounting Summary" in markdown
     assert "- Requested/effective rounds: 1 / 1" in markdown
     assert (
         "| normal.research_efficiency.v1.json | 1 | 1 | 2 | "
-        "1 | 2/0/0/0 | requested_rounds_complete |" in markdown
+        "1 | 2/0/0 | requested_rounds_complete |" in markdown
     )
     assert "## Measurement Effect Summary" in markdown
     assert "- Mechanism-family mapped/unmapped rows: 2 / 0" in markdown
@@ -1059,10 +958,6 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     )
     assert "## Runtime Feedback Summary" in markdown
     assert "- Runtime budget diagnostics: 1" in markdown
-    assert (
-        "| normal.research_efficiency.v1.json | not_selected_no_pending | "
-        "1 | 0 | 1 | 0 | 0 | not_started |" in markdown
-    )
     assert "## Failure Taxonomy Summary" in markdown
     assert "- Quality block reasons: schema_missing_effect_path=1" in markdown
     assert (
@@ -1078,33 +973,16 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "1 / 1 / 1 / 0" in markdown
     )
     assert (
-        "- Active subject code constraints traces/required/full-visible/not-full-visible: "
-        "1 / 1 / 1 / 0" in markdown
-    )
-    assert (
         "- Signal density shares: 0.363636 / 0.272727 / 0.090909 / 0.272727" in markdown
     )
     assert "- Research+source/governance ratio: 2.333333" in markdown
     assert "| source_code | 1 | 15 | 60 |" in markdown
-    assert (
-        "| normal.research_efficiency.v1.json | 1/1/0 | 2/3 | 1 | 1/1 | "
-        "3 | 1=1, 3=1 | deep_focused | 2 |" in markdown
-    )
-    assert "- Branch lesson semantic failures: semantic_mismatch=1" in markdown
-    assert "- Branch lesson semantic blocks: semantic_mismatch=1" in markdown
-    assert "- Branch lesson actions: preserved_same_branch=2" in markdown
     assert "## Research Context Actionability Summary" in markdown
-    assert "- Guidance status: context_actionability_review_required" in markdown
-    assert "- Continuity selected/observed same-mechanism follow-up: 1 / 1" in markdown
-    assert "- Continuity missed same-mechanism follow-up: 0" in markdown
-    assert "- Branch lessons satisfied/required/semantic gap: 2 / 3 / 1" in markdown
-    assert "- Branch lesson semantic failure mix: semantic_mismatch=1" in markdown
-    assert "- Branch lesson semantic block mix: semantic_mismatch=1" in markdown
+    assert "- Guidance status: continuity_signals_context_actionable" in markdown
     assert (
         "- Prompt research/source/cross-branch/governance tokens: 20 / 15 / 5 / 15"
         in markdown
     )
-    assert "branch_lesson_semantic_gap_despite_cross_branch_prompt_signal" in markdown
     assert any(
         "research_continuity" in question for question in brief["required_questions"]
     )
@@ -1131,62 +1009,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert cli_brief["schema_version"] == "scion.postrun_analysis_brief.v1"
 
 
-def test_research_context_actionability_projects_branch_lesson_reason_mix() -> None:
-    summary = brief_tool._research_context_actionability_summary(
-        prompt_context_visibility_summary={
-            "current_run_evidence": True,
-            "available": True,
-            "aggregate": {
-                "signal_density": {
-                    "research_signal_tokens": 12,
-                    "source_code_tokens": 5,
-                    "cross_branch_tokens": 4,
-                    "governance_tokens": 7,
-                }
-            },
-        },
-        research_continuity_summary={
-            "current_run_evidence": True,
-            "available": True,
-            "aggregate": {
-                "branch_lesson_semantic_failure_counts": {
-                    "metadata_only": 2,
-                    "linkage_unrecognized": 1,
-                },
-                "branch_lesson_semantic_block_counts": {
-                    "linkage_unrecognized": 1,
-                },
-            },
-            "entries": [],
-        },
-    )
-
-    indicators = summary["indicators"]
-    assert indicators["branch_lesson_semantic_failure_count"] == 3
-    assert indicators["branch_lesson_semantic_failure_counts"] == {
-        "linkage_unrecognized": 1,
-        "metadata_only": 2,
-    }
-    assert indicators["branch_lesson_semantic_block_count"] == 1
-    assert indicators["branch_lesson_semantic_block_counts"] == {
-        "linkage_unrecognized": 1,
-    }
-    assert summary["actionability_gaps"] == [
-        "branch_lesson_semantic_gap_despite_cross_branch_prompt_signal"
-    ]
-    assert (
-        "inspect hypotheses that filled branch_lesson_usage with metadata-only payloads"
-        in summary["recommendations"]
-    )
-    assert (
-        "normalize branch_lesson_usage target/action/mechanism linkage aliases"
-        in summary["recommendations"]
-    )
-
-
-def test_research_context_actionability_flags_unselected_same_mechanism_opportunity() -> (
-    None
-):
+def test_research_context_actionability_ignores_unknown_continuity_fields() -> None:
     summary = brief_tool._research_context_actionability_summary(
         prompt_context_visibility_summary={
             "current_run_evidence": True,
@@ -1213,28 +1036,14 @@ def test_research_context_actionability_flags_unselected_same_mechanism_opportun
             "current_run_evidence": True,
             "available": True,
             "aggregate": {},
-            "entries": [
-                {
-                    "same_mechanism_followup": {
-                        "observed_opportunity_count": 1,
-                        "selected_same_branch_refinement_count": 0,
-                    },
-                }
-            ],
+            "entries": [{"unsupported_followup": {"observed": 1}}],
         },
     )
 
     indicators = summary["indicators"]
-    assert indicators["same_mechanism_observed"] == 1
-    assert indicators["same_mechanism_selected"] == 0
-    assert indicators["same_mechanism_missed"] == 1
-    assert summary["guidance_status"] == "context_actionability_review_required"
-    assert summary["actionability_gaps"] == [
-        "same_mechanism_opportunities_not_selected"
-    ]
-    assert "inspect branch-local research_signal blocks before judging churn" in (
-        summary["recommendations"]
-    )
+    assert indicators["weak_positive_observed"] == 0
+    assert summary["guidance_status"] == "no_continuity_opportunities_observed"
+    assert summary["actionability_gaps"] == []
 
 
 def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
@@ -1279,6 +1088,7 @@ def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
     brief = brief_tool.build_brief(run_root)
     markdown = brief_tool.render_markdown(brief)
 
+    _assert_historical_execution_outcome_unknown(brief)
     assert brief["lifecycle"]["prepared_only"] is True
     assert brief["validity"]["run_validity_status"] == "prepared_only"
     assert brief["validity"]["run_completeness_status"] == "not_started"
@@ -1321,2078 +1131,6 @@ def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
     assert "For valid runs, inspect target intent" not in markdown
 
 
-def test_warehouse_followup_summary_prepared_only_requires_launch(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "warehouse-prepared"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "schema": "scion.launcher_prepare.v1",
-            "status": "prepared",
-            "prepared_only": True,
-            "resume_from_campaign": "/tmp/warehouse-source",
-        },
-    )
-    _write_warehouse_manifest(run_root, campaign_dir, rounds=6)
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    contract = brief["prepared_run_contract"]
-    assert contract["execution"]["disable_early_stop"] is True
-    assert contract["checks"]["execution_disable_early_stop"]["passed"] is True
-    assert contract["checks"]["command_disable_early_stop"]["passed"] is True
-
-    summary = brief["warehouse_followup_summary"]
-    assert summary["schema_version"] == ("scion.postrun_warehouse_followup_summary.v1")
-    assert summary["report_only"] is True
-    assert summary["quality_judgment"] is False
-    assert summary["decision_features_excluded"] is True
-    assert summary["available"] is True
-    assert summary["current_run_evidence"] is False
-    assert summary["launch_required_before_plateau_conclusion"] is True
-    assert summary["interpretation"] == "prepared_only_launch_required"
-    assert summary["handoff_complete"] is True
-    assert all(
-        item["available"] is True for item in summary["handoff_requirements"].values()
-    )
-    assert summary["evidence_gaps"] == ["launch_required_before_plateau_conclusion"]
-    assert summary["deferred_review_axes"] == list(WAREHOUSE_FOLLOWUP_REVIEW_AXES)
-    assert summary["review_axes_actionability"] == (
-        "not_actionable_before_launch_current_run_evidence_required"
-    )
-    assert "## Warehouse Follow-up Summary" in markdown
-    assert "- Interpretation: prepared_only_launch_required" in markdown
-    assert "prepared warehouse research_focus handoff; current-run protocol" in markdown
-    assert "- Deferred post-launch warehouse review axes:" in markdown
-    assert "- Required warehouse review axes:" not in markdown
-    assert "not_actionable_before_launch_current_run_evidence_required" in markdown
-    assert "| execution_disable_early_stop | True | True |" in markdown
-    assert "| command_disable_early_stop | True |" in markdown
-    assert (
-        "| warehouse_required_evidence_handoff | True | 1 | "
-        "prepared_run_manifest warehouse research_focus required_evidence |" in markdown
-    )
-    assert any(
-        "warehouse_followup_summary" in question and "incomplete-handoff" in question
-        for question in brief["required_questions"]
-    )
-    assert any(
-        "not a research-quality" in question for question in brief["required_questions"]
-    )
-    assert not any(
-        "cvrp_large_twoopt_summary" in question
-        for question in brief["required_questions"]
-    )
-
-
-def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-prepared"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "schema": "scion.launcher_prepare.v1",
-            "status": "prepared",
-            "prepared_only": True,
-            "resume_from_campaign": "/tmp/cvrp-source",
-        },
-    )
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    contract = brief["prepared_run_contract"]
-    assert contract["execution"]["disable_early_stop"] is True
-    assert contract["checks"]["execution_disable_early_stop"]["passed"] is True
-    assert contract["checks"]["command_disable_early_stop"]["passed"] is True
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["schema_version"] == "scion.postrun_cvrp_large_twoopt_summary.v1"
-    assert summary["report_only"] is True
-    assert summary["quality_judgment"] is False
-    assert summary["decision_features_excluded"] is True
-    assert summary["available"] is True
-    assert summary["current_run_evidence"] is False
-    assert summary["launch_required_before_twoopt_conclusion"] is True
-    assert summary["interpretation"] == "prepared_only_launch_required"
-    assert summary["handoff_complete"] is True
-    assert all(
-        item["available"] is True for item in summary["handoff_requirements"].values()
-    )
-    assert summary["evidence_gaps"] == [
-        "launch_required_before_bounded_twoopt_conclusion"
-    ]
-    assert summary["deferred_review_axes"] == list(CVRP_LARGE_TWOOPT_REVIEW_AXES)
-    assert summary["review_axes_actionability"] == (
-        "not_actionable_before_launch_current_run_evidence_required"
-    )
-    assert "## CVRP Large Two-Opt Summary" in markdown
-    assert "| execution_disable_early_stop | True | True |" in markdown
-    assert "| command_disable_early_stop | True |" in markdown
-    assert "- Interpretation: prepared_only_launch_required" in markdown
-    assert (
-        "prepared CVRP large-twoopt research_focus handoff; current-run protocol"
-        in markdown
-    )
-    assert "- Deferred post-launch CVRP bounded two-opt review axes:" in markdown
-    assert "- Required CVRP bounded two-opt review axes:" not in markdown
-    assert "not_actionable_before_launch_current_run_evidence_required" in markdown
-    assert "cvrp_large_twoopt_bounded_constraints_handoff" in markdown
-    assert "cvrp_cmt_case_protection_handoff" in markdown
-    assert "Case-protection requirements" in markdown
-    assert "protected_cases: CMT2, CMT4" in markdown
-    assert (
-        "live target-intent or hypothesis trace mentions CMT2/CMT4 protection"
-        in markdown
-    )
-    assert any(
-        "cvrp_large_twoopt_summary" in question and "incomplete handoff" in question
-        for question in brief["required_questions"]
-    )
-    assert any(
-        "not a research-quality" in question for question in brief["required_questions"]
-    )
-    assert not any(
-        "warehouse_followup_summary" in question
-        for question in brief["required_questions"]
-    )
-
-
-def test_cvrp_large_twoopt_summary_distinguishes_quality_blocked_run(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-quality-blocked"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "requested_rounds": 1,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 0,
-            "protocol_evaluated_candidates": 0,
-        },
-    )
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "cvrp.research_efficiency.v1.json",
-        {
-            "proposal_quality": {
-                "proposal_attempts_total": 3,
-                "proposal_attempts_consumed": 3,
-                "proposal_quality_blocks": 2,
-                "quality_blocks": 2,
-                "quality_block_ledger_count": 2,
-                "quality_block_reasons": ["missing_direct_effect"],
-            },
-            "run_status": {
-                "run_validity_status": "valid",
-                "stopped_reason": "proposal_quality_blocked",
-                "run_complete": True,
-            },
-        },
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["available"] is True
-    assert summary["current_run_evidence"] is True
-    assert summary["interpretation"] == "quality_blocked_no_protocol_twoopt_conclusion"
-    assert summary["launch_required_before_twoopt_conclusion"] is False
-    assert "quality_blocked_before_protocol_evaluation" in summary["evidence_gaps"]
-    assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 0
-    assert summary["evidence"]["quality_blocks"]["proposal_quality_blocks"] == 2
-    assert "- Interpretation: quality_blocked_no_protocol_twoopt_conclusion" in (
-        markdown
-    )
-    assert "- Quality-block signal: 2 / 2 / 2" in markdown
-    assert "- Quality-block reasons: missing_direct_effect=1" in markdown
-
-
-def test_cvrp_large_twoopt_summary_requires_review_inputs_after_protocol_eval(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-protocol-eval-missing-inputs"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="bounded_large_twoopt",
-        include_runtime=False,
-        include_continuity=False,
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["current_run_evidence"] is True
-    assert summary["launch_required_before_twoopt_conclusion"] is False
-    assert summary["interpretation"] == "protocol_evaluated_review_inputs_incomplete"
-    assert "no_protocol_evaluated_candidates" not in summary["evidence_gaps"]
-    assert "missing_measurement_effect_summary" not in summary["evidence_gaps"]
-    assert "missing_runtime_feedback_summary" in summary["evidence_gaps"]
-    assert "missing_research_continuity_summary" in summary["evidence_gaps"]
-    assert "missing_large_twoopt_mechanism_signal" not in summary["evidence_gaps"]
-    assert "- Interpretation: protocol_evaluated_review_inputs_incomplete" in markdown
-
-
-def test_cvrp_large_twoopt_summary_requires_runtime_drain_status_not_budget_only(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-protocol-eval-budget-diagnostics-only"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="bounded_large_twoopt",
-    )
-    report_path = (
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "cvrp.research_efficiency.v1.json"
-    )
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    report.pop("fresh_runtime_replay_drain")
-    report.pop("stage_transition_drain")
-    report_path.write_text(json.dumps(report), encoding="utf-8")
-    summary_path = campaign_dir / "campaign_summary.json"
-    campaign_summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    campaign_summary["runtime_budget_diagnostics"] = [
-        {
-            "branch_id": "branch-1",
-            "stage": "screening",
-            "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
-            "severity": "info",
-            "runtime_model": "budget_exhausting",
-            "saturation_ratio": 0.98,
-            "threshold_ratio": 0.9,
-            "total_pairs": 8,
-        }
-    ]
-    summary_path.write_text(json.dumps(campaign_summary), encoding="utf-8")
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    runtime = brief["runtime_feedback_summary"]
-    assert runtime["available"] is True
-    assert runtime["drain_status_complete"] is False
-    assert runtime["review_ready"] is False
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["current_run_evidence"] is True
-    assert summary["handoff_complete"] is True
-    assert summary["interpretation"] == "protocol_evaluated_review_inputs_incomplete"
-    assert "missing_runtime_feedback_summary" in summary["evidence_gaps"]
-    runtime_evidence = summary["evidence"]["runtime"]
-    assert runtime_evidence["available"] is False
-    assert runtime_evidence["raw_available"] is True
-    assert runtime_evidence["drain_status_complete"] is False
-    assert runtime_evidence["runtime_budget_diagnostic_count"] == 1
-    assert "Runtime drain status complete / review-ready: `False` / `False`" in (
-        markdown
-    )
-
-
-def test_cvrp_large_twoopt_summary_rejects_protocol_eval_without_twoopt_signal(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-protocol-eval-no-twoopt"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="regret_insertion",
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["current_run_evidence"] is True
-    assert summary["handoff_complete"] is True
-    assert summary["interpretation"] == "protocol_evaluated_without_large_twoopt_signal"
-    assert "missing_large_twoopt_mechanism_signal" in summary["evidence_gaps"]
-    assert summary["evidence"]["large_twoopt_mechanism"]["available"] is False
-    assert (
-        "- Interpretation: protocol_evaluated_without_large_twoopt_signal" in markdown
-    )
-
-
-def test_cvrp_large_twoopt_summary_rejects_default_avoid_twoopt_protocol_signal(
-    tmp_path: Path,
-) -> None:
-    cases = (
-        ("cross_route_2opt_reconnect", "excluded_default_avoid_twoopt_family"),
-        ("unbounded_large_twoopt_fallback", "excluded_default_avoid_twoopt_family"),
-        ("generic_two_opt", "missing_large_bounded_intra_twoopt_scope"),
-    )
-    for mechanism_family, reason in cases:
-        run_root = tmp_path / mechanism_family
-        campaign_dir = run_root / "campaign"
-        campaign_dir.mkdir(parents=True)
-        _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-        _write_cvrp_protocol_run(
-            run_root,
-            campaign_dir,
-            mechanism_family=mechanism_family,
-        )
-
-        brief = brief_tool.build_brief(run_root)
-        markdown = brief_tool.render_markdown(brief)
-
-        summary = brief["cvrp_large_twoopt_summary"]
-        assert summary["current_run_evidence"] is True
-        assert summary["handoff_complete"] is True
-        assert (
-            summary["interpretation"]
-            == "protocol_evaluated_without_large_twoopt_signal"
-        )
-        assert "missing_large_twoopt_mechanism_signal" in summary["evidence_gaps"]
-        mechanism = summary["evidence"]["large_twoopt_mechanism"]
-        assert mechanism["available"] is False
-        assert mechanism["protocol_families"] == []
-        assert mechanism["rejected_protocol_families"] == [mechanism_family]
-        assert mechanism["rejection_reason_counts"][reason] >= 1
-        assert mechanism["protocol_row_count"] == 0
-        assert mechanism_family in markdown
-        assert "- Rejected two-opt-like protocol/continuity families:" in markdown
-
-
-def test_cvrp_large_twoopt_summary_rejects_intra_only_family_without_deadline(
-    tmp_path: Path,
-) -> None:
-    cases = (
-        (
-            "large_instance_intra_route_two_opt",
-            "missing_bounded_deadline_twoopt_scope",
-        ),
-        (
-            "size70_two_opt_candidate",
-            "missing_large_bounded_intra_twoopt_scope",
-        ),
-    )
-    for mechanism_family, reason in cases:
-        run_root = tmp_path / mechanism_family
-        campaign_dir = run_root / "campaign"
-        campaign_dir.mkdir(parents=True)
-        _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-        _write_cvrp_protocol_run(
-            run_root,
-            campaign_dir,
-            mechanism_family=mechanism_family,
-        )
-
-        brief = brief_tool.build_brief(run_root)
-        markdown = brief_tool.render_markdown(brief)
-
-        summary = brief["cvrp_large_twoopt_summary"]
-        assert summary["current_run_evidence"] is True
-        assert summary["handoff_complete"] is True
-        assert (
-            summary["interpretation"]
-            == "protocol_evaluated_without_large_twoopt_signal"
-        )
-        assert "missing_large_twoopt_mechanism_signal" in summary["evidence_gaps"]
-        mechanism = summary["evidence"]["large_twoopt_mechanism"]
-        assert mechanism["available"] is False
-        assert mechanism["protocol_families"] == []
-        assert mechanism["rejected_protocol_families"] == [mechanism_family]
-        assert mechanism["rejection_reason_counts"][reason] >= 1
-        assert "- Interpretation: protocol_evaluated_without_large_twoopt_signal" in (
-            markdown
-        )
-        assert mechanism_family in markdown
-
-
-def test_cvrp_large_twoopt_summary_rejects_continuity_only_twoopt_signal(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-protocol-eval-continuity-only-twoopt"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="regret_insertion",
-    )
-    report_path = (
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "cvrp.research_efficiency.v1.json"
-    )
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    report["research_shape"]["mechanism_family_breadth"]["families"] = {
-        "bounded_large_twoopt": 1
-    }
-    report_path.write_text(json.dumps(report), encoding="utf-8")
-
-    brief = brief_tool.build_brief(run_root)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["current_run_evidence"] is True
-    assert summary["handoff_complete"] is True
-    assert summary["interpretation"] == "protocol_evaluated_without_large_twoopt_signal"
-    assert "missing_large_twoopt_mechanism_signal" in summary["evidence_gaps"]
-    mechanism = summary["evidence"]["large_twoopt_mechanism"]
-    assert mechanism["available"] is False
-    assert mechanism["protocol_row_count"] == 0
-    assert mechanism["protocol_families"] == []
-    assert mechanism["continuity_families"] == ["bounded_large_twoopt"]
-    markdown = brief_tool.render_markdown(brief)
-    assert (
-        "- Large two-opt protocol/continuity families / top-row signals: "
-        "none / bounded_large_twoopt / 0"
-    ) in markdown
-
-
-def test_cvrp_large_twoopt_summary_accepts_top_row_twoopt_protocol_signal(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-protocol-eval-top-row-twoopt"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="bounded_large_twoopt",
-    )
-    report_path = (
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "cvrp.research_efficiency.v1.json"
-    )
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    report["protocol_effects_vs_mde"]["mechanism_family_effect_summary"][
-        "by_family"
-    ] = {}
-    report_path.write_text(json.dumps(report), encoding="utf-8")
-
-    brief = brief_tool.build_brief(run_root)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["interpretation"] == "bounded_twoopt_review_ready"
-    mechanism = summary["evidence"]["large_twoopt_mechanism"]
-    assert mechanism["available"] is True
-    assert mechanism["protocol_families"] == ["bounded_large_twoopt"]
-    assert mechanism["protocol_row_count"] == 1
-    assert mechanism["top_row_signal_count"] == 1
-    markdown = brief_tool.render_markdown(brief)
-    assert (
-        "- Large two-opt protocol/continuity families / top-row signals: "
-        "bounded_large_twoopt / bounded_large_twoopt / 1"
-    ) in markdown
-
-
-def test_cvrp_large_twoopt_summary_requires_direct_evidence_for_review_ready(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-protocol-eval-twoopt-without-direct-evidence"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="bounded_large_twoopt",
-        include_direct_evidence=False,
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["current_run_evidence"] is True
-    assert summary["handoff_complete"] is True
-    assert summary["interpretation"] == (
-        "protocol_evaluated_without_large_twoopt_direct_evidence"
-    )
-    assert "missing_large_twoopt_direct_evidence" in summary["evidence_gaps"]
-    mechanism = summary["evidence"]["large_twoopt_mechanism"]
-    assert mechanism["mechanism_family_available"] is True
-    assert mechanism["available"] is False
-    assert mechanism["direct_evidence_ready"] is False
-    assert mechanism["direct_evidence"]["missing"] == [
-        "missing_activation_observed",
-        "missing_objective_effect_telemetry",
-        "missing_phase_telemetry",
-        "missing_cmt_case_protection_evidence",
-    ]
-    assert "- Large two-opt direct evidence ready / missing: `False`" in markdown
-    assert (
-        "- Interpretation: protocol_evaluated_without_large_twoopt_direct_evidence"
-        in (markdown)
-    )
-
-
-def test_cvrp_large_twoopt_summary_requires_twoopt_specific_phase_telemetry(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-protocol-eval-twoopt-generic-phase"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="bounded_large_twoopt",
-    )
-    report_path = (
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "cvrp.research_efficiency.v1.json"
-    )
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    top_rows = report["protocol_effects_vs_mde"]["top_rows_by_effect_to_mde"]
-    top_rows[0]["candidate_phase_telemetry_summary"] = {
-        "selected_surface": "solver_design",
-        "candidate_pairs": 8,
-        "runtime_observed_pairs": 8,
-        "buckets": {
-            "construction": {
-                "declared": True,
-                "weighted_sum_ms": 120.0,
-                "max_ms": 30.0,
-            },
-            "local_search": {
-                "declared": True,
-                "weighted_sum_ms": 40.0,
-                "max_ms": 12.0,
-            },
-        },
-        "solver_algorithm_phase_improvement_counts": {
-            "construction": 2,
-        },
-    }
-    report_path.write_text(json.dumps(report), encoding="utf-8")
-
-    brief = brief_tool.build_brief(run_root)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["interpretation"] == (
-        "protocol_evaluated_without_large_twoopt_direct_evidence"
-    )
-    mechanism = summary["evidence"]["large_twoopt_mechanism"]
-    assert mechanism["mechanism_family_available"] is True
-    assert mechanism["direct_evidence_ready"] is False
-    direct_evidence = mechanism["direct_evidence"]
-    assert direct_evidence["positive_effect_row_count"] == 1
-    assert direct_evidence["activation_observed_count"] == 1
-    assert direct_evidence["objective_effect_observed_count"] == 1
-    assert direct_evidence["phase_telemetry_observed_count"] == 0
-    assert direct_evidence["complete_direct_evidence_row_count"] == 0
-    assert direct_evidence["missing"] == ["missing_phase_telemetry"]
-
-
-def test_cvrp_large_twoopt_summary_rejects_cross_route_twoopt_star_phase_telemetry(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-protocol-eval-twoopt-star-phase"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="bounded_large_twoopt",
-    )
-    report_path = (
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "cvrp.research_efficiency.v1.json"
-    )
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    top_rows = report["protocol_effects_vs_mde"]["top_rows_by_effect_to_mde"]
-    top_rows[0]["candidate_phase_telemetry_summary"] = {
-        "selected_surface": "solver_design",
-        "candidate_pairs": 8,
-        "runtime_observed_pairs": 8,
-        "buckets": {
-            "two_opt_star": {
-                "declared": True,
-                "weighted_sum_ms": 120.0,
-                "max_ms": 30.0,
-            },
-        },
-    }
-    report_path.write_text(json.dumps(report), encoding="utf-8")
-
-    brief = brief_tool.build_brief(run_root)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["interpretation"] == (
-        "protocol_evaluated_without_large_twoopt_direct_evidence"
-    )
-    mechanism = summary["evidence"]["large_twoopt_mechanism"]
-    assert mechanism["mechanism_family_available"] is True
-    assert mechanism["direct_evidence_ready"] is False
-    direct_evidence = mechanism["direct_evidence"]
-    assert direct_evidence["positive_effect_row_count"] == 1
-    assert direct_evidence["activation_observed_count"] == 1
-    assert direct_evidence["objective_effect_observed_count"] == 1
-    assert direct_evidence["phase_telemetry_observed_count"] == 0
-    assert direct_evidence["complete_direct_evidence_row_count"] == 0
-    assert direct_evidence["missing"] == ["missing_phase_telemetry"]
-
-
-def test_cvrp_large_twoopt_summary_rejects_size70_fallback_phase_telemetry(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-protocol-eval-size70-fallback-phase"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="bounded_large_twoopt",
-    )
-    report_path = (
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "cvrp.research_efficiency.v1.json"
-    )
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    top_rows = report["protocol_effects_vs_mde"]["top_rows_by_effect_to_mde"]
-    top_rows[0]["candidate_phase_telemetry_summary"] = {
-        "selected_surface": "solver_design",
-        "candidate_pairs": 8,
-        "runtime_observed_pairs": 8,
-        "buckets": {
-            "size70_two_opt_initial": {
-                "declared": True,
-                "weighted_sum_ms": 120.0,
-                "max_ms": 30.0,
-            },
-        },
-    }
-    report_path.write_text(json.dumps(report), encoding="utf-8")
-
-    brief = brief_tool.build_brief(run_root)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["interpretation"] == (
-        "protocol_evaluated_without_large_twoopt_direct_evidence"
-    )
-    mechanism = summary["evidence"]["large_twoopt_mechanism"]
-    assert mechanism["mechanism_family_available"] is True
-    assert mechanism["direct_evidence_ready"] is False
-    direct_evidence = mechanism["direct_evidence"]
-    assert direct_evidence["positive_effect_row_count"] == 1
-    assert direct_evidence["activation_observed_count"] == 1
-    assert direct_evidence["objective_effect_observed_count"] == 1
-    assert direct_evidence["phase_telemetry_observed_count"] == 0
-    assert direct_evidence["complete_direct_evidence_row_count"] == 0
-    assert direct_evidence["missing"] == ["missing_phase_telemetry"]
-
-
-def test_cvrp_large_twoopt_summary_requires_direct_evidence_on_same_top_row(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-protocol-eval-twoopt-split-direct-evidence"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="bounded_large_twoopt",
-    )
-    report_path = (
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "cvrp.research_efficiency.v1.json"
-    )
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    top_rows = report["protocol_effects_vs_mde"]["top_rows_by_effect_to_mde"]
-    first = dict(top_rows[0])
-    first["mechanism_evidence"] = {
-        "primary_mechanism": "bounded_large_twoopt",
-        "primary_activation_status": "observed",
-        "primary_effect_status": "not_observed",
-    }
-    first.pop("candidate_phase_telemetry_summary", None)
-    second = dict(top_rows[0])
-    second["positive_effect_at_or_above_mde"] = False
-    second["mechanism_evidence"] = {
-        "primary_mechanism": "bounded_large_twoopt",
-        "primary_activation_status": "not_observed",
-        "primary_effect_status": "positive",
-        "objective_effect_status": "mixed_objective_effect",
-    }
-    second["candidate_phase_telemetry_summary"] = {
-        "selected_surface": "solver_design",
-        "runtime_observed_pairs": 8,
-        "buckets": {"two_opt": {"weighted_sum_ms": 120.0}},
-    }
-    report["protocol_effects_vs_mde"]["top_rows_by_effect_to_mde"] = [
-        first,
-        second,
-    ]
-    report_path.write_text(json.dumps(report), encoding="utf-8")
-
-    brief = brief_tool.build_brief(run_root)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["interpretation"] == (
-        "protocol_evaluated_without_large_twoopt_direct_evidence"
-    )
-    mechanism = summary["evidence"]["large_twoopt_mechanism"]
-    assert mechanism["mechanism_family_available"] is True
-    assert mechanism["direct_evidence_ready"] is False
-    direct_evidence = mechanism["direct_evidence"]
-    assert direct_evidence["positive_effect_row_count"] == 1
-    assert direct_evidence["activation_observed_count"] == 1
-    assert direct_evidence["objective_effect_observed_count"] == 1
-    assert direct_evidence["phase_telemetry_observed_count"] == 1
-    assert direct_evidence["complete_direct_evidence_row_count"] == 0
-    assert direct_evidence["missing"] == ["missing_complete_direct_evidence_row"]
-
-
-def test_cvrp_large_twoopt_summary_requires_matching_mechanism_evidence(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-protocol-eval-twoopt-unrelated-mechanism-evidence"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="bounded_large_twoopt",
-    )
-    report_path = (
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "cvrp.research_efficiency.v1.json"
-    )
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    top_rows = report["protocol_effects_vs_mde"]["top_rows_by_effect_to_mde"]
-    top_rows[0]["mechanism_evidence"] = {
-        "primary_mechanism": "unrelated_probe",
-        "primary_activation_status": "observed",
-        "primary_effect_status": "positive",
-        "activation_evidence_status": "activation_observed",
-        "objective_effect_status": "mixed_objective_effect",
-        "mechanisms": [
-            {
-                "mechanism": "unrelated_probe",
-                "activation_status": "observed",
-                "effect_status": "positive",
-            }
-        ],
-    }
-    report_path.write_text(json.dumps(report), encoding="utf-8")
-
-    brief = brief_tool.build_brief(run_root)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["interpretation"] == (
-        "protocol_evaluated_without_large_twoopt_direct_evidence"
-    )
-    mechanism = summary["evidence"]["large_twoopt_mechanism"]
-    assert mechanism["mechanism_family_available"] is True
-    assert mechanism["direct_evidence_ready"] is False
-    direct_evidence = mechanism["direct_evidence"]
-    assert direct_evidence["positive_effect_row_count"] == 1
-    assert direct_evidence["activation_observed_count"] == 0
-    assert direct_evidence["objective_effect_observed_count"] == 0
-    assert direct_evidence["phase_telemetry_observed_count"] == 1
-    assert direct_evidence["complete_direct_evidence_row_count"] == 0
-    assert direct_evidence["missing"] == [
-        "missing_activation_observed",
-        "missing_objective_effect_telemetry",
-    ]
-
-
-def test_cvrp_large_twoopt_summary_requires_cmt_case_protection_evidence(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-protocol-eval-twoopt-missing-cmt-protection"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="bounded_large_twoopt",
-    )
-    report_path = (
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "cvrp.research_efficiency.v1.json"
-    )
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    top_row = report["protocol_effects_vs_mde"]["top_rows_by_effect_to_mde"][0]
-    top_row.pop("case_level_total_distance_deltas", None)
-    top_row["case_protection_evidence"] = {
-        "protected_cases": ["CMT2", "CMT4"],
-        "note": "handoff mentions alone are not current-run case deltas",
-    }
-    report_path.write_text(json.dumps(report), encoding="utf-8")
-
-    brief = brief_tool.build_brief(run_root)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["interpretation"] == (
-        "protocol_evaluated_without_large_twoopt_direct_evidence"
-    )
-    mechanism = summary["evidence"]["large_twoopt_mechanism"]
-    assert mechanism["mechanism_family_available"] is True
-    assert mechanism["direct_evidence_ready"] is False
-    direct_evidence = mechanism["direct_evidence"]
-    assert direct_evidence["positive_effect_row_count"] == 1
-    assert direct_evidence["activation_observed_count"] == 1
-    assert direct_evidence["objective_effect_observed_count"] == 1
-    assert direct_evidence["phase_telemetry_observed_count"] == 1
-    assert direct_evidence["protected_case_complete_row_count"] == 0
-    assert direct_evidence["protected_cases_observed"] == []
-    assert direct_evidence["complete_direct_evidence_row_count"] == 0
-    assert direct_evidence["missing"] == ["missing_cmt_case_protection_evidence"]
-
-
-def test_cvrp_large_twoopt_summary_rejects_cmt_route_or_feasibility_only_evidence(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-protocol-eval-twoopt-cmt-route-only"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="bounded_large_twoopt",
-    )
-    report_path = (
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "cvrp.research_efficiency.v1.json"
-    )
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    top_row = report["protocol_effects_vs_mde"]["top_rows_by_effect_to_mde"][0]
-    top_row["case_level_total_distance_deltas"] = {
-        "CMT2": {
-            "feasible_before": True,
-            "feasible_after": True,
-            "route_count_before": 8,
-            "route_count_after": 8,
-        },
-        "CMT4": {
-            "feasible_before": True,
-            "feasible_after": True,
-            "route_count_before": 12,
-            "route_count_after": 12,
-        },
-    }
-    report_path.write_text(json.dumps(report), encoding="utf-8")
-
-    brief = brief_tool.build_brief(run_root)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["interpretation"] == (
-        "protocol_evaluated_without_large_twoopt_direct_evidence"
-    )
-    mechanism = summary["evidence"]["large_twoopt_mechanism"]
-    direct_evidence = mechanism["direct_evidence"]
-    assert direct_evidence["positive_effect_row_count"] == 1
-    assert direct_evidence["activation_observed_count"] == 1
-    assert direct_evidence["objective_effect_observed_count"] == 1
-    assert direct_evidence["phase_telemetry_observed_count"] == 1
-    assert direct_evidence["protected_case_complete_row_count"] == 0
-    assert direct_evidence["protected_cases_observed"] == []
-    assert direct_evidence["complete_direct_evidence_row_count"] == 0
-    assert direct_evidence["missing"] == ["missing_cmt_case_protection_evidence"]
-
-
-def test_cvrp_large_twoopt_summary_marks_bounded_twoopt_review_ready(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-twoopt-review-ready"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="bounded_large_twoopt",
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["available"] is True
-    assert summary["current_run_evidence"] is True
-    assert summary["handoff_complete"] is True
-    assert summary["launch_required_before_twoopt_conclusion"] is False
-    assert summary["interpretation"] == "bounded_twoopt_review_ready"
-    assert summary["evidence_gaps"] == []
-    assert summary["deferred_review_axes"] == []
-    assert summary["review_axes_actionability"] == (
-        "actionable_current_run_evidence_present"
-    )
-    assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
-    continuity = summary["evidence"]["research_continuity"]
-    assert continuity["available"] is True
-    assert continuity["substantive"] is True
-    assert continuity["max_branch_depth"] == 2
-    assert continuity["same_mechanism_observed"] == 1
-    assert continuity["same_mechanism_selected"] == 1
-    assert continuity["same_mechanism_missed"] == 0
-    assert continuity["mechanism_family_counts"] == {
-        "bounded_large_twoopt": 1,
-    }
-    mechanism = summary["evidence"]["large_twoopt_mechanism"]
-    assert mechanism["available"] is True
-    assert mechanism["families"] == ["bounded_large_twoopt"]
-    assert mechanism["protocol_families"] == ["bounded_large_twoopt"]
-    assert mechanism["continuity_families"] == ["bounded_large_twoopt"]
-    assert mechanism["protocol_row_count"] == 2
-    assert mechanism["mechanism_family_available"] is True
-    assert "- Research continuity same-mechanism missed: 0" in markdown
-    assert mechanism["direct_evidence_ready"] is True
-    assert mechanism["direct_evidence"]["complete_direct_evidence_row_count"] == 1
-    assert mechanism["direct_evidence"]["protected_case_complete_row_count"] == 1
-    assert mechanism["direct_evidence"]["protected_cases_observed"] == [
-        "CMT2",
-        "CMT4",
-    ]
-    assert mechanism["direct_evidence"]["missing"] == []
-    assert "- Interpretation: bounded_twoopt_review_ready" in markdown
-    assert "- Large two-opt direct evidence ready / missing: `True` / none" in (
-        markdown
-    )
-    assert "- Evidence gaps:\n  - none" in markdown
-
-
-def test_cvrp_large_twoopt_summary_requires_handoff_before_review_ready(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "cvrp-twoopt-incomplete-handoff"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_cvrp_large_twoopt_manifest(
-        run_root,
-        campaign_dir,
-        rounds=1,
-        include_large_twoopt_constraints=False,
-    )
-    _write_cvrp_protocol_run(
-        run_root,
-        campaign_dir,
-        mechanism_family="bounded_large_twoopt",
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["cvrp_large_twoopt_summary"]
-    assert summary["current_run_evidence"] is True
-    assert summary["handoff_complete"] is False
-    assert summary["interpretation"] == "protocol_evaluated_handoff_incomplete"
-    assert (
-        "cvrp_large_twoopt_handoff_requirements_incomplete" in summary["evidence_gaps"]
-    )
-    assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
-    assert summary["evidence"]["large_twoopt_mechanism"]["available"] is True
-    assert "- Interpretation: protocol_evaluated_handoff_incomplete" in markdown
-
-
-def test_warehouse_followup_summary_distinguishes_quality_blocked_run(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "warehouse-quality-blocked"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "requested_rounds": 1,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 0,
-            "protocol_evaluated_candidates": 0,
-        },
-    )
-    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "warehouse.research_efficiency.v1.json",
-        {
-            "proposal_quality": {
-                "proposal_attempts_total": 3,
-                "proposal_attempts_consumed": 3,
-                "proposal_quality_blocks": 2,
-                "quality_blocks": 2,
-                "quality_block_ledger_count": 2,
-                "quality_block_reasons": ["missing_direct_effect"],
-            },
-            "run_status": {
-                "run_validity_status": "valid",
-                "stopped_reason": "proposal_quality_blocked",
-                "run_complete": True,
-            },
-        },
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["warehouse_followup_summary"]
-    assert summary["available"] is True
-    assert summary["current_run_evidence"] is True
-    assert summary["interpretation"] == (
-        "quality_blocked_no_protocol_plateau_conclusion"
-    )
-    assert summary["launch_required_before_plateau_conclusion"] is False
-    assert "quality_blocked_before_protocol_evaluation" in summary["evidence_gaps"]
-    assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 0
-    assert summary["evidence"]["quality_blocks"]["proposal_quality_blocks"] == 2
-    assert "- Interpretation: quality_blocked_no_protocol_plateau_conclusion" in (
-        markdown
-    )
-    assert "- Quality-block reasons: missing_direct_effect=1" in markdown
-
-
-def test_warehouse_followup_summary_marks_protocol_evaluated_plateau_review_ready(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "warehouse-protocol-evaluated"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "requested_rounds": 1,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 1,
-        },
-    )
-    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
-    _write_champions_db(campaign_dir / "scion.db", versions=(2, 3))
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "warehouse.research_efficiency.v1.json",
-        {
-            "protocol_rows": {
-                "protocol_metric_results": 2,
-                "protocol_evaluated_candidates": 1,
-            },
-            "formal_candidates": {
-                "formal_screened_candidates": 1,
-                "protocol_evaluated_candidates": 1,
-            },
-            "protocol_effects_vs_mde": {
-                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
-                "report_only": True,
-                "decision_features_excluded": True,
-                "protocol_row_count": 2,
-                "rows_at_or_above_mde": 0,
-                "rows_with_ci_high_below_mde": 2,
-                "max_effect_to_mde_ratio": 0.4,
-                "interpretation_counts": {"below_mde": 2},
-            },
-            "fresh_runtime_replay_drain": {
-                "status": "not_selected_no_pending",
-                "attempts": 1,
-                "executed": 0,
-                "skipped": 1,
-                "counts_toward_max_rounds": False,
-            },
-            "stage_transition_drain": {
-                "status": "not_started",
-                "attempts": 0,
-                "counts_toward_max_rounds": False,
-                "generates_new_hypothesis": False,
-            },
-            "research_continuity": {
-                "same_mechanism_followup": {
-                    "observed_opportunity_count": 1,
-                    "selected_same_branch_refinement_count": 1,
-                },
-                "branch_lesson_usage": {
-                    "requirement_count": 1,
-                    "satisfied_count": 1,
-                    "semantic_gap_count": 0,
-                },
-                "weak_positive_transfer": {
-                    "observed_opportunity_count": 0,
-                    "accepted_count": 0,
-                },
-                "lesson_action_counts": {"preserved_same_branch": 1},
-                "research_shape_summary": {
-                    "max_branch_depth": 2,
-                    "branch_depth_distribution": {"2": 1},
-                    "active_shape": "focused_followup",
-                },
-            },
-            "run_status": {
-                "run_validity_status": "valid",
-                "run_completeness_status": "complete",
-                "run_complete": True,
-            },
-        },
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["warehouse_followup_summary"]
-    assert summary["available"] is True
-    assert summary["current_run_evidence"] is True
-    assert summary["handoff_complete"] is True
-    assert summary["launch_required_before_plateau_conclusion"] is False
-    assert summary["interpretation"] == "protocol_evaluated_plateau_review_ready"
-    assert "quality_blocked_before_protocol_evaluation" not in summary["evidence_gaps"]
-    assert "no_protocol_evaluated_candidates" not in summary["evidence_gaps"]
-    assert summary["evidence"]["protocol"]["formal_screened_candidates"] == 1
-    assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
-    assert summary["evidence"]["protocol"]["protocol_metric_results"] == 2
-    measurement = summary["evidence"]["measurement_effect"]
-    assert measurement["effect_signal"] == "ci_high_below_mde_plateau_consistent"
-    assert measurement["plateau_consistent"] is True
-    assert measurement["positive_effect_at_or_above_mde"] is False
-    continuity = summary["evidence"]["research_continuity"]
-    assert continuity["substantive"] is True
-    assert continuity["max_branch_depth"] == 2
-    assert continuity["same_mechanism_observed"] == 1
-    assert "- Research continuity substantive/depth: `True` / 2" in markdown
-    assert "- Research continuity same-mechanism selected/observed: 1 / 1" in (markdown)
-    assert "- Research continuity same-mechanism missed: 0" in markdown
-    progress = brief["champion_progress_summary"]
-    assert progress["schema_version"] == ("scion.postrun_champion_progress_summary.v1")
-    assert progress["report_only"] is True
-    assert progress["quality_judgment"] is False
-    assert progress["decision_features_excluded"] is True
-    assert progress["campaign_state_mutated"] is False
-    assert progress["scheduler_state_mutated"] is False
-    assert progress["promotion_state_mutated"] is False
-    assert progress["current_run_evidence"] is True
-    assert progress["available"] is True
-    assert progress["starting_champion_version"] == 2
-    assert progress["current_champion_version"] == 3
-    assert progress["champion_version_gain"] == 1
-    assert progress["champion_count"] == 2
-    assert progress["champion_versions"] == [2, 3]
-    assert progress["promoted_hypothesis_count"] == 0
-    assert progress["promotion_decision_count"] == 0
-    assert progress["interpretation"] == "champion_version_gain_observed"
-    assert "## Champion Progress Summary" in markdown
-    assert "- Champion version gain: 1" in markdown
-    assert "- Interpretation: protocol_evaluated_plateau_review_ready" in markdown
-    assert (
-        "- Measurement signal / plateau-consistent / positive-at-MDE: "
-        "ci_high_below_mde_plateau_consistent / True / False" in markdown
-    )
-
-
-def test_warehouse_followup_summary_routes_positive_mde_effect_out_of_plateau_ready(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "warehouse-protocol-evaluated-positive-effect"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "requested_rounds": 1,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 1,
-        },
-    )
-    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "warehouse.research_efficiency.v1.json",
-        {
-            "protocol_rows": {
-                "protocol_metric_results": 2,
-                "protocol_evaluated_candidates": 1,
-            },
-            "formal_candidates": {
-                "formal_screened_candidates": 1,
-                "protocol_evaluated_candidates": 1,
-            },
-            "protocol_effects_vs_mde": {
-                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
-                "report_only": True,
-                "decision_features_excluded": True,
-                "protocol_row_count": 2,
-                "rows_at_or_above_mde": 1,
-                "rows_with_ci_high_below_mde": 1,
-                "max_effect_to_mde_ratio": 1.2,
-                "interpretation_counts": {"above_mde": 1, "below_mde": 1},
-            },
-            "fresh_runtime_replay_drain": {
-                "status": "not_selected_no_pending",
-                "attempts": 1,
-                "executed": 0,
-                "skipped": 1,
-                "counts_toward_max_rounds": False,
-            },
-            "stage_transition_drain": {
-                "status": "not_started",
-                "attempts": 0,
-                "counts_toward_max_rounds": False,
-                "generates_new_hypothesis": False,
-            },
-            "research_continuity": {
-                "same_mechanism_followup": {
-                    "observed_opportunity_count": 1,
-                    "selected_same_branch_refinement_count": 0,
-                },
-                "branch_lesson_usage": {
-                    "requirement_count": 1,
-                    "satisfied_count": 0,
-                    "semantic_gap_count": 1,
-                },
-                "weak_positive_transfer": {
-                    "observed_opportunity_count": 1,
-                    "accepted_count": 0,
-                },
-                "research_shape_summary": {
-                    "max_branch_depth": 1,
-                    "branch_depth_distribution": {"1": 1},
-                    "active_shape": "unrealized_continuity_opportunity",
-                },
-            },
-            "run_status": {
-                "run_validity_status": "valid",
-                "run_completeness_status": "complete",
-                "run_complete": True,
-            },
-        },
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["warehouse_followup_summary"]
-    assert summary["available"] is True
-    assert summary["current_run_evidence"] is True
-    assert summary["handoff_complete"] is True
-    assert summary["interpretation"] == (
-        "protocol_evaluated_positive_effect_review_ready"
-    )
-    assert (
-        "warehouse_research_continuity_evidence_too_shallow"
-        not in summary["evidence_gaps"]
-    )
-    measurement = summary["evidence"]["measurement_effect"]
-    assert measurement["effect_signal"] == "positive_effect_at_or_above_mde"
-    assert measurement["plateau_consistent"] is False
-    assert measurement["positive_effect_at_or_above_mde"] is True
-    assert "- Interpretation: protocol_evaluated_positive_effect_review_ready" in (
-        markdown
-    )
-    assert (
-        "- Measurement signal / plateau-consistent / positive-at-MDE: "
-        "positive_effect_at_or_above_mde / False / True" in markdown
-    )
-
-
-def test_warehouse_followup_summary_routes_inconclusive_measurement_out_of_plateau_ready(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "warehouse-protocol-evaluated-inconclusive-effect"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "requested_rounds": 1,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 1,
-        },
-    )
-    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "warehouse.research_efficiency.v1.json",
-        {
-            "protocol_rows": {
-                "protocol_metric_results": 2,
-                "protocol_evaluated_candidates": 1,
-            },
-            "formal_candidates": {
-                "formal_screened_candidates": 1,
-                "protocol_evaluated_candidates": 1,
-            },
-            "protocol_effects_vs_mde": {
-                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
-                "report_only": True,
-                "decision_features_excluded": True,
-                "protocol_row_count": 2,
-                "rows_at_or_above_mde": 0,
-                "rows_with_ci_high_below_mde": 1,
-                "max_effect_to_mde_ratio": 0.7,
-                "interpretation_counts": {
-                    "protocol_effects_below_mde_or_inconclusive": 2
-                },
-            },
-            "fresh_runtime_replay_drain": {
-                "status": "not_selected_no_pending",
-                "attempts": 1,
-                "executed": 0,
-                "skipped": 1,
-                "counts_toward_max_rounds": False,
-            },
-            "stage_transition_drain": {
-                "status": "not_started",
-                "attempts": 0,
-                "counts_toward_max_rounds": False,
-                "generates_new_hypothesis": False,
-            },
-            "research_continuity": {
-                "same_mechanism_followup": {
-                    "observed_opportunity_count": 1,
-                    "selected_same_branch_refinement_count": 1,
-                },
-                "branch_lesson_usage": {
-                    "requirement_count": 1,
-                    "satisfied_count": 1,
-                    "semantic_gap_count": 0,
-                },
-                "weak_positive_transfer": {
-                    "observed_opportunity_count": 0,
-                    "accepted_count": 0,
-                },
-                "research_shape_summary": {
-                    "max_branch_depth": 2,
-                    "branch_depth_distribution": {"2": 1},
-                    "active_shape": "focused_followup",
-                },
-            },
-            "run_status": {
-                "run_validity_status": "valid",
-                "run_completeness_status": "complete",
-                "run_complete": True,
-            },
-        },
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["warehouse_followup_summary"]
-    assert summary["available"] is True
-    assert summary["current_run_evidence"] is True
-    assert summary["handoff_complete"] is True
-    assert summary["interpretation"] == (
-        "protocol_evaluated_measurement_effect_inconclusive"
-    )
-    assert "warehouse_measurement_effect_inconclusive" in summary["evidence_gaps"]
-    measurement = summary["evidence"]["measurement_effect"]
-    assert measurement["effect_signal"] == "partial_ci_high_below_mde_inconclusive"
-    assert measurement["plateau_consistent"] is False
-    assert measurement["all_ci_high_below_mde"] is False
-    assert measurement["positive_effect_at_or_above_mde"] is False
-    assert "- Interpretation: protocol_evaluated_measurement_effect_inconclusive" in (
-        markdown
-    )
-
-
-def test_warehouse_followup_summary_requires_runtime_drain_status_not_budget_only(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "warehouse-protocol-eval-budget-diagnostics-only"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "requested_rounds": 1,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 1,
-            "runtime_budget_diagnostics": [
-                {
-                    "branch_id": "branch-1",
-                    "stage": "screening",
-                    "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
-                    "severity": "info",
-                    "runtime_model": "budget_exhausting",
-                    "saturation_ratio": 0.98,
-                    "threshold_ratio": 0.9,
-                    "total_pairs": 6,
-                }
-            ],
-        },
-    )
-    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "warehouse.research_efficiency.v1.json",
-        {
-            "protocol_rows": {
-                "protocol_metric_results": 2,
-                "protocol_evaluated_candidates": 1,
-            },
-            "formal_candidates": {
-                "formal_screened_candidates": 1,
-                "protocol_evaluated_candidates": 1,
-            },
-            "protocol_effects_vs_mde": {
-                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
-                "report_only": True,
-                "decision_features_excluded": True,
-                "protocol_row_count": 2,
-                "rows_at_or_above_mde": 0,
-                "rows_with_ci_high_below_mde": 2,
-                "max_effect_to_mde_ratio": 0.4,
-                "interpretation_counts": {"below_mde": 2},
-            },
-            "research_continuity": {
-                "same_mechanism_followup": {
-                    "observed_opportunity_count": 1,
-                    "selected_same_branch_refinement_count": 1,
-                },
-                "branch_lesson_usage": {
-                    "requirement_count": 1,
-                    "satisfied_count": 1,
-                    "semantic_gap_count": 0,
-                },
-                "weak_positive_transfer": {
-                    "observed_opportunity_count": 0,
-                    "accepted_count": 0,
-                },
-                "research_shape_summary": {
-                    "max_branch_depth": 2,
-                    "branch_depth_distribution": {"2": 1},
-                    "active_shape": "focused_followup",
-                },
-            },
-            "run_status": {
-                "run_validity_status": "valid",
-                "run_completeness_status": "complete",
-                "run_complete": True,
-            },
-        },
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    runtime = brief["runtime_feedback_summary"]
-    assert runtime["available"] is True
-    assert runtime["drain_status_complete"] is False
-    assert runtime["review_ready"] is False
-    summary = brief["warehouse_followup_summary"]
-    assert summary["current_run_evidence"] is True
-    assert summary["handoff_complete"] is True
-    assert summary["interpretation"] == "protocol_evaluated_review_inputs_incomplete"
-    assert "missing_runtime_feedback_summary" in summary["evidence_gaps"]
-    runtime_evidence = summary["evidence"]["runtime"]
-    assert runtime_evidence["available"] is True
-    assert runtime_evidence["review_ready"] is False
-    assert runtime_evidence["drain_status_complete"] is False
-    assert runtime_evidence["runtime_budget_diagnostic_count"] == 1
-    assert "Runtime drain status complete / review-ready: `False` / `False`" in (
-        markdown
-    )
-
-
-def test_warehouse_followup_summary_rejects_shallow_continuity_for_plateau_ready(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "warehouse-protocol-evaluated-shallow-continuity"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "requested_rounds": 1,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 1,
-        },
-    )
-    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "warehouse.research_efficiency.v1.json",
-        {
-            "protocol_rows": {
-                "protocol_metric_results": 2,
-                "protocol_evaluated_candidates": 1,
-            },
-            "formal_candidates": {
-                "formal_screened_candidates": 1,
-                "protocol_evaluated_candidates": 1,
-            },
-            "protocol_effects_vs_mde": {
-                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
-                "report_only": True,
-                "decision_features_excluded": True,
-                "protocol_row_count": 2,
-                "rows_at_or_above_mde": 0,
-                "rows_with_ci_high_below_mde": 2,
-                "max_effect_to_mde_ratio": 0.4,
-                "interpretation_counts": {"below_mde": 2},
-            },
-            "fresh_runtime_replay_drain": {
-                "status": "not_selected_no_pending",
-                "attempts": 1,
-                "executed": 0,
-                "skipped": 1,
-                "counts_toward_max_rounds": False,
-            },
-            "stage_transition_drain": {
-                "status": "not_started",
-                "attempts": 0,
-                "counts_toward_max_rounds": False,
-                "generates_new_hypothesis": False,
-            },
-            "research_continuity": {
-                "branch_lesson_usage": {
-                    "requirement_count": 0,
-                    "satisfied_count": 0,
-                    "semantic_gap_count": 0,
-                },
-                "research_shape_summary": {
-                    "max_branch_depth": 1,
-                    "branch_depth_distribution": {"1": 1},
-                    "active_shape": "shallow_one_off",
-                },
-            },
-            "run_status": {
-                "run_validity_status": "valid",
-                "run_completeness_status": "complete",
-                "run_complete": True,
-            },
-        },
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["warehouse_followup_summary"]
-    assert summary["current_run_evidence"] is True
-    assert summary["handoff_complete"] is True
-    assert summary["interpretation"] == (
-        "protocol_evaluated_research_continuity_too_shallow"
-    )
-    assert (
-        "warehouse_research_continuity_evidence_too_shallow" in summary["evidence_gaps"]
-    )
-    continuity = summary["evidence"]["research_continuity"]
-    assert continuity["available"] is True
-    assert continuity["substantive"] is False
-    assert continuity["max_branch_depth"] == 1
-    assert continuity["same_mechanism_observed"] == 0
-    assert continuity["branch_lessons_required"] == 0
-    assert "- Research continuity substantive/depth: `False` / 1" in markdown
-    assert "- Research continuity same-mechanism selected/observed: 0 / 0" in (markdown)
-    assert "- Research continuity same-mechanism missed: 0" in markdown
-    assert "- Interpretation: protocol_evaluated_research_continuity_too_shallow" in (
-        markdown
-    )
-
-
-def test_warehouse_followup_summary_rejects_unrealized_continuity_for_plateau_ready(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "warehouse-protocol-evaluated-unrealized-continuity"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "requested_rounds": 1,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 1,
-        },
-    )
-    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "warehouse.research_efficiency.v1.json",
-        {
-            "protocol_rows": {
-                "protocol_metric_results": 2,
-                "protocol_evaluated_candidates": 1,
-            },
-            "formal_candidates": {
-                "formal_screened_candidates": 1,
-                "protocol_evaluated_candidates": 1,
-            },
-            "protocol_effects_vs_mde": {
-                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
-                "report_only": True,
-                "decision_features_excluded": True,
-                "protocol_row_count": 2,
-                "rows_at_or_above_mde": 0,
-                "rows_with_ci_high_below_mde": 2,
-                "max_effect_to_mde_ratio": 0.4,
-                "interpretation_counts": {"below_mde": 2},
-            },
-            "fresh_runtime_replay_drain": {
-                "status": "not_selected_no_pending",
-                "attempts": 1,
-                "executed": 0,
-                "skipped": 1,
-                "counts_toward_max_rounds": False,
-            },
-            "stage_transition_drain": {
-                "status": "not_started",
-                "attempts": 0,
-                "counts_toward_max_rounds": False,
-                "generates_new_hypothesis": False,
-            },
-            "research_continuity": {
-                "same_mechanism_followup": {
-                    "observed_opportunity_count": 1,
-                    "selected_same_branch_refinement_count": 0,
-                },
-                "branch_lesson_usage": {
-                    "requirement_count": 2,
-                    "satisfied_count": 0,
-                    "semantic_gap_count": 2,
-                },
-                "weak_positive_transfer": {
-                    "observed_opportunity_count": 1,
-                    "accepted_count": 0,
-                },
-                "research_shape_summary": {
-                    "max_branch_depth": 1,
-                    "branch_depth_distribution": {"1": 1},
-                    "active_shape": "unrealized_continuity_opportunity",
-                },
-            },
-            "run_status": {
-                "run_validity_status": "valid",
-                "run_completeness_status": "complete",
-                "run_complete": True,
-            },
-        },
-    )
-
-    brief = brief_tool.build_brief(run_root)
-
-    summary = brief["warehouse_followup_summary"]
-    assert summary["interpretation"] == (
-        "protocol_evaluated_research_continuity_too_shallow"
-    )
-    assert (
-        "warehouse_research_continuity_evidence_too_shallow" in summary["evidence_gaps"]
-    )
-    continuity = summary["evidence"]["research_continuity"]
-    assert continuity["substantive"] is False
-    assert continuity["same_mechanism_observed"] == 1
-    assert continuity["same_mechanism_selected"] == 0
-    assert continuity["branch_lessons_required"] == 2
-    assert continuity["branch_lessons_satisfied"] == 0
-    assert continuity["weak_positive_observed"] == 1
-    assert continuity["weak_positive_accepted"] == 0
-
-
-def test_warehouse_followup_summary_rejects_depth_only_unselected_same_mechanism(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "warehouse-protocol-evaluated-depth-only-missed-followup"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "requested_rounds": 1,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 1,
-        },
-    )
-    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "warehouse.research_efficiency.v1.json",
-        {
-            "protocol_rows": {
-                "protocol_metric_results": 2,
-                "protocol_evaluated_candidates": 1,
-            },
-            "formal_candidates": {
-                "formal_screened_candidates": 1,
-                "protocol_evaluated_candidates": 1,
-            },
-            "protocol_effects_vs_mde": {
-                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
-                "report_only": True,
-                "decision_features_excluded": True,
-                "protocol_row_count": 2,
-                "rows_at_or_above_mde": 0,
-                "rows_with_ci_high_below_mde": 2,
-                "max_effect_to_mde_ratio": 0.4,
-                "interpretation_counts": {"below_mde": 2},
-            },
-            "fresh_runtime_replay_drain": {
-                "status": "not_selected_no_pending",
-                "attempts": 1,
-                "executed": 0,
-                "skipped": 1,
-                "counts_toward_max_rounds": False,
-            },
-            "stage_transition_drain": {
-                "status": "not_started",
-                "attempts": 0,
-                "counts_toward_max_rounds": False,
-                "generates_new_hypothesis": False,
-            },
-            "research_continuity": {
-                "same_mechanism_followup": {
-                    "observed_opportunity_count": 1,
-                    "selected_same_branch_refinement_count": 0,
-                },
-                "branch_lesson_usage": {
-                    "requirement_count": 1,
-                    "satisfied_count": 1,
-                    "semantic_gap_count": 0,
-                },
-                "weak_positive_transfer": {
-                    "observed_opportunity_count": 1,
-                    "accepted_count": 1,
-                },
-                "lesson_action_counts": {"borrowed_sibling": 1},
-                "research_shape_summary": {
-                    "max_branch_depth": 2,
-                    "branch_depth_distribution": {"2": 1},
-                    "active_shape": "missed_same_mechanism_followup",
-                },
-            },
-            "run_status": {
-                "run_validity_status": "valid",
-                "run_completeness_status": "complete",
-                "run_complete": True,
-            },
-        },
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["warehouse_followup_summary"]
-    assert summary["interpretation"] == (
-        "protocol_evaluated_research_continuity_too_shallow"
-    )
-    assert (
-        "warehouse_research_continuity_evidence_too_shallow" in summary["evidence_gaps"]
-    )
-    continuity = summary["evidence"]["research_continuity"]
-    assert continuity["substantive"] is False
-    assert continuity["max_branch_depth"] == 2
-    assert continuity["same_mechanism_observed"] == 1
-    assert continuity["same_mechanism_selected"] == 0
-    assert continuity["same_mechanism_missed"] == 1
-    assert continuity["branch_lessons_satisfied"] == 1
-    assert continuity["weak_positive_accepted"] == 1
-    assert "- Research continuity same-mechanism missed: 1" in markdown
-
-
-def test_warehouse_followup_summary_requires_handoff_before_plateau_ready(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "warehouse-protocol-evaluated-incomplete-handoff"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "requested_rounds": 1,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 1,
-        },
-    )
-    _write_warehouse_manifest(
-        run_root,
-        campaign_dir,
-        rounds=1,
-        include_v2_checkpoint=False,
-    )
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "warehouse.research_efficiency.v1.json",
-        {
-            "protocol_rows": {
-                "protocol_metric_results": 2,
-                "protocol_evaluated_candidates": 1,
-            },
-            "formal_candidates": {
-                "formal_screened_candidates": 1,
-                "protocol_evaluated_candidates": 1,
-            },
-            "protocol_effects_vs_mde": {
-                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
-                "report_only": True,
-                "decision_features_excluded": True,
-                "protocol_row_count": 2,
-                "rows_at_or_above_mde": 0,
-                "rows_with_ci_high_below_mde": 2,
-                "max_effect_to_mde_ratio": 0.4,
-                "interpretation_counts": {"below_mde": 2},
-            },
-            "fresh_runtime_replay_drain": {
-                "status": "not_selected_no_pending",
-                "attempts": 1,
-                "executed": 0,
-                "skipped": 1,
-                "counts_toward_max_rounds": False,
-            },
-            "stage_transition_drain": {
-                "status": "not_started",
-                "attempts": 0,
-                "counts_toward_max_rounds": False,
-                "generates_new_hypothesis": False,
-            },
-            "research_continuity": {
-                "same_mechanism_followup": {
-                    "observed_opportunity_count": 1,
-                    "selected_same_branch_refinement_count": 1,
-                },
-                "branch_lesson_usage": {
-                    "requirement_count": 1,
-                    "satisfied_count": 1,
-                    "semantic_gap_count": 0,
-                },
-            },
-            "run_status": {
-                "run_validity_status": "valid",
-                "run_completeness_status": "complete",
-                "run_complete": True,
-            },
-        },
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["warehouse_followup_summary"]
-    assert summary["current_run_evidence"] is True
-    assert summary["handoff_complete"] is False
-    assert summary["interpretation"] == "protocol_evaluated_handoff_incomplete"
-    assert "warehouse_handoff_requirements_incomplete" in summary["evidence_gaps"]
-    assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
-    assert "- Interpretation: protocol_evaluated_handoff_incomplete" in markdown
-
-
-def test_warehouse_followup_summary_requires_review_inputs_after_protocol_eval(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "warehouse-protocol-eval-missing-inputs"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "requested_rounds": 1,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 1,
-        },
-    )
-    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "warehouse.research_efficiency.v1.json",
-        {
-            "protocol_rows": {
-                "protocol_metric_results": 2,
-                "protocol_evaluated_candidates": 1,
-            },
-            "formal_candidates": {
-                "formal_screened_candidates": 1,
-                "protocol_evaluated_candidates": 1,
-            },
-            "protocol_effects_vs_mde": {
-                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
-                "report_only": True,
-                "decision_features_excluded": True,
-                "protocol_row_count": 2,
-                "rows_at_or_above_mde": 0,
-                "rows_with_ci_high_below_mde": 2,
-                "max_effect_to_mde_ratio": 0.4,
-                "interpretation_counts": {"below_mde": 2},
-            },
-            "run_status": {
-                "run_validity_status": "valid",
-                "run_completeness_status": "complete",
-                "run_complete": True,
-            },
-        },
-    )
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["warehouse_followup_summary"]
-    assert summary["current_run_evidence"] is True
-    assert summary["launch_required_before_plateau_conclusion"] is False
-    assert summary["interpretation"] == "protocol_evaluated_review_inputs_incomplete"
-    assert "no_protocol_evaluated_candidates" not in summary["evidence_gaps"]
-    assert "missing_measurement_effect_summary" not in summary["evidence_gaps"]
-    assert "missing_runtime_feedback_summary" in summary["evidence_gaps"]
-    assert "missing_research_continuity_summary" in summary["evidence_gaps"]
-    assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
-    assert "- Interpretation: protocol_evaluated_review_inputs_incomplete" in markdown
-
-
-def test_warehouse_followup_summary_keeps_screened_only_out_of_plateau_review(
-    tmp_path: Path,
-) -> None:
-    run_root = tmp_path / "warehouse-screened-only"
-    campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True)
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "requested_rounds": 1,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 0,
-        },
-    )
-    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
-
-    brief = brief_tool.build_brief(run_root)
-    markdown = brief_tool.render_markdown(brief)
-
-    summary = brief["warehouse_followup_summary"]
-    assert summary["available"] is True
-    assert summary["current_run_evidence"] is True
-    assert summary["handoff_complete"] is True
-    assert summary["launch_required_before_plateau_conclusion"] is False
-    assert summary["interpretation"] == "screened_without_protocol_evaluation"
-    assert "no_protocol_evaluated_candidates" in summary["evidence_gaps"]
-    assert summary["evidence"]["protocol"]["formal_screened_candidates"] == 1
-    assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 0
-    assert "- Interpretation: screened_without_protocol_evaluation" in markdown
-
-
 def test_brief_stop_conditions_for_invalid_infra_run(tmp_path: Path) -> None:
     run_root = tmp_path / "infra-run"
     campaign_dir = run_root / "campaign"
@@ -3409,84 +1147,11 @@ def test_brief_stop_conditions_for_invalid_infra_run(tmp_path: Path) -> None:
     brief = brief_tool.build_brief(run_root)
     markdown = brief_tool.render_markdown(brief)
 
+    _assert_historical_execution_outcome_unknown(brief)
     assert any("INVALID INFRA-ONLY RUN" in item for item in brief["stop_conditions"])
     assert any("No effective rounds" in item for item in brief["stop_conditions"])
     assert "INVALID INFRA-ONLY RUN" in markdown
     assert "do not analyze as research behavior" in markdown
-
-
-def test_problem_summaries_mark_invalid_infra_only_not_actionable(
-    tmp_path: Path,
-) -> None:
-    warehouse_root = tmp_path / "warehouse-infra-run"
-    warehouse_campaign = warehouse_root / "campaign"
-    warehouse_campaign.mkdir(parents=True)
-    _write_json(
-        warehouse_root / "run_status.json",
-        {
-            "run_validity_status": "invalid_infra_only",
-            "run_completeness_status": "incomplete",
-            "last_stop_reason": "provider_infra_balance_exhausted",
-            "invalid_infra_only": True,
-            "requested_rounds": 1,
-        },
-    )
-    _write_warehouse_manifest(warehouse_root, warehouse_campaign, rounds=1)
-
-    warehouse_brief = brief_tool.build_brief(warehouse_root)
-    warehouse_markdown = brief_tool.render_markdown(warehouse_brief)
-    warehouse_summary = warehouse_brief["warehouse_followup_summary"]
-
-    assert warehouse_brief["lifecycle"]["current_run_evidence"] is False
-    assert warehouse_summary["available"] is True
-    assert warehouse_summary["current_run_evidence"] is False
-    assert warehouse_summary["invalid_infra_only"] is True
-    assert warehouse_summary["interpretation"] == (
-        "invalid_infra_only_no_research_conclusion"
-    )
-    assert warehouse_summary["evidence_gaps"] == [
-        "invalid_infra_only_no_research_conclusion"
-    ]
-    assert warehouse_summary["review_axes_actionability"] == (
-        "not_actionable_invalid_infra_only"
-    )
-    assert "infra-only run" in warehouse_markdown
-    assert "not_actionable_invalid_infra_only" in warehouse_markdown
-
-    cvrp_root = tmp_path / "cvrp-infra-run"
-    cvrp_campaign = cvrp_root / "campaign"
-    cvrp_campaign.mkdir(parents=True)
-    _write_json(
-        cvrp_root / "run_status.json",
-        {
-            "run_validity_status": "invalid_infra_only",
-            "run_completeness_status": "incomplete",
-            "last_stop_reason": "provider_infra_balance_exhausted",
-            "invalid_infra_only": True,
-            "requested_rounds": 1,
-        },
-    )
-    _write_cvrp_large_twoopt_manifest(cvrp_root, cvrp_campaign, rounds=1)
-
-    cvrp_brief = brief_tool.build_brief(cvrp_root)
-    cvrp_markdown = brief_tool.render_markdown(cvrp_brief)
-    cvrp_summary = cvrp_brief["cvrp_large_twoopt_summary"]
-
-    assert cvrp_brief["lifecycle"]["current_run_evidence"] is False
-    assert cvrp_summary["available"] is True
-    assert cvrp_summary["current_run_evidence"] is False
-    assert cvrp_summary["invalid_infra_only"] is True
-    assert cvrp_summary["interpretation"] == (
-        "invalid_infra_only_no_research_conclusion"
-    )
-    assert cvrp_summary["evidence_gaps"] == [
-        "invalid_infra_only_no_research_conclusion"
-    ]
-    assert cvrp_summary["review_axes_actionability"] == (
-        "not_actionable_invalid_infra_only"
-    )
-    assert "infra-only run" in cvrp_markdown
-    assert "not_actionable_invalid_infra_only" in cvrp_markdown
 
 
 def test_brief_exposes_resume_snapshot_without_current_run_evidence(
@@ -3545,7 +1210,7 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
                     "branch_id": "branch-1",
                     "branch_state": "explore_expand",
                     "lineage_id": "lineage-1",
-                    "branch_mechanism_ids": ["bounded_resume_probe"],
+                    "mechanism_ids": ["bounded_resume_probe"],
                     "branch_next_action": "refine_checkpoint",
                     "branch_scheduling_lane": "weak_positive_followup",
                     "followup_recommended": True,
@@ -3566,25 +1231,12 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
         traces_dir / "20260606T000000_hypothesis_branch_1.json",
         {"request_kind": "hypothesis", "ok": True, "branch_id": "branch-1"},
     )
-    _write_json(
-        campaign_dir / "agentic_sessions" / "agentic_session_trace_index.json",
-        {
-            "session_count": 1,
-            "trace_count": 1,
-            "sessions": [
-                {
-                    "session_id": "s-1",
-                    "branch_id": "branch-1",
-                    "traces": [{"trace_id": "t-hyp", "request_kind": "hypothesis"}],
-                }
-            ],
-        },
-    )
     _write_db(campaign_dir / "scion.db")
 
     brief = brief_tool.build_brief(run_root)
     markdown = brief_tool.render_markdown(brief)
 
+    _assert_historical_execution_outcome_unknown(brief)
     assert brief["validity"]["run_validity_status"] == "invalid_infra_only"
     assert brief["counters"]["effective_rounds_completed"] == 0
     assert brief["branches"]["count"] == 0
@@ -3614,15 +1266,15 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
         "decision": 1,
         "experiment": 2,
     }
-    assert brief["resume_snapshot"]["top_branches"][0]["branch_id"] == "branch-1"
-    assert brief["resume_snapshot"]["top_branches"][0]["state"] == "explore_expand"
-    assert brief["resume_snapshot"]["top_branches"][0]["mechanism_ids"] == [
+    assert brief["resume_snapshot"]["branches"][0]["branch_id"] == "branch-1"
+    assert brief["resume_snapshot"]["branches"][0]["state"] == "explore_expand"
+    assert brief["resume_snapshot"]["branches"][0]["mechanism_ids"] == [
         "bounded_resume_probe"
     ]
-    assert brief["resume_snapshot"]["top_branches"][0]["next_action"] == (
+    assert brief["resume_snapshot"]["branches"][0]["next_action"] == (
         "refine_checkpoint"
     )
-    assert brief["resume_snapshot"]["top_branches"][0]["followup_recommended"] is True
+    assert brief["resume_snapshot"]["branches"][0]["followup_recommended"] is True
     assert "## Resume Snapshot" in markdown
     assert "Copied campaign artifacts are launch input, not current-run evidence" in (
         markdown
@@ -3639,557 +1291,7 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def _write_warehouse_manifest(
-    run_root: Path,
-    campaign_dir: Path,
-    *,
-    rounds: int,
-    include_v2_checkpoint: bool = True,
-) -> None:
-    research_focus = {
-        "current_question": (
-            "Starting from champion v2, determine whether continuous "
-            "additional useful research remains or whether this is a "
-            "real plateau."
-        ),
-        "required_evidence": [
-            "preserve or improve promotion behavior",
-            "inspect branch transfer before judging plateau",
-            (
-                "distinguish quality-blocked proposals from "
-                "protocol-evaluated no-effect candidates"
-            ),
-            "compare cost_delta and split_delta before split-only claims",
-            "explain fast completion through the runtime model",
-        ],
-        "default_avoid_directions": [
-            "baseline",
-            "proposal-quality",
-            "fast completion",
-            "split_delta_sum==0",
-            "broad warehouse matrix",
-        ],
-        "decision_boundary": (
-            "Proposal/delegated-analysis guidance only; never enter "
-            "DecisionFeatures, Protocol gates, promotion input, or "
-            "scheduler state."
-        ),
-    }
-    if include_v2_checkpoint:
-        research_focus["accepted_checkpoint"] = (
-            "Champion v2 promoted from validation-transfer acceptance."
-        )
-    command = (
-        "python -m scion.cli.main run "
-        f"--campaign-dir {campaign_dir} "
-        f"--rounds {rounds} "
-        "--time-limit-sec 30 "
-        "--agentic-session-timeout-sec 3600 "
-        "--agentic-tool-max-steps 240 "
-        "--agentic-tool-max-calls 200 "
-        "--agentic-code-tool-max-calls 200 "
-        "--agentic-observation-max-chars 2000000 "
-        "--measurement-governance on "
-        "--proposal-context-ablation full "
-        "--disable-early-stop "
-        "--agentic-proposal"
-    )
-    _write_json(
-        run_root / "prepared_run_manifest.v1.json",
-        {
-            "schema_version": "scion.launcher_prepared_run_manifest.v1",
-            "report_only": True,
-            "quality_judgment": False,
-            "decision_features_excluded": True,
-            "campaign_state_mutated": False,
-            "scheduler_state_mutated": False,
-            "promotion_state_mutated": False,
-            "problem_family": "warehouse_delivery",
-            "run_root": str(run_root),
-            "campaign_dir": str(campaign_dir),
-            "command": command,
-            "research_focus": research_focus,
-            "model": {"name": "gpt-5.5", "completion_preflight": True},
-            "report_metadata": {
-                "control_pair_key": "warehouse-v2-followup",
-                "postrun_reports": True,
-                "postrun_acceptance_families": [
-                    "summaries",
-                    "failures",
-                    "research_efficiency",
-                    "manifests",
-                    "analysis_brief",
-                    "inventory",
-                    "rebuild",
-                ],
-            },
-            "execution": {
-                "rounds": rounds,
-                "time_limit_sec": 30,
-                "agentic_session_timeout_sec": 3600,
-                "agentic_tool_max_steps": 240,
-                "agentic_tool_max_calls": 200,
-                "agentic_code_tool_max_calls": 200,
-                "agentic_observation_max_chars": 2000000,
-                "measurement_governance": "on",
-                "proposal_context_ablation": "full",
-                "agentic_proposal": True,
-                "disable_early_stop": True,
-            },
-            "acceptance_focus": [
-                "Distinguish real plateau from missed continuous-promotion opportunities."
-            ],
-        },
-    )
-
-
-def _write_cvrp_large_twoopt_manifest(
-    run_root: Path,
-    campaign_dir: Path,
-    *,
-    rounds: int,
-    include_large_twoopt_constraints: bool = True,
-) -> None:
-    research_focus = {
-        "measurement_opportunity_diagnostics": {
-            "schema_version": "cvrp_measurement_opportunity_handoff.v1",
-            "proposal_visibility_only": True,
-            "decision_features_excluded": True,
-            "screening_mde_at_power_80": 9.9,
-            "practical_screen_delta": 2.0,
-            "source": "problem_v1.measurement.calibration_ref",
-            "measurement_readiness": {
-                "status": "ready",
-                "reason_code": "ok",
-            },
-            "calibration": {
-                "schema": "scion.aa_noise_floor.v1",
-                "ref": "formal/calibration/aa_noise_floor.json",
-                "decision_features_excluded": True,
-            },
-            "reason_codes": [
-                "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
-                "TRAJECTORY_DIVERGENT_LOW_SNR",
-                "BUDGET_EXHAUSTING_RUNTIME_REPORT_ONLY",
-            ],
-        },
-        "measurable_opportunity_classes": [
-            "large_instance_intra_route_two_opt_seed",
-            "bounded_local_search_variant",
-            "construction_seed_portfolio",
-            "destroy_repair_selection",
-            "acceptance_or_adaptive_weighting",
-        ],
-        "default_avoid_directions": [
-            "broad VNS removal",
-            "pure ALNS/no-polish",
-            "initial-VNS disablement",
-            "unbounded large-instance two-opt fallback",
-            "cadence-2",
-            "share70 cap",
-            "route-merge absorption",
-            "demand-slack regret insertion",
-            "cross-route 2-opt reconnect",
-            "cluster-biased worst removal",
-            "route-limit seed diversification",
-        ],
-        "route_merge_exception_rule": (
-            "Require direct objective evidence for route merge claims."
-        ),
-        "construction_seed_rule": (
-            "Require same-run seed baseline or same-mechanism accepted delta."
-        ),
-        "missing_primary_telemetry_rule": (
-            "If telemetry says the declared primary mechanism is "
-            "not_evaluated/not_triggered or missing, treat weak_positive "
-            "sparse two-opt feedback as missing primary mechanism telemetry; "
-            "do not continue without active large_instance_intra_route_two_opt_seed "
-            "evidence."
-        ),
-        "decision_boundary": (
-            "Proposal guidance only; never enter DecisionFeatures, "
-            "Protocol gates, promotion input, or scheduler state."
-        ),
-    }
-    if include_large_twoopt_constraints:
-        research_focus["large_instance_two_opt_constraints"] = (
-            _large_twoopt_constraints()
-        )
-    research_focus["case_protection_requirements"] = _cmt_case_protection_requirements()
-    research_focus["resume_continuity_requirements"] = _resume_continuity_requirements()
-    command = (
-        "python -m scion.cli.main run "
-        f"--campaign-dir {campaign_dir} "
-        f"--rounds {rounds} "
-        "--time-limit-sec 30 "
-        "--agentic-session-timeout-sec 3600 "
-        "--agentic-tool-max-steps 240 "
-        "--agentic-tool-max-calls 200 "
-        "--agentic-code-tool-max-calls 200 "
-        "--agentic-observation-max-chars 2000000 "
-        "--stage-transition-drain-limit 4 "
-        "--measurement-governance on "
-        "--proposal-context-ablation full "
-        "--disable-early-stop "
-        "--agentic-proposal"
-    )
-    _write_json(
-        run_root / "prepared_run_manifest.v1.json",
-        {
-            "schema_version": "scion.launcher_prepared_run_manifest.v1",
-            "report_only": True,
-            "quality_judgment": False,
-            "decision_features_excluded": True,
-            "campaign_state_mutated": False,
-            "scheduler_state_mutated": False,
-            "promotion_state_mutated": False,
-            "problem_family": "cvrp",
-            "run_root": str(run_root),
-            "campaign_dir": str(campaign_dir),
-            "command": command,
-            "research_focus": research_focus,
-            "model": {"name": "gpt-5.5", "completion_preflight": True},
-            "report_metadata": {
-                "control_pair_key": "cvrp.large-twoopt-bounded:rep01",
-                "postrun_reports": True,
-                "postrun_acceptance_families": [
-                    "summaries",
-                    "failures",
-                    "research_efficiency",
-                    "manifests",
-                    "analysis_brief",
-                    "inventory",
-                    "rebuild",
-                ],
-            },
-            "execution": {
-                "rounds": rounds,
-                "time_limit_sec": 30,
-                "agentic_session_timeout_sec": 3600,
-                "agentic_tool_max_steps": 240,
-                "agentic_tool_max_calls": 200,
-                "agentic_code_tool_max_calls": 200,
-                "agentic_observation_max_chars": 2000000,
-                "stage_transition_drain_limit": 4,
-                "measurement_governance": "on",
-                "proposal_context_ablation": "full",
-                "agentic_proposal": True,
-                "disable_early_stop": True,
-            },
-            "acceptance_focus": [
-                "Review bounded large-instance intra-route two-opt evidence."
-            ],
-        },
-    )
-
-
-def _large_twoopt_constraints() -> dict[str, object]:
-    return {
-        "schema_version": "scion.cvrp_large_instance_two_opt_constraints.v1",
-        "scope": "proposal_only_prepared_handoff",
-        "seed_report": (
-            "scion/docs/experiments/v0.4/"
-            "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md"
-        ),
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "implementation_constraints": [
-            "derive a deadline from the solver time_limit and monotonic start time",
-            "check wall-clock remaining time before each route and sweep",
-            "do not call unbounded two_opt_intra above the vns_threshold",
-        ],
-        "required_pair_evidence": [
-            "total_distance delta by case and seed",
-            "feasibility before and after",
-            "route count before and after",
-            "wall-clock elapsed status",
-        ],
-        "default_reject_directions": [
-            "unbounded two_opt_intra fallback",
-            "activation claims without wall-clock evidence",
-        ],
-    }
-
-
-def _cmt_case_protection_requirements() -> dict[str, object]:
-    return {
-        "schema_version": "scion.cvrp_case_protection_requirements.v1",
-        "scope": "proposal_only_prepared_handoff",
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "protected_cases": ["CMT2", "CMT4"],
-        "rules": [
-            (
-                "Target intent or hypothesis must name the CMT2/CMT4 "
-                "protection plan before revisiting construction, route-merge, "
-                "demand-slack, VNS, or share70-derived mechanisms."
-            ),
-            (
-                "Same-branch follow-up should keep CMT2 and CMT4 in formal "
-                "coverage when those cases are available."
-            ),
-            (
-                "A materially different problem-owned solver mechanism must "
-                "still explain how it avoids repeating the CMT2/CMT4 losses."
-            ),
-            "Do not hardcode case ids, BKS values, seeds, or split membership.",
-        ],
-        "required_evidence": [
-            "live target-intent or hypothesis trace mentions CMT2/CMT4 protection",
-            "formal screening includes CMT2 and CMT4 or records a case-selection caveat",
-            "case-level total_distance deltas for CMT2 and CMT4",
-        ],
-    }
-
-
-def _resume_continuity_requirements() -> dict[str, object]:
-    return {
-        "schema_version": "scion.cvrp_resume_continuity_requirements.v1",
-        "scope": "proposal_only_prepared_handoff",
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "fallback_sources": [
-            "prepared_research_focus",
-            "copied_agentic_session_trace_index",
-            "copied_target_intent_or_hypothesis_traces",
-        ],
-        "rules": [
-            (
-                "A sparse resume with zero branch cards must use copied "
-                "target-intent or hypothesis traces before treating the run "
-                "as empty."
-            ),
-            (
-                "First CVRP branch must continue bounded large-instance "
-                "two-opt with CMT2/CMT4 protection or name a different "
-                "problem-owned causal path."
-            ),
-        ],
-        "required_evidence": [
-            (
-                "live hypothesis references copied target-intent or "
-                "hypothesis evidence when branch cards are absent"
-            ),
-            "branch-continuity caveat is recorded if copied branch cards remain absent",
-        ],
-    }
-
-
-def _write_champions_db(path: Path, *, versions: tuple[int, ...]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path) as conn:
-        conn.execute("""
-            CREATE TABLE champions (
-                version INTEGER NOT NULL,
-                weight_revision INTEGER NOT NULL DEFAULT 0,
-                operator_pool_json TEXT NOT NULL,
-                solver_config_hash TEXT NOT NULL,
-                code_snapshot_path TEXT NOT NULL,
-                code_snapshot_hash TEXT NOT NULL,
-                promotion_experiment_id TEXT,
-                promotion_dossier_ref TEXT,
-                promoted_at TEXT,
-                PRIMARY KEY (version, weight_revision)
-            )
-            """)
-        conn.executemany(
-            """
-            INSERT INTO champions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    version,
-                    0,
-                    "{}",
-                    f"solver-hash-{version}",
-                    f"snapshots/champion-v{version}",
-                    f"code-hash-{version}",
-                    f"exp-promote-{version}" if version > 2 else None,
-                    f"dossier-{version}" if version > 2 else None,
-                    "2026-06-19T00:00:00Z" if version > 2 else None,
-                )
-                for version in versions
-            ],
-        )
-
-
-def _write_cvrp_protocol_run(
-    run_root: Path,
-    campaign_dir: Path,
-    *,
-    mechanism_family: str,
-    include_runtime: bool = True,
-    include_continuity: bool = True,
-    include_direct_evidence: bool = True,
-) -> None:
-    top_row: dict[str, object] = {
-        "round": 1,
-        "branch_id": "branch-1",
-        "mechanism_family": mechanism_family,
-        "stage": "screening",
-        "decision": "continue_explore",
-        "gate_outcome": "pass",
-        "median_delta": 11.0,
-        "effect_to_mde_ratio": 1.1,
-        "positive_effect_at_or_above_mde": True,
-    }
-    if include_direct_evidence:
-        top_row["mechanism_evidence"] = {
-            "primary_mechanism": mechanism_family,
-            "primary_activation_status": "observed",
-            "primary_effect_status": "positive",
-            "activation_evidence_status": "activation_observed",
-            "objective_effect_status": "mixed_objective_effect",
-        }
-        top_row["case_level_total_distance_deltas"] = {
-            "CMT2": {"candidate_minus_champion": 0.5, "feasible": True},
-            "CMT4": {"candidate_minus_champion": 0.25, "feasible": True},
-        }
-        top_row["candidate_phase_telemetry_summary"] = {
-            "selected_surface": "solver_design",
-            "candidate_pairs": 8,
-            "runtime_observed_pairs": 8,
-            "buckets": {
-                "two_opt": {
-                    "declared": True,
-                    "weighted_sum_ms": 120.0,
-                    "max_ms": 30.0,
-                }
-            },
-        }
-    _write_json(
-        run_root / "run_status.json",
-        {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "requested_rounds": 1,
-        },
-    )
-    _write_json(
-        campaign_dir / "campaign_summary.json",
-        {
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 1,
-        },
-    )
-    payload: dict[str, object] = {
-        "protocol_rows": {
-            "effective_protocol_rounds": 1,
-            "protocol_metric_results": 2,
-            "protocol_evaluated_candidates": 1,
-            "stage_counts": {"screening": 2, "validation": 0, "frozen": 0},
-        },
-        "formal_candidates": {
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 1,
-        },
-        "formal_candidate_artifacts": {
-            "row_count": 1,
-            "index_status": "available",
-            "unreadable_rows": 0,
-        },
-        "measurement_readiness": {
-            "status": "ready",
-            "reason_code": "ok",
-            "mde_at_power_80": 9.9,
-            "signal_to_noise_tier": "low_power",
-        },
-        "protocol_effects_vs_mde": {
-            "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
-            "report_only": True,
-            "decision_features_excluded": True,
-            "measurement_readiness_status": "ready",
-            "mde_at_power_80": 9.9,
-            "interpretation": "has_positive_protocol_effect_at_or_above_mde",
-            "protocol_row_count": 2,
-            "rows_at_or_above_mde": 1,
-            "rows_with_ci_high_below_mde": 1,
-            "positive_rows": 1,
-            "nonpositive_rows": 1,
-            "max_effect_to_mde_ratio": 1.1,
-            "mechanism_family_effect_summary": {
-                "schema_version": "scion.mechanism_family_effect_summary.v1",
-                "report_only": True,
-                "decision_features_excluded": True,
-                "mapping_status": "available",
-                "mapped_row_count": 2,
-                "unmapped_row_count": 0,
-                "mechanism_family_count": 1,
-                "by_family": {
-                    mechanism_family: {
-                        "protocol_row_count": 2,
-                        "rows_with_median_delta": 2,
-                        "positive_rows": 1,
-                        "nonpositive_rows": 1,
-                        "rows_at_or_above_mde": 1,
-                        "rows_below_mde": 1,
-                        "rows_with_ci_high_below_mde": 1,
-                        "max_median_delta": 11.0,
-                        "max_effect_to_mde_ratio": 1.1,
-                    }
-                },
-            },
-            "top_rows_by_effect_to_mde": [top_row],
-        },
-        "run_status": {
-            "run_validity_status": "valid",
-            "run_completeness_status": "complete",
-            "run_complete": True,
-        },
-    }
-    if include_runtime:
-        payload["fresh_runtime_replay_drain"] = {
-            "status": "not_selected_no_pending",
-            "attempts": 1,
-            "executed": 0,
-            "skipped": 1,
-            "counts_toward_max_rounds": False,
-        }
-        payload["stage_transition_drain"] = {
-            "status": "not_started",
-            "attempts": 0,
-            "counts_toward_max_rounds": False,
-            "generates_new_hypothesis": False,
-        }
-    if include_continuity:
-        payload["research_continuity"] = {
-            "same_mechanism_followup": {
-                "observed_opportunity_count": 1,
-                "selected_same_branch_refinement_count": 1,
-            },
-            "branch_lesson_usage": {
-                "requirement_count": 1,
-                "satisfied_count": 1,
-                "semantic_gap_count": 0,
-            },
-            "weak_positive_transfer": {
-                "observed_opportunity_count": 0,
-                "accepted_count": 0,
-            },
-            "lesson_action_counts": {"preserved_same_branch": 1},
-            "research_shape_summary": {
-                "max_branch_depth": 2,
-                "branch_depth_distribution": {"2": 1},
-                "active_shape": "focused_followup",
-                "mechanism_family_count": 1,
-            },
-        }
-        payload["research_shape"] = {
-            "mechanism_family_breadth": {
-                "family_count": 1,
-                "families": {mechanism_family: 1},
-            }
-        }
-    _write_json(
-        run_root
-        / "postrun_acceptance"
-        / "research_efficiency"
-        / "cvrp.research_efficiency.v1.json",
-        payload,
-    )
-
-
-def _write_db(path: Path) -> None:
+def _write_db(path: Path, *, typed_evaluated: bool = False) -> None:
     with sqlite3.connect(path) as conn:
         conn.execute("""
             CREATE TABLE branches (
@@ -4213,15 +1315,29 @@ def _write_db(path: Path) -> None:
                 status TEXT
             )
             """)
-        conn.execute("""
-            CREATE TABLE experiment_events (
-                event_id TEXT PRIMARY KEY,
-                branch_id TEXT,
-                event_kind TEXT,
-                decision TEXT,
-                stage TEXT
-            )
-            """)
+        if typed_evaluated:
+            conn.execute("""
+                CREATE TABLE experiment_events (
+                    event_id TEXT PRIMARY KEY,
+                    campaign_id TEXT,
+                    branch_id TEXT,
+                    hypothesis_id TEXT,
+                    event_kind TEXT,
+                    decision TEXT,
+                    stage TEXT,
+                    execution_outcome TEXT
+                )
+                """)
+        else:
+            conn.execute("""
+                CREATE TABLE experiment_events (
+                    event_id TEXT PRIMARY KEY,
+                    branch_id TEXT,
+                    event_kind TEXT,
+                    decision TEXT,
+                    stage TEXT
+                )
+                """)
         conn.execute("""
             INSERT INTO branches VALUES (
                 'branch-1', 'ready_validate', 'lineage-1', 'basehash',
@@ -4236,11 +1352,60 @@ def _write_db(path: Path) -> None:
                 ("hyp-2", "branch-1", "solver_design", "create_new", "rejected"),
             ],
         )
-        conn.executemany(
-            "INSERT INTO experiment_events VALUES (?, ?, ?, ?, ?)",
-            [
-                ("event-1", "branch-1", "experiment", "continue_explore", "screening"),
-                ("event-2", "branch-1", "experiment", "queue_validate", "screening"),
-                ("event-3", "branch-1", "decision", None, None),
-            ],
-        )
+        if typed_evaluated:
+            conn.executemany(
+                "INSERT INTO experiment_events VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        "event-1",
+                        "campaign-1",
+                        "branch-1",
+                        "hypothesis-1",
+                        "experiment",
+                        "continue_explore",
+                        "screening",
+                        None,
+                    ),
+                    (
+                        "event-2",
+                        "campaign-1",
+                        "branch-1",
+                        "hypothesis-1",
+                        "experiment",
+                        "queue_validate",
+                        "screening",
+                        None,
+                    ),
+                    (
+                        "event-3",
+                        "campaign-1",
+                        "branch-1",
+                        "hypothesis-1",
+                        "decision",
+                        None,
+                        None,
+                        "evaluated",
+                    ),
+                ],
+            )
+        else:
+            conn.executemany(
+                "INSERT INTO experiment_events VALUES (?, ?, ?, ?, ?)",
+                [
+                    (
+                        "event-1",
+                        "branch-1",
+                        "experiment",
+                        "continue_explore",
+                        "screening",
+                    ),
+                    (
+                        "event-2",
+                        "branch-1",
+                        "experiment",
+                        "queue_validate",
+                        "screening",
+                    ),
+                    ("event-3", "branch-1", "decision", None, None),
+                ],
+            )

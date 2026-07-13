@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.production_boundary import (
     production_boundary_errors,
     production_boundary_identity_hashes,
@@ -173,7 +174,7 @@ class TestEvalStepWritesStepRecord:
 
         assert result.failure_stage == "evaluation"
         assert result.decision is None
-        assert "evaluation failed" in result.failure_detail
+        assert result.failure_detail == "protocol boom"
 
         failure_steps = [
             step
@@ -183,10 +184,9 @@ class TestEvalStepWritesStepRecord:
         assert failure_steps, "evaluation exception must write a failure StepRecord"
         failure = failure_steps[-1]
         assert failure.decision is None
-        assert failure.protocol_result is not None
-        assert failure.protocol_result.gate_outcome == "fail"
-        assert failure.protocol_result.reason_codes == ("EVALUATION_FAILED",)
-        assert failure.decision_reason_codes == ("EVALUATION_FAILED",)
+        assert failure.protocol_result is None
+        assert failure.execution_outcome is ExecutionOutcome.NOT_EVALUATED
+        assert failure.execution_outcome_reason_code == "EVALUATION_EXCEPTION"
 
     def test_screening_protocol_exception_records_evaluation_failure(
         self,
@@ -217,68 +217,8 @@ class TestEvalStepWritesStepRecord:
         failure = cm._step_history[-1]
         assert failure.failure_stage == "evaluation"
         assert failure.decision is None
-        assert failure.protocol_result is not None
-        assert failure.protocol_result.gate_outcome == "fail"
-        assert failure.protocol_result.reason_codes == ("EVALUATION_FAILED",)
-
-
-class TestFrozenBudgetLedger:
-    def test_frozen_budget_consumes_before_attempt_and_blocks_second_branch(
-        self,
-        tmp_path,
-    ):
-        proto = _MockProtocol(
-            results=[
-                _make_protocol_result(
-                    "fail",
-                    stage=ExperimentStage.FROZEN,
-                    win_rate=0.0,
-                )
-            ]
-        )
-        cm = _campaign(
-            tmp_path,
-            experiment_protocol=proto,
-            protocol_config=ProtocolConfig(
-                frozen=FrozenConfig(max_uses_per_campaign=1),
-            ),
-        )
-        workspace = str(tmp_path / "champion_code")
-        first_bid = _install_frozen_ready_branch(cm, workspace)
-        second_bid = _install_frozen_ready_branch(cm, workspace)
-
-        first = cm.run_one_step()
-        second = cm.run_one_step()
-
-        assert first.branch_id == first_bid
-        assert second.branch_id == second_bid
-        assert len(proto.experiment_calls) == 1
-        assert proto.experiment_calls[0][0] == ExperimentStage.FROZEN
-        assert len(proto.canary_calls) == 1
-        assert cm._frozen_budget_ledger.snapshot() == {
-            "used": 1,
-            "limit": 1,
-            "remaining": 0,
-        }
-
-        blocked_steps = [
-            step for step in cm._step_history
-            if step.branch_id == second_bid
-        ]
-        assert blocked_steps
-        blocked = blocked_steps[-1]
-        assert blocked.failure_stage == "frozen_budget"
-        assert blocked.failure_detail == FROZEN_BUDGET_EXHAUSTED
-        assert blocked.protocol_result is not None
-        assert blocked.protocol_result.reason_codes == (FROZEN_BUDGET_EXHAUSTED,)
-        assert blocked.decision == Decision.ABANDON
-
-        rebuilt = FrozenBudgetLedger(
-            max_uses=1,
-            registry=cm._registry,
-            campaign_id="fresh-process-campaign-id",
-        )
-        assert rebuilt.used == 1
+        assert failure.protocol_result is None
+        assert failure.execution_outcome is ExecutionOutcome.NOT_EVALUATED
 
 
 class TestProgrammaticRuntimeVerificationDefault:
@@ -379,7 +319,6 @@ class TestProgrammaticRuntimeVerificationDefault:
         assert cm._vgate._adapter is cm_adapter
         assert cm._vgate._strict_runtime_checks is True
         assert cm._vgate._require_adapter_for_runtime is True
-
     def test_adapter_without_runner_fails_closed_by_default(self, tmp_path):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
         problem_spec = self._production_spec(base._spec)
@@ -473,6 +412,32 @@ class TestProgrammaticRuntimeVerificationDefault:
                 campaign_dir=str(tmp_path / "production-no-protocol"),
                 experiment_protocol=None,
                 adapter=object(),
+            )
+
+    def test_production_campaign_rejects_parameter_search(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        problem_spec = self._production_spec(base._spec)
+        problem_spec.parameter_search.enabled = True
+
+        with pytest.raises(
+            ValueError,
+            match=r"parameter_search\.enabled must be false",
+        ):
+            CampaignManager(
+                problem_spec=problem_spec,
+                protocol_config=ProtocolConfig(),
+                split_manifest=self._production_split(),
+                seed_ledger=self._production_seeds(),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "production-parameter-search"),
+                experiment_protocol=self._production_protocol(
+                    problem_spec=problem_spec,
+                ),
+                adapter=self._adapter_for(problem_spec),
             )
 
     def test_legacy_adapter_campaign_requires_metric_specs(self, tmp_path):
@@ -791,6 +756,26 @@ class TestProgrammaticRuntimeVerificationDefault:
         assert hashes["split_manifest_hash"]
         assert hashes["seed_ledger_hash"]
 
+    def test_production_boundary_rejects_parameter_search(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        campaign_spec = self._production_spec(base._spec)
+        campaign_spec.parameter_search.enabled = True
+
+        errors = production_boundary_errors(
+            problem_spec=campaign_spec,
+            experiment_protocol=self._production_protocol(
+                problem_spec=campaign_spec,
+            ),
+            adapter=self._adapter_for(campaign_spec),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
+        )
+
+        assert (
+            "parameter_search.enabled must be false for direct-v3 production "
+            "campaigns"
+        ) in errors
+
     def test_production_campaign_rejects_metric_names_mismatch(self, tmp_path):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
         problem_spec = self._production_spec(base._spec).model_copy(
@@ -966,27 +951,3 @@ class TestProgrammaticRuntimeVerificationDefault:
 
         assert cm._vgate._strict_runtime_checks is True
         assert cm._vgate._require_adapter_for_runtime is True
-
-    def test_agentic_production_campaign_enables_anchor_preflight(self, tmp_path):
-        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
-        problem_spec = self._legacy_spec(base._spec)
-
-        cm = CampaignManager(
-            problem_spec=problem_spec,
-            protocol_config=ProtocolConfig(),
-            split_manifest=self._production_split(),
-            seed_ledger=self._production_seeds(),
-            llm_client=MockLLMClient(
-                hypothesis_response=_VALID_HYPOTHESIS,
-                patch_response=_VALID_PATCH,
-            ),
-            champion=base._champion,
-            campaign_dir=str(tmp_path / "agentic-production-anchors"),
-            experiment_protocol=self._production_protocol(
-                problem_spec=problem_spec,
-            ),
-            adapter=self._adapter_for(problem_spec),
-            use_agentic_proposal=True,
-        )
-
-        assert cm._proposal_pipeline.require_agentic_problem_anchors is True

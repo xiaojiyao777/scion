@@ -8,7 +8,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 SCHEMA = "outer-wrapper.v1"
 
 
@@ -38,6 +37,7 @@ def build_status(
         "model": str(model),
         "started_utc": str(started_utc),
         "pid": int(pid),
+        "proposal_runtime_mode": "direct_v3",
     }
     if scion_base_url:
         payload["scion_base_url"] = str(scion_base_url)

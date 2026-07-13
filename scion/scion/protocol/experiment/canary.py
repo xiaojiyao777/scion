@@ -7,6 +7,7 @@ from scion.core.models import CanaryResult
 from scion.runtime.audit import (
     format_runtime_audit_failure,
     runtime_audit_failure_from_result,
+    runtime_audit_issue_blocks_execution,
 )
 
 if TYPE_CHECKING:
@@ -125,10 +126,15 @@ def run_canary(
                         ),
                     ),
                 )
-            cand_audit_failure = runtime_audit_failure_from_result(
+            cand_audit_issue = runtime_audit_failure_from_result(
                 cand_result,
                 problem_spec=protocol._problem_spec,
                 selected_surface=selected_surface,
+            )
+            cand_audit_failure = (
+                cand_audit_issue
+                if runtime_audit_issue_blocks_execution(cand_audit_issue)
+                else None
             )
             if cand_audit_failure is not None:
                 protocol._emit_progress(
@@ -175,7 +181,8 @@ def run_canary(
             if not champ_result.success:
                 # Infra issue on champion side — skip veto
                 continue
-            if runtime_audit_failure_from_result(champ_result) is not None:
+            champion_audit_issue = runtime_audit_failure_from_result(champ_result)
+            if runtime_audit_issue_blocks_execution(champion_audit_issue):
                 # Existing champion-side runtime audit issues are not a
                 # candidate veto in the canary gate; validation/frozen
                 # evidence treats them as incomplete champion evidence.

@@ -1,4 +1,4 @@
-"""Sprint E4 tests: T22, T27, T28, T29."""
+"""Sprint E4 tests: T22, T27, and T28."""
 from __future__ import annotations
 
 import json
@@ -13,7 +13,6 @@ from scion.proposal.llm_client import (
     LLMClient,
     LLMFormatError,
     LLMRateLimitError,
-    LLMRetryExhaustedError,
     LLMTimeoutError,
 )
 from scion.runtime.subprocess_runner import (
@@ -22,133 +21,60 @@ from scion.runtime.subprocess_runner import (
     resolve_offloaded,
     _OFFLOAD_PREFIX,
 )
-from scion.core.campaign import CircuitBreaker, MAX_CONSECUTIVE_LLM_FAILURES
 
 
 # ---------------------------------------------------------------------------
-# T22: LLM Client Graded Retry
+# T22: LLM Client Single Attempt
 # ---------------------------------------------------------------------------
 
 class TestGradedRetry:
-    """T22: priority parameter controls retry vs fail-fast on 429."""
+    """Legacy name: all priorities now fail immediately on typed 429."""
 
-    def _client(self, max_retries: int = 2) -> LLMClient:
-        return LLMClient(max_retries=max_retries)
+    def _client(self) -> LLMClient:
+        return LLMClient()
 
     # -- call_with_tool tests --
 
-    def test_foreground_retries_on_429(self):
-        """Foreground priority: 429 sleeps and retries (does not consume retry budget)."""
-        client = self._client()
-        good_result = {"hypothesis": "test"}
-        tool = {"name": "test_tool", "input_schema": {"required": []}}
-
-        call_count = 0
-
-        def fake_create(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise LLMRateLimitError("429", retry_after=0.001)
-            resp = MagicMock()
-            resp.stop_reason = "tool_use"
-            block = MagicMock()
-            block.type = "tool_use"
-            block.name = "test_tool"
-            block.input = good_result
-            resp.content = [block]
-            resp.usage = None
-            return resp
-
-        with patch.object(client, "_get_anthropic_client") as mock_get:
-            mock_client = MagicMock()
-            mock_client.messages.create.side_effect = fake_create
-            mock_get.return_value = mock_client
-            with patch("scion.proposal.llm_client.time.sleep"):
-                result = client.call_with_tool("prompt", tool, priority="foreground")
-        assert result == good_result
-        assert call_count == 2
-
-    def test_background_fails_fast_on_429(self):
-        """Background priority: 429 raises immediately without retry."""
+    def test_typed_429_is_immediate_single_call_without_sleep(self):
         client = self._client()
         tool = {"name": "test_tool", "input_schema": {"required": []}}
 
-        def fake_create(**kwargs):
-            raise LLMRateLimitError("429", retry_after=60.0)
-
         with patch.object(client, "_get_anthropic_client") as mock_get:
             mock_client = MagicMock()
-            mock_client.messages.create.side_effect = fake_create
+            mock_client.messages.create.side_effect = LLMRateLimitError(
+                "429",
+                retry_after=3600.0,
+            )
             mock_get.return_value = mock_client
-            with patch("scion.proposal.llm_client.time.sleep") as mock_sleep:
+            with patch("scion.proposal.llm.client.time.sleep") as mock_sleep:
                 with pytest.raises(LLMRateLimitError):
-                    client.call_with_tool("prompt", tool, priority="background")
-                # Should not sleep for retry_after duration
-                mock_sleep.assert_not_called()
+                    client.call_with_tool("prompt", tool)
+        assert mock_client.messages.create.call_count == 1
+        mock_sleep.assert_not_called()
 
-    def test_default_priority_is_foreground(self):
-        """Default priority should be 'foreground' (backward compatible)."""
-        import inspect
-        sig = inspect.signature(LLMClient.call_with_tool)
-        assert sig.parameters["priority"].default == "foreground"
-
-        sig2 = inspect.signature(LLMClient.call)
-        assert sig2.parameters["priority"].default == "foreground"
-
-    def test_background_fails_fast_on_generic_429_exception(self):
-        """Background priority: generic exception with 429 in message fails fast."""
+    def test_generic_429_is_classified_once_without_sleep(self):
         client = self._client()
         tool = {"name": "test_tool", "input_schema": {"required": []}}
 
-        def fake_create(**kwargs):
-            raise Exception("HTTP 429 rate_limit exceeded")
-
         with patch.object(client, "_get_anthropic_client") as mock_get:
             mock_client = MagicMock()
-            mock_client.messages.create.side_effect = fake_create
+            mock_client.messages.create.side_effect = Exception(
+                "HTTP 429 rate_limit exceeded"
+            )
             mock_get.return_value = mock_client
-            with patch("scion.proposal.llm_client.time.sleep"):
+            with patch("scion.proposal.llm.client.time.sleep") as mock_sleep:
                 with pytest.raises(LLMRateLimitError):
-                    client.call_with_tool("prompt", tool, priority="background")
-
-    def test_foreground_retries_on_generic_429(self):
-        """Foreground priority: generic 429 exception retries."""
-        client = self._client(max_retries=1)
-        tool = {"name": "test_tool", "input_schema": {"required": []}}
-
-        call_count = 0
-
-        def fake_create(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise Exception("HTTP 429 rate_limit")
-            resp = MagicMock()
-            resp.stop_reason = "tool_use"
-            block = MagicMock()
-            block.type = "tool_use"
-            block.name = "test_tool"
-            block.input = {"key": "val"}
-            resp.content = [block]
-            resp.usage = None
-            return resp
-
-        with patch.object(client, "_get_anthropic_client") as mock_get:
-            mock_client = MagicMock()
-            mock_client.messages.create.side_effect = fake_create
-            mock_get.return_value = mock_client
-            with patch("scion.proposal.llm_client.time.sleep"):
-                result = client.call_with_tool("prompt", tool, priority="foreground")
-        assert result == {"key": "val"}
+                    client.call_with_tool("prompt", tool)
+        assert mock_client.messages.create.call_count == 1
+        mock_sleep.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
-# T27: Max-tokens Truncation Recovery
+# T27: Provider output is not controlled by Scion
 # ---------------------------------------------------------------------------
 
-class TestTruncationRecovery:
-    """T27: truncated responses trigger retry with higher max_tokens."""
+class TestProviderManagedOutput:
+    """Length stop metadata does not activate a special Scion retry path."""
 
     def _make_truncated_response(self, stop_reason: str = "max_tokens"):
         resp = MagicMock()
@@ -168,100 +94,35 @@ class TestTruncationRecovery:
         resp.usage = None
         return resp
 
-    def test_truncation_triggers_retry_with_higher_tokens(self):
-        """On max_tokens stop_reason, retry with doubled max_tokens."""
-        client = LLMClient(max_tokens=4096)
+    def test_length_stop_with_typed_payload_is_returned_without_retry(self):
+        client = LLMClient()
         tool = {"name": "write", "input_schema": {"required": []}}
         good = self._make_good_response("write", {"code": "x=1"})
-
-        max_tokens_seen = []
-        call_count = 0
-
-        def fake_create(**kwargs):
-            nonlocal call_count
-            max_tokens_seen.append(kwargs["max_tokens"])
-            call_count += 1
-            if call_count == 1:
-                return self._make_truncated_response("max_tokens")
-            return good
+        good.stop_reason = "max_tokens"
 
         with patch.object(client, "_get_anthropic_client") as mock_get:
             mock_client = MagicMock()
-            mock_client.messages.create.side_effect = fake_create
+            mock_client.messages.create.return_value = good
             mock_get.return_value = mock_client
-            with patch("scion.proposal.llm_client.time.sleep"):
-                result = client.call_with_tool("prompt", tool)
+            result = client.call_with_tool("prompt", tool)
 
         assert result == {"code": "x=1"}
-        assert call_count == 2
-        assert max_tokens_seen[0] == 4096
-        assert max_tokens_seen[1] == 8192  # doubled
+        assert mock_client.messages.create.call_count == 1
 
-    def test_truncation_max_retries_respected(self):
-        """After MAX_TRUNCATION_RETRIES truncations, returns partial (raises format error)."""
-        from scion.proposal.llm_client import MAX_TRUNCATION_RETRIES
-        client = LLMClient(max_tokens=4096, max_retries=0)
+    def test_length_stop_without_typed_payload_is_format_failure(self):
+        client = LLMClient()
         tool = {"name": "write", "input_schema": {"required": []}}
-
-        def fake_create(**kwargs):
-            return self._make_truncated_response("max_tokens")
+        response = self._make_truncated_response("max_tokens")
 
         with patch.object(client, "_get_anthropic_client") as mock_get:
             mock_client = MagicMock()
-            mock_client.messages.create.side_effect = fake_create
+            mock_client.messages.create.return_value = response
             mock_get.return_value = mock_client
-            with patch("scion.proposal.llm_client.time.sleep"):
-                with pytest.raises(LLMRetryExhaustedError):
-                    client.call_with_tool("prompt", tool)
+            with pytest.raises(LLMFormatError) as caught:
+                client.call_with_tool("prompt", tool)
 
-    def test_normal_response_no_truncation_logic(self):
-        """Non-truncated response passes through normally."""
-        client = LLMClient(max_tokens=4096)
-        tool = {"name": "write", "input_schema": {"required": []}}
-        good = self._make_good_response("write", {"code": "y=2"})
-
-        call_count = 0
-
-        def fake_create(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            return good
-
-        with patch.object(client, "_get_anthropic_client") as mock_get:
-            mock_client = MagicMock()
-            mock_client.messages.create.side_effect = fake_create
-            mock_get.return_value = mock_client
-            result = client.call_with_tool("prompt", tool)
-
-        assert result == {"code": "y=2"}
-        assert call_count == 1
-
-    def test_truncation_doubles_up_to_cap(self):
-        """max_tokens should not exceed MAX_MAX_TOKENS when doubling."""
-        from scion.proposal.llm_client import MAX_MAX_TOKENS
-        client = LLMClient(max_tokens=MAX_MAX_TOKENS - 100, max_retries=0)
-        tool = {"name": "write", "input_schema": {"required": []}}
-        good = self._make_good_response("write", {"code": "z=3"})
-
-        max_tokens_seen = []
-        call_count = 0
-
-        def fake_create(**kwargs):
-            nonlocal call_count
-            max_tokens_seen.append(kwargs["max_tokens"])
-            call_count += 1
-            if call_count == 1:
-                return self._make_truncated_response("max_tokens")
-            return good
-
-        with patch.object(client, "_get_anthropic_client") as mock_get:
-            mock_client = MagicMock()
-            mock_client.messages.create.side_effect = fake_create
-            mock_get.return_value = mock_client
-            result = client.call_with_tool("prompt", tool)
-
-        assert result == {"code": "z=3"}
-        assert max_tokens_seen[1] == MAX_MAX_TOKENS  # capped
+        assert "did not call tool" in str(caught.value)
+        assert mock_client.messages.create.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -321,54 +182,8 @@ class TestOutputOffload:
         assert result2.startswith(_OFFLOAD_PREFIX)
 
 
-# ---------------------------------------------------------------------------
-# T29: Circuit Breaker
-# ---------------------------------------------------------------------------
-
-class TestCircuitBreaker:
-    """T29: CircuitBreaker trips after N consecutive failures."""
-
-    def test_circuit_breaker_trips_after_threshold(self):
-        cb = CircuitBreaker(threshold=3)
-        assert not cb.is_tripped
-        cb.record_failure("err1")
-        assert not cb.is_tripped
-        cb.record_failure("err2")
-        assert not cb.is_tripped
-        cb.record_failure("err3")
-        assert cb.is_tripped
-
-    def test_circuit_breaker_resets_on_success(self):
-        cb = CircuitBreaker(threshold=3)
-        cb.record_failure("err1")
-        cb.record_failure("err2")
-        assert not cb.is_tripped
-        cb.record_success()
-        # Counter reset — need 3 more failures to trip
-        cb.record_failure("err3")
-        cb.record_failure("err4")
-        assert not cb.is_tripped
-        cb.record_failure("err5")
-        assert cb.is_tripped
-
-    def test_circuit_breaker_default_threshold(self):
-        cb = CircuitBreaker()
-        assert cb._threshold == MAX_CONSECUTIVE_LLM_FAILURES
-
-    def test_record_failure_returns_trip_status(self):
-        cb = CircuitBreaker(threshold=2)
-        assert cb.record_failure("e1") is False
-        assert cb.record_failure("e2") is True
-
-    def test_last_failure_detail_stored(self):
-        cb = CircuitBreaker(threshold=3)
-        cb.record_failure("first error")
-        cb.record_failure("last error")
-        assert cb.last_failure_detail == "last error"
-
-
-class TestCampaignCircuitBreaker:
-    """T29: Campaign stops when circuit breaker trips."""
+class TestCampaignTypedProviderTermination:
+    """A typed provider failure stops the direct invocation once."""
 
     def _make_campaign(self, llm_client):
         """Create a minimal CampaignManager with mock dependencies."""
@@ -411,37 +226,27 @@ class TestCampaignCircuitBreaker:
         )
         return campaign
 
-    def test_campaign_stops_on_circuit_breaker(self):
-        """Mock LLM to fail 3x, verify campaign stops gracefully."""
+    def test_campaign_stops_on_first_typed_infra_outcome(self):
+        """Provider infra failure stops the invocation without hidden retries."""
         from scion.proposal.mock_client import MockLLMClient
 
-        # LLM always raises LLMRetryExhaustedError
-        failing_client = MockLLMClient(mode="exhausted")
+        failing_client = MockLLMClient(mode="timeout")
         campaign = self._make_campaign(failing_client)
 
-        # Run with enough rounds to trigger circuit breaker
-        campaign.run(max_rounds=20)
+        campaign.run(requested_rounds=20)
 
-        assert campaign._circuit_breaker.is_tripped
+        assert campaign._last_stop_reason == "execution_blocked_infra"
 
-    def test_circuit_breaker_in_campaign_state(self):
-        """CircuitBreaker is initialized on CampaignManager."""
-        from scion.proposal.mock_client import MockLLMClient
-        client = MockLLMClient(mode="success")
-        campaign = self._make_campaign(client)
-        assert hasattr(campaign, "_circuit_breaker")
-        assert isinstance(campaign._circuit_breaker, CircuitBreaker)
-
-    def test_campaign_summary_has_stopped_reason_on_trip(self):
-        """Campaign summary includes stopped_reason=circuit_breaker when tripped."""
+    def test_campaign_summary_has_typed_infra_stop_reason(self):
+        """Campaign summary names the typed outcome that stopped execution."""
         from scion.proposal.mock_client import MockLLMClient
         import json as _json
 
-        failing_client = MockLLMClient(mode="exhausted")
+        failing_client = MockLLMClient(mode="timeout")
         campaign = self._make_campaign(failing_client)
-        campaign.run(max_rounds=20)
+        campaign.run(requested_rounds=20)
 
         summary_path = Path(campaign._campaign_dir) / "campaign_summary.json"
         if summary_path.exists():
             summary = _json.loads(summary_path.read_text())
-            assert summary.get("stopped_reason") == "circuit_breaker"
+            assert summary.get("stopped_reason") == "execution_blocked_infra"

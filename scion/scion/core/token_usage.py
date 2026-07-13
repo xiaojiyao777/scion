@@ -19,7 +19,6 @@ class TokenUsageRecord:
     completion_tokens: int
     cache_read_tokens: int = 0
     cache_create_tokens: int = 0
-    retry_count: int = 0
     timed_out: bool = False
     error: Optional[str] = None
 
@@ -38,7 +37,6 @@ class TokenUsageTracker:
         completion_tokens: int = 0,
         cache_read_tokens: int = 0,
         cache_create_tokens: int = 0,
-        retry_count: int = 0,
         timed_out: bool = False,
         error: Optional[str] = None,
     ) -> None:
@@ -50,7 +48,6 @@ class TokenUsageTracker:
             completion_tokens=completion_tokens,
             cache_read_tokens=cache_read_tokens,
             cache_create_tokens=cache_create_tokens,
-            retry_count=retry_count,
             timed_out=timed_out,
             error=error,
         ))
@@ -65,7 +62,6 @@ class TokenUsageTracker:
         total_cache_read = sum(r.cache_read_tokens for r in self._records)
         total_cache_create = sum(r.cache_create_tokens for r in self._records)
         total_calls = len(self._records)
-        total_retries = sum(r.retry_count for r in self._records)
         total_timeouts = sum(1 for r in self._records if r.timed_out)
         total_errors = sum(1 for r in self._records if r.error)
         total_input = total_prompt + total_cache_read + total_cache_create
@@ -84,7 +80,6 @@ class TokenUsageTracker:
             "total_cache_read_tokens": total_cache_read,
             "total_cache_create_tokens": total_cache_create,
             "cache_hit_rate": round(cache_hit_rate, 3),
-            "total_retries": total_retries,
             "total_timeouts": total_timeouts,
             "total_errors": total_errors,
             "by_kind": by_kind,

@@ -168,14 +168,14 @@ def _operator_action(classification: str) -> str:
         )
     if classification == "no_available_accounts":
         return (
-            "Wait for an active GPT-5.5 account or refresh the proxy account pool, "
+            "Wait for an active model account or refresh the proxy account pool, "
             "then rerun launch readiness."
         )
     if classification == "rate_limited":
         return "Wait for the rate limit window to clear, then rerun launch readiness."
     if classification == "transport_error":
         return (
-            "Start or repair the local GPT-5.5 proxy endpoint, then rerun launch readiness."
+            "Start or repair the configured proxy endpoint, then rerun launch readiness."
         )
     if classification:
         return (

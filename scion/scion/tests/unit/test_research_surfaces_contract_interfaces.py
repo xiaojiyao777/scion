@@ -267,7 +267,7 @@ def test_contract_gate_uses_v2_targets_actions_and_interface(
         action="remove",
         target_file="policies/dispatch.py",
     )
-    result = gate.validate_hypothesis(remove_hypothesis, [], [])
+    result = gate.validate_hypothesis(remove_hypothesis)
     c3 = next(check for check in result.checks if check.name == "C3_action_target")
     assert not c3.passed
     assert "not allowed" in c3.detail
@@ -278,7 +278,7 @@ def test_contract_gate_uses_v2_targets_actions_and_interface(
         action="modify",
         target_file="operators/not_dispatch.py",
     )
-    result = gate.validate_hypothesis(wrong_target, [], [])
+    result = gate.validate_hypothesis(wrong_target)
     c3 = next(check for check in result.checks if check.name == "C3_action_target")
     assert not c3.passed
     assert "policies/dispatch.py" in c3.detail
@@ -328,7 +328,7 @@ def test_contract_gate_enforces_surface_action_and_target_rules(
         action="remove",
         target_file="policies/search_policy.py",
     )
-    result = gate.validate_hypothesis(remove_hypothesis, [], [])
+    result = gate.validate_hypothesis(remove_hypothesis)
     c3 = next(check for check in result.checks if check.name == "C3_action_target")
     assert not c3.passed
     assert "not allowed" in c3.detail
@@ -339,7 +339,7 @@ def test_contract_gate_enforces_surface_action_and_target_rules(
         action="modify",
         target_file="operators/not_policy.py",
     )
-    result = gate.validate_hypothesis(wrong_target, [], [])
+    result = gate.validate_hypothesis(wrong_target)
     c3 = next(check for check in result.checks if check.name == "C3_action_target")
     assert not c3.passed
     assert "not in target files" in c3.detail
@@ -481,8 +481,8 @@ def test_contract_gate_surface_wildcard_is_segment_aware(
         target_file="operators/archive/evil.py",
     )
 
-    direct_result = gate.validate_hypothesis(direct, [], [])
-    nested_result = gate.validate_hypothesis(nested, [], [])
+    direct_result = gate.validate_hypothesis(direct)
+    nested_result = gate.validate_hypothesis(nested)
     direct_c3 = next(
         check for check in direct_result.checks if check.name == "C3_action_target"
     )

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-import json
 
 import pytest
 
@@ -102,55 +101,6 @@ def test_contract_serializes_round_trips_and_summarizes_manifest_paths() -> None
     assert summary["available"] is True
 
 
-def test_typed_manifest_flows_into_context_manager_payload(
-    tmp_path,
-    monkeypatch,
-) -> None:
-    contract = _valid_contract()
-    manifest_path = tmp_path / "prepared_run_manifest.v1.json"
-    manifest = {
-        "problem_family": contract.problem_family,
-        "analysis_intent": "Dummy prepared guidance.",
-        "acceptance_focus": ["Keep guidance proposal-only."],
-        "research_guidance_contract": research_guidance_contract_to_dict(contract),
-        "research_focus": {"current_question": contract.current_question},
-    }
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-    monkeypatch.setenv("PREPARED_RUN_MANIFEST", str(manifest_path))
-
-    from scion.proposal.context_manager.manager import _build_launch_research_focus
-
-    payload = _build_launch_research_focus()
-    direct_payload = launch_research_guidance_payload(
-        manifest_path=manifest_path,
-        manifest=manifest,
-    )
-
-    assert payload == direct_payload
-    assert payload["schema_version"] == "scion.launch_research_guidance_prompt.v1"
-    assert payload["contract_source"] == "typed_manifest"
-    assert payload["contract_schema_version"] == contract.schema_version
-    assert payload["current_question"] == contract.current_question
-    assert payload["decision_boundary"] == contract.decision_boundary
-    assert payload["required_mechanism_ids"] == ["foo_activation_probe"]
-    assert payload["target_intent_required_mechanism_ids"] == []
-    assert payload["rendered_paths"] == list(
-        expected_research_guidance_rendered_paths(contract)
-    )
-    assert "foo_activation_probe" in payload["guidance_text"]
-    assert "excluded from DecisionFeatures" in payload["guidance_text"]
-
-    from scion.proposal.engine.hypothesis_prompts import (
-        _target_intent_launch_focus_required_mechanism_lines,
-    )
-
-    guard_lines = _target_intent_launch_focus_required_mechanism_lines(
-        {"launch_research_focus": payload}
-    )
-    assert any("foo_activation_probe" in line for line in guard_lines)
-    assert any(contract.current_question in line for line in guard_lines)
-
-
 def test_context_only_required_mechanism_renders_without_hard_launch_binding(
     tmp_path,
 ) -> None:
@@ -178,7 +128,6 @@ def test_context_only_required_mechanism_renders_without_hard_launch_binding(
     )
 
     assert payload["required_mechanism_ids"] == []
-    assert payload["target_intent_required_mechanism_ids"] == []
     assert "foo_activation_probe" in payload["guidance_text"]
     assert "hypothesis_mechanism_binding=context_only" in payload["guidance_text"]
     assert "required_mechanisms.foo_activation_probe" in payload["rendered_paths"]
@@ -186,69 +135,12 @@ def test_context_only_required_mechanism_renders_without_hard_launch_binding(
         expected_research_guidance_rendered_paths(contract)
     )
 
-    from scion.proposal.engine.hypothesis_prompts import (
-        _target_intent_launch_focus_required_mechanism_lines,
-    )
-
-    guard_lines = _target_intent_launch_focus_required_mechanism_lines(
-        {"launch_research_focus": payload}
-    )
-    assert guard_lines == []
-
-
-def test_target_intent_required_mechanism_projects_without_formal_required_binding(
-    tmp_path,
-) -> None:
-    base_contract = _valid_contract()
-    mechanism = base_contract.required_mechanisms[0]
-    contract = replace(
-        base_contract,
-        required_mechanisms=(
-            replace(
-                mechanism,
-                hypothesis_mechanism_binding="target_intent_required",
-            ),
-        ),
-    )
-    manifest = {
-        "problem_family": contract.problem_family,
-        "analysis_intent": "Dummy target-intent prepared guidance.",
-        "acceptance_focus": ["Keep formal required-mechanism guard unconfigured."],
-        "research_guidance_contract": research_guidance_contract_to_dict(contract),
-    }
-
-    payload = launch_research_guidance_payload(
-        manifest_path=tmp_path / "prepared_run_manifest.v1.json",
-        manifest=manifest,
-    )
-
-    assert payload["required_mechanism_ids"] == []
-    assert payload["target_intent_required_mechanism_ids"] == [
-        "foo_activation_probe"
-    ]
-    assert "hypothesis_mechanism_binding=target_intent_required" in (
-        payload["guidance_text"]
-    )
-    assert "required_mechanisms.foo_activation_probe" in payload["rendered_paths"]
-
-    from scion.proposal.engine.hypothesis_prompts import (
-        _target_intent_launch_focus_required_mechanism_lines,
-    )
-
-    guard_lines = _target_intent_launch_focus_required_mechanism_lines(
-        {"launch_research_focus": payload}
-    )
-    assert any("target_intent_required_mechanism_ids" in line for line in guard_lines)
-    assert any("foo_activation_probe" in line for line in guard_lines)
-
-
-def test_legacy_manifest_projects_successor_focus_metadata(tmp_path) -> None:
+def test_legacy_manifest_projects_nonbinding_metadata(tmp_path) -> None:
     manifest = {
         "problem_family": "dummy_family",
         "analysis_intent": "Legacy successor focus.",
         "research_focus": {
             "schema_version": "legacy-focus.v1",
-            "target_intent_required_mechanism_ids": ["target_probe"],
             "reviewed_mechanism_ids": ["reviewed_probe"],
             "suppressed_mechanism_ids": ["suppressed_probe"],
             "successor_opportunity_families": ["successor_family"],
@@ -270,19 +162,13 @@ def test_legacy_manifest_projects_successor_focus_metadata(tmp_path) -> None:
     )
 
     assert payload["required_mechanism_ids"] == []
-    assert payload["target_intent_required_mechanism_ids"] == ["target_probe"]
     assert payload["reviewed_mechanism_ids"] == ["reviewed_probe"]
     assert payload["suppressed_mechanism_ids"] == ["suppressed_probe"]
     assert payload["successor_opportunity_families"] == ["successor_family"]
     assert payload["default_avoid_directions"] == ["acceptance variants"]
     assert payload["next_required_direction"] == "Choose a successor."
-    assert payload["material_difference_requirement"]["record_id"] == (
-        "material_difference_requirement:legacy-test"
-    )
+    assert "material_difference_requirement" not in payload
     assert "acceptance variants" in payload["guidance_text"]
-    assert "hypothesis_mechanism_binding=target_intent_required" in (
-        payload["guidance_text"]
-    )
 
 
 @pytest.mark.parametrize(

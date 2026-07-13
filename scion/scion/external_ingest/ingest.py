@@ -168,7 +168,7 @@ class ExternalProposalIngestor:
             self.problem_spec,
             champion_snapshot_path=str(base_workspace),
         )
-        h_result = gate.validate_hypothesis(hypothesis, [], [])
+        h_result = gate.validate_hypothesis(hypothesis)
         p_result = gate.validate_patch(
             patch,
             approved_hypothesis=hypothesis,
@@ -364,17 +364,12 @@ class ExternalProposalIngestor:
             raise ValueError("external proposal produced no file changes")
 
         primary, additional = changes[0], tuple(changes[1:])
-        patch_mechanisms = tuple(
-            mechanism
-            for mechanism in manifest.hypothesis.to_proposal().mechanism_changes
-        )
         return audits, PatchProposal(
             file_path=primary.file_path,
             action=primary.action,
             code_content=primary.code_content,
             test_hint=primary.test_hint,
             additional_changes=additional,
-            mechanism_changes=patch_mechanisms,
         )
 
     def _derive_change(
@@ -506,7 +501,7 @@ class ExternalProposalIngestor:
             "code_hash": _tree_hash(workspace_path) if workspace_path is not None else "",
             "patch_action": patch.action,
             "patch_file": patch.file_path,
-            "hypothesis_text": hypothesis.hypothesis_text[:500],
+            "hypothesis_text": hypothesis.hypothesis_text,
             "contract_passed": str(passed),
             "verification_passed": "False",
             "contract_result": "passed" if passed else "failed",

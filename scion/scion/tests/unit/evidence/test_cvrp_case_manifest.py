@@ -143,12 +143,8 @@ def test_filters_by_subset_and_comparability_requirements() -> None:
     assert manifest.metadata["rejection_counts_by_reason"]["benchmark"] == 1
 
 
-def test_selects_deterministically_with_per_subset_and_total_limits() -> None:
-    config = CvrpCaseSelectionConfig(
-        subsets=("A", "B"),
-        max_cases_per_subset=2,
-        max_cases_total=3,
-    )
+def test_selects_all_eligible_cases_deterministically() -> None:
+    config = CvrpCaseSelectionConfig(subsets=("A", "B"))
 
     manifest = build_cvrp_case_manifest_from_rows(
         [
@@ -161,9 +157,15 @@ def test_selects_deterministically_with_per_subset_and_total_limits() -> None:
         config=config,
     )
 
-    assert [case.case_id for case in manifest.cases] == ["A-01", "A-02", "B-01"]
+    assert [case.case_id for case in manifest.cases] == [
+        "A-01",
+        "A-02",
+        "A-03",
+        "B-01",
+        "B-02",
+    ]
     assert manifest.metadata["n_eligible_cases"] == 5
-    assert manifest.metadata["n_selected_cases"] == 3
+    assert manifest.metadata["n_selected_cases"] == 5
 
 
 def test_rejection_counts_cover_all_filter_reasons() -> None:

@@ -66,15 +66,15 @@ def normalize_patch_typed_edits(
     except PatchSchemaPreflightError as exc:
         raise PatchEditProtocolError(str(exc)) from exc
 
-    source_records = _source_records_from_context(
-        context,
-        requested_paths=_patch_requested_paths(normalized),
-    )
+    source_records = _source_records_from_context(context)
     source_files = {
         path: record.content for path, record in source_records.items()
     }
     source_provenance = {
         path: record.provenance for path, record in source_records.items()
+    }
+    source_owners = {
+        path: record.owner for path, record in source_records.items()
     }
     reject_legacy_code_content = bool(
         (context or {}).get("reject_legacy_code_content_full_file_modify")
@@ -86,6 +86,7 @@ def normalize_patch_typed_edits(
         normalized,
         source_files=source_files,
         source_provenance=source_provenance,
+        source_owners=source_owners,
         reject_legacy_code_content=reject_legacy_code_content,
         allow_host_internal_full_file_modify=allow_host_internal_full_file_modify,
     )
@@ -94,7 +95,7 @@ def normalize_patch_typed_edits(
 
 
 def build_patch_edit_source_manifest(context: Mapping[str, Any]) -> str:
-    """Render compact source digests for model-facing typed edit prompts."""
+    """Render every source digest for model-facing typed edit prompts."""
 
     source_records = _source_records_from_context(context)
     if not source_records:
@@ -119,6 +120,7 @@ def _normalize_change(
     *,
     source_files: Mapping[str, str],
     source_provenance: Mapping[str, str] | None = None,
+    source_owners: Mapping[str, str] | None = None,
     original_source_files: Mapping[str, str] | None = None,
     change_pointer: str,
     allow_original_source_digest: bool = False,
@@ -201,6 +203,14 @@ def _normalize_change(
         content_after = _full_file_content_after(change)
         if action == "delete":
             content_after = ""
+        if (
+            action == "modify"
+            and not allow_host_internal_full_file_modify
+            and not _digest_text(change.get("source_digest"))
+        ):
+            raise PatchEditProtocolError(
+                f"{change_pointer}: full_file modify requires source_digest"
+            )
         _validate_optional_source_digest(
             change,
             file_path=file_path,
@@ -227,6 +237,11 @@ def _normalize_change(
             if source_provenance is not None
             else None
         ),
+        source_owner=(
+            source_owners.get(file_path)
+            if source_owners is not None
+            else None
+        ),
         content_after=content_after,
         change_pointer=change_pointer,
         eof_final_newline_tolerated=eof_final_newline_tolerated,
@@ -239,6 +254,7 @@ def _normalize_patch_set_changes(
     *,
     source_files: Mapping[str, str],
     source_provenance: Mapping[str, str] | None = None,
+    source_owners: Mapping[str, str] | None = None,
     reject_legacy_code_content: bool = False,
     allow_host_internal_full_file_modify: bool = False,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -285,6 +301,7 @@ def _normalize_patch_set_changes(
             slot.raw,
             source_files=source_state,
             source_provenance=source_provenance,
+            source_owners=source_owners,
             original_source_files=source_files,
             change_pointer=slot.pointer,
             allow_original_source_digest=(
@@ -602,10 +619,12 @@ def _validate_existing_file_full_file_modify(
 ) -> None:
     if action != "modify" or allow_host_internal_full_file_modify:
         return
-    if (
-        explicit_intent != "full_file"
-        and not has_content_after
-        and (not has_code_content or not reject_legacy_code_content)
+    if before is not None and (
+        explicit_intent == "full_file" or has_content_after
+    ):
+        return
+    if before is not None and (
+        not has_code_content or not reject_legacy_code_content
     ):
         return
     content_field = "content_after" if has_content_after else "code_content"
@@ -615,15 +634,11 @@ def _validate_existing_file_full_file_modify(
         else "existing_file_full_file_modify_source_required"
     )
     detail = (
-        "action=modify targets an existing host-visible file; "
-        "model-supplied full_file/content_after is disabled by "
-        "default. full_file_reason is not an authorization."
+        "legacy code_content modify requires an explicit edit_intent."
         if before is not None
         else "action=modify declares an existing-file change, but no "
         "host-visible source was provided. Model-facing existing-file "
-        "modifies must use exact_replace with source_digest; "
-        "full_file/content_after/code_content is allowed only for "
-        "creates or for host-internal compatibility."
+        "modifies require host-visible source and source_digest."
     )
     payload = {
         "error": "patch_edit_protocol",
@@ -635,7 +650,8 @@ def _validate_existing_file_full_file_modify(
         "content_field": content_field,
         "detail": detail,
         "guidance": (
-            "Existing file requires modify exact_replace with source_digest; "
+            "Existing-file modify requires source_digest and either typed "
+            "exact_replace or explicit full_file/content_after; "
             "create is only for new files. "
             "Rewrite this change as edit_intent='exact_replace': set "
             "source_digest to the host-provided sha256 digest, omit "
@@ -684,16 +700,14 @@ def _validate_existing_file_create_action(
         "action": action,
         "source_digest": source_digest_for_content(before),
         "detail": (
-            "existing file requires modify exact_replace with source_digest; "
+            "existing file requires action=modify with source_digest; "
             "create is only for new files."
         ),
         "guidance": (
             "Rewrite this existing-file change with action='modify' and "
-            "edit_intent='exact_replace': set source_digest to the "
-            "host-provided sha256 digest, provide a non-empty old_string "
-            "copied exactly from the current file, and provide new_string "
-            "with only the replacement text. Use new_string: \"\" for "
-            "deletion; do not omit new_string or set it to null. Use "
+            "the host-provided source_digest. Use exact_replace with a "
+            "non-empty old_string/new_string pair, or explicit full_file "
+            "with content_after. Use "
             "action='create' and edit_intent='full_file' only when the file "
             "does not exist."
         ),
@@ -724,6 +738,7 @@ def _normalization_metadata(
     edit_intent: str,
     before: str | None,
     source_provenance: str | None = None,
+    source_owner: str | None = None,
     content_after: str,
     change_pointer: str,
     eof_final_newline_tolerated: bool = False,
@@ -746,6 +761,7 @@ def _normalization_metadata(
         "edit_intent": edit_intent,
         "source_digest": _digest_text(change.get("source_digest")) or before_digest,
         "source_record_digest": before_digest,
+        "source_owner": source_owner or "",
         "source_provenance": source_provenance or "",
         "content_after_digest": after_digest,
         "derived_diff_ref": derived_diff_ref,
@@ -816,15 +832,6 @@ def _derived_diff_ref(
     rendered = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:16]
     return f"typed-edit-diff:{digest}"
-
-
-def _patch_requested_paths(raw: Mapping[str, Any]) -> tuple[str, ...]:
-    paths: list[str] = []
-    for slot in _patch_set_slots(raw):
-        path = _normalize_path(slot.raw.get("file_path"))
-        if path:
-            paths.append(path)
-    return tuple(dict.fromkeys(paths))
 
 
 def _edit_intent(change: Mapping[str, Any]) -> str:

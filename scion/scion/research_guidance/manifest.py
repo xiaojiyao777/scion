@@ -112,9 +112,6 @@ def legacy_research_focus_to_contract(
     """Adapt an old manifest focus mapping without interpreting domain keys."""
 
     mechanism_ids = _string_tuple(research_focus.get("required_mechanism_ids"))
-    target_intent_mechanism_ids = _string_tuple(
-        research_focus.get("target_intent_required_mechanism_ids")
-    )
     current_question = (
         _string(research_focus.get("current_question"))
         or _string(research_focus.get("next_required_direction"))
@@ -138,18 +135,6 @@ def legacy_research_focus_to_contract(
                 description=f"Legacy prepared mechanism id: {mechanism_id}",
             )
             for mechanism_id in mechanism_ids
-        )
-        + tuple(
-            RequiredMechanism(
-                mechanism_id=mechanism_id,
-                category="legacy_target_intent_required_mechanism",
-                description=(
-                    "Legacy prepared target-intent mechanism id: "
-                    f"{mechanism_id}"
-                ),
-                hypothesis_mechanism_binding="target_intent_required",
-            )
-            for mechanism_id in target_intent_mechanism_ids
         ),
         evidence_requirements=tuple(
             EvidenceRequirement(
@@ -245,9 +230,6 @@ def launch_research_guidance_payload(
         "legacy_research_focus_schema_version": _string(
             legacy_focus.get("schema_version")
         ),
-        "material_difference_requirement": _json_safe(
-            legacy_focus.get("material_difference_requirement")
-        ),
         "reviewed_mechanism_ids": _string_list(
             legacy_focus.get("reviewed_mechanism_ids")
         ),
@@ -273,13 +255,6 @@ def launch_research_guidance_payload(
             "required_mechanisms",
             [],
         ),
-        "target_intent_contracts": {
-            str(key): _json_safe(value)
-            for key, value in legacy_focus.items()
-            if isinstance(key, str)
-            and key.endswith("_target_intent")
-            and value not in ("", None, [], {}, ())
-        },
         "case_protection_requirements": _json_safe(
             legacy_focus.get("case_protection_requirements")
         ),
@@ -290,11 +265,6 @@ def launch_research_guidance_payload(
             mechanism.mechanism_id
             for mechanism in contract.required_mechanisms
             if mechanism.hypothesis_mechanism_binding == "required"
-        ],
-        "target_intent_required_mechanism_ids": [
-            mechanism.mechanism_id
-            for mechanism in contract.required_mechanisms
-            if mechanism.hypothesis_mechanism_binding == "target_intent_required"
         ],
         "expected_rendered_paths": list(expected_paths),
         "rendered_paths": list(rendered.rendered_paths),

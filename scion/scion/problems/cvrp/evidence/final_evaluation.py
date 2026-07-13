@@ -412,7 +412,7 @@ def _failed_run_side(result: "RunResult") -> CvrpSideResult:
         status=status,
         elapsed_ms=result.elapsed_ms,
         error_category=result.error_category or status,
-        detail=(result.stderr or result.stdout or "")[:1000] or None,
+        detail=(result.stderr or result.stdout or "") or None,
     )
 
 

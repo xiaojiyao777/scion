@@ -8,14 +8,13 @@ from pathlib import Path
 from typing import Any, Dict, Mapping
 
 from scion.core.branch_cards import active_slot_inventory_from_branch_cards
-from scion.core.branch_hygiene import campaign_remaining_branch_classification
 from scion.core.public_refs import redact_public_refs
-from scion.core.research_process_guidance_audit import (
-    extract_research_process_guidance_audit,
-)
 from scion.core.run_validity import apply_run_completion_aliases, build_run_validity
+from scion.core.execution_outcome import (
+    execution_outcome_evidence,
+    execution_outcome_evidence_from_counts,
+)
 from scion.core.screening_visibility import (
-    observability_value_visibility_from_payload,
     runtime_gate_visibility_summary,
     runtime_evidence_policy_summary,
 )
@@ -23,26 +22,15 @@ from scion.core.status_reporter import normalize_status_payload, normalize_stopp
 
 from .accounting import (
     accounting_reconciliation_fields,
+    direct_campaign_loop_facts,
+    is_direct_campaign_loop,
     proposal_accounting_fields,
 )
 from .artifact_refs import _in_flight_protocol_snapshot, _read_partial_metrics_snapshot
 from .common import reduced_measurement_readiness_payload
-from .cross_branch_observability import build_cross_branch_research_observability
 from .lineage import apply_lineage_integrity_to_run_validity
 
 logger = logging.getLogger(__name__)
-
-_BRANCH_LESSON_USAGE_STEP_COUNTER_FIELDS = (
-    "branch_lesson_usage_present_count",
-    "branch_lesson_usage_satisfied_count",
-    "branch_lesson_usage_missing_block_count",
-    "borrowed_lesson_count",
-    "avoided_lesson_count",
-    "contrasted_lesson_count",
-    "preserved_same_branch_lesson_count",
-    "clean_fork_contrast_satisfied_count",
-    "weak_positive_transfer_count",
-)
 
 _PROTOCOL_STAGE_SCOPED_FIELDS = (
     "complete",
@@ -70,7 +58,6 @@ _PROTOCOL_STAGE_SCOPED_FIELDS = (
     "champion_cached_runtime_pairs",
     "runtime_budget_diagnostic",
     "runtime_budget_diagnostic_code",
-    "observability_value_visibility",
 )
 
 
@@ -140,6 +127,10 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         return
 
     aliases = {
+        "operator_requested_formal_rounds": "operator_requested_formal_rounds",
+        "completed_typed_protocol_rounds": "completed_typed_protocol_rounds",
+        "scheduled_calls": "scheduled_calls",
+        "formal_stage_counts": "formal_stage_counts",
         "requested_rounds": "requested_rounds",
         "total_rounds": "total_rounds",
         "proposal_attempts": "proposal_attempts",
@@ -158,9 +149,6 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "protocol_evaluated_candidates": "protocol_evaluated_candidates",
         "protocol_metric_results": "protocol_metric_results",
         "screening_protocol_results": "screening_protocol_results",
-        "fresh_runtime_replay_protocol_results": (
-            "fresh_runtime_replay_protocol_results"
-        ),
         "validation_protocol_results": "validation_protocol_results",
         "frozen_protocol_results": "frozen_protocol_results",
         "verification_consumed_candidates": "verification_consumed_candidates",
@@ -172,9 +160,6 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "protocol_stage_counts": "protocol_stage_counts",
         "max_rounds_budget_counter": "max_rounds_budget_counter",
         "max_rounds_semantics": "max_rounds_semantics",
-        "telemetry_repair_attempts": "telemetry_repair_attempts",
-        "telemetry_diagnostic_attempts": "telemetry_diagnostic_attempts",
-        "branch_lifecycle_policy_blocks": "branch_lifecycle_policy_blocks",
         "reconcile_lifecycle_steps": "reconcile_lifecycle_steps",
         "non_counted_lifecycle_steps": "non_counted_lifecycle_steps",
         "scheduler_active_slot_blocked_attempts": (
@@ -185,42 +170,6 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
             "scheduler_active_slot_blocked_attempt_limit"
         ),
         "active_slot_blocked_attempt_limit": "active_slot_blocked_attempt_limit",
-        "fresh_runtime_replay_drain": "fresh_runtime_replay_drain",
-        "fresh_runtime_replay_drain_status": "fresh_runtime_replay_drain_status",
-        "fresh_runtime_replay_drain_attempts": "fresh_runtime_replay_drain_attempts",
-        "fresh_runtime_replay_drain_executed": "fresh_runtime_replay_drain_executed",
-        "fresh_runtime_replay_drain_skipped": "fresh_runtime_replay_drain_skipped",
-        "fresh_runtime_replay_drain_limit": "fresh_runtime_replay_drain_limit",
-        "fresh_runtime_replay_drain_stopped_reason": (
-            "fresh_runtime_replay_drain_stopped_reason"
-        ),
-        "fresh_runtime_replay_drain_accepted_replay_last_result": (
-            "fresh_runtime_replay_drain_accepted_replay_last_result"
-        ),
-        "fresh_runtime_replay_drain_final_attempt_last_result": (
-            "fresh_runtime_replay_drain_final_attempt_last_result"
-        ),
-        "fresh_runtime_replay_drain_blocked_count": (
-            "fresh_runtime_replay_drain_blocked_count"
-        ),
-        "fresh_runtime_replay_drain_unresolved_closures": (
-            "fresh_runtime_replay_drain_unresolved_closures"
-        ),
-        "stage_transition_drain": "stage_transition_drain",
-        "stage_transition_drain_status": "stage_transition_drain_status",
-        "stage_transition_drain_attempts": "stage_transition_drain_attempts",
-        "stage_transition_drain_executed": "stage_transition_drain_executed",
-        "stage_transition_drain_skipped": "stage_transition_drain_skipped",
-        "stage_transition_drain_limit": "stage_transition_drain_limit",
-        "stage_transition_drain_stopped_reason": (
-            "stage_transition_drain_stopped_reason"
-        ),
-        "stage_transition_drain_accepted_stage_last_result": (
-            "stage_transition_drain_accepted_stage_last_result"
-        ),
-        "stage_transition_drain_final_attempt_last_result": (
-            "stage_transition_drain_final_attempt_last_result"
-        ),
         "quality_blocks": "quality_blocks",
         "quality_block_ledger": "quality_block_ledger",
         "quality_block_ledger_count": "quality_block_ledger_count",
@@ -239,8 +188,6 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "loop_steps": "loop_steps",
         "campaign_steps": "campaign_steps",
         "screened_rounds": "screened_rounds",
-        "agentic_sessions": "agentic_sessions",
-        "agentic_sessions_semantics": "agentic_sessions_semantics",
         "hypothesis_calls": "hypothesis_calls",
         "hypothesis_calls_semantics": "hypothesis_calls_semantics",
         "code_calls": "code_calls",
@@ -249,11 +196,8 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "llm_request_kind_counts_semantics": (
             "llm_request_kind_counts_semantics"
         ),
-        "llm_model_counts": "llm_model_counts",
-        "llm_provider_counts": "llm_provider_counts",
-        "llm_token_sums": "llm_token_sums",
-        "llm_token_field_availability": "llm_token_field_availability",
-        "llm_accounting": "llm_accounting",
+        "proposal_attempt_source": "proposal_attempt_source",
+        "unsupported_historical_sources": "unsupported_historical_sources",
         "formal_candidate_count_reconciliation": (
             "formal_candidate_count_reconciliation"
         ),
@@ -342,31 +286,6 @@ def _ensure_runtime_gate_visibility(progress: Dict[str, Any]) -> None:
     )
 
 
-def _ensure_observability_value_visibility(progress: Dict[str, Any]) -> None:
-    if not _progress_has_observability_value_source(progress):
-        return
-    visibility = observability_value_visibility_from_payload(progress)
-    if visibility:
-        progress["observability_value_visibility"] = visibility
-
-
-def _progress_has_observability_value_source(progress: Mapping[str, Any]) -> bool:
-    return any(
-        key in progress
-        for key in (
-            "observability_value_visibility",
-            "candidate_intent",
-            "attempt_kind",
-            "mechanism_evidence",
-            "candidate_surface_runtime_summary",
-            "candidate_phase_telemetry_summary",
-            "telemetry_failure_details",
-            "candidate_runtime_failure_categories",
-            "candidate_first_runtime_failure",
-        )
-    )
-
-
 def _progress_has_runtime_policy_source(progress: Mapping[str, Any]) -> bool:
     return any(
         key in progress
@@ -421,11 +340,39 @@ def _status_scope_reconciliation(
 ) -> dict[str, Any]:
     """Describe which evidence sources are visible in status.json."""
 
-    last_counts = None
-    if isinstance(last_result, Mapping):
-        last_counts = bool(last_result.get("counts_toward_max_rounds", True))
     loop = payload.get("campaign_loop")
     loop_mapping = loop if isinstance(loop, Mapping) else {}
+    direct_loop = is_direct_campaign_loop(loop_mapping)
+    last_counts = None
+    if isinstance(last_result, Mapping) and not direct_loop:
+        # Historical status artifacts used this field before direct-v3 made
+        # typed formal Protocol outcomes the sole round-completion authority.
+        last_counts = bool(last_result.get("counts_toward_max_rounds", True))
+    source_counts = {
+        "step_history_total": 0,
+        "branch_row_count": len(branch_rows),
+        "last_result_count": 1 if last_result is not None else 0,
+        "current_progress_count": 1 if current_progress is not None else 0,
+        "in_flight_protocol_count": (
+            1 if payload.get("in_flight_protocol") else 0
+        ),
+        "screened_experiments": payload.get(
+            "screened_experiments",
+            loop_mapping.get("screened_experiments"),
+        ),
+        "effective_rounds_completed": payload.get(
+            "effective_rounds_completed",
+            loop_mapping.get("effective_rounds_completed"),
+        ),
+    }
+    if direct_loop:
+        source_counts["last_result_completed_typed_protocol_round"] = bool(
+            isinstance(last_result, Mapping)
+            and last_result.get("formal_protocol_evaluated")
+            and last_result.get("screened_experiment_effective")
+        )
+    else:
+        source_counts["last_result_counts_toward_max_rounds"] = last_counts
     return {
         "schema_version": "evidence_scope_reconciliation.v1",
         "payload": "status",
@@ -442,25 +389,12 @@ def _status_scope_reconciliation(
         "includes_failed_steps": bool(
             isinstance(last_result, Mapping) and last_result.get("failure_stage")
         ),
-        "includes_non_counted_steps": bool(last_counts is False),
-        "source_counts": {
-            "step_history_total": 0,
-            "branch_row_count": len(branch_rows),
-            "last_result_count": 1 if last_result is not None else 0,
-            "last_result_counts_toward_max_rounds": last_counts,
-            "current_progress_count": 1 if current_progress is not None else 0,
-            "in_flight_protocol_count": (
-                1 if payload.get("in_flight_protocol") else 0
-            ),
-            "screened_experiments": payload.get(
-                "screened_experiments",
-                loop_mapping.get("screened_experiments"),
-            ),
-            "effective_rounds_completed": payload.get(
-                "effective_rounds_completed",
-                loop_mapping.get("effective_rounds_completed"),
-            ),
-        },
+        **(
+            {}
+            if direct_loop
+            else {"includes_non_counted_steps": bool(last_counts is False)}
+        ),
+        "source_counts": source_counts,
     }
 
 
@@ -531,95 +465,6 @@ def _sync_in_flight_branch_fields(
     return merged
 
 
-def _status_context_records(
-    *values: Mapping[str, Any] | None,
-) -> list[Mapping[str, Any]]:
-    records: list[Mapping[str, Any]] = []
-    for value in values:
-        if not isinstance(value, Mapping):
-            continue
-        ref = value.get("proposal_session_ref")
-        if isinstance(ref, Mapping):
-            records.append(ref)
-        for key in (
-            "branch_lesson_records",
-            "branch_lessons",
-            "branch_lesson_usage_requirement",
-            "cross_branch_research_audit_records",
-            "cross_branch_research_payload",
-            "cross_branch_research_status",
-            "material_difference_audit_records",
-            "material_difference_requirement",
-        ):
-            if key in value:
-                records.append(value)
-                break
-    return records
-
-
-def _summary_grade_branch_lesson_usage_counters(
-    *,
-    campaign_dir: Path,
-    campaign_id: str,
-) -> dict[str, Any] | None:
-    summary_path = campaign_dir / "campaign_summary.json"
-    try:
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
-    if not isinstance(summary, Mapping):
-        return None
-    if summary.get("campaign_id") not in (None, campaign_id):
-        return None
-    observability = summary.get("cross_branch_research_observability")
-    if not isinstance(observability, Mapping):
-        return None
-    if observability.get("step_history_scope") in (None, "none"):
-        return None
-    source_counts = observability.get("source_counts")
-    step_history_total = 0
-    if isinstance(source_counts, Mapping):
-        try:
-            step_history_total = int(source_counts.get("step_history_total") or 0)
-        except (TypeError, ValueError):
-            step_history_total = 0
-    if step_history_total <= 0:
-        return None
-
-    counters = {
-        key: observability[key]
-        for key in _BRANCH_LESSON_USAGE_STEP_COUNTER_FIELDS
-        if key in observability
-    }
-    if not counters:
-        return None
-    counters["branch_lesson_usage_counter_scope"] = "summary_step_history"
-    counters["branch_lesson_usage_counter_source"] = "campaign_summary_json"
-    counters["branch_lesson_usage_counter_reason"] = (
-        "status_step_history_not_available; copied_summary_grade_step_history_counters"
-    )
-    counters["branch_lesson_usage_step_history_scope"] = observability.get(
-        "step_history_scope"
-    )
-    counters["branch_lesson_usage_summary_step_history_total"] = step_history_total
-    return counters
-
-
-def _mark_branch_lesson_usage_counters_unavailable(
-    observability: Dict[str, Any],
-) -> None:
-    if observability.get("step_history_scope") != "none":
-        return
-    for key in _BRANCH_LESSON_USAGE_STEP_COUNTER_FIELDS:
-        if key in observability:
-            observability[key] = None
-    observability["branch_lesson_usage_counter_scope"] = "not_available"
-    observability["branch_lesson_usage_counter_source"] = "requires_step_history"
-    observability["branch_lesson_usage_counter_reason"] = (
-        "status_json_does_not_have_step_history; use_campaign_summary_json_when_available"
-    )
-
-
 def _canary_result_payload(
     canary_result: Any,
     *,
@@ -657,18 +502,6 @@ _BRANCH_PROGRESS_FIELDS = (
     "active_slot_status",
     "counts_toward_active_slots",
     "current_head_active_slot_release_reason",
-    "best_checkpoint_status",
-    "best_quality_checkpoint_id",
-    "last_valid_checkpoint_id",
-    "rollback_count",
-    "lineage_retained_checkpoint",
-    "latest_head_failed",
-    "allowed_next_actions",
-    "forbidden_next_actions",
-    "final_branch_classification",
-    "branch_final_classification",
-    "branch_next_action",
-    "branch_classification_reason",
 )
 
 
@@ -687,7 +520,10 @@ class StatusWriterMixin:
         if loop_status is not None:
             self.campaign_loop_status = dict(loop_status)
         if self.campaign_loop_status is not None:
-            payload["campaign_loop"] = dict(self.campaign_loop_status)
+            direct_loop = is_direct_campaign_loop(self.campaign_loop_status)
+            payload["campaign_loop"] = direct_campaign_loop_facts(
+                self.campaign_loop_status
+            )
             _merge_campaign_loop_observability(payload)
             accounting = proposal_accounting_fields(
                 campaign_dir=self.campaign_dir,
@@ -695,26 +531,30 @@ class StatusWriterMixin:
                 state=payload,
                 screened_rounds=payload.get("screened_experiments"),
             )
-            accounting_reconciliation = accounting_reconciliation_fields(
-                loop_status=self.campaign_loop_status,
-                state=payload,
-                screened_rounds=payload.get("screened_experiments"),
-                effective_rounds_completed=payload.get(
-                    "effective_rounds_completed"
-                ),
-                campaign_dir=self.campaign_dir,
-            )
             payload.update(accounting)
-            payload["accounting_reconciliation"] = accounting_reconciliation
-            payload["proposal_accounting"] = {
-                "proposal_attempts": payload.get("proposal_attempts"),
-                "proposal_attempts_consumed": payload.get(
-                    "proposal_attempts_consumed"
-                ),
-                **accounting,
-                "accounting_reconciliation": accounting_reconciliation,
-            }
+            if direct_loop:
+                payload["proposal_accounting"] = dict(accounting)
+            else:
+                accounting_reconciliation = accounting_reconciliation_fields(
+                    loop_status=self.campaign_loop_status,
+                    state=payload,
+                    screened_rounds=payload.get("screened_experiments"),
+                    effective_rounds_completed=payload.get(
+                        "effective_rounds_completed"
+                    ),
+                    campaign_dir=self.campaign_dir,
+                )
+                payload["accounting_reconciliation"] = accounting_reconciliation
+                payload["proposal_accounting"] = {
+                    "proposal_attempts": payload.get("proposal_attempts"),
+                    "proposal_attempts_consumed": payload.get(
+                        "proposal_attempts_consumed"
+                    ),
+                    **accounting,
+                    "accounting_reconciliation": accounting_reconciliation,
+                }
         if last_result is not None:
+            direct_loop = is_direct_campaign_loop(self.campaign_loop_status)
             self.last_status_result = {
                 "action": last_result.action,
                 "branch_id": last_result.branch_id,
@@ -725,11 +565,6 @@ class StatusWriterMixin:
                 ),
                 "stopped": last_result.stopped,
                 "reason": last_result.reason,
-                "counts_toward_max_rounds": getattr(
-                    last_result,
-                    "counts_toward_max_rounds",
-                    True,
-                ),
                 "attempt_kind": getattr(last_result, "attempt_kind", "screening"),
                 "protocol_stage": getattr(last_result, "protocol_stage", None),
                 "formal_protocol_evaluated": bool(
@@ -746,11 +581,6 @@ class StatusWriterMixin:
                     "repair_policy_reason",
                     "",
                 ),
-                "decision_layer_source": getattr(
-                    last_result,
-                    "decision_layer_source",
-                    None,
-                ),
                 "decision_engine_reason_codes": list(
                     getattr(last_result, "decision_engine_reason_codes", ()) or ()
                 ),
@@ -759,12 +589,6 @@ class StatusWriterMixin:
                 ),
                 "bypass_reason_codes": list(
                     getattr(last_result, "bypass_reason_codes", ()) or ()
-                ),
-                "lifecycle_reason_codes": list(
-                    getattr(last_result, "lifecycle_reason_codes", ()) or ()
-                ),
-                "lifecycle_bookkeeping": dict(
-                    getattr(last_result, "lifecycle_bookkeeping", None) or {}
                 ),
                 "scheduler_slot": getattr(last_result, "scheduler_slot", ""),
                 "scheduler_reason": getattr(last_result, "scheduler_reason", ""),
@@ -777,13 +601,6 @@ class StatusWriterMixin:
                 self.last_status_result["proposal_session_ref"] = dict(
                     proposal_session_ref
                 )
-            guidance_audit = extract_research_process_guidance_audit(
-                getattr(last_result, "scheduler_audit_metadata", None) or {}
-            )
-            if guidance_audit:
-                self.last_status_result["research_process_guidance_audit"] = (
-                    guidance_audit
-                )
             failure_stage = getattr(last_result, "failure_stage", None)
             failure_category = getattr(last_result, "failure_category", None)
             failure_detail = getattr(last_result, "failure_detail", None)
@@ -792,15 +609,68 @@ class StatusWriterMixin:
             if failure_category:
                 self.last_status_result["failure_category"] = failure_category
             if failure_detail:
-                self.last_status_result["failure_detail"] = str(failure_detail)[:1000]
+                self.last_status_result["failure_detail"] = str(failure_detail)
             canary_payload = _canary_result_payload(
                 getattr(last_result, "canary_result", None),
                 base_dir=self.campaign_dir,
             )
             if canary_payload:
                 self.last_status_result["canary_result"] = canary_payload
+            execution_outcome = getattr(last_result, "execution_outcome", None)
+            if execution_outcome is not None:
+                outcome_value = getattr(execution_outcome, "value", execution_outcome)
+                outcome_projection = {
+                    "outcome": str(outcome_value),
+                    "reason_code": getattr(
+                        last_result, "execution_outcome_reason_code", ""
+                    ),
+                    "detail": getattr(
+                        last_result, "execution_outcome_detail", ""
+                    ),
+                    "provenance": dict(
+                        getattr(
+                            last_result,
+                            "execution_outcome_provenance",
+                            {},
+                        )
+                        or {}
+                    ),
+                }
+                self.last_status_result["execution_outcome"] = str(outcome_value)
+                self.last_status_result["execution_outcome_reason_code"] = (
+                    outcome_projection["reason_code"]
+                )
+                self.last_status_result["execution_outcome_detail"] = (
+                    outcome_projection["detail"]
+                )
+                self.last_status_result["execution_outcome_provenance"] = (
+                    outcome_projection["provenance"]
+                )
+                payload["last_execution_outcome"] = outcome_projection
         if self.last_status_result is not None:
             payload["last_result"] = self.last_status_result
+        outcome_rows: list[Mapping[str, Any]] = []
+        query_outcomes = getattr(self.registry, "query_execution_outcomes", None)
+        if callable(query_outcomes):
+            outcome_rows = list(query_outcomes(campaign_id=self.campaign_id))
+        if outcome_rows:
+            payload.update(execution_outcome_evidence(outcome_rows))
+        elif isinstance(payload.get("execution_outcome_counts"), Mapping):
+            payload.update(
+                execution_outcome_evidence_from_counts(
+                    payload.get("execution_outcome_counts"),
+                    last_execution_outcome=(
+                        payload.get("last_execution_outcome")
+                        if isinstance(payload.get("last_execution_outcome"), Mapping)
+                        else None
+                    ),
+                    unknown_count=int(payload.get("unknown_outcome_count") or 0),
+                )
+            )
+        elif isinstance(self.last_status_result, Mapping):
+            payload.update(execution_outcome_evidence([self.last_status_result]))
+        else:
+            payload.update(execution_outcome_evidence_from_counts(None))
         if stopped_reason is not None:
             payload["stopped_reason"] = normalize_stopped_reason(
                 stopped_reason,
@@ -821,10 +691,6 @@ class StatusWriterMixin:
         terminal_stopped_reason = payload.get("stopped_reason")
         branch_rows = _branch_rows(payload)
         _reconcile_active_slots_from_branch_cards(payload, branch_rows)
-        if _is_max_rounds_stop(terminal_stopped_reason):
-            payload["remaining_branch_classification"] = (
-                campaign_remaining_branch_classification(branch_rows)
-            )
         current_progress = self.current_status_progress
         if current_progress is None and isinstance(state_current_progress, Mapping):
             current_progress = dict(state_current_progress)
@@ -856,47 +722,6 @@ class StatusWriterMixin:
             )
             if self.last_status_result is not None:
                 payload["last_completed_result"] = self.last_status_result
-        try:
-            scheduler_records = (
-                [self.last_status_result]
-                if isinstance(self.last_status_result, Mapping)
-                else []
-            )
-            payload["cross_branch_research_observability"] = (
-                build_cross_branch_research_observability(
-                    branch_rows=branch_rows,
-                    branch_history_cards=payload.get("branch_history_cards") or (),
-                    scheduler_records=scheduler_records,
-                    context_records=_status_context_records(
-                        self.last_status_result
-                        if isinstance(self.last_status_result, Mapping)
-                        else None,
-                        current_progress
-                        if isinstance(current_progress, Mapping)
-                        else None,
-                        payload.get("in_flight_protocol")
-                        if isinstance(payload.get("in_flight_protocol"), Mapping)
-                        else None,
-                    ),
-                )
-            )
-            _merge_status_cross_branch_map_coverage(payload)
-            observability = payload.get("cross_branch_research_observability")
-            if isinstance(observability, dict):
-                summary_counters = (
-                    _summary_grade_branch_lesson_usage_counters(
-                        campaign_dir=self.campaign_dir,
-                        campaign_id=self.campaign_id,
-                    )
-                    if terminal_stopped
-                    else None
-                )
-                if summary_counters is not None:
-                    observability.update(summary_counters)
-                else:
-                    _mark_branch_lesson_usage_counters_unavailable(observability)
-        except Exception as exc:  # pragma: no cover - status is best-effort
-            logger.debug("cross-branch observability status failed: %s", exc)
         payload["evidence_scope_reconciliation"] = _status_scope_reconciliation(
             payload=payload,
             branch_rows=branch_rows,
@@ -932,11 +757,17 @@ class StatusWriterMixin:
             payload["run_validity"] = build_run_validity(
                 requested_rounds=payload.get(
                     "requested_rounds",
-                    loop_mapping.get("requested_rounds"),
+                    payload.get(
+                        "operator_requested_formal_rounds",
+                        loop_mapping.get("requested_rounds"),
+                    ),
                 ),
                 effective_rounds_completed=payload.get(
                     "effective_rounds_completed",
-                    loop_mapping.get("effective_rounds_completed"),
+                    payload.get(
+                        "completed_typed_protocol_rounds",
+                        loop_mapping.get("effective_rounds_completed"),
+                    ),
                 ),
                 n_experiments=payload.get(
                     "n_experiments",
@@ -944,7 +775,10 @@ class StatusWriterMixin:
                 ),
                 proposal_attempts=payload.get(
                     "proposal_attempts_consumed",
-                    payload.get("proposal_attempts"),
+                    payload.get(
+                        "proposal_attempts",
+                        payload.get("scheduled_calls"),
+                    ),
                 ),
                 protocol_metric_results=payload.get(
                     "protocol_metric_results",
@@ -958,6 +792,9 @@ class StatusWriterMixin:
                 failure_categories=failure_categories,
                 stopped=True,
                 partial_in_flight=bool(payload.get("in_flight_protocol")),
+                execution_outcome_counts=payload.get("execution_outcome_counts"),
+                last_execution_outcome=payload.get("last_execution_outcome"),
+                unknown_outcome_count=payload.get("unknown_outcome_count"),
             )
             payload["run_validity_status"] = payload["run_validity"]["reason"]
             apply_lineage_integrity_to_run_validity(payload, lineage_integrity)
@@ -1001,7 +838,6 @@ class StatusWriterMixin:
             "champion_cached_runtime_pairs",
             "runtime_budget_diagnostic",
             "runtime_budget_diagnostic_code",
-            "observability_value_visibility",
         ):
             if key not in payload and key in metrics_snapshot:
                 progress[key] = metrics_snapshot[key]
@@ -1010,7 +846,6 @@ class StatusWriterMixin:
             progress["valid_pairs"] = progress["completed_pairs"]
         _ensure_runtime_evidence_policy(progress)
         _ensure_runtime_gate_visibility(progress)
-        _ensure_observability_value_visibility(progress)
         _ensure_running_protocol_fields(progress)
         if progress.get("raw_metrics_ref"):
             progress["raw_metrics_ref_scope"] = "public_artifact_ref"
@@ -1026,32 +861,8 @@ class StatusWriterMixin:
 
 def _is_max_rounds_stop(reason: Any) -> bool:
     text = str(reason or "").strip()
-    return text in {"max_rounds", "max_rounds_exhausted"}
-
-
-def _merge_status_cross_branch_map_coverage(payload: Dict[str, Any]) -> None:
-    """Infer status-level map coverage from stable loop counters when needed."""
-    observability = payload.get("cross_branch_research_observability")
-    if not isinstance(observability, dict):
-        return
-    if observability.get("observable_step_count"):
-        return
-    completed = payload.get("effective_rounds_completed") or payload.get(
-        "screened_experiments"
-    )
-    try:
-        count = max(0, int(completed))
-    except (TypeError, ValueError):
-        return
-    if count <= 0:
-        return
-    observability["observable_step_count"] = count
-    observability["cross_branch_map_seen_count"] = max(
-        int(observability.get("cross_branch_map_seen_count") or 0),
-        count,
-    )
-    source_counts = observability.get("source_counts")
-    if isinstance(source_counts, dict):
-        source_counts["observable_step_count"] = observability["observable_step_count"]
-        source_counts["status_loop_accounting_inferred_count"] = count
-    observability["status_scope"] = "loop_accounting_inferred"
+    return text in {
+        "max_rounds",
+        "max_rounds_exhausted",
+        "requested_rounds_completed",
+    }

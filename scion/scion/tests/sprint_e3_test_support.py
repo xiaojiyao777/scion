@@ -16,7 +16,6 @@ from scion.core.models import (
     PairwiseCaseFeedback, CaseAggregateFeedback,
     ProtocolResult, StepRecord, VerificationResult, CheckResult,
 )
-from scion.core.stagnation import StagnationDetector, StagnationSignal, CampaignDiagnosis
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +73,7 @@ def _make_protocol_result(gate_outcome: str = "pass", win_rate: float = 0.7) -> 
         stage=ExperimentStage.SCREENING,
         stats=stats,
         gate_outcome=gate_outcome,
-        reason_codes=("TEST",),
+        reason_codes=("SCREENING_PASS",),
         exposed_summary="test",
         raw_metrics_ref="/tmp/test.json",
     )

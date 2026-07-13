@@ -1,8 +1,8 @@
 """Report-only projection of protocol raw metrics into case-level deltas.
 
-The projection is intentionally problem-neutral. It preserves enough bounded
-per-case metric-delta evidence for problem-owned postrun reviewers to interpret
-their own protected cases without teaching core about problem semantics.
+The projection is intentionally problem-neutral and lossless: problem-owned
+postrun reviewers receive every public case pair and metric without core
+teaching problem semantics or substituting a bounded summary for evidence.
 """
 from __future__ import annotations
 
@@ -11,20 +11,12 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Mapping
 
-DEFAULT_CASE_LIMIT = 24
-DEFAULT_METRIC_LIMIT = 8
-DEFAULT_SAMPLE_LIMIT = 8
-
-
 def protocol_case_level_deltas(
     protocol: Mapping[str, Any],
     *,
     campaign_path: Path,
-    case_limit: int = DEFAULT_CASE_LIMIT,
-    metric_limit: int = DEFAULT_METRIC_LIMIT,
-    sample_limit: int = DEFAULT_SAMPLE_LIMIT,
 ) -> dict[str, Any]:
-    """Return bounded case -> metric-delta evidence from public metrics refs."""
+    """Return complete case -> metric-delta evidence from public metrics refs."""
 
     metrics_path = _resolve_public_metrics_path(protocol, campaign_path=campaign_path)
     if metrics_path is None:
@@ -45,16 +37,12 @@ def protocol_case_level_deltas(
         scalar_delta = _float_or_none(pair.get("delta"))
         if scalar_delta is None and not metric_deltas:
             continue
-        if case not in case_pairs and len(case_pairs) >= max(0, case_limit):
-            continue
         case_pairs.setdefault(case, []).append(pair)
 
     return {
         case: _case_delta_summary(
             case,
             pairs_for_case,
-            metric_limit=max(0, metric_limit),
-            sample_limit=max(0, sample_limit),
         )
         for case, pairs_for_case in case_pairs.items()
     }
@@ -107,9 +95,6 @@ def _read_json_mapping(path: Path) -> dict[str, Any]:
 def _case_delta_summary(
     case: str,
     pairs: list[Mapping[str, Any]],
-    *,
-    metric_limit: int,
-    sample_limit: int,
 ) -> dict[str, Any]:
     scalar_deltas: list[float] = []
     metric_values: dict[str, list[float]] = {}
@@ -126,10 +111,9 @@ def _case_delta_summary(
         metric_deltas = _numeric_mapping(pair.get("metric_deltas"))
         for metric, value in metric_deltas.items():
             metric_values.setdefault(metric, []).append(value)
-        if len(samples) < sample_limit:
-            sample = _pair_sample(pair, scalar_delta, metric_deltas, metric_limit)
-            if sample:
-                samples.append(sample)
+        sample = _pair_sample(pair, scalar_delta, metric_deltas)
+        if sample:
+            samples.append(sample)
 
     summary: dict[str, Any] = {
         "case": case,
@@ -140,19 +124,14 @@ def _case_delta_summary(
     if comparison_counts:
         summary["comparison_counts"] = dict(sorted(comparison_counts.items()))
     if metric_values:
-        selected_metrics = sorted(metric_values.items())[:metric_limit]
         summary["metric_delta_metric_count"] = len(metric_values)
-        if len(metric_values) > metric_limit:
-            summary["metric_delta_metrics_truncated"] = len(metric_values) - metric_limit
         summary["metric_delta_medians"] = {
             metric: _median(values)
-            for metric, values in selected_metrics
+            for metric, values in sorted(metric_values.items())
             if values
         }
     if samples:
         summary["sample_pairs"] = samples
-        if len(pairs) > len(samples):
-            summary["sample_pairs_truncated"] = len(pairs) - len(samples)
     return summary
 
 
@@ -160,7 +139,6 @@ def _pair_sample(
     pair: Mapping[str, Any],
     scalar_delta: float | None,
     metric_deltas: Mapping[str, float],
-    metric_limit: int,
 ) -> dict[str, Any]:
     sample: dict[str, Any] = {}
     seed = pair.get("seed")
@@ -172,10 +150,7 @@ def _pair_sample(
     if scalar_delta is not None:
         sample["delta"] = scalar_delta
     if metric_deltas:
-        sample["metric_deltas"] = {
-            metric: value
-            for metric, value in sorted(metric_deltas.items())[:metric_limit]
-        }
+        sample["metric_deltas"] = dict(sorted(metric_deltas.items()))
     return sample
 
 

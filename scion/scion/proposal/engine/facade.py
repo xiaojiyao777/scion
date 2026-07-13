@@ -2,41 +2,62 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from dataclasses import replace
+from typing import Any, Dict, Mapping
 
 from scion.core.models import HypothesisProposal, PatchProposal
-from scion.proposal.schemas import (
-    FIX_TOOL,
-    HYPOTHESIS_TOOL,
-    HYPOTHESIS_TARGET_INTENT_TOOL,
-    PATCH_TOOL,
-    TOOL_SELECTION_TOOL,
+from scion.proposal.context_owner_maps import proposal_context_snapshot
+from scion.proposal.context_snapshot import ProposalContextSnapshot
+from scion.proposal.prompt_projection_authority import (
+    ProposalPromptProjectionAuthority,
+)
+from scion.proposal.prompt_manifest import stable_digest
+from scion.proposal.schemas import HYPOTHESIS_TOOL, PATCH_TOOL
+
+from .parsing import _parse_hypothesis, _parse_patch
+from .provider_call import (
+    PromptCallReceipt,
+    PromptTurnSnapshot,
+    ProviderCallOwner,
+    _attach_prompt_call_receipt,
+    prompt_call_receipt_from_error,
 )
 
-from .code_prompts import _split_code_context
-from .fix_context import _split_fix_context
-from .hypothesis_prompts import (
-    _split_hypothesis_context,
-    _split_hypothesis_target_intent_context,
-)
-from .parsing import (
-    _parse_hypothesis,
-    _parse_hypothesis_target_intent,
-    _parse_patch,
-)
-from .tool_selection import _parse_tool_selection, _split_tool_selection_context
-from .trace import _TraceWriter, _client_request_policy
+
+def build_prompt_turn_snapshot(
+    render_kind: str,
+    context: Mapping[str, Any] | ProposalContextSnapshot,
+) -> PromptTurnSnapshot:
+    """Render one provider-visible prompt turn from its structured context."""
+    kind = str(render_kind)
+    if kind not in {"hypothesis", "code"}:
+        raise ValueError(f"unsupported prompt render kind: {render_kind}")
+    authoritative = (
+        context
+        if isinstance(context, ProposalContextSnapshot)
+        else proposal_context_snapshot(kind, context)
+    )
+    projection = ProposalPromptProjectionAuthority.project(kind, authoritative)
+    render_context = projection.structured_context
+    return PromptTurnSnapshot(
+        render_kind=kind,
+        system_blocks=tuple(dict(block) for block in projection.system_blocks),
+        user_prompt=str(projection.user_prompt),
+        context_digest=stable_digest(render_context, length=64),
+        authoritative_context_ref=authoritative.snapshot_id,
+        authoritative_context=authoritative,
+    )
 
 
 class CreativeLayer:
     """Generates HypothesisProposal (Round 1) and PatchProposal (Round 2) via LLM.
 
-    The client must implement ``call(prompt, response_schema, model) -> dict``.
+    The client must implement ``call_with_tool(...) -> dict``.
     Both :class:`~scion.proposal.llm_client.LLMClient` and
     :class:`~scion.proposal.mock_client.MockLLMClient` satisfy this interface.
 
-    Errors from the LLM client (LLMRetryExhaustedError, LLMFormatError, …)
-    propagate to the caller (CampaignManager → FailureRouter).
+    Typed leaf faults from the single-attempt LLM client propagate to the
+    caller (CampaignManager → FailureRouter).
     """
 
     def __init__(
@@ -49,167 +70,88 @@ class CreativeLayer:
         self._client = llm_client
         self._model = model or getattr(llm_client, "model", None) or "claude-opus-4-6"
         self._trace_dir = trace_dir
-
-    def generate_hypothesis(self, context: Dict[str, Any]) -> HypothesisProposal:
-        """Generate a HypothesisProposal using tool_use."""
-        system_blocks, user_prompt = _split_hypothesis_context(context)
-        raw = self._call_with_trace(
-            request_kind="hypothesis",
-            prompt=user_prompt,
-            tool=HYPOTHESIS_TOOL,
-            system_blocks=system_blocks,
-            context=context,
-        )
-        return _parse_hypothesis(raw)
-
-    def generate_hypothesis_target_intent(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Select a tainted target intent before formal hypothesis generation."""
-        system_blocks, user_prompt = _split_hypothesis_target_intent_context(context)
-        raw = self._call_with_trace(
-            request_kind="hypothesis_target_intent",
-            prompt=user_prompt,
-            tool=HYPOTHESIS_TARGET_INTENT_TOOL,
-            system_blocks=system_blocks,
-            context=context,
-        )
-        return _parse_hypothesis_target_intent(raw)
-
-    def generate_code(self, context: Dict[str, Any]) -> PatchProposal:
-        """Generate a PatchProposal using tool_use (API handles JSON escape)."""
-        system_blocks, user_prompt = _split_code_context(context)
-        raw = self._call_with_trace(
-            request_kind="code",
-            prompt=user_prompt,
-            tool=PATCH_TOOL,
-            system_blocks=system_blocks,
-            context=context,
-        )
-        return _parse_patch(raw, context=context)
-
-    def fix_code(self, context: Dict[str, Any]) -> PatchProposal | None:
-        """Generate a corrected PatchProposal after a light verification failure.
-
-        Uses tool_use (same as generate_hypothesis/generate_code) to avoid
-        JSON escape issues when code_content contains complex Python.
-        """
-        system_blocks, user_prompt = _split_fix_context(context)
-        raw = self._call_with_trace(
-            request_kind="fix",
-            prompt=user_prompt,
-            tool=FIX_TOOL,
-            system_blocks=system_blocks,
-            context=context,
-        )
-        if _raw_fix_declares_no_patch(raw):
-            return None
-        return _parse_patch(raw, context=context)
-
-    def plan_tool_call(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Ask the model to choose the next APS proposal tool.
-
-        The model only returns a plan. APS validates the selected tool against
-        its allowed list and executes through ProposalToolRegistry.
-        """
-        system_blocks, prompt = _split_tool_selection_context(context)
-        raw = self._call_with_trace(
-            request_kind="tool_selection",
-            prompt=prompt,
-            tool=TOOL_SELECTION_TOOL,
-            system_blocks=system_blocks,
-            context=context,
-        )
-        return _parse_tool_selection(raw)
-
-    def _call_with_trace(
-        self,
-        *,
-        request_kind: str,
-        prompt: str,
-        tool: Dict[str, Any],
-        system_blocks: "list[dict]",
-        context: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        trace = _TraceWriter(self._trace_dir)
-        request_policy = _client_request_policy(
+        self._provider_calls = ProviderCallOwner(
             self._client,
-            request_kind=request_kind,
-            tool=tool,
+            self._model,
+            trace_dir=self._trace_dir,
         )
-        trace_path = trace.write_start(
-            request_kind=request_kind,
-            model=self._model,
-            tool=tool,
-            prompt=prompt,
-            system_blocks=system_blocks,
+
+    def generate_direct_hypothesis_with_receipt(
+        self,
+        context: Dict[str, Any],
+        snapshot: PromptTurnSnapshot,
+        *,
+        attempt_audit: Mapping[str, Any] | None = None,
+    ) -> tuple[HypothesisProposal, PromptCallReceipt]:
+        """Generate one direct-v3 hypothesis without a Scion output cap."""
+        return self._generate_hypothesis_with_receipt(
+            context,
+            snapshot,
+            attempt_audit=attempt_audit,
+        )
+
+    def _generate_hypothesis_with_receipt(
+        self,
+        context: Dict[str, Any],
+        snapshot: PromptTurnSnapshot,
+        *,
+        attempt_audit: Mapping[str, Any] | None = None,
+    ) -> tuple[HypothesisProposal, PromptCallReceipt]:
+        raw, receipt = self._provider_calls.call_with_receipt(
+            request_kind="hypothesis",
+            tool=HYPOTHESIS_TOOL,
             context=context,
-            request_policy=request_policy,
+            snapshot=snapshot,
+            attempt_audit=attempt_audit,
         )
         try:
-            try:
-                raw = self._client.call_with_tool(
-                    prompt,
-                    tool,
-                    self._model,
-                    system_blocks=system_blocks,
-                    request_kind=request_kind,
-                )
-            except TypeError as exc:
-                if "request_kind" not in str(exc):
-                    raise
-                raw = self._client.call_with_tool(
-                    prompt,
-                    tool,
-                    self._model,
-                    system_blocks=system_blocks,
-                )
+            return _parse_hypothesis(raw), receipt
         except Exception as exc:
-            trace.write_finish(
-                trace_path,
+            failed = replace(
+                receipt,
                 ok=False,
-                error=str(exc),
-                llm_usage=_client_usage_metadata(self._client),
-                llm_retry_events=_client_retry_events(self._client),
+                error_category="response_parse_failed",
+                error_type=type(exc).__name__,
             )
+            _attach_prompt_call_receipt(exc, failed)
             raise
-        trace.write_finish(
-            trace_path,
-            ok=True,
-            response=raw,
-            llm_usage=_client_usage_metadata(self._client),
-            llm_retry_events=_client_retry_events(self._client),
+
+    def generate_direct_code_with_receipt(
+        self,
+        context: Dict[str, Any],
+        snapshot: PromptTurnSnapshot,
+        *,
+        attempt_audit: Mapping[str, Any] | None = None,
+    ) -> tuple[PatchProposal, PromptCallReceipt]:
+        """Generate one direct-v3 patch without a Scion output cap."""
+        return self._generate_code_with_receipt(
+            context,
+            snapshot,
+            attempt_audit=attempt_audit,
         )
-        return raw
 
-
-def _raw_fix_declares_no_patch(raw: Dict[str, Any]) -> bool:
-    """Return True when a fix response explicitly refuses ownership."""
-
-    premise_check = str(raw.get("premise_check") or "").strip()
-    if premise_check != "wrong_owner":
-        return False
-    reason = str(raw.get("premise_check_reason") or "").strip()
-    return bool(reason)
-
-
-def _client_usage_metadata(client: Any) -> Dict[str, Any] | None:
-    getter = getattr(client, "get_last_usage_metadata", None)
-    if getter is None:
-        return None
-    try:
-        usage = getter()
-    except Exception:
-        return None
-    return dict(usage) if isinstance(usage, dict) else None
-
-
-def _client_retry_events(client: Any) -> list[dict[str, Any]]:
-    getter = getattr(client, "get_last_retry_events", None)
-    if getter is None:
-        return []
-    try:
-        events = getter()
-    except Exception:
-        return []
-    if not isinstance(events, list):
-        return []
-    return [dict(item) for item in events if isinstance(item, dict)]
+    def _generate_code_with_receipt(
+        self,
+        context: Dict[str, Any],
+        snapshot: PromptTurnSnapshot,
+        *,
+        attempt_audit: Mapping[str, Any] | None = None,
+    ) -> tuple[PatchProposal, PromptCallReceipt]:
+        raw, receipt = self._provider_calls.call_with_receipt(
+            request_kind="code",
+            tool=PATCH_TOOL,
+            context=context,
+            snapshot=snapshot,
+            attempt_audit=attempt_audit,
+        )
+        try:
+            return _parse_patch(raw, context=context), receipt
+        except Exception as exc:
+            failed = replace(
+                receipt,
+                ok=False,
+                error_category="response_parse_failed",
+                error_type=type(exc).__name__,
+            )
+            _attach_prompt_call_receipt(exc, failed)
+            raise

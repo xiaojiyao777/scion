@@ -1,0 +1,463 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from scion.core.models import (
+    Branch,
+    BranchState,
+    ChampionState,
+    CaseAggregateFeedback,
+    Decision,
+    EvalStats,
+    ExperimentStage,
+    HypothesisProposal,
+    PairwiseCaseFeedback,
+    ProtocolResult,
+    StepRecord,
+)
+from scion.problem.bridge import (
+    legacy_problem_spec_from_v1,
+    load_problem_spec_v1_from_yaml,
+)
+from scion.problem.loader import load_problem_adapter
+from scion.proposal.context_manager import ContextManager
+from scion.proposal.context_manager.manager import (
+    CANONICAL_SCREENING_HISTORY_KEY,
+    persist_canonical_screening_record,
+)
+from scion.proposal.context_owner_maps import proposal_context_snapshot
+from scion.proposal.engine import (
+    _parse_hypothesis,
+    _split_code_context,
+    _split_hypothesis_context,
+)
+
+
+_PROBLEM_ROOT = Path(__file__).resolve().parents[2] / "problems"
+
+
+def _runtime(problem_id: str):
+    spec = load_problem_spec_v1_from_yaml(
+        _PROBLEM_ROOT / problem_id / "problem-v1.yaml"
+    )
+    legacy = legacy_problem_spec_from_v1(spec)
+    adapter = load_problem_adapter(spec)
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="champion-config",
+        code_snapshot_path=legacy.root_dir,
+        code_snapshot_hash="champion-code",
+    )
+    branch = Branch(
+        branch_id=f"direct-{problem_id}",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-code",
+    )
+    return spec, legacy, adapter, champion, branch
+
+
+@pytest.mark.parametrize("problem_id", ("warehouse_delivery", "cvrp"))
+def test_direct_v3_real_problem_response_uses_minimal_parser_path(
+    problem_id: str,
+) -> None:
+    _spec, legacy, _adapter, _champion, _branch = _runtime(problem_id)
+    surface = legacy.research_surfaces[0]
+    target_file = (
+        "policies/baseline_modules/local_search.py"
+        if problem_id == "cvrp"
+        else "operators/direct_lossless_fixture.py"
+    )
+
+    proposal = _parse_hypothesis(
+        {
+            "hypothesis_text": f"Exercise {problem_id} direct response parsing.",
+            "change_locus": surface.name,
+            "action": "modify" if problem_id == "cvrp" else "create_new",
+            "target_file": target_file,
+            "predicted_direction": "improve",
+            "target_weakness": "slow convergence",
+            "expected_effect": "faster convergence",
+        }
+    )
+
+    assert proposal.change_locus == surface.name
+    assert proposal.target_file == target_file
+
+
+@pytest.mark.parametrize("problem_id", ("warehouse_delivery", "cvrp"))
+def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
+    problem_id: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _spec, legacy, adapter, champion, branch = _runtime(problem_id)
+    branch.direction = f"SENTINEL_{problem_id}_HOST_DIRECTION"
+    objective_tail = f"SENTINEL_{problem_id}_OBJECTIVE"
+    runtime_error_tail = f"SENTINEL_{problem_id}_RUNTIME_ERROR"
+    telemetry_noise = f"SENTINEL_{problem_id}_TELEMETRY_NOISE"
+    pre_protocol_noise = f"SENTINEL_{problem_id}_PRE_PROTOCOL_NOISE"
+    forbidden_raw = f"FORBIDDEN_{problem_id}_RAW_PAIR"
+    hypothesis = HypothesisProposal(
+        hypothesis_text=objective_tail,
+        change_locus=legacy.research_surfaces[0].name,
+        action="modify",
+        target_file=(
+            "policies/baseline_modules/local_search.py"
+            if problem_id == "cvrp"
+            else "operators/change_vehicle_type.py"
+        ),
+    )
+    screening = StepRecord(
+        round_num=1,
+        branch_id=branch.branch_id,
+        hypothesis=hypothesis,
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=1,
+                wins=1,
+                losses=0,
+                ties=0,
+                win_rate=1.0,
+                median_delta=2.5,
+                ci_low=1.0,
+                ci_high=4.0,
+            ),
+            gate_outcome="pass",
+            reason_codes=("host-gate-noise",),
+            exposed_summary="duplicate summary noise",
+            raw_metrics_ref="private/raw.json",
+            objective_semantics="minimize total objective",
+            case_ids=("case-visible",),
+            seed_set=(11,),
+            pair_feedback=(
+                PairwiseCaseFeedback(
+                    case_id="case-visible",
+                    seed=11,
+                    comparison="win",
+                    delta=2.5,
+                ),
+            ),
+            case_feedback=(
+                CaseAggregateFeedback(
+                    case_id="case-visible",
+                    n_pairs=1,
+                    wins=1,
+                    losses=0,
+                    ties=0,
+                    win_rate=1.0,
+                    dominant_result="win",
+                    median_deltas={"objective": 2.5},
+                ),
+            ),
+            candidate_phase_telemetry_summary={"phase": telemetry_noise},
+            candidate_operator_attempts=99,
+            mechanism_evidence={"mechanism": telemetry_noise},
+            candidate_runtime_failure_categories={"crash": 1},
+            candidate_first_runtime_failure={"detail": runtime_error_tail},
+        ),
+        decision=Decision.CONTINUE_EXPLORE,
+        failure_stage=None,
+        failure_detail=None,
+        hypothesis_id="attempt-screening-1",
+    )
+    pre_protocol = StepRecord(
+        round_num=2,
+        branch_id=branch.branch_id,
+        hypothesis=HypothesisProposal(
+            hypothesis_text=pre_protocol_noise,
+            change_locus=legacy.research_surfaces[0].name,
+            action="modify",
+            target_file=hypothesis.target_file,
+        ),
+        patch=None,
+        contract_passed=False,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="verification",
+        failure_detail=pre_protocol_noise,
+    )
+    adapter_payload = dict(adapter.render_problem_measurement_diagnostics())
+    adapter_payload["opportunity_diagnostics"] = [telemetry_noise]
+    adapter_payload["phase_telemetry"] = [telemetry_noise]
+    adapter_payload["raw_pair_rows"] = [forbidden_raw]
+    monkeypatch.setattr(
+        adapter,
+        "render_problem_measurement_diagnostics",
+        lambda: adapter_payload,
+    )
+
+    context = ContextManager(adapter=adapter).build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=[screening, pre_protocol],
+    )
+    snapshot = proposal_context_snapshot("hypothesis", context)
+    blocks, user_prompt = _split_hypothesis_context(
+        snapshot.inputs.provider_context(include_renderer_inputs=True)
+    )
+    rendered = "\n".join(block["text"] for block in blocks) + user_prompt
+
+    assert len(context["experiment_history"]) == 1
+    evidence = context["experiment_history"][0]
+    assert evidence["attempt_id"] == "attempt-screening-1"
+    assert set(evidence["experiment_evidence"]) == {
+        "stage",
+        "objective_outcome",
+        "case_outcomes",
+        "runtime_errors",
+    }
+    assert objective_tail in rendered
+    assert "case-visible" in rendered
+    assert runtime_error_tail in rendered
+    assert telemetry_noise not in rendered
+    assert pre_protocol_noise not in rendered
+    assert forbidden_raw not in rendered
+    assert "problem_opportunity_summary" not in context
+    assert "raw_pair_rows" not in rendered
+    assert set(context["research_question"]) == {
+        "schema_version",
+        "problem_family",
+        "current_question",
+    }
+    assert "report_only" not in rendered
+    assert "branch_direction" not in context
+    assert branch.direction not in rendered
+    assert set(context).isdisjoint(
+        {
+            "failed_hypotheses",
+            "active_hypotheses",
+            "sibling_branches",
+            "branch_dossier",
+            "cross_branch_research",
+            "material_difference_requirement",
+            "branch_lesson_usage_requirement",
+            "search_memory",
+            "research_log",
+            "runtime_feedback",
+            "agent_quality_feedback",
+            "search_control_guidance",
+        }
+    )
+    lowered = rendered.lower()
+    for forbidden in (
+        "omitted_item_count",
+        "text_digest",
+        "compact_to_fit",
+        "target_intent",
+    ):
+        assert forbidden not in lowered
+
+
+def test_canonical_screening_history_deduplicates_durable_and_live_record() -> None:
+    _spec, legacy, adapter, champion, branch = _runtime("cvrp")
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Test one durable screening observation.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+    )
+    screening = StepRecord(
+        round_num=1,
+        branch_id=branch.branch_id,
+        hypothesis=hypothesis,
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=2,
+                wins=1,
+                losses=1,
+                ties=0,
+                win_rate=0.5,
+                median_delta=-1.0,
+                ci_low=-2.0,
+                ci_high=0.0,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL",),
+            exposed_summary="screening failed",
+            raw_metrics_ref="private/round-1.json",
+        ),
+        decision=Decision.CONTINUE_EXPLORE,
+        failure_stage=None,
+        failure_detail=None,
+        hypothesis_id="same-hypothesis",
+    )
+
+    assert persist_canonical_screening_record(branch, screening) is True
+    context = ContextManager(adapter=adapter).build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=[screening],
+    )
+
+    assert len(context["experiment_history"]) == 1
+    assert context["experiment_history"][0]["attempt_id"] == "same-hypothesis"
+    assert persist_canonical_screening_record(branch, screening) is False
+
+
+def test_canonical_screening_history_keeps_multiple_screenings_of_one_hypothesis() -> None:
+    _spec, legacy, adapter, champion, branch = _runtime("cvrp")
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Expand screening for the same hypothesis.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+    )
+
+    def screening(round_num: int, raw_ref: str, median_delta: float) -> StepRecord:
+        return StepRecord(
+            round_num=round_num,
+            branch_id=branch.branch_id,
+            hypothesis=hypothesis,
+            patch=None,
+            contract_passed=True,
+            verification_passed=True,
+            protocol_result=ProtocolResult(
+                stage=ExperimentStage.SCREENING,
+                stats=EvalStats(
+                    n_cases=2,
+                    wins=1,
+                    losses=1,
+                    ties=0,
+                    win_rate=0.5,
+                    median_delta=median_delta,
+                    ci_low=-2.0,
+                    ci_high=2.0,
+                ),
+                gate_outcome="expand",
+                reason_codes=("SCREENING_EXPAND",),
+                exposed_summary="screening expanded",
+                raw_metrics_ref=raw_ref,
+            ),
+            decision=Decision.CONTINUE_EXPLORE,
+            failure_stage=None,
+            failure_detail=None,
+            hypothesis_id="same-hypothesis",
+        )
+
+    first = screening(1, "private/round-1.json", -1.0)
+    second = screening(2, "private/round-2.json", 0.5)
+    assert persist_canonical_screening_record(branch, first) is True
+    assert persist_canonical_screening_record(branch, second) is True
+
+    context = ContextManager(adapter=adapter).build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=[],
+    )
+    history = context["experiment_history"]
+    assert len(history) == 2
+    assert {record["attempt_id"] for record in history} == {"same-hypothesis"}
+    assert len({record["screening_attempt_id"] for record in history}) == 2
+
+
+def test_canonical_screening_history_fails_closed_on_malformed_durable_owner() -> None:
+    _spec, legacy, adapter, champion, branch = _runtime("cvrp")
+    branch.branch_evidence_summary = {
+        CANONICAL_SCREENING_HISTORY_KEY: {"not": "a list"}
+    }
+
+    with pytest.raises(ValueError, match="canonical screening history is invalid"):
+        ContextManager(adapter=adapter).build_hypothesis_context(
+            branch=branch,
+            champion=champion,
+            problem_spec=legacy,
+            step_history=[],
+        )
+
+
+@pytest.mark.parametrize(
+    ("problem_id", "surface", "target_file"),
+    (
+        (
+            "warehouse_delivery",
+            "vehicle_level",
+            "operators/change_vehicle_type.py",
+        ),
+        (
+            "cvrp",
+            "solver_design",
+            "policies/baseline_modules/local_search.py",
+        ),
+    ),
+)
+def test_direct_v3_code_context_contains_source_not_research_history(
+    problem_id: str,
+    surface: str,
+    target_file: str,
+) -> None:
+    _spec, legacy, adapter, champion, branch = _runtime(problem_id)
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Implement one source-grounded algorithmic change.",
+        change_locus=surface,
+        action="modify",
+        target_file=target_file,
+        predicted_direction="improve",
+        target_weakness="current mechanism leaves measurable quality headroom",
+        expected_effect="improve the declared objective",
+    )
+
+    context = ContextManager(adapter=adapter).build_code_context(
+        branch,
+        hypothesis,
+        champion,
+        legacy,
+        step_history=[
+            StepRecord(
+                round_num=1,
+                branch_id=branch.branch_id,
+                hypothesis=hypothesis,
+                patch=None,
+                contract_passed=False,
+                verification_passed=False,
+                protocol_result=None,
+                decision=Decision.CONTINUE_EXPLORE,
+                failure_stage="hypothesis_contract",
+                failure_detail="must-not-enter-code-context",
+            )
+        ],
+    )
+    snapshot = proposal_context_snapshot("code", context)
+    blocks, user_prompt = _split_code_context(
+        snapshot.inputs.provider_context(include_renderer_inputs=True)
+    )
+    rendered = "\n".join(block["text"] for block in blocks) + user_prompt
+    ledger = context["proposal_source_ledger"]
+    target = next(
+        item for item in ledger["entries"] if item["path"] == target_file
+    )
+
+    assert target["visibility"] == "full_current"
+    assert target["content"]
+    assert target["digest"]
+    assert context["approved_hypothesis"]["target_file"] == target_file
+    assert "must-not-enter-code-context" not in rendered
+    assert set(context).isdisjoint(
+        {
+            "experiment_history",
+            "failed_hypotheses",
+            "active_hypotheses",
+            "sibling_branches",
+            "branch_direction",
+            "research_question",
+        }
+    )
+    assert "target_intent" not in rendered
+    canonical = json.loads(blocks[1]["text"].split("\n", 1)[1])
+    assert canonical["approved_hypothesis"]["target_file"] == target_file
+    assert canonical["proposal_source_ledger"]["approved_target"] == target_file

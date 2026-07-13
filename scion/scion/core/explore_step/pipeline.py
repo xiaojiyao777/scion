@@ -4,21 +4,14 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, MutableMapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Mapping, MutableMapping, Optional, Sequence, Tuple
 
-from scion.core.branch_hygiene import (
-    branch_hygiene_context,
-    branch_requires_repair_focus,
-    record_branch_lifecycle_policy_block,
-)
-from scion.core.branch_identity import adopt_verified_hypothesis_identity
-from scion.core.branch_repair_policy import (
-    BranchLifecyclePolicyBlockSignal,
-    REPAIR_FIRST_POLICY_VIOLATION,
-    branch_lifecycle_policy_block_signal_from_detail,
-    branch_continuation_mechanism_ids,
-    branch_repair_mechanism_ids,
-    validate_repair_focused_patch,
+from scion.core.execution_outcome import (
+    ExecutionOutcome,
+    ExecutionOutcomeRecord,
+    execution_outcome_projection_kwargs,
+    install_branch_execution_hold,
+    record_execution_outcome_event,
 )
 from scion.core.models import (
     Branch,
@@ -34,52 +27,46 @@ from scion.core.models import (
     StepRecord,
     VerificationResult,
 )
-from scion.core.repeated_contract_failures import (
-    REPEATED_CONTRACT_REROUTE_REASON,
-    RepeatedContractRecord,
-    record_contract_failure_attempt,
+from scion.core.evaluation_orchestrator import (
+    EvaluationExecutionResult,
 )
-from scion.core.run_validity import failure_category_for_run_validity
 from scion.core.step_result import StepResult
 from scion.core.telemetry_validation import screened_experiment_effective
 from scion.core.verification_call import run_verification_gate
 from scion.contract.result_payload import diagnostic_checks
-from scion.proposal.context.branch_followup import branch_current_file_sources
+from scion.proposal.context_manager.code_context import branch_current_file_sources
 
 from .common import (
-    _AGENTIC_BUDGET_CONTROL,
-    _AGENTIC_SESSION_TIMEOUT,
-    _AGENT_QUALITY_BLOCKED,
-    _agent_quality_failure_detail,
-    _is_algorithm_smoke_failure_detail,
-    _is_agent_quality_blocked_detail,
-    _is_agentic_control_timeout_detail,
-    _is_schema_quality_block_detail,
     _proposal_failure_hypothesis,
-    _proposal_failure_reason,
-    _proposal_failure_stage,
-    _proposal_session_ref_is_agent_quality_blocked,
-)
-from .branch_lesson_usage import (
-    branch_lesson_usage_pre_code_block_reason,
-    branch_lesson_usage_requirement_metadata,
-    canonical_branch_lesson_usage_repair,
 )
 from .events import ExploreStepEventMixin
-from .material_difference import (
-    material_difference_pre_code_block_reason,
-    material_difference_requirement_metadata,
-)
 from .verification import VerificationMixin
 
 logger = logging.getLogger(__name__)
 
+
+def _advisory_contract_diagnostic(
+    kind: str,
+    detail: str,
+    *,
+    metadata: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    diagnostic_metadata = {
+        "gate_action": "diagnostic",
+        "diagnostic_kind": kind,
+        "authority": "outer_contract_audit_only",
+    }
+    diagnostic_metadata.update(dict(metadata or {}))
+    return {
+        "name": f"K5_{kind}",
+        "passed": True,
+        "severity": "light",
+        "detail": detail,
+        "metadata": diagnostic_metadata,
+    }
+
 __all__ = [
     "ExploreStepPipeline",
-    "branch_lesson_usage_pre_code_block_reason",
-    "branch_lesson_usage_requirement_metadata",
-    "material_difference_pre_code_block_reason",
-    "material_difference_requirement_metadata",
 ]
 
 
@@ -94,23 +81,17 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     registry: Any
     campaign_id: str
     get_champion: Callable[[], Optional[ChampionState]]
-    pending_hypotheses: MutableMapping[str, Tuple[HypothesisProposal, HypothesisRecord, str]]
     branch_hypotheses: MutableMapping[str, HypothesisProposal]
     branch_patches: MutableMapping[str, PatchProposal]
     branch_current_hypothesis: MutableMapping[str, HypothesisRecord]
     branch_workspaces: MutableMapping[str, str]
     failure_streak: MutableMapping[str, int]
     increment_round: Callable[[], int]
-    increment_rounds_since_last_promote: Callable[[], None]
     generate_hypothesis: Callable[
         [Branch],
         Tuple[Optional[HypothesisProposal], Optional[HypothesisRecord]],
     ]
     generate_code: Callable[..., Optional[PatchProposal]]
-    attempt_fix: Callable[
-        [Branch, PatchProposal, VerificationResult],
-        Optional[PatchProposal],
-    ]
     handle_failure: Callable[..., None]
     record_step: Callable[[StepRecord], None]
     setup_workspace: Callable[[Branch], Optional[str]]
@@ -119,13 +100,18 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     archive_failed_workspace: Callable[[str, str, int], Optional[str]]
     evaluate: Callable[
         [Branch, str, HypothesisProposal],
-        Tuple[Optional[Decision], Optional[ProtocolResult], CanaryResult],
+        EvaluationExecutionResult,
     ]
     apply_decision_and_finalize: Callable[..., StepResult]
     decision_reason_codes_for: Callable[[str, Optional[ProtocolResult]], Optional[Tuple[str, ...]]]
     proposal_failure_detail_for: Callable[[str], Optional[str]] = lambda _branch_id: None
+    proposal_execution_outcome_for: Callable[
+        [str], Optional[ExecutionOutcomeRecord]
+    ] = lambda _branch_id: None
     proposal_session_ref_for: Callable[[str], Optional[dict[str, Any]]] = lambda _branch_id: None
-    get_current_round: Optional[Callable[[], int]] = None
+    proposal_governance_envelope_for: Callable[[str], Any | None] = (
+        lambda _branch_id: None
+    )
     persist_branch_state: Callable[[str], None] = lambda _branch_id: None
     update_status_progress: Callable[[dict[str, Any] | None], None] = (
         lambda _payload: None
@@ -133,561 +119,186 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     step_history: Sequence[StepRecord] = ()
     decision_provenance_for: Callable[[str], dict[str, Any]] = lambda _branch_id: {}
 
-    def _block_missing_material_difference(
-        self,
-        branch: Branch,
-        hypothesis: HypothesisProposal,
-        h_record: HypothesisRecord,
-        *,
-        round_num: int,
-        retry_attempt: bool,
-        prior_failure: str | None,
-    ) -> StepResult | None:
-        bid = branch.branch_id
-        session_ref = self._proposal_session_ref(
-            bid,
-            retry_attempt=retry_attempt,
-            prior_failure=prior_failure,
-        )
-        detail = material_difference_pre_code_block_reason(
-            hypothesis,
-            branch,
-            session_ref=session_ref,
-        )
-        if not detail:
-            return None
-        logger.info(
-            "Branch %s: material_difference pre-code block: %s",
-            bid,
-            detail,
-        )
-        self.handle_failure(
-            branch,
-            FailureEvent(category="proposal", detail=detail),
-        )
-        self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
-        self.record_step(
-            StepRecord(
-                round_num=round_num,
-                branch_id=bid,
-                hypothesis=hypothesis,
-                patch=None,
-                contract_passed=True,
-                verification_passed=False,
-                protocol_result=None,
-                decision=None,
-                failure_stage="proposal",
-                failure_detail=detail,
-                hypothesis_id=h_record.hypothesis_id,
-                proposal_session_ref=session_ref,
-                counts_toward_max_rounds=False,
-                attempt_kind="proposal_block",
-            )
-        )
-        return StepResult(
-            action="explore",
-            branch_id=bid,
-            reason="material difference required before code generation",
-            counts_toward_max_rounds=False,
-            attempt_kind="proposal_block",
-            failure_stage="proposal",
-            failure_detail=detail,
-            failure_category="proposal",
-            proposal_session_ref=session_ref,
-        )
-
-    def _block_missing_branch_lesson_usage(
-        self,
-        branch: Branch,
-        hypothesis: HypothesisProposal,
-        h_record: HypothesisRecord,
-        *,
-        round_num: int,
-        retry_attempt: bool,
-        prior_failure: str | None,
-    ) -> StepResult | None:
-        bid = branch.branch_id
-        session_ref = self._proposal_session_ref(
-            bid,
-            retry_attempt=retry_attempt,
-            prior_failure=prior_failure,
-        )
-        detail = branch_lesson_usage_pre_code_block_reason(
-            hypothesis,
-            branch,
-            session_ref=session_ref,
-        )
-        if detail:
-            repair = canonical_branch_lesson_usage_repair(
-                getattr(hypothesis, "branch_lesson_usage", None),
-                metadata=branch_lesson_usage_requirement_metadata(
-                    branch,
-                    session_ref=session_ref,
-                ),
-                hypothesis=hypothesis,
-            )
-            repaired_usage = repair.get("branch_lesson_usage") if repair else None
-            if isinstance(repaired_usage, dict) and repaired_usage:
-                hypothesis.branch_lesson_usage = repaired_usage
-                attribution = repair.get("repair_attribution")
-                if isinstance(attribution, dict) and attribution:
-                    hypothesis.schema_repair_attribution = (
-                        *tuple(hypothesis.schema_repair_attribution or ()),
-                        attribution,
-                    )
-                detail = branch_lesson_usage_pre_code_block_reason(
-                    hypothesis,
-                    branch,
-                    session_ref=session_ref,
-                )
-        if not detail:
-            return None
-        logger.info(
-            "Branch %s: branch_lesson_usage pre-code block: %s",
-            bid,
-            detail,
-        )
-        self.handle_failure(
-            branch,
-            FailureEvent(category="proposal", detail=detail),
-        )
-        self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
-        self.record_step(
-            StepRecord(
-                round_num=round_num,
-                branch_id=bid,
-                hypothesis=hypothesis,
-                patch=None,
-                contract_passed=True,
-                verification_passed=False,
-                protocol_result=None,
-                decision=None,
-                failure_stage="proposal",
-                failure_detail=detail,
-                hypothesis_id=h_record.hypothesis_id,
-                proposal_session_ref=session_ref,
-                counts_toward_max_rounds=False,
-                attempt_kind="proposal_block",
-            )
-        )
-        return StepResult(
-            action="explore",
-            branch_id=bid,
-            reason="branch lesson usage required before code generation",
-            counts_toward_max_rounds=False,
-            attempt_kind="proposal_block",
-            failure_stage="proposal",
-            failure_detail=detail,
-            failure_category="proposal",
-            proposal_session_ref=session_ref,
-        )
-
     def run(self, branch: Branch) -> StepResult:
         """Run the full EXPLORE/EXPLORE_EXPAND branch step."""
         bid = branch.branch_id
         self._proposal_session_ref_cache = {}
-        pending = self.pending_hypotheses.pop(bid, None)
-        retry_attempt = pending is not None
-        if retry_attempt:
-            rnum = self._current_round_num()
-        else:
-            rnum = self.increment_round()
-            self.increment_rounds_since_last_promote()
-
-        prior_failure: Optional[str] = None
+        rnum = self.increment_round()
         h_contract_diagnostics: tuple[dict[str, Any], ...] = ()
+        branch.screening_expand_count = 0
+        branch.validation_expand_count = 0
 
-        if pending is None:
-            # Expand budgets are per candidate, not per branch.
-            branch.screening_expand_count = 0
-            branch.validation_expand_count = 0
+        self._emit_status_progress(
+            branch,
+            phase="proposal_hypothesis",
+            round_num=rnum,
+        )
+        hypothesis, h_record = self.generate_hypothesis(branch)
+        if hypothesis is None:
+            failure_detail = (
+                self.proposal_failure_detail_for(bid)
+                or "hypothesis generation failed"
+            )
+            session_ref = self._proposal_session_ref(bid)
+            proposal_outcome = self.proposal_execution_outcome_for(bid)
+            if proposal_outcome is None:
+                proposal_outcome = ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.BLOCKED_INFRA,
+                    reason_code="PROPOSAL_OUTCOME_MISSING",
+                    detail=failure_detail,
+                    provenance={
+                        "owner": "explore_step_pipeline",
+                        "stage": "proposal_hypothesis",
+                    },
+                )
+            record_execution_outcome_event(
+                registry=self.registry,
+                campaign_id=self.campaign_id,
+                branch_id=bid,
+                record=proposal_outcome,
+                hypothesis_id=None,
+                event_kind="proposal_execution_outcome",
+            )
+            outcome_kwargs = execution_outcome_projection_kwargs(
+                proposal_outcome
+            )
+            if install_branch_execution_hold(branch, proposal_outcome):
+                self.persist_branch_state(bid)
+            self.record_step(
+                StepRecord(
+                    round_num=rnum,
+                    branch_id=bid,
+                    hypothesis=_proposal_failure_hypothesis(failure_detail),
+                    patch=None,
+                    contract_passed=False,
+                    verification_passed=False,
+                    protocol_result=None,
+                    decision=None,
+                    failure_stage="proposal_hypothesis",
+                    failure_detail=failure_detail,
+                    proposal_session_ref=session_ref,
+                    **outcome_kwargs,
+                )
+            )
+            return self._finish_status_progress(
+                StepResult(
+                    action="explore",
+                    branch_id=bid,
+                    reason=failure_detail,
+                    failure_stage="proposal_hypothesis",
+                    failure_detail=failure_detail,
+                    failure_category=proposal_outcome.outcome.value,
+                    proposal_session_ref=session_ref,
+                    **outcome_kwargs,
+                )
+            )
+        if h_record is None:
+            raise RuntimeError(
+                f"Branch {bid}: hypothesis generated without canonical record"
+            )
+        logger.info(
+            "Branch %s R1 hypothesis: locus=%s action=%s target=%s text='%s'",
+            bid,
+            hypothesis.change_locus,
+            hypothesis.action,
+            hypothesis.target_file,
+            hypothesis.hypothesis_text or "",
+        )
 
-        if pending is not None:
-            hypothesis, h_record, prior_failure = pending
+        self._emit_status_progress(
+            branch,
+            phase="hypothesis_contract",
+            round_num=rnum,
+            hypothesis=hypothesis,
+        )
+        governance_envelope = self.proposal_governance_envelope_for(bid)
+        session_ref = self._proposal_session_ref(bid)
+        envelope_digest = str(
+            getattr(governance_envelope, "digest", "") or ""
+        )
+        governance_diagnostics = (
+            _advisory_contract_diagnostic(
+                "governance_envelope",
+                "host governance envelope consumed by the outer Contract",
+                metadata={"governance_envelope_digest": envelope_digest},
+            ),
+        )
+        c_result = self._validate_hypothesis(
+            hypothesis,
+            governance_envelope=governance_envelope,
+        )
+        h_contract_diagnostics = (
+            *diagnostic_checks(c_result),
+            *governance_diagnostics,
+        )
+        if not c_result.passed:
             logger.info(
-                "Branch %s: retrying code gen for pending hypothesis (prior failure: %s)",
+                "Branch %s: hypothesis contract failed: %s",
                 bid,
-                prior_failure[:80],
+                c_result.failure_reason,
             )
-            self._emit_status_progress(
-                branch,
-                phase="proposal_hypothesis_retry_contract",
-                round_num=rnum,
-                hypothesis=hypothesis,
-                retry_attempt=retry_attempt,
-                prior_failure=prior_failure,
-            )
-            c_result_pending = self._validate_hypothesis(hypothesis)
-            if not c_result_pending.passed:
-                logger.info(
-                    "Branch %s: pending hypothesis re-failed contract gate: %s",
-                    bid,
-                    c_result_pending.failure_reason,
-                )
-                reason = c_result_pending.failure_reason or ""
-                session_ref = self._proposal_session_ref(
-                    bid,
-                    retry_attempt=retry_attempt,
-                    prior_failure=prior_failure,
-                )
-                quality_blocked = (
-                    _proposal_session_ref_is_agent_quality_blocked(session_ref)
-                    or _is_agent_quality_blocked_detail(reason)
-                )
-                failure_stage = (
-                    _AGENT_QUALITY_BLOCKED if quality_blocked else "hypothesis_contract"
-                )
-                failure_detail = (
-                    _agent_quality_failure_detail(reason, session_ref)
-                    if quality_blocked
-                    else c_result_pending.failure_reason
-                )
-                if quality_blocked:
-                    self._record_agent_quality_branch_signal(
-                        branch,
-                        failure_detail,
-                        session_ref,
-                    )
-                else:
-                    category = (
-                        "search_guidance" if "C10_novelty" in reason else "contract"
-                    )
-                    self.handle_failure(
-                        branch,
-                        FailureEvent(category=category, detail=reason),
-                    )
-                repeated_contract = self._record_repeated_contract_failure(
-                    branch,
-                    failure_detail,
-                    hypothesis,
-                    session_ref,
-                    failure_stage="hypothesis_contract",
-                )
-                self.hypothesis_store.mark_status(
-                    h_record.hypothesis_id,
-                    "rejected" if quality_blocked else "contract_failed",
-                )
-                self.record_step(
-                    StepRecord(
-                        round_num=rnum,
-                        branch_id=bid,
-                        hypothesis=hypothesis,
-                        patch=None,
-                        contract_passed=False,
-                        verification_passed=False,
-                        protocol_result=None,
-                        decision=None,
-                        failure_stage=failure_stage,
-                        failure_detail=failure_detail,
-                        contract_diagnostics=diagnostic_checks(c_result_pending),
-                        hypothesis_id=h_record.hypothesis_id,
-                        proposal_session_ref=session_ref,
-                        attempt_kind=(
-                            "branch_lifecycle_policy"
-                            if repeated_contract.threshold_reached
-                            else "screening"
-                        ),
-                        repair_policy_reason=(
-                            REPEATED_CONTRACT_REROUTE_REASON
-                            if repeated_contract.threshold_reached
-                            else None
-                        ),
-                    )
-                )
-                return self._finish_status_progress(
-                    StepResult(
-                        action="explore",
-                        branch_id=bid,
-                        reason=(
-                            REPEATED_CONTRACT_REROUTE_REASON
-                            if repeated_contract.threshold_reached
-                            else
-                            _AGENT_QUALITY_BLOCKED
-                            if quality_blocked
-                            else "pending hypothesis re-failed contract gate"
-                        ),
-                        counts_toward_max_rounds=False,
-                        attempt_kind=(
-                            "branch_lifecycle_policy"
-                            if repeated_contract.threshold_reached
-                            else "screening"
-                        ),
-                        repair_policy_reason=(
-                            REPEATED_CONTRACT_REROUTE_REASON
-                            if repeated_contract.threshold_reached
-                            else ""
-                        ),
-                        proposal_session_ref=session_ref,
-                    )
-                )
-            h_contract_diagnostics = diagnostic_checks(c_result_pending)
-            blocked = self._block_missing_material_difference(
-                branch,
+            failure_stage = "hypothesis_contract"
+            failure_detail = c_result.failure_reason
+            contract_outcome = self._record_contract_failure(
+                bid,
                 hypothesis,
-                h_record,
-                round_num=rnum,
-                retry_attempt=retry_attempt,
-                prior_failure=prior_failure,
+                c_result,
+                stage=failure_stage,
+                hypothesis_id=h_record.hypothesis_id,
             )
-            if blocked is not None:
-                return self._finish_status_progress(blocked)
-            blocked = self._block_missing_branch_lesson_usage(
-                branch,
-                hypothesis,
-                h_record,
-                round_num=rnum,
-                retry_attempt=retry_attempt,
-                prior_failure=prior_failure,
+            self.hypothesis_store.mark_status(
+                h_record.hypothesis_id,
+                "research_rejected",
             )
-            if blocked is not None:
-                return self._finish_status_progress(blocked)
-            self.branch_hypotheses[bid] = hypothesis
-        else:
-            self._emit_status_progress(
-                branch,
-                phase="proposal_hypothesis",
-                round_num=rnum,
-                retry_attempt=retry_attempt,
+            outcome_kwargs = execution_outcome_projection_kwargs(
+                contract_outcome
             )
-            hypothesis, h_record = self.generate_hypothesis(branch)
-            if hypothesis is None:
-                failure_detail = (
-                    self.proposal_failure_detail_for(bid)
-                    or "hypothesis generation failed"
-                )
-                session_ref = self._proposal_session_ref(bid)
-                failure_stage = _proposal_failure_stage(
-                    failure_detail,
-                    "proposal",
-                )
-                failure_category = failure_category_for_run_validity(
-                    failure_detail,
+            self.record_step(
+                StepRecord(
+                    round_num=rnum,
+                    branch_id=bid,
+                    hypothesis=hypothesis,
+                    patch=None,
+                    contract_passed=False,
+                    verification_passed=False,
+                    protocol_result=None,
+                    decision=None,
                     failure_stage=failure_stage,
-                    session_ref=session_ref,
+                    failure_detail=failure_detail,
+                    contract_diagnostics=h_contract_diagnostics,
+                    hypothesis_id=h_record.hypothesis_id,
+                    proposal_session_ref=session_ref,
+                    **outcome_kwargs,
                 )
-                if failure_stage == _AGENT_QUALITY_BLOCKED:
-                    self._record_agent_quality_branch_signal(
-                        branch,
-                        failure_detail,
-                        session_ref,
-                    )
-                self._record_proposal_fail_event(bid, failure_detail)
-                lifecycle_signal = branch_lifecycle_policy_block_signal_from_detail(
-                    failure_detail
+            )
+            return self._finish_status_progress(
+                StepResult(
+                    action="explore",
+                    branch_id=bid,
+                    reason="hypothesis contract rejected",
+                    failure_stage=failure_stage,
+                    failure_detail=failure_detail,
+                    failure_category=ExecutionOutcome.RESEARCH_REJECTED.value,
+                    proposal_session_ref=session_ref,
+                    **outcome_kwargs,
                 )
-                attempt_kind, repair_ids, repair_policy_reason = (
-                    self._repair_attempt_metadata(
-                        branch,
-                        failure_detail,
-                        lifecycle_signal=lifecycle_signal,
-                    )
-                )
-                if (
-                    attempt_kind == "branch_lifecycle_policy"
-                    and lifecycle_signal is not None
-                ):
-                    self._record_branch_lifecycle_policy_block(
-                        branch,
-                        failure_detail,
-                        lifecycle_signal=lifecycle_signal,
-                    )
-                self.record_step(
-                    StepRecord(
-                        round_num=rnum,
-                        branch_id=bid,
-                        hypothesis=_proposal_failure_hypothesis(failure_detail),
-                        patch=None,
-                        contract_passed=False,
-                        verification_passed=False,
-                        protocol_result=None,
-                        decision=None,
-                        failure_stage=failure_stage,
-                        failure_detail=failure_detail,
-                        proposal_session_ref=session_ref,
-                        counts_toward_max_rounds=False,
-                        attempt_kind=attempt_kind,
-                        repair_policy_reason=repair_policy_reason,
-                        repair_mechanism_ids=repair_ids,
-                    )
-                )
-                return self._finish_status_progress(
-                    StepResult(
-                        action="explore",
-                        branch_id=bid,
-                        reason=_proposal_failure_reason(
-                            failure_detail,
-                            "hypothesis generation failed",
-                        ),
-                        counts_toward_max_rounds=False,
-                        attempt_kind=attempt_kind,  # type: ignore[arg-type]
-                        repair_mechanism_ids=repair_ids,
-                        repair_policy_reason=repair_policy_reason or "",
-                        failure_stage=failure_stage,
-                        failure_detail=failure_detail,
-                        failure_category=failure_category,
-                        proposal_session_ref=session_ref,
-                    ),
-                )
-            if h_record is None:
-                raise RuntimeError(
-                    f"Branch {bid}: hypothesis generated without canonical record"
-                )
-            logger.info(
-                "Branch %s R1 hypothesis: locus=%s action=%s target=%s text='%s'",
-                bid,
-                hypothesis.change_locus,
-                hypothesis.action,
-                hypothesis.target_file,
-                (hypothesis.hypothesis_text or "")[:200],
             )
 
-            self._emit_status_progress(
-                branch,
-                phase="hypothesis_contract",
-                round_num=rnum,
-                hypothesis=hypothesis,
-                retry_attempt=retry_attempt,
+        durable_record = self.hypothesis_store.get_one(h_record.hypothesis_id)
+        if durable_record is None:
+            raise RuntimeError(
+                f"Branch {bid}: direct hypothesis record is not durable"
             )
-            c_result = self._validate_hypothesis(hypothesis)
-            if not c_result.passed:
-                logger.info(
-                    "Branch %s: hypothesis contract failed: %s",
-                    bid,
-                    c_result.failure_reason,
-                )
-                reason = c_result.failure_reason or ""
-                session_ref = self._proposal_session_ref(bid)
-                quality_blocked = (
-                    _proposal_session_ref_is_agent_quality_blocked(session_ref)
-                    or _is_agent_quality_blocked_detail(reason)
-                )
-                failure_stage = (
-                    _AGENT_QUALITY_BLOCKED if quality_blocked else "hypothesis_contract"
-                )
-                failure_detail = (
-                    _agent_quality_failure_detail(reason, session_ref)
-                    if quality_blocked
-                    else c_result.failure_reason
-                )
-                if quality_blocked:
-                    self._record_agent_quality_branch_signal(
-                        branch,
-                        failure_detail,
-                        session_ref,
-                    )
-                else:
-                    category = (
-                        "search_guidance" if "C10_novelty" in reason else "contract"
-                    )
-                    self.handle_failure(
-                        branch,
-                        FailureEvent(category=category, detail=reason),
-                    )
-                    self._record_contract_failure(
-                        bid,
-                        hypothesis,
-                        c_result.failure_reason or "",
-                    )
-                    self.hypothesis_store.mark_status(
-                        h_record.hypothesis_id,
-                        "contract_failed",
-                    )
-                repeated_contract = self._record_repeated_contract_failure(
-                    branch,
-                    failure_detail,
-                    hypothesis,
-                    session_ref,
-                    failure_stage="hypothesis_contract",
-                )
-                self.record_step(
-                    StepRecord(
-                        round_num=rnum,
-                        branch_id=bid,
-                        hypothesis=hypothesis,
-                        patch=None,
-                        contract_passed=False,
-                        verification_passed=False,
-                        protocol_result=None,
-                        decision=None,
-                        failure_stage=failure_stage,
-                        failure_detail=failure_detail,
-                        contract_diagnostics=diagnostic_checks(c_result),
-                        hypothesis_id=h_record.hypothesis_id,
-                        proposal_session_ref=session_ref,
-                        attempt_kind=(
-                            "branch_lifecycle_policy"
-                            if repeated_contract.threshold_reached
-                            else "screening"
-                        ),
-                        repair_policy_reason=(
-                            REPEATED_CONTRACT_REROUTE_REASON
-                            if repeated_contract.threshold_reached
-                            else None
-                        ),
-                    )
-                )
-                return self._finish_status_progress(
-                    StepResult(
-                        action="explore",
-                        branch_id=bid,
-                        reason=(
-                            REPEATED_CONTRACT_REROUTE_REASON
-                            if repeated_contract.threshold_reached
-                            else
-                            _AGENT_QUALITY_BLOCKED
-                            if quality_blocked
-                            else "hypothesis contract failed"
-                        ),
-                        counts_toward_max_rounds=False,
-                        attempt_kind=(
-                            "branch_lifecycle_policy"
-                            if repeated_contract.threshold_reached
-                            else "screening"
-                        ),
-                        repair_policy_reason=(
-                            REPEATED_CONTRACT_REROUTE_REASON
-                            if repeated_contract.threshold_reached
-                            else ""
-                        ),
-                        proposal_session_ref=session_ref,
-                    )
-                )
-            h_contract_diagnostics = diagnostic_checks(c_result)
-
-            champion = self.get_champion()
-            h_record.base_champion_version = champion.version if champion else 0
-            self.hypothesis_store.save(h_record)
-            blocked = self._block_missing_material_difference(
-                branch,
-                hypothesis,
-                h_record,
-                round_num=rnum,
-                retry_attempt=retry_attempt,
-                prior_failure=prior_failure,
-            )
-            if blocked is not None:
-                return self._finish_status_progress(blocked)
-            blocked = self._block_missing_branch_lesson_usage(
-                branch,
-                hypothesis,
-                h_record,
-                round_num=rnum,
-                retry_attempt=retry_attempt,
-                prior_failure=prior_failure,
-            )
-            if blocked is not None:
-                return self._finish_status_progress(blocked)
-            self.branch_hypotheses[bid] = hypothesis
+        h_record = durable_record
+        self.branch_hypotheses[bid] = hypothesis
 
         self._emit_status_progress(
             branch,
             phase="proposal_code",
             round_num=rnum,
             hypothesis=hypothesis,
-            retry_attempt=retry_attempt,
-            prior_failure=prior_failure,
         )
-        patch = self.generate_code(branch, hypothesis, prior_failure=prior_failure)
+        patch = self.generate_code(branch, hypothesis)
         if patch is not None:
             logger.info(
                 "Branch %s R2 code: file=%s action=%s code_len=%d",
@@ -696,209 +307,70 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 patch.action,
                 len(patch.code_content or ""),
             )
-            if prior_failure is not None:
-                self._mark_code_generation_recovered(branch, h_record)
 
         if patch is None:
             detailed_failure = self.proposal_failure_detail_for(bid)
             cache = getattr(self, "_proposal_session_ref_cache", None)
             if isinstance(cache, dict):
                 cache.pop(bid, None)
-            session_timeout = _is_agentic_control_timeout_detail(detailed_failure)
-            quality_blocked = _is_agent_quality_blocked_detail(detailed_failure)
-            status = "code_failed"
-            queue_pending_retry = False
-            if session_timeout:
-                branch.pending_retry = False
-                branch.consecutive_llm_retries = 0
-                failure_detail = detailed_failure or _AGENTIC_SESSION_TIMEOUT
-            elif quality_blocked:
-                branch.pending_retry = False
-                branch.consecutive_llm_retries = 0
-                status = (
-                    "smoke_failed"
-                    if _is_algorithm_smoke_failure_detail(detailed_failure)
-                    else "rejected"
+            proposal_outcome = self.proposal_execution_outcome_for(bid)
+            if proposal_outcome is None:
+                proposal_outcome = ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.BLOCKED_INFRA,
+                    reason_code="PROPOSAL_OUTCOME_MISSING",
+                    detail=detailed_failure or "code generation failed",
+                    provenance={
+                        "owner": "explore_step_pipeline",
+                        "stage": "proposal_code",
+                    },
                 )
-                failure_detail = detailed_failure or _AGENT_QUALITY_BLOCKED
-            elif prior_failure is not None:
-                branch.pending_retry = False
-                branch.consecutive_llm_retries = 0
-                status = "rejected"
-                failure_detail = (
-                    f"{detailed_failure} (retry - hypothesis rejected)"
-                    if detailed_failure
-                    else "LLM code generation failed (retry - hypothesis rejected)"
-                )
-            else:
-                failure_detail = detailed_failure or "LLM code generation failed"
-                queue_pending_retry = True
-            session_ref = self._proposal_session_ref(
-                bid,
-                retry_attempt=retry_attempt,
-                prior_failure=prior_failure,
-            )
-            failure_stage = _proposal_failure_stage(
-                failure_detail,
-                "code_generation",
-            )
-            failure_category = failure_category_for_run_validity(
-                failure_detail,
-                failure_stage=failure_stage,
-                session_ref=session_ref,
-            )
-            if failure_stage == _AGENT_QUALITY_BLOCKED:
-                self._record_agent_quality_branch_signal(
-                    branch,
-                    failure_detail,
-                    session_ref,
-                )
-            repeated_contract = self._record_repeated_contract_failure(
-                branch,
-                failure_detail,
-                hypothesis,
-                session_ref,
-                failure_stage=failure_stage,
-            )
-            if repeated_contract.threshold_reached:
-                queue_pending_retry = False
-                self.pending_hypotheses.pop(bid, None)
-                if status == "code_failed":
-                    status = "rejected"
-            if queue_pending_retry:
-                self.pending_hypotheses[bid] = (
-                    hypothesis,
-                    h_record,
-                    failure_detail,
-                )
+            status = {
+                ExecutionOutcome.NOT_EVALUATED: "not_evaluated",
+                ExecutionOutcome.BLOCKED_INFRA: "blocked_infra",
+                ExecutionOutcome.RESOURCE_EXHAUSTED: "resource_exhausted",
+            }.get(proposal_outcome.outcome, "not_evaluated")
             self.hypothesis_store.mark_status(h_record.hypothesis_id, status)
-            attempt_kind, repair_ids, repair_policy_reason = (
-                self._repair_attempt_metadata(branch, failure_detail)
+            session_ref = self._proposal_session_ref(bid)
+            record_execution_outcome_event(
+                registry=self.registry,
+                campaign_id=self.campaign_id,
+                branch_id=bid,
+                record=proposal_outcome,
+                hypothesis_id=h_record.hypothesis_id,
+                event_kind="proposal_execution_outcome",
             )
-            if repeated_contract.threshold_reached:
-                attempt_kind = "branch_lifecycle_policy"
-                repair_policy_reason = REPEATED_CONTRACT_REROUTE_REASON
+            outcome_kwargs = execution_outcome_projection_kwargs(
+                proposal_outcome
+            )
+            if install_branch_execution_hold(branch, proposal_outcome):
+                self.persist_branch_state(bid)
             self.record_step(
                 StepRecord(
                     round_num=rnum,
                     branch_id=bid,
                     hypothesis=hypothesis,
                     patch=None,
-                    contract_passed=not quality_blocked,
+                    contract_passed=True,
                     verification_passed=False,
                     protocol_result=None,
                     decision=None,
-                    failure_stage=failure_stage,
-                    failure_detail=failure_detail,
+                    failure_stage="proposal_code",
+                    failure_detail=detailed_failure,
                     hypothesis_id=h_record.hypothesis_id,
                     proposal_session_ref=session_ref,
-                    counts_toward_max_rounds=False,
-                    attempt_kind=attempt_kind,
-                    repair_policy_reason=repair_policy_reason,
-                    repair_mechanism_ids=repair_ids,
+                    **outcome_kwargs,
                 )
             )
             return self._finish_status_progress(
                 StepResult(
                     action="explore",
                     branch_id=bid,
-                    reason=_proposal_failure_reason(
-                        failure_detail,
-                        "code generation failed",
-                    )
-                    if not repeated_contract.threshold_reached
-                    else REPEATED_CONTRACT_REROUTE_REASON,
-                    counts_toward_max_rounds=False,
-                    attempt_kind=attempt_kind,  # type: ignore[arg-type]
-                    repair_mechanism_ids=repair_ids,
-                    repair_policy_reason=repair_policy_reason or "",
-                    failure_stage=failure_stage,
-                    failure_detail=failure_detail,
-                    failure_category=failure_category,
+                    reason=detailed_failure or proposal_outcome.reason_code,
+                    failure_stage="proposal_code",
+                    failure_detail=detailed_failure,
+                    failure_category=proposal_outcome.outcome.value,
                     proposal_session_ref=session_ref,
-                ),
-            )
-
-        repair_patch_check = validate_repair_focused_patch(
-            branch,
-            hypothesis,
-            patch,
-            step_history=self.step_history,
-        )
-        if not repair_patch_check.allowed:
-            detail = repair_patch_check.detail
-            lifecycle_signal = repair_patch_check.lifecycle_block_signal
-            logger.info(
-                "Branch %s: branch continuation patch policy failed: %s",
-                bid,
-                detail,
-            )
-            if lifecycle_signal is None:
-                self.handle_failure(
-                    branch,
-                    FailureEvent(category="proposal", detail=detail),
-                )
-            self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
-            attempt_kind, repair_ids, repair_policy_reason = (
-                self._repair_attempt_metadata(
-                    branch,
-                    detail,
-                    lifecycle_signal=lifecycle_signal,
-                )
-            )
-            if (
-                attempt_kind == "branch_lifecycle_policy"
-                and lifecycle_signal is not None
-            ):
-                self._record_branch_lifecycle_policy_block(
-                    branch,
-                    detail,
-                    lifecycle_signal=lifecycle_signal,
-                )
-            if not repair_ids:
-                repair_ids = (
-                    repair_patch_check.protected_mechanism_ids
-                    or repair_patch_check.proposed_mechanism_ids
-                )
-            session_ref = self._proposal_session_ref(
-                bid,
-                retry_attempt=retry_attempt,
-                prior_failure=prior_failure,
-            )
-            self.record_step(
-                StepRecord(
-                    round_num=rnum,
-                    branch_id=bid,
-                    hypothesis=hypothesis,
-                    patch=patch,
-                    contract_passed=False,
-                    verification_passed=False,
-                    protocol_result=None,
-                    decision=None,
-                    failure_stage="repair_policy",
-                    failure_detail=detail,
-                    hypothesis_id=h_record.hypothesis_id,
-                    proposal_session_ref=session_ref,
-                    counts_toward_max_rounds=False,
-                    attempt_kind=attempt_kind,
-                    repair_policy_reason=(
-                        repair_policy_reason or repair_patch_check.reason
-                    ),
-                    repair_mechanism_ids=repair_ids,
-                )
-            )
-            return self._finish_status_progress(
-                StepResult(
-                    action="explore",
-                    branch_id=bid,
-                    reason=detail,
-                    counts_toward_max_rounds=False,
-                    attempt_kind=attempt_kind,  # type: ignore[arg-type]
-                    repair_mechanism_ids=repair_ids,
-                    repair_policy_reason=(
-                        repair_policy_reason or repair_patch_check.reason
-                    ),
-                    proposal_session_ref=session_ref,
+                    **outcome_kwargs,
                 )
             )
 
@@ -908,7 +380,6 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             round_num=rnum,
             hypothesis=hypothesis,
             patch=patch,
-            retry_attempt=retry_attempt,
         )
         p_result = self.contract_gate.validate_patch(
             patch,
@@ -925,23 +396,22 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 bid,
                 p_result.failure_reason,
             )
-            self.handle_failure(
-                branch,
-                FailureEvent(category="contract", detail=p_result.failure_reason or ""),
-            )
-            session_ref = self._proposal_session_ref(
+            session_ref = self._proposal_session_ref(bid)
+            contract_outcome = self._record_contract_failure(
                 bid,
-                retry_attempt=retry_attempt,
-                prior_failure=prior_failure,
-            )
-            repeated_contract = self._record_repeated_contract_failure(
-                branch,
-                p_result.failure_reason,
                 hypothesis,
-                session_ref,
-                failure_stage="patch_contract",
+                p_result,
+                stage="patch_contract",
+                hypothesis_id=h_record.hypothesis_id,
+                patch=patch,
             )
-            self.hypothesis_store.mark_status(h_record.hypothesis_id, "contract_failed")
+            outcome_kwargs = execution_outcome_projection_kwargs(
+                contract_outcome
+            )
+            self.hypothesis_store.mark_status(
+                h_record.hypothesis_id,
+                "research_rejected",
+            )
             self.record_step(
                 StepRecord(
                     round_num=rnum,
@@ -960,39 +430,19 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     ),
                     hypothesis_id=h_record.hypothesis_id,
                     proposal_session_ref=session_ref,
-                    attempt_kind=(
-                        "branch_lifecycle_policy"
-                        if repeated_contract.threshold_reached
-                        else "screening"
-                    ),
-                    repair_policy_reason=(
-                        REPEATED_CONTRACT_REROUTE_REASON
-                        if repeated_contract.threshold_reached
-                        else None
-                    ),
+                    **outcome_kwargs,
                 )
             )
             return self._finish_status_progress(
                 StepResult(
                     action="explore",
                     branch_id=bid,
-                    reason=(
-                        REPEATED_CONTRACT_REROUTE_REASON
-                        if repeated_contract.threshold_reached
-                        else "patch contract failed"
-                    ),
-                    counts_toward_max_rounds=not retry_attempt,
-                    attempt_kind=(
-                        "branch_lifecycle_policy"
-                        if repeated_contract.threshold_reached
-                        else "screening"
-                    ),
-                    repair_policy_reason=(
-                        REPEATED_CONTRACT_REROUTE_REASON
-                        if repeated_contract.threshold_reached
-                        else ""
-                    ),
+                    reason="patch contract rejected",
+                    failure_stage="patch_contract",
+                    failure_detail=p_result.failure_reason,
+                    failure_category=ExecutionOutcome.RESEARCH_REJECTED.value,
                     proposal_session_ref=session_ref,
+                    **outcome_kwargs,
                 )
             )
 
@@ -1002,20 +452,38 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             round_num=rnum,
             hypothesis=hypothesis,
             patch=patch,
-            retry_attempt=retry_attempt,
         )
         workspace = self.setup_workspace(branch)
         if workspace is None:
+            workspace_outcome = ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.BLOCKED_INFRA,
+                reason_code="WORKSPACE_SETUP_FAILED",
+                detail="workspace setup failed",
+                provenance={
+                    "owner": "explore_step_pipeline",
+                    "stage": "workspace_setup",
+                },
+            )
+            record_execution_outcome_event(
+                registry=self.registry,
+                campaign_id=self.campaign_id,
+                branch_id=bid,
+                record=workspace_outcome,
+                hypothesis_id=h_record.hypothesis_id,
+                event_kind="workspace_execution_outcome",
+            )
             self.handle_failure(
                 branch,
                 FailureEvent(category="infra", detail="workspace setup failed"),
                 hypothesis_already_recorded=True,
             )
-            self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
-            session_ref = self._proposal_session_ref(
-                bid,
-                retry_attempt=retry_attempt,
-                prior_failure=prior_failure,
+            self.hypothesis_store.mark_status(
+                h_record.hypothesis_id,
+                "blocked_infra",
+            )
+            session_ref = self._proposal_session_ref(bid)
+            outcome_kwargs = execution_outcome_projection_kwargs(
+                workspace_outcome
             )
             self.record_step(
                 StepRecord(
@@ -1031,6 +499,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_detail="workspace setup failed",
                     hypothesis_id=h_record.hypothesis_id,
                     proposal_session_ref=session_ref,
+                    **outcome_kwargs,
                 )
             )
             return self._finish_status_progress(
@@ -1038,8 +507,11 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     action="explore",
                     branch_id=bid,
                     reason="workspace setup failed",
-                    counts_toward_max_rounds=not retry_attempt,
+                    failure_stage="workspace",
+                    failure_detail="workspace setup failed",
+                    failure_category=ExecutionOutcome.BLOCKED_INFRA.value,
                     proposal_session_ref=session_ref,
+                    **outcome_kwargs,
                 )
             )
 
@@ -1050,7 +522,6 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 round_num=rnum,
                 hypothesis=hypothesis,
                 patch=patch,
-                retry_attempt=retry_attempt,
             )
             applied = self.apply_patch(
                 branch,
@@ -1063,15 +534,37 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             code_hash = applied.code_hash
         except Exception as exc:
             logger.warning("Branch %s: apply_patch failed: %s", bid, exc)
+            failure_detail = f"apply_patch: {exc}"
+            workspace_outcome = ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.BLOCKED_INFRA,
+                reason_code="PATCH_MATERIALIZATION_FAILED",
+                detail=failure_detail,
+                provenance={
+                    "owner": "explore_step_pipeline",
+                    "stage": "patch_materialization",
+                    "error_type": type(exc).__name__,
+                },
+            )
+            record_execution_outcome_event(
+                registry=self.registry,
+                campaign_id=self.campaign_id,
+                branch_id=bid,
+                record=workspace_outcome,
+                hypothesis_id=h_record.hypothesis_id,
+                event_kind="workspace_execution_outcome",
+            )
             self.handle_failure(
                 branch,
-                FailureEvent(category="contract", detail=f"apply_patch: {exc}"),
+                FailureEvent(category="infra", detail=failure_detail),
+                hypothesis_already_recorded=True,
             )
-            self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
-            session_ref = self._proposal_session_ref(
-                bid,
-                retry_attempt=retry_attempt,
-                prior_failure=prior_failure,
+            self.hypothesis_store.mark_status(
+                h_record.hypothesis_id,
+                "blocked_infra",
+            )
+            session_ref = self._proposal_session_ref(bid)
+            outcome_kwargs = execution_outcome_projection_kwargs(
+                workspace_outcome
             )
             self.record_step(
                 StepRecord(
@@ -1084,9 +577,10 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     protocol_result=None,
                     decision=None,
                     failure_stage="workspace",
-                    failure_detail=f"apply_patch: {exc}",
+                    failure_detail=failure_detail,
                     hypothesis_id=h_record.hypothesis_id,
                     proposal_session_ref=session_ref,
+                    **outcome_kwargs,
                 )
             )
             return self._finish_status_progress(
@@ -1094,8 +588,11 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     action="explore",
                     branch_id=bid,
                     reason="apply_patch failed",
-                    counts_toward_max_rounds=not retry_attempt,
+                    failure_stage="workspace",
+                    failure_detail=failure_detail,
+                    failure_category=ExecutionOutcome.BLOCKED_INFRA.value,
                     proposal_session_ref=session_ref,
+                    **outcome_kwargs,
                 )
             )
 
@@ -1107,7 +604,6 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             round_num=rnum,
             hypothesis=hypothesis,
             patch=patch,
-            retry_attempt=retry_attempt,
         )
         vresult = run_verification_gate(
             self.verification_gate,
@@ -1127,8 +623,6 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 vresult=vresult,
                 code_hash=code_hash,
                 champion_workspace=champ_ws,
-                retry_attempt=retry_attempt,
-                prior_failure=prior_failure,
             )
             if verification_outcome.step_result is not None:
                 return self._finish_status_progress(
@@ -1138,7 +632,6 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             vresult = verification_outcome.verification_result
 
         self.record_verification_pass(branch, code_hash)
-        self.record_verified_hypothesis_identity(branch, hypothesis)
         self.failure_streak.clear()
         self.branch_current_hypothesis[bid] = h_record
 
@@ -1153,7 +646,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     action="skip",
                     branch_id=bid,
                     reason="stale_during_explore",
-                    counts_toward_max_rounds=not retry_attempt,
+                    attempt_kind="other",
+                    execution_outcome=ExecutionOutcome.NOT_EVALUATED,
+                    execution_outcome_reason_code="BRANCH_STALE_DURING_EXPLORE",
                 )
             )
 
@@ -1164,17 +659,77 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             round_num=rnum,
             hypothesis=hypothesis,
             patch=patch,
-            retry_attempt=retry_attempt,
         )
-        decision, protocol_result, canary_result = self.evaluate(
+        evaluation = self.evaluate(
             branch,
             workspace,
             hypothesis,
         )
-        finalizer_decision = decision or Decision.ABANDON
+        if not isinstance(evaluation, EvaluationExecutionResult):
+            raise TypeError("evaluate callback must return EvaluationExecutionResult")
+        decision = evaluation.decision
+        protocol_result = evaluation.protocol_result
+        canary_result = evaluation.canary_result
+        execution_outcome = evaluation.execution_outcome
+        session_ref = self._proposal_session_ref(bid)
+        record_execution_outcome_event(
+            registry=self.registry,
+            campaign_id=self.campaign_id,
+            branch_id=bid,
+            hypothesis_id=h_record.hypothesis_id,
+            record=execution_outcome,
+            event_kind="explore_evaluation_outcome",
+        )
+        if execution_outcome.outcome is not ExecutionOutcome.EVALUATED:
+            result = StepResult(
+                action="explore",
+                branch_id=bid,
+                reason=execution_outcome.detail or execution_outcome.reason_code,
+                attempt_kind="other",
+                failure_stage="evaluation",
+                failure_detail=(
+                    execution_outcome.detail or execution_outcome.reason_code
+                ),
+                proposal_session_ref=session_ref,
+                canary_result=canary_result,
+                **execution_outcome_projection_kwargs(execution_outcome),
+            )
+            provenance = self.decision_provenance_for(bid)
+            for key, value in provenance.items():
+                setattr(result, key, value)
+            self.record_step(
+                StepRecord(
+                    round_num=rnum,
+                    branch_id=bid,
+                    hypothesis=hypothesis,
+                    patch=self.branch_patches.get(bid, patch),
+                    contract_passed=True,
+                    verification_passed=True,
+                    protocol_result=None,
+                    decision=None,
+                    failure_stage="evaluation",
+                    failure_detail=(
+                        execution_outcome.detail or execution_outcome.reason_code
+                    ),
+                    contract_diagnostics=(
+                        *h_contract_diagnostics,
+                        *diagnostic_checks(p_result),
+                    ),
+                    hypothesis_id=h_record.hypothesis_id,
+                    decision_reason_codes=None,
+                    **provenance,
+                    proposal_session_ref=session_ref,
+                    canary_result=canary_result,
+                    attempt_kind="other",
+                    **execution_outcome_projection_kwargs(execution_outcome),
+                )
+            )
+            return self._finish_status_progress(result)
+        if decision is None:
+            raise ValueError("evaluated result missing Decision")
         result = self.apply_decision_and_finalize(
             branch=branch,
-            decision=finalizer_decision,
+            decision=decision,
             hypothesis=hypothesis,
             h_record=h_record,
             protocol_result=protocol_result,
@@ -1182,30 +737,26 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             contract_result=p_result,
             verification_result=vresult,
             action_label="explore",
+            proposal_attempt_ref=session_ref,
         )
         _annotate_protocol_accounting(result, protocol_result)
         result.canary_result = canary_result
+        for key, value in execution_outcome_projection_kwargs(
+            execution_outcome
+        ).items():
+            setattr(result, key, value)
         failure_stage, failure_detail = _evaluation_failure_detail(
             protocol_result,
             canary_result=canary_result,
         )
-        if decision is None:
-            result.decision = None
-            result.failure_stage = failure_stage or "evaluation"
-            result.failure_detail = failure_detail or "evaluation failed"
         provenance = self.decision_provenance_for(bid)
         for key, value in provenance.items():
             setattr(result, key, value)
-        session_ref = self._proposal_session_ref(
-            bid,
-            retry_attempt=retry_attempt,
-            prior_failure=prior_failure,
-        )
         result.proposal_session_ref = session_ref
         logger.debug(
             "_run_explore_step done bid=%s decision=%s workspaces=%s",
             bid,
-            finalizer_decision.value,
+            decision.value,
             list(self.branch_workspaces.keys()),
         )
         self.record_step(
@@ -1232,119 +783,13 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 **provenance,
                 proposal_session_ref=session_ref,
                 canary_result=canary_result,
-                counts_toward_max_rounds=result.counts_toward_max_rounds,
                 attempt_kind=result.attempt_kind,
                 repair_policy_reason=result.repair_policy_reason or None,
                 repair_mechanism_ids=result.repair_mechanism_ids,
+                **execution_outcome_projection_kwargs(execution_outcome),
             )
         )
-        if retry_attempt:
-            result.counts_toward_max_rounds = False
         return self._finish_status_progress(result)
-
-    def _repair_attempt_metadata(
-        self,
-        branch: Branch,
-        failure_detail: str | None,
-        *,
-        lifecycle_signal: BranchLifecyclePolicyBlockSignal | None = None,
-    ) -> tuple[str, tuple[str, ...], str | None]:
-        if (
-            failure_category_for_run_validity(
-                failure_detail,
-                failure_stage="proposal",
-            )
-            == "infra"
-        ):
-            return "proposal_retry", (), str(failure_detail or "")
-        if _is_schema_quality_block_detail(failure_detail):
-            return "schema_quality_block", (), str(failure_detail or "")
-        if "stale_source" in str(failure_detail or "").lower():
-            return "proposal_retry", (), "stale_source_refresh"
-        signal = (
-            lifecycle_signal
-            or branch_lifecycle_policy_block_signal_from_detail(failure_detail)
-        )
-        if signal is not None:
-            ids = branch_continuation_mechanism_ids(
-                branch,
-                self.step_history,
-            )
-            if not ids:
-                ids = branch_repair_mechanism_ids(branch)
-            return "branch_lifecycle_policy", ids, str(failure_detail or "")
-        if _is_agent_quality_blocked_detail(failure_detail):
-            return "proposal_block", (), None
-        if not branch_requires_repair_focus(branch):
-            return "proposal_block", (), None
-        repair_ids = branch_repair_mechanism_ids(branch)
-        reason = None
-        if REPAIR_FIRST_POLICY_VIOLATION in str(failure_detail or ""):
-            reason = str(failure_detail or "")
-        return "telemetry_repair", repair_ids, reason
-
-    def record_verified_hypothesis_identity(
-        self,
-        branch: Branch,
-        hypothesis: HypothesisProposal | HypothesisRecord,
-    ) -> None:
-        if adopt_verified_hypothesis_identity(branch, hypothesis):
-            self.persist_branch_state(branch.branch_id)
-
-    def _record_branch_lifecycle_policy_block(
-        self,
-        branch: Branch,
-        detail: str | None,
-        *,
-        lifecycle_signal: BranchLifecyclePolicyBlockSignal | None = None,
-    ) -> None:
-        signal = (
-            lifecycle_signal
-            or branch_lifecycle_policy_block_signal_from_detail(detail)
-        )
-        if signal is None:
-            return
-        record_branch_lifecycle_policy_block(
-            branch,
-            detail,
-            lifecycle_signal=signal,
-        )
-        try:
-            self.persist_branch_state(branch.branch_id)
-        except Exception:  # pragma: no cover - reroute persistence is best effort
-            logger.debug(
-                "Failed to persist branch lifecycle reroute marker for %s",
-                branch.branch_id,
-                exc_info=True,
-            )
-
-    def _record_repeated_contract_failure(
-        self,
-        branch: Branch,
-        failure_detail: str | None,
-        hypothesis: HypothesisProposal | None,
-        session_ref: dict[str, Any] | None,
-        *,
-        failure_stage: str | None,
-    ) -> RepeatedContractRecord:
-        record = record_contract_failure_attempt(
-            branch,
-            failure_detail,
-            hypothesis,
-            session_ref,
-            failure_stage=failure_stage,
-        )
-        if record.signature is None:
-            return record
-        try:
-            self.persist_branch_state(branch.branch_id)
-        except Exception:  # pragma: no cover - diagnostic persistence is best effort
-            logger.debug(
-                "Failed to persist repeated-contract diagnostic marker for %s",
-                branch.branch_id,
-                exc_info=True,
-            )
-        return record
 
     def _emit_status_progress(
         self,
@@ -1354,8 +799,6 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         round_num: int,
         hypothesis: HypothesisProposal | None = None,
         patch: PatchProposal | None = None,
-        retry_attempt: bool = False,
-        prior_failure: str | None = None,
     ) -> None:
         """Best-effort heartbeat for long pre-protocol steps."""
         payload: dict[str, Any] = {
@@ -1365,31 +808,15 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             "round_num": round_num,
             "base_champion_id": branch.base_champion_id,
             "branch_weight_revision": getattr(branch, "weight_revision", 0),
-            "retry_attempt": retry_attempt,
             "step_started_at": datetime.now().isoformat(),
             "complete": False,
         }
-        payload.update(branch_hygiene_context(branch))
-        if prior_failure:
-            payload["retry_prior_failure"] = prior_failure
         if hypothesis is not None:
             payload.update(
                 {
                     "target_file": hypothesis.target_file,
                     "hypothesis_action": hypothesis.action,
                     "hypothesis_text": hypothesis.hypothesis_text,
-                    "mechanism_changes": [
-                        {
-                            "id": str(getattr(change, "id", "") or ""),
-                            "change_type": str(
-                                getattr(change, "change_type", "") or ""
-                            ),
-                        }
-                        for change in tuple(
-                            getattr(hypothesis, "mechanism_changes", ()) or ()
-                        )
-                        if str(getattr(change, "id", "") or "")
-                    ],
                 }
             )
         if patch is not None:

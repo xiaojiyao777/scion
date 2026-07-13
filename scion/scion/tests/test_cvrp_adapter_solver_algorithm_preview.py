@@ -1,7 +1,24 @@
 from __future__ import annotations
 
+import types
+
+from scion.problems.cvrp.preview.common import _call_preview_function
 from scion.problems.cvrp.preview import synthetic as cvrp_preview_synthetic
 from scion.tests.cvrp_adapter_test_support import *
+
+
+def test_preview_function_preserves_complete_return_detail() -> None:
+    module = types.ModuleType("lossless_preview_fixture")
+    value = "preview-start-" + ("x" * 500) + "-preview-end"
+    module.solve = lambda _instance, _time_limit: value
+    issues: list[str] = []
+    checks: list[dict[str, object]] = []
+
+    result = _call_preview_function(module, "solve", object(), issues, checks)
+
+    assert result == value
+    assert issues == []
+    assert checks == [{"name": "solve", "passed": True, "detail": repr(value)}]
 
 def test_cvrp_solver_algorithm_preview_accepts_valid_solution(
     cvrp_adapter: ProblemAdapter,

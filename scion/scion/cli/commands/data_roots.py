@@ -102,12 +102,11 @@ def validate_declared_problem_data_cases(
             missing.append(case)
 
     if missing:
-        sample = ", ".join(missing[:5])
-        suffix = "" if len(missing) <= 5 else f", ... (+{len(missing) - 5} more)"
+        missing_detail = ", ".join(missing)
         roots_text = ", ".join(str(root) for root in roots) or "<unset>"
         raise ValueError(
             "split manifest contains data-root-relative cases that do not resolve "
-            f"via {activation.env_name}={roots_text}: {sample}{suffix}"
+            f"via {activation.env_name}={roots_text}: {missing_detail}"
         )
 
 

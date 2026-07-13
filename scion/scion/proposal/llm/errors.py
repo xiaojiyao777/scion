@@ -1,10 +1,7 @@
-"""LLMClient error taxonomy and retry classification."""
+"""Typed LLM provider, transport, and response faults."""
 from __future__ import annotations
 
 import time
-
-from .config import LLM_TRANSIENT_API_ERROR_CATEGORY
-
 
 def _is_transient_provider_error(err_str: str) -> bool:
     """Return true for gateway failures that happen before model generation."""
@@ -58,6 +55,7 @@ def _is_timeout_error_text(err_str: str) -> bool:
 # Exceptions
 # ---------------------------------------------------------------------------
 
+
 class LLMError(Exception):
     """Base class for LLM-related errors."""
 
@@ -66,8 +64,20 @@ class LLMTimeoutError(LLMError):
     """API call timed out."""
 
 
-class LLMTransientProviderError(LLMError):
-    """Provider/gateway failed before a usable model response was produced."""
+class LLMAuthError(LLMError):
+    """Provider credentials are missing, invalid, expired, or forbidden."""
+
+
+class LLMBalanceError(LLMError):
+    """API balance/credits are exhausted."""
+
+
+class LLMTransportError(LLMError):
+    """The request failed in DNS, connection, or network transport."""
+
+
+class LLMProviderError(LLMError):
+    """The provider/gateway failed before producing a usable response."""
 
 
 class LLMFormatError(LLMError):
@@ -75,61 +85,28 @@ class LLMFormatError(LLMError):
 
 
 class LLMRateLimitError(LLMError):
-    """HTTP 429 — Too Many Requests."""
+    """HTTP 429; ``retry_after`` is advisory operator metadata only."""
 
     def __init__(self, message: str, retry_after: float = 60.0) -> None:
         super().__init__(message)
         self.retry_after = retry_after
 
 
-class LLMRetryExhaustedError(LLMError):
-    """All retry attempts exhausted."""
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        last_error: Exception | None = None,
-        failure_category: str | None = None,
-    ) -> None:
-        super().__init__(message)
-        self.last_error = last_error
-        self.failure_category = failure_category
-
-
-class LLMBalanceError(LLMError):
-    """API balance/credits exhausted (HTTP 403 with insufficient-balance message)."""
-
-
-def is_llm_transient_api_error(exc: BaseException | None) -> bool:
-    """Return true when an LLM error is transport/provider transient."""
+def is_llm_infra_error(exc: BaseException | None) -> bool:
+    """Return true only for typed provider/transport infrastructure faults."""
     if exc is None:
         return False
-    if isinstance(exc, (LLMTimeoutError, LLMTransientProviderError, LLMRateLimitError)):
-        return True
-    if isinstance(exc, LLMRetryExhaustedError):
-        if exc.failure_category == LLM_TRANSIENT_API_ERROR_CATEGORY:
-            return True
-        if is_llm_transient_api_error(exc.last_error):
-            return True
-    err_str = str(exc).lower()
-    return (
-        _is_timeout_error_text(err_str)
-        or _is_transient_provider_error(err_str)
-        or "rate_limit" in err_str
-        or "ratelimit" in err_str
-        or "http 429" in err_str
-        or "error code: 429" in err_str
+    return isinstance(
+        exc,
+        (
+            LLMAuthError,
+            LLMBalanceError,
+            LLMTimeoutError,
+            LLMRateLimitError,
+            LLMTransportError,
+            LLMProviderError,
+        ),
     )
-
-
-
-def _retry_exhausted_failure_category(
-    last_error: Exception | None,
-) -> str | None:
-    if is_llm_transient_api_error(last_error):
-        return LLM_TRANSIENT_API_ERROR_CATEGORY
-    return None
 
 
 def _masked_hard_timeout_error(
@@ -156,20 +133,6 @@ def _masked_hard_timeout_error(
             f"{timeout_sec:.1f}s (elapsed {elapsed:.1f}s)"
         )
     return None
-
-
-def _transient_retry_exhausted_error(
-    *,
-    request_label: str,
-    total_attempts: int,
-    last_error: Exception,
-) -> LLMRetryExhaustedError:
-    return LLMRetryExhaustedError(
-        f"{request_label} failed after {total_attempts} transient API attempt(s). "
-        f"Last error: {last_error}",
-        last_error=last_error,
-        failure_category=LLM_TRANSIENT_API_ERROR_CATEGORY,
-    )
 
 
 # ---------------------------------------------------------------------------

@@ -62,7 +62,6 @@ def main(argv: list[str] | None = None) -> int:
     mechanisms = _selected_mechanisms(args.mechanism)
     cases = load_case_entries(
         args.case_manifest,
-        case_limit=args.case_limit,
         case_id_filter=tuple(args.case_id),
         family_filter=tuple(args.family),
         slice_filter=tuple(args.slice),
@@ -190,7 +189,7 @@ def _run_jobs(
         reference = reference_by_case_seed.get((job.case.case_id, job.seed))
         summary = summarize_solver_output_for_job(raw, job=job, reference=reference)
         status_row = status_by_job.get(job.job_id, {})
-        for key in ("returncode", "wall_elapsed_sec", "stdout_tail", "stderr_tail"):
+        for key in ("returncode", "wall_elapsed_sec", "stdout", "stderr"):
             if key in status_row:
                 summary[key] = status_row[key]
         results.append(summary)
@@ -256,8 +255,8 @@ def _run_solver_job(
                 "timeout_after_sec": int(job.time_budget_sec)
                 + int(timeout_padding_sec),
                 "wall_elapsed_sec": time.perf_counter() - started,
-                "stdout_tail": _tail_text(exc.stdout),
-                "stderr_tail": _tail_text(exc.stderr),
+                "stdout": _full_text(exc.stdout),
+                "stderr": _full_text(exc.stderr),
             }
         )
         return row
@@ -266,8 +265,8 @@ def _run_solver_job(
         {
             "returncode": completed.returncode,
             "wall_elapsed_sec": time.perf_counter() - started,
-            "stdout_tail": _tail_text(completed.stdout),
-            "stderr_tail": _tail_text(completed.stderr),
+            "stdout": _full_text(completed.stdout),
+            "stderr": _full_text(completed.stderr),
         }
     )
     if completed.returncode != 0 or not Path(job.output_path).exists():
@@ -675,12 +674,12 @@ def _dict_or_empty(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
-def _tail_text(value: Any, limit: int = 2000) -> str:
+def _full_text(value: Any) -> str:
     if value is None:
         return ""
     if isinstance(value, bytes):
         value = value.decode("utf-8", errors="replace")
-    return str(value)[-limit:]
+    return str(value)
 
 
 def _positive_int(value: object, label: str) -> int:
@@ -725,10 +724,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=[],
         help=(
             "Case id to include exactly, e.g. P-n76-k4. Repeatable; combines "
-            "with --family and --slice filters before --case-limit is applied."
+            "with --family and --slice filters."
         ),
     )
-    parser.add_argument("--case-limit", type=int, default=1)
     parser.add_argument("--seed", action="append", default=[])
     parser.add_argument("--time-budget-sec", default="1")
     parser.add_argument("--timeout-padding-sec", type=int, default=60)
@@ -736,8 +734,6 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--reuse-workspaces", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
-    if args.case_limit is not None and args.case_limit <= 0:
-        raise SystemExit("--case-limit must be positive")
     if args.timeout_padding_sec < 0:
         raise SystemExit("--timeout-padding-sec must be non-negative")
     return args

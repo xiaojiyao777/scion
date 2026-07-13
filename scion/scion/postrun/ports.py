@@ -28,6 +28,8 @@ class RunEvidenceLifecycle:
     wrapper_exit_status: int | None = None
     postrun_acceptance_status: str = ""
     invalid_infra_only: bool = False
+    execution_outcomes: Mapping[str, Any] = field(default_factory=dict)
+    research_conclusion_eligibility: Mapping[str, Any] = field(default_factory=dict)
     failed_required_checks: tuple[str, ...] = ()
     failed_optional_checks: tuple[str, ...] = ()
     detail: Mapping[str, Any] = field(default_factory=dict)
@@ -52,6 +54,10 @@ class RunEvidenceLifecycle:
             "wrapper_exit_status": self.wrapper_exit_status,
             "postrun_acceptance_status": self.postrun_acceptance_status,
             "invalid_infra_only": self.invalid_infra_only,
+            "execution_outcomes": dict(self.execution_outcomes),
+            "research_conclusion_eligibility": dict(
+                self.research_conclusion_eligibility
+            ),
             "failed_required_checks": list(self.failed_required_checks),
             "failed_optional_checks": list(self.failed_optional_checks),
             "detail": dict(self.detail),

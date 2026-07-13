@@ -290,8 +290,8 @@ def _run_result_to_payload(result: RunResult) -> dict[str, Any]:
         "error_category": result.error_category,
         "stdout_sha256": _text_digest(stdout),
         "stderr_sha256": _text_digest(stderr),
-        "stdout_tail": stdout[-4000:],
-        "stderr_tail": stderr[-4000:],
+        "stdout": stdout,
+        "stderr": stderr,
     }
 
 
@@ -307,8 +307,8 @@ def _run_result_from_payload(payload: Mapping[str, Any]) -> RunResult | None:
     return RunResult(
         success=bool(payload.get("success")),
         exit_code=int(payload.get("exit_code") or 0),
-        stdout=str(payload.get("stdout_tail") or ""),
-        stderr=str(payload.get("stderr_tail") or ""),
+        stdout=str(payload.get("stdout") or ""),
+        stderr=str(payload.get("stderr") or ""),
         elapsed_ms=int(payload.get("elapsed_ms") or 0),
         output=output,
         output_path=(

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import PurePosixPath
 from typing import Any, Mapping
 
 from scion.postrun.acceptance_checks import (
@@ -11,9 +10,7 @@ from scion.postrun.acceptance_checks import (
     PostrunAcceptanceCheckBundle,
 )
 from scion.postrun.opportunity_visibility import (
-    OPPORTUNITY_COMMITMENT_VISIBILITY_SCHEMA,
     PROBLEM_OPPORTUNITY_VISIBILITY_SCHEMA,
-    opportunity_commitment_visibility_signature,
     problem_opportunity_visibility_signature,
 )
 
@@ -34,7 +31,6 @@ class PostrunPromptVisibilityAcceptancePort:
         problem_family: str | None,
         summary: Mapping[str, Any],
         expected: Mapping[str, Any],
-        active_subject_failure_prefix: str | None = None,
         enabled: bool = True,
     ) -> PostrunAcceptanceCheckBundle:
         if not enabled:
@@ -56,7 +52,6 @@ class PostrunPromptVisibilityAcceptancePort:
             problem_family=problem_family,
             summary=summary,
             expected=expected,
-            active_subject_failure_prefix=active_subject_failure_prefix,
         )
         return PostrunAcceptanceCheckBundle(
             checks=(
@@ -74,7 +69,6 @@ def _prompt_source_visibility_actionability(
     problem_family: str | None,
     summary: Mapping[str, Any],
     expected: Mapping[str, Any],
-    active_subject_failure_prefix: str | None,
 ) -> tuple[str, dict[str, Any]]:
     summary = _mapping_or_empty(summary)
     expected = _mapping_or_empty(expected)
@@ -83,9 +77,6 @@ def _prompt_source_visibility_actionability(
     opportunity_visibility = _mapping_or_empty(
         aggregate.get("problem_opportunity_visibility")
     )
-    commitment_visibility = _mapping_or_empty(
-        aggregate.get("opportunity_commitment_visibility")
-    )
     call_kind_counts = _mapping_or_empty(aggregate.get("call_kind_counts"))
     hypothesis_density = _mapping_or_empty(
         aggregate.get("hypothesis_generation_signal_density")
@@ -93,9 +84,6 @@ def _prompt_source_visibility_actionability(
     expected_aggregate = _mapping_or_empty(expected.get("aggregate"))
     expected_source_visibility = _mapping_or_empty(
         expected_aggregate.get("source_visibility")
-    )
-    expected_commitment_visibility = _mapping_or_empty(
-        expected_aggregate.get("opportunity_commitment_visibility")
     )
     expected_density = _mapping_or_empty(expected_aggregate.get("signal_density"))
     expected_hypothesis_density = _mapping_or_empty(
@@ -135,20 +123,6 @@ def _prompt_source_visibility_actionability(
             require_quality=False,
         )
     )
-    if _commitment_visibility_has_signal(
-        commitment_visibility
-    ) and commitment_visibility.get("schema_version") != (
-        OPPORTUNITY_COMMITMENT_VISIBILITY_SCHEMA
-    ):
-        failures.append("opportunity_commitment_visibility_schema_stale")
-    if commitment_visibility:
-        failures.extend(
-            _boundary_marker_failures(
-                "opportunity_commitment_visibility",
-                commitment_visibility,
-                require_quality=False,
-            )
-        )
     if summary.get("current_run_evidence") is not True:
         failures.append("prompt_context_not_current_run_evidence")
     if summary.get("available") is not True:
@@ -158,22 +132,7 @@ def _prompt_source_visibility_actionability(
     if _int_or_zero(source_visibility.get("trace_count")) <= 0:
         failures.append("prompt_source_visibility_trace_accounting_missing")
 
-    target_intent_required = _target_intent_source_visibility_required(
-        source_visibility,
-        call_kind_counts,
-    )
-    _append_target_source_failures(
-        failures,
-        source_visibility=source_visibility,
-        target_intent_source_visibility_required=target_intent_required,
-    )
-    code_trace_count = _append_code_source_failures(failures, source_visibility)
-    if active_subject_failure_prefix and code_trace_count > 0:
-        _append_active_subject_failures(
-            failures,
-            source_visibility=source_visibility,
-            failure_prefix=active_subject_failure_prefix,
-        )
+    _append_code_source_failures(failures, source_visibility)
 
     consistency_failures = _prompt_context_visibility_consistency_failures(
         summary=summary,
@@ -199,10 +158,6 @@ def _prompt_source_visibility_actionability(
             "available": summary.get("available"),
             "expected_available": expected.get("available"),
             "manifest_report_count": summary.get("manifest_report_count"),
-            "target_intent_trace_count": _int_or_zero(
-                call_kind_counts.get("hypothesis_target_intent")
-            ),
-            "target_intent_source_visibility_required": target_intent_required,
             "expected_manifest_report_count": expected.get("manifest_report_count"),
             "context_report_count": summary.get("context_report_count"),
             "expected_context_report_count": expected.get("context_report_count"),
@@ -273,80 +228,6 @@ def _prompt_source_visibility_actionability(
                     "code_missing_required_source_path_counts"
                 )
             ),
-            "active_subject_code_constraints_trace_count": source_visibility.get(
-                "active_subject_code_constraints_trace_count"
-            ),
-            "expected_active_subject_code_constraints_trace_count": (
-                expected_source_visibility.get(
-                    "active_subject_code_constraints_trace_count"
-                )
-            ),
-            "active_subject_code_constraints_required_count": source_visibility.get(
-                "active_subject_code_constraints_required_count"
-            ),
-            "expected_active_subject_code_constraints_required_count": (
-                expected_source_visibility.get(
-                    "active_subject_code_constraints_required_count"
-                )
-            ),
-            "active_subject_code_constraints_full_visible_count": (
-                source_visibility.get(
-                    "active_subject_code_constraints_full_visible_count"
-                )
-            ),
-            "expected_active_subject_code_constraints_full_visible_count": (
-                expected_source_visibility.get(
-                    "active_subject_code_constraints_full_visible_count"
-                )
-            ),
-            "active_subject_code_constraints_not_full_visible_count": (
-                source_visibility.get(
-                    "active_subject_code_constraints_not_full_visible_count"
-                )
-            ),
-            "expected_active_subject_code_constraints_not_full_visible_count": (
-                expected_source_visibility.get(
-                    "active_subject_code_constraints_not_full_visible_count"
-                )
-            ),
-            "active_subject_code_constraints_status_counts": source_visibility.get(
-                "active_subject_code_constraints_status_counts"
-            ),
-            "expected_active_subject_code_constraints_status_counts": (
-                expected_source_visibility.get(
-                    "active_subject_code_constraints_status_counts"
-                )
-            ),
-            "hypothesis_target_source_trace_count": source_visibility.get(
-                "hypothesis_target_source_trace_count"
-            ),
-            "expected_hypothesis_target_source_trace_count": (
-                expected_source_visibility.get("hypothesis_target_source_trace_count")
-            ),
-            "hypothesis_target_source_required_count": source_visibility.get(
-                "hypothesis_target_source_required_count"
-            ),
-            "expected_hypothesis_target_source_required_count": (
-                expected_source_visibility.get(
-                    "hypothesis_target_source_required_count"
-                )
-            ),
-            "hypothesis_target_source_visible_count": source_visibility.get(
-                "hypothesis_target_source_visible_count"
-            ),
-            "expected_hypothesis_target_source_visible_count": (
-                expected_source_visibility.get(
-                    "hypothesis_target_source_visible_count"
-                )
-            ),
-            "hypothesis_target_source_not_visible_count": source_visibility.get(
-                "hypothesis_target_source_not_visible_count"
-            ),
-            "expected_hypothesis_target_source_not_visible_count": (
-                expected_source_visibility.get(
-                    "hypothesis_target_source_not_visible_count"
-                )
-            ),
             "signal_density_total_token_estimate": _mapping_or_empty(
                 aggregate.get("signal_density")
             ).get("total_token_estimate"),
@@ -371,71 +252,8 @@ def _prompt_source_visibility_actionability(
             "expected_hypothesis_generation_signal_density_interpretation": (
                 expected_hypothesis_density.get("interpretation")
             ),
-            "opportunity_commitment_summary_trace_count": commitment_visibility.get(
-                "commitment_summary_trace_count"
-            ),
-            "expected_opportunity_commitment_summary_trace_count": (
-                expected_commitment_visibility.get("commitment_summary_trace_count")
-            ),
-            "opportunity_commitment_summary_without_section_count": (
-                commitment_visibility.get("commitment_summary_without_section_count")
-            ),
-            "expected_opportunity_commitment_summary_without_section_count": (
-                expected_commitment_visibility.get(
-                    "commitment_summary_without_section_count"
-                )
-            ),
-            "code_opportunity_commitment_summary_without_section_count": (
-                commitment_visibility.get(
-                    "code_commitment_summary_without_section_count"
-                )
-            ),
-            "expected_code_opportunity_commitment_summary_without_section_count": (
-                expected_commitment_visibility.get(
-                    "code_commitment_summary_without_section_count"
-                )
-            ),
         },
     )
-
-
-def _target_intent_source_visibility_required(
-    source_visibility: Mapping[str, Any],
-    call_kind_counts: Mapping[str, Any],
-) -> bool:
-    return (
-        _int_or_zero(call_kind_counts.get("hypothesis_target_intent")) > 0
-        or _int_or_zero(
-            source_visibility.get("hypothesis_target_source_required_count")
-        )
-        > 0
-    )
-
-
-def _append_target_source_failures(
-    failures: list[str],
-    *,
-    source_visibility: Mapping[str, Any],
-    target_intent_source_visibility_required: bool,
-) -> None:
-    required_count = _int_or_zero(
-        source_visibility.get("hypothesis_target_source_required_count")
-    )
-    visible_count = _int_or_zero(
-        source_visibility.get("hypothesis_target_source_visible_count")
-    )
-    if (
-        target_intent_source_visibility_required
-        and _int_or_zero(
-            source_visibility.get("hypothesis_target_source_trace_count")
-        )
-        <= 0
-    ):
-        failures.append("hypothesis_target_source_visibility_trace_missing")
-    elif target_intent_source_visibility_required and visible_count <= 0:
-        failures.append("hypothesis_target_source_visibility_not_visible")
-    if required_count > 0 and visible_count < required_count:
-        failures.append("hypothesis_target_required_source_not_fully_visible")
 
 
 def _append_code_source_failures(
@@ -456,33 +274,6 @@ def _append_code_source_failures(
     if missing_required_count > 0:
         failures.append("code_missing_required_source_visibility")
     return code_trace_count
-
-
-def _append_active_subject_failures(
-    failures: list[str],
-    *,
-    source_visibility: Mapping[str, Any],
-    failure_prefix: str,
-) -> None:
-    trace_count = _int_or_zero(
-        source_visibility.get("active_subject_code_constraints_trace_count")
-    )
-    required_count = _int_or_zero(
-        source_visibility.get("active_subject_code_constraints_required_count")
-    )
-    full_visible_count = _int_or_zero(
-        source_visibility.get("active_subject_code_constraints_full_visible_count")
-    )
-    if trace_count <= 0:
-        failures.append(f"{failure_prefix}_active_subject_code_constraints_trace_missing")
-    if required_count <= 0:
-        failures.append(f"{failure_prefix}_active_subject_code_constraints_not_required")
-    if (required_count <= 0 and full_visible_count <= 0) or (
-        required_count > 0 and full_visible_count < required_count
-    ):
-        failures.append(
-            f"{failure_prefix}_active_subject_code_constraints_not_full_visible"
-        )
 
 
 def _prompt_context_visibility_consistency_failures(
@@ -510,8 +301,6 @@ def _prompt_context_visibility_consistency_failures(
         "block_family_trace_count",
         "hypothesis_generation_trace_count",
         "hypothesis_generation_block_family_trace_count",
-        "omitted_section_trace_count",
-        "truncated_section_trace_count",
     ):
         if _int_or_zero(aggregate.get(field)) != _int_or_zero(
             expected_aggregate.get(field)
@@ -520,8 +309,6 @@ def _prompt_context_visibility_consistency_failures(
 
     for field in (
         "call_kind_counts",
-        "omitted_section_counts",
-        "truncated_section_counts",
     ):
         if _int_mapping(aggregate.get(field)) != _int_mapping(
             expected_aggregate.get(field)
@@ -568,15 +355,6 @@ def _prompt_context_visibility_consistency_failures(
         expected_aggregate.get("problem_opportunity_visibility")
     ):
         failures.append("prompt_context_visibility_problem_opportunity_mismatch")
-    if _commitment_visibility_comparison_required(
-        aggregate.get("opportunity_commitment_visibility"),
-        expected_aggregate.get("opportunity_commitment_visibility"),
-    ) and opportunity_commitment_visibility_signature(
-        aggregate.get("opportunity_commitment_visibility")
-    ) != opportunity_commitment_visibility_signature(
-        expected_aggregate.get("opportunity_commitment_visibility")
-    ):
-        failures.append("prompt_context_visibility_opportunity_commitment_mismatch")
     if _prompt_context_entries_signature(summary.get("entries")) != (
         _prompt_context_entries_signature(expected.get("entries"))
     ):
@@ -612,18 +390,6 @@ def _prompt_source_visibility_consistency_failures(
         "code_required_integration_source_visible_count",
         "code_algorithm_file_read_source_visible_count",
         "code_missing_required_source_trace_count",
-        "hypothesis_target_source_trace_count",
-        "hypothesis_target_source_required_count",
-        "hypothesis_target_source_visible_count",
-        "hypothesis_target_source_not_visible_count",
-        "active_subject_code_constraints_trace_count",
-        "active_subject_code_constraints_required_count",
-        "active_subject_code_constraints_full_visible_count",
-        "active_subject_code_constraints_partial_visible_count",
-        "active_subject_code_constraints_not_full_visible_count",
-        "active_subject_code_constraints_not_required_count",
-        "active_subject_code_constraints_constraint_count_total",
-        "active_subject_code_constraints_forbidden_pattern_count_total",
     ):
         if _int_or_zero(source_visibility.get(field)) != _int_or_zero(
             expected.get(field)
@@ -633,9 +399,6 @@ def _prompt_source_visibility_consistency_failures(
         "code_missing_required_source_path_counts",
         "code_target_source_status_counts",
         "code_target_visibility_status_counts",
-        "hypothesis_target_visibility_status_counts",
-        "active_subject_code_constraints_status_counts",
-        "active_subject_code_constraints_missing_reason_counts",
     ):
         if _int_mapping(source_visibility.get(field)) != _int_mapping(
             expected.get(field)
@@ -674,28 +437,6 @@ def _prompt_signal_density_consistency_failures(
     return failures
 
 
-def _commitment_visibility_comparison_required(left: Any, right: Any) -> bool:
-    return _commitment_visibility_has_signal(left) or _commitment_visibility_has_signal(
-        right
-    )
-
-
-def _commitment_visibility_has_signal(value: Any) -> bool:
-    visibility = _mapping_or_empty(value)
-    if not visibility:
-        return False
-    for key in (
-        "section_present_trace_count",
-        "section_visible_trace_count",
-        "code_section_present_trace_count",
-        "code_section_visible_trace_count",
-        "commitment_summary_trace_count",
-    ):
-        if _int_or_zero(visibility.get(key)) > 0:
-            return True
-    return False
-
-
 def _prompt_context_entries_signature(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
@@ -706,7 +447,7 @@ def _prompt_context_entries_signature(value: Any) -> list[dict[str, Any]]:
             continue
         signature = {
             "report": str(entry.get("report") or ""),
-            "path": _path_tail_signature(entry.get("path")),
+            "path": _path_signature(entry.get("path")),
             "prompt_manifest_ref_count": _int_or_zero(
                 entry.get("prompt_manifest_ref_count")
             ),
@@ -726,12 +467,6 @@ def _prompt_context_entries_signature(value: Any) -> list[dict[str, Any]]:
             "hypothesis_generation_block_family_trace_count": _int_or_zero(
                 entry.get("hypothesis_generation_block_family_trace_count")
             ),
-            "omitted_section_trace_count": _int_or_zero(
-                entry.get("omitted_section_trace_count")
-            ),
-            "truncated_section_trace_count": _int_or_zero(
-                entry.get("truncated_section_trace_count")
-            ),
             "call_kind_counts": _int_mapping(entry.get("call_kind_counts")),
             "block_family_totals": _block_family_totals_signature(
                 entry.get("block_family_totals")
@@ -740,12 +475,6 @@ def _prompt_context_entries_signature(value: Any) -> list[dict[str, Any]]:
                 _block_family_totals_signature(
                     entry.get("hypothesis_generation_block_family_totals")
                 )
-            ),
-            "omitted_section_counts": _int_mapping(
-                entry.get("omitted_section_counts")
-            ),
-            "truncated_section_counts": _int_mapping(
-                entry.get("truncated_section_counts")
             ),
             "source_visibility": _prompt_source_visibility_signature(
                 entry.get("source_visibility")
@@ -756,11 +485,6 @@ def _prompt_context_entries_signature(value: Any) -> list[dict[str, Any]]:
                 )
             ),
         }
-        commitment_visibility = entry.get("opportunity_commitment_visibility")
-        if _commitment_visibility_has_signal(commitment_visibility):
-            signature["opportunity_commitment_visibility"] = (
-                opportunity_commitment_visibility_signature(commitment_visibility)
-            )
         entries.append(signature)
     return sorted(entries, key=lambda item: item["report"])
 
@@ -799,61 +523,6 @@ def _prompt_source_visibility_signature(value: Any) -> dict[str, Any]:
         ),
         "code_target_visibility_status_counts": _int_mapping(
             source_visibility.get("code_target_visibility_status_counts")
-        ),
-        "hypothesis_target_source_trace_count": _int_or_zero(
-            source_visibility.get("hypothesis_target_source_trace_count")
-        ),
-        "hypothesis_target_source_required_count": _int_or_zero(
-            source_visibility.get("hypothesis_target_source_required_count")
-        ),
-        "hypothesis_target_source_visible_count": _int_or_zero(
-            source_visibility.get("hypothesis_target_source_visible_count")
-        ),
-        "hypothesis_target_source_not_visible_count": _int_or_zero(
-            source_visibility.get("hypothesis_target_source_not_visible_count")
-        ),
-        "hypothesis_target_visibility_status_counts": _int_mapping(
-            source_visibility.get("hypothesis_target_visibility_status_counts")
-        ),
-        "active_subject_code_constraints_trace_count": _int_or_zero(
-            source_visibility.get("active_subject_code_constraints_trace_count")
-        ),
-        "active_subject_code_constraints_required_count": _int_or_zero(
-            source_visibility.get("active_subject_code_constraints_required_count")
-        ),
-        "active_subject_code_constraints_full_visible_count": _int_or_zero(
-            source_visibility.get("active_subject_code_constraints_full_visible_count")
-        ),
-        "active_subject_code_constraints_partial_visible_count": _int_or_zero(
-            source_visibility.get(
-                "active_subject_code_constraints_partial_visible_count"
-            )
-        ),
-        "active_subject_code_constraints_not_full_visible_count": _int_or_zero(
-            source_visibility.get(
-                "active_subject_code_constraints_not_full_visible_count"
-            )
-        ),
-        "active_subject_code_constraints_not_required_count": _int_or_zero(
-            source_visibility.get("active_subject_code_constraints_not_required_count")
-        ),
-        "active_subject_code_constraints_constraint_count_total": _int_or_zero(
-            source_visibility.get(
-                "active_subject_code_constraints_constraint_count_total"
-            )
-        ),
-        "active_subject_code_constraints_forbidden_pattern_count_total": _int_or_zero(
-            source_visibility.get(
-                "active_subject_code_constraints_forbidden_pattern_count_total"
-            )
-        ),
-        "active_subject_code_constraints_status_counts": _int_mapping(
-            source_visibility.get("active_subject_code_constraints_status_counts")
-        ),
-        "active_subject_code_constraints_missing_reason_counts": _int_mapping(
-            source_visibility.get(
-                "active_subject_code_constraints_missing_reason_counts"
-            )
         ),
     }
 
@@ -921,12 +590,11 @@ def _json_comparison_value(value: Any) -> Any:
         return str(value)
 
 
-def _path_tail_signature(value: Any) -> Any:
+def _path_signature(value: Any) -> Any:
     if not isinstance(value, str) or not value:
         return _json_comparison_value(value)
     normalized = value.replace("\\", "/")
-    parts = [part for part in PurePosixPath(normalized).parts if part not in {"", "/"}]
-    return {"path_tail": parts[-4:]}
+    return {"path": normalized}
 
 
 __all__ = [

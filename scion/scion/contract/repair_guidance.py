@@ -1,86 +1,9 @@
 """Generic contract repair guidance templates."""
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from typing import Any, Sequence
 
-from scion.core.models import HypothesisProposal, HypothesisRecord, PatchProposal
-
-_DIRECT_SIGNATURE_FIELDS = frozenset(
-    {"predicted_direction", "target_objectives", "protected_objectives"}
-)
-
-
-def novelty_signature_missing_fields_template(
-    hypothesis: HypothesisProposal | HypothesisRecord | None,
-    *,
-    surface_name: str,
-    missing_fields: Sequence[str],
-    required_fields: Sequence[str],
-) -> dict[str, Any]:
-    """Return generic C10 repair guidance for missing semantic signature fields."""
-
-    mechanism_ids = _mechanism_ids(hypothesis)
-    novelty_fields = [
-        field
-        for field in _ordered_strings(required_fields)
-        if field not in _DIRECT_SIGNATURE_FIELDS
-    ]
-    direct_fields = [
-        field for field in _ordered_strings(required_fields) if field in _DIRECT_SIGNATURE_FIELDS
-    ]
-    novelty_template = {
-        field: _novelty_signature_placeholder(field) for field in novelty_fields
-    }
-    novelty_template.setdefault(
-        "mechanism_id",
-        (
-            mechanism_ids[0]
-            if len(mechanism_ids) == 1
-            else "<same id as mechanism_changes and expected telemetry>"
-        ),
-    )
-    return _drop_empty(
-        {
-            "repair_type": "novelty_signature_missing_fields",
-            "check": "C10_novelty",
-            "severity": "light",
-            "surface": surface_name,
-            "missing_fields": _ordered_strings(missing_fields),
-            "required_fields": _ordered_strings(required_fields),
-            "required_template": _drop_empty(
-                {
-                    "top_level_fields": {
-                        field: _direct_signature_placeholder(field)
-                        for field in direct_fields
-                    },
-                    "novelty_signature": novelty_template,
-                }
-            ),
-            "mechanism_id_consistency": _drop_empty(
-                {
-                    "mechanism_change_ids": mechanism_ids,
-                    "instruction": (
-                        "Use the same concrete mechanism id in mechanism_changes, "
-                        "novelty_signature.mechanism_id when present, "
-                        "expected_telemetry mechanism-specific fields, and patch "
-                        "telemetry records."
-                    ),
-                }
-            ),
-            "agent_instruction": [
-                "Do not invent problem facts.",
-                (
-                    "If a strategy is unchanged, say unchanged and name the "
-                    "baseline component from the active solver map or baseline "
-                    "component summary."
-                ),
-                (
-                    "Mechanism id must match mechanism_changes and expected "
-                    "telemetry mechanism-specific field names."
-                ),
-            ],
-        }
-    )
+from scion.core.models import PatchProposal
 
 
 def patch_primary_target_mismatch_template(
@@ -151,21 +74,6 @@ def patch_primary_target_mismatch_template(
     )
 
 
-def _mechanism_ids(
-    hypothesis: HypothesisProposal | HypothesisRecord | None,
-) -> list[str]:
-    ids: list[str] = []
-    for change in getattr(hypothesis, "mechanism_changes", ()) or ():
-        if isinstance(change, Mapping):
-            value = change.get("id")
-        else:
-            value = getattr(change, "id", None)
-        text = str(value or "").strip()
-        if text and text not in ids:
-            ids.append(text)
-    return ids
-
-
 def _ordered_strings(values: Sequence[str]) -> list[str]:
     items: list[str] = []
     for value in values:
@@ -175,37 +83,10 @@ def _ordered_strings(values: Sequence[str]) -> list[str]:
     return items
 
 
-def _novelty_signature_placeholder(field: str) -> str:
-    if field == "algorithm_family":
-        return "<generic algorithm or mechanism family>"
-    if field == "construction_strategy":
-        return "<unchanged|modified|new construction behavior>"
-    if field == "improvement_strategy":
-        return "<what changes search or improvement behavior>"
-    if field == "acceptance_strategy":
-        return "<unchanged|modified acceptance behavior>"
-    if field == "runtime_budget_strategy":
-        return "<how runtime is bounded or reallocated>"
-    if field == "mechanism_id":
-        return "<same id as mechanism_changes and expected telemetry>"
-    return f"<structured identity value for {field}>"
-
-
-def _direct_signature_placeholder(field: str) -> Any:
-    if field == "predicted_direction":
-        return "<improve|tradeoff|exploratory>"
-    if field == "target_objectives":
-        return ["<objective metric name>"]
-    if field == "protected_objectives":
-        return ["<objective metric name>"]
-    return f"<{field}>"
-
-
 def _drop_empty(value: dict[str, Any]) -> dict[str, Any]:
     return {key: item for key, item in value.items() if item not in ({}, [], None, "")}
 
 
 __all__ = [
-    "novelty_signature_missing_fields_template",
     "patch_primary_target_mismatch_template",
 ]

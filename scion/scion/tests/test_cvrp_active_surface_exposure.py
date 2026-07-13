@@ -66,15 +66,16 @@ def test_cvrp_hypothesis_context_exposes_only_solver_design_as_active_surface(
         branch=branch,
         champion=champion,
         problem_spec=legacy,
-        active_hypotheses=[],
-        blacklist=[],
     )
 
-    assert ctx["active_problem_boundary_surfaces"] == "solver_design"
-    assert ctx["operator_categories"] == "solver_design"
-    assert "solver_design [solver_design]" in ctx["research_surfaces"]
+    assert [surface["name"] for surface in ctx["research_surfaces"]] == [
+        "solver_design"
+    ]
+    assert ctx["research_surfaces"][0]["kind"] == "solver_design"
     for surface_name in _LEGACY_SURFACES:
-        assert f"{surface_name} [" not in ctx["research_surfaces"]
+        assert surface_name not in {
+            surface["name"] for surface in ctx["research_surfaces"]
+        }
     assert "policies/baseline_algorithm.py" in ctx["targetable_files"]
     assert "policies/baseline_modules/*.py" in ctx["targetable_files"]
     assert "policies/baseline_policy.py" not in ctx["targetable_files"]

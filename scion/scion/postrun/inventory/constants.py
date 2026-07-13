@@ -21,6 +21,7 @@ CAMPAIGN_EXECUTION_ARTIFACTS = (
     ("campaign_summary", "campaign_summary.json"),
 )
 LAUNCHER_STATUS_KEYS = (
+    "proposal_runtime_mode",
     "wrapper_exit_status",
     "pre_campaign_completion_preflight",
     "pre_campaign_completion_preflight_active_accounts",
@@ -83,7 +84,6 @@ EXIT_MARKERS = (
 POSTRUN_REPORT_DIRS = (
     "summaries",
     "failures",
-    "research_efficiency",
     "manifests",
     "analysis_brief",
     "inventory",

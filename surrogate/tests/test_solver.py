@@ -103,6 +103,34 @@ class TestSmallInstance:
         assert "subcategory_splits" in d["objective"]
         assert "total_cost" in d["objective"]
 
+    def test_default_operator_registry_emits_state_transition_only(self):
+        """默认 operator set 只证明 registry 激活，不声称尝试或效果。"""
+        inst = load_instance(get_instance_path("instance_small_1.json"), phase=1)
+        cfg = Config(max_iterations=0, no_improve_limit=1, random_seed=42)
+
+        sol = solve(inst, cfg)
+        raw = solution_to_dict(sol, inst)
+
+        runtime = raw["runtime"]
+        assert runtime["operator_registry"] == [
+            "swap_orders",
+            "move_order",
+            "destroy_rebuild",
+            "merge_vehicles",
+            "change_vehicle_type",
+            "split_vehicle",
+        ]
+        assert "operator_diagnostics" not in runtime
+        events = runtime["typed_telemetry_events"]
+        assert len(events) == 1
+        assert events[0]["lane"] == "state_transition"
+        assert events[0]["mechanism_id"] == "warehouse_operator_registry"
+        assert events[0]["occurrences"] == 1
+        assert all(
+            event["lane"] not in {"attempt", "direct_effect"}
+            for event in events
+        )
+
     def test_small3_assignment_consistent_with_vehicles(self):
         """small_3：assignment 与 vehicles 内 order_ids 一致。"""
         inst = load_instance(get_instance_path("instance_small_3.json"), phase=1)

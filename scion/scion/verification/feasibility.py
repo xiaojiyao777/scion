@@ -9,8 +9,13 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
-from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_raw
+from scion.runtime.audit import (
+    format_runtime_audit_failure,
+    runtime_audit_failure_from_raw,
+    runtime_audit_issue_blocks_execution,
+)
 from scion.runtime.runner import Runner, run_solver_with_surface
+from scion.verification.candidate_canary import CandidateCanaryExecution
 from scion.verification.requirements import requires_adapter_for_runtime
 
 if TYPE_CHECKING:
@@ -26,55 +31,69 @@ def check_feasibility(
     selected_surface: str | None = None,
     require_adapter_for_runtime: bool = False,
     runtime_time_limit_sec: int | float = 30,
+    canary_execution: CandidateCanaryExecution | None = None,
 ) -> CheckResult:
     """V6_feasibility: solver output must pass oracle.check_feasibility on the canary case."""
     t0 = time.monotonic_ns()
 
-    canary = resolve_problem_path(problem_spec, problem_spec.canary_case_path)
+    canary = (
+        canary_execution.case_path
+        if canary_execution is not None
+        else resolve_problem_path(problem_spec, problem_spec.canary_case_path)
+    )
     if not canary:
         return _cr(True, "heavy", "skipped: no canary_case_path configured", t0)
 
     if not os.path.isfile(canary):
         return _cr(True, "heavy", f"skipped: canary file not found: {canary}", t0)
 
-    # Run solver in candidate workspace with canary case.
-    try:
-        result = run_solver_with_surface(
-            runner,
-            workdir=candidate_workspace,
-            instance_path=canary,
-            seed=42,
-            time_limit_sec=runtime_time_limit_sec,
-            registry_path=_registry_path(candidate_workspace),
-            selected_surface=selected_surface,
-        )
-    except Exception as exc:
-        return _cr(False, "heavy", f"runner error: {exc}", t0)
+    if canary_execution is not None:
+        if canary_execution.raw_output is None:
+            return _cr(
+                False,
+                "heavy",
+                canary_execution.error or "solver produced no output",
+                t0,
+            )
+        raw = dict(canary_execution.raw_output)
+    else:
+        # Standalone compatibility path; VerificationGate supplies a shared run.
+        try:
+            result = run_solver_with_surface(
+                runner,
+                workdir=candidate_workspace,
+                instance_path=canary,
+                seed=42,
+                time_limit_sec=runtime_time_limit_sec,
+                registry_path=_registry_path(candidate_workspace),
+                selected_surface=selected_surface,
+            )
+        except Exception as exc:
+            return _cr(False, "heavy", f"runner error: {exc}", t0)
 
-    if not result.success:
-        return _cr(
-            False, "heavy",
-            f"solver failed (exit={result.exit_code}, "
-            f"category={result.error_category}): {result.stderr[:200]}",
-            t0,
-        )
+        if not result.success:
+            return _cr(
+                False, "heavy",
+                f"solver failed (exit={result.exit_code}, "
+                f"category={result.error_category}): {result.stderr}",
+                t0,
+            )
 
-    if result.output_path is None:
-        return _cr(False, "heavy", "solver produced no output file", t0)
+        if result.output_path is None:
+            return _cr(False, "heavy", "solver produced no output file", t0)
 
-    # Load output JSON.
-    try:
-        with open(result.output_path, encoding="utf-8") as f:
-            raw = json.load(f)
-    except Exception as exc:
-        return _cr(False, "heavy", f"cannot read solver output: {exc}", t0)
+        try:
+            with open(result.output_path, encoding="utf-8") as f:
+                raw = json.load(f)
+        except Exception as exc:
+            return _cr(False, "heavy", f"cannot read solver output: {exc}", t0)
 
     audit_failure = runtime_audit_failure_from_raw(
         raw,
         problem_spec=problem_spec,
         selected_surface=selected_surface,
     )
-    if audit_failure is not None:
+    if runtime_audit_issue_blocks_execution(audit_failure):
         return _cr(
             False,
             "heavy",
@@ -127,7 +146,7 @@ def check_feasibility(
     if passed:
         return _cr(True, "heavy", "feasibility ok", t0)
     reasons = getattr(legacy_result, "reasons", None) or getattr(legacy_result, "violations", None) or ()
-    detail = "; ".join(str(reason) for reason in list(reasons)[:3]) or "legacy feasibility hook failed"
+    detail = "; ".join(str(reason) for reason in reasons) or "legacy feasibility hook failed"
     return _cr(False, "heavy", f"infeasible: {detail}", t0)
 
 
@@ -145,7 +164,7 @@ def _check_via_adapter(
         if not consistency.passed:
             return _cr(
                 False, "heavy",
-                f"consistency failed: {'; '.join(consistency.reasons[:3])}",
+                f"consistency failed: {'; '.join(consistency.reasons)}",
                 t0,
             )
     except Exception as exc:
@@ -160,7 +179,7 @@ def _check_via_adapter(
         return _cr(True, "heavy", "feasibility ok", t0)
     return _cr(
         False, "heavy",
-        f"infeasible: {'; '.join(feas.reasons[:3])}",
+        f"infeasible: {'; '.join(feas.reasons)}",
         t0,
     )
 

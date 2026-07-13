@@ -29,6 +29,7 @@ def check_surface_interface(
     problem_spec: Any | None = None,
     selected_surface: str | None = None,
     operator_execute_signature: str | None = None,
+    active_subject_policy: Mapping[str, Any] | None = None,
     check_name: str,
     severity: str = "light",
     detail_suffix: str = "",
@@ -87,6 +88,7 @@ def check_surface_interface(
         problem_spec,
         file_rel,
         selected_surface=selected_surface,
+        active_subject_policy=active_subject_policy,
     ):
         return _cr(
             check_name,
@@ -266,11 +268,14 @@ def _is_active_subject_support_module(
     file_rel: str,
     *,
     selected_surface: str | None,
+    active_subject_policy: Mapping[str, Any] | None,
 ) -> bool:
-    policy = active_subject_policy_payload(
-        problem_spec=problem_spec,
-        surface=selected_surface,
-    )
+    policy = active_subject_policy
+    if policy is None:
+        policy = active_subject_policy_payload(
+            problem_spec=problem_spec,
+            surface=selected_surface,
+        )
     return active_subject_policy_matches_path(
         policy,
         file_rel,

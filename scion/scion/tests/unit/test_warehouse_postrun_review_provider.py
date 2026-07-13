@@ -51,7 +51,7 @@ def test_warehouse_postrun_review_port_uses_existing_summary() -> None:
     assert review.proposal_visibility_only is True
 
 
-def test_warehouse_postrun_review_port_fails_required_review_input_gaps() -> None:
+def test_warehouse_postrun_review_port_reports_gaps_without_gating() -> None:
     summary = _build_warehouse_followup_summary()
     stale_summary = {
         **summary,
@@ -62,8 +62,10 @@ def test_warehouse_postrun_review_port_fails_required_review_input_gaps() -> Non
         {"analysis_brief": {"warehouse_followup_summary": stale_summary}}
     )
 
-    assert review.ready is False
-    assert review.failed_required_checks == ("missing_runtime_feedback_summary",)
+    assert review.ready is True
+    assert review.status == "reported"
+    assert review.failed_required_checks == ()
+    assert review.detail["readiness_input"] is False
 
 
 def test_warehouse_actionability_spec_keeps_quality_blocked_input_gaps_nonblocking() -> None:
@@ -140,15 +142,8 @@ def _context(
         },
         runtime_feedback_summary={
             "available": True,
-            "drain_status_complete": True,
+            "review_ready": True,
             "aggregate": {
-                "fresh_runtime_replay_drain": {
-                    "status_counts": {"executed": 1},
-                    "attempts": 1,
-                    "executed": 1,
-                    "protocol_results": 1,
-                },
-                "stage_transition_drain": {"status_counts": {"executed": 1}},
                 "runtime_budget_diagnostics": {
                     "runtime_model_counts": {"fast_complete": 1},
                     "diagnostic_count": 1,

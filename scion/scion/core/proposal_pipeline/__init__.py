@@ -5,52 +5,25 @@ compatible while implementation details live in focused modules.
 """
 from __future__ import annotations
 
-from .boundaries import (
-    _active_problem_boundary_surfaces_for_runtime,
-    _declared_solver_design_surface_names,
-)
-from .classification import (
-    AgenticFailureRoutingSignal,
-    _agentic_detail_is_framework_boundary,
-    _agentic_failure_routing_signal,
-    _agentic_output_is_control_timeout,
-    _agentic_output_is_quality_blocked,
-    _agentic_primary_secondary_failures,
-    _agentic_quality_block_classification,
-    _agentic_rejection_constraint,
-    _agentic_self_check_failure_detail,
-    _bounded_agentic_failure_text,
-)
 from .facade import ProposalPipeline
+from .attempts import (
+    PROPOSAL_ATTEMPT_TRANSITION_SCHEMA,
+    ProposalAttemptRecorder,
+)
 from .protocols import (
-    AgenticProposalSessionLike,
     BranchControllerLike,
-    CircuitBreakerLike,
     ClassifierLike,
     CreativeLayerLike,
     HypothesisStoreLike,
     ProblemRuntimeLike,
 )
-
 __all__ = [
-    "AgenticProposalSessionLike",
-    "AgenticFailureRoutingSignal",
     "BranchControllerLike",
-    "CircuitBreakerLike",
     "ClassifierLike",
     "CreativeLayerLike",
     "HypothesisStoreLike",
     "ProblemRuntimeLike",
+    "PROPOSAL_ATTEMPT_TRANSITION_SCHEMA",
+    "ProposalAttemptRecorder",
     "ProposalPipeline",
-    "_active_problem_boundary_surfaces_for_runtime",
-    "_agentic_detail_is_framework_boundary",
-    "_agentic_failure_routing_signal",
-    "_agentic_output_is_control_timeout",
-    "_agentic_output_is_quality_blocked",
-    "_agentic_primary_secondary_failures",
-    "_agentic_quality_block_classification",
-    "_agentic_rejection_constraint",
-    "_agentic_self_check_failure_detail",
-    "_bounded_agentic_failure_text",
-    "_declared_solver_design_surface_names",
 ]

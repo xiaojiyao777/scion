@@ -34,6 +34,14 @@ class DefaultRunEvidenceLifecyclePort:
         validity = _mapping(inventory.get("validity"))
         launcher = _mapping(inventory.get("launcher"))
         phase4 = _mapping(inventory.get("phase4_evidence_coverage"))
+        proposal_runtime = _mapping(inventory.get("proposal_runtime"))
+        execution_outcomes = _mapping(inventory.get("execution_outcomes"))
+        outcome_counts = _mapping(
+            execution_outcomes.get("execution_outcome_counts")
+        )
+        eligibility = _mapping(
+            execution_outcomes.get("research_conclusion_eligibility")
+        )
         status_fields = _mapping(launcher.get("status_fields"))
 
         wrapper_exit_status = _optional_int(
@@ -50,10 +58,19 @@ class DefaultRunEvidenceLifecyclePort:
             phase4.get("current_run_evidence"),
             default=_bool_from_any(lifecycle.get("current_run_evidence")),
         )
-        invalid_infra_only = _bool_from_any(
-            phase4.get("invalid_infra_only"),
-            default=_bool_from_any(validity.get("invalid_infra_only")),
-        )
+        explicit_outcome_count = _int_from_any(
+            execution_outcomes.get("evaluated_count")
+        ) + _int_from_any(execution_outcomes.get("non_evaluated_count"))
+        if explicit_outcome_count > 0:
+            invalid_infra_only = (
+                _int_from_any(outcome_counts.get("blocked_infra"))
+                == explicit_outcome_count
+            )
+        else:
+            invalid_infra_only = _bool_from_any(
+                phase4.get("invalid_infra_only"),
+                default=_bool_from_any(validity.get("invalid_infra_only")),
+            )
 
         failed: list[str] = []
         if wrapper_exit_status not in (None, 0):
@@ -64,6 +81,16 @@ class DefaultRunEvidenceLifecyclePort:
             failed.append("invalid_infra_only")
         if not current_run_evidence:
             failed.append("missing_current_run_evidence")
+        if eligibility.get("eligible") is False:
+            failed.append("no_evaluated_execution_outcome")
+        runtime_status = str(proposal_runtime.get("status") or "unknown")
+        if runtime_status == "unsupported_historical":
+            failed.append("proposal_runtime_mode_unsupported_historical")
+        elif (
+            runtime_status != "resolved"
+            or proposal_runtime.get("resolved_mode") != "direct_v3"
+        ):
+            failed.append("proposal_runtime_mode_unresolved")
 
         return RunEvidenceLifecycle(
             status="ready" if not failed else "not_ready",
@@ -81,9 +108,12 @@ class DefaultRunEvidenceLifecyclePort:
             wrapper_exit_status=wrapper_exit_status,
             postrun_acceptance_status=postrun_acceptance_status,
             invalid_infra_only=invalid_infra_only,
+            execution_outcomes=dict(execution_outcomes),
+            research_conclusion_eligibility=dict(eligibility),
             failed_required_checks=tuple(failed),
             detail={
                 "source": "postrun_inventory_common_fields",
+                "proposal_runtime": dict(proposal_runtime),
             },
         )
 
@@ -217,6 +247,11 @@ def _optional_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _int_from_any(value: Any) -> int:
+    parsed = _optional_int(value)
+    return max(0, parsed) if parsed is not None else 0
 
 
 def _bool_from_any(value: Any, *, default: bool = False) -> bool:

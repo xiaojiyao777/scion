@@ -6,7 +6,7 @@ import os
 import sqlite3
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import pytest
 
 from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig, SearchSpace
@@ -15,7 +15,6 @@ from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, Decision,
     EvalStats, ExperimentStage, ProtocolResult, VerificationResult, CheckResult,
 )
-from scion.core.termination import TerminationConfig
 from scion.evidence.final_evidence_refs import (
     FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
     FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED,
@@ -49,7 +48,7 @@ _VALID_PATCH = {
     "file_path": "operators/local_search.py",
     "action": "modify",
     "edit_intent": "exact_replace",
-    "source_digest": source_digest_for_content(_VALID_CODE + "\n"),
+    "source_digest": source_digest_for_content(_VALID_CODE),
     "old_string": "        return solution\n",
     "new_string": "        candidate = solution\n        return candidate\n",
     "replace_all": False,
@@ -65,7 +64,7 @@ _VALID_PATCH_REPAIR = {
     "file_path": "operators/local_search.py",
     "action": "modify",
     "edit_intent": "exact_replace",
-    "source_digest": source_digest_for_content(_VALID_CODE_AFTER_PATCH + "\n\n"),
+    "source_digest": source_digest_for_content(_VALID_CODE_AFTER_PATCH),
     "old_string": "        return candidate\n",
     "new_string": "        return candidate\n",
     "replace_all": False,
@@ -150,10 +149,30 @@ def _make_protocol_result(
         stage=stage,
         stats=stats,
         gate_outcome=gate_outcome,
-        reason_codes=("TEST",),
+        reason_codes=(_protocol_reason_code(stage, gate_outcome),),
         exposed_summary=f"stage={stage.value} outcome={gate_outcome}",
         raw_metrics_ref="/tmp/test.json",
     )
+
+
+def _protocol_reason_code(stage: ExperimentStage, gate_outcome: str) -> str:
+    return {
+        (ExperimentStage.SCREENING, "pass"): "SCREENING_PASS",
+        (ExperimentStage.SCREENING, "fail"): "SCREENING_FAIL_WIN_RATE",
+        (ExperimentStage.SCREENING, "unclear"): "SCREENING_INCONCLUSIVE_HIGH_WIN_NEGATIVE_EFFECT",
+        (ExperimentStage.SCREENING, "expand"): "SCREENING_EXPAND",
+        (ExperimentStage.SCREENING, "continue"): "SCREENING_FAIL_WIN_RATE",
+        (ExperimentStage.VALIDATION, "pass"): "VALIDATION_PASS",
+        (ExperimentStage.VALIDATION, "fail"): "VALIDATION_FAIL_WIN_RATE",
+        (ExperimentStage.VALIDATION, "unclear"): "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",
+        (ExperimentStage.VALIDATION, "expand"): "VALIDATION_EXPAND",
+        (ExperimentStage.VALIDATION, "continue"): "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",
+        (ExperimentStage.FROZEN, "pass"): "FROZEN_PASS",
+        (ExperimentStage.FROZEN, "fail"): "FROZEN_FAIL_UNCLEAR",
+        (ExperimentStage.FROZEN, "unclear"): "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",
+        (ExperimentStage.FROZEN, "expand"): "FROZEN_FAIL_UNCLEAR",
+        (ExperimentStage.FROZEN, "continue"): "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",
+    }[(stage, gate_outcome)]
 
 
 class MockExperimentProtocol:
@@ -214,7 +233,6 @@ def _campaign(
     llm_client: Any = None,
     experiment_protocol: Any = None,
     verification_gate: Any = None,
-    termination_config: Optional[TerminationConfig] = None,
 ) -> CampaignManager:
     # Create minimal champion code directory
     code_dir = tmp_path / "champion_code"
@@ -239,10 +257,6 @@ def _campaign(
         campaign_dir=campaign_dir,
         verification_gate=verification_gate or AlwaysPassVerificationGate(),
         experiment_protocol=experiment_protocol,
-        termination_config=termination_config or TerminationConfig(
-            max_experiments=100,
-            stagnation_limit=50,
-        ),
     )
 
 

@@ -1,3 +1,3 @@
-from .router import FailureRouter, FailureAction, RetryConfig
+from .router import FailureRouter, FailureAction
 
-__all__ = ["FailureRouter", "FailureAction", "RetryConfig"]
+__all__ = ["FailureRouter", "FailureAction"]

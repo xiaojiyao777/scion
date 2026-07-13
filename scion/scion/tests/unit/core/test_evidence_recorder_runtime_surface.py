@@ -90,7 +90,7 @@ def test_campaign_summary_distinguishes_pair_and_case_screening_rates(
     assert protocol["screening_pair_win_rate"] == 0.125
 
 
-def test_campaign_summary_exposes_bounded_runtime_failure_summary(
+def test_campaign_summary_exposes_complete_runtime_failure_summary(
     tmp_path: Path,
 ) -> None:
     recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
@@ -203,51 +203,6 @@ def test_campaign_summary_exposes_selected_surface_runtime_summary(
     assert surface_summary["fields"]["algorithm_plan"]["present"] == 4
 
 
-def test_campaign_summary_renders_branch_history_cards_from_state_provider(
-    tmp_path: Path,
-) -> None:
-    branch_card = {
-        "branch_id": "branch-1",
-        "direction": "modify/local_search",
-        "status": "active",
-        "rollback_count": 1,
-        "best_quality_checkpoint_id": "ckpt-best",
-        "last_valid_checkpoint_id": "ckpt-valid",
-    }
-    recorder = EvidenceRecorder(
-        campaign_id="camp-1",
-        campaign_dir=tmp_path,
-        state_provider=lambda: {
-            "branches": [{"branch_id": "branch-1", "branch_card": branch_card}],
-        },
-    )
-
-    summary = recorder.write_campaign_summary(
-        step_history=[_step()],
-        round_num=1,
-        champion=_champion(),
-    )
-
-    assert summary["branch_cards"] == [branch_card]
-    history_card = summary["branch_history_cards"][0]
-    assert history_card["branch_id"] == "branch-1"
-    assert history_card["generic_evidence_summary"]["tier"] == "weak_positive"
-    assert history_card["lineage_retained_checkpoint"] is True
-    assert history_card["why_not_promoted_reason_codes"] == [
-        "screening_positive",
-        "runtime_ok",
-    ]
-    assert "generic_evidence_summary=tier:weak_positive" in history_card[
-        "branch_card_text"
-    ]
-    assert summary["rollback_events"] == [
-        {
-            "branch_id": "branch-1",
-            "rollback_count": 1,
-            "best_quality_checkpoint_id": "ckpt-best",
-            "last_valid_checkpoint_id": "ckpt-valid",
-        }
-    ]
 
 
 def test_campaign_summary_family_coverage_uses_step_locus_for_ambiguous_text(

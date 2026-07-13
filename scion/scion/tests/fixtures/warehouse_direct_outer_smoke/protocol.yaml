@@ -1,0 +1,39 @@
+version: "warehouse-direct-outer-smoke"
+
+screening:
+  n_cases_modify: 1
+  n_cases_create: 1
+  n_seeds: 1
+  expand_to_modify: 1
+  expand_to_create: 1
+
+validation:
+  n_cases: 1
+  n_seeds: 1
+  expand_to: 1
+
+frozen:
+  n_cases: 1
+  n_seeds: 1
+
+canary:
+  cases: []
+  seeds: []
+
+runtime:
+  max_runtime_ratio: 2.0
+  tie_speedup_ratio: 0.75
+  tie_min_runtime_pairs: 1
+
+gates:
+  screening:
+    win_rate_min: 0.60
+    median_delta_min: "practical_delta_screen"
+  validation:
+    win_rate_min: 0.66
+    median_delta_min: "practical_delta_validate"
+    bootstrap_ci_low_min: 0.0
+    bootstrap_n: 100
+  frozen:
+    bootstrap_ci_low_min: 0.0
+    canary_required: true

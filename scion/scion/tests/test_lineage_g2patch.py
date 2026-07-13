@@ -52,49 +52,6 @@ class TestEventKind:
         summary = reg.get_campaign_summary()
         assert summary["total_events"] == 2
 
-    def test_campaign_summary_counts_telemetry_failed_experiment_rows(self, tmp_path):
-        reg = _reg(tmp_path)
-        reg.record_event(
-            {
-                "branch_id": "b1",
-                "timestamp": datetime.now().isoformat(),
-                "telemetry_guard_failed": 1,
-                "telemetry_failure_categories_json": '["activity", "effect"]',
-                "telemetry_failure_details_json": (
-                    '[{"schema":"scion.telemetry_decision_detail.v1",'
-                    '"stage":"screening","category":"activity",'
-                    '"mechanism_id":"activity_probe",'
-                    '"surface_field_id":"activity_counter",'
-                    '"runtime_role":"activity","missing_fields":[],'
-                    '"invalid_fields":[],"repairable":false,'
-                    '"declaration_source_digest":"digest-1"}]'
-                ),
-            }
-        )
-        reg.record_event(
-            {
-                "branch_id": "b2",
-                "timestamp": datetime.now().isoformat(),
-                "telemetry_guard_failed": 0,
-                "telemetry_failure_categories_json": "[]",
-            }
-        )
-        reg.record_decision("b1", "{}", "abandon", '["SCREENING_TELEMETRY_FAILED"]')
-
-        summary = reg.get_campaign_summary()
-
-        assert summary["total_events"] == 2
-        assert summary["telemetry_failed_experiments"] == 1
-        assert summary["telemetry_failed_experiments_by_category"] == {
-            "activity": 1,
-            "effect": 1,
-        }
-        assert summary["telemetry_failure_details"][0]["mechanism_id"] == (
-            "activity_probe"
-        )
-        assert summary["telemetry_failure_details"][0]["surface_field_id"] == (
-            "activity_counter"
-        )
 
     def test_existing_record_event_preserves_explicit_event_kind(self, tmp_path):
         """Caller can override event_kind if needed."""
@@ -126,9 +83,6 @@ class TestAuditColumns:
             "protocol_version",
             "prompt_tokens",
             "completion_tokens",
-            "telemetry_guard_failed",
-            "telemetry_failure_categories_json",
-            "telemetry_failure_details_json",
         ):
             assert col in cols, f"Missing column: {col}"
 

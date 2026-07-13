@@ -44,7 +44,7 @@ def _preview_baseline_algorithm_boundary(
         else (
             "context.remaining_time() returns seconds; use "
             "context.remaining_time_ms() when comparing to millisecond-derived "
-            f"variables: {mixed[:5]}"
+            f"variables: {mixed}"
         )
     )
     checks.append(
@@ -158,7 +158,7 @@ def _preview_solver_design_context_api(
         if dynamic_attrs_passed
         else (
             f"{path} writes private dynamic state attributes at lines "
-            f"{dynamic_attrs[:8]}; `_Solution` and `_Route` use `__slots__`, "
+            f"{dynamic_attrs}; `_Solution` and `_Route` use `__slots__`, "
             "so pass temporary caches through local variables/helper arguments "
             "or add an explicit approved state-model change."
         )
@@ -180,7 +180,7 @@ def _preview_solver_design_context_api(
         if cumulative_phase_passed
         else (
             f"{path} passes cumulative context.elapsed_ms() directly to "
-            f"context.record_phase at lines {cumulative_phase_lines[:8]}; "
+            f"context.record_phase at lines {cumulative_phase_lines}; "
             "record_phase expects a phase-duration delta, e.g. "
             "phase_start = context.elapsed_ms(); ...; "
             "context.record_phase(name, context.elapsed_ms() - phase_start)."

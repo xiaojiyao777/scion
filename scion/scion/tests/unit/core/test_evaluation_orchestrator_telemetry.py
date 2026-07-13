@@ -6,20 +6,14 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 from scion.config.problem import ProtocolConfig
-from scion.core.branch_lifecycle_policy import (
-    BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
-    BRANCH_LIFECYCLE_PARK_LINEAGE,
-    SCREENING_NEUTRAL_SIGNAL_CONTINUE,
-    SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
-    TELEMETRY_DIAGNOSTIC_NEGATIVE_DELTA,
-    TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
-)
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.evaluation_orchestrator import (
+    EvaluationInfrastructureError,
     EvaluationOrchestrator,
     _branch_followup_priority_cases,
 )
-from scion.core.features import BudgetState, SafeFeatureExtractor
+from scion.core.execution_outcome import ExecutionOutcome
+from scion.core.features import SafeFeatureExtractor
 from scion.core.models import (
     Branch,
     BranchState,
@@ -36,7 +30,6 @@ from scion.core.runtime_budget_diagnostics import (
     CANDIDATE_RUNTIME_BUDGET_SATURATION,
     SCREENING_RUNTIME_BUDGET_SATURATION,
 )
-from scion.core.telemetry_validation import TELEMETRY_EFFECT_ZERO_DIAGNOSTIC
 
 
 def _champion() -> ChampionState:
@@ -63,8 +56,9 @@ def _hypothesis() -> HypothesisProposal:
         change_locus="solver_design",
         action="modify",
         target_file="policies/baseline_modules/scheduler.py",
-        mechanism_changes=(),
     )
+
+
 
 
 def test_branch_followup_priority_cases_prefer_losses_then_winners() -> None:
@@ -95,13 +89,11 @@ def test_branch_followup_priority_cases_prefer_losses_then_winners() -> None:
 
 
 class _BranchController:
-    soft_abandoned = False
-
     def next_stage(self, _branch_id: str) -> ExperimentStage:
         return ExperimentStage.SCREENING
 
     def apply_decision(self, _branch_id: str, _decision) -> None:
-        self.soft_abandoned = True
+        pass
 
 
 class _Protocol:
@@ -155,6 +147,11 @@ class _RaisingProtocol:
 
     def run_experiment(self, **_kwargs) -> ProtocolResult:
         raise RuntimeError("protocol boom")
+
+
+class _InfraRaisingProtocol(_RaisingProtocol):
+    def run_experiment(self, **_kwargs) -> ProtocolResult:
+        raise EvaluationInfrastructureError("runner transport unavailable")
 
 
 class _PathSafetyCanaryProtocol:
@@ -506,61 +503,38 @@ class _RuntimeSlowLowMidProtocol:
         )
 
 
-def test_evaluation_exception_returns_structured_failure_without_decision() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
-    branch_controller = _BranchController()
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-    failures = []
 
+
+def test_explicit_evaluation_infra_cause_is_blocked_infra() -> None:
+    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
     orchestrator = EvaluationOrchestrator(
-        branch_controller=branch_controller,
+        branch_controller=_BranchController(),
         champion_lock=nullcontext(),
         get_champion=_champion,
         branch_patches={},
         branch_workspaces={branch.branch_id: "/tmp/candidate"},
         branch_hypotheses={},
         branch_current_hypothesis={},
-        experiment_protocol_provider=_RaisingProtocol,
+        experiment_protocol_provider=_InfraRaisingProtocol,
         feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
         decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes=decision_reason_codes,
+        decision_reason_codes={},
         campaign_id="campaign",
-        registry=SimpleNamespace(record_event=lambda payload: None),
-        materializer=SimpleNamespace(
-            archive_workspace=lambda *args, **kwargs: None,
-            cleanup=lambda *args, **kwargs: None,
-        ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
+        registry=SimpleNamespace(),
+        materializer=SimpleNamespace(),
+        hypothesis_store=SimpleNamespace(),
         persist_branch_state=lambda _branch_id: None,
         begin_status_progress=lambda **_kwargs: None,
         end_status_progress=lambda: None,
-        handle_failure=lambda _branch, failure: failures.append(failure),
         increment_experiment_count=lambda: None,
-        increment_budget_used=lambda: None,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=lambda: None,
     )
 
-    decision, protocol_result, canary_result = orchestrator.evaluate(
-        branch,
-        "/tmp/candidate",
-        _hypothesis(),
-    )
+    result = orchestrator.evaluate(branch, "/tmp/candidate", _hypothesis())
 
-    assert decision is None
-    assert canary_result.passed is False
-    assert canary_result.reason == "evaluation failed"
-    assert protocol_result is not None
-    assert protocol_result.gate_outcome == "fail"
-    assert protocol_result.reason_codes == ("EVALUATION_FAILED",)
-    assert decision_reason_codes[branch.branch_id] == ("EVALUATION_FAILED",)
-    assert orchestrator.decision_layer_sources[branch.branch_id] == "evaluation_bypass"
-    assert orchestrator.bypass_reason_codes[branch.branch_id] == ("EVALUATION_FAILED",)
-    assert orchestrator.decision_engine_reason_codes[branch.branch_id] == ()
-    assert branch_controller.soft_abandoned is False
-    assert failures and failures[-1].category == "evaluation"
-    assert "protocol boom" in failures[-1].detail
+    assert result.execution_outcome.outcome is ExecutionOutcome.BLOCKED_INFRA
+    assert result.execution_outcome.reason_code == "EVALUATION_INFRA_BLOCKED"
+    assert result.protocol_result is None
+    assert result.decision is None
 
 
 def test_canary_config_failure_rewrites_public_reason_without_changing_decision_boundary() -> None:
@@ -578,7 +552,6 @@ def test_canary_config_failure_rewrites_public_reason_without_changing_decision_
         branch_current_hypothesis={},
         experiment_protocol_provider=_PathSafetyCanaryProtocol,
         feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
         decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
         decision_reason_codes=decision_reason_codes,
         campaign_id="campaign",
@@ -591,18 +564,17 @@ def test_canary_config_failure_rewrites_public_reason_without_changing_decision_
         persist_branch_state=lambda _branch_id: None,
         begin_status_progress=lambda **_kwargs: None,
         end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
         increment_experiment_count=lambda: None,
-        increment_budget_used=lambda: None,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=lambda: None,
     )
 
-    decision, protocol_result, canary_result = orchestrator.evaluate(
+    evaluation = orchestrator.evaluate(
         branch,
         "/tmp/candidate",
         _hypothesis(),
     )
+    decision = evaluation.decision
+    protocol_result = evaluation.protocol_result
+    canary_result = evaluation.canary_result
 
     assert decision == Decision.ABANDON
     assert protocol_result is None
@@ -633,7 +605,6 @@ def test_ordinary_canary_failure_keeps_public_algorithm_reason() -> None:
         branch_current_hypothesis={},
         experiment_protocol_provider=_OrdinaryFailingCanaryProtocol,
         feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
         decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
         decision_reason_codes=decision_reason_codes,
         campaign_id="campaign",
@@ -646,18 +617,17 @@ def test_ordinary_canary_failure_keeps_public_algorithm_reason() -> None:
         persist_branch_state=lambda _branch_id: None,
         begin_status_progress=lambda **_kwargs: None,
         end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
         increment_experiment_count=lambda: None,
-        increment_budget_used=lambda: None,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=lambda: None,
     )
 
-    decision, protocol_result, canary_result = orchestrator.evaluate(
+    evaluation = orchestrator.evaluate(
         branch,
         "/tmp/candidate",
         _hypothesis(),
     )
+    decision = evaluation.decision
+    protocol_result = evaluation.protocol_result
+    canary_result = evaluation.canary_result
 
     assert decision == Decision.ABANDON
     assert protocol_result is None
@@ -668,788 +638,3 @@ def test_ordinary_canary_failure_keeps_public_algorithm_reason() -> None:
         "CANARY_FAILED",
     )
     assert orchestrator.diagnostic_reason_codes[branch.branch_id] == ()
-
-
-def test_telemetry_repairable_does_not_soft_abandon_or_count_screened() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
-    branch_controller = _BranchController()
-    experiment_count = 0
-    telemetry_count = 0
-    budget_used = 0
-
-    def increment_experiment_count() -> None:
-        nonlocal experiment_count
-        experiment_count += 1
-
-    def increment_telemetry_count() -> None:
-        nonlocal telemetry_count
-        telemetry_count += 1
-
-    def increment_budget_used() -> None:
-        nonlocal budget_used
-        budget_used += 1
-
-    orchestrator = EvaluationOrchestrator(
-        branch_controller=branch_controller,
-        champion_lock=nullcontext(),
-        get_champion=_champion,
-        branch_patches={},
-        branch_workspaces={branch.branch_id: "/tmp/candidate"},
-        branch_hypotheses={},
-        branch_current_hypothesis={},
-        experiment_protocol_provider=_Protocol,
-        feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
-        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes={},
-        campaign_id="campaign",
-        registry=SimpleNamespace(record_event=lambda payload: None),
-        materializer=SimpleNamespace(
-            archive_workspace=lambda *args, **kwargs: None,
-            cleanup=lambda *args, **kwargs: None,
-        ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
-        begin_status_progress=lambda **_kwargs: None,
-        end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
-        increment_experiment_count=increment_experiment_count,
-        increment_budget_used=increment_budget_used,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=increment_telemetry_count,
-    )
-
-    decision, protocol_result, _canary = orchestrator.evaluate(
-        branch,
-        "/tmp/candidate",
-        _hypothesis(),
-    )
-
-    assert decision == Decision.CONTINUE_EXPLORE
-    assert protocol_result is not None
-    assert "TELEMETRY_VALIDATION_REPAIRABLE" in protocol_result.reason_codes
-    assert branch_controller.soft_abandoned is False
-    assert experiment_count == 0
-    assert telemetry_count == 1
-    assert budget_used == 0
-
-
-def test_formal_activity_all_zero_is_branch_local_diagnostic_not_abandon() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
-    branch_controller = _BranchController()
-    experiment_count = 0
-    telemetry_count = 0
-    budget_used = 0
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-    diagnostic_streaks: dict[str, int] = {}
-
-    def increment_experiment_count() -> None:
-        nonlocal experiment_count
-        experiment_count += 1
-
-    def increment_telemetry_count() -> None:
-        nonlocal telemetry_count
-        telemetry_count += 1
-
-    def increment_budget_used() -> None:
-        nonlocal budget_used
-        budget_used += 1
-
-    orchestrator = EvaluationOrchestrator(
-        branch_controller=branch_controller,
-        champion_lock=nullcontext(),
-        get_champion=_champion,
-        branch_patches={},
-        branch_workspaces={branch.branch_id: "/tmp/candidate"},
-        branch_hypotheses={},
-        branch_current_hypothesis={},
-        experiment_protocol_provider=_ActivityTelemetryFailureProtocol,
-        feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
-        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes=decision_reason_codes,
-        campaign_id="campaign",
-        registry=SimpleNamespace(record_event=lambda payload: None),
-        materializer=SimpleNamespace(
-            archive_workspace=lambda *args, **kwargs: None,
-            cleanup=lambda *args, **kwargs: None,
-        ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
-        begin_status_progress=lambda **_kwargs: None,
-        end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
-        increment_experiment_count=increment_experiment_count,
-        increment_budget_used=increment_budget_used,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=increment_telemetry_count,
-        branch_telemetry_diagnostic_streaks=diagnostic_streaks,
-    )
-
-    decision, protocol_result, _canary = orchestrator.evaluate(
-        branch,
-        "/tmp/candidate",
-        _hypothesis(),
-    )
-
-    assert decision == Decision.CONTINUE_EXPLORE
-    assert protocol_result is not None
-    assert "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO" in protocol_result.reason_codes
-    assert decision_reason_codes[branch.branch_id] == (
-        "TELEMETRY_VALIDATION_REPAIRABLE",
-        "SCREENING_TELEMETRY_REPAIRABLE",
-        SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
-    )
-    assert branch_controller.soft_abandoned is False
-    assert diagnostic_streaks[branch.branch_id] == 1
-    assert experiment_count == 0
-    assert telemetry_count == 1
-    assert budget_used == 0
-
-
-def test_activity_all_zero_with_quality_regression_keeps_branch_for_repair() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
-    branch_controller = _BranchController()
-    workspaces = {branch.branch_id: "/tmp/candidate"}
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-
-    orchestrator = EvaluationOrchestrator(
-        branch_controller=branch_controller,
-        champion_lock=nullcontext(),
-        get_champion=_champion,
-        branch_patches={},
-        branch_workspaces=workspaces,
-        branch_hypotheses={},
-        branch_current_hypothesis={},
-        experiment_protocol_provider=_ActivityTelemetryRegressionProtocol,
-        feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
-        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes=decision_reason_codes,
-        campaign_id="campaign",
-        registry=SimpleNamespace(record_event=lambda payload: None),
-        materializer=SimpleNamespace(
-            archive_workspace=lambda *args, **kwargs: None,
-            cleanup=lambda *args, **kwargs: None,
-        ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
-        begin_status_progress=lambda **_kwargs: None,
-        end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
-        increment_experiment_count=lambda: None,
-        increment_budget_used=lambda: None,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=lambda: None,
-    )
-
-    decision, protocol_result, _canary = orchestrator.evaluate(
-        branch,
-        "/tmp/candidate",
-        _hypothesis(),
-    )
-
-    assert decision == Decision.CONTINUE_EXPLORE
-    assert protocol_result is not None
-    assert branch_controller.soft_abandoned is False
-    assert branch.branch_id in workspaces
-    assert decision_reason_codes[branch.branch_id] == (
-        "TELEMETRY_VALIDATION_REPAIRABLE",
-        "SCREENING_TELEMETRY_REPAIRABLE",
-        SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
-    )
-
-
-def test_activity_all_zero_mixed_with_protected_failure_abandons_fail_closed() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
-    branch_controller = _BranchController()
-    experiment_count = 0
-    telemetry_count = 0
-    budget_used = 0
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-
-    def increment_experiment_count() -> None:
-        nonlocal experiment_count
-        experiment_count += 1
-
-    def increment_telemetry_count() -> None:
-        nonlocal telemetry_count
-        telemetry_count += 1
-
-    def increment_budget_used() -> None:
-        nonlocal budget_used
-        budget_used += 1
-
-    orchestrator = EvaluationOrchestrator(
-        branch_controller=branch_controller,
-        champion_lock=nullcontext(),
-        get_champion=_champion,
-        branch_patches={},
-        branch_workspaces={branch.branch_id: "/tmp/candidate"},
-        branch_hypotheses={},
-        branch_current_hypothesis={},
-        experiment_protocol_provider=_ActivityProtectedTelemetryFailureProtocol,
-        feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
-        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes=decision_reason_codes,
-        campaign_id="campaign",
-        registry=SimpleNamespace(record_event=lambda payload: None),
-        materializer=SimpleNamespace(
-            archive_workspace=lambda *args, **kwargs: None,
-            cleanup=lambda *args, **kwargs: None,
-        ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
-        begin_status_progress=lambda **_kwargs: None,
-        end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
-        increment_experiment_count=increment_experiment_count,
-        increment_budget_used=increment_budget_used,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=increment_telemetry_count,
-    )
-
-    decision, protocol_result, _canary = orchestrator.evaluate(
-        branch,
-        "/tmp/candidate",
-        _hypothesis(),
-    )
-
-    assert decision == Decision.ABANDON
-    assert protocol_result is not None
-    assert "TELEMETRY_VALIDATION_REPAIRABLE" not in protocol_result.reason_codes
-    assert experiment_count == 1
-    assert telemetry_count == 1
-    assert budget_used == 1
-    assert decision_reason_codes[branch.branch_id] == ("SCREENING_TELEMETRY_FAILED",)
-
-
-def test_formal_effect_zero_with_activation_counts_as_no_effect_not_telemetry_retry() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
-    branch_controller = _BranchController()
-    experiment_count = 0
-    telemetry_count = 0
-    budget_used = 0
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-    diagnostic_streaks: dict[str, int] = {}
-
-    def increment_experiment_count() -> None:
-        nonlocal experiment_count
-        experiment_count += 1
-
-    def increment_telemetry_count() -> None:
-        nonlocal telemetry_count
-        telemetry_count += 1
-
-    def increment_budget_used() -> None:
-        nonlocal budget_used
-        budget_used += 1
-
-    orchestrator = EvaluationOrchestrator(
-        branch_controller=branch_controller,
-        champion_lock=nullcontext(),
-        get_champion=_champion,
-        branch_patches={},
-        branch_workspaces={branch.branch_id: "/tmp/candidate"},
-        branch_hypotheses={},
-        branch_current_hypothesis={},
-        experiment_protocol_provider=_EffectTelemetryZeroProtocol,
-        feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
-        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes=decision_reason_codes,
-        campaign_id="campaign",
-        registry=SimpleNamespace(record_event=lambda payload: None),
-        materializer=SimpleNamespace(
-            archive_workspace=lambda *args, **kwargs: None,
-            cleanup=lambda *args, **kwargs: None,
-        ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
-        begin_status_progress=lambda **_kwargs: None,
-        end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
-        increment_experiment_count=increment_experiment_count,
-        increment_budget_used=increment_budget_used,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=increment_telemetry_count,
-        branch_telemetry_diagnostic_streaks=diagnostic_streaks,
-    )
-
-    decision, protocol_result, _canary = orchestrator.evaluate(
-        branch,
-        "/tmp/candidate",
-        _hypothesis(),
-    )
-
-    assert decision == Decision.CONTINUE_EXPLORE
-    assert protocol_result is not None
-    assert protocol_result.reason_codes == (
-        "SCREENING_FAIL_WIN_RATE",
-        TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
-    )
-    assert decision_reason_codes[branch.branch_id] == (
-        "SCREENING_FAIL_WIN_RATE",
-        SCREENING_NEUTRAL_SIGNAL_CONTINUE,
-        "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
-        TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
-    )
-    assert orchestrator.decision_layer_sources[branch.branch_id] == "stage_decision"
-    assert orchestrator.diagnostic_reason_codes[branch.branch_id] == (
-        TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
-    )
-    assert TELEMETRY_EFFECT_ZERO_DIAGNOSTIC not in (
-        orchestrator.decision_engine_reason_codes[branch.branch_id]
-    )
-    assert branch_controller.soft_abandoned is False
-    assert branch.branch_id not in diagnostic_streaks
-    assert experiment_count == 1
-    assert telemetry_count == 0
-    assert budget_used == 1
-
-
-def test_formal_budget_starved_is_branch_local_diagnostic_not_abandon() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
-    branch_controller = _BranchController()
-    experiment_count = 0
-    telemetry_count = 0
-    budget_used = 0
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-    diagnostic_streaks: dict[str, int] = {}
-
-    def increment_experiment_count() -> None:
-        nonlocal experiment_count
-        experiment_count += 1
-
-    def increment_telemetry_count() -> None:
-        nonlocal telemetry_count
-        telemetry_count += 1
-
-    def increment_budget_used() -> None:
-        nonlocal budget_used
-        budget_used += 1
-
-    orchestrator = EvaluationOrchestrator(
-        branch_controller=branch_controller,
-        champion_lock=nullcontext(),
-        get_champion=_champion,
-        branch_patches={},
-        branch_workspaces={branch.branch_id: "/tmp/candidate"},
-        branch_hypotheses={},
-        branch_current_hypothesis={},
-        experiment_protocol_provider=_BudgetTelemetryStarvedProtocol,
-        feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
-        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes=decision_reason_codes,
-        campaign_id="campaign",
-        registry=SimpleNamespace(record_event=lambda payload: None),
-        materializer=SimpleNamespace(
-            archive_workspace=lambda *args, **kwargs: None,
-            cleanup=lambda *args, **kwargs: None,
-        ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
-        begin_status_progress=lambda **_kwargs: None,
-        end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
-        increment_experiment_count=increment_experiment_count,
-        increment_budget_used=increment_budget_used,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=increment_telemetry_count,
-        branch_telemetry_diagnostic_streaks=diagnostic_streaks,
-    )
-
-    decision, protocol_result, _canary = orchestrator.evaluate(
-        branch,
-        "/tmp/candidate",
-        _hypothesis(),
-    )
-
-    assert decision == Decision.CONTINUE_EXPLORE
-    assert protocol_result is not None
-    assert "TELEMETRY_BUDGET_STARVED" in protocol_result.reason_codes
-    assert decision_reason_codes[branch.branch_id] == (
-        "TELEMETRY_VALIDATION_REPAIRABLE",
-        "SCREENING_TELEMETRY_REPAIRABLE",
-        SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
-    )
-    assert branch_controller.soft_abandoned is False
-    assert diagnostic_streaks[branch.branch_id] == 1
-    assert experiment_count == 0
-    assert telemetry_count == 1
-    assert budget_used == 0
-
-
-def test_repeated_telemetry_diagnostic_parks_lineage_without_archive() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
-    branch_controller = _BranchController()
-    workspaces = {branch.branch_id: "/tmp/candidate"}
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-    diagnostic_streaks = {branch.branch_id: 2}
-
-    orchestrator = EvaluationOrchestrator(
-        branch_controller=branch_controller,
-        champion_lock=nullcontext(),
-        get_champion=_champion,
-        branch_patches={},
-        branch_workspaces=workspaces,
-        branch_hypotheses={},
-        branch_current_hypothesis={},
-        experiment_protocol_provider=_BudgetTelemetryStarvedProtocol,
-        feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
-        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes=decision_reason_codes,
-        campaign_id="campaign",
-        registry=SimpleNamespace(record_event=lambda payload: None),
-        materializer=SimpleNamespace(
-            archive_workspace=lambda *args, **kwargs: None,
-            cleanup=lambda *args, **kwargs: None,
-        ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
-        begin_status_progress=lambda **_kwargs: None,
-        end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
-        increment_experiment_count=lambda: None,
-        increment_budget_used=lambda: None,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=lambda: None,
-        branch_telemetry_diagnostic_streaks=diagnostic_streaks,
-    )
-
-    decision, protocol_result, _canary = orchestrator.evaluate(
-        branch,
-        "/tmp/candidate",
-        _hypothesis(),
-    )
-
-    assert decision == Decision.CONTINUE_EXPLORE
-    assert protocol_result is not None
-    assert branch_controller.soft_abandoned is False
-    assert branch.branch_id in workspaces
-    assert decision_reason_codes[branch.branch_id] == (
-        "TELEMETRY_VALIDATION_REPAIRABLE",
-        "SCREENING_TELEMETRY_REPAIRABLE",
-        BRANCH_LIFECYCLE_PARK_LINEAGE,
-        TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
-    )
-
-
-def test_weak_positive_low_win_screening_continues_without_soft_abandon() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
-    branch_controller = _BranchController()
-    experiment_count = 0
-    telemetry_count = 0
-    budget_used = 0
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-
-    def increment_experiment_count() -> None:
-        nonlocal experiment_count
-        experiment_count += 1
-
-    def increment_telemetry_count() -> None:
-        nonlocal telemetry_count
-        telemetry_count += 1
-
-    def increment_budget_used() -> None:
-        nonlocal budget_used
-        budget_used += 1
-
-    orchestrator = EvaluationOrchestrator(
-        branch_controller=branch_controller,
-        champion_lock=nullcontext(),
-        get_champion=_champion,
-        branch_patches={},
-        branch_workspaces={branch.branch_id: "/tmp/candidate"},
-        branch_hypotheses={},
-        branch_current_hypothesis={},
-        experiment_protocol_provider=_WeakPositiveProtocol,
-        feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
-        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes=decision_reason_codes,
-        campaign_id="campaign",
-        registry=SimpleNamespace(record_event=lambda payload: None),
-        materializer=SimpleNamespace(
-            archive_workspace=lambda *args, **kwargs: None,
-            cleanup=lambda *args, **kwargs: None,
-        ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
-        begin_status_progress=lambda **_kwargs: None,
-        end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
-        increment_experiment_count=increment_experiment_count,
-        increment_budget_used=increment_budget_used,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=increment_telemetry_count,
-        branch_zero_win_streaks={},
-    )
-
-    decision, protocol_result, _canary = orchestrator.evaluate(
-        branch,
-        "/tmp/candidate",
-        _hypothesis(),
-    )
-
-    assert decision == Decision.CONTINUE_EXPLORE
-    assert protocol_result is not None
-    assert branch_controller.soft_abandoned is False
-    assert experiment_count == 1
-    assert telemetry_count == 0
-    assert budget_used == 1
-    assert decision_reason_codes[branch.branch_id] == (
-        "SCREENING_FAIL_WIN_RATE",
-        "SCREENING_WEAK_SIGNAL_CONTINUE",
-    )
-
-
-def test_runtime_budget_saturation_reaches_decision_reason_codes() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
-    branch_controller = _BranchController()
-    experiment_count = 0
-    budget_used = 0
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-
-    def increment_experiment_count() -> None:
-        nonlocal experiment_count
-        experiment_count += 1
-
-    def increment_budget_used() -> None:
-        nonlocal budget_used
-        budget_used += 1
-
-    orchestrator = EvaluationOrchestrator(
-        branch_controller=branch_controller,
-        champion_lock=nullcontext(),
-        get_champion=_champion,
-        branch_patches={},
-        branch_workspaces={branch.branch_id: "/tmp/candidate"},
-        branch_hypotheses={},
-        branch_current_hypothesis={},
-        experiment_protocol_provider=_RuntimeBudgetSaturationProtocol,
-        feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
-        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes=decision_reason_codes,
-        campaign_id="campaign",
-        registry=SimpleNamespace(record_event=lambda payload: None),
-        materializer=SimpleNamespace(
-            archive_workspace=lambda *args, **kwargs: None,
-            cleanup=lambda *args, **kwargs: None,
-        ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
-        begin_status_progress=lambda **_kwargs: None,
-        end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
-        increment_experiment_count=increment_experiment_count,
-        increment_budget_used=increment_budget_used,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=lambda: None,
-        branch_zero_win_streaks={},
-    )
-
-    decision, protocol_result, _canary = orchestrator.evaluate(
-        branch,
-        "/tmp/candidate",
-        _hypothesis(),
-    )
-
-    assert decision == Decision.CONTINUE_EXPLORE
-    assert protocol_result is not None
-    assert SCREENING_RUNTIME_BUDGET_SATURATION in protocol_result.reason_codes
-    assert decision_reason_codes[branch.branch_id] == (
-        "SCREENING_FAIL_WIN_RATE",
-        "SCREENING_WEAK_SIGNAL_CONTINUE",
-        SCREENING_RUNTIME_BUDGET_SATURATION,
-        CANDIDATE_RUNTIME_BUDGET_SATURATION,
-    )
-    assert orchestrator.diagnostic_reason_codes[branch.branch_id] == (
-        SCREENING_RUNTIME_BUDGET_SATURATION,
-        CANDIDATE_RUNTIME_BUDGET_SATURATION,
-    )
-    assert SCREENING_RUNTIME_BUDGET_SATURATION not in (
-        orchestrator.decision_engine_reason_codes[branch.branch_id]
-    )
-    assert branch_controller.soft_abandoned is False
-    assert experiment_count == 1
-    assert budget_used == 1
-
-
-def test_low_mid_regressive_screening_abandon_comes_from_decision_engine() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
-    branch_controller = _BranchController()
-    workspaces = {branch.branch_id: "/tmp/candidate"}
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-
-    orchestrator = EvaluationOrchestrator(
-        branch_controller=branch_controller,
-        champion_lock=nullcontext(),
-        get_champion=_champion,
-        branch_patches={},
-        branch_workspaces=workspaces,
-        branch_hypotheses={},
-        branch_current_hypothesis={},
-        experiment_protocol_provider=_RegressiveLowMidProtocol,
-        feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
-        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes=decision_reason_codes,
-        campaign_id="campaign",
-        registry=SimpleNamespace(record_event=lambda payload: None),
-        materializer=SimpleNamespace(
-            archive_workspace=lambda *args, **kwargs: None,
-            cleanup=lambda *args, **kwargs: None,
-        ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
-        begin_status_progress=lambda **_kwargs: None,
-        end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
-        increment_experiment_count=lambda: None,
-        increment_budget_used=lambda: None,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=lambda: None,
-        branch_zero_win_streaks={},
-    )
-
-    decision, protocol_result, _canary = orchestrator.evaluate(
-        branch,
-        "/tmp/candidate",
-        _hypothesis(),
-    )
-
-    assert decision == Decision.ABANDON
-    assert protocol_result is not None
-    assert branch_controller.soft_abandoned is False
-    assert branch.branch_id in workspaces
-    assert decision_reason_codes[branch.branch_id] == (
-        "SCREENING_FAIL_WIN_RATE",
-        BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
-        "SCREENING_SOFT_ABANDON_NEGATIVE_DELTA",
-    )
-    assert orchestrator.decision_layer_sources[branch.branch_id] == "stage_decision"
-    assert orchestrator.decision_lifecycle_bookkeeping[branch.branch_id][
-        "legacy_attempt_kind"
-    ] == "branch_lifecycle_policy"
-    assert orchestrator.decision_lifecycle_bookkeeping[branch.branch_id][
-        "legacy_decision_layer_source"
-    ] == "lifecycle_policy"
-
-
-def test_orchestrator_does_not_run_post_decision_lifecycle_policy() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
-    branch_controller = _BranchController()
-    workspaces = {branch.branch_id: "/tmp/candidate"}
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-
-    class ContinueCoordinator:
-        def decide(self, features):
-            return SimpleNamespace(
-                decision=Decision.CONTINUE_EXPLORE,
-                reason_codes=("SCREENING_FAIL_WIN_RATE",),
-                rule="test:forced_continue",
-                features_snapshot=features,
-            )
-
-    orchestrator = EvaluationOrchestrator(
-        branch_controller=branch_controller,
-        champion_lock=nullcontext(),
-        get_champion=_champion,
-        branch_patches={},
-        branch_workspaces=workspaces,
-        branch_hypotheses={},
-        branch_current_hypothesis={},
-        experiment_protocol_provider=_RegressiveLowMidProtocol,
-        feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
-        decision_coordinator=ContinueCoordinator(),  # type: ignore[arg-type]
-        decision_reason_codes=decision_reason_codes,
-        campaign_id="campaign",
-        registry=SimpleNamespace(record_event=lambda payload: None),
-        materializer=SimpleNamespace(
-            archive_workspace=lambda *args, **kwargs: None,
-            cleanup=lambda *args, **kwargs: None,
-        ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
-        begin_status_progress=lambda **_kwargs: None,
-        end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
-        increment_experiment_count=lambda: None,
-        increment_budget_used=lambda: None,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=lambda: None,
-        branch_zero_win_streaks={},
-    )
-
-    decision, protocol_result, _canary = orchestrator.evaluate(
-        branch,
-        "/tmp/candidate",
-        _hypothesis(),
-    )
-
-    assert decision == Decision.CONTINUE_EXPLORE
-    assert protocol_result is not None
-    assert branch_controller.soft_abandoned is False
-    assert branch.branch_id in workspaces
-    assert decision_reason_codes[branch.branch_id] == ("SCREENING_FAIL_WIN_RATE",)
-
-
-def test_low_mid_runtime_regression_abandon_comes_from_decision_engine() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
-    branch_controller = _BranchController()
-    workspaces = {branch.branch_id: "/tmp/candidate"}
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-
-    orchestrator = EvaluationOrchestrator(
-        branch_controller=branch_controller,
-        champion_lock=nullcontext(),
-        get_champion=_champion,
-        branch_patches={},
-        branch_workspaces=workspaces,
-        branch_hypotheses={},
-        branch_current_hypothesis={},
-        experiment_protocol_provider=_RuntimeSlowLowMidProtocol,
-        feature_extractor=SafeFeatureExtractor(),
-        get_budget=lambda: BudgetState(total=4, used=0),
-        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes=decision_reason_codes,
-        campaign_id="campaign",
-        registry=SimpleNamespace(record_event=lambda payload: None),
-        materializer=SimpleNamespace(
-            archive_workspace=lambda *args, **kwargs: None,
-            cleanup=lambda *args, **kwargs: None,
-        ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
-        begin_status_progress=lambda **_kwargs: None,
-        end_status_progress=lambda: None,
-        handle_failure=lambda *_args, **_kwargs: None,
-        increment_experiment_count=lambda: None,
-        increment_budget_used=lambda: None,
-        increment_soft_abandon_streak=lambda: None,
-        increment_telemetry_failed_count=lambda: None,
-        branch_zero_win_streaks={},
-    )
-
-    decision, protocol_result, _canary = orchestrator.evaluate(
-        branch,
-        "/tmp/candidate",
-        _hypothesis(),
-    )
-
-    assert decision == Decision.ABANDON
-    assert protocol_result is not None
-    assert branch_controller.soft_abandoned is False
-    assert branch.branch_id in workspaces
-    assert decision_reason_codes[branch.branch_id] == (
-        "SCREENING_FAIL_WIN_RATE",
-        BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
-        "SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN",
-        "SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE",
-    )

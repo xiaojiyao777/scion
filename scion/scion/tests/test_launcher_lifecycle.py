@@ -26,8 +26,6 @@ def test_render_run_sh_wraps_dummy_command_with_lifecycle_markers(
             ("RUN_ROOT", tmp_path / "run"),
             ("PY", "/usr/bin/python"),
             ("SCION_DIR", tmp_path / "repo" / "scion"),
-            ("MEASUREMENT_GOVERNANCE", "record-only"),
-            ("PROPOSAL_CONTEXT_ABLATION", "minimal-research-context"),
             ("CONTROL_PAIR_KEY", "dummy:prepared"),
             ("POSTRUN_REPORTS", 1),
         ),
@@ -36,8 +34,6 @@ def test_render_run_sh_wraps_dummy_command_with_lifecycle_markers(
             "SCION_MODEL",
             "SCION_BASE_URL",
             "SCION_API_KEY",
-            "SCION_SDK_MAX_RETRIES",
-            "SCION_LLM_MAX_RETRIES",
             "SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT",
             "SCION_STAGE_TRANSITION_DRAIN_LIMIT",
             "PREPARED_RUN_MANIFEST",
@@ -64,7 +60,7 @@ def test_render_run_sh_wraps_dummy_command_with_lifecycle_markers(
     assert "DUMMY_DATA_ROOT" in run_sh
     assert "DUMMY_GUARD_FAILED:$DUMMY_DATA_ROOT" in run_sh
     assert '"dummy_guard_failed":true' in run_sh
-    assert 'REPORT_STEM="dummy_${MEASUREMENT_GOVERNANCE//-/_}' in run_sh
+    assert 'REPORT_STEM="dummy_direct_v3"' in run_sh
 
     command_log = run_sh.index('echo "COMMAND:dummy campaign command"')
     guard = run_sh.index("DUMMY_GUARD_FAILED:$DUMMY_DATA_ROOT")

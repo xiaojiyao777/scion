@@ -9,7 +9,6 @@ from scion.contract.gate import ContractGate
 from scion.core.models import (
     HypothesisProposal,
     HypothesisRecord,
-    MechanismChange,
     PatchProposal,
 )
 

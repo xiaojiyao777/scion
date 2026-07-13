@@ -101,7 +101,7 @@ def _format_phase_telemetry_summary(summary: Mapping[str, Any]) -> str:
     buckets = summary.get("buckets")
     if not isinstance(buckets, Mapping) or not buckets:
         return ""
-    bucket_text = ",".join(str(name) for name in sorted(buckets)[:8])
+    bucket_text = ",".join(str(name) for name in sorted(buckets))
     return (
         " phase_telemetry="
         f"observed_pairs={summary.get('runtime_observed_pairs', 0)}"

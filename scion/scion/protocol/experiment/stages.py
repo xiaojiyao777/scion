@@ -18,7 +18,6 @@ from scion.core.models import (
 from scion.core.runtime_budget_diagnostics import (
     format_runtime_budget_diagnostic,
     runtime_budget_diagnostic,
-    runtime_budget_summary_reason_codes,
 )
 from scion.core.screening_visibility import (
     mechanism_evidence_for_protocol,
@@ -34,15 +33,15 @@ from scion.runtime.audit import (
     format_runtime_audit_failure,
     normalize_surface_name,
     runtime_audit_failure_from_result,
+    runtime_audit_issue_blocks_execution,
 )
-from scion.runtime.telemetry_guard import build_telemetry_guard_summary
 from .cache import compute_workspace_digest
 from .failures import (
-    _bounded_runtime_failure,
-    _bounded_runtime_failure_from_audit,
     _candidate_audit_failure_category,
     _candidate_process_failure_category,
     _format_runtime_failure_categories,
+    _runtime_failure_summary,
+    _runtime_failure_summary_from_audit,
 )
 from .feedback import (
     _aggregate_case_feedback,
@@ -58,13 +57,11 @@ from .phase_telemetry import (
     _record_phase_telemetry_sample,
 )
 from .runtime_observation import (
-    _append_guard_runtime,
     _build_runtime_stats,
     _candidate_runtime_counter_template,
     _candidate_runtime_observation,
     _format_runtime_counter_summary,
     _format_runtime_summary,
-    _format_telemetry_guard_summary,
     _merge_runtime_observation,
     _record_runtime_sample,
     _runtime_fields,
@@ -73,7 +70,7 @@ from .selection import configured_priority_case_ids, resolve_priority_case_ids
 from .surface_runtime import (
     _record_surface_runtime_sample,
     _surface_runtime_summary_template,
-    _surface_runtime_summary_with_guard,
+    _surface_runtime_summary_with_diagnostics,
 )
 from .values import _increment_category
 
@@ -94,9 +91,6 @@ def run_experiment(
     expand: bool = False,
     expand_round: int = 1,
     selected_surface: str | None = None,
-    expected_telemetry: Mapping[str, Any] | None = None,
-    mechanism_changes: Sequence[Any] | None = None,
-    protected_objectives: Sequence[str] = (),
     priority_case_ids: Sequence[str] = (),
 ) -> ProtocolResult:
     """Execute paired A/B evaluation for the given stage.
@@ -154,9 +148,6 @@ def run_experiment(
     candidate_runtime_categories: dict[str, int] = {}
     candidate_first_runtime_failure: dict[str, Any] | None = None
     candidate_runtime_stop_reasons: dict[str, int] = {}
-    candidate_guard_runtimes: list[Mapping[str, Any]] = []
-    champion_guard_runtimes: list[Mapping[str, Any]] = []
-    candidate_telemetry_guard_summary: dict[str, Any] = {}
     runtime_budget_diagnostic_summary: dict[str, Any] | None = None
     candidate_elapsed_samples_ms: list[float] = []
     champion_elapsed_samples_ms: list[float] = []
@@ -311,9 +302,8 @@ def run_experiment(
                         "cached_runtime_pairs": champion_cached_runtime_pairs,
                     },
                     "candidate_surface_runtime_summary": (
-                        _surface_runtime_summary_with_guard(
+                        _surface_runtime_summary_with_diagnostics(
                             candidate_surface_runtime_summary,
-                            candidate_telemetry_guard_summary,
                             runtime_budget_diagnostic_summary,
                         )
                     ),
@@ -321,9 +311,6 @@ def run_experiment(
                         _finalize_phase_telemetry_summary(
                             candidate_phase_telemetry_summary
                         )
-                    ),
-                    "candidate_telemetry_guard_summary": (
-                        candidate_telemetry_guard_summary
                     ),
                     "complete": complete,
                     "pairs": raw_pairs,
@@ -443,8 +430,6 @@ def run_experiment(
                 selected_surface=normalized_selected_surface,
                 candidate_required_runtime_fields=surface_required_runtime_fields,
             )
-            _append_guard_runtime(candidate_guard_runtimes, cand_r)
-            _append_guard_runtime(champion_guard_runtimes, champ_r)
             if champion_result_source != "cached":
                 _record_runtime_sample(
                     runtime_fields,
@@ -470,7 +455,12 @@ def run_experiment(
 
             champ_audit_failure = None
             if champ_r.success and champ_r.output is not None:
-                champ_audit_failure = runtime_audit_failure_from_result(champ_r)
+                champ_audit_issue = runtime_audit_failure_from_result(champ_r)
+                champ_audit_failure = (
+                    champ_audit_issue
+                    if runtime_audit_issue_blocks_execution(champ_audit_issue)
+                    else None
+                )
                 if (
                     champ_audit_failure is None
                     and champion_result_source == "fresh"
@@ -505,9 +495,9 @@ def run_experiment(
                     **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
-                    "stderr_tail": (champ_r.stderr or "")[-1000:],
-                    "candidate_stderr_tail": (
-                        (cand_r.stderr or "")[-1000:] if side == "both" else ""
+                    "stderr": champ_r.stderr or "",
+                    "candidate_stderr": (
+                        cand_r.stderr or "" if side == "both" else ""
                     ),
                 }
                 raw_failures.append(failure_record)
@@ -550,7 +540,7 @@ def run_experiment(
                 category = _candidate_process_failure_category(cand_r)
                 _increment_category(candidate_runtime_categories, category)
                 if candidate_first_runtime_failure is None:
-                    candidate_first_runtime_failure = _bounded_runtime_failure(
+                    candidate_first_runtime_failure = _runtime_failure_summary(
                         category=category,
                         code=str(cand_r.error_category or cand_r.exit_code or "process_failure"),
                         surface=None,
@@ -571,7 +561,7 @@ def run_experiment(
                     **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
-                    "stderr_tail": (cand_r.stderr or "")[-1000:],
+                    "stderr": cand_r.stderr or "",
                 }
                 raw_failures.append(failure_record)
                 raw_pairs.append({
@@ -619,7 +609,7 @@ def run_experiment(
                 if cand_r.output is None:
                     _increment_category(candidate_runtime_categories, "invalid_output")
                     if candidate_first_runtime_failure is None:
-                        candidate_first_runtime_failure = _bounded_runtime_failure(
+                        candidate_first_runtime_failure = _runtime_failure_summary(
                             category="invalid_output",
                             code="missing_output",
                             surface=None,
@@ -661,17 +651,22 @@ def run_experiment(
                 )
                 continue
 
-            cand_audit_failure = runtime_audit_failure_from_result(
+            cand_audit_issue = runtime_audit_failure_from_result(
                 cand_r,
                 problem_spec=protocol._problem_spec,
                 selected_surface=normalized_selected_surface,
+            )
+            cand_audit_failure = (
+                cand_audit_issue
+                if runtime_audit_issue_blocks_execution(cand_audit_issue)
+                else None
             )
             if cand_audit_failure is not None:
                 audit_category = _candidate_audit_failure_category(cand_audit_failure)
                 if audit_category not in (runtime_observation.get("categories") or {}):
                     _increment_category(candidate_runtime_categories, audit_category)
                 if candidate_first_runtime_failure is None:
-                    candidate_first_runtime_failure = _bounded_runtime_failure_from_audit(
+                    candidate_first_runtime_failure = _runtime_failure_summary_from_audit(
                         cand_audit_failure,
                         category=audit_category,
                     )
@@ -894,9 +889,9 @@ def run_experiment(
     )
     if case_comparisons:
         if stage == ExperimentStage.SCREENING:
-            gate = screening_gate(stats, protocol.config)
+            gate = screening_gate(stats, protocol.config, expanded=expand)
         elif stage == ExperimentStage.VALIDATION:
-            gate = validation_gate(stats, protocol.config)
+            gate = validation_gate(stats, protocol.config, expanded=expand)
         else:
             gate = frozen_gate(stats, protocol.config)
 
@@ -928,31 +923,6 @@ def run_experiment(
                 ),
             )
 
-    candidate_telemetry_guard_summary = build_telemetry_guard_summary(
-        candidate_runtimes=candidate_guard_runtimes,
-        champion_runtimes=champion_guard_runtimes,
-        problem_spec=protocol._problem_spec,
-        selected_surface=normalized_selected_surface,
-        expected_telemetry=expected_telemetry,
-        declared_mechanisms=mechanism_changes,
-        protected_objectives=protected_objectives,
-        effect_observation_required=stage != ExperimentStage.SCREENING,
-    )
-    telemetry_guard_failures = candidate_telemetry_guard_summary.get("failures")
-    if isinstance(telemetry_guard_failures, list) and telemetry_guard_failures:
-        guard_codes = tuple(
-            str(item.get("code") or "TELEMETRY_GUARD_FAILED")
-            for item in telemetry_guard_failures
-            if isinstance(item, Mapping)
-        )
-        gate = GateResult(
-            outcome="fail",
-            reason_codes=(
-                *tuple(gate.reason_codes),
-                "TELEMETRY_GUARD_FAILED",
-                *guard_codes[:3],
-            ),
-        )
     runtime_budget_diagnostic_summary = runtime_budget_diagnostic(
         stage=stage,
         time_limit_sec=(
@@ -971,19 +941,6 @@ def run_experiment(
         champion_time_limit_sec=champion_time_limit_samples_sec,
         total_pairs=total_pairs,
     )
-    if runtime_budget_diagnostic_summary:
-        runtime_budget_codes = runtime_budget_summary_reason_codes(
-            runtime_budget_diagnostic_summary
-        )
-        if runtime_budget_codes:
-            gate = GateResult(
-                outcome=gate.outcome,
-                reason_codes=tuple(
-                    dict.fromkeys(
-                        (*tuple(gate.reason_codes), *runtime_budget_codes)
-                    )
-                ),
-            )
     runtime_confidence = (
         "low_cached_champion" if champion_cached_runtime_pairs else "high"
     )
@@ -1036,9 +993,6 @@ def run_experiment(
         else ""
     )
     runtime_attempt_summary = _format_runtime_counter_summary(candidate_runtime_counters)
-    telemetry_guard_summary = _format_telemetry_guard_summary(
-        candidate_telemetry_guard_summary
-    )
     phase_telemetry_summary = _format_phase_telemetry_summary(
         _finalize_phase_telemetry_summary(candidate_phase_telemetry_summary)
     )
@@ -1093,7 +1047,7 @@ def run_experiment(
             f"screening_evidence_status={_screening_evidence_status(stage=stage, champion_failed_pairs=champion_failed_pairs)} "
             f"reason_codes={','.join(gate.reason_codes) or 'none'} "
             f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
-            f"{telemetry_guard_summary}{phase_telemetry_summary}"
+            f"{phase_telemetry_summary}"
             f"{runtime_budget_summary}"
             f"{champion_cache_summary}"
         )
@@ -1107,7 +1061,7 @@ def run_experiment(
             f"valid_pairs={valid_pairs}/{total_pairs} failed_pairs={failed_pairs} "
             f"candidate_failures={candidate_failed_pairs} champion_failures={champion_failed_pairs} "
             f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
-            f"{telemetry_guard_summary}{phase_telemetry_summary}"
+            f"{phase_telemetry_summary}"
             f"{runtime_budget_summary}"
             f"{champion_cache_summary}"
         )
@@ -1133,9 +1087,8 @@ def run_experiment(
         case_feedback=case_fb,
         pattern_summary=pattern,
         selected_surface=normalized_selected_surface or selected_surface,
-        candidate_surface_runtime_summary=_surface_runtime_summary_with_guard(
+        candidate_surface_runtime_summary=_surface_runtime_summary_with_diagnostics(
             candidate_surface_runtime_summary,
-            candidate_telemetry_guard_summary,
             runtime_budget_diagnostic_summary,
         ),
         candidate_phase_telemetry_summary=_finalize_phase_telemetry_summary(

@@ -11,10 +11,7 @@ from scion.core.models import (
     BranchState,
     ChampionState,
     Decision,
-    ExperimentStage,
     HypothesisRecord,
-    PatchProposal,
-    StepRecord,
 )
 from scion.core.promotion_service import PromotionPlan, PromotionRequest, PromotionService
 
@@ -28,22 +25,16 @@ class PromotionLifecycleService:
     promotion_service: PromotionService
     branch_controller: BranchController
     branch_workspaces: Mapping[str, str]
-    branch_patches: Mapping[str, PatchProposal]
     branch_current_hypothesis: MutableMapping[str, HypothesisRecord]
-    step_history: Sequence[StepRecord]
     champion_lock: Any
     get_champion: Callable[[], ChampionState]
     set_champion: Callable[[ChampionState], None]
     get_champion_store: Callable[[], Any]
     hypothesis_store: Any
-    search_memory: Any
     get_weight_opt_coord: Callable[[], Any]
     get_weight_opt_committer: Callable[[], Any]
     get_parameter_search_execution: Callable[[], str]
-    get_round_num: Callable[[], int]
     promotion_dossier_ref_for: Callable[[int], str | None]
-    reset_promotion_counters: Callable[[str], None]
-    set_rounds_since_last_promote: Callable[[int], None]
 
     def on_promote(self, branch: Branch) -> None:
         """Compatibility entry for callers that already hold a frozen branch."""
@@ -108,16 +99,11 @@ class PromotionLifecycleService:
         )
         self.start_weight_optimization(plan)
 
-    def begin_promotion_commit(self, plan: PromotionPlan) -> None:
-        """Reset campaign-level stagnation counters after persistence succeeds."""
-        self.reset_promotion_counters(plan.branch_id)
-        logger.debug("Branch %s promoted -> stagnation counters reset", plan.branch_id)
 
     def commit_promoted_champion_state(self, new_champion: ChampionState) -> None:
         """Install the promoted champion in campaign memory."""
         with self.champion_lock:
             self.set_champion(new_champion)
-        self.set_rounds_since_last_promote(0)
 
     def transition_promoted_branch(
         self,
@@ -132,33 +118,6 @@ class PromotionLifecycleService:
         if h_record is not None:
             self.hypothesis_store.mark_status(h_record.hypothesis_id, "promoted")
             self.branch_current_hypothesis.pop(branch_id, None)
-
-    def record_promoted_branch(
-        self,
-        branch_id: str,
-        new_champion: ChampionState,
-    ) -> None:
-        """Record promotion context in search memory."""
-        patch = self.branch_patches.get(branch_id)
-        op_name = (
-            patch.file_path.split("/")[-1].replace(".py", "")
-            if patch and patch.file_path
-            else "unknown"
-        )
-        screening_win_rate = None
-        for step in reversed(self.step_history):
-            if (
-                step.branch_id == branch_id
-                and step.protocol_result
-                and step.protocol_result.stage == ExperimentStage.SCREENING
-            ):
-                screening_win_rate = step.protocol_result.stats.win_rate
-                break
-        desc = f"->v{new_champion.version} {op_name} (R{self.get_round_num()}"
-        if screening_win_rate is not None:
-            desc += f", scr_wr={screening_win_rate:.2f}"
-        desc += ")"
-        self.search_memory.record_champion_promotion(desc, new_champion.version)
 
     def persist_promoted_champion(self, new_champion: ChampionState) -> None:
         """Persist the promoted champion before mutable side effects."""

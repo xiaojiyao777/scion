@@ -13,6 +13,7 @@ from scion.postrun import (
 
 def test_postrun_readiness_ports_compose_generic_ready_summary() -> None:
     inventory = {
+        "proposal_runtime": {"status": "resolved", "resolved_mode": "direct_v3"},
         "lifecycle": {
             "wrapper_exit_status": 0,
             "postrun_acceptance_status": "ready",
@@ -50,6 +51,10 @@ def test_postrun_readiness_ports_compose_generic_ready_summary() -> None:
 
 def test_postrun_readiness_ports_keep_problem_review_problem_owned() -> None:
     inventory = {
+        "proposal_runtime": {
+            "status": "resolved",
+            "resolved_mode": "direct_v3",
+        },
         "problem_family": "fixture_problem",
         "lifecycle": {
             "wrapper_exit_status": 0,
@@ -87,6 +92,7 @@ def test_postrun_readiness_ports_keep_problem_review_problem_owned() -> None:
 
 def test_postrun_readiness_ports_read_nested_prepared_contract_family() -> None:
     inventory = {
+        "proposal_runtime": {"status": "resolved", "resolved_mode": "direct_v3"},
         "launcher": {
             "prepared_run_contract": {"problem_family": "fixture_problem"},
         },
@@ -120,6 +126,7 @@ def test_postrun_readiness_ports_read_nested_prepared_contract_family() -> None:
 
 def test_postrun_readiness_ports_fail_closed_on_generic_lifecycle() -> None:
     inventory = {
+        "proposal_runtime": {"status": "resolved", "resolved_mode": "direct_v3"},
         "lifecycle": {
             "wrapper_exit_status": 64,
             "postrun_acceptance_status": "ready",
@@ -139,6 +146,27 @@ def test_postrun_readiness_ports_fail_closed_on_generic_lifecycle() -> None:
         "wrapper_exit_status_nonzero"
     ]
     assert payload["failed_required_checks"] == ["wrapper_exit_status_nonzero"]
+
+
+def test_postrun_readiness_fails_closed_on_unknown_runtime_mode() -> None:
+    inventory = {
+        "proposal_runtime": {"status": "unknown", "resolved_mode": None},
+        "lifecycle": {
+            "wrapper_exit_status": 0,
+            "postrun_acceptance_status": "ready",
+        },
+        "phase4_evidence_coverage": {
+            "current_run_evidence": True,
+            "invalid_infra_only": False,
+        },
+    }
+
+    payload = PostrunReadinessOrchestrator(
+        MappingPostrunInventoryPort(inventory),
+    ).build("/tmp/run-root").to_payload()
+
+    assert payload["current_run_analysis_ready"] is False
+    assert "proposal_runtime_mode_unresolved" in payload["failed_required_checks"]
 
 
 @dataclass(frozen=True)

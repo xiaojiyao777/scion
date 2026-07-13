@@ -74,7 +74,7 @@ def check_feasibility(
     if missing:
         violations.append(
             f"C0a: {len(missing)}/{len(all_order_ids)} orders unassigned "
-            f"(examples: {sorted(missing)[:5]})"
+            f"(examples: {sorted(missing)})"
         )
         return FeasibilityResult(False, violations)
 

@@ -5,8 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from scion.core.execution_outcome import (
+    ExecutionOutcome,
+    execution_outcome_evidence,
+    execution_outcome_evidence_from_counts,
+)
 from scion.postrun.handoff.resume_snapshot import (
-    build_resume_top_branch_summaries,
+    build_resume_branch_summaries,
     load_resume_campaign_summary,
 )
 from scion.postrun.inventory.constants import (
@@ -169,31 +174,28 @@ def build_inventory(
         campaign_execution_artifacts=campaign_execution_artifacts,
         pre_campaign_infra_failure_keys=pre_campaign_infra_failure_keys,
     )
-    trace_index = _read_json(
-        campaign_dir / "agentic_sessions" / "agentic_session_trace_index.json"
-    )
-    session_index = _read_json(
-        campaign_dir / "agentic_sessions" / "agentic_session_index.json"
-    )
-
     db_path = campaign_dir / "scion.db"
     db_inventory = (
         _read_db_inventory(db_path) if db_path.exists() else _empty_db_inventory()
     )
-    llm_traces = _read_llm_traces(
-        campaign_dir / "llm_traces",
-        trace_index=trace_index,
-        session_index=session_index,
+    proposal_runtime = _proposal_runtime_inventory(
+        prepared_manifest=prepared_manifest,
+        run_status=run_status,
+        campaign_run_status=campaign_run_status,
+        campaign_status=campaign_status,
+        summary=summary,
+        proposal_attempts=db_inventory["proposal_attempts"],
     )
+    llm_traces = _read_llm_traces(campaign_dir / "llm_traces")
     postrun_reports = _postrun_report_inventory(run_root)
     phase4_coverage = _phase4_evidence_coverage(
         run_root=run_root,
         campaign_dir=campaign_dir,
         campaign_status=campaign_status,
         summary=summary,
-        trace_index=trace_index,
-        session_index=session_index,
         llm_traces=llm_traces,
+        proposal_attempts=db_inventory["proposal_attempts"],
+        proposal_runtime=proposal_runtime,
         lifecycle=lifecycle,
         prepared_manifest=prepared_manifest,
         prepared_handoff_ports=prepared_handoff_ports_by_family,
@@ -230,6 +232,13 @@ def build_inventory(
         current_champions = db_inventory["champions"]
         current_llm_traces = _llm_trace_summary(llm_traces)
 
+    execution_outcomes = _execution_outcomes_inventory(
+        campaign_run_status=campaign_run_status,
+        campaign_status=campaign_status,
+        summary=summary,
+        events=current_events,
+    )
+
     return {
         "run_root": str(run_root),
         "campaign_dir": str(campaign_dir),
@@ -263,7 +272,9 @@ def build_inventory(
             if _launch_root_without_current_run(lifecycle)
             else _counters(run_status, campaign_run_status, campaign_status, summary)
         ),
+        "execution_outcomes": execution_outcomes,
         "llm_traces": current_llm_traces,
+        "proposal_runtime": proposal_runtime,
         "launcher": _launcher_inventory(
             run_root,
             run_status,
@@ -276,6 +287,7 @@ def build_inventory(
             "path": str(db_path),
             "present": db_path.exists(),
             "read_error": db_inventory.get("read_error"),
+            "proposal_attempts": db_inventory["proposal_attempts"],
         },
         "resume_snapshot": resume_snapshot,
         "postrun_reports": postrun_reports,
@@ -285,6 +297,240 @@ def build_inventory(
         "hypotheses": current_hypotheses,
         "champions": current_champions,
         "analysis_handoff": HANDOFF_DOC,
+    }
+
+
+def _execution_outcomes_inventory(
+    *,
+    campaign_run_status: Any,
+    campaign_status: Any,
+    summary: Any,
+    events: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Project typed outcomes without inferring them from status prose."""
+    source = "unknown_historical"
+    evidence: dict[str, Any] | None = None
+    for source_name, document in (
+        ("campaign_summary", summary),
+        ("campaign_status", campaign_status),
+        ("campaign_run_status", campaign_run_status),
+    ):
+        payload = _mapping_or_empty(document)
+        counts = payload.get("execution_outcome_counts")
+        if isinstance(counts, Mapping):
+            evidence = execution_outcome_evidence_from_counts(
+                counts,
+                last_execution_outcome=(
+                    payload.get("last_execution_outcome")
+                    if isinstance(payload.get("last_execution_outcome"), Mapping)
+                    else None
+                ),
+                unknown_count=_safe_nonnegative_int(
+                    payload.get("unknown_outcome_count")
+                ),
+                total_count=_optional_nonnegative_int(
+                    payload.get("total_outcome_subject_count")
+                ),
+            )
+            source = source_name
+            break
+        steps = payload.get("steps")
+        if isinstance(steps, list) and steps:
+            evidence = execution_outcome_evidence(steps)
+            source = f"{source_name}.steps"
+            break
+
+    lineage_counts = _mapping_or_empty(events.get("by_execution_outcome"))
+    lineage_explicit_count = _safe_nonnegative_int(
+        events.get("explicit_execution_outcome_count")
+    )
+    if evidence is None and lineage_explicit_count > 0:
+        evidence = execution_outcome_evidence_from_counts(lineage_counts)
+        source = "scion.db.experiment_events"
+    if evidence is None:
+        evidence = execution_outcome_evidence_from_counts(None)
+
+    summary_counts = _mapping_or_empty(evidence.get("execution_outcome_counts"))
+    comparable = (
+        lineage_explicit_count > 0
+        and sum(_safe_nonnegative_int(value) for value in summary_counts.values()) > 0
+    )
+    counts_consistent = (
+        all(
+            _safe_nonnegative_int(summary_counts.get(key))
+            == _safe_nonnegative_int(lineage_counts.get(key))
+            for key in summary_counts
+        )
+        if comparable
+        else None
+    )
+    step_invariants = _execution_outcome_step_invariants(
+        _mapping_or_empty(summary).get("steps")
+    )
+    step_counts = _mapping_or_empty(step_invariants.get("execution_outcome_counts"))
+    step_counts_comparable = step_invariants.get("step_count", 0) > 0
+    step_counts_consistent = (
+        all(
+            _safe_nonnegative_int(summary_counts.get(key))
+            == _safe_nonnegative_int(step_counts.get(key))
+            for key in summary_counts
+        )
+        if step_counts_comparable
+        else None
+    )
+    return {
+        **evidence,
+        "source": source,
+        "lineage": {
+            "schema_available": events.get(
+                "execution_outcome_schema_available"
+            ) is True,
+            "explicit_outcome_count": lineage_explicit_count,
+            "execution_outcome_counts": dict(lineage_counts),
+            "invalid_outcome_count": _safe_nonnegative_int(
+                events.get("invalid_execution_outcome_count")
+            ),
+            "decision_outcome_consistency_status": str(
+                events.get("decision_outcome_consistency_status")
+                or "unknown_historical"
+            ),
+            "decision_rows_with_non_evaluated_outcome": _safe_nonnegative_int(
+                events.get("decision_rows_with_non_evaluated_outcome")
+            ),
+        },
+        "summary_lineage_counts_comparable": comparable,
+        "summary_lineage_counts_consistent": counts_consistent,
+        "summary_step_counts_comparable": step_counts_comparable,
+        "summary_step_counts_consistent": step_counts_consistent,
+        "step_invariants": step_invariants,
+    }
+
+
+def _execution_outcome_step_invariants(value: Any) -> dict[str, Any]:
+    if not isinstance(value, list):
+        return {
+            "status": "unknown_historical",
+            "step_count": 0,
+            "explicit_outcome_count": 0,
+            "unknown_outcome_count": 0,
+            "violations": [],
+        }
+    allowed = {outcome.value for outcome in ExecutionOutcome}
+    counts = {outcome.value: 0 for outcome in ExecutionOutcome}
+    violations: list[dict[str, Any]] = []
+    explicit_count = 0
+    unknown_count = 0
+    for index, item in enumerate(value):
+        if not isinstance(item, Mapping):
+            unknown_count += 1
+            continue
+        raw_outcome = item.get("execution_outcome")
+        outcome = str(raw_outcome or "")
+        identity = {
+            "step_index": index,
+            "round": item.get("round"),
+            "branch_id": item.get("branch_id"),
+        }
+        if not outcome:
+            unknown_count += 1
+            continue
+        explicit_count += 1
+        if outcome not in allowed:
+            violations.append({**identity, "code": "invalid_execution_outcome"})
+            continue
+        counts[outcome] += 1
+        if outcome == ExecutionOutcome.EVALUATED.value:
+            continue
+        if item.get("decision") not in (None, ""):
+            violations.append({**identity, "code": "non_evaluated_has_decision"})
+        if isinstance(item.get("protocol_result"), Mapping):
+            violations.append(
+                {**identity, "code": "non_evaluated_has_protocol_result"}
+            )
+        if item.get("screened_experiment") is True or item.get(
+            "screened_experiment_effective"
+        ) is True:
+            violations.append({**identity, "code": "non_evaluated_is_screened"})
+        if item.get("decision_reason_codes"):
+            violations.append(
+                {**identity, "code": "non_evaluated_has_decision_reason_codes"}
+            )
+    status = "valid" if not violations else "invalid"
+    if not value:
+        status = "unknown_historical"
+    return {
+        "status": status,
+        "step_count": len(value),
+        "explicit_outcome_count": explicit_count,
+        "unknown_outcome_count": unknown_count,
+        "execution_outcome_counts": counts,
+        "violations": violations,
+    }
+
+
+def _safe_nonnegative_int(value: Any) -> int:
+    parsed = _optional_nonnegative_int(value)
+    return parsed if parsed is not None else 0
+
+
+def _optional_nonnegative_int(value: Any) -> int | None:
+    try:
+        if value is None or value == "":
+            return None
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _proposal_runtime_inventory(
+    *,
+    prepared_manifest: Any,
+    run_status: Any,
+    campaign_run_status: Any,
+    campaign_status: Any,
+    summary: Any,
+    proposal_attempts: Mapping[str, Any],
+) -> dict[str, Any]:
+    sources: dict[str, str] = {}
+    invalid_sources: dict[str, Any] = {}
+    manifest = _mapping_or_empty(prepared_manifest)
+    execution = _mapping_or_empty(manifest.get("execution"))
+    explicit = execution.get("proposal_runtime_mode")
+    if explicit not in (None, ""):
+        sources["prepared_manifest.execution.proposal_runtime_mode"] = str(explicit)
+    for name, doc in (
+        ("run_status", run_status),
+        ("campaign_run_status", campaign_run_status),
+        ("campaign_status", campaign_status),
+        ("campaign_summary", summary),
+    ):
+        payload = _mapping_or_empty(doc)
+        value = payload.get("proposal_runtime_mode")
+        if value not in (None, ""):
+            sources[f"{name}.proposal_runtime_mode"] = str(value)
+    for mode in _mapping_or_empty(
+        proposal_attempts.get("by_runtime_mode")
+    ):
+        sources[f"scion.db.proposal_attempt_transition.{mode}"] = str(mode)
+
+    for source, value in sources.items():
+        if value != "direct_v3":
+            invalid_sources[source] = value
+    if invalid_sources:
+        status = "invalid"
+        resolved = None
+    elif sources and all(value == "direct_v3" for value in sources.values()):
+        status = "resolved"
+        resolved = "direct_v3"
+    else:
+        status = "unknown"
+        resolved = None
+    return {
+        "status": status,
+        "resolved_mode": resolved,
+        "sources": sources,
+        "invalid_sources": invalid_sources,
+        "fail_closed": status != "resolved",
     }
 
 
@@ -489,7 +735,7 @@ def _resume_snapshot_inventory(
         "hypotheses_by_status": db_inventory["hypotheses"].get("by_status", {}),
         "champion_count": db_inventory["champions"].get("count", 0),
         "max_champion_version": db_inventory["champions"].get("max_version"),
-        "top_branches": build_resume_top_branch_summaries(
+        "branches": build_resume_branch_summaries(
             branches=branches,
             summary=summary,
         ),

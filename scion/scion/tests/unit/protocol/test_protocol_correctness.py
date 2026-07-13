@@ -55,7 +55,7 @@ def minimal_config():
             expand_to_create=8,
         ),
         validation=ValidationConfig(n_cases=4, n_seeds=2, expand_to=7),
-        frozen=FrozenConfig(n_cases=3, n_seeds=2, max_uses_per_campaign=3),
+        frozen=FrozenConfig(n_cases=3, n_seeds=2),
     )
 
 

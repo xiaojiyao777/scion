@@ -421,6 +421,145 @@ def test_budget_exhausting_runtime_ratio_does_not_block_low_snr_expand():
     )
 
 
+@pytest.mark.parametrize("gate_func", (screening_gate, validation_gate, frozen_gate))
+def test_protocol_gate_owns_runtime_regression_threshold(gate_func):
+    stats = _make_stats(
+        win_rate=1.0,
+        median_delta=10.0,
+        ci_low=1.0,
+        ci_high=20.0,
+        runtime_ratio_median=3.0,
+        runtime_pairs=10,
+    )
+
+    result = gate_func(stats, _cfg)
+
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("RUNTIME_REGRESSION",)
+
+
+def test_budget_exhausting_protocol_does_not_apply_comparative_runtime_threshold():
+    stats = _make_stats(
+        win_rate=1.0,
+        median_delta=10.0,
+        ci_low=1.0,
+        ci_high=20.0,
+        runtime_ratio_median=99.0,
+        runtime_pairs=10,
+    )
+    config = ProtocolConfig.model_validate(
+        {"runtime": {"runtime_model": "budget_exhausting"}}
+    )
+
+    result = frozen_gate(stats, config)
+
+    assert result.outcome == "pass"
+    assert result.reason_codes == ("FROZEN_PASS",)
+
+
+def test_expanded_screening_protocol_owns_borderline_advance():
+    stats = _make_stats(
+        win_rate=0.50,
+        median_delta=100.0,
+        ci_low=0.0,
+        ci_high=200.0,
+    )
+    config = ProtocolConfig.model_validate(
+        {
+            "gates": {
+                "screening": {
+                    "win_rate_min": 0.55,
+                    "expanded_borderline_advance": {
+                        "enabled": True,
+                        "win_rate_window": 0.05,
+                    },
+                }
+            }
+        }
+    )
+
+    initial = screening_gate(stats, config)
+    expanded = screening_gate(stats, config, expanded=True)
+
+    assert initial.outcome == "expand"
+    assert expanded.outcome == "pass"
+    assert expanded.reason_codes == (
+        "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_POLICY_PASS",
+        "SCREENING_BELOW_WIN_RATE_MIN_ALLOWED_BY_POLICY",
+    )
+
+
+def test_expanded_screening_protocol_owns_pair_signal_advance():
+    stats = _make_stats(
+        wins=5,
+        losses=4,
+        ties=3,
+        win_rate=5 / 12,
+        median_delta=16.75,
+        ci_low=3.25,
+        ci_high=36.5,
+        pair_wins=46,
+        pair_losses=12,
+        pair_ties=6,
+    )
+    config = ProtocolConfig.model_validate(
+        {
+            "pairing_validity": "trajectory_divergent",
+            "gates": {
+                "screening": {
+                    "win_rate_min": 0.60,
+                    "expanded_borderline_advance": {
+                        "enabled": True,
+                        "win_rate_window": 0.10,
+                        "require_median_delta_nonnegative": True,
+                        "require_ci_low_nonnegative": True,
+                        "allow_pair_level_signal": True,
+                        "pair_win_rate_min": 0.50,
+                        "min_pair_total": 16,
+                        "min_pair_wins": 8,
+                        "min_pair_win_loss_margin": 1,
+                        "pair_non_tie_win_rate_min": 0.60,
+                        "max_pair_loss_rate": 0.40,
+                    },
+                }
+            },
+        }
+    )
+
+    result = screening_gate(stats, config, expanded=True)
+
+    assert result.outcome == "pass"
+    assert result.reason_codes == (
+        "SCREENING_EXPAND_EXHAUSTED_PAIR_SIGNAL_POLICY_PASS",
+        "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE",
+    )
+
+
+@pytest.mark.parametrize(
+    ("median_delta", "outcome", "reason_code"),
+    (
+        (5.0, "pass", "VALIDATION_EXPAND_EXHAUSTED_MARGINAL_PASS"),
+        (-5.0, "fail", "VALIDATION_EXPAND_EXHAUSTED_FAIL"),
+    ),
+)
+def test_expanded_validation_protocol_owns_final_verdict(
+    median_delta,
+    outcome,
+    reason_code,
+):
+    stats = _make_stats(
+        win_rate=0.70,
+        median_delta=median_delta,
+        ci_low=-0.01,
+        ci_high=0.02,
+    )
+
+    result = validation_gate(stats, _cfg, expanded=True)
+
+    assert result.outcome == outcome
+    assert result.reason_codes == (reason_code,)
+
+
 def test_budget_exhausting_high_runtime_ratio_does_not_block_low_snr_expand():
     stats = _make_stats(
         wins=3,
