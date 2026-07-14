@@ -178,6 +178,14 @@ steering, or launch a formal experiment from the transition worktree.
   Its chmod allowlist accepts only the exact generated command and rejects
   appended shell operations. That prepared-only root is superseded and must
   not be launched.
+- Commit `1978b426` contains that follow-up and is pushed. A distinct R3 CVRP
+  root is prepared from its clean detached runtime. Its 81-file identity,
+  runtime/run.sh anchors, secret hygiene, and guarded-wrapper readiness are
+  green without a live probe or provider call. Offline native first-H rendering
+  exposes only `solver_design`, 11 concrete algorithm files plus one declared
+  wildcard, and zero successor/target-intent/forced-targeting/mechanism-ranking,
+  telemetry-gate, candidate-cap, retry/backoff, truncation, or semantic-budget
+  matches. Independent prelaunch review reports P0/P1/P2=`0/0/0`.
 - That continuation exposed one narrow postrun bug: current summary outcome
   counts were compared with cumulative copied-database counts across two
   campaign IDs. The experiment is valid; the current repair scopes integrity
@@ -273,12 +281,12 @@ The first CVRP control attempt produced no algorithm evidence: it failed before
 proposal generation on an incorrect external-data-root binding. No experiment
 is running, and automatic retry remains prohibited.
 
-The immediate blocker is pushing the verified narrow readiness follow-up, not
-VRP algorithm quality. The repair pins all 40 formal `.vrp`
+The verified readiness follow-up is pushed and the new R3 root is prepared.
+The repair pins all 40 formal `.vrp`
 files, their 40 sibling `.sol` files, and the package canary in the prepared
 contract; the wrapper verifies the same identity before provider access and
-after campaign execution. After the repair is pushed, create a new detached
-runtime at that exact commit.
+after campaign execution. The only remaining prelaunch blocker is explicit
+operator authorization to start this already-audited prepared root.
 
 Preserve the excluded user-owned
 `scion/docs/v0.4-measurement-readiness.md` change and unrelated untracked
@@ -286,22 +294,16 @@ history.
 
 ## Immediate Queue
 
-1. Stage, commit, and push only the verified prepared-contract/readiness
-   follow-up, its tests, and status docs under
-   the existing authorization.
-2. Create an isolated detached clean runtime at that exact commit.
-3. Prepare a distinct fresh two-round CVRP direct control with explicit
-   `--data-root`, no target/action/surface binding, parameter search disabled,
-   `gpt-5.6-sol`, strict postrun reports, and completion preflight inside the
-   guarded wrapper.
-4. Confirm the prepared 81-file identity receipt, then require guarded-wrapper
-   readiness and inspect the actual H context for
-   successor IDs, target-file/mechanism steering, telemetry,
-   budget, retry, or truncation noise. Do not send a separate live probe.
-5. Do not treat the corrected root as an automatic retry. Launch only under
-   explicit operator authorization after those checks pass. Supply the shared
-   proxy key only in process environment, poll about every three minutes, and
-   never retry.
+1. Commit and push only the R3 prelaunch report plus compact status updates;
+   keep the root prepared-only.
+2. Launch the exact audited R3 root only after explicit operator authorization.
+   Supply the shared proxy key only in process environment; the wrapper's sole
+   live completion preflight must run before campaign initialization.
+3. Poll about every three minutes. Never retry, replace, resume, or silently
+   repair the run if it fails.
+4. After a terminal outcome, audit H/C receipts, solver pairs, lineage,
+   algorithmic materiality, runtime, and postrun readiness before making any
+   continuation or promotion decision.
 
 Do not close v0.4 merely because framework tests pass. Close it only after both
 formal controls show that the simplified agent performs useful research without

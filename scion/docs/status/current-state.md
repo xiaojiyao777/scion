@@ -13,7 +13,8 @@ green. Do not retry, freeze, modify, or promote this branch. The first fresh
 CVRP control stopped before proposal generation on an incorrect external data
 root; it contains no algorithm result and was not retried. A distinct corrected
 R2 root was prepared at `6ec0db55` but guarded readiness rejected it before any
-provider call; it is also not launchable.
+provider call; it is also not launchable. A distinct R3 CVRP root is now fully
+audited and prepared-only at pushed `1978b426`; it has not called the provider.
 
 ## Current Decision
 
@@ -35,7 +36,9 @@ failed root.
 The first clean prepare after that commit exposed two narrow static-auditor
 drifts: identity SHA metadata was interpreted as a path, and the receipt
 allowlist did not recognize the exact `chmod 600` line. The minimal follow-up
-is implemented and fully verified; push it before preparing another root.
+is pushed at `1978b426`. The new R3 root passes guarded-wrapper readiness,
+formal data identity, secret-hygiene, and native first-H context audits. Keep it
+prepared-only until explicit operator authorization.
 
 ## Run Roots
 
@@ -59,6 +62,10 @@ Superseded prepared-only CVRP root:
 
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r2-2r-gpt56sol-20260714T161411Z-claw`
 
+Current audited prepared-only CVRP root:
+
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r3-2r-gpt56sol-20260714T163231Z-claw`
+
 The first root is the fresh formal confirmation. The second and third are
 copied-state, diagnostic/non-formal continuations used only to evaluate the
 exact same cumulative candidate. Do not blur their wrapper status or evidence
@@ -71,6 +78,34 @@ Do not resume or relaunch it.
 The R2 root made no provider call. Its identity is correct, but its exact commit
 cannot pass guarded readiness because the static auditors predate the follow-up.
 Do not edit or launch it.
+
+The CVRP R3 root is the only launch candidate. It remains prepared-only with no
+PID, provider trace, live preflight receipt, or campaign execution artifact.
+Do not replace, resume, or auto-retry it.
+
+## CVRP R3 Prelaunch Evidence
+
+- prepared/runtime commit: clean detached `1978b426`;
+- model/rounds/solver limit: `gpt-5.6-sol`, `2`, `30` seconds per solver
+  subprocess;
+- force surface/action/target: all empty;
+- formal data identity: 81 files, digest
+  `ca7e470ec8d1f3569a690d10df5a170c4994108c71fecf5aa1a7a76b42630743`;
+- generated wrapper embeds that digest in both pre/post checks and matches its
+  prepared run.sh SHA anchor;
+- guarded-wrapper readiness: `true`, with no required or optional failures;
+- `launch_ready=false` only because no separate live completion was sent; the
+  wrapper owns the sole live pre-campaign completion preflight;
+- `launch.env` and the data identity receipt are mode `0600`; secret-field scans
+  are empty and the API key value is not persisted;
+- provider calls, campaign markers, scheduler/promotion mutation: none.
+
+The native first-H projection contains only the `solver_design` surface and 12
+targetable entries: 11 concrete CVRP algorithm files plus the declared
+`policies/baseline_modules/*.py` wildcard. It contains open algorithm guidance
+and zero matches for successor, target-intent, forced targeting, mechanism
+ranking/denylist, telemetry gate, candidate caps, retry/backoff, truncation, or
+semantic budget. Independent review reports P0/P1/P2=`0/0/0`.
 
 ## Formal R3 Evidence
 
@@ -263,33 +298,26 @@ green.
 
 ## Worktree State
 
-- branch: `v0.4-dev` at pushed launcher-integrity base `6ec0db55`;
-- intended changes now: the narrow prepared-contract/readiness follow-up, its
-  focused tests, the CVRP pre-campaign failure report, `TASK.md`, and this file;
+- branch: `v0.4-dev`; audited runtime commit `1978b426` is pushed;
+- intended changes now: the CVRP R3 prelaunch report, `TASK.md`, and this file;
 - `scion/docs/v0.4-measurement-readiness.md` is a pre-existing user-owned
   tracked change and must remain excluded;
 - unrelated untracked historical/future documents must remain excluded;
-- validation ran from clean detached runtime
-  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-9c88ef6a`.
+- the current CVRP prepared root uses clean detached runtime
+  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-1978b426`.
 
 ## Resume Actions
 
-1. Stage, commit, and push only the verified narrow prepared-contract/readiness
-   follow-up and status docs.
-2. Create a detached clean runtime at that exact commit.
-3. Prepare a distinct fresh two-round CVRP direct control with explicit
-   external data root, no target/action/surface binding, parameter search
-   disabled, `gpt-5.6-sol`, strict postrun reports, and completion preflight
-   inside the guarded wrapper.
-4. Confirm the prepared 81-file formal data identity receipt, require
-   guarded-wrapper launch readiness, then inspect the prepared actual provider
-   context for successor,
-   target-file, mechanism-ranking, telemetry,
-   budget, retry, and truncation noise. Do not send a separate live probe.
-5. Do not treat the corrected root as an automatic retry. Launch only under
-   explicit operator authorization after those checks pass. Supply
-   `SCION_SHARED_PROXY_KEY` only in process environment, poll about every three
-   minutes, and never retry.
+1. Commit and push only the R3 prelaunch report plus compact status updates;
+   leave the run root unchanged and prepared-only.
+2. Launch that exact audited root only after explicit operator authorization.
+   Supply `SCION_SHARED_PROXY_KEY` only in process environment; do not send a
+   separate probe because run.sh owns the sole live completion preflight.
+3. Poll about every three minutes and never retry, replace, resume, or silently
+   repair a failed run.
+4. After a terminal outcome, audit H/C receipts, solver pairs, lineage,
+   algorithmic materiality, runtime, and postrun readiness before continuation
+   or promotion.
 
 ## Runner Notes
 
