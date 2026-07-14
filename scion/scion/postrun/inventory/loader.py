@@ -397,6 +397,9 @@ def _execution_outcomes_inventory(
             "decision_rows_with_non_evaluated_outcome": _safe_nonnegative_int(
                 events.get("decision_rows_with_non_evaluated_outcome")
             ),
+            "decision_rows_without_correlation_identity": _safe_nonnegative_int(
+                events.get("decision_rows_without_correlation_identity")
+            ),
         },
         "summary_lineage_counts_comparable": comparable,
         "summary_lineage_counts_consistent": counts_consistent,

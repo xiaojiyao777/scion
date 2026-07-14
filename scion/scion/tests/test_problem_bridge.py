@@ -182,6 +182,24 @@ def test_warehouse_legacy_and_package_specs_share_measurement_declaration() -> N
         assert readiness.signal_to_noise_tier == "low_power"
 
 
+def test_warehouse_legacy_and_package_specs_share_semantics() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    legacy_path = repo_root / "problems" / "warehouse_delivery" / "problem-v1.yaml"
+    package_path = PROBLEMS_DIR / "warehouse_delivery" / "problem-v1.yaml"
+
+    legacy = load_problem_spec_v1_from_yaml(legacy_path)
+    package = load_problem_spec_v1_from_yaml(package_path)
+
+    assert legacy.model_dump(mode="json") == package.model_dump(mode="json")
+    rendered = str(
+        [surface.model_dump(mode="json") for surface in legacy.research_surfaces]
+    ).lower()
+    assert "telemetry guard" not in rendered
+    assert "activation/effect counters" not in rendered
+    assert "runtime budget strategy" not in rendered
+    assert "max_candidates" not in rendered
+
+
 def test_load_problem_spec_v1_resolves_placeholder_root_dir() -> None:
     cvrp_dir = PROBLEMS_DIR / "cvrp"
     spec = load_problem_spec_v1_from_yaml(cvrp_dir / "problem-v1.yaml")

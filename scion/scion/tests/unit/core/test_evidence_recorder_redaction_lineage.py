@@ -454,6 +454,9 @@ def test_protocol_decision_persists_explicit_decision_features_snapshot(
     assert registry.decisions
     assert json.loads(registry.events[0]["decision_features_json"]) == event_features
     assert json.loads(registry.decisions[0]["features_json"]) == event_features
+    assert registry.decisions[0]["campaign_id"] == "camp-1"
+    assert registry.decisions[0]["hypothesis_id"] == "hyp-1"
+    assert registry.decisions[0]["stage"] == "screening"
 
     summary = recorder.write_campaign_summary(
         step_history=[

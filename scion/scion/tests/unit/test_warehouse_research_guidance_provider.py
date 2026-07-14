@@ -90,10 +90,15 @@ def test_warehouse_adapter_hypothesis_context_has_no_hidden_outcomes_or_controls
     adapter = load_problem_adapter(spec)
 
     summary = adapter.render_problem_summary()
+    operator_interface = adapter.render_operator_interface()
     order_context = adapter.render_research_surface_interface("order_level")
     vehicle_context = adapter.render_research_surface_interface("vehicle_level")
 
     assert "Both order-level and vehicle-level research remain open" in summary
+    assert 'f"{order.destination_country},{order.ship_method}"' in summary
+    assert "country first, comma separator" in summary
+    assert 'f"{order.destination_country},{order.ship_method}"' in operator_interface
+    assert "country first, comma separator" in operator_interface
     assert "order-level idea" in order_context
     assert "vehicle-level idea" in vehicle_context
     assert "telemetry" not in order_context.lower()

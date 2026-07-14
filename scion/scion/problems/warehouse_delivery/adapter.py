@@ -142,6 +142,8 @@ Within each group, orders are packed sequentially into vehicles using first-fit.
 When a vehicle reaches capacity (pallet limit), a new vehicle is opened for the same group.
 Subcategory splits occur when a subcategory group's total pallets exceed one vehicle's capacity.
 Example: if subcategory 3 has 50 pallets and HQ40 capacity is 40, it needs 2 vehicles -> 1 split.
+H6 amount-limit keys use `f"{{order.destination_country}},{{order.ship_method}}"`
+(country first, comma separator).
 
 Operator categories: {cats}
 Editable operator source: {editable}
@@ -190,6 +192,7 @@ idea to investigate."""
   - `spu_list: list[SPU]` — packing units; use `calc_pallets(order.spu_list)` from models.py
   - `locked_vehicle_id: Optional[str]` — None = freely assignable; non-None = MUST stay in that vehicle
 - `Instance`: accessed via `self.instance` (set in __init__); contains `orders: dict[str, Order]`, `amount_limits: dict[str, float]`
+  - H6 amount-limit keys are exactly `f"{{order.destination_country}},{{order.ship_method}}"` (country first, comma separator)
 - Helper: `select_minimum_vehicle_type(total_pallets, total_hazard) -> str` from models.py
 - Helper: `get_max_pickups(region) -> int` from models.py (Dongguan=2, Shenzhen=3)
 

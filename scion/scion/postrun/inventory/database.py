@@ -82,6 +82,7 @@ def _empty_events() -> dict[str, Any]:
         "explicit_execution_outcome_count": 0,
         "invalid_execution_outcome_count": 0,
         "decision_rows_with_non_evaluated_outcome": 0,
+        "decision_rows_without_correlation_identity": 0,
         "decision_outcome_consistency_status": "unknown_historical",
     }
 
@@ -179,6 +180,7 @@ def _events(conn: sqlite3.Connection) -> dict[str, Any]:
     )
     inconsistent_decisions = 0
     decision_count = 0
+    decisions_without_identity = 0
     if "decision" in columns:
         decision_count = int(
             conn.execute(
@@ -190,25 +192,50 @@ def _events(conn: sqlite3.Connection) -> dict[str, Any]:
         if outcome_schema and explicit_count > 0:
             identity_columns = {"campaign_id", "branch_id", "hypothesis_id"}
             if identity_columns.issubset(columns):
-                inconsistent_decisions = int(
+                explicit_non_evaluated_decisions = int(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM experiment_events "
+                        "WHERE decision IS NOT NULL AND decision != '' "
+                        "AND execution_outcome IS NOT NULL "
+                        "AND execution_outcome != '' "
+                        "AND execution_outcome != ?",
+                        (ExecutionOutcome.EVALUATED.value,),
+                    ).fetchone()[0]
+                    or 0
+                )
+                missing_correlated_evaluated_outcome = int(
                     conn.execute(
                         "SELECT COUNT(*) FROM experiment_events AS decision_row "
                         "WHERE decision_row.decision IS NOT NULL "
                         "AND decision_row.decision != '' "
-                        "AND COALESCE(decision_row.execution_outcome, '') != ? "
+                        "AND COALESCE(decision_row.execution_outcome, '') = '' "
+                        "AND COALESCE(decision_row.campaign_id, '') != '' "
+                        "AND COALESCE(decision_row.branch_id, '') != '' "
+                        "AND COALESCE(decision_row.hypothesis_id, '') != '' "
                         "AND NOT EXISTS ("
                         "SELECT 1 FROM experiment_events AS outcome_row "
                         "WHERE outcome_row.execution_outcome = ? "
                         "AND outcome_row.campaign_id = decision_row.campaign_id "
                         "AND outcome_row.branch_id = decision_row.branch_id "
-                        "AND (outcome_row.hypothesis_id = decision_row.hypothesis_id "
-                        "OR decision_row.hypothesis_id IS NULL))",
-                        (
-                            ExecutionOutcome.EVALUATED.value,
-                            ExecutionOutcome.EVALUATED.value,
-                        ),
+                        "AND outcome_row.hypothesis_id = decision_row.hypothesis_id)",
+                        (ExecutionOutcome.EVALUATED.value,),
                     ).fetchone()[0]
                     or 0
+                )
+                decisions_without_identity = int(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM experiment_events "
+                        "WHERE decision IS NOT NULL AND decision != '' "
+                        "AND COALESCE(execution_outcome, '') = '' "
+                        "AND (COALESCE(campaign_id, '') = '' "
+                        "OR COALESCE(branch_id, '') = '' "
+                        "OR COALESCE(hypothesis_id, '') = '')"
+                    ).fetchone()[0]
+                    or 0
+                )
+                inconsistent_decisions = (
+                    explicit_non_evaluated_decisions
+                    + missing_correlated_evaluated_outcome
                 )
             else:
                 inconsistent_decisions = int(
@@ -238,6 +265,7 @@ def _events(conn: sqlite3.Connection) -> dict[str, Any]:
         "invalid_execution_outcome_count": invalid_count,
         "decision_row_count": decision_count,
         "decision_rows_with_non_evaluated_outcome": inconsistent_decisions,
+        "decision_rows_without_correlation_identity": decisions_without_identity,
         "decision_outcome_consistency_status": consistency_status,
     }
 

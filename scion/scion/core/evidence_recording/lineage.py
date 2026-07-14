@@ -349,6 +349,7 @@ class LineageRecorderMixin:
         verification_result: VerificationResult,
         canary_result: CanaryResult,
         decision: Decision,
+        hypothesis_id: str = "",
         decision_reason_codes: Iterable[str] | None = None,
         decision_features: DecisionFeatures | None = None,
     ) -> Dict[str, str]:
@@ -393,7 +394,10 @@ class LineageRecorderMixin:
             else json.dumps(features, sort_keys=True)
         )
         return {
+            "campaign_id": self.campaign_id,
             "branch_id": branch.branch_id,
+            "hypothesis_id": hypothesis_id,
+            "stage": protocol_result.stage.value if protocol_result else "",
             "features_json": features_json,
             "decision": decision.value,
             "reason": json.dumps(list(decision_reason_codes or ())),
@@ -470,6 +474,7 @@ class LineageRecorderMixin:
             verification_result=verification_result,
             canary_result=canary_result,
             decision=decision,
+            hypothesis_id=hypothesis_id,
             decision_reason_codes=decision_reason_codes,
             decision_features=decision_features,
         )

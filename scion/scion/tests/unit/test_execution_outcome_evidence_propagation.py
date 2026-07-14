@@ -292,6 +292,48 @@ def test_historical_lineage_decisions_without_outcome_are_unknown() -> None:
     assert events["decision_outcome_consistency_status"] == "unknown_historical"
 
 
+def test_identityless_decision_projection_is_diagnostic_not_false_negative() -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE experiment_events ("
+        "campaign_id TEXT, branch_id TEXT, hypothesis_id TEXT, "
+        "event_kind TEXT, stage TEXT, decision TEXT, execution_outcome TEXT)"
+    )
+    conn.executemany(
+        "INSERT INTO experiment_events VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+            ("camp", "b1", "h1", "execution_outcome", "screening", None, "evaluated"),
+            ("camp", "b1", "h1", "experiment", "screening", "keep", None),
+            (None, "b1", None, "decision", None, "keep", None),
+        ],
+    )
+
+    events = _events(conn)
+
+    assert events["decision_rows_with_non_evaluated_outcome"] == 0
+    assert events["decision_rows_without_correlation_identity"] == 1
+    assert events["decision_outcome_consistency_status"] == "consistent"
+
+
+def test_identityless_explicit_non_evaluated_decision_fails_closed() -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE experiment_events ("
+        "campaign_id TEXT, branch_id TEXT, hypothesis_id TEXT, "
+        "event_kind TEXT, stage TEXT, decision TEXT, execution_outcome TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO experiment_events VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (None, "b1", None, "decision", None, "rollback", "resource_exhausted"),
+    )
+
+    events = _events(conn)
+
+    assert events["decision_rows_with_non_evaluated_outcome"] == 1
+    assert events["decision_rows_without_correlation_identity"] == 0
+    assert events["decision_outcome_consistency_status"] == "invalid"
+
+
 def test_analysis_effect_and_protocol_summaries_require_evaluated_outcome(
     tmp_path: Path,
 ) -> None:

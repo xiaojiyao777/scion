@@ -428,6 +428,10 @@ class LineageRegistry:
         features_json: str,
         decision: str,
         reason: str,
+        *,
+        campaign_id: str = "",
+        hypothesis_id: str = "",
+        stage: str = "",
     ) -> None:
         """Append a decision event row (INSERT only — never UPDATE)."""
         event = {
@@ -439,6 +443,12 @@ class LineageRegistry:
             "decision": decision,
             "decision_reason": reason,
         }
+        if campaign_id:
+            event["campaign_id"] = campaign_id
+        if hypothesis_id:
+            event["hypothesis_id"] = hypothesis_id
+        if stage:
+            event["stage"] = stage
         cols = ", ".join(event.keys())
         placeholders = ", ".join(["?"] * len(event))
         sql = f"INSERT INTO experiment_events ({cols}) VALUES ({placeholders})"

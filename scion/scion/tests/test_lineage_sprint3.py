@@ -82,6 +82,24 @@ class TestLineageRegistry:
         rows = reg.query_by_branch(bid)
         assert len(rows) == 2
 
+    def test_record_decision_persists_correlation_identity(self, tmp_path):
+        reg = LineageRegistry(str(tmp_path / "scion.db"))
+        reg.record_decision(
+            "branch-1",
+            "{}",
+            "continue_explore",
+            "[]",
+            campaign_id="campaign-1",
+            hypothesis_id="hypothesis-1",
+            stage="screening",
+        )
+
+        row = reg.query_by_branch("branch-1")[0]
+
+        assert row["campaign_id"] == "campaign-1"
+        assert row["hypothesis_id"] == "hypothesis-1"
+        assert row["stage"] == "screening"
+
     def test_query_failures_returns_failed_rows(self, tmp_path):
         reg = LineageRegistry(str(tmp_path / "scion.db"))
         bid = "br_fail"
