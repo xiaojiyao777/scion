@@ -288,10 +288,15 @@ is running, and automatic retry remains prohibited.
 The CVRP R3 root is terminal and must not be resumed or retried. It proves the
 agent can select a substantial solver mechanism, but also exposes a direct
 provider-schema/Contract mismatch that blocks it before code generation. The
-call-local enum repair is complete: the standard suite passes `1886 passed,
-1 skipped` in `499.32s`, compileall and `git diff --check` pass, and independent
-review reports P0/P1/P2 = 0. The current blocker is committing and pushing that
-audited repair before any new clean root is prepared.
+call-local enum repair is pushed at `ff14318c`: the standard suite passes `1886
+passed, 1 skipped` in `499.32s`, compileall and `git diff --check` pass, and
+independent review reports P0/P1/P2 = 0.
+
+A distinct R4 root is now prepared-only at that exact clean commit. Its guarded
+readiness, 81-file data identity, secret hygiene, native first-H context, and
+call-local `change_locus.enum=["solver_design"]` are independently green. No
+provider/live-probe/campaign call has occurred. The current blocker is explicit
+launch authorization; do not launch automatically.
 
 Preserve the excluded user-owned
 `scion/docs/v0.4-measurement-readiness.md` change and unrelated untracked
@@ -299,15 +304,13 @@ history.
 
 ## Immediate Queue
 
-1. Stage, commit, and push only the intended call-local surface-enum
-   repair/tests/docs and the R3 terminal interface report.
-2. Keep the separate forced-governance wiring finding out of this minimal
-   unforced-control repair.
-3. Create a clean detached runtime and distinct R4 prepared root at that exact
-   commit. Do not resume or reuse R3 and do not launch R4 automatically.
-4. Reconfirm formal data identity, guarded-wrapper readiness, secret hygiene,
-   call-local `change_locus` enum, and native first-H context before requesting
-   explicit launch authorization.
+1. Keep R4 prepared-only until the operator explicitly authorizes launch.
+2. At launch, provide `SCION_SHARED_PROXY_KEY` only in process environment;
+   let `run.sh` own the sole completion preflight and never auto-retry.
+3. Poll about every three minutes, then audit H/C, solver pairs, lineage,
+   algorithmic materiality, and postrun readiness after the terminal outcome.
+4. Keep the separate forced-governance wiring finding out of this minimal
+   unforced control.
 
 Do not close v0.4 merely because framework tests pass. Close it only after both
 formal controls show that the simplified agent performs useful research without

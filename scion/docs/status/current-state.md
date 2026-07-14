@@ -16,6 +16,8 @@ R2 root was prepared at `6ec0db55` but guarded readiness rejected it before any
 provider call; it is also not launchable. A distinct R3 CVRP root launched once
 at pushed `1978b426`, made exactly one H call and no C call, then terminated on
 a provider-schema/Contract interface mismatch before any solver evaluation.
+The repair is pushed at `ff14318c`; a distinct R4 root is prepared-only there
+and has made no live completion, provider, or campaign call.
 
 ## Current Decision
 
@@ -43,6 +45,13 @@ SWAP* neighborhood in `local_search.py`, but the tool schema allowed a free-form
 `change_locus` while C2 required exact `solver_design`. The current repair moves
 that exact enum into the call-local provider tool and parse boundary while
 retaining C2. Do not resume or retry R3.
+
+The repair passes the standard suite at `1886 passed, 1 skipped` in `499.32s`.
+R4 offline audit reconstructs the native first-H path and confirms the active
+surface and call-local enum are exactly `solver_design`, with no global tool
+mutation, retry/backoff, truncation, forced targeting, or agent/token/output
+budget controls. The guarded wrapper, 81-file identity, clean runtime, and
+secret hygiene are green. R4 now waits for explicit launch authorization.
 
 A separate audit found that forced diagnostics emit `forced_research_target`
 while part of the governance/C0 path still looks for legacy
@@ -75,6 +84,10 @@ Superseded prepared-only CVRP root:
 Terminal CVRP R3 interface-failure root:
 
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r3-2r-gpt56sol-20260714T163231Z-claw`
+
+Prepared-only CVRP R4 root:
+
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r4-2r-gpt56sol-20260714T234816Z-claw`
 
 The first root is the fresh formal confirmation. The second and third are
 copied-state, diagnostic/non-formal continuations used only to evaluate the
@@ -326,9 +339,10 @@ green.
 
 ## Worktree State
 
-- branch: `v0.4-dev`; audited runtime commit `1978b426` is pushed;
-- intended changes now: call-local surface enum binding, parser/pipeline
-  integrity coverage, the R3 terminal report, `TASK.md`, and this file;
+- branch: `v0.4-dev`; call-local surface enum repair commit `ff14318c` is
+  pushed and is the clean
+  detached runtime for the prepared-only R4 root;
+- intended changes now: the R4 prelaunch report, `TASK.md`, and this file;
 - final verification for those intended changes is green: the standard suite
   passes `1886 passed, 1 skipped` in `499.32s`; independent latest-diff review
   reports P0/P1/P2 = 0 and separately passes `103` tests; compileall and
@@ -337,19 +351,18 @@ green.
   tracked change and must remain excluded;
 - unrelated untracked historical/future documents must remain excluded;
 - the terminal CVRP R3 root used clean detached runtime
-  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-1978b426`.
+  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-1978b426`;
+- the prepared-only CVRP R4 root uses clean detached runtime
+  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-ff14318c`.
 
 ## Resume Actions
 
-1. Stage, commit, and push only the intended call-local surface-enum
-   code/tests/docs and the R3 terminal interface report.
-2. Keep the separate forced-governance wiring finding out of this minimal
-   unforced-control repair.
-3. Create a clean detached runtime and distinct R4 prepared root at that exact
-   commit. Do not resume or reuse R3 and do not launch R4 automatically.
-4. Reconfirm data identity, guarded-wrapper readiness, secret hygiene, the
-   call-local `change_locus` enum, and native first-H context before requesting
-   explicit launch authorization.
+1. Keep R4 prepared-only until the operator explicitly authorizes launch.
+2. At launch, inject `SCION_SHARED_PROXY_KEY` only into the process environment
+   and let `run.sh` own the sole live completion preflight.
+3. Poll about every three minutes; never auto-retry, resume, or replace R4.
+4. After terminal outcome, audit H/C, solver pairs, lineage, algorithmic
+   materiality, runtime, and postrun readiness before any continuation.
 
 ## Runner Notes
 
