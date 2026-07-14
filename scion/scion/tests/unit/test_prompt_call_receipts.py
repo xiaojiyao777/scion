@@ -22,6 +22,9 @@ from scion.proposal.llm_client import (
     LLMProviderError,
 )
 from scion.proposal.prompt_manifest_accounting import _provider_prompt_hash
+from scion.proposal.schemas import HYPOTHESIS_TOOL
+
+
 _HYPOTHESIS_RESPONSE = {
     "hypothesis_text": "Try one bounded local improvement move.",
     "change_locus": "local_search",
@@ -57,6 +60,7 @@ class _CaptureClient:
         self.response = dict(response or _HYPOTHESIS_RESPONSE)
         self.expected_tool = expected_tool
         self.calls: list[tuple[str, list[dict], str]] = []
+        self.tools: list[dict] = []
 
     def call_with_tool(
         self,
@@ -70,6 +74,7 @@ class _CaptureClient:
         self.calls.append(
             (str(prompt), list(system_blocks or []), str(request_kind))
         )
+        self.tools.append(json.loads(json.dumps(tool)))
         if self.error is not None:
             raise self.error
         assert tool["name"] == self.expected_tool
@@ -102,7 +107,13 @@ class _DirectOpenAIClient(LLMClient):
 def _hypothesis_context() -> dict:
     return {
         "problem_summary": "Synthetic routing control.",
-        "research_surfaces": "surface: local_search",
+        "research_surfaces": [
+            {
+                "name": "local_search",
+                "kind": "operator",
+                "target_files": ["operators/*.py"],
+            }
+        ],
         "objective_policy_guidance": "Minimize cost while preserving feasibility.",
         "solver_mechanics": "",
         "champion_operators_code": "class Control: pass",
@@ -180,6 +191,88 @@ def test_prompt_call_receipt_uses_one_snapshot_for_manifest_trace_and_provider(
     assert trace["prompt_manifest"]["prompt_hash"] == expected_hash
     assert trace["prompt_manifest"]["context_digest"] == snapshot.context_digest
     assert trace["prompt_manifest"]["projection"] == "direct_v3_lossless"
+    assert client.tools[0]["input_schema"]["properties"]["change_locus"][
+        "enum"
+    ] == ["local_search"]
+    assert "enum" not in HYPOTHESIS_TOOL["input_schema"]["properties"][
+        "change_locus"
+    ]
+    assert trace["tool_schema"]["properties"]["change_locus"]["enum"] == [
+        "local_search"
+    ]
+
+
+def test_provider_response_cannot_append_description_to_change_locus(
+    tmp_path: Path,
+) -> None:
+    response = {
+        **_HYPOTHESIS_RESPONSE,
+        "change_locus": "local_search neighborhood family",
+    }
+    client = _CaptureClient(response=response)
+    creative = CreativeLayer(client, trace_dir=str(tmp_path / "traces"))
+    context = _hypothesis_context()
+    snapshot = build_prompt_turn_snapshot("hypothesis", context)
+
+    with pytest.raises(
+        ProposalValidationError,
+        match="must exactly match one provider-visible research surface",
+    ) as caught:
+        creative.generate_direct_hypothesis_with_receipt(context, snapshot)
+
+    assert len(client.calls) == 1
+    assert client.tools[0]["input_schema"]["properties"]["change_locus"][
+        "enum"
+    ] == ["local_search"]
+    receipt = prompt_call_receipt_from_error(caught.value)
+    assert receipt is not None
+    assert receipt.provider_ok is True
+    assert receipt.ok is False
+    assert receipt.error_category == "response_parse_failed"
+
+
+def test_hypothesis_tool_enum_is_generic_across_visible_surfaces(
+    tmp_path: Path,
+) -> None:
+    client = _CaptureClient()
+    creative = CreativeLayer(client, trace_dir=str(tmp_path / "traces"))
+    context = {
+        **_hypothesis_context(),
+        "research_surfaces": [
+            {"name": "local_search", "kind": "operator"},
+            {"name": "construction", "kind": "solver_design"},
+        ],
+    }
+    snapshot = build_prompt_turn_snapshot("hypothesis", context)
+
+    creative.generate_direct_hypothesis_with_receipt(context, snapshot)
+
+    assert client.tools[0]["input_schema"]["properties"]["change_locus"][
+        "enum"
+    ] == ["local_search", "construction"]
+
+
+@pytest.mark.parametrize(
+    "research_surfaces",
+    [
+        "local_search",
+        [],
+        [{"kind": "operator"}],
+        [{"name": "local_search"}, {"name": "local_search"}],
+        [{"name": " local_search"}],
+        [{"name": "local_search "}],
+    ],
+)
+def test_hypothesis_tool_rejects_invalid_visible_surface_contract_before_call(
+    research_surfaces: object,
+) -> None:
+    context = {
+        **_hypothesis_context(),
+        "research_surfaces": research_surfaces,
+    }
+
+    with pytest.raises(ValueError, match="research"):
+        build_prompt_turn_snapshot("hypothesis", context)
 
 
 def test_receipt_uses_authoritative_owner_without_exposing_audit_context(
@@ -318,7 +411,13 @@ def test_direct_context_preserves_complete_authoritative_inputs(
         "problem_summary": sentinels["problem_summary"],
         "problem_object": sentinels["problem_object"],
         "solver_mechanics": sentinels["solver_mechanics"],
-        "research_surfaces": sentinels["research_surfaces"],
+        "research_surfaces": [
+            {
+                "name": "local_search",
+                "kind": "operator",
+                "marker": sentinels["research_surfaces"],
+            }
+        ],
         "objective_policy_guidance": sentinels["objective_policy"],
         "champion_operators_code": sentinels["champion_code"],
         "champion_stats": {"marker": sentinels["champion_stats"]},

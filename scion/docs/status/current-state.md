@@ -13,8 +13,9 @@ green. Do not retry, freeze, modify, or promote this branch. The first fresh
 CVRP control stopped before proposal generation on an incorrect external data
 root; it contains no algorithm result and was not retried. A distinct corrected
 R2 root was prepared at `6ec0db55` but guarded readiness rejected it before any
-provider call; it is also not launchable. A distinct R3 CVRP root is now fully
-audited and prepared-only at pushed `1978b426`; it has not called the provider.
+provider call; it is also not launchable. A distinct R3 CVRP root launched once
+at pushed `1978b426`, made exactly one H call and no C call, then terminated on
+a provider-schema/Contract interface mismatch before any solver evaluation.
 
 ## Current Decision
 
@@ -36,9 +37,18 @@ failed root.
 The first clean prepare after that commit exposed two narrow static-auditor
 drifts: identity SHA metadata was interpreted as a path, and the receipt
 allowlist did not recognize the exact `chmod 600` line. The minimal follow-up
-is pushed at `1978b426`. The new R3 root passes guarded-wrapper readiness,
-formal data identity, secret-hygiene, and native first-H context audits. Keep it
-prepared-only until explicit operator authorization.
+is pushed at `1978b426`. The R3 launch passed completion preflight and pre/post
+formal data identity. Its sole H proposed a substantive capacity-feasible
+SWAP* neighborhood in `local_search.py`, but the tool schema allowed a free-form
+`change_locus` while C2 required exact `solver_design`. The current repair moves
+that exact enum into the call-local provider tool and parse boundary while
+retaining C2. Do not resume or retry R3.
+
+A separate audit found that forced diagnostics emit `forced_research_target`
+while part of the governance/C0 path still looks for legacy
+`forced_surface`/`forced_action`/`forced_target_file` keys. It did not affect
+this open, unforced R3 control. Keep it as a separate follow-up so the minimal
+surface-enum repair does not silently broaden into forced-run governance work.
 
 ## Run Roots
 
@@ -62,7 +72,7 @@ Superseded prepared-only CVRP root:
 
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r2-2r-gpt56sol-20260714T161411Z-claw`
 
-Current audited prepared-only CVRP root:
+Terminal CVRP R3 interface-failure root:
 
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r3-2r-gpt56sol-20260714T163231Z-claw`
 
@@ -79,11 +89,11 @@ The R2 root made no provider call. Its identity is correct, but its exact commit
 cannot pass guarded readiness because the static auditors predate the follow-up.
 Do not edit or launch it.
 
-The CVRP R3 root is the only launch candidate. It remains prepared-only with no
-PID, provider trace, live preflight receipt, or campaign execution artifact.
-Do not replace, resume, or auto-retry it.
+The CVRP R3 root is terminal. It must not be replaced in place, resumed, or
+auto-retried. Any later control must use a distinct clean root after the
+interface repair is pushed.
 
-## CVRP R3 Prelaunch Evidence
+## CVRP R3 Outcome
 
 - prepared/runtime commit: clean detached `1978b426`;
 - model/rounds/solver limit: `gpt-5.6-sol`, `2`, `30` seconds per solver
@@ -98,14 +108,32 @@ Do not replace, resume, or auto-retry it.
   wrapper owns the sole live pre-campaign completion preflight;
 - `launch.env` and the data identity receipt are mode `0600`; secret-field scans
   are empty and the API key value is not persisted;
-- provider calls, campaign markers, scheduler/promotion mutation: none.
+- completion preflight: authenticated, HTTP 200, non-empty response;
+- provider calls: H=`1`, C=`0`, retry=`0`;
+- evaluated candidates and solver pairs: `0`;
+- terminal status: `invalid_research_rejected_only` /
+  `execution_research_rejected` in the current accounting vocabulary.
 
 The native first-H projection contains only the `solver_design` surface and 12
 targetable entries: 11 concrete CVRP algorithm files plus the declared
 `policies/baseline_modules/*.py` wildcard. It contains open algorithm guidance
 and zero matches for successor, target-intent, forced targeting, mechanism
 ranking/denylist, telemetry gate, candidate caps, retry/backoff, truncation, or
-semantic budget. Independent review reports P0/P1/P2=`0/0/0`.
+semantic budget. Independent prelaunch review reported P0/P1/P2=`0/0/0`.
+
+The only H targeted `policies/baseline_modules/local_search.py` and proposed a
+capacity-feasible SWAP* neighborhood with best reinsertion, edge deltas,
+strict-improvement acceptance, time polling, and route/coverage/capacity
+invariants. C0, C1, C3, and K5 passed. C2 alone rejected the descriptive locus
+`solver_design local-search/VNS neighborhood set` because the exact allowed ID
+is `solver_design`. The provider tool had declared only a non-empty string, so
+this is a framework producer/consumer mismatch, not evidence that the algorithm
+idea failed.
+
+Postrun readiness has 28 `ok`, 3 `skipped`, and no required or optional
+failure. Pre/post data identities are identical. Lineage closes over the single
+initial attempt with no hidden retry. The root is analysis-ready but report-only
+and supports no algorithm-quality or promotion conclusion.
 
 ## Formal R3 Evidence
 
@@ -299,25 +327,29 @@ green.
 ## Worktree State
 
 - branch: `v0.4-dev`; audited runtime commit `1978b426` is pushed;
-- intended changes now: the CVRP R3 prelaunch report, `TASK.md`, and this file;
+- intended changes now: call-local surface enum binding, parser/pipeline
+  integrity coverage, the R3 terminal report, `TASK.md`, and this file;
+- final verification for those intended changes is green: the standard suite
+  passes `1886 passed, 1 skipped` in `499.32s`; independent latest-diff review
+  reports P0/P1/P2 = 0 and separately passes `103` tests; compileall and
+  `git diff --check` pass;
 - `scion/docs/v0.4-measurement-readiness.md` is a pre-existing user-owned
   tracked change and must remain excluded;
 - unrelated untracked historical/future documents must remain excluded;
-- the current CVRP prepared root uses clean detached runtime
+- the terminal CVRP R3 root used clean detached runtime
   `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-1978b426`.
 
 ## Resume Actions
 
-1. Commit and push only the R3 prelaunch report plus compact status updates;
-   leave the run root unchanged and prepared-only.
-2. Launch that exact audited root only after explicit operator authorization.
-   Supply `SCION_SHARED_PROXY_KEY` only in process environment; do not send a
-   separate probe because run.sh owns the sole live completion preflight.
-3. Poll about every three minutes and never retry, replace, resume, or silently
-   repair a failed run.
-4. After a terminal outcome, audit H/C receipts, solver pairs, lineage,
-   algorithmic materiality, runtime, and postrun readiness before continuation
-   or promotion.
+1. Stage, commit, and push only the intended call-local surface-enum
+   code/tests/docs and the R3 terminal interface report.
+2. Keep the separate forced-governance wiring finding out of this minimal
+   unforced-control repair.
+3. Create a clean detached runtime and distinct R4 prepared root at that exact
+   commit. Do not resume or reuse R3 and do not launch R4 automatically.
+4. Reconfirm data identity, guarded-wrapper readiness, secret hygiene, the
+   call-local `change_locus` enum, and native first-H context before requesting
+   explicit launch authorization.
 
 ## Runner Notes
 

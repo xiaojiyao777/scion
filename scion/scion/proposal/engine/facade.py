@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import replace
 from typing import Any, Dict, Mapping
 
@@ -12,7 +13,7 @@ from scion.proposal.prompt_projection_authority import (
     ProposalPromptProjectionAuthority,
 )
 from scion.proposal.prompt_manifest import stable_digest
-from scion.proposal.schemas import HYPOTHESIS_TOOL, PATCH_TOOL
+from scion.proposal.schemas import PATCH_TOOL, bind_hypothesis_tool_to_context
 
 from .parsing import _parse_hypothesis, _parse_patch
 from .provider_call import (
@@ -39,11 +40,20 @@ def build_prompt_turn_snapshot(
     )
     projection = ProposalPromptProjectionAuthority.project(kind, authoritative)
     render_context = projection.structured_context
+    if kind == "hypothesis":
+        provider_tool, allowed_change_loci = bind_hypothesis_tool_to_context(
+            render_context
+        )
+    else:
+        provider_tool = deepcopy(PATCH_TOOL)
+        allowed_change_loci = ()
     return PromptTurnSnapshot(
         render_kind=kind,
         system_blocks=tuple(dict(block) for block in projection.system_blocks),
         user_prompt=str(projection.user_prompt),
         context_digest=stable_digest(render_context, length=64),
+        provider_tool=provider_tool,
+        allowed_change_loci=allowed_change_loci,
         authoritative_context_ref=authoritative.snapshot_id,
         authoritative_context=authoritative,
     )
@@ -99,13 +109,19 @@ class CreativeLayer:
     ) -> tuple[HypothesisProposal, PromptCallReceipt]:
         raw, receipt = self._provider_calls.call_with_receipt(
             request_kind="hypothesis",
-            tool=HYPOTHESIS_TOOL,
+            tool=dict(snapshot.provider_tool),
             context=context,
             snapshot=snapshot,
             attempt_audit=attempt_audit,
         )
         try:
-            return _parse_hypothesis(raw), receipt
+            return (
+                _parse_hypothesis(
+                    raw,
+                    allowed_change_loci=snapshot.allowed_change_loci,
+                ),
+                receipt,
+            )
         except Exception as exc:
             failed = replace(
                 receipt,
@@ -139,7 +155,7 @@ class CreativeLayer:
     ) -> tuple[PatchProposal, PromptCallReceipt]:
         raw, receipt = self._provider_calls.call_with_receipt(
             request_kind="code",
-            tool=PATCH_TOOL,
+            tool=dict(snapshot.provider_tool),
             context=context,
             snapshot=snapshot,
             attempt_audit=attempt_audit,

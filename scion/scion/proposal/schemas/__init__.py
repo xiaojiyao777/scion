@@ -21,6 +21,7 @@ from .patch import (
 from .tools import (
     HYPOTHESIS_TOOL,
     PATCH_TOOL,
+    bind_hypothesis_tool_to_context,
 )
 
 __all__ = [
@@ -34,6 +35,7 @@ __all__ = [
     "PatchFileChangeInput",
     "PatchProposalInput",
     "PatchSchemaPreflightError",
+    "bind_hypothesis_tool_to_context",
     "normalize_patch_output_with_repair_attribution",
     "preflight_patch_exact_replace_shape",
 ]

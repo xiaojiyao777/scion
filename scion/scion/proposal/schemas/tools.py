@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from copy import deepcopy
+from typing import Any, Dict, Mapping
 
 from .hypothesis import HYPOTHESIS_PROPOSAL_SCHEMA
 from .patch import PATCH_PROPOSAL_SCHEMA
@@ -51,7 +52,53 @@ PATCH_TOOL: Dict[str, Any] = {
     "input_schema": PATCH_PROPOSAL_SCHEMA,
 }
 
+
+def bind_hypothesis_tool_to_context(
+    context: Mapping[str, Any],
+) -> tuple[Dict[str, Any], tuple[str, ...]]:
+    """Bind the provider tool to the exact visible research-surface names."""
+
+    surfaces = context.get("research_surfaces")
+    if not isinstance(surfaces, (list, tuple)) or not surfaces:
+        raise ValueError(
+            "hypothesis provider context requires non-empty research_surfaces"
+        )
+    names: list[str] = []
+    for index, surface in enumerate(surfaces):
+        if not isinstance(surface, Mapping):
+            raise ValueError(
+                "hypothesis provider research surface must be a mapping at "
+                f"index {index}"
+            )
+        name = surface.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(
+                "hypothesis provider research surface requires a non-empty "
+                f"name at index {index}"
+            )
+        if name != name.strip():
+            raise ValueError(
+                "hypothesis provider research surface name must not contain "
+                f"leading or trailing whitespace at index {index}"
+            )
+        if name in names:
+            raise ValueError(
+                f"duplicate hypothesis provider research surface: {name}"
+            )
+        names.append(name)
+
+    tool = deepcopy(HYPOTHESIS_TOOL)
+    locus_schema = tool["input_schema"]["properties"]["change_locus"]
+    locus_schema["enum"] = list(names)
+    locus_schema["description"] = (
+        "Return exactly one declared research-surface name from this enum; "
+        "do not append a mechanism description."
+    )
+    return tool, tuple(names)
+
+
 __all__ = [
     "HYPOTHESIS_TOOL",
     "PATCH_TOOL",
+    "bind_hypothesis_tool_to_context",
 ]

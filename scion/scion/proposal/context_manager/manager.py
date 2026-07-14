@@ -222,9 +222,10 @@ class ContextManager:
             ),
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
-            "research_surfaces": [
-                _surface_projection(surface) for surface in visible_surfaces
-            ],
+            "research_surfaces": _hypothesis_surface_projections(
+                visible_surfaces,
+                problem_spec,
+            ),
             "available_actions": sorted(available_actions),
             "targetable_files": targetable_files,
             "champion_operators_code": champion_source,
@@ -479,6 +480,19 @@ def _surface_projection(surface: Any | None) -> dict[str, Any]:
         for key, value in projection.items()
         if value not in (None, "", [], {})
     }
+
+
+def _hypothesis_surface_projections(
+    surfaces: list[Any],
+    problem_spec: ProblemSpec,
+) -> list[dict[str, Any]]:
+    projections = [_surface_projection(surface) for surface in surfaces]
+    if projections:
+        return projections
+    return [
+        {"name": category, "kind": "operator"}
+        for category in problem_spec.operator_categories
+    ]
 
 
 def _champion_projection(champion: ChampionState) -> dict[str, Any]:

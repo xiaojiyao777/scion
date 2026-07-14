@@ -4,9 +4,13 @@ from pathlib import Path
 
 import pytest
 
+from scion.config.problem import ProblemSpec as LegacyProblemSpec, SearchSpace
 from scion.problem.bridge import legacy_problem_spec_from_v1
 from scion.problem.spec import ProblemSpecV1
+from scion.core.models import Branch, BranchState, ChampionState
 from scion.proposal.context.problem_adapter import _build_operator_interface_spec
+from scion.proposal.context_manager import ContextManager
+from scion.proposal.engine import build_prompt_turn_snapshot
 from scion.tests.unit.research_surface_helpers import _problem_payload
 
 
@@ -329,6 +333,52 @@ def test_problem_spec_without_research_surfaces_keeps_legacy_categories(
     assert spec.research_surfaces is None
     assert legacy.operator_categories == ["local"]
     assert legacy.research_surfaces == []
+
+
+def test_legacy_categories_bind_structured_hypothesis_surface_enum(
+    tmp_path: Path,
+) -> None:
+    operator_dir = tmp_path / "operators"
+    operator_dir.mkdir()
+    (operator_dir / "local.py").write_text("def improve(value):\n    return value\n")
+    legacy = LegacyProblemSpec(
+        name="legacy-demo",
+        root_dir=str(tmp_path),
+        operator_categories=["local"],
+        search_space=SearchSpace(
+            editable=["operators/*.py"],
+            frozen=["solver.py"],
+            import_whitelist=["math"],
+        ),
+    )
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="legacy-config",
+        code_snapshot_path=str(tmp_path),
+        code_snapshot_hash="legacy-code",
+    )
+    branch = Branch(
+        branch_id="legacy-surface-binding",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="legacy-code",
+    )
+
+    context = ContextManager().build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+    )
+    snapshot = build_prompt_turn_snapshot("hypothesis", context)
+
+    assert context["research_surfaces"] == [
+        {"name": "local", "kind": "operator"}
+    ]
+    assert snapshot.allowed_change_loci == ("local",)
+    assert snapshot.provider_tool["input_schema"]["properties"][
+        "change_locus"
+    ]["enum"] == ["local"]
 
 
 def test_problem_spec_rejects_unknown_research_surface_kind(tmp_path: Path) -> None:

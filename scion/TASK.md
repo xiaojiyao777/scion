@@ -178,14 +178,18 @@ steering, or launch a formal experiment from the transition worktree.
   Its chmod allowlist accepts only the exact generated command and rejects
   appended shell operations. That prepared-only root is superseded and must
   not be launched.
-- Commit `1978b426` contains that follow-up and is pushed. A distinct R3 CVRP
-  root is prepared from its clean detached runtime. Its 81-file identity,
-  runtime/run.sh anchors, secret hygiene, and guarded-wrapper readiness are
-  green without a live probe or provider call. Offline native first-H rendering
-  exposes only `solver_design`, 11 concrete algorithm files plus one declared
-  wildcard, and zero successor/target-intent/forced-targeting/mechanism-ranking,
-  telemetry-gate, candidate-cap, retry/backoff, truncation, or semantic-budget
-  matches. Independent prelaunch review reports P0/P1/P2=`0/0/0`.
+- Commit `1978b426` contains that follow-up and is pushed. Its distinct R3 CVRP
+  root launched once with green preflight/data identity and no retry. The sole H
+  proposed an algorithmically material capacity-feasible SWAP* neighborhood in
+  `local_search.py`, but its otherwise valid tool response appended mechanism
+  prose to `change_locus`. The generic provider schema allowed any non-empty
+  string while C2 required exact `solver_design`; C0/C1/C3 passed, then C2
+  rejected before C or solver evaluation. Treat this as a framework interface
+  mismatch, not an algorithm result or valid research rejection.
+- The current repair compiles provider-visible `research_surfaces[].name` into
+  a call-local tool enum before an attempt starts, binds parse-time exact
+  validation to the same tuple, and retains outer C2 as an independent
+  backstop. It does not normalize model output, retry, or relax Contract.
 - That continuation exposed one narrow postrun bug: current summary outcome
   counts were compared with cumulative copied-database counts across two
   campaign IDs. The experiment is valid; the current repair scopes integrity
@@ -281,12 +285,13 @@ The first CVRP control attempt produced no algorithm evidence: it failed before
 proposal generation on an incorrect external-data-root binding. No experiment
 is running, and automatic retry remains prohibited.
 
-The verified readiness follow-up is pushed and the new R3 root is prepared.
-The repair pins all 40 formal `.vrp`
-files, their 40 sibling `.sol` files, and the package canary in the prepared
-contract; the wrapper verifies the same identity before provider access and
-after campaign execution. The only remaining prelaunch blocker is explicit
-operator authorization to start this already-audited prepared root.
+The CVRP R3 root is terminal and must not be resumed or retried. It proves the
+agent can select a substantial solver mechanism, but also exposes a direct
+provider-schema/Contract mismatch that blocks it before code generation. The
+call-local enum repair is complete: the standard suite passes `1886 passed,
+1 skipped` in `499.32s`, compileall and `git diff --check` pass, and independent
+review reports P0/P1/P2 = 0. The current blocker is committing and pushing that
+audited repair before any new clean root is prepared.
 
 Preserve the excluded user-owned
 `scion/docs/v0.4-measurement-readiness.md` change and unrelated untracked
@@ -294,16 +299,15 @@ history.
 
 ## Immediate Queue
 
-1. Commit and push only the R3 prelaunch report plus compact status updates;
-   keep the root prepared-only.
-2. Launch the exact audited R3 root only after explicit operator authorization.
-   Supply the shared proxy key only in process environment; the wrapper's sole
-   live completion preflight must run before campaign initialization.
-3. Poll about every three minutes. Never retry, replace, resume, or silently
-   repair the run if it fails.
-4. After a terminal outcome, audit H/C receipts, solver pairs, lineage,
-   algorithmic materiality, runtime, and postrun readiness before making any
-   continuation or promotion decision.
+1. Stage, commit, and push only the intended call-local surface-enum
+   repair/tests/docs and the R3 terminal interface report.
+2. Keep the separate forced-governance wiring finding out of this minimal
+   unforced-control repair.
+3. Create a clean detached runtime and distinct R4 prepared root at that exact
+   commit. Do not resume or reuse R3 and do not launch R4 automatically.
+4. Reconfirm formal data identity, guarded-wrapper readiness, secret hygiene,
+   call-local `change_locus` enum, and native first-H context before requesting
+   explicit launch authorization.
 
 Do not close v0.4 merely because framework tests pass. Close it only after both
 formal controls show that the simplified agent performs useful research without

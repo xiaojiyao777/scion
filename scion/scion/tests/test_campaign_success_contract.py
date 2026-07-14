@@ -278,11 +278,11 @@ class TestContractFailure:
         assert cm._step_history[-1].decision is None
         assert cm._step_history[-1].protocol_result is None
 
-    def test_hypothesis_contract_fail_handled(self, tmp_path):
-        """Invalid hypothesis (empty change_locus) routes as contract failure."""
+    def test_hypothesis_locus_outside_call_enum_is_provider_invalid(self, tmp_path):
+        """An enum-external locus is rejected before publishing a hypothesis."""
         bad_hypothesis = {
             "hypothesis_text": "test",
-            "change_locus": "unknown_category",  # C2 will fail
+            "change_locus": "unknown_category",
             "action": "modify",
             "target_file": "operators/local_search.py",
             "predicted_direction": "improve",
@@ -295,9 +295,8 @@ class TestContractFailure:
         assert result.branch_id is not None
         assert result.decision is None
         records = cm._hyp_store.get_by_branch(result.branch_id)
-        assert len(records) == 1
-        assert records[0].status == "research_rejected"
-        assert result.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
+        assert records == []
+        assert result.execution_outcome is ExecutionOutcome.NOT_EVALUATED
 
     def test_contract_fail_next_tick_starts_fresh_candidate_same_branch(self, tmp_path):
         """An explicit next tick starts a fresh candidate on the same branch.

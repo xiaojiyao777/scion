@@ -26,6 +26,8 @@ class PromptTurnSnapshot:
     system_blocks: tuple[Mapping[str, Any], ...]
     user_prompt: str
     context_digest: str
+    provider_tool: Mapping[str, Any]
+    allowed_change_loci: tuple[str, ...] = ()
     authoritative_context_ref: str | None = None
     authoritative_context: ProposalContextSnapshot | None = field(
         default=None,

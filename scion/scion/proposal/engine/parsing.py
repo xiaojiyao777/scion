@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Sequence
 
 from pydantic import ValidationError
 
@@ -59,12 +59,23 @@ _PATCH_ADDITIONAL_CHANGE_FIELDS = frozenset(
 
 def _parse_hypothesis(
     raw: Dict[str, Any],
+    *,
+    allowed_change_loci: Sequence[str] | None = None,
 ) -> HypothesisProposal:
     """Convert a validated LLM response dict into a HypothesisProposal."""
     try:
         validated = HypothesisProposalInput(**dict(raw))
     except ValidationError as exc:
         raise ProposalValidationError(str(exc)) from exc
+    if (
+        allowed_change_loci is not None
+        and validated.change_locus not in allowed_change_loci
+    ):
+        raise ProposalValidationError(
+            "change_locus must exactly match one provider-visible research "
+            f"surface: {list(allowed_change_loci)}; got "
+            f"{validated.change_locus!r}"
+        )
     return HypothesisProposal(
         hypothesis_text=validated.hypothesis_text,
         change_locus=validated.change_locus,

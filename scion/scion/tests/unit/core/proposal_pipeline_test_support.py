@@ -42,7 +42,9 @@ class FakeProblemRuntime:
         return {
             "problem_summary": "fixture",
             "branch_id": kwargs["branch"].branch_id,
-            "research_surfaces": "",
+            "research_surfaces": [
+                {"name": "local_search", "kind": "operator"}
+            ],
             "champion_operators_code": "",
             "champion_stats": {},
         }

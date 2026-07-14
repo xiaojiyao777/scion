@@ -1084,6 +1084,37 @@ def test_invalid_hypothesis_context_fails_before_attempt_or_provider() -> None:
     assert registry.events == []
 
 
+def test_invalid_hypothesis_surface_binding_fails_before_attempt_or_provider() -> None:
+    registry = MemoryLineageRegistry()
+    creative = FakeCreative()
+    pipeline, branch, runtime, _failures, _balance = _pipeline(
+        creative=creative,
+        lineage_registry=registry,
+    )
+    runtime.build_hypothesis_context = lambda **_kwargs: {
+        "problem_summary": "invalid surface binding fixture",
+        "branch_id": branch.branch_id,
+        "research_surfaces": "local_search",
+        "champion_operators_code": "class Solver: pass",
+        "champion_stats": {},
+    }
+    routed: list[tuple[str, str]] = []
+    pipeline.handle_failure = lambda _branch, failure: routed.append(
+        (failure.category, failure.detail)
+    )
+
+    assert pipeline.generate_hypothesis(branch) == (None, None)
+
+    detail = pipeline.hypothesis_failure_details[branch.branch_id]
+    assert detail.startswith("proposal_context_validation_failed:ValueError:")
+    assert "non-empty research_surfaces" in detail
+    assert routed == [("infra", detail)]
+    assert creative.hypothesis_calls == 0
+    assert branch.branch_id not in pipeline.proposal_attempt_ids
+    assert branch.branch_id not in pipeline.proposal_attempt_refs
+    assert registry.events == []
+
+
 def test_invalid_code_context_clears_pending_but_preserves_approved_binding() -> None:
     registry = MemoryLineageRegistry()
     creative = ReceiptCreative()

@@ -40,6 +40,19 @@ def test_minimal_hypothesis_uses_the_single_parser_path():
     assert result.suggested_weight == 0.5
 
 
+def test_hypothesis_parser_rejects_descriptive_change_locus_suffix() -> None:
+    with pytest.raises(
+        ProposalValidationError,
+        match="must exactly match one provider-visible research surface",
+    ):
+        _parse_hypothesis(
+            _minimal_hypothesis(
+                change_locus="solver_design local-search/VNS neighborhood set",
+            ),
+            allowed_change_loci=("solver_design",),
+        )
+
+
 @pytest.mark.parametrize(
     "missing_field",
     ["hypothesis_text", "change_locus", "action", "predicted_direction", "target_weakness", "expected_effect"],

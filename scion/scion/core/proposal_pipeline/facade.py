@@ -239,6 +239,10 @@ class ProposalPipeline(ProposalRecordMixin):
                 "hypothesis",
                 context,
             )
+            prompt_snapshot = build_prompt_turn_snapshot(
+                "hypothesis",
+                authoritative_context,
+            )
         except (TypeError, ValueError) as exc:
             detail = f"proposal_context_validation_failed:{type(exc).__name__}:{exc}"
             self._direct_attempts.fail_integrity(
@@ -250,10 +254,6 @@ class ProposalPipeline(ProposalRecordMixin):
         self.governance_envelopes[bid] = authoritative_context.governance_envelope
         if not self._direct_attempts.require_receipt_api(branch, "hypothesis"):
             return None, None
-        prompt_snapshot = build_prompt_turn_snapshot(
-            "hypothesis",
-            authoritative_context,
-        )
         attempt_audit = self._direct_attempts.start_provider_call(
             branch=branch,
             champion=champ_snapshot,
@@ -450,6 +450,10 @@ class ProposalPipeline(ProposalRecordMixin):
         )
         try:
             authoritative_context = proposal_context_snapshot("code", context)
+            prompt_snapshot = build_prompt_turn_snapshot(
+                "code",
+                authoritative_context,
+            )
         except (TypeError, ValueError) as exc:
             detail = f"proposal_context_validation_failed:{type(exc).__name__}:{exc}"
             self._direct_attempts.fail_integrity(
@@ -459,10 +463,6 @@ class ProposalPipeline(ProposalRecordMixin):
             )
             return None
         result: PatchProposal | None = None
-        prompt_snapshot = build_prompt_turn_snapshot(
-            "code",
-            authoritative_context,
-        )
         attempt_audit = self._direct_attempts.start_provider_call(
             branch=branch,
             champion=champ_snapshot,

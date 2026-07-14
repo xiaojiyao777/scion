@@ -112,7 +112,7 @@ def _instrument_once(
     monkeypatch.setattr(owner, method_name, wrapped)
 
 
-def test_outer_contract_rejects_invalid_locus_before_code_and_verification(
+def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -183,45 +183,43 @@ def test_outer_contract_rejects_invalid_locus_before_code_and_verification(
 
     result = campaign.run_one_step()
 
-    assert result.reason == "hypothesis contract rejected"
-    assert result.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
-    assert result.execution_outcome_reason_code == "HYPOTHESIS_CONTRACT_REJECTED"
+    assert "must exactly match one provider-visible research surface" in result.reason
+    assert result.execution_outcome is ExecutionOutcome.NOT_EVALUATED
+    assert result.execution_outcome_reason_code == "PROPOSAL_RESPONSE_INVALID"
     assert result.decision is None
     assert llm.call_count == 1
-    assert counts["contract_hypothesis"] == 1
+    assert counts.get("contract_hypothesis", 0) == 0
     assert counts.get("verification", 0) == 0
     step = campaign._step_history[-1]
-    assert step.failure_stage == "hypothesis_contract"
+    assert step.failure_stage == "proposal_hypothesis"
     assert step.contract_passed is False
     assert step.verification_passed is False
-    assert step.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
-    assert step.execution_outcome_reason_code == "HYPOTHESIS_CONTRACT_REJECTED"
+    assert step.execution_outcome is ExecutionOutcome.NOT_EVALUATED
+    assert step.execution_outcome_reason_code == "PROPOSAL_RESPONSE_INVALID"
     assert step.decision is None
     assert step.protocol_result is None
-    assert "C2_change_locus" in (step.failure_detail or "")
+    assert "must exactly match one provider-visible research surface" in (
+        step.failure_detail or ""
+    )
     branch = campaign._branch_ctrl.get_branch(result.branch_id)
     assert "CONTRACT" not in branch.failure_codes
     records = campaign._hyp_store.get_by_branch(result.branch_id)
-    assert len(records) == 1
-    assert records[0].status == "research_rejected"
+    assert records == []
     outcome_events = [
         event
         for event in campaign._registry.query_by_branch(result.branch_id)
-        if event["execution_outcome"] == "research_rejected"
+        if event["execution_outcome"] == "not_evaluated"
     ]
     assert len(outcome_events) == 1
-    assert outcome_events[0]["event_kind"] == "contract_fail"
+    assert outcome_events[0]["event_kind"] == "proposal_execution_outcome"
     assert outcome_events[0]["decision"] is None
     durable = campaign._registry.get_latest_execution_outcome(
         branch_id=result.branch_id
     )
     assert durable is not None
-    assert durable["provenance"]["owner"] == "outer_contract"
-    assert durable["provenance"]["stage"] == "hypothesis_contract"
-    assert any(
-        check["name"] == "C0_governance_constraints"
-        for check in durable["provenance"]["contract_checks"]
-    )
+    assert durable["reason_code"] == "PROPOSAL_RESPONSE_INVALID"
+    assert durable["provenance"]["owner"] == "direct_proposal_provider"
+    assert durable["provenance"]["stage"] == "proposal_hypothesis"
 
 
 def test_real_warehouse_campaign_direct_v3_outer_path_is_lossless(
