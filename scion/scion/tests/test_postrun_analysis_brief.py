@@ -29,6 +29,7 @@ def _evaluated_campaign_summary(
     """Build a modern summary with one explicit evaluated execution step."""
     return {
         **payload,
+        "campaign_id": "campaign-1",
         "execution_outcome_counts": {
             "evaluated": 1,
             "research_rejected": 0,

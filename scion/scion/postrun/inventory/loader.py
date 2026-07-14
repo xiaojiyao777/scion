@@ -175,8 +175,16 @@ def build_inventory(
         pre_campaign_infra_failure_keys=pre_campaign_infra_failure_keys,
     )
     db_path = campaign_dir / "scion.db"
+    current_campaign_id = _first_string(
+        summary,
+        campaign_status,
+        campaign_run_status,
+        keys=("campaign_id",),
+    )
     db_inventory = (
-        _read_db_inventory(db_path) if db_path.exists() else _empty_db_inventory()
+        _read_db_inventory(db_path, current_campaign_id=current_campaign_id)
+        if db_path.exists()
+        else _empty_db_inventory()
     )
     proposal_runtime = _proposal_runtime_inventory(
         prepared_manifest=prepared_manifest,
@@ -222,12 +230,14 @@ def build_inventory(
     if _launch_root_without_current_run(lifecycle):
         current_branches: list[dict[str, Any]] = []
         current_events = _empty_events()
+        execution_events = _empty_events(scope_status="identity_unavailable")
         current_hypotheses = _empty_hypotheses()
         current_champions = _empty_champions()
         current_llm_traces = _empty_llm_trace_summary()
     else:
         current_branches = branches
         current_events = db_inventory["events"]
+        execution_events = db_inventory["current_events"]
         current_hypotheses = db_inventory["hypotheses"]
         current_champions = db_inventory["champions"]
         current_llm_traces = _llm_trace_summary(llm_traces)
@@ -236,7 +246,7 @@ def build_inventory(
         campaign_run_status=campaign_run_status,
         campaign_status=campaign_status,
         summary=summary,
-        events=current_events,
+        events=execution_events,
     )
 
     return {
@@ -310,6 +320,7 @@ def _execution_outcomes_inventory(
     """Project typed outcomes without inferring them from status prose."""
     source = "unknown_historical"
     evidence: dict[str, Any] | None = None
+    summary_outcome_projection_explicit = False
     for source_name, document in (
         ("campaign_summary", summary),
         ("campaign_status", campaign_status),
@@ -318,6 +329,7 @@ def _execution_outcomes_inventory(
         payload = _mapping_or_empty(document)
         counts = payload.get("execution_outcome_counts")
         if isinstance(counts, Mapping):
+            summary_outcome_projection_explicit = True
             evidence = execution_outcome_evidence_from_counts(
                 counts,
                 last_execution_outcome=(
@@ -337,6 +349,10 @@ def _execution_outcomes_inventory(
         steps = payload.get("steps")
         if isinstance(steps, list) and steps:
             evidence = execution_outcome_evidence(steps)
+            summary_outcome_projection_explicit = (
+                evidence.get("evaluated_count", 0) > 0
+                or evidence.get("non_evaluated_count", 0) > 0
+            )
             source = f"{source_name}.steps"
             break
 
@@ -351,10 +367,19 @@ def _execution_outcomes_inventory(
         evidence = execution_outcome_evidence_from_counts(None)
 
     summary_counts = _mapping_or_empty(evidence.get("execution_outcome_counts"))
-    comparable = (
-        lineage_explicit_count > 0
-        and sum(_safe_nonnegative_int(value) for value in summary_counts.values()) > 0
+    summary_explicit_count = sum(
+        _safe_nonnegative_int(value) for value in summary_counts.values()
     )
+    lineage_scope_status = str(events.get("scope_status") or "database")
+    if lineage_scope_status == "campaign":
+        comparable = (
+            summary_outcome_projection_explicit
+            and events.get("execution_outcome_schema_available") is True
+        )
+    elif lineage_scope_status == "database":
+        comparable = lineage_explicit_count > 0 and summary_explicit_count > 0
+    else:
+        comparable = False
     counts_consistent = (
         all(
             _safe_nonnegative_int(summary_counts.get(key))
@@ -381,7 +406,12 @@ def _execution_outcomes_inventory(
     return {
         **evidence,
         "source": source,
+        "summary_outcome_projection_explicit": (
+            summary_outcome_projection_explicit
+        ),
         "lineage": {
+            "scope_status": lineage_scope_status,
+            "campaign_id": events.get("campaign_id"),
             "schema_available": events.get(
                 "execution_outcome_schema_available"
             ) is True,

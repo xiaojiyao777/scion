@@ -131,8 +131,29 @@ steering, or launch a formal experiment from the transition worktree.
 
 ## Integrated Evidence
 
-- Commit `436b6e12` contains the direct proposal-context and postrun repair,
-  passed the full suite (`1848 passed, 1 skipped`), and is pushed on
+- Commit `d57d6cd6` contains the operational warehouse-spec parity, exact H6
+  source contract, and decision-identity repair; it passed the full suite
+  (`1852 passed, 1 skipped`) and is pushed on `v0.4-dev`.
+- Its clean formal warehouse R3 confirmation completed two evaluated rounds on
+  one branch with exactly two H and two C calls and no retry. Actual H/C
+  contexts contained none of the removed telemetry-counter, telemetry-guard,
+  validation-transfer, top-k/max-candidate, runtime-budget-strategy, retry, or
+  truncation instructions. Both rounds passed Contract, Verification, Canary,
+  and postrun readiness.
+- R3 round 2 produced a positive directed-merge signal: initial case W/L/T
+  `3/0/3`, pair `8/1/3`, total-cost median `+775`, CI `[150, 3000]`. Scion
+  correctly chose `expand_screening`.
+- An eval-only continuation reused the exact candidate without another
+  provider call and expanded to 14 cases / 28 pairs: case W/L/T `7/0/7`, pair
+  `19/2/7`, total-cost median `+625`, CI `[300, 1600]`, fresh runtime ratio
+  `0.7004`, Protocol pass, Decision `queue_validate`. The branch is now
+  `ready_validate`; no promotion occurred.
+- That continuation exposed one narrow postrun bug: current summary outcome
+  counts were compared with cumulative copied-database counts across two
+  campaign IDs. The experiment is valid; the current repair scopes integrity
+  to the summary campaign while retaining cumulative audit counts.
+- Commit `436b6e12` contains the preceding direct proposal-context and postrun
+  repair, passed the full suite (`1848 passed, 1 skipped`), and is pushed on
   `v0.4-dev`.
 - Its clean formal warehouse R2 control completed two evaluated rounds on one
   branch with exactly two H and two C calls and no retry. Both substantive new
@@ -217,55 +238,53 @@ steering, or launch a formal experiment from the transition worktree.
 
 ## Current Blocker
 
-The warehouse R2 campaign at `436b6e12` is complete and valid, but its actual C
-trace proves that the intended prompt-noise removal did not reach the formal
-launcher: the package spec was changed while the operational top-level spec
-remained stale. Both generated candidates also used the wrong H6 amount-limit
-key format because the exact oracle key was not provider-visible. CVRP must not
-start until those source-contract defects and the postrun correlation false
-negative are repaired and tested.
+The formal R3 confirmation is complete and green. Its same-candidate expanded
+screening continuation is scientifically valid and has earned validation, but
+its original outer wrapper is red because postrun compared this invocation's
+one evaluated outcome with three cumulative outcomes in the copied database.
 
-The repair is intentionally narrow:
+The current repair is intentionally narrow:
 
-- retain the top-level warehouse spec as the operational launch owner and make
-  its resolved semantics match the package mirror;
-- enforce full resolved-spec semantic parity so a future edit cannot silently
-  miss the formal launcher;
-- expose only the exact H6 key format needed for correct feasibility;
-- persist campaign/hypothesis/stage on future decision projections;
-- correlate only identity-complete decision rows, while keeping explicit
-  non-evaluated outcomes fail-closed and reporting legacy identity-less rows as
-  a diagnostic count.
+- preserve cumulative database event counts as resume/audit history;
+- resolve the current invocation identity from `campaign_summary.json` (then
+  current status fallbacks);
+- scope execution-outcome and decision correlation to that campaign ID;
+- remain fail-closed when scoped identity exists but its durable outcome is
+  absent;
+- mark legacy schemas without usable campaign identity as incomparable rather
+  than comparing mixed history.
 
-Rebuilding R2's inventory with this repair yields evaluated=`2`,
-`decision_rows_with_non_evaluated_outcome=0`,
-`decision_rows_without_correlation_identity=2`, and consistency=`consistent`.
-Its original root wrapper markers remain immutable evidence of the historical
-postrun false failure. Do not restart, reuse, or rewrite that root.
+The acceptance gate itself is unchanged. Against the real continuation root,
+the repaired inventory reports cumulative evaluated=`3`, scoped evaluated=`1`,
+`summary_lineage_counts_comparable=true`, and
+`summary_lineage_counts_consistent=true`.
 
-No experiment is running. The source worktree still contains the excluded
-user-owned `scion/docs/v0.4-measurement-readiness.md` change and unrelated
-untracked history; they must remain untouched and must not enter the repair
-commit.
+The final repair suite passes `1859 passed, 1 skipped` in `494.65s`; focused
+postrun/lineage coverage, compileall, `git diff --check`, and independent
+read-only review also pass with P0=0/P1=0/P2=0.
+
+No experiment is running. Do not start validation until this repair and the R3
+report pass the full suite and are committed. Preserve the excluded user-owned
+`scion/docs/v0.4-measurement-readiness.md` change and unrelated untracked
+history.
 
 ## Immediate Queue
 
-1. Complete the final diff/exclusion review. The focused shard, full suite,
-   compileall, and `git diff --check` already pass; keep the user/history files
-   excluded.
-2. Stage, commit, and push only the reviewed framework repair, R2 report, and
-   operating-doc updates after explicit authorization.
-3. From that exact commit, create an isolated detached clean runtime worktree
-   and run guarded-wrapper readiness. Confirm from the prepared prompt artifact
-   that the operational warehouse spec no longer injects telemetry counters,
-   top-k/max-candidate obligations, validation-transfer analysis, or a runtime
-   budget strategy. Do not send a separate live completion probe.
-4. Run one fresh two-round warehouse confirmation before CVRP. It must retain
-   one branch across a screening continuation, exactly one H/C pair per round,
-   and a green postrun wrapper. Judge the algorithm on full-solver outcomes,
-   not local accepted-move counters.
-5. Only after that repaired-context confirmation, run one clean,
-   non-target-bound CVRP campaign as the second problem-family control.
+1. Complete the scoped-lineage patch review, full suite, compileall, and
+   exclusion check.
+2. Stage, commit, and push only the reviewed postrun repair, tests, R3 report,
+   `TASK.md`, and current-state update under the user's existing authorization.
+3. Create an isolated detached clean runtime at that exact commit. Prepare one
+   diagnostic/non-formal continuation from the expanded campaign with
+   `requested_rounds=1`; this is an explicit invocation scope, not a semantic
+   budget.
+4. Run the same candidate on the preregistered validation split. The scheduler
+   must use the eval-only `READY_VALIDATE` path, issue no provider call, preserve
+   the candidate/branch identity, and finish with a green postrun wrapper.
+5. Run frozen evaluation only if the deterministic validation decision queues
+   it. Do not promote or start CVRP from screening evidence alone. After the
+   warehouse lifecycle is resolved, run one clean, non-target-bound CVRP
+   campaign as the second problem-family control.
 
 Do not close v0.4 merely because framework tests pass. Close it only after both
 formal controls show that the simplified agent performs useful research without
@@ -306,3 +325,5 @@ reintroducing governance noise.
   `scion/docs/experiments/v0.4/v04-warehouse-direct-control-b1464171-postrun-20260713.md`
 - Formal warehouse R2 `436b6e12` postrun:
   `scion/docs/experiments/v0.4/v04-warehouse-direct-control-r2-436b6e12-postrun-20260714.md`
+- Formal warehouse R3 plus expanded screening:
+  `scion/docs/experiments/v0.4/v04-warehouse-direct-context-confirm-r3-d57d6cd6-postrun-20260714.md`

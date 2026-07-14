@@ -5,189 +5,190 @@
 This is the operational resume point. Read `scion/TASK.md` first and use
 `scion/design/scion-architecture-v3.md` as the architecture tie-breaker.
 
-No experiment is running. The latest formal warehouse campaign completed two
-evaluated rounds and proved that the direct runtime can perform substantial,
-iterative algorithm development. Neither candidate improved the solver. Before
-CVRP, three experiment-proven framework defects are being repaired: the formal
-launcher consumed a stale problem-spec copy, postrun falsely rejected
-identity-less duplicate decision rows, and the exact warehouse H6 key format
-was absent from provider context.
+No experiment is running. The clean formal warehouse R3 confirmation is
+complete and green. Its round-2 candidate then passed an eval-only expanded
+screen on the same branch without another provider call and is now
+`ready_validate`. Before validation, land the narrow postrun fix that scopes
+current-invocation outcome integrity by campaign ID.
 
 ## Current Decision
 
-Commit `436b6e12` is pushed on `v0.4-dev`. It is the source commit for the
-completed R2 warehouse control, not the next runtime baseline.
+Commit `d57d6cd6` is pushed on `v0.4-dev` and is the exact runtime commit for
+R3. R3 proves that the repaired prompt/source contract reached the operational
+formal launcher and that the direct runtime can produce a promising algorithm
+signal without the old governance noise.
 
-Do not launch CVRP or another formal warehouse run from `436b6e12`. First land
-and fully test the narrow spec-owner/parity, lineage-correlation, and H6 prompt
-repair. Then prepare a fresh detached clean worktree and run a two-round
-warehouse confirmation whose actual H/C trace proves the corrected context is
-visible. CVRP follows only after that confirmation.
+The same-candidate expanded screen earned `queue_validate`; it did not earn
+promotion. Do not generate another H/C pair, start a new warehouse hypothesis,
+or launch CVRP yet. First commit the postrun scope repair, then reopen the
+expanded campaign from a clean detached runtime and run its eval-only
+validation step.
 
-Do not resume successor55, create successor56, reuse an old warehouse root, or
-bypass `git_runtime_worktree_clean`.
+## Run Roots
 
-## Latest Formal Control
+Formal fresh R3 root:
 
-Run root:
+`/home/clawd/research/scion-experiments/v04-warehouse-direct-repaired-context-confirm-r3-2r-gpt56sol-20260714T135820Z-claw`
 
-`/home/clawd/research/scion-experiments/v04-warehouse-direct-control-r2-2r-gpt56sol-20260714T120937Z-claw`
+Expanded-screening continuation root:
 
-Runtime facts:
+`/home/clawd/research/scion-experiments/v04-warehouse-r3-same-candidate-expand-1r-gpt56sol-20260714T142050Z-claw`
+
+The first root is the fresh formal confirmation. The second is a copied-state,
+diagnostic/non-formal continuation used only to evaluate the exact same
+candidate. Do not blur their wrapper status or evidence scope.
+
+## Formal R3 Evidence
 
 - model: `gpt-5.6-sol`;
-- prepared/runtime commit: `436b6e12`;
-- guarded readiness: passed with no blocker;
+- prepared/runtime commit: `d57d6cd6`;
+- guarded readiness: passed without a separate live probe;
 - preflight: authenticated HTTP 200, non-empty response;
 - requested/evaluated rounds: `2/2`;
 - durable provider calls: H=`2`, C=`2`, total=`4`;
 - retries or replacement attempts: `0`;
-- branch count: one active research branch across both rounds;
-- both candidates: Contract pass, Verification pass, Canary pass, `20/20`
-  valid screening pairs;
-- campaign validity: `valid`;
-- campaign wrapper exit: `0`;
-- original outer wrapper effective exit: `64` only because postrun produced a
-  false `execution_outcome_integrity` failure.
+- one branch across both rounds:
+  `52b0b193-7bc3-469c-97a2-216b494b4e4a`;
+- both candidates: Contract pass, Verification pass, Canary pass;
+- campaign and outer wrapper: green;
+- postrun required/optional checks: green;
+- decision/outcome identity: complete and consistent;
+- champion: version 1, unchanged.
+
+Actual H/C contexts contained none of the removed telemetry-counter,
+telemetry-guard, validation-transfer, top-k/max-candidate,
+runtime-budget-strategy, retry, or truncation text. H2 received round 1's
+canonical result; C2 received its verified current branch source.
 
 The run used no Scion prompt/session/tool/file/item/token budget, semantic
-termination budget, or truncation. The protocol's 30-second solver time limit
-remains a scientific subprocess fact.
+termination budget, or truncation. The 30-second solver time limit is a
+scientific subprocess fact.
 
-## Algorithm Results
+## Algorithm Result
 
 ### Round 1
 
-The agent created a 373-line `subcategory_consolidation.py` implementing a
-bounded best-improvement subcategory ejection/repacking search.
+The agent replaced `operators/destroy_rebuild.py` with a subcategory-focused
+beam destroy/rebuild search.
 
-- case W/L/T: `1/1/8`, win rate `0.10`;
-- pair W/L/T: `7/8/5`;
-- subcategory-split delta: always `0`;
-- total-cost median delta: `+50`, CI `[-325, 250]`;
-- runtime median ratio: `0.9254`, delta `-194 ms`;
-- Decision: `continue_explore / SCREENING_FAIL_WIN_RATE`.
-
-The operator reported many accepted local moves and large summed local cost
-reductions, but the final solver output did not improve. Local acceptance is
-not causal evidence of better global search.
-
-### Round 2
-
-The same branch received round 1's canonical experiment result and verified
-current source. The agent created a 320-line `cost_neutral_repack.py`
-implementing bounded three-vehicle repartition.
-
-- C SourceLedger carried the round-1 operator as
-  `branch_history_current/full_current` with its digest;
-- case W/L/T: `0/3/7`, win rate `0.00`;
-- pair W/L/T: `5/9/6`;
-- subcategory-split delta: always `0`;
-- total-cost median delta: `-150`, CI `[-2500, 400]`;
-- runtime median ratio: `2.2983`, delta `+3373 ms`;
-- runtime regression rate: `0.85`, max elapsed `30115 ms`;
+- case W/L/T: `2/2/2`;
+- pair W/L/T: `5/5/2`;
+- primary `subcategory_splits` delta: always `0`;
+- total-cost median delta: `-1150`, CI `[-10175, 550]`;
+- runtime ratio: `3.2567`;
 - Decision: `continue_explore / RUNTIME_REGRESSION`.
 
-This was not a promising algorithm blocked only by a heavy runtime gate. It
-also won no case and lost more seed pairs than it won. The likely scientific
-bottleneck is operator opportunity cost and whole-search trajectory impact:
-expensive locally improving operators can starve useful existing operators or
-change the seeded trajectory adversely.
+### Round 2 initial screen
 
-## Experiment-Proven Framework Defects
+The same branch then replaced `operators/merge_vehicles.py` with a directed
+best-of-k vehicle merge. The H6 lookup key matches the oracle exactly:
+`f"{destination_country},{ship_method}"`.
 
-### Operational problem-spec drift
+- case W/L/T: `3/0/3`;
+- pair W/L/T: `8/1/3`;
+- primary delta: always `0`;
+- total-cost median delta: `+775`, CI `[150, 3000]`;
+- statistical status: positive;
+- Decision: `expand_screening`.
 
-The previous repair edited
-`scion/scion/problems/warehouse_delivery/problem-v1.yaml`, but both the formal
-launcher and warehouse prompt bridge prefer
-`scion/problems/warehouse_delivery/problem-v1.yaml`. The actual round-2 C trace
-still contained activation/effect counter requests, telemetry-guard language,
-validation-transfer analysis, top-k/max-candidate rules, and runtime-budget
-strategy. The generated code followed that noise.
+### Same-candidate expanded screen
 
-The repair keeps the top-level spec as the operational launch owner, aligns its
-resolved semantics with the package mirror, and adds full semantic parity
-coverage. Changing the launch owner and every prompt-bridge path is out
-of scope for this experiment repair.
+The continuation used the scheduler's eval-only path. Trace count remained
+four, so there was no new H/C call.
 
-### Postrun decision correlation false negative
+- evaluated invocation rounds: `1/1`;
+- cases / pairs: `14 / 28`;
+- valid / failed pairs: `28 / 0`;
+- case W/L/T: `7/0/7`;
+- pair W/L/T: `19/2/7`;
+- primary median/CI: `0 / [0, 0]`;
+- total-cost median delta: `+625`, CI `[300, 1600]`;
+- fresh runtime ratio: `0.7004`, confidence high;
+- runtime delta: `-279 ms`, regression rate `0.4286`;
+- Protocol: pass;
+- Decision: `queue_validate`;
+- branch state: `ready_validate`;
+- screening expansion count: `1`.
 
-The R2 database has two exact evaluated outcome rows and identity-complete
-experiment/scheduler decisions. `LineageRegistry.record_decision` also wrote two
-duplicate branch-only decision projections with NULL campaign/hypothesis/stage.
-The original SQL checked only whether identity columns existed in the table and
-therefore treated those legacy rows as failed outcome correlations.
+This is the first strong warehouse signal, but attribution is incomplete. The
+branch still contains round 1's slower destroy/rebuild change, both changes
+alter RNG consumption, and current artifacts have no direct operator
+call/acceptance/causal-effect evidence. `_PAIR_LIMIT=24` also slices only after
+full directed `O(V^2)` pair enumeration. Six larger candidate pairs reached
+about 30 seconds even though the fresh median was faster than champion.
 
-The repair persists full identity on future decision projections. Postrun now:
+All production screening, validation, frozen, and canary fixtures have empty
+`amount_limits`, so the corrected H6 code path is not experimentally exercised.
+Validation does contain many locked orders and will exercise that separate
+feasibility rule. The available validation surface is five cases times three
+seeds (`15` pairs); locked-order counts are `12/49/43/15/58`.
 
-- fails any decision row that explicitly carries a non-evaluated outcome;
-- requires an evaluated correlation only for decision rows with complete
-  campaign/branch/hypothesis identity;
-- counts legacy incomplete projections separately as
-  `decision_rows_without_correlation_identity`.
+## Resume-Postrun False Failure
 
-The rebuilt R2 inventory reports evaluated=`2`, consistency=`consistent`,
-non-evaluated decision rows=`0`, and identity-less diagnostic rows=`2`.
-`execution_outcome_integrity` passes. Strict current-run readiness still fails
-only on immutable historical outer-wrapper/postrun-failed markers, so the old
-root remains evidence rather than a reusable runtime.
+The expanded campaign is valid and its campaign wrapper exited `0`, but the
+original outer wrapper exited `64` on
+`summary_lineage_outcome_counts_mismatch`.
 
-### H6 source contract
+The copied database contains:
 
-Both generated candidates used `ship_method + "|" + destination_country` for
-amount-limit lookup. The oracle uses
-`f"{destination_country},{ship_method}"`. Screening data did not expose the
-mismatch strongly enough to fail Verification. The exact key format is now
-included once in the concise problem/operator interface.
+- source campaign `acbb5338-...`: two evaluated outcomes;
+- current campaign `94d52219-...`: one evaluated outcome;
+- cumulative total: three evaluated outcomes.
 
-## Repair Validation Status
+Postrun compared the current summary count `1` with cumulative count `3`. The
+repair preserves cumulative top-level event audit counts but uses the current
+summary/status campaign ID for execution-outcome and decision-correlation
+integrity. If current identity exists and its durable outcome is absent, the
+gate still fails closed. If a legacy schema cannot establish campaign scope,
+the counts are marked incomparable rather than mixed.
 
-Completed so far:
+Current-source verification against the real root now reports:
 
-- focused problem-guidance and problem-bridge regression: `13 passed`;
-- complete affected lineage/postrun/launcher shard: `206 passed`;
-- final collection/full Scion suite: `1853` tests collected,
-  `1852 passed, 1 skipped` in `492.99s`;
-- compileall and `git diff --check`: passed;
-- a read-only current-source postrun check against the R2 root confirms
-  `execution_outcome_integrity=ok` and only the immutable wrapper-marker checks
-  remain failed.
+- cumulative evaluated: `3`;
+- scoped campaign: `94d52219-a51d-4215-ada5-e5f98ea72c93`;
+- scoped evaluated: `1`;
+- comparable: `true`;
+- consistent: `true`;
+- decision/outcome consistency: `consistent`.
 
-Still required before commit/runtime preparation:
-
-- focused diff review and exclusion check.
+Focused postrun/lineage coverage passes, the full Scion suite passes
+`1859 passed, 1 skipped` in `494.65s`, and compileall plus
+`git diff --check` pass.
 
 ## Worktree State
 
-- branch: `v0.4-dev`;
-- `436b6e12` has been committed and pushed;
-- the source worktree contains the new, uncommitted framework repair plus this
-  report and operating-doc updates;
+- branch: `v0.4-dev` at pushed `d57d6cd6`;
+- intended changes: postrun campaign-scope repair, regression tests, R3 report,
+  `TASK.md`, and this file;
 - `scion/docs/v0.4-measurement-readiness.md` is a pre-existing user-owned
   tracked change and must remain excluded;
 - unrelated untracked historical/future documents must remain excluded;
-- the source worktree must not host a formal run.
+- do not run validation from this dirty source worktree.
 
 ## Resume Actions
 
-1. Complete the final read-only audit and exclusion review; the affected shard,
-   full suite, compileall, and diff checks already pass.
-2. Stage only the spec/parity, lineage/postrun, H6 interface, R2
-   report, `TASK.md`, and this current-state file after explicit authorization.
-   Preserve all excluded user/history files.
-3. Commit and push the reviewed repair after authorization.
-4. Create a fresh detached clean worktree at that exact commit. Prepare a new
-   warehouse root and require guarded-wrapper readiness with no separate live
-   probe.
-5. Before launch, inspect the prepared provider context and prove that old
-   telemetry-counter, telemetry-guard, validation-transfer, top-k/
-   max-candidate, and runtime-budget strategy text is absent.
-6. After explicit operator approval, launch one two-round warehouse
-   confirmation. Poll observationally at about three-minute intervals and
-   never schedule a retry.
-7. Run one clean, open, non-target-bound CVRP control only after the repaired
-   warehouse confirmation is executable and the outer wrapper is green.
+1. Finish the full suite, compileall, diff/exclusion review, and independent
+   read-only patch audit.
+2. Stage, commit, and push only the intended repair/report/operating-doc files
+   under the user's existing authorization.
+3. Create a detached clean runtime at the exact new commit.
+4. Prepare one diagnostic/non-formal continuation from the expanded campaign
+   with `requested_rounds=1`. This is explicit invocation scope, not a semantic
+   budget.
+5. Confirm prelaunch state is `ready_validate`, trace count remains four, no
+   provider call is scheduled, current code hash is
+   `b214e9e18fcbf86c5b58ae58aed1be0db1cfd1daf57f3e874bda6bbe8c42d069`,
+   and the cumulative workspace retains destroy/rebuild digest
+   `4910ad450fb8bf8a876b0d3287ce9322e5600a4a87e156e95e36b4ea1a22cc36`
+   plus merge digest
+   `6e251c9f5bba4562bc2893cc4d56e10c9e74fa9874a2afacb0fa9428f144dcd5`
+   and registry digest
+   `4a3f8c737bb02cd3b87230ae4dad4a758287e0fef3ffb82e810a3f0592c212f1`.
+6. Launch the eval-only validation step with `SCION_SHARED_PROXY_KEY` supplied
+   only by the process environment; do not persist its value. Poll
+   observationally about every three minutes and never schedule a retry.
+7. Run frozen evaluation only if validation deterministically queues it. Do not
+   promote or start CVRP from screening evidence alone.
 
 ## Runner Notes
 
@@ -195,10 +196,10 @@ Server `claw`:
 
 - repo: `/home/clawd/research/or-autoresearch-agent`;
 - Python: `/home/clawd/miniconda3/envs/claw/bin/python`;
-- use for focused tests and one formal run at a time.
+- use for focused tests and one experiment at a time.
 
-WSL `scion` is reserved for large/concurrent validation after a fresh
-connectivity and preflight check.
+WSL `scion` is reserved for large/concurrent work after a fresh connectivity
+and preflight check.
 
 ## Pointers
 
@@ -208,9 +209,7 @@ connectivity and preflight check.
   `scion/design/scion-architecture-v3-v0.4-direct-runtime-addendum.md`
 - Main audit:
   `scion/reports/v04-v3-runtime-and-research-effectiveness-audit-20260712.md`
-- Successor55 characterization:
-  `scion/docs/experiments/v0.4/v04-cvrp-successor55-bounded-elite-solution-pool-postrun-20260712.md`
-- Warehouse R1 control:
-  `scion/docs/experiments/v0.4/v04-warehouse-direct-control-b1464171-postrun-20260713.md`
 - Warehouse R2 control:
   `scion/docs/experiments/v0.4/v04-warehouse-direct-control-r2-436b6e12-postrun-20260714.md`
+- Warehouse R3 plus expanded screening:
+  `scion/docs/experiments/v0.4/v04-warehouse-direct-context-confirm-r3-d57d6cd6-postrun-20260714.md`

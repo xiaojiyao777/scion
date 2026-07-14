@@ -334,6 +334,211 @@ def test_identityless_explicit_non_evaluated_decision_fails_closed() -> None:
     assert events["decision_outcome_consistency_status"] == "invalid"
 
 
+def test_resumed_lineage_comparison_uses_current_campaign_scope() -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE experiment_events ("
+        "campaign_id TEXT, branch_id TEXT, hypothesis_id TEXT, "
+        "event_kind TEXT, stage TEXT, decision TEXT, execution_outcome TEXT)"
+    )
+    conn.executemany(
+        "INSERT INTO experiment_events VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+            ("old", "b1", "h1", "outcome", "screening", None, "evaluated"),
+            ("old", "b1", "h2", "outcome", "screening", None, "evaluated"),
+            (
+                "current",
+                "b1",
+                "h2",
+                "outcome",
+                "screening",
+                None,
+                "evaluated",
+            ),
+            ("current", "b1", "h2", "decision", "screening", "keep", None),
+        ],
+    )
+
+    cumulative_events = _events(conn)
+    current_events = _events(
+        conn,
+        campaign_id="current",
+        require_campaign_scope=True,
+    )
+    outcomes = _execution_outcomes_inventory(
+        campaign_run_status={},
+        campaign_status={},
+        summary={
+            "campaign_id": "current",
+            "execution_outcome_counts": _all_outcome_counts(evaluated=1),
+            "steps": [
+                {
+                    "branch_id": "b1",
+                    "execution_outcome": "evaluated",
+                    "decision": "keep",
+                }
+            ],
+        },
+        events=current_events,
+    )
+    status, detail = _execution_outcome_integrity(
+        {"execution_outcomes": outcomes},
+        {"execution_outcomes": outcomes},
+    )
+
+    assert cumulative_events["by_execution_outcome"] == {"evaluated": 3}
+    assert current_events["scope_status"] == "campaign"
+    assert current_events["campaign_id"] == "current"
+    assert current_events["by_execution_outcome"] == {"evaluated": 1}
+    assert outcomes["summary_lineage_counts_comparable"] is True
+    assert outcomes["summary_lineage_counts_consistent"] is True
+    assert status == "ok"
+    assert detail["failures"] == []
+
+
+def test_current_campaign_scope_with_missing_lineage_outcome_fails_closed() -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE experiment_events ("
+        "campaign_id TEXT, branch_id TEXT, hypothesis_id TEXT, "
+        "event_kind TEXT, stage TEXT, decision TEXT, execution_outcome TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO experiment_events VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("old", "b1", "h1", "outcome", "screening", None, "evaluated"),
+    )
+    current_events = _events(
+        conn,
+        campaign_id="current",
+        require_campaign_scope=True,
+    )
+    outcomes = _execution_outcomes_inventory(
+        campaign_run_status={},
+        campaign_status={},
+        summary={
+            "campaign_id": "current",
+            "execution_outcome_counts": _all_outcome_counts(evaluated=1),
+            "steps": [{"execution_outcome": "evaluated"}],
+        },
+        events=current_events,
+    )
+    status, detail = _execution_outcome_integrity(
+        {"execution_outcomes": outcomes},
+        {"execution_outcomes": outcomes},
+    )
+
+    assert current_events["scope_status"] == "campaign"
+    assert current_events["explicit_execution_outcome_count"] == 0
+    assert outcomes["summary_lineage_counts_comparable"] is True
+    assert outcomes["summary_lineage_counts_consistent"] is False
+    assert status == "failed"
+    assert "summary_lineage_outcome_counts_mismatch" in detail["failures"]
+
+
+def test_explicit_zero_summary_counts_do_not_hide_scoped_lineage_outcome() -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE experiment_events ("
+        "campaign_id TEXT, branch_id TEXT, hypothesis_id TEXT, "
+        "event_kind TEXT, stage TEXT, decision TEXT, execution_outcome TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO experiment_events VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            "current",
+            "b1",
+            "h1",
+            "outcome",
+            "screening",
+            None,
+            "resource_exhausted",
+        ),
+    )
+    current_events = _events(
+        conn,
+        campaign_id="current",
+        require_campaign_scope=True,
+    )
+    outcomes = _execution_outcomes_inventory(
+        campaign_run_status={},
+        campaign_status={},
+        summary={
+            "campaign_id": "current",
+            "execution_outcome_counts": _all_outcome_counts(),
+        },
+        events=current_events,
+    )
+    status, detail = _execution_outcome_integrity(
+        {"execution_outcomes": outcomes},
+        {"execution_outcomes": outcomes},
+    )
+
+    assert outcomes["summary_outcome_projection_explicit"] is True
+    assert outcomes["summary_lineage_counts_comparable"] is True
+    assert outcomes["summary_lineage_counts_consistent"] is False
+    assert status == "failed"
+    assert "summary_lineage_outcome_counts_mismatch" in detail["failures"]
+
+
+def test_scoped_decision_without_outcome_cannot_borrow_old_campaign_outcome() -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE experiment_events ("
+        "campaign_id TEXT, branch_id TEXT, hypothesis_id TEXT, "
+        "event_kind TEXT, stage TEXT, decision TEXT, execution_outcome TEXT)"
+    )
+    conn.executemany(
+        "INSERT INTO experiment_events VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+            ("old", "b1", "h1", "outcome", "screening", None, "evaluated"),
+            ("current", "b1", "h1", "decision", "screening", "keep", None),
+        ],
+    )
+
+    current_events = _events(
+        conn,
+        campaign_id="current",
+        require_campaign_scope=True,
+    )
+
+    assert current_events["explicit_execution_outcome_count"] == 0
+    assert current_events["decision_row_count"] == 1
+    assert current_events["decision_rows_with_non_evaluated_outcome"] == 1
+    assert current_events["decision_outcome_consistency_status"] == "invalid"
+
+
+@pytest.mark.parametrize("include_campaign_column", [True, False])
+def test_lineage_comparison_is_incomparable_without_campaign_identity(
+    include_campaign_column: bool,
+) -> None:
+    conn = sqlite3.connect(":memory:")
+    campaign_column = "campaign_id TEXT, " if include_campaign_column else ""
+    conn.execute(
+        "CREATE TABLE experiment_events ("
+        f"{campaign_column}branch_id TEXT, hypothesis_id TEXT, "
+        "event_kind TEXT, stage TEXT, decision TEXT, execution_outcome TEXT)"
+    )
+    current_events = _events(
+        conn,
+        campaign_id=None if include_campaign_column else "current",
+        require_campaign_scope=True,
+    )
+    outcomes = _execution_outcomes_inventory(
+        campaign_run_status={},
+        campaign_status={},
+        summary={
+            "execution_outcome_counts": _all_outcome_counts(evaluated=1),
+            "steps": [{"execution_outcome": "evaluated"}],
+        },
+        events=current_events,
+    )
+
+    assert current_events["scope_status"] == "identity_unavailable"
+    assert current_events["explicit_execution_outcome_count"] == 0
+    assert outcomes["summary_lineage_counts_comparable"] is False
+    assert outcomes["summary_lineage_counts_consistent"] is None
+
+
 def test_analysis_effect_and_protocol_summaries_require_evaluated_outcome(
     tmp_path: Path,
 ) -> None:

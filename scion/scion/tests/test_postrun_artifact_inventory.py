@@ -205,6 +205,78 @@ def test_direct_proposal_attempt_inventory_and_mode_neutral_coverage(
     assert phase4["requirements"]["code_trace"]["available"] is True
 
 
+def test_resumed_inventory_keeps_cumulative_events_but_scopes_outcome_integrity(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "resumed-current-campaign"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "run_name": "resumed-current-campaign",
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+        },
+    )
+    _write_json(campaign_dir / "status.json", {"effective_rounds_completed": 1})
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "campaign_id": "current",
+            "effective_rounds_completed": 1,
+            "execution_outcome_counts": {
+                "evaluated": 1,
+                "research_rejected": 0,
+                "not_evaluated": 0,
+                "blocked_infra": 0,
+                "resource_exhausted": 0,
+                "interrupted": 0,
+            },
+            "steps": [
+                {
+                    "round": 1,
+                    "branch_id": "branch-1",
+                    "execution_outcome": "evaluated",
+                }
+            ],
+        },
+    )
+    with sqlite3.connect(campaign_dir / "scion.db") as conn:
+        conn.execute(
+            "CREATE TABLE experiment_events ("
+            "campaign_id TEXT, branch_id TEXT, hypothesis_id TEXT, "
+            "event_kind TEXT, stage TEXT, decision TEXT, execution_outcome TEXT)"
+        )
+        conn.executemany(
+            "INSERT INTO experiment_events VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("old", "branch-1", "h1", "outcome", "screening", None, "evaluated"),
+                ("old", "branch-1", "h2", "outcome", "screening", None, "evaluated"),
+                (
+                    "current",
+                    "branch-1",
+                    "h2",
+                    "outcome",
+                    "screening",
+                    None,
+                    "evaluated",
+                ),
+            ],
+        )
+
+    data = inventory_tool.build_inventory(run_root)
+
+    assert data["events"]["scope_status"] == "database"
+    assert data["events"]["by_execution_outcome"] == {"evaluated": 3}
+    outcomes = data["execution_outcomes"]
+    assert outcomes["lineage"]["scope_status"] == "campaign"
+    assert outcomes["lineage"]["campaign_id"] == "current"
+    assert outcomes["lineage"]["execution_outcome_counts"] == {"evaluated": 1}
+    assert outcomes["summary_lineage_counts_comparable"] is True
+    assert outcomes["summary_lineage_counts_consistent"] is True
+
+
 def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     tmp_path: Path,
 ) -> None:

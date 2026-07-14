@@ -18,13 +18,26 @@ from scion.postrun.inventory.utils import (
 )
 
 
-def _read_db_inventory(db_path: Path) -> dict[str, Any]:
+def _read_db_inventory(
+    db_path: Path,
+    *,
+    current_campaign_id: str | None = None,
+) -> dict[str, Any]:
     try:
         with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
             conn.row_factory = sqlite3.Row
             tables = _tables(conn)
             branches = _branches(conn) if "branches" in tables else []
             events = _events(conn) if "experiment_events" in tables else _empty_events()
+            current_events = (
+                _events(
+                    conn,
+                    campaign_id=current_campaign_id,
+                    require_campaign_scope=True,
+                )
+                if "experiment_events" in tables
+                else _empty_events(scope_status="identity_unavailable")
+            )
             hypotheses = (
                 _hypotheses(conn) if "hypotheses" in tables else _empty_hypotheses()
             )
@@ -39,6 +52,7 @@ def _read_db_inventory(db_path: Path) -> dict[str, Any]:
     return {
         "branches": branches,
         "events": events,
+        "current_events": current_events,
         "hypotheses": hypotheses,
         "champions": champions,
         "proposal_attempts": proposal_attempts,
@@ -49,6 +63,7 @@ def _empty_db_inventory() -> dict[str, Any]:
     return {
         "branches": [],
         "events": _empty_events(),
+        "current_events": _empty_events(scope_status="identity_unavailable"),
         "hypotheses": _empty_hypotheses(),
         "champions": _empty_champions(),
         "proposal_attempts": _empty_proposal_attempts(),
@@ -72,8 +87,10 @@ def _empty_proposal_attempts() -> dict[str, Any]:
     }
 
 
-def _empty_events() -> dict[str, Any]:
+def _empty_events(*, scope_status: str = "database") -> dict[str, Any]:
     return {
+        "scope_status": scope_status,
+        "campaign_id": None,
         "by_kind": {},
         "by_decision": {},
         "by_stage": {},
@@ -165,11 +182,40 @@ def _branches(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return branches
 
 
-def _events(conn: sqlite3.Connection) -> dict[str, Any]:
+def _events(
+    conn: sqlite3.Connection,
+    *,
+    campaign_id: str | None = None,
+    require_campaign_scope: bool = False,
+) -> dict[str, Any]:
     columns = _columns(conn, "experiment_events")
+    requested_campaign_id = str(campaign_id or "").strip() or None
+    scoped_campaign_id = requested_campaign_id if "campaign_id" in columns else None
+    if scoped_campaign_id is not None:
+        scope_status = "campaign"
+    elif require_campaign_scope or requested_campaign_id is not None:
+        scope_status = "identity_unavailable"
+    else:
+        scope_status = "database"
+
+    def scope_suffix(alias: str = "") -> tuple[str, tuple[str, ...]]:
+        if scoped_campaign_id is None:
+            return "", ()
+        return f" AND {alias}campaign_id = ?", (scoped_campaign_id,)
+
     outcome_schema = "execution_outcome" in columns
+    if scope_status == "identity_unavailable":
+        payload = _empty_events(scope_status=scope_status)
+        payload["execution_outcome_schema_available"] = outcome_schema
+        return payload
     by_outcome = (
-        _group_counts(conn, "experiment_events", "execution_outcome")
+        _group_counts(
+            conn,
+            "experiment_events",
+            "execution_outcome",
+            filter_column="campaign_id" if scoped_campaign_id else None,
+            filter_value=scoped_campaign_id,
+        )
         if outcome_schema
         else {}
     )
@@ -182,14 +228,18 @@ def _events(conn: sqlite3.Connection) -> dict[str, Any]:
     decision_count = 0
     decisions_without_identity = 0
     if "decision" in columns:
+        suffix, suffix_params = scope_suffix()
         decision_count = int(
             conn.execute(
                 "SELECT COUNT(*) FROM experiment_events "
-                "WHERE decision IS NOT NULL AND decision != ''"
+                "WHERE decision IS NOT NULL AND decision != ''" + suffix,
+                suffix_params,
             ).fetchone()[0]
             or 0
         )
-        if outcome_schema and explicit_count > 0:
+        if outcome_schema and (
+            explicit_count > 0 or scope_status == "campaign"
+        ):
             identity_columns = {"campaign_id", "branch_id", "hypothesis_id"}
             if identity_columns.issubset(columns):
                 explicit_non_evaluated_decisions = int(
@@ -198,10 +248,13 @@ def _events(conn: sqlite3.Connection) -> dict[str, Any]:
                         "WHERE decision IS NOT NULL AND decision != '' "
                         "AND execution_outcome IS NOT NULL "
                         "AND execution_outcome != '' "
-                        "AND execution_outcome != ?",
-                        (ExecutionOutcome.EVALUATED.value,),
+                        "AND execution_outcome != ?" + suffix,
+                        (ExecutionOutcome.EVALUATED.value, *suffix_params),
                     ).fetchone()[0]
                     or 0
+                )
+                decision_scope_suffix, decision_scope_params = scope_suffix(
+                    "decision_row."
                 )
                 missing_correlated_evaluated_outcome = int(
                     conn.execute(
@@ -212,24 +265,36 @@ def _events(conn: sqlite3.Connection) -> dict[str, Any]:
                         "AND COALESCE(decision_row.campaign_id, '') != '' "
                         "AND COALESCE(decision_row.branch_id, '') != '' "
                         "AND COALESCE(decision_row.hypothesis_id, '') != '' "
+                        + decision_scope_suffix
+                        + " "
                         "AND NOT EXISTS ("
                         "SELECT 1 FROM experiment_events AS outcome_row "
                         "WHERE outcome_row.execution_outcome = ? "
                         "AND outcome_row.campaign_id = decision_row.campaign_id "
                         "AND outcome_row.branch_id = decision_row.branch_id "
                         "AND outcome_row.hypothesis_id = decision_row.hypothesis_id)",
-                        (ExecutionOutcome.EVALUATED.value,),
+                        (
+                            *decision_scope_params,
+                            ExecutionOutcome.EVALUATED.value,
+                        ),
                     ).fetchone()[0]
                     or 0
+                )
+                missing_identity_predicate = (
+                    "(COALESCE(branch_id, '') = '' "
+                    "OR COALESCE(hypothesis_id, '') = '')"
+                    if scoped_campaign_id is not None
+                    else "(COALESCE(campaign_id, '') = '' "
+                    "OR COALESCE(branch_id, '') = '' "
+                    "OR COALESCE(hypothesis_id, '') = '')"
                 )
                 decisions_without_identity = int(
                     conn.execute(
                         "SELECT COUNT(*) FROM experiment_events "
                         "WHERE decision IS NOT NULL AND decision != '' "
                         "AND COALESCE(execution_outcome, '') = '' "
-                        "AND (COALESCE(campaign_id, '') = '' "
-                        "OR COALESCE(branch_id, '') = '' "
-                        "OR COALESCE(hypothesis_id, '') = '')"
+                        f"AND {missing_identity_predicate}" + suffix,
+                        suffix_params,
                     ).fetchone()[0]
                     or 0
                 )
@@ -244,8 +309,8 @@ def _events(conn: sqlite3.Connection) -> dict[str, Any]:
                         "WHERE decision IS NOT NULL AND decision != '' "
                         "AND execution_outcome IS NOT NULL "
                         "AND execution_outcome != '' "
-                        "AND execution_outcome != ?",
-                        (ExecutionOutcome.EVALUATED.value,),
+                        "AND execution_outcome != ?" + suffix,
+                        (ExecutionOutcome.EVALUATED.value, *suffix_params),
                     ).fetchone()[0]
                     or 0
                 )
@@ -256,9 +321,29 @@ def _events(conn: sqlite3.Connection) -> dict[str, Any]:
     else:
         consistency_status = "unknown_historical"
     return {
-        "by_kind": _group_counts(conn, "experiment_events", "event_kind"),
-        "by_decision": _group_counts(conn, "experiment_events", "decision"),
-        "by_stage": _group_counts(conn, "experiment_events", "stage"),
+        "scope_status": scope_status,
+        "campaign_id": scoped_campaign_id,
+        "by_kind": _group_counts(
+            conn,
+            "experiment_events",
+            "event_kind",
+            filter_column="campaign_id" if scoped_campaign_id else None,
+            filter_value=scoped_campaign_id,
+        ),
+        "by_decision": _group_counts(
+            conn,
+            "experiment_events",
+            "decision",
+            filter_column="campaign_id" if scoped_campaign_id else None,
+            filter_value=scoped_campaign_id,
+        ),
+        "by_stage": _group_counts(
+            conn,
+            "experiment_events",
+            "stage",
+            filter_column="campaign_id" if scoped_campaign_id else None,
+            filter_value=scoped_campaign_id,
+        ),
         "execution_outcome_schema_available": outcome_schema,
         "by_execution_outcome": by_outcome,
         "explicit_execution_outcome_count": explicit_count,
@@ -383,12 +468,25 @@ def _group_counts(
     conn: sqlite3.Connection,
     table: str,
     column: str,
+    *,
+    filter_column: str | None = None,
+    filter_value: str | None = None,
 ) -> dict[str, int]:
-    if column not in _columns(conn, table):
+    columns = _columns(conn, table)
+    if column not in columns:
         return {}
+    filter_sql = ""
+    params: tuple[str, ...] = ()
+    if filter_column is not None:
+        if filter_column not in columns:
+            return {}
+        filter_sql = f" AND {filter_column} = ?"
+        params = (str(filter_value or ""),)
     rows = conn.execute(
         f"SELECT {column}, COUNT(*) FROM {table} "
-        f"WHERE {column} IS NOT NULL AND {column} != '' GROUP BY {column}"
+        f"WHERE {column} IS NOT NULL AND {column} != ''"
+        f"{filter_sql} GROUP BY {column}",
+        params,
     ).fetchall()
     return {str(key): int(count) for key, count in rows}
 
