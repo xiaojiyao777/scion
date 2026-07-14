@@ -8,6 +8,7 @@ import pytest
 
 from scion.cli.commands.data_roots import (
     activate_declared_problem_data_root,
+    missing_problem_data_cases,
     validate_declared_problem_data_cases,
     with_declared_problem_data_roots,
 )
@@ -101,6 +102,78 @@ def test_declared_data_root_validation_fails_before_campaign(
                 frozen=[],
             ),
         )
+
+
+def test_explicit_data_root_validation_never_borrows_process_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    problem_yaml = tmp_path / "problem" / "problem.yaml"
+    problem_yaml.parent.mkdir()
+    problem_yaml.write_text("name: cvrp\n", encoding="utf-8")
+    borrowed_cwd = tmp_path / "borrowed"
+    case = borrowed_cwd / "cvrplib" / "A" / "case.vrp"
+    case.parent.mkdir(parents=True)
+    case.write_text("NAME : case\n", encoding="utf-8")
+    explicit_missing_root = tmp_path / "explicit-missing"
+    monkeypatch.chdir(borrowed_cwd)
+
+    missing = missing_problem_data_cases(
+        problem_yaml=problem_yaml,
+        split_manifest=SplitManifest(screening=["cvrplib/A/case.vrp"]),
+        data_roots=(explicit_missing_root,),
+    )
+
+    assert missing == ["cvrplib/A/case.vrp"]
+
+
+@pytest.mark.parametrize(
+    "case_factory",
+    (
+        lambda outside: str(outside),
+        lambda outside: f"../{outside.name}",
+    ),
+)
+def test_explicit_data_root_validation_rejects_paths_outside_allowed_roots(
+    tmp_path: Path,
+    case_factory,
+) -> None:
+    problem_yaml = tmp_path / "problem" / "problem.yaml"
+    problem_yaml.parent.mkdir()
+    problem_yaml.write_text("name: cvrp\n", encoding="utf-8")
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    outside = tmp_path / "outside.vrp"
+    outside.write_text("NAME : outside\n", encoding="utf-8")
+    case = case_factory(outside)
+
+    missing = missing_problem_data_cases(
+        problem_yaml=problem_yaml,
+        split_manifest=SplitManifest(screening=[case]),
+        data_roots=(data_root,),
+    )
+
+    assert missing == [case]
+
+
+def test_explicit_data_root_validation_rejects_symlink_case(tmp_path: Path) -> None:
+    problem_yaml = tmp_path / "problem" / "problem.yaml"
+    problem_yaml.parent.mkdir()
+    problem_yaml.write_text("name: cvrp\n", encoding="utf-8")
+    data_root = tmp_path / "data"
+    case = data_root / "cvrplib" / "A" / "case.vrp"
+    case.parent.mkdir(parents=True)
+    target = data_root / "target.vrp"
+    target.write_text("NAME : target\n", encoding="utf-8")
+    case.symlink_to(target)
+
+    missing = missing_problem_data_cases(
+        problem_yaml=problem_yaml,
+        split_manifest=SplitManifest(screening=["cvrplib/A/case.vrp"]),
+        data_roots=(data_root,),
+    )
+
+    assert missing == ["cvrplib/A/case.vrp"]
 
 
 def test_declared_data_root_is_wired_into_protocol_safe_roots(

@@ -2691,6 +2691,35 @@ if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then""",
     }
 
 
+def test_launch_readiness_accepts_cvrp_split_data_failure_path(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            'if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then',
+            """if ! check-cvrp-split-data; then
+  echo "CVRP_SPLIT_DATA_INVALID:$RUN_ROOT/pre_campaign_split_data.v1.json"
+  write_postrun_acceptance_reports
+  exit 64
+fi
+if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then""",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    data_root_check = report["checks"]["run_script_data_root_failure_reports"]
+
+    assert data_root_check["status"] == "ok"
+    assert data_root_check["required"] is True
+    assert data_root_check["detail"]["failure_marker"] == (
+        "CVRP_SPLIT_DATA_INVALID"
+    )
+    assert data_root_check["detail"]["failures"] == []
+
+
 def test_launch_readiness_rejects_api_key_env_failure_without_postrun_call(
     tmp_path: Path,
 ) -> None:
@@ -2793,6 +2822,45 @@ def test_completion_preflight_fetches_login_url_and_operator_action(
         "http://127.0.0.1:8080/auth/login"
     )
     assert "launch_ready=true" in detail["operator_action"]["next_step"]
+
+
+def test_completion_preflight_direct_key_uses_child_environment(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    captured: dict[str, object] = {}
+
+    class Result:
+        returncode = 0
+        stdout = json.dumps({"ok": True, "chat": {"http_status": 200}})
+        stderr = ""
+
+    def fake_run(command: list[str], **kwargs: object) -> Result:
+        captured["command"] = command
+        captured["env"] = kwargs.get("env")
+        return Result()
+
+    monkeypatch.setattr(readiness_tool.subprocess, "run", fake_run)
+
+    status, _detail = readiness_tool._completion_preflight_check(
+        prepared_contract={
+            "manifest_path": str(run_root / "prepared_run_manifest.v1.json")
+        },
+        api_key="direct-secret",
+        api_key_env=None,
+        timeout_sec=20,
+    )
+
+    command = captured["command"]
+    child_env = captured["env"]
+    assert status == "ok"
+    assert isinstance(command, list)
+    assert "--api-key" not in command
+    assert "direct-secret" not in command
+    assert "--api-key-env" in command
+    assert isinstance(child_env, dict)
+    assert child_env["SCION_COMPLETION_PREFLIGHT_API_KEY"] == "direct-secret"
 
 
 def test_launch_readiness_markdown_renders_completion_action(

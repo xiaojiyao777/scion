@@ -1,7 +1,10 @@
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 
 SCION_DIR = Path(__file__).resolve().parents[2]
@@ -90,6 +93,85 @@ def test_probe_chat_classifies_timeout_without_requesting_login(monkeypatch) -> 
     assert result.code == "TimeoutError"
     assert tool._login_url_required(result.classification) is False
     assert tool._login_url_required("not_authenticated") is True
+
+
+def test_sanitize_auth_status_excludes_secrets_and_account_identity() -> None:
+    tool = _load_tool_module()
+
+    sanitized = tool.sanitize_auth_status(
+        {
+            "authenticated": True,
+            "proxy_api_key": "must-not-persist",
+            "user": {
+                "accountId": "account-id",
+                "email": "private@example.com",
+                "planType": "pro",
+            },
+            "pool": {
+                "active": 1,
+                "refreshing": 0,
+                "total": 1,
+                "internal_account_ids": ["account-id"],
+            },
+        }
+    )
+
+    assert sanitized == {
+        "authenticated": True,
+        "pool": {"active": 1, "refreshing": 0, "total": 1},
+    }
+    assert "must-not-persist" not in str(sanitized)
+    assert "private@example.com" not in str(sanitized)
+
+
+def test_json_output_never_emits_raw_auth_status_secrets(
+    monkeypatch,
+    capsys,
+) -> None:
+    tool = _load_tool_module()
+    raw_auth_status = {
+        "authenticated": True,
+        "proxy_api_key": "must-not-persist",
+        "user": {"email": "private@example.com"},
+        "pool": {"active": 1, "total": 1},
+    }
+    monkeypatch.setattr(
+        tool,
+        "fetch_auth_status",
+        lambda *_args: tool.sanitize_auth_status(raw_auth_status),
+    )
+    monkeypatch.setattr(
+        tool,
+        "probe_chat",
+        lambda *_args: tool.ProbeResult(
+            ok=True,
+            http_status=200,
+            code="ok",
+            message="healthy",
+            classification="healthy",
+            content_len=2,
+            finish_reason="stop",
+        ),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [str(TOOL), "--api-key", "request-key", "--json"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        tool.main()
+    assert exc_info.value.code == 0
+
+    rendered = capsys.readouterr().out
+    payload = json.loads(rendered)
+    assert payload["auth_status"] == {
+        "authenticated": True,
+        "pool": {"active": 1, "total": 1},
+    }
+    assert "must-not-persist" not in rendered
+    assert "private@example.com" not in rendered
+    assert "request-key" not in rendered
 
 
 def test_tool_help_and_api_key_env_guard() -> None:

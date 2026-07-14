@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -66,6 +67,11 @@ def test_cvrp_launcher_prepare_writes_open_direct_manifest(tmp_path: Path) -> No
     manifest = json.loads(
         (run_root / "prepared_run_manifest.v1.json").read_text(encoding="utf-8")
     )
+    data_identity = json.loads(
+        (run_root / "prepared_cvrp_data_identity.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
     manifest_md = (run_root / "prepared_run_manifest.md").read_text(
         encoding="utf-8"
     )
@@ -85,6 +91,18 @@ def test_cvrp_launcher_prepare_writes_open_direct_manifest(tmp_path: Path) -> No
         "path": str(run_root / "run.sh"),
         "sha256": run_script_sha256,
     }
+    assert data_identity["ok"] is True
+    assert data_identity["identity_file_count"] == 81
+    assert manifest["config"]["data_identity_manifest"] == str(
+        run_root / "prepared_cvrp_data_identity.v1.json"
+    )
+    assert manifest["config"]["data_identity_sha256"] == data_identity[
+        "identity_sha256"
+    ]
+    assert (
+        f"CVRP_DATA_IDENTITY_SHA256={data_identity['identity_sha256']}"
+        in launch_env
+    )
     assert manifest["research_guidance_contract"]["schema_version"] == (
         "scion.cvrp_research_guidance_contract.v3"
     )
@@ -116,6 +134,21 @@ def test_cvrp_launcher_prepare_writes_open_direct_manifest(tmp_path: Path) -> No
         "--disable-early-stop",
     ):
         assert removed_option not in run_script
+    assert "--api-key-env SCION_API_KEY" in run_script
+    assert '--api-key "$SCION_API_KEY"' not in run_script
+    assert "umask 077" in run_script
+    assert 'umask "$PREFLIGHT_PREVIOUS_UMASK"' in run_script
+    assert 'chmod 600 "$PREFLIGHT_DETAIL"' in run_script
+    assert "tools/check_problem_split_data.py" in run_script
+    assert run_script.count("tools/check_problem_split_data.py") == 2
+    assert run_script.count("--expected-identity-sha256") == 2
+    assert run_script.count(data_identity["identity_sha256"]) == 2
+    assert "$CVRP_DATA_IDENTITY_SHA256" not in run_script
+    assert "post_campaign_split_data.v1.json" in run_script
+    assert "CVRP_DATA_IDENTITY_DRIFT" in run_script
+    assert run_script.index("tools/check_problem_split_data.py") < run_script.index(
+        "tools/check_completion_proxy.py"
+    )
 
     rendered = "\n".join((launch_env, run_script, manifest_md)).lower()
     for removed in (
@@ -156,6 +189,41 @@ def test_cvrp_launcher_rejects_conflicting_api_key_sources(tmp_path: Path) -> No
     )
     assert result.returncode != 0
     assert "mutually exclusive" in result.stderr.lower()
+
+
+def test_cvrp_launcher_rejects_missing_split_data_before_writing_run_root(
+    tmp_path: Path,
+) -> None:
+    experiments_root = tmp_path / "experiments"
+    missing_data_root = tmp_path / "missing-vrp"
+    missing_data_root.mkdir()
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "missing-formal-data",
+            "--experiments-root",
+            str(experiments_root),
+            "--data-root",
+            str(missing_data_root),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+        env={
+            **os.environ,
+            "SCION_PROBLEM_DATA_ROOT": str(SCION_DIR.parent / "vrp"),
+        },
+    )
+
+    assert result.returncode != 0
+    assert "CVRP data-root preflight failed" in result.stderr
+    assert "A-n64-k9.vrp" in result.stderr
+    assert not experiments_root.exists()
 
 
 def test_cvrp_launcher_rejects_target_binding_for_completion_preflight(

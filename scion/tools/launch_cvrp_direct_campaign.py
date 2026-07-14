@@ -23,12 +23,15 @@ if str(SCION_PROJECT_DIR) not in sys.path:
 from scion.launcher.lifecycle import (
     CampaignCommandPlan,
     LauncherLifecyclePlan,
+    PreCampaignGuard,
     render_run_sh,
 )
 from scion.launcher.resume import (
     ResumePreparationError,
     prepare_launcher_campaign,
 )
+from scion.problems.cvrp.formal_data_identity import build_formal_data_identity
+
 DEFAULT_EXPERIMENTS_ROOT = Path.home() / "research" / "scion-experiments"
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_BASE_URL = "http://127.0.0.1:8080"
@@ -202,6 +205,35 @@ def _preflight_cvrp_parameter_search_disabled(scion_dir: Path, problem: str) -> 
             )
 
 
+def _preflight_cvrp_split_data(
+    scion_dir: Path,
+    *,
+    problem: str,
+    split: str,
+    data_root: Path,
+) -> dict[str, object]:
+    """Require every declared case before writing a formal run root."""
+
+    problem_path = _resolve_spec_path(scion_dir, problem)
+    split_path = _resolve_spec_path(scion_dir, split)
+    report = build_formal_data_identity(
+        problem_path=problem_path,
+        split_path=split_path,
+        data_root=data_root,
+    )
+    if not report["ok"]:
+        failures: list[str] = []
+        for key in ("missing_cases", "missing_companions", "unsafe_files"):
+            values = report.get(key)
+            if isinstance(values, list):
+                failures.extend(str(value) for value in values)
+        raise SystemExit(
+            "CVRP data-root preflight failed: required formal files are "
+            f"missing or unsafe via {data_root}: {', '.join(failures)}"
+        )
+    return report
+
+
 def _problem_v1_path_for_problem(scion_dir: Path, problem: str) -> Path:
     return _resolve_spec_path(scion_dir, problem).with_name("problem-v1.yaml")
 
@@ -368,6 +400,8 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "SCION_API_KEY",
         "SCION_API_KEY_ENV",
         "SCION_PROBLEM_DATA_ROOT",
+        "CVRP_DATA_IDENTITY_MANIFEST",
+        "CVRP_DATA_IDENTITY_SHA256",
         "COMPLETION_PREFLIGHT",
         "POSTRUN_REPORTS",
         "PROBLEM",
@@ -402,10 +436,8 @@ def _write_run_sh(run_root: Path, command: str, env: dict[str, object]) -> str:
         "CONTROL_PAIR_KEY",
         "POSTRUN_REPORTS",
     ]
-    command_plan = CampaignCommandPlan(
-        command_log=command,
-        exported_env_names=("SCION_PROBLEM_DATA_ROOT",),
-        command_body=r'''FORCE_ARGS=()
+    expected_data_identity = shlex.quote(str(env["CVRP_DATA_IDENTITY_SHA256"]))
+    command_body = r'''FORCE_ARGS=()
 if [[ -n "${FORCE_SURFACE:-}" ]]; then
   FORCE_ARGS+=(--force-surface "$FORCE_SURFACE")
   if [[ -n "${FORCE_ACTION:-}" ]]; then
@@ -415,6 +447,7 @@ if [[ -n "${FORCE_SURFACE:-}" ]]; then
     FORCE_ARGS+=(--force-target-file "$FORCE_TARGET_FILE")
   fi
 fi
+CAMPAIGN_COMMAND_STATUS=0
 "$PY" -m scion.cli.main run \
   --problem "$PROBLEM" \
   --protocol "$PROTOCOL" \
@@ -424,7 +457,26 @@ fi
   --rounds "$ROUNDS" \
   --time-limit-sec "$TIME_LIMIT_SEC" \
   "${FORCE_ARGS[@]}" \
-  >> "$RUN_ROOT/run.log" 2>&1''',
+  >> "$RUN_ROOT/run.log" 2>&1 || CAMPAIGN_COMMAND_STATUS=$?
+CVRP_DATA_POST_STATUS=0
+"$PY" "$SCION_DIR/tools/check_problem_split_data.py" \
+  --problem "$PROBLEM" \
+  --split "$SPLIT" \
+  --data-root "$SCION_PROBLEM_DATA_ROOT" \
+  --expected-identity-sha256 __CVRP_EXPECTED_DATA_IDENTITY__ \
+  > "$RUN_ROOT/post_campaign_split_data.v1.json" \
+  2>> "$RUN_ROOT/run.log" || CVRP_DATA_POST_STATUS=$?
+if [[ "$CVRP_DATA_POST_STATUS" -ne 0 ]]; then
+  echo "CVRP_DATA_IDENTITY_DRIFT:$RUN_ROOT/post_campaign_split_data.v1.json" \
+    >> "$RUN_ROOT/run.log"
+  (exit "$CVRP_DATA_POST_STATUS")
+else
+  (exit "$CAMPAIGN_COMMAND_STATUS")
+fi'''.replace("__CVRP_EXPECTED_DATA_IDENTITY__", expected_data_identity)
+    command_plan = CampaignCommandPlan(
+        command_log=command,
+        exported_env_names=("SCION_PROBLEM_DATA_ROOT",),
+        command_body=command_body,
     )
     plan = LauncherLifecyclePlan(
         run_root=Path(env["RUN_ROOT"]),
@@ -445,6 +497,22 @@ fi
             "SCION_BASE_URL",
             "SCION_API_KEY",
             "PREPARED_RUN_MANIFEST",
+        ),
+        pre_campaign_guards=(
+            PreCampaignGuard(
+                failure_key="CVRP_SPLIT_DATA_INVALID",
+                condition=(
+                    '! "$PY" "$SCION_DIR/tools/check_problem_split_data.py" '
+                    '--problem "$PROBLEM" --split "$SPLIT" '
+                    '--data-root "$SCION_PROBLEM_DATA_ROOT" '
+                    '--expected-identity-sha256 '
+                    f'{expected_data_identity} '
+                    '> "$RUN_ROOT/pre_campaign_split_data.v1.json" '
+                    '2>> "$RUN_ROOT/run.log"'
+                ),
+                detail="$RUN_ROOT/pre_campaign_split_data.v1.json",
+                status_fields={"cvrp_split_data_invalid": True},
+            ),
         ),
         preflight_failure_exit_code=PREFLIGHT_FAILURE_EXIT_CODE,
     )
@@ -550,6 +618,8 @@ def _write_prepared_run_manifest(
             "split": str(env["SPLIT"]),
             "seeds": str(env["SEEDS"]),
             "data_root": str(env["SCION_PROBLEM_DATA_ROOT"]),
+            "data_identity_manifest": str(env["CVRP_DATA_IDENTITY_MANIFEST"]),
+            "data_identity_sha256": str(env["CVRP_DATA_IDENTITY_SHA256"]),
         },
         "execution": {
             "rounds": int(env["ROUNDS"]),
@@ -621,7 +691,15 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         lines.append(f"  - {block.get('title')}: {block.get('category')}")
 
     lines.extend(["", "## Config"])
-    for key in ("problem", "protocol", "split", "seeds", "data_root"):
+    for key in (
+        "problem",
+        "protocol",
+        "split",
+        "seeds",
+        "data_root",
+        "data_identity_manifest",
+        "data_identity_sha256",
+    ):
         lines.append(f"- {key}: `{config[key]}`")
     lines.extend(["", "## Execution"])
     for key in (
@@ -666,6 +744,17 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     repo_root = _repo_root()
     scion_dir = repo_root / "scion"
     _preflight_cvrp_parameter_search_disabled(scion_dir, args.problem)
+    data_root = (
+        args.data_root
+        if args.data_root is not None
+        else repo_root / "vrp"
+    ).expanduser().resolve(strict=False)
+    data_identity = _preflight_cvrp_split_data(
+        scion_dir,
+        problem=args.problem,
+        split=args.split,
+        data_root=data_root,
+    )
     started_at = datetime.now(timezone.utc)
     timestamp = started_at.strftime("%Y%m%dT%H%M%SZ")
     label = _safe_label(args.label)
@@ -683,6 +772,11 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         )
     except ResumePreparationError as exc:
         raise SystemExit(str(exc)) from exc
+    data_identity_manifest = run_root / "prepared_cvrp_data_identity.v1.json"
+    data_identity_manifest.write_text(
+        json.dumps(data_identity, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     api_key, api_key_env = _resolve_api_key(args)
     control_pair_key = _prepared_control_pair_key(
         args.control_pair_key,
@@ -700,7 +794,9 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "SCION_BASE_URL": args.base_url,
         "SCION_API_KEY": api_key,
         "SCION_API_KEY_ENV": api_key_env,
-        "SCION_PROBLEM_DATA_ROOT": repo_root / "vrp",
+        "SCION_PROBLEM_DATA_ROOT": data_root,
+        "CVRP_DATA_IDENTITY_MANIFEST": data_identity_manifest,
+        "CVRP_DATA_IDENTITY_SHA256": str(data_identity["identity_sha256"]),
         "COMPLETION_PREFLIGHT": 1 if args.completion_preflight else 0,
         "POSTRUN_REPORTS": 0 if args.skip_postrun_reports else 1,
         "PROBLEM": args.problem,
@@ -778,6 +874,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--protocol", default=PROTOCOL)
     parser.add_argument("--split", default=SPLIT)
     parser.add_argument("--seeds", default=SEEDS)
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=None,
+        help=(
+            "Read-only CVRP instance root. Defaults to <repo>/vrp; every "
+            "declared split case must exist before a run root is written."
+        ),
+    )
     parser.add_argument(
         "--control-pair-key",
         default=None,

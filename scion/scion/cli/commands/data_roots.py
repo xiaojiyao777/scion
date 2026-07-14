@@ -5,7 +5,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 GENERIC_DATA_ROOT_ENV = "SCION_PROBLEM_DATA_ROOT"
 
@@ -90,16 +90,12 @@ def validate_declared_problem_data_cases(
     if activation is None or not activation.env_name:
         return
 
-    cases = _all_split_cases(split_manifest)
-    if not cases:
-        return
-
     roots = _declared_data_roots(activation)
-
-    missing: list[str] = []
-    for case in cases:
-        if not _case_path_resolves(case, problem_dir=problem_yaml.parent, data_roots=roots):
-            missing.append(case)
+    missing = missing_problem_data_cases(
+        problem_yaml=problem_yaml,
+        split_manifest=split_manifest,
+        data_roots=roots,
+    )
 
     if missing:
         missing_detail = ", ".join(missing)
@@ -108,6 +104,73 @@ def validate_declared_problem_data_cases(
             "split manifest contains data-root-relative cases that do not resolve "
             f"via {activation.env_name}={roots_text}: {missing_detail}"
         )
+
+
+def missing_problem_data_cases(
+    *,
+    problem_yaml: Path,
+    split_manifest: Any,
+    data_roots: Sequence[str | Path],
+) -> list[str]:
+    """Return cases unresolved by exactly the supplied roots.
+
+    This pure form is used by launch preparation, where an ambient data-root
+    environment variable must not silently replace the path written into the
+    prepared run contract.
+    """
+
+    roots = _dedupe_paths(
+        [Path(root).expanduser().resolve(strict=False) for root in data_roots]
+    )
+    return [
+        case
+        for case in _all_split_cases(split_manifest)
+        if resolve_problem_data_case(
+            case,
+            problem_dir=problem_yaml.parent,
+            data_roots=roots,
+        )
+        is None
+    ]
+
+
+def resolve_problem_data_case(
+    case: str,
+    *,
+    problem_dir: Path,
+    data_roots: Sequence[str | Path],
+) -> Path | None:
+    """Resolve one case without CWD lookup or allowed-root escape."""
+
+    roots = _dedupe_paths(
+        [
+            problem_dir.expanduser().resolve(strict=False),
+            *(
+                Path(root).expanduser().resolve(strict=False)
+                for root in data_roots
+            ),
+        ]
+    )
+    path = Path(case).expanduser()
+    if path.is_absolute():
+        resolved = path.resolve(strict=False)
+        if (
+            path.is_file()
+            and not path.is_symlink()
+            and any(resolved.is_relative_to(root) for root in roots)
+        ):
+            return resolved
+        return None
+    for root in roots:
+        candidate = root / path
+        resolved = candidate.resolve(strict=False)
+        if (
+            resolved.is_relative_to(root)
+            and candidate.is_file()
+            and not candidate.is_symlink()
+        ):
+            return resolved
+    return None
 
 
 def with_declared_problem_data_roots(
@@ -186,22 +249,6 @@ def _all_split_cases(split_manifest: Any) -> list[str]:
     return cases
 
 
-def _case_path_resolves(
-    case: str,
-    *,
-    problem_dir: Path,
-    data_roots: list[Path],
-) -> bool:
-    path = Path(case)
-    if path.is_absolute():
-        return path.exists()
-    if path.exists():
-        return True
-    if (problem_dir / path).exists():
-        return True
-    return any((root / path).exists() for root in data_roots)
-
-
 def _declared_data_roots(activation: DataRootActivation | None) -> list[Path]:
     if activation is None or not activation.env_name:
         return []
@@ -230,6 +277,8 @@ def _dedupe_paths(paths: list[Path]) -> list[Path]:
 __all__ = (
     "DataRootActivation",
     "activate_declared_problem_data_root",
+    "missing_problem_data_cases",
+    "resolve_problem_data_case",
     "validate_declared_problem_data_cases",
     "with_declared_problem_data_roots",
 )

@@ -153,6 +153,23 @@ steering, or launch a formal experiment from the transition worktree.
   `13/15`. Decision was
   `abandon / VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`; the branch is abandoned,
   and no frozen run or promotion occurred.
+- The first fresh CVRP control root stopped before proposal generation because
+  the detached worktree's partial `vrp/` directory did not contain the
+  gitignored formal CVRPLIB dataset. The completion preflight was healthy, but
+  campaign initialization rejected all 40 external cases. No H/C call,
+  candidate, or solver pair exists, and the root was not retried.
+- That pre-campaign failure exposed two launcher defects now under repair:
+  prepare did not resolve every split case against the final explicit data
+  root, and the persisted proxy auth receipt copied the proxy key and account
+  identity. The failed receipt has been explicitly redacted. The repair adds
+  exact-root prepare validation, a wrapper recheck before provider access,
+  auth-field allowlisting, environment-only key transfer, and secure receipt
+  creation.
+- The completed repair also pins the 81-file CVRP data identity as a literal in
+  both generated pre/post checks under the existing run.sh SHA anchor. It passes
+  `134` focused tests and the standard full suite (`1872 passed, 1 skipped` in
+  `496.65s`); compileall, diff-check, generated-script syntax, and independent
+  formal-path P0/P1/P2 review are green.
 - That continuation exposed one narrow postrun bug: current summary outcome
   counts were compared with cumulative copied-database counts across two
   campaign IDs. The experiment is valid; the current repair scopes integrity
@@ -243,44 +260,41 @@ steering, or launch a formal experiment from the transition worktree.
 
 ## Current Blocker
 
-The warehouse R3 lifecycle is complete. The framework behaved correctly at
-every step, including the repaired current-campaign postrun projection, but the
-cumulative algorithm did not generalize from the smaller screening distribution
-to the 308--457-order validation distribution.
+The warehouse R3 lifecycle is complete and its branch remains `abandoned`.
+The first CVRP control attempt produced no algorithm evidence: it failed before
+proposal generation on an incorrect external-data-root binding. No experiment
+is running, and automatic retry remains prohibited.
 
-Validation was a real hierarchical failure, not a gate artifact:
+The immediate blocker is completing and pushing the launcher-integrity
+regression, not VRP algorithm quality. The repair pins all 40 formal `.vrp`
+files, their 40 sibling `.sol` files, and the package canary in the prepared
+contract; the wrapper verifies the same identity before provider access and
+after campaign execution. After the repair is pushed, create a new detached
+runtime at that exact commit.
 
-- only `val_l01` improved the primary split objective;
-- `val_l02`, `val_l04`, and `val_lx01` tied on splits and lost cost on every
-  seed;
-- `val_lx02` tied on splits and won cost on every seed;
-- the five case-level cost effects have descriptive median `-8300`;
-- 12/15 candidate runs reached about 30 seconds, and 13/15 regressed runtime.
-
-The branch is `abandoned`. Do not retry validation, expand the same fixed
-split, run frozen, or create another warehouse hypothesis in this sequence.
-The current blocker for v0.4 closeout is now the second problem-family control:
-one fresh, open, non-target-bound CVRP direct campaign must show whether the
-simplified runtime can conduct useful research without successor-era steering.
-
-No experiment is running. Preserve the excluded user-owned
+Preserve the excluded user-owned
 `scion/docs/v0.4-measurement-readiness.md` change and unrelated untracked
 history.
 
 ## Immediate Queue
 
-1. Finish the independent validation-result audit and diff/exclusion check.
-2. Stage, commit, and push only the R3 report, `TASK.md`, and current-state
-   update under the user's existing authorization.
+1. Complete full-suite regression and independent review of the launcher
+   integrity repair.
+2. Stage, commit, and push only the repair, its tests, the pre-campaign failure
+   report, `TASK.md`, and current-state under the existing authorization.
 3. Create an isolated detached clean runtime at that exact commit.
-4. Prepare one fresh two-round CVRP direct control with no target/action/surface
-   binding, parameter search disabled, `gpt-5.6-sol`, strict postrun reports,
-   and completion preflight inside the guarded wrapper.
-5. Require guarded-wrapper readiness, then inspect the prepared actual H/C
-   context for successor IDs, target-file/mechanism steering, telemetry,
+4. Prepare a distinct fresh two-round CVRP direct control with explicit
+   `--data-root`, no target/action/surface binding, parameter search disabled,
+   `gpt-5.6-sol`, strict postrun reports, and completion preflight inside the
+   guarded wrapper.
+5. Confirm the prepared 81-file identity receipt, then require guarded-wrapper
+   readiness and inspect the actual H context for
+   successor IDs, target-file/mechanism steering, telemetry,
    budget, retry, or truncation noise. Do not send a separate live probe.
-6. Launch only after those checks pass. Supply the shared proxy key only in
-   process environment, poll about every three minutes, and never retry.
+6. Do not treat the corrected root as an automatic retry. Launch only under
+   explicit operator authorization after those checks pass. Supply the shared
+   proxy key only in process environment, poll about every three minutes, and
+   never retry.
 
 Do not close v0.4 merely because framework tests pass. Close it only after both
 formal controls show that the simplified agent performs useful research without

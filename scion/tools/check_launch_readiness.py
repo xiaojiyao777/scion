@@ -3167,9 +3167,14 @@ def _run_script_data_root_failure_reports(run_sh: Path) -> tuple[str, Any]:
             },
         )
 
-    marker = "WAREHOUSE_DATA_ROOT_MISSING"
-    marker_pos, ignored_marker_count = _find_executable_marker_position(text, marker)
-    if marker_pos < 0:
+    marker_matches: list[tuple[int, str, int]] = []
+    ignored_marker_count = 0
+    for marker in ("WAREHOUSE_DATA_ROOT_MISSING", "CVRP_SPLIT_DATA_INVALID"):
+        marker_pos, ignored_count = _find_executable_marker_position(text, marker)
+        ignored_marker_count += ignored_count
+        if marker_pos >= 0:
+            marker_matches.append((marker_pos, marker, ignored_count))
+    if not marker_matches:
         return (
             "ok",
             {
@@ -3179,6 +3184,8 @@ def _run_script_data_root_failure_reports(run_sh: Path) -> tuple[str, Any]:
                 "ignored_non_executable_marker_count": ignored_marker_count,
             },
         )
+
+    marker_pos, marker, _marker_ignored_count = min(marker_matches)
 
     call_pos = _find_line_after(text, "write_postrun_acceptance_reports", marker_pos)
     exit_pos = _find_next_exit_after(text, marker_pos)
@@ -4124,15 +4131,20 @@ def _completion_preflight_check(
         "--login-url-on-failure",
         "--json",
     ]
+    subprocess_env: dict[str, str] | None = None
     if api_key_env:
         command.extend(["--api-key-env", api_key_env])
     elif api_key:
-        command.extend(["--api-key", api_key])
+        readiness_api_key_env = "SCION_COMPLETION_PREFLIGHT_API_KEY"
+        command.extend(["--api-key-env", readiness_api_key_env])
+        subprocess_env = os.environ.copy()
+        subprocess_env[readiness_api_key_env] = api_key
     result = subprocess.run(
         command,
         text=True,
         capture_output=True,
         check=False,
+        env=subprocess_env,
     )
     try:
         payload = json.loads(result.stdout)

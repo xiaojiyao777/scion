@@ -17,6 +17,16 @@ DEFAULT_BASE_URL = "http://127.0.0.1:8080"
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_API_KEY = "pwd"
 UNHEALTHY_EXIT = 64
+AUTH_POOL_COUNT_FIELDS = (
+    "active",
+    "banned",
+    "disabled",
+    "expired",
+    "quota_exhausted",
+    "rate_limited",
+    "refreshing",
+    "total",
+)
 
 
 @dataclass(frozen=True)
@@ -197,7 +207,37 @@ def fetch_auth_status(base_url: str, timeout: float) -> dict[str, Any] | None:
         payload = json.loads(body)
     except Exception:
         return None
-    return payload if isinstance(payload, dict) else None
+    return sanitize_auth_status(payload)
+
+
+def sanitize_auth_status(payload: Any) -> dict[str, Any] | None:
+    """Keep only readiness fields from the proxy status response.
+
+    The proxy response can include its API key and account identity.  Neither
+    is needed to decide whether a completion route is ready, and the JSON
+    result is commonly persisted as launch evidence.
+    """
+
+    if not isinstance(payload, dict):
+        return None
+
+    sanitized: dict[str, Any] = {}
+    authenticated = payload.get("authenticated")
+    if isinstance(authenticated, bool):
+        sanitized["authenticated"] = authenticated
+
+    pool = payload.get("pool")
+    if isinstance(pool, dict):
+        sanitized_pool = {
+            name: value
+            for name in AUTH_POOL_COUNT_FIELDS
+            if isinstance((value := pool.get(name)), int)
+            and not isinstance(value, bool)
+        }
+        if sanitized_pool:
+            sanitized["pool"] = sanitized_pool
+
+    return sanitized
 
 
 def fetch_login_url(base_url: str, timeout: float) -> str:

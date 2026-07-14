@@ -9,21 +9,27 @@ No experiment is running. The warehouse R3 lifecycle is resolved. Its
 round-2 candidate passed expanded screening, but the same cumulative branch
 failed eval-only validation on the larger locked split and is now `abandoned`.
 The validation wrapper and the repaired campaign-scoped postrun path are fully
-green. Do not retry, freeze, modify, or promote this branch.
+green. Do not retry, freeze, modify, or promote this branch. The first fresh
+CVRP control stopped before proposal generation on an incorrect external data
+root; it contains no algorithm result and was not retried.
 
 ## Current Decision
 
-Commit `9c88ef6a` is pushed on `v0.4-dev`. It contains the resumed-postrun scope
-repair and is the exact runtime commit for validation. The result is a useful
-negative research lifecycle: Scion found a broad screening signal, expanded
-it, escalated the same candidate without another model call, and correctly
-rejected it when it failed to generalize.
+Commit `64137fc3` is pushed on `v0.4-dev` and was the exact clean runtime for
+the failed pre-campaign CVRP root. Commit `9c88ef6a` contains the resumed-
+postrun scope repair and was the exact validation runtime. The warehouse result
+remains a useful negative research lifecycle: Scion found a broad screening
+signal, expanded it, escalated the same candidate without another model call,
+and correctly rejected it when it failed to generalize.
 
-The next experiment is one fresh, clean, open, non-target-bound CVRP direct
-control. First commit and push this validation status update, then prepare a
-new detached clean runtime at that exact docs commit so formal readiness sees
-an exact clean repository. Do not carry warehouse target hints or mechanism
-instructions into CVRP.
+The current work is the resulting launcher-integrity repair. It validates the
+final explicit data root before creating a run root, repeats that check before
+provider access, pins the complete 81-file identity, rechecks it after campaign
+execution, redacts proxy auth receipts to readiness-only fields, keeps the key
+out of argv, and creates the receipt under `umask 077`. After this is committed
+and pushed, prepare a distinct clean, open, non-target-bound CVRP control at the
+new exact commit. Do not carry warehouse target hints or mechanism instructions
+into CVRP, and do not auto-retry the failed root.
 
 ## Run Roots
 
@@ -39,10 +45,18 @@ Same-candidate validation root:
 
 `/home/clawd/research/scion-experiments/v04-warehouse-r3-same-candidate-validation-1r-gpt56sol-20260714T145307Z-claw`
 
+Failed pre-campaign CVRP root:
+
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r1-2r-gpt56sol-20260714T151358Z-claw`
+
 The first root is the fresh formal confirmation. The second and third are
 copied-state, diagnostic/non-formal continuations used only to evaluate the
 exact same cumulative candidate. Do not blur their wrapper status or evidence
 scope.
+
+The CVRP root is infrastructure evidence only. Its healthy completion probe
+was followed by a split-data resolution failure before any H/C proposal call.
+Do not resume or relaunch it.
 
 ## Formal R3 Evidence
 
@@ -197,11 +211,41 @@ cumulative evaluated outcomes across three campaign IDs, current scoped
 summary/lineage counts are `1/1`, decision consistency is `consistent`, and
 postrun readiness has no required or optional failure.
 
+## CVRP Pre-Campaign Failure and Repair
+
+- prepared/runtime commit: `64137fc3`;
+- model/preflight: `gpt-5.6-sol`, authenticated HTTP 200, non-empty response;
+- proposal/code calls: `0 / 0`;
+- solver pairs: `0`;
+- failure: 40 formal external cases absent under the detached worktree's
+  partial `vrp/` directory;
+- retry/restart: none;
+- failed receipt: proxy key and account identity explicitly removed with a
+  security-redaction marker.
+
+The repaired launcher accepts an explicit data root and validates only that
+exact path; an ambient valid root cannot hide a bad prepared path. Generated
+run.sh repeats the check before completion preflight. Completion receipts keep
+only authenticated state and pool counts, take the key from the environment,
+and are created with owner-only permissions.
+
+The external main-checkout dataset is not tracked by git and is writable. The
+audited formal input set is 40 `.vrp` files, 40 sibling `.sol` files, and the
+package canary. Its ordered identity digest is
+`ca7e470ec8d1f3569a690d10df5a170c4994108c71fecf5aa1a7a76b42630743`.
+The repaired prepared contract records this identity, and the generated wrapper
+requires it before provider access and after execution.
+
+Repair verification is complete: `134` focused tests pass; the standard full
+suite passes `1872 passed, 1 skipped` in `496.65s`; compileall, diff-check,
+generated run.sh syntax, live identity construction, and independent formal-
+path P0/P1/P2 review are green.
+
 ## Worktree State
 
-- branch: `v0.4-dev` at pushed `9c88ef6a`;
-- intended changes now: validation results in the R3 report, `TASK.md`, and
-  this file only;
+- branch: `v0.4-dev` at pushed `64137fc3`;
+- intended changes now: launcher/preflight repair, focused tests, CVRP
+  pre-campaign failure report, `TASK.md`, and this file;
 - `scion/docs/v0.4-measurement-readiness.md` is a pre-existing user-owned
   tracked change and must remain excluded;
 - unrelated untracked historical/future documents must remain excluded;
@@ -210,18 +254,23 @@ postrun readiness has no required or optional failure.
 
 ## Resume Actions
 
-1. Complete the independent validation-result audit and diff/exclusion check.
-2. Stage, commit, and push only the R3 report, `TASK.md`, and this file under
-   the user's existing authorization.
+1. Complete full-suite regression and independent review of the launcher
+   integrity repair.
+2. Stage, commit, and push only the intended repair/docs scope.
 3. Create a detached clean runtime at that exact commit.
-4. Prepare one fresh two-round CVRP direct control with no target/action/surface
-   binding, parameter search disabled, `gpt-5.6-sol`, strict postrun reports,
-   and completion preflight inside the guarded wrapper.
-5. Require guarded-wrapper launch readiness, then inspect the prepared actual
-   provider context for successor, target-file, mechanism-ranking, telemetry,
+4. Prepare a distinct fresh two-round CVRP direct control with explicit
+   external data root, no target/action/surface binding, parameter search
+   disabled, `gpt-5.6-sol`, strict postrun reports, and completion preflight
+   inside the guarded wrapper.
+5. Confirm the prepared 81-file formal data identity receipt, require
+   guarded-wrapper launch readiness, then inspect the prepared actual provider
+   context for successor,
+   target-file, mechanism-ranking, telemetry,
    budget, retry, and truncation noise. Do not send a separate live probe.
-6. Launch only after those checks pass. Supply `SCION_SHARED_PROXY_KEY` only in
-   process environment, poll about every three minutes, and never retry.
+6. Do not treat the corrected root as an automatic retry. Launch only under
+   explicit operator authorization after those checks pass. Supply
+   `SCION_SHARED_PROXY_KEY` only in process environment, poll about every three
+   minutes, and never retry.
 
 ## Runner Notes
 
@@ -246,3 +295,5 @@ and preflight check.
   `scion/docs/experiments/v0.4/v04-warehouse-direct-control-r2-436b6e12-postrun-20260714.md`
 - Warehouse R3 plus expanded screening:
   `scion/docs/experiments/v0.4/v04-warehouse-direct-context-confirm-r3-d57d6cd6-postrun-20260714.md`
+- CVRP pre-campaign failure:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-open-control-r1-precampaign-failure-20260714.md`

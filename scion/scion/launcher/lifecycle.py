@@ -333,15 +333,25 @@ def _dedupe(names: tuple[str, ...]) -> tuple[str, ...]:
 _COMPLETION_PREFLIGHT_SNIPPET = r'''
 if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then
   PREFLIGHT_DETAIL="$RUN_ROOT/pre_campaign_completion_preflight.v1.json"
+  PREFLIGHT_PREVIOUS_UMASK="$(umask)"
+  umask 077
   "$PY" "$SCION_DIR/tools/check_completion_proxy.py" \
     --base-url "$SCION_BASE_URL" \
     --model "$SCION_MODEL" \
-    --api-key "$SCION_API_KEY" \
+    --api-key-env SCION_API_KEY \
     --timeout-sec 60 \
     --login-url-on-failure \
     --json \
     > "$PREFLIGHT_DETAIL" 2>> "$RUN_ROOT/run.log"
   PREFLIGHT_STATUS=$?
+  PREFLIGHT_CHMOD_STATUS=0
+  chmod 600 "$PREFLIGHT_DETAIL" 2>> "$RUN_ROOT/run.log" \
+    || PREFLIGHT_CHMOD_STATUS=$?
+  if [[ "$PREFLIGHT_STATUS" -eq 0 && "$PREFLIGHT_CHMOD_STATUS" -ne 0 ]]; then
+    PREFLIGHT_STATUS="$PREFLIGHT_CHMOD_STATUS"
+  fi
+  umask "$PREFLIGHT_PREVIOUS_UMASK"
+  unset PREFLIGHT_PREVIOUS_UMASK PREFLIGHT_CHMOD_STATUS
   echo "COMPLETION_PREFLIGHT_DETAIL:$PREFLIGHT_DETAIL" >> "$RUN_ROOT/run.log"
   if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then
     {
