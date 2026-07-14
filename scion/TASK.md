@@ -146,8 +146,13 @@ steering, or launch a formal experiment from the transition worktree.
 - An eval-only continuation reused the exact candidate without another
   provider call and expanded to 14 cases / 28 pairs: case W/L/T `7/0/7`, pair
   `19/2/7`, total-cost median `+625`, CI `[300, 1600]`, fresh runtime ratio
-  `0.7004`, Protocol pass, Decision `queue_validate`. The branch is now
-  `ready_validate`; no promotion occurred.
+  `0.7004`, Protocol pass, Decision `queue_validate`.
+- The same cumulative candidate then completed eval-only validation with no
+  provider call: 15/15 valid pairs, case W/L/T `2/3/0`, pair `6/9/0`, primary
+  median `0`, CI `[0,1]`, runtime ratio `1.578`, and runtime regression rate
+  `13/15`. Decision was
+  `abandon / VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`; the branch is abandoned,
+  and no frozen run or promotion occurred.
 - That continuation exposed one narrow postrun bug: current summary outcome
   counts were compared with cumulative copied-database counts across two
   campaign IDs. The experiment is valid; the current repair scopes integrity
@@ -238,53 +243,44 @@ steering, or launch a formal experiment from the transition worktree.
 
 ## Current Blocker
 
-The formal R3 confirmation is complete and green. Its same-candidate expanded
-screening continuation is scientifically valid and has earned validation, but
-its original outer wrapper is red because postrun compared this invocation's
-one evaluated outcome with three cumulative outcomes in the copied database.
+The warehouse R3 lifecycle is complete. The framework behaved correctly at
+every step, including the repaired current-campaign postrun projection, but the
+cumulative algorithm did not generalize from the smaller screening distribution
+to the 308--457-order validation distribution.
 
-The current repair is intentionally narrow:
+Validation was a real hierarchical failure, not a gate artifact:
 
-- preserve cumulative database event counts as resume/audit history;
-- resolve the current invocation identity from `campaign_summary.json` (then
-  current status fallbacks);
-- scope execution-outcome and decision correlation to that campaign ID;
-- remain fail-closed when scoped identity exists but its durable outcome is
-  absent;
-- mark legacy schemas without usable campaign identity as incomparable rather
-  than comparing mixed history.
+- only `val_l01` improved the primary split objective;
+- `val_l02`, `val_l04`, and `val_lx01` tied on splits and lost cost on every
+  seed;
+- `val_lx02` tied on splits and won cost on every seed;
+- the five case-level cost effects have descriptive median `-8300`;
+- 12/15 candidate runs reached about 30 seconds, and 13/15 regressed runtime.
 
-The acceptance gate itself is unchanged. Against the real continuation root,
-the repaired inventory reports cumulative evaluated=`3`, scoped evaluated=`1`,
-`summary_lineage_counts_comparable=true`, and
-`summary_lineage_counts_consistent=true`.
+The branch is `abandoned`. Do not retry validation, expand the same fixed
+split, run frozen, or create another warehouse hypothesis in this sequence.
+The current blocker for v0.4 closeout is now the second problem-family control:
+one fresh, open, non-target-bound CVRP direct campaign must show whether the
+simplified runtime can conduct useful research without successor-era steering.
 
-The final repair suite passes `1859 passed, 1 skipped` in `494.65s`; focused
-postrun/lineage coverage, compileall, `git diff --check`, and independent
-read-only review also pass with P0=0/P1=0/P2=0.
-
-No experiment is running. Do not start validation until this repair and the R3
-report pass the full suite and are committed. Preserve the excluded user-owned
+No experiment is running. Preserve the excluded user-owned
 `scion/docs/v0.4-measurement-readiness.md` change and unrelated untracked
 history.
 
 ## Immediate Queue
 
-1. Complete the scoped-lineage patch review, full suite, compileall, and
-   exclusion check.
-2. Stage, commit, and push only the reviewed postrun repair, tests, R3 report,
-   `TASK.md`, and current-state update under the user's existing authorization.
-3. Create an isolated detached clean runtime at that exact commit. Prepare one
-   diagnostic/non-formal continuation from the expanded campaign with
-   `requested_rounds=1`; this is an explicit invocation scope, not a semantic
-   budget.
-4. Run the same candidate on the preregistered validation split. The scheduler
-   must use the eval-only `READY_VALIDATE` path, issue no provider call, preserve
-   the candidate/branch identity, and finish with a green postrun wrapper.
-5. Run frozen evaluation only if the deterministic validation decision queues
-   it. Do not promote or start CVRP from screening evidence alone. After the
-   warehouse lifecycle is resolved, run one clean, non-target-bound CVRP
-   campaign as the second problem-family control.
+1. Finish the independent validation-result audit and diff/exclusion check.
+2. Stage, commit, and push only the R3 report, `TASK.md`, and current-state
+   update under the user's existing authorization.
+3. Create an isolated detached clean runtime at that exact commit.
+4. Prepare one fresh two-round CVRP direct control with no target/action/surface
+   binding, parameter search disabled, `gpt-5.6-sol`, strict postrun reports,
+   and completion preflight inside the guarded wrapper.
+5. Require guarded-wrapper readiness, then inspect the prepared actual H/C
+   context for successor IDs, target-file/mechanism steering, telemetry,
+   budget, retry, or truncation noise. Do not send a separate live probe.
+6. Launch only after those checks pass. Supply the shared proxy key only in
+   process environment, poll about every three minutes, and never retry.
 
 Do not close v0.4 merely because framework tests pass. Close it only after both
 formal controls show that the simplified agent performs useful research without

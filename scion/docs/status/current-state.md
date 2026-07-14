@@ -5,24 +5,25 @@
 This is the operational resume point. Read `scion/TASK.md` first and use
 `scion/design/scion-architecture-v3.md` as the architecture tie-breaker.
 
-No experiment is running. The clean formal warehouse R3 confirmation is
-complete and green. Its round-2 candidate then passed an eval-only expanded
-screen on the same branch without another provider call and is now
-`ready_validate`. Before validation, land the narrow postrun fix that scopes
-current-invocation outcome integrity by campaign ID.
+No experiment is running. The warehouse R3 lifecycle is resolved. Its
+round-2 candidate passed expanded screening, but the same cumulative branch
+failed eval-only validation on the larger locked split and is now `abandoned`.
+The validation wrapper and the repaired campaign-scoped postrun path are fully
+green. Do not retry, freeze, modify, or promote this branch.
 
 ## Current Decision
 
-Commit `d57d6cd6` is pushed on `v0.4-dev` and is the exact runtime commit for
-R3. R3 proves that the repaired prompt/source contract reached the operational
-formal launcher and that the direct runtime can produce a promising algorithm
-signal without the old governance noise.
+Commit `9c88ef6a` is pushed on `v0.4-dev`. It contains the resumed-postrun scope
+repair and is the exact runtime commit for validation. The result is a useful
+negative research lifecycle: Scion found a broad screening signal, expanded
+it, escalated the same candidate without another model call, and correctly
+rejected it when it failed to generalize.
 
-The same-candidate expanded screen earned `queue_validate`; it did not earn
-promotion. Do not generate another H/C pair, start a new warehouse hypothesis,
-or launch CVRP yet. First commit the postrun scope repair, then reopen the
-expanded campaign from a clean detached runtime and run its eval-only
-validation step.
+The next experiment is one fresh, clean, open, non-target-bound CVRP direct
+control. First commit and push this validation status update, then prepare a
+new detached clean runtime at that exact docs commit so formal readiness sees
+an exact clean repository. Do not carry warehouse target hints or mechanism
+instructions into CVRP.
 
 ## Run Roots
 
@@ -34,9 +35,14 @@ Expanded-screening continuation root:
 
 `/home/clawd/research/scion-experiments/v04-warehouse-r3-same-candidate-expand-1r-gpt56sol-20260714T142050Z-claw`
 
-The first root is the fresh formal confirmation. The second is a copied-state,
-diagnostic/non-formal continuation used only to evaluate the exact same
-candidate. Do not blur their wrapper status or evidence scope.
+Same-candidate validation root:
+
+`/home/clawd/research/scion-experiments/v04-warehouse-r3-same-candidate-validation-1r-gpt56sol-20260714T145307Z-claw`
+
+The first root is the fresh formal confirmation. The second and third are
+copied-state, diagnostic/non-formal continuations used only to evaluate the
+exact same cumulative candidate. Do not blur their wrapper status or evidence
+scope.
 
 ## Formal R3 Evidence
 
@@ -117,11 +123,41 @@ call/acceptance/causal-effect evidence. `_PAIR_LIMIT=24` also slices only after
 full directed `O(V^2)` pair enumeration. Six larger candidate pairs reached
 about 30 seconds even though the fresh median was faster than champion.
 
+### Same-candidate validation
+
+The validation continuation kept the same branch/workspace/code identity and
+made no H/C call. It evaluated five cases with seeds `7/19/83`.
+
+The copied `campaign/status.json` still displays cumulative H=`2`, C=`2` from
+the source campaign. Current campaign proposal-transition count is zero, and
+all four trace files are byte-identical pre-launch artifacts; use those scoped
+facts rather than the inherited counters when auditing eval-only behavior.
+
+- pairs: `15/15` valid, no solver failure;
+- case W/L/T: `2/3/0`;
+- pair W/L/T: `6/9/0`;
+- primary `subcategory_splits` median: `0`, CI `[0,1]`;
+- case win rate: `0.40`, below validation minimum `0.55`;
+- runtime ratio: `1.578`;
+- runtime delta: `+11072 ms`;
+- runtime regression rate: `13/15`;
+- Decision: `abandon / VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`;
+- final branch state: `abandoned`;
+- champion: unchanged; no frozen run or promotion.
+
+`val_l01` improved splits by one on all seeds but worsened cost by
+`8000--11500`. `val_lx02` tied on splits and improved cost on all seeds.
+`val_l02`, `val_l04`, and `val_lx01` tied on splits and lost cost on all nine
+pairs. Even ignoring the hierarchical primary metric, the five case-level
+cost effects have median `-8300`. Twelve candidate runs were near 30 seconds.
+The screening signal was local to the smaller screen and did not generalize to
+the 308--457-order validation distribution.
+
 All production screening, validation, frozen, and canary fixtures have empty
 `amount_limits`, so the corrected H6 code path is not experimentally exercised.
-Validation does contain many locked orders and will exercise that separate
-feasibility rule. The available validation surface is five cases times three
-seeds (`15` pairs); locked-order counts are `12/49/43/15/58`.
+Validation contained many locked orders and all 15 pairs remained feasible, so
+the cumulative candidate is lock-safe on this surface. Locked-order counts were
+`12/49/43/15/58`. H6 remains untested because every amount-limit map is empty.
 
 ## Resume-Postrun False Failure
 
@@ -155,40 +191,37 @@ Focused postrun/lineage coverage passes, the full Scion suite passes
 `1859 passed, 1 skipped` in `494.65s`, and compileall plus
 `git diff --check` pass.
 
+The validation root proves the fix in a real continuation: its current campaign
+`a24b5d73-...` has one evaluated outcome, the copied database has four
+cumulative evaluated outcomes across three campaign IDs, current scoped
+summary/lineage counts are `1/1`, decision consistency is `consistent`, and
+postrun readiness has no required or optional failure.
+
 ## Worktree State
 
-- branch: `v0.4-dev` at pushed `d57d6cd6`;
-- intended changes: postrun campaign-scope repair, regression tests, R3 report,
-  `TASK.md`, and this file;
+- branch: `v0.4-dev` at pushed `9c88ef6a`;
+- intended changes now: validation results in the R3 report, `TASK.md`, and
+  this file only;
 - `scion/docs/v0.4-measurement-readiness.md` is a pre-existing user-owned
   tracked change and must remain excluded;
 - unrelated untracked historical/future documents must remain excluded;
-- do not run validation from this dirty source worktree.
+- validation ran from clean detached runtime
+  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-9c88ef6a`.
 
 ## Resume Actions
 
-1. Finish the full suite, compileall, diff/exclusion review, and independent
-   read-only patch audit.
-2. Stage, commit, and push only the intended repair/report/operating-doc files
-   under the user's existing authorization.
-3. Create a detached clean runtime at the exact new commit.
-4. Prepare one diagnostic/non-formal continuation from the expanded campaign
-   with `requested_rounds=1`. This is explicit invocation scope, not a semantic
-   budget.
-5. Confirm prelaunch state is `ready_validate`, trace count remains four, no
-   provider call is scheduled, current code hash is
-   `b214e9e18fcbf86c5b58ae58aed1be0db1cfd1daf57f3e874bda6bbe8c42d069`,
-   and the cumulative workspace retains destroy/rebuild digest
-   `4910ad450fb8bf8a876b0d3287ce9322e5600a4a87e156e95e36b4ea1a22cc36`
-   plus merge digest
-   `6e251c9f5bba4562bc2893cc4d56e10c9e74fa9874a2afacb0fa9428f144dcd5`
-   and registry digest
-   `4a3f8c737bb02cd3b87230ae4dad4a758287e0fef3ffb82e810a3f0592c212f1`.
-6. Launch the eval-only validation step with `SCION_SHARED_PROXY_KEY` supplied
-   only by the process environment; do not persist its value. Poll
-   observationally about every three minutes and never schedule a retry.
-7. Run frozen evaluation only if validation deterministically queues it. Do not
-   promote or start CVRP from screening evidence alone.
+1. Complete the independent validation-result audit and diff/exclusion check.
+2. Stage, commit, and push only the R3 report, `TASK.md`, and this file under
+   the user's existing authorization.
+3. Create a detached clean runtime at that exact commit.
+4. Prepare one fresh two-round CVRP direct control with no target/action/surface
+   binding, parameter search disabled, `gpt-5.6-sol`, strict postrun reports,
+   and completion preflight inside the guarded wrapper.
+5. Require guarded-wrapper launch readiness, then inspect the prepared actual
+   provider context for successor, target-file, mechanism-ranking, telemetry,
+   budget, retry, and truncation noise. Do not send a separate live probe.
+6. Launch only after those checks pass. Supply `SCION_SHARED_PROXY_KEY` only in
+   process environment, poll about every three minutes, and never retry.
 
 ## Runner Notes
 

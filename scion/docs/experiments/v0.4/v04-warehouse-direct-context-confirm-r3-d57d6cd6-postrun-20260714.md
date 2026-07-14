@@ -24,10 +24,12 @@ continuation then reused the exact same candidate without another provider
 call and strengthened the result to 14 cases / 28 seed pairs, after which the
 deterministic decision became `queue_validate`.
 
-This is not yet validation or promotion evidence. The branch is cumulative,
-the primary `subcategory_splits` objective never improved, and the present
-artifacts do not isolate the merge operator from round 1's slower
-destroy/rebuild operator or from changed seeded search trajectories.
+The subsequent eval-only validation rejected the cumulative branch. On five
+larger, lock-heavy cases it achieved case W/L/T `2/3/0`, primary
+`subcategory_splits` median `0` with CI `[0,1]`, and runtime ratio `1.578`.
+Decision was `abandon / VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`; no frozen run or
+promotion followed. The positive screening signal was real on its declared
+screen, but it did not generalize sufficiently.
 
 ## Formal Execution Evidence
 
@@ -125,6 +127,55 @@ seed each on `m04` and `ml02`. The largest consistent gain was on `ml01`
 (`+15100`, `+11800`). This is broad enough to justify validation, but all gain
 is still on the secondary total-cost objective.
 
+## Same-Candidate Validation
+
+- Runtime commit: `9c88ef6a`;
+- continuation root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-r3-same-candidate-validation-1r-gpt56sol-20260714T145307Z-claw`;
+- campaign ID: `a24b5d73-153a-4f85-85e8-17fbb69c50e1`;
+- trace count before/after: `4 / 4`;
+- provider calls or retries in this invocation: `0`;
+- code/branch identity: unchanged cumulative candidate;
+- cases / seeds / pairs: `5 / 3 / 15`;
+- valid / failed pairs: `15 / 0`;
+- case W/L/T: `2/3/0`;
+- pair W/L/T: `6/9/0`;
+- `subcategory_splits` median: `0`, CI `[0,1]`;
+- runtime median ratio: `1.578`;
+- runtime median delta: `+11072 ms`;
+- runtime regression rate: `13/15 = 0.8667`;
+- Decision: `abandon / VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`;
+- final branch state: `abandoned`;
+- campaign/outer wrapper: `0 / 0`;
+- postrun: ready, no required or optional failure.
+
+The copied status/summary retains cumulative H=`2`, C=`2` counters from the
+source campaign. They are not current-invocation calls. The validation
+campaign has zero proposal-attempt transitions, and the four trace files are
+byte-identical artifacts whose mtimes predate validation launch.
+
+Pair-level interpretation:
+
+- `val_l01` improved `subcategory_splits` by `+1` on all three seeds, so it
+  won lexicographically despite cost deltas `-11500/-10600/-8000`;
+- `val_l02`, `val_l04`, and `val_lx01` tied on splits and lost cost on all
+  nine pairs;
+- `val_lx02` tied on splits and won cost on all three seeds by
+  `+52900/+43800/+48100`.
+
+Thus only one of five cases had a consistent primary-objective gain, one other
+case had a large cost gain, and three cases consistently regressed. The
+descriptive median of the five case-level cost effects is `-8300`. Twelve of
+15 candidate runs were near the 30-second solver limit, while champion took
+about 13.6--21.1 seconds. The validation rejection is therefore scientific,
+not a framework or gate false negative.
+
+The validation root also proves the resumed-postrun fix under real execution:
+the copied database has four cumulative evaluated outcomes across three
+campaign IDs, while current-invocation integrity correctly compares summary
+`1` with scoped lineage `1`. Decision/outcome consistency is `consistent`, and
+postrun is fully green.
+
 ## Remaining Scientific Uncertainty
 
 1. The final branch contains both the round-1 destroy/rebuild change and the
@@ -173,24 +224,14 @@ the full Scion suite (`1859 passed, 1 skipped` in `494.65s`), compileall,
 
 ## Next Action
 
-After the scoped-lineage repair passes the full suite and is committed, create
-a detached clean runtime at that exact commit and resume the expanded campaign
-into one eval-only validation invocation. It should reuse the same candidate,
-make no provider call, and evaluate only the preregistered validation split.
-The manifest contains five validation cases and three validation seeds, so the
-expected surface is 15 pairs even though the protocol's upper request is six
-cases. Their locked-order counts are `12/49/43/15/58`. Before launch, assert
-the cumulative candidate identity. The exact identities are:
+Do not retry, modify, freeze, or promote this branch. Preserve it as a useful
+negative generalization result: Scion found a broad screening signal, expanded
+it, escalated it to validation, and then rejected it on the preregistered
+larger locked split without another model call.
 
-- code:
-  `b214e9e18fcbf86c5b58ae58aed1be0db1cfd1daf57f3e874bda6bbe8c42d069`;
-- destroy/rebuild:
-  `4910ad450fb8bf8a876b0d3287ce9322e5600a4a87e156e95e36b4ea1a22cc36`;
-- merge:
-  `6e251c9f5bba4562bc2893cc4d56e10c9e74fa9874a2afacb0fa9428f144dcd5`.
-- registry:
-  `4a3f8c737bb02cd3b87230ae4dad4a758287e0fef3ffb82e810a3f0592c212f1`.
-
-Replaying only the round-2 patch would be the wrong candidate. Proceed to
-frozen evaluation only if the deterministic validation decision requires it.
-Do not promote or start CVRP from screening evidence alone.
+The warehouse direct-runtime lifecycle is now resolved. After committing this
+status update, prepare one fresh, clean, open, non-target-bound CVRP control as
+the second problem-family test. Keep the same no-retry/no-truncation rules and
+inspect actual provider context before launch. H6 still needs a separately
+constructed non-empty `amount_limits` fixture in later constraint-coverage
+work; this validation cannot be cited as H6 behavioral evidence.
