@@ -54,6 +54,50 @@ def test_prompt_visibility_acceptance_rejects_drift_and_policy_failures() -> Non
     assert "prompt_signal_density_total_token_estimate_mismatch" in failures
 
 
+def test_prompt_visibility_acceptance_rejects_unnormalized_direct_receipt() -> None:
+    summary, expected = _ready_prompt_inputs()
+    for payload in (summary, expected):
+        aggregate = payload["aggregate"]
+        aggregate["prompt_manifest_ref_count"] = 2
+        aggregate["prompt_manifest_loaded_count"] = 2
+        aggregate["trace_count"] = 1
+        entry = payload["entries"][0]
+        entry["prompt_manifest_ref_count"] = 2
+        entry["prompt_manifest_loaded_count"] = 2
+        entry["trace_count"] = 1
+
+    check = PostrunPromptVisibilityAcceptancePort().summarize(
+        problem_family="warehouse_delivery",
+        summary=summary,
+        expected=expected,
+    ).checks[0]
+
+    assert check.status == "failed"
+    assert "prompt_manifest_loaded_not_fully_normalized" in check.detail[
+        "failures"
+    ]
+
+
+def test_prompt_visibility_acceptance_rejects_unloaded_direct_receipt() -> None:
+    summary, expected = _ready_prompt_inputs()
+    for payload in (summary, expected):
+        aggregate = payload["aggregate"]
+        aggregate["prompt_manifest_ref_count"] = 2
+        aggregate["prompt_manifest_loaded_count"] = 1
+        entry = payload["entries"][0]
+        entry["prompt_manifest_ref_count"] = 2
+        entry["prompt_manifest_loaded_count"] = 1
+
+    check = PostrunPromptVisibilityAcceptancePort().summarize(
+        problem_family="warehouse_delivery",
+        summary=summary,
+        expected=expected,
+    ).checks[0]
+
+    assert check.status == "failed"
+    assert "prompt_manifest_refs_not_fully_loaded" in check.detail["failures"]
+
+
 def test_prompt_visibility_acceptance_can_emit_skipped_payload() -> None:
     check = PostrunPromptVisibilityAcceptancePort().summarize(
         problem_family="other",

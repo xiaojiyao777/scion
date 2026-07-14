@@ -193,13 +193,6 @@ idea to investigate."""
 - Helper: `select_minimum_vehicle_type(total_pallets, total_hazard) -> str` from models.py
 - Helper: `get_max_pickups(region) -> int` from models.py (Dongguan=2, Shenzhen=3)
 
-### Optional Operator Observability
-Operators may expose `operator_invocations`,
-`eligible_vehicle_or_order_groups_seen`, `accepted_moves`, `split_delta_sum`,
-`cost_delta_sum`, and `improving_move_count` when those values help explain an
-algorithmic effect. These diagnostics are observability, not a condition for
-proposing or implementing a useful algorithmic change.
-
 ### Critical Constraints
 1. **Deep copy first**: always call `new_sol = solution.deep_copy()` before any modification
 2. **Locked orders**: never move orders where `order.locked_vehicle_id is not None`
@@ -307,22 +300,6 @@ proposing or implementing a useful algorithmic change.
                 "interpretation": (
                     "total_cost matters when subcategory_splits is preserved; "
                     "feasibility is always required"
-                ),
-            },
-            "optional_observability": {
-                "activation": [
-                    "operator_invocations",
-                    "eligible_vehicle_or_order_groups_seen",
-                    "accepted_moves",
-                ],
-                "effect": [
-                    "split_delta_sum",
-                    "cost_delta_sum",
-                    "improving_move_count",
-                ],
-                "policy": (
-                    "Use these fields when they clarify why an operator did or "
-                    "did not affect the objective; they are not proposal gates."
                 ),
             },
             "measurable_opportunity_classes": [

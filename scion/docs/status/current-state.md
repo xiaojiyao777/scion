@@ -3,16 +3,21 @@
 *Last updated: 2026-07-13*
 
 This is the operational resume point. Read `scion/TASK.md` first. v0.4 is in
-final integration review; no experiment is running. The latest warehouse root
-stopped before campaign creation on a single upstream completion timeout and
-must not be restarted or reused.
+formal control repair; no experiment is running. The latest warehouse root
+completed preflight and one substantive H/C pair, but Contract rejected the
+candidate before Verification, leaving zero evaluated rounds. It must not be
+restarted or reused.
 
 ## Current Decision
 
-The refactor implementation and final scope are accepted. The initial audited
-payload is `09af19d2`; the prepared-focus repair is `82dcf3fb`. The commit
-containing this document includes the final postrun/preflight repair and is the
-required base for a replacement clean runtime.
+The guarded-wrapper baseline is commit `b1464171`. The first formal control at
+that commit proves that the simplified agent can propose and implement a
+material warehouse mechanism, but not yet that the mechanism can execute or
+improve the solver. The completed repair removes telemetry prompt noise, makes
+the C9 reflection boundary provider-visible while keeping it fail-closed, and
+updates postrun to read direct-v3 traces without fabricating source visibility.
+Independent review reports P0=`0`, P1=`0`; the full suite passes
+`1848 passed, 1 skipped`.
 
 Do not launch successor56, resume successor55, create a targeted CVRP successor,
 or bypass `git_runtime_worktree_clean`.
@@ -147,8 +152,11 @@ Production forbidden scans are currently clean for the K6 deletion list.
 
 ## Validation Snapshot
 
-- final collection after the latest regression additions: `1836 tests`;
-- full Scion after all cleanup: `1835 passed, 1 skipped` in `496.64s`;
+- latest collection after the prompt/C9 and direct-v3 postrun repairs:
+  `1849 tests`;
+- latest full Scion: `1848 passed, 1 skipped` in `502.91s`;
+- guarded-readiness baseline at `b1464171`: `1835 passed, 1 skipped` in
+  `496.64s`;
 - final direct-writer/legacy-reader hardening: `106 passed` affected regression;
 - direct warehouse/CVRP outer smokes: passed;
 - scheduler/same-branch/reopen H/C evidence regression: `82 passed`;
@@ -237,6 +245,43 @@ also was never launched and sent no completion. Static checks passed, but the
 generated readiness text still encoded the old duplicate-probe workflow. It is
 superseded and must not be used; rebuild after the guarded-readiness commit.
 
+## Formal Warehouse Control at `b1464171`
+
+Run root:
+`v04-warehouse-direct-control-2r-gpt56sol-20260713T144325Z-claw`.
+
+- completion preflight: authenticated HTTP 200 and non-empty response;
+- provider activity: one successful H and one successful C, no retry;
+- H: bounded best-first subcategory consolidation with up to two ejected
+  blockers, directly targeting `(subcategory_splits, total_cost)`;
+- C: a complete 484-line `operators/subcategory_consolidation.py`, correctly
+  bound to the approved target and full SourceLedger;
+- Contract: all checks passed except C9, which rejected `setattr(self, key,
+  getattr(self, key) + value)` used only to maintain optional counters;
+- workspace/Verification/Protocol: not entered;
+- result: effective rounds=`0`, screened experiments=`0`,
+  `invalid_research_rejected_only`, algorithm conclusions forbidden.
+
+Independent source audit also found a deterministic two-blocker score-shape
+bug (`int + tuple`) plus weaker ranking/H6 risks. These do not excuse the hidden
+Contract mismatch; they show why executable Verification must remain the owner
+after structural Contract passes.
+
+The repair direction is deliberately small:
+
+- remove optional observability fields/instructions from warehouse H/C context;
+- disclose the generic C9 no-reflection/API boundary in the short C instruction;
+- retain strict C9 rather than adding a receiver-analysis exception;
+- adapt postrun to direct-v3 attempts, validate exact context SHA-256 and the
+  canonical `proposal-source-ledger.v2`, and fail closed on malformed ledgers.
+
+The real-root rebuild loads prompt-manifest refs=`2`, loaded=`2`, traces=`2`;
+it reports H=`1`, C=`1`, code protected source visible, and no missing required
+source. It still reports
+`ineligible_zero_evaluated`/`algorithm_conclusions_allowed=false`. Strict
+current-run readiness remains false only because the original wrapper's failed
+status markers are immutable; delegation/read-only analysis is ready.
+
 ## Worktree State
 
 - branch: `v0.4-dev`;
@@ -251,14 +296,15 @@ superseded and must not be used; rebuild after the guarded-readiness commit.
   (`0755`);
 - `scion/docs/v0.4-measurement-readiness.md` has a pre-existing user change and
   was deliberately not edited by this refactor;
-- nothing has been pushed; one wrapper launch at `82dcf3fb` stopped in its sole
-  pre-campaign completion preflight before campaign execution and is retained
-  only as infra characterization evidence.
+- nothing has been pushed; the latest `b1464171` root is retained only as
+  characterization evidence and its postrun report is
+  `v04-warehouse-direct-control-b1464171-postrun-20260713.md`.
 
 ## Resume Actions
 
-1. Verify the commit containing this document includes the postrun/preflight
-   repair and excludes all `34` preserved paths.
+1. Stage and commit only the reviewed repair/report/status scope after explicit
+   authorization; do not include the preserved user/history files and do not
+   push.
 2. Create an isolated detached clean runtime worktree at that exact commit.
    Do not stash/delete the excluded source-tree files. Prepare warehouse and
    run `--require-guarded-wrapper-launch-ready`. Require guarded scope, no
@@ -266,8 +312,8 @@ superseded and must not be used; rebuild after the guarded-readiness commit.
    redirection; do not duplicate the live completion probe.
 3. After explicit approval, run warehouse control first; `run.sh` owns the one
    live pre-campaign completion preflight and persists its receipt.
-4. If warehouse artifacts confirm the framework contract, run one open CVRP
-   campaign with no successor target binding.
+4. Run one open CVRP campaign with no successor target binding only after the
+   warehouse candidate reaches executable evaluation.
 5. For a screening continuation, verify the second candidate remains on the
    same branch and sees the first screening evidence/current verified source.
    Treat `typed_edit_noop_dropped` or `patch_set_composition` as
@@ -307,3 +353,5 @@ WSL `scion`, only after a fresh connectivity and preflight check:
   `scion/docs/planning/v0.4/v0.4-k6-single-proposal-runtime-deletion-plan-20260712.md`
 - Successor55 postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor55-bounded-elite-solution-pool-postrun-20260712.md`
+- Formal warehouse `b1464171` postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-direct-control-b1464171-postrun-20260713.md`

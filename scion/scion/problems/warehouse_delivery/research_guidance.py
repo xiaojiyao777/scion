@@ -48,18 +48,15 @@ WAREHOUSE_REQUIRED_EVIDENCE = (
     "ground the idea in the current champion source and complete branch evidence",
     "preserve assignment completeness and synchronization",
     "preserve capacity, region, category, pickup, hazard, and locked-order feasibility",
-    "use runtime and operator diagnostics as optional explanation when informative",
 )
 WAREHOUSE_DEFAULT_AVOID_DIRECTIONS = (
     "model the warehouse assignment problem as routing or distance optimization",
     "preselect an operator family before inspecting the current source",
     "move orders without an explicit path to the lexicographic objective",
     "trade away assignment feasibility for an apparent objective improvement",
-    "treat optional telemetry as a proposal gate or as a substitute for objective evidence",
 )
 WAREHOUSE_ADAPTER_OPPORTUNITY_FIELDS = (
     "objective_model",
-    "optional_observability",
     "measurable_opportunity_classes",
     "opportunity_diagnostics",
     "policy",
@@ -160,16 +157,6 @@ def build_warehouse_research_guidance_contract(
                     "order_level: move or exchange orders when the source supports a credible objective path",
                     "vehicle_level: merge, split, resize, or rebuild assignments when the source supports a credible objective path",
                     "Neither surface nor operator family is preferred in advance.",
-                ),
-            ),
-            GuidanceBlock(
-                block_id="warehouse_optional_observability",
-                category="observability",
-                title="Optional algorithm observability",
-                lines=(
-                    WAREHOUSE_REQUIRED_EVIDENCE[4],
-                    "Useful fields may include operator_invocations, accepted_moves, split_delta_sum, cost_delta_sum, and improving_move_count.",
-                    "Absence of those fields does not block an otherwise valid algorithmic idea.",
                 ),
             ),
             GuidanceBlock(

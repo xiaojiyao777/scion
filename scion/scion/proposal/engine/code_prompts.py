@@ -38,8 +38,11 @@ def _split_code_context(
         "Implement the approved hypothesis as one coherent patch, including every "
         "necessary file in the typed edit set. Bind modifications to the supplied "
         "source owner, provenance, and digest. Do not substitute a nearby target, "
-        "silently weaken the mechanism, or add unrelated cleanup. Return the patch "
-        "through the required tool schema."
+        "silently weaken the mechanism, or add unrelated cleanup. Use direct "
+        "attribute access: do not use "
+        "setattr, delattr, dynamic-name getattr, globals, locals, or vars, and do not "
+        "use process, network, environment, dynamic-import, or file APIs. Return the "
+        "patch through the required tool schema."
     )
     return system_blocks, user_prompt
 

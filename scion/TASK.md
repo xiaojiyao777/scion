@@ -131,8 +131,10 @@ steering, or launch a formal experiment from the transition worktree.
 
 ## Integrated Evidence
 
-- Final collection after the guarded-readiness repair: `1836 tests collected`.
-- Full Scion suite after the final context, launch-boundary, and postrun fixes:
+- Latest collection after the prompt/C9 and direct-v3 postrun repairs:
+  `1849 tests collected`.
+- Latest full Scion suite: `1848 passed, 1 skipped` in `502.91s`.
+- The preceding guarded-readiness baseline at `b1464171` passed
   `1835 passed, 1 skipped` in `496.64s`.
 - Direct warehouse and CVRP outer smokes pass through
   Contract -> Verification -> Protocol -> Decision.
@@ -198,50 +200,43 @@ steering, or launch a formal experiment from the transition worktree.
 
 The source worktree intentionally retains unrelated/user-owned changes and
 historical untracked reports, so it must not host a formal run. The next runtime
-must be an isolated clean worktree at the exact integration commit;
+must be an isolated clean worktree at the exact repair commit;
 `git_runtime_worktree_clean` remains a hard launch boundary and must not be
 bypassed.
 
-The refreshed scope classifies all `826` status paths with no ambiguity:
-`792` refactor paths to include, `34` paths to preserve/exclude, and `0`
-unresolved paths. The excluded set is the user-owned measurement-readiness
-change plus `33` old/future untracked documents.
+Commit `b1464171` contains the guarded-wrapper launch repair and passed the full
+suite (`1835 passed, 1 skipped`). Its formal warehouse root
+`v04-warehouse-direct-control-2r-gpt56sol-20260713T144325Z-claw` completed the
+preflight and one H/C pair. The agent proposed a substantive bounded
+subcategory-consolidation/ejection-chain mechanism and generated a complete new
+operator, but C9 rejected a reflective telemetry helper before materialization.
+Verification and Protocol therefore did not run: evaluated rounds=`0`, outcome
+`research_rejected`, validity=`invalid_research_rejected_only`. Source audit
+also found a two-blocker `TypeError` that normal Verification still needed to
+expose.
 
-The integration commits contain exactly the audited refactor scope plus the
-prepared-focus repair. No push has occurred. The user-owned change in
-`scion/docs/v0.4-measurement-readiness.md` remains outside the commit and must
-remain untouched.
+The completed repair removes optional warehouse telemetry instructions from
+H/C context, exposes the concise C9 no-reflection/API boundary in the generic C
+instruction, and keeps C9 fail-closed. It also updates postrun for direct-v3
+`attempts/phases/prompt_fingerprint`, verifies receipt identity, the exact
+rendered header family/context digest, and the canonical SourceLedger, and
+retains legacy report compatibility. Independent review reports P0=`0`,
+P1=`0`; the latest full suite passes `1848 passed, 1 skipped`. The real-root
+rebuild loads all `2/2` prompt-manifest receipts, normalizes both H/C traces,
+and passes prompt/source visibility while preserving
+`ineligible_zero_evaluated`.
 
-The first prepared warehouse root at commit `09af19d2` was never launched and
-must not be reused: readiness correctly stopped on an invalid generic API-key
-environment and the focus-projection required-bit regression. Rebuild from the
-new commit with the dedicated proxy-key environment after readiness is green.
-
-The clean warehouse root at `82dcf3fb` also must not be reused. Its campaign
-never started: the single `run.sh` launch-boundary completion attempt timed out
-upstream and the wrapper stopped fail-closed without a retry. A new formal root
-must be prepared from the commit containing this document, which includes the
-postrun/timeout-classification repair. Do not precede `run.sh` with a second
-live completion probe: perform
-static/structural readiness first, then let `run.sh` own and persist the sole
-real pre-campaign completion receipt. Starting that replacement root requires
-an explicit operator decision; do not restart automatically.
-
-The root prepared from `695b7204` at
-`v04-warehouse-direct-control-695b7204-2r-gpt56sol-20260713T133245Z-claw`
-was never launched and sent no completion. Its static checks passed, but its
-generated rule still required an external live probe immediately before the
-wrapper, so it is superseded by the guarded-readiness repair and must not be
-used.
+The `b1464171` root and all earlier `09af19d2`, `82dcf3fb`, and `695b7204`
+roots are immutable characterization evidence. Do not restart or reuse them.
+No push has occurred. The user-owned
+`scion/docs/v0.4-measurement-readiness.md` change and unrelated untracked
+history remain excluded and must remain untouched.
 
 ## Immediate Queue
 
-1. Verify the commit containing this document includes the postrun import,
-   preflight-failure integration coverage, and timeout-classification repair,
-   and excludes all `34` preserved paths.
-2. From that commit, create an isolated detached clean runtime worktree;
-   preserve excluded user/history files in the source worktree, rebuild
-   prepared artifacts, and run
+1. Stage and commit only the reviewed repair, focused experiment report, and
+   operating-doc updates after explicit authorization; do not push.
+2. From that commit, create an isolated detached clean runtime worktree and run
    `--require-guarded-wrapper-launch-ready` with exact commit identity. Require
    `readiness_scope=guarded_wrapper_launch`, no blockers, exactly one executable
    proxy call, and a persisted receipt path. Do not send a separate live
@@ -252,7 +247,8 @@ used.
    Contract, Verification, Protocol, Decision, normalization events, and
    postrun artifacts. If screening continues, verify the next candidate uses
    the same branch's experiment evidence and verified source.
-4. Run one clean, non-target-bound CVRP campaign from the same runtime.
+4. Run one clean, non-target-bound CVRP campaign only after warehouse reaches
+   executable evaluation.
 5. Judge research effectiveness from actual algorithm hypotheses, executable
    multi-file code, attributable solver behavior, and full-solver outcomes.
 
@@ -291,3 +287,5 @@ reintroducing governance noise.
   `scion/docs/planning/v0.4/v0.4-k6-single-proposal-runtime-deletion-plan-20260712.md`
 - Successor55 postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-successor55-bounded-elite-solution-pool-postrun-20260712.md`
+- Formal warehouse `b1464171` postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-direct-control-b1464171-postrun-20260713.md`

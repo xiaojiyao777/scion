@@ -23,6 +23,9 @@ from scion.problem.bridge import (
     load_problem_spec_v1_from_yaml,
 )
 from scion.problem.loader import load_problem_adapter
+from scion.postrun.direct_v3_prompt_visibility import (
+    direct_v3_code_source_visibility,
+)
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_manager.manager import (
     CANONICAL_SCREENING_HISTORY_KEY,
@@ -438,6 +441,8 @@ def test_direct_v3_code_context_contains_source_not_research_history(
     )
     rendered = "\n".join(block["text"] for block in blocks) + user_prompt
     ledger = context["proposal_source_ledger"]
+    visibility = direct_v3_code_source_visibility(context)
+    guarantees = visibility["code_phase_guarantees"]
     target = next(
         item for item in ledger["entries"] if item["path"] == target_file
     )
@@ -446,6 +451,14 @@ def test_direct_v3_code_context_contains_source_not_research_history(
     assert target["content"]
     assert target["digest"]
     assert context["approved_hypothesis"]["target_file"] == target_file
+    assert "Use direct attribute access" in user_prompt
+    assert "setattr, delattr, dynamic-name getattr" in user_prompt
+    assert "process, network, environment, dynamic-import, or file APIs" in user_prompt
+    assert guarantees["target_source_visible"] is True
+    assert guarantees["protected_source_visible"] is True
+    assert guarantees["required_integration_source_visible"] is True
+    assert guarantees["algorithm_file_read_source_visible"] is True
+    assert guarantees["missing_required_source_paths"] == []
     assert "must-not-enter-code-context" not in rendered
     assert set(context).isdisjoint(
         {
@@ -461,3 +474,43 @@ def test_direct_v3_code_context_contains_source_not_research_history(
     canonical = json.loads(blocks[1]["text"].split("\n", 1)[1])
     assert canonical["approved_hypothesis"]["target_file"] == target_file
     assert canonical["proposal_source_ledger"]["approved_target"] == target_file
+
+
+def test_direct_v3_cvrp_create_ledger_proves_target_and_support_sources() -> None:
+    _spec, legacy, adapter, champion, branch = _runtime("cvrp")
+    target_file = "policies/baseline_modules/new_mechanism.py"
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Create one source-grounded CVRP mechanism.",
+        change_locus="solver_design",
+        action="create_new",
+        target_file=target_file,
+        predicted_direction="improve",
+        target_weakness="current mechanism leaves measurable quality headroom",
+        expected_effect="improve the declared objective",
+    )
+
+    context = ContextManager(adapter=adapter).build_code_context(
+        branch,
+        hypothesis,
+        champion,
+        legacy,
+        step_history=[],
+    )
+    ledger = context["proposal_source_ledger"]
+    target = next(
+        item for item in ledger["entries"] if item["path"] == target_file
+    )
+    guarantees = direct_v3_code_source_visibility(context)[
+        "code_phase_guarantees"
+    ]
+
+    assert target["visibility"] == "new_file_placeholder"
+    assert target_file not in ledger["views"]["api_reference"]
+    assert ledger["views"]["api_reference"]
+    assert ledger["views"]["integration_full"]
+    assert ledger["views"]["champion_research"]
+    assert guarantees["target_source_visible"] is True
+    assert guarantees["protected_source_visible"] is True
+    assert guarantees["required_integration_source_visible"] is True
+    assert guarantees["algorithm_file_read_source_visible"] is True
+    assert guarantees["missing_required_source_paths"] == []

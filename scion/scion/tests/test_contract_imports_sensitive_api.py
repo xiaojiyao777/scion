@@ -210,6 +210,91 @@ class TestC9SensitiveApi:
         assert not c9.passed
         assert "dynamic_name" in c9.detail
 
+    def test_local_operator_telemetry_reflection_is_blocked(
+        self,
+        gate: ContractGate,
+    ):
+        code = (
+            "class Op:\n"
+            "    def _record(self, key, value):\n"
+            "        setattr(self, key, getattr(self, key) + value)\n"
+            "        self.diagnostics[key] = getattr(self, key)\n"
+            "    def execute(self, solution, rng):\n"
+            "        self._record('accepted_moves', 1)\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(
+            file_path="operators/op.py",
+            action="create",
+            code_content=code,
+        )
+
+        c9 = check_sensitive_api(patch)
+
+        assert not c9.passed
+        assert "setattr" in c9.detail
+        assert "dynamic_name" in c9.detail
+
+    def test_setattr_on_solver_object_is_blocked(self, gate: ContractGate):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        setattr(solution, 'assignment', {})\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(
+            file_path="operators/op.py",
+            action="create",
+            code_content=code,
+        )
+
+        c9 = check_sensitive_api(patch)
+
+        assert not c9.passed
+        assert "setattr" in c9.detail
+
+    def test_rebound_self_setattr_is_blocked(self, gate: ContractGate):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        self = solution\n"
+            "        setattr(self, 'assignment', {})\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(
+            file_path="operators/op.py",
+            action="create",
+            code_content=code,
+        )
+
+        c9 = check_sensitive_api(patch)
+
+        assert not c9.passed
+        assert "setattr" in c9.detail
+
+    def test_staticmethod_parameter_named_self_setattr_is_blocked(
+        self,
+        gate: ContractGate,
+    ):
+        code = (
+            "class Op:\n"
+            "    @staticmethod\n"
+            "    def mutate(self, key, value):\n"
+            "        setattr(self, key, value)\n"
+            "    def execute(self, solution, rng):\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(
+            file_path="operators/op.py",
+            action="create",
+            code_content=code,
+        )
+
+        c9 = check_sensitive_api(patch)
+
+        assert not c9.passed
+        assert "setattr" in c9.detail
+
     def test_os_environ_is_blocked(self, gate: ContractGate):
         code = (
             "import os\n"

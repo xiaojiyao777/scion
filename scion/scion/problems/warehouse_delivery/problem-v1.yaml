@@ -82,19 +82,16 @@ research_surfaces:
         repacking orders are all open when the hypothesis explains how the
         change can reduce subcategory_splits or preserve splits while reducing
         total_cost. State the relevant feasibility invariants and the source
-        behavior the idea changes. Operator diagnostics may be proposed when
-        they would help explain the algorithm, but are optional observability.
+        behavior the idea changes.
       implementation_guidance: >-
         Keep Solution.assignment synchronized with Vehicle.order_ids, preserve
         locked orders and all domain feasibility rules, use the supplied rng,
         and return a complete Solution. Reuse source-level summaries and
         objective calculations when that naturally follows from the chosen
-        algorithm. If diagnostics are useful, expose values that correspond to
-        actual attempted or accepted algorithmic effects.
+        algorithm.
       anti_patterns: >-
         Do not treat this as a routing or distance problem, move arbitrary
-        orders without an objective argument, desynchronize assignment state,
-        or make optional telemetry a prerequisite for an algorithmic idea.
+        orders without an objective argument, or desynchronize assignment state.
   - name: vehicle_level
     kind: operator
     description: "Warehouse operators that merge, split, resize, or rebuild vehicle assignments."
@@ -115,21 +112,18 @@ research_surfaces:
         structural operator are all open when the hypothesis explains the path
         to fewer subcategory splits or lower cost with splits preserved. State
         how every order remains assigned exactly once and how the chosen source
-        path preserves the warehouse feasibility model. Operator diagnostics
-        are optional when they would make the algorithmic effect easier to see.
+        path preserves the warehouse feasibility model.
       implementation_guidance: >-
         Structural vehicle operators must update both vehicle.order_ids and
         solution.assignment together, preserve locked orders, call
         remove_empty_vehicles after moves, and return the original solution
         when a proposed move cannot preserve capacity, region, category,
         pickup, hazard, and assignment completeness. Use deterministic source
-        operations and the supplied rng. If diagnostics are useful, tie them to
-        real attempted or accepted structural changes.
+        operations and the supplied rng.
       anti_patterns: >-
         Do not delete useful structure solely because an earlier idea failed,
         drop or duplicate orders, desynchronize assignment state, ignore
-        feasibility, or make optional telemetry a prerequisite for an
-        algorithmic idea.
+        feasibility, or substitute metadata work for an algorithmic idea.
 
 objective_policy:
   mode: lexicographic

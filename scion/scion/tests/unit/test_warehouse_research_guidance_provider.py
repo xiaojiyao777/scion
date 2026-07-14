@@ -69,7 +69,8 @@ def test_warehouse_provider_keeps_both_algorithm_surfaces_open() -> None:
     assert "order_level" in rendered.text
     assert "vehicle_level" in rendered.text
     assert "Neither surface nor operator family is preferred" in rendered.text
-    assert "optional" in rendered.text.lower()
+    assert "telemetry" not in rendered.text.lower()
+    assert "observability" not in rendered.text.lower()
     assert "excluded from DecisionFeatures" in rendered.text
     _assert_no_forbidden_prompt_controls(rendered.text)
 
@@ -95,8 +96,10 @@ def test_warehouse_adapter_hypothesis_context_has_no_hidden_outcomes_or_controls
     assert "Both order-level and vehicle-level research remain open" in summary
     assert "order-level idea" in order_context
     assert "vehicle-level idea" in vehicle_context
-    assert "optional observability" in order_context.lower()
-    assert "optional" in vehicle_context.lower()
+    assert "telemetry" not in order_context.lower()
+    assert "observability" not in order_context.lower()
+    assert "telemetry" not in vehicle_context.lower()
+    assert "observability" not in vehicle_context.lower()
     _assert_no_forbidden_prompt_controls(summary)
     _assert_no_forbidden_prompt_controls(order_context)
     _assert_no_forbidden_prompt_controls(vehicle_context)
@@ -120,7 +123,7 @@ def test_warehouse_focus_preserves_safe_complete_aggregate_measurement() -> None
     assert focus["scope"] == "report_only_prepared_handoff"
     assert "current champion source" in focus["accepted_checkpoint"].lower()
     assert "order-level or vehicle-level" in focus["current_question"]
-    assert len(focus["required_evidence"]) == 5
+    assert len(focus["required_evidence"]) == 4
     assert "DecisionFeatures" in focus["decision_boundary"]
 
     measurement = focus["measurement_opportunity_diagnostics"]
@@ -149,7 +152,7 @@ def test_warehouse_focus_preserves_safe_complete_aggregate_measurement() -> None
     assert {
         item["surface"] for item in measurement["measurable_opportunity_classes"]
     } == {"order_level", "vehicle_level"}
-    assert "optional_observability" in measurement
+    assert "optional_observability" not in measurement
     assert "runtime_policy" not in measurement["calibration"]
     assert "calibration_run" not in measurement["calibration"]
 

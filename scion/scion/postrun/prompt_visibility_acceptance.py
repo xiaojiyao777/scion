@@ -132,6 +132,7 @@ def _prompt_source_visibility_actionability(
     if _int_or_zero(source_visibility.get("trace_count")) <= 0:
         failures.append("prompt_source_visibility_trace_accounting_missing")
 
+    _append_prompt_receipt_integrity_failures(failures, summary)
     _append_code_source_failures(failures, source_visibility)
 
     consistency_failures = _prompt_context_visibility_consistency_failures(
@@ -163,6 +164,12 @@ def _prompt_source_visibility_actionability(
             "expected_context_report_count": expected.get("context_report_count"),
             "trace_count": aggregate.get("trace_count"),
             "expected_trace_count": expected_aggregate.get("trace_count"),
+            "prompt_manifest_ref_count": aggregate.get(
+                "prompt_manifest_ref_count"
+            ),
+            "prompt_manifest_loaded_count": aggregate.get(
+                "prompt_manifest_loaded_count"
+            ),
             "visibility_digest_count": aggregate.get("visibility_digest_count"),
             "expected_visibility_digest_count": expected_aggregate.get(
                 "visibility_digest_count"
@@ -274,6 +281,33 @@ def _append_code_source_failures(
     if missing_required_count > 0:
         failures.append("code_missing_required_source_visibility")
     return code_trace_count
+
+
+def _append_prompt_receipt_integrity_failures(
+    failures: list[str],
+    summary: Mapping[str, Any],
+) -> None:
+    entries = summary.get("entries")
+    if not isinstance(entries, list):
+        return
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            continue
+        ref_count = _int_or_zero(entry.get("prompt_manifest_ref_count"))
+        if ref_count <= 0:
+            continue
+        loaded_count = _int_or_zero(entry.get("prompt_manifest_loaded_count"))
+        trace_count = _int_or_zero(entry.get("trace_count"))
+        if (
+            loaded_count != ref_count
+            and "prompt_manifest_refs_not_fully_loaded" not in failures
+        ):
+            failures.append("prompt_manifest_refs_not_fully_loaded")
+        if (
+            trace_count != loaded_count
+            and "prompt_manifest_loaded_not_fully_normalized" not in failures
+        ):
+            failures.append("prompt_manifest_loaded_not_fully_normalized")
 
 
 def _prompt_context_visibility_consistency_failures(

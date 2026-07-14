@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import sqlite3
@@ -13,6 +14,13 @@ assert SPEC is not None
 brief_tool = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(brief_tool)
+
+from scion.postrun.direct_v3_prompt_visibility import (  # noqa: E402
+    direct_v3_code_source_visibility,
+    direct_v3_context_digest,
+    direct_v3_trace_path,
+    normalize_direct_v3_prompt_context_trace,
+)
 
 
 def _evaluated_campaign_summary(
@@ -174,26 +182,28 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     )
     _write_json(
         campaign_dir / "campaign_summary.json",
-        _evaluated_campaign_summary({
-            "formal_screened_candidates": 1,
-            "protocol_evaluated_candidates": 1,
-            "runtime_budget_diagnostics": [
-                {
-                    "branch_id": "branch-1",
-                    "stage": "screening",
-                    "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
-                    "severity": "info",
-                    "runtime_model": "budget_exhausting",
-                    "saturated_side": "champion",
-                    "repairable": False,
-                    "candidate_saturated": False,
-                    "champion_saturated": True,
-                    "saturation_ratio": 0.99,
-                    "threshold_ratio": 0.9,
-                    "total_pairs": 32,
-                }
-            ],
-        }),
+        _evaluated_campaign_summary(
+            {
+                "formal_screened_candidates": 1,
+                "protocol_evaluated_candidates": 1,
+                "runtime_budget_diagnostics": [
+                    {
+                        "branch_id": "branch-1",
+                        "stage": "screening",
+                        "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
+                        "severity": "info",
+                        "runtime_model": "budget_exhausting",
+                        "saturated_side": "champion",
+                        "repairable": False,
+                        "candidate_saturated": False,
+                        "champion_saturated": True,
+                        "saturation_ratio": 0.99,
+                        "threshold_ratio": 0.9,
+                        "total_pairs": 32,
+                    }
+                ],
+            }
+        ),
     )
     _write_json(
         traces_dir / "20260618T000001_hypothesis_branch_1.json",
@@ -245,10 +255,10 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                 "unreadable_rows": 0,
                 "semantics": "formal candidate artifact rows",
             },
-                "stage_rows": {
-                    "screening": 2,
-                    "validation": 0,
-                    "frozen": 0,
+            "stage_rows": {
+                "screening": 2,
+                "validation": 0,
+                "frozen": 0,
             },
             "reconciliation": {
                 "formal_candidate_count_reconciliation": {
@@ -363,8 +373,8 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                 "run_completeness_status": "complete",
                 "wrapper_exit_status": 0,
             },
-                "research_continuity": {
-                    "weak_positive_transfer": {
+            "research_continuity": {
+                "weak_positive_transfer": {
                     "accepted_count": 1,
                     "rejected_count": 0,
                     "observed_opportunity_count": 1,
@@ -618,10 +628,10 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             "unreadable_rows": 0,
             "index_status_counts": {"available": 1},
         },
-            "stage_rows": {
-                "screening": 2,
-                "validation": 0,
-                "frozen": 0,
+        "stage_rows": {
+            "screening": 2,
+            "validation": 0,
+            "frozen": 0,
         },
         "reconciliation_status_counts": {
             "available": 1,
@@ -1044,6 +1054,403 @@ def test_research_context_actionability_ignores_unknown_continuity_fields() -> N
     assert indicators["weak_positive_observed"] == 0
     assert summary["guidance_status"] == "no_continuity_opportunities_observed"
     assert summary["actionability_gaps"] == []
+
+
+def test_direct_v3_trajectory_loads_lossless_prompt_visibility(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "direct-v3-run"
+    campaign_dir = run_root / "campaign"
+    traces_dir = campaign_dir / "llm_traces"
+    manifest_path = (
+        run_root
+        / "postrun_acceptance"
+        / "manifests"
+        / "direct.proposal_trajectory_manifest.v1.json"
+    )
+    hypothesis_ref = "llm_traces/hypothesis.json"
+    code_ref = "llm_traces/code.json"
+    hypothesis_context = {
+        "champion_operators_code": "class ExistingOperator: ...",
+        "problem_summary": "warehouse",
+    }
+    base_content = "class Operator: ..."
+    code_context = {
+        "approved_hypothesis": {"target": "operators/new.py"},
+        "proposal_source_ledger": {
+            "schema_version": "proposal-source-ledger.v2",
+            "approved_target": "operators/new.py",
+            "target_api_guidance": "",
+            "entries": [
+                {
+                    "path": "operators/new.py",
+                    "content": None,
+                    "digest": None,
+                    "owner": "approved_target",
+                    "provenance": "new_file_placeholder",
+                    "visibility": "new_file_placeholder",
+                    "reason": "not_found",
+                },
+                {
+                    "path": "operators/base.py",
+                    "content": base_content,
+                    "digest": hashlib.sha256(base_content.encode()).hexdigest(),
+                    "owner": "champion_api_support",
+                    "provenance": "champion_snapshot",
+                    "visibility": "full_current",
+                    "reason": "ok",
+                },
+            ],
+            "views": {
+                "champion_research": ["operators/base.py"],
+                "api_reference": ["operators/new.py"],
+                "integration_full": ["operators/new.py"],
+                "integration_summary": [],
+                "branch_current": [],
+                "required_full": [],
+                "reference": ["operators/base.py"],
+            },
+        },
+    }
+    hypothesis_digest = direct_v3_context_digest(hypothesis_context)
+    code_digest = direct_v3_context_digest(code_context)
+
+    _write_json(
+        traces_dir / "hypothesis.json",
+        {
+            "request_kind": "hypothesis",
+            "prompt_manifest": {
+                "schema_version": "api-visible-prompt-manifest.v4",
+                "projection": "direct_v3_lossless",
+                "rendered_prompt_available": True,
+                "context_digest": hypothesis_digest,
+                "context_keys": ["champion_operators_code", "problem_summary"],
+                "call_kind": "hypothesis",
+            },
+            "system_blocks": [
+                {
+                    "type": "text",
+                    "text": (
+                        "## Direct V3 Static Problem And Champion Context\n"
+                        + json.dumps(
+                            hypothesis_context,
+                            ensure_ascii=True,
+                            indent=2,
+                            sort_keys=True,
+                        )
+                    ),
+                },
+                {
+                    "type": "text",
+                    "text": "## Direct V3 Canonical Hypothesis Evidence\n{}",
+                },
+            ],
+        },
+    )
+    _write_json(
+        traces_dir / "code.json",
+        {
+            "request_kind": "code",
+            "prompt_manifest": {
+                "schema_version": "api-visible-prompt-manifest.v4",
+                "projection": "direct_v3_lossless",
+                "rendered_prompt_available": True,
+                "context_digest": code_digest,
+                "context_keys": ["approved_hypothesis", "proposal_source_ledger"],
+                "call_kind": "code",
+            },
+            "system_blocks": [
+                {
+                    "type": "text",
+                    "text": (
+                        "## Direct V3 Canonical Code Context\n"
+                        + json.dumps(
+                            code_context,
+                            ensure_ascii=True,
+                            indent=2,
+                            sort_keys=True,
+                        )
+                    ),
+                }
+            ],
+        },
+    )
+    _write_json(
+        manifest_path,
+        {
+            "schema_version": "proposal_trajectory_manifest.v1",
+            "runtime_mode": "direct_v3",
+            "campaign_dir": str(campaign_dir),
+            "attempts": [
+                {
+                    "phases": [
+                        {
+                            "phase": "hypothesis",
+                            "status": "started",
+                            "prompt_fingerprint": {
+                                "request_kind": "hypothesis",
+                                "trace_ref": None,
+                            },
+                        },
+                        {
+                            "phase": "hypothesis",
+                            "status": "generated",
+                            "prompt_fingerprint": {
+                                "request_kind": "hypothesis",
+                                "context_digest": hypothesis_digest,
+                                "trace_ref": hypothesis_ref,
+                                "prompt_manifest_ref": (
+                                    f"{hypothesis_ref}#/prompt_manifest"
+                                ),
+                            },
+                        },
+                    ]
+                },
+                {
+                    "phases": [
+                        {
+                            "phase": "code",
+                            "status": "generated",
+                            "prompt_fingerprint": {
+                                "request_kind": "code",
+                                "context_digest": code_digest,
+                                "trace_ref": code_ref,
+                                "prompt_manifest_ref": f"{code_ref}#/prompt_manifest",
+                            },
+                        },
+                        {
+                            "phase": "code",
+                            "status": "duplicate",
+                            "prompt_fingerprint": {
+                                "request_kind": "code",
+                                "trace_ref": code_ref,
+                                "prompt_manifest_ref": f"{code_ref}#/prompt_manifest",
+                            },
+                        },
+                    ]
+                },
+            ],
+        },
+    )
+
+    entry = brief_tool._proposal_trajectory_context_entry(manifest_path)
+
+    assert entry["prompt_manifest_ref_count"] == 2
+    assert entry["prompt_manifest_loaded_count"] == 2
+    assert entry["trace_count"] == 2
+    assert entry["visibility_digest_count"] == 2
+    assert entry["hypothesis_generation_trace_count"] == 1
+    assert entry["call_kind_counts"] == {"code": 1, "hypothesis": 1}
+    source_visibility = entry["source_visibility"]
+    assert source_visibility["trace_count"] == 2
+    assert source_visibility["code_trace_count"] == 1
+    assert source_visibility["code_target_source_visible_count"] == 1
+    assert source_visibility["code_protected_source_visible_count"] == 1
+    assert source_visibility["code_missing_required_source_trace_count"] == 0
+    assert source_visibility["code_missing_required_source_path_counts"] == {}
+    assert source_visibility["hypothesis_target_source_trace_count"] == 1
+    assert source_visibility["hypothesis_target_source_required_count"] == 0
+    assert source_visibility["hypothesis_target_source_visible_count"] == 1
+
+
+def test_direct_v3_prompt_visibility_fails_closed_on_tampered_context(
+    tmp_path: Path,
+) -> None:
+    context = {"champion_operators_code": "class ExistingOperator: ..."}
+    trace = {
+        "request_kind": "hypothesis",
+        "prompt_manifest": {
+            "schema_version": "api-visible-prompt-manifest.v4",
+            "projection": "direct_v3_lossless",
+            "rendered_prompt_available": True,
+            "context_digest": "not-the-rendered-context-digest",
+            "context_keys": ["champion_operators_code"],
+            "call_kind": "hypothesis",
+        },
+        "system_blocks": [
+            {
+                "type": "text",
+                "text": (
+                    "## Direct V3 Static Problem And Champion Context\n"
+                    + json.dumps(context, ensure_ascii=True, sort_keys=True)
+                ),
+            },
+            {
+                "type": "text",
+                "text": "## Direct V3 Canonical Hypothesis Evidence\n{}",
+            },
+        ],
+    }
+
+    normalized = normalize_direct_v3_prompt_context_trace(
+        trace,
+        fingerprint={
+            "request_kind": "hypothesis",
+            "context_digest": "not-the-rendered-context-digest",
+        },
+    )
+
+    assert normalized == {}
+    campaign_dir = (tmp_path / "run" / "campaign").resolve()
+    assert (
+        direct_v3_trace_path(
+            campaign_dir,
+            "../outside.json",
+        )
+        is None
+    )
+
+
+def test_direct_v3_prompt_visibility_rejects_receipt_identity_mismatch() -> None:
+    context = {"champion_operators_code": "class ExistingOperator: ..."}
+    context_digest = direct_v3_context_digest(context)
+    trace = {
+        "request_kind": "hypothesis",
+        "prompt_manifest": {
+            "schema_version": "api-visible-prompt-manifest.v4",
+            "projection": "direct_v3_lossless",
+            "rendered_prompt_available": True,
+            "context_digest": context_digest,
+            "context_keys": ["champion_operators_code"],
+            "call_kind": "hypothesis",
+        },
+        "system_blocks": [
+            {
+                "type": "text",
+                "text": (
+                    "## Direct V3 Static Problem And Champion Context\n"
+                    + json.dumps(context, ensure_ascii=True, sort_keys=True)
+                ),
+            },
+            {
+                "type": "text",
+                "text": "## Direct V3 Canonical Hypothesis Evidence\n{}",
+            },
+        ],
+    }
+    fingerprint = {
+        "request_kind": "hypothesis",
+        "context_digest": context_digest,
+    }
+
+    assert normalize_direct_v3_prompt_context_trace(
+        trace,
+        fingerprint=fingerprint,
+    )
+    assert (
+        normalize_direct_v3_prompt_context_trace(
+            trace,
+            fingerprint={**fingerprint, "context_digest": "wrong"},
+        )
+        == {}
+    )
+    assert (
+        normalize_direct_v3_prompt_context_trace(
+            {**trace, "request_kind": "code"},
+            fingerprint={**fingerprint, "request_kind": "code"},
+        )
+        == {}
+    )
+
+
+def test_direct_v3_prompt_visibility_rejects_header_family_mismatch() -> None:
+    context = {"champion_operators_code": "class ExistingOperator: ..."}
+    context_digest = direct_v3_context_digest(context)
+    trace = {
+        "request_kind": "hypothesis",
+        "prompt_manifest": {
+            "schema_version": "api-visible-prompt-manifest.v4",
+            "projection": "direct_v3_lossless",
+            "rendered_prompt_available": True,
+            "context_digest": context_digest,
+            "context_keys": ["champion_operators_code"],
+            "call_kind": "hypothesis",
+        },
+        "system_blocks": [
+            {
+                "type": "text",
+                "text": (
+                    "## Direct V3 Canonical Code Context\n"
+                    + json.dumps(context, ensure_ascii=True, sort_keys=True)
+                ),
+            }
+        ],
+    }
+
+    assert (
+        normalize_direct_v3_prompt_context_trace(
+            trace,
+            fingerprint={
+                "request_kind": "hypothesis",
+                "context_digest": context_digest,
+            },
+        )
+        == {}
+    )
+
+
+def test_direct_v3_source_visibility_rejects_noncanonical_ledger() -> None:
+    summary = direct_v3_code_source_visibility(
+        {
+            "proposal_source_ledger": {
+                "schema_version": "bogus.v0",
+                "approved_target": "operators/new.py",
+                "entries": [
+                    {
+                        "path": "operators/new.py",
+                        "visibility": "new_file_placeholder",
+                    }
+                ],
+                "views": {},
+            }
+        }
+    )
+
+    guarantees = summary["code_phase_guarantees"]
+    assert guarantees["target_source_visible"] is False
+    assert guarantees["protected_source_visible"] is False
+    assert guarantees["required_integration_source_visible"] is False
+    assert guarantees["algorithm_file_read_source_visible"] is False
+    assert guarantees["missing_required_source_paths"] == ["proposal_source_ledger"]
+
+
+def test_direct_v3_source_visibility_rejects_empty_canonical_views() -> None:
+    summary = direct_v3_code_source_visibility(
+        {
+            "proposal_source_ledger": {
+                "schema_version": "proposal-source-ledger.v2",
+                "approved_target": "operators/new.py",
+                "target_api_guidance": "",
+                "entries": [
+                    {
+                        "path": "operators/new.py",
+                        "content": None,
+                        "digest": None,
+                        "owner": "approved_target",
+                        "provenance": "new_file_placeholder",
+                        "visibility": "new_file_placeholder",
+                        "reason": "not_found",
+                    }
+                ],
+                "views": {
+                    "champion_research": [],
+                    "reference": [],
+                    "api_reference": [],
+                    "integration_full": [],
+                    "integration_summary": [],
+                    "branch_current": [],
+                    "required_full": [],
+                },
+            }
+        }
+    )
+
+    guarantees = summary["code_phase_guarantees"]
+    assert guarantees["target_source_visible"] is False
+    assert guarantees["protected_source_visible"] is False
+    assert guarantees["required_integration_source_visible"] is False
+    assert guarantees["algorithm_file_read_source_visible"] is False
+    assert guarantees["missing_required_source_paths"] == ["proposal_source_ledger"]
 
 
 def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:

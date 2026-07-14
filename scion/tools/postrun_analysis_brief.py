@@ -24,6 +24,9 @@ from scion.postrun.opportunity_visibility import (  # noqa: E402
     empty_problem_opportunity_visibility_aggregate,
     merge_problem_opportunity_visibility,
 )
+from scion.postrun.direct_v3_prompt_visibility import (  # noqa: E402
+    load_direct_v3_prompt_context_traces,
+)
 from scion.problems.warehouse_delivery.postrun_review import (  # noqa: E402
     WarehousePostrunSummaryProvider,
 )
@@ -2651,7 +2654,8 @@ def _proposal_trajectory_manifests(
 def _proposal_trajectory_context_entry(path: Path) -> dict[str, Any]:
     doc = _read_json_object(path)
     sessions = doc.get("sessions")
-    if not isinstance(sessions, list):
+    attempts = doc.get("attempts")
+    if not isinstance(sessions, list) and not isinstance(attempts, list):
         return {}
     counts = _mapping_or_empty(doc.get("counts"))
     entry = {
@@ -2676,17 +2680,49 @@ def _proposal_trajectory_context_entry(path: Path) -> dict[str, Any]:
             empty_problem_opportunity_visibility_aggregate()
         ),
     }
-    for session in sessions:
-        if not isinstance(session, Mapping):
-            continue
-        traces = session.get("trace_fingerprints")
-        if not isinstance(traces, list):
-            continue
-        for trace in traces:
-            if not isinstance(trace, Mapping):
+    if isinstance(sessions, list):
+        for session in sessions:
+            if not isinstance(session, Mapping):
                 continue
-            _add_prompt_trace_context(entry, trace)
+            traces = session.get("trace_fingerprints")
+            if not isinstance(traces, list):
+                continue
+            for trace in traces:
+                if not isinstance(trace, Mapping):
+                    continue
+                _add_prompt_trace_context(entry, trace)
+        return entry
+
+    _add_direct_v3_prompt_trace_contexts(
+        entry,
+        manifest_path=path,
+        manifest=doc,
+        attempts=attempts,
+    )
     return entry
+
+
+def _add_direct_v3_prompt_trace_contexts(
+    entry: dict[str, Any],
+    *,
+    manifest_path: Path,
+    manifest: Mapping[str, Any],
+    attempts: list[Any],
+) -> None:
+    loaded = load_direct_v3_prompt_context_traces(
+        manifest_path=manifest_path,
+        manifest=manifest,
+        attempts=attempts,
+    )
+    entry["prompt_manifest_ref_count"] = _int_or_zero(
+        loaded.get("prompt_manifest_ref_count")
+    )
+    entry["prompt_manifest_loaded_count"] = _int_or_zero(
+        loaded.get("prompt_manifest_loaded_count")
+    )
+    for trace in loaded.get("traces") or []:
+        if isinstance(trace, Mapping):
+            _add_prompt_trace_context(entry, trace)
 
 
 def _add_prompt_trace_context(entry: dict[str, Any], trace: Mapping[str, Any]) -> None:
