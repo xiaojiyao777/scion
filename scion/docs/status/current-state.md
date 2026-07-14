@@ -11,7 +11,9 @@ failed eval-only validation on the larger locked split and is now `abandoned`.
 The validation wrapper and the repaired campaign-scoped postrun path are fully
 green. Do not retry, freeze, modify, or promote this branch. The first fresh
 CVRP control stopped before proposal generation on an incorrect external data
-root; it contains no algorithm result and was not retried.
+root; it contains no algorithm result and was not retried. A distinct corrected
+R2 root was prepared at `6ec0db55` but guarded readiness rejected it before any
+provider call; it is also not launchable.
 
 ## Current Decision
 
@@ -22,14 +24,18 @@ remains a useful negative research lifecycle: Scion found a broad screening
 signal, expanded it, escalated the same candidate without another model call,
 and correctly rejected it when it failed to generalize.
 
-The current work is the resulting launcher-integrity repair. It validates the
+The launcher-integrity repair is pushed at `6ec0db55`. It validates the
 final explicit data root before creating a run root, repeats that check before
 provider access, pins the complete 81-file identity, rechecks it after campaign
 execution, redacts proxy auth receipts to readiness-only fields, keeps the key
-out of argv, and creates the receipt under `umask 077`. After this is committed
-and pushed, prepare a distinct clean, open, non-target-bound CVRP control at the
-new exact commit. Do not carry warehouse target hints or mechanism instructions
-into CVRP, and do not auto-retry the failed root.
+out of argv, and creates the receipt under `umask 077`. Do not carry warehouse
+target hints or mechanism instructions into CVRP, and do not auto-retry the
+failed root.
+
+The first clean prepare after that commit exposed two narrow static-auditor
+drifts: identity SHA metadata was interpreted as a path, and the receipt
+allowlist did not recognize the exact `chmod 600` line. The minimal follow-up
+is implemented and fully verified; push it before preparing another root.
 
 ## Run Roots
 
@@ -49,6 +55,10 @@ Failed pre-campaign CVRP root:
 
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r1-2r-gpt56sol-20260714T151358Z-claw`
 
+Superseded prepared-only CVRP root:
+
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r2-2r-gpt56sol-20260714T161411Z-claw`
+
 The first root is the fresh formal confirmation. The second and third are
 copied-state, diagnostic/non-formal continuations used only to evaluate the
 exact same cumulative candidate. Do not blur their wrapper status or evidence
@@ -57,6 +67,10 @@ scope.
 The CVRP root is infrastructure evidence only. Its healthy completion probe
 was followed by a split-data resolution failure before any H/C proposal call.
 Do not resume or relaunch it.
+
+The R2 root made no provider call. Its identity is correct, but its exact commit
+cannot pass guarded readiness because the static auditors predate the follow-up.
+Do not edit or launch it.
 
 ## Formal R3 Evidence
 
@@ -241,11 +255,17 @@ suite passes `1872 passed, 1 skipped` in `496.65s`; compileall, diff-check,
 generated run.sh syntax, live identity construction, and independent formal-
 path P0/P1/P2 review are green.
 
+The subsequent two-auditor follow-up passes `124` focused tests and the standard
+full suite at `1875 passed, 1 skipped` in `502.33s`. Its chmod reference
+allowlist accepts only the exact generated command and rejects appended shell
+operations; compileall, `git diff --check`, and independent P0/P1/P2 review are
+green.
+
 ## Worktree State
 
-- branch: `v0.4-dev` at pushed `64137fc3`;
-- intended changes now: launcher/preflight repair, focused tests, CVRP
-  pre-campaign failure report, `TASK.md`, and this file;
+- branch: `v0.4-dev` at pushed launcher-integrity base `6ec0db55`;
+- intended changes now: the narrow prepared-contract/readiness follow-up, its
+  focused tests, the CVRP pre-campaign failure report, `TASK.md`, and this file;
 - `scion/docs/v0.4-measurement-readiness.md` is a pre-existing user-owned
   tracked change and must remain excluded;
 - unrelated untracked historical/future documents must remain excluded;
@@ -254,20 +274,19 @@ path P0/P1/P2 review are green.
 
 ## Resume Actions
 
-1. Complete full-suite regression and independent review of the launcher
-   integrity repair.
-2. Stage, commit, and push only the intended repair/docs scope.
-3. Create a detached clean runtime at that exact commit.
-4. Prepare a distinct fresh two-round CVRP direct control with explicit
+1. Stage, commit, and push only the verified narrow prepared-contract/readiness
+   follow-up and status docs.
+2. Create a detached clean runtime at that exact commit.
+3. Prepare a distinct fresh two-round CVRP direct control with explicit
    external data root, no target/action/surface binding, parameter search
    disabled, `gpt-5.6-sol`, strict postrun reports, and completion preflight
    inside the guarded wrapper.
-5. Confirm the prepared 81-file formal data identity receipt, require
+4. Confirm the prepared 81-file formal data identity receipt, require
    guarded-wrapper launch readiness, then inspect the prepared actual provider
    context for successor,
    target-file, mechanism-ranking, telemetry,
    budget, retry, and truncation noise. Do not send a separate live probe.
-6. Do not treat the corrected root as an automatic retry. Launch only under
+5. Do not treat the corrected root as an automatic retry. Launch only under
    explicit operator authorization after those checks pass. Supply
    `SCION_SHARED_PROXY_KEY` only in process environment, poll about every three
    minutes, and never retry.

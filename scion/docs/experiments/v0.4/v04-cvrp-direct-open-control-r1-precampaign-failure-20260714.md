@@ -75,6 +75,28 @@ tests and the standard full suite at `1872 passed, 1 skipped` in `496.65s`.
 identity build, and independent P0/P1/P2 review also pass. The final independent
 review reports P0=`0`, P1=`0`, P2=`0` for the formal env-based path.
 
+## First Corrected Prepare Audit
+
+After `6ec0db55` was pushed, a distinct clean root was prepared but not launched:
+
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r2-2r-gpt56sol-20260714T161411Z-claw`
+
+Its 81-file identity was correct, but guarded readiness rejected three static
+checks before any provider call. Two causes were new generator-auditor drift:
+
+- prepared-contract path validation treated `data_identity_sha256` as a path;
+- the canonical completion-receipt reference allowlist did not recognize the
+  new `chmod 600 "$PREFLIGHT_DETAIL"` hardening line.
+
+The analysis-brief failure was downstream of the same config-path error. The
+minimal follow-up marks SHA/digest config scalars as non-path metadata and
+accepts only the exact owner-only receipt chmod form. Focused prepared-contract,
+readiness, launcher, handoff, and identity coverage passes `124` tests; the
+standard full suite passes `1875 passed, 1 skipped` in `502.33s`. Negative tests
+confirm appended shell operations are rejected, and independent P0/P1/P2
+review is green. This R2 root remains prepared-only and must not be edited or
+launched; create another clean root after the follow-up commit.
+
 ## Disposition
 
 Keep this root as infrastructure evidence only. Do not resume or relaunch it.

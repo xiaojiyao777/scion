@@ -2999,6 +2999,8 @@ def _allowed_preflight_detail_reference(line: str) -> bool:
         return True
     if line.startswith('echo "COMPLETION_PREFLIGHT_DETAIL:$PREFLIGHT_DETAIL"'):
         return True
+    if line == 'chmod 600 "$PREFLIGHT_DETAIL" 2>> "$RUN_ROOT/run.log" \\':
+        return True
     return line.startswith('--detail "$PREFLIGHT_DETAIL"')
 
 

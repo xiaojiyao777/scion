@@ -170,6 +170,14 @@ steering, or launch a formal experiment from the transition worktree.
   `134` focused tests and the standard full suite (`1872 passed, 1 skipped` in
   `496.65s`); compileall, diff-check, generated-script syntax, and independent
   formal-path P0/P1/P2 review are green.
+- The first corrected prepare at `6ec0db55` made no provider call but guarded
+  readiness exposed two static auditor drifts: the prepared contract treated
+  the identity SHA as a path, and the receipt-reference allowlist rejected the
+  exact `chmod 600` hardening line. The minimal follow-up passes `124` focused
+  tests and the standard full suite (`1875 passed, 1 skipped` in `502.33s`).
+  Its chmod allowlist accepts only the exact generated command and rejects
+  appended shell operations. That prepared-only root is superseded and must
+  not be launched.
 - That continuation exposed one narrow postrun bug: current summary outcome
   counts were compared with cumulative copied-database counts across two
   campaign IDs. The experiment is valid; the current repair scopes integrity
@@ -265,8 +273,8 @@ The first CVRP control attempt produced no algorithm evidence: it failed before
 proposal generation on an incorrect external-data-root binding. No experiment
 is running, and automatic retry remains prohibited.
 
-The immediate blocker is completing and pushing the launcher-integrity
-regression, not VRP algorithm quality. The repair pins all 40 formal `.vrp`
+The immediate blocker is pushing the verified narrow readiness follow-up, not
+VRP algorithm quality. The repair pins all 40 formal `.vrp`
 files, their 40 sibling `.sol` files, and the package canary in the prepared
 contract; the wrapper verifies the same identity before provider access and
 after campaign execution. After the repair is pushed, create a new detached
@@ -278,20 +286,19 @@ history.
 
 ## Immediate Queue
 
-1. Complete full-suite regression and independent review of the launcher
-   integrity repair.
-2. Stage, commit, and push only the repair, its tests, the pre-campaign failure
-   report, `TASK.md`, and current-state under the existing authorization.
-3. Create an isolated detached clean runtime at that exact commit.
-4. Prepare a distinct fresh two-round CVRP direct control with explicit
+1. Stage, commit, and push only the verified prepared-contract/readiness
+   follow-up, its tests, and status docs under
+   the existing authorization.
+2. Create an isolated detached clean runtime at that exact commit.
+3. Prepare a distinct fresh two-round CVRP direct control with explicit
    `--data-root`, no target/action/surface binding, parameter search disabled,
    `gpt-5.6-sol`, strict postrun reports, and completion preflight inside the
    guarded wrapper.
-5. Confirm the prepared 81-file identity receipt, then require guarded-wrapper
+4. Confirm the prepared 81-file identity receipt, then require guarded-wrapper
    readiness and inspect the actual H context for
    successor IDs, target-file/mechanism steering, telemetry,
    budget, retry, or truncation noise. Do not send a separate live probe.
-6. Do not treat the corrected root as an automatic retry. Launch only under
+5. Do not treat the corrected root as an automatic retry. Launch only under
    explicit operator authorization after those checks pass. Supply the shared
    proxy key only in process environment, poll about every three minutes, and
    never retry.

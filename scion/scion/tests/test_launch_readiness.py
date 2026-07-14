@@ -2058,6 +2058,25 @@ def test_launch_readiness_rejects_disabled_run_script_completion_preflight(
     ]
 
 
+def test_preflight_detail_reference_allows_owner_only_receipt_chmod() -> None:
+    assert readiness_tool._allowed_preflight_detail_reference(
+        'chmod 600 "$PREFLIGHT_DETAIL" 2>> "$RUN_ROOT/run.log" \\'
+    )
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'chmod 600 "$PREFLIGHT_DETAIL"; rm -f "$PREFLIGHT_DETAIL"',
+        'chmod 600 "$PREFLIGHT_DETAIL" "$OTHER_FILE"',
+    ],
+)
+def test_preflight_detail_reference_rejects_noncanonical_receipt_chmod(
+    line: str,
+) -> None:
+    assert not readiness_tool._allowed_preflight_detail_reference(line)
+
+
 def test_launch_readiness_rejects_comment_only_completion_preflight_proxy(
     tmp_path: Path,
 ) -> None:

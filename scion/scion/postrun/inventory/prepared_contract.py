@@ -303,7 +303,7 @@ def missing_manifest_config_paths(
     for key, value in sorted(config.items()):
         if not isinstance(value, str) or not value.strip():
             continue
-        if key.endswith("data_root"):
+        if key.endswith("data_root") or key.endswith(("_sha256", "_digest")):
             continue
         if manifest_path_resolves(
             value,

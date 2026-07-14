@@ -127,6 +127,7 @@ def test_prepared_contract_port_builds_direct_generic_contract(tmp_path: Path) -
             "protocol": str(config_dir / "protocol.yaml"),
             "split": str(config_dir / "split.yaml"),
             "seeds": str(config_dir / "seeds.yaml"),
+            "data_identity_sha256": "a" * 64,
         },
         "execution": {
             "rounds": 1,
