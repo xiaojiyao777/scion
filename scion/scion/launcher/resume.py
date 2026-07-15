@@ -9,15 +9,18 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-
-RESUME_PREPARATION_SCHEMA = "scion.launcher_resume_preparation.v1"
+from scion.launcher.formal_candidate_lineage import (
+    FormalCandidateLineageError,
+    RESUME_PREPARATION_SCHEMA,
+    RESUME_SNAPSHOT_MANIFEST_REF,
+    flatten_formal_candidate_lineage,
+)
 
 _TERMINAL_ARTIFACT_REFS = (
     "run_status.json",
     "status.json",
     "campaign_summary.json",
     "exit.txt",
-    "artifacts/formal_candidates/index.jsonl",
 )
 
 
@@ -112,7 +115,7 @@ def prepare_resumed_campaign(
 
     shutil.copytree(resume_source, campaign_dir)
     snapshot_dir = run_root / "resume_snapshot" / "campaign"
-    terminal_artifacts = tuple(
+    terminal_artifacts = [
         _quarantine_terminal_artifact(
             campaign_dir=campaign_dir,
             snapshot_dir=snapshot_dir,
@@ -120,8 +123,20 @@ def prepare_resumed_campaign(
         )
         for ref in _TERMINAL_ARTIFACT_REFS
         if (campaign_dir / ref).is_file()
-    )
-    manifest_path = run_root / "resume_snapshot" / "resume_source_manifest.v1.json"
+    ]
+    try:
+        candidate_index_artifact = flatten_formal_candidate_lineage(
+            resume_source=resume_source,
+            campaign_dir=campaign_dir,
+            run_root=run_root,
+            snapshot_dir=snapshot_dir,
+        )
+    except FormalCandidateLineageError as exc:
+        raise ResumePreparationError(str(exc)) from exc
+    if candidate_index_artifact is not None:
+        terminal_artifacts.append(candidate_index_artifact)
+
+    manifest_path = run_root / RESUME_SNAPSHOT_MANIFEST_REF
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest = {
         "schema_version": RESUME_PREPARATION_SCHEMA,
@@ -129,7 +144,7 @@ def prepare_resumed_campaign(
         "campaign_dir": str(campaign_dir),
         "snapshot_dir": str(snapshot_dir),
         "current_run_canonical_terminal_artifacts_cleared": True,
-        "terminal_artifacts": list(terminal_artifacts),
+        "terminal_artifacts": terminal_artifacts,
     }
     manifest_path.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
@@ -140,7 +155,7 @@ def prepare_resumed_campaign(
         campaign_dir=campaign_dir,
         snapshot_dir=snapshot_dir,
         manifest_path=manifest_path,
-        terminal_artifacts=terminal_artifacts,
+        terminal_artifacts=tuple(terminal_artifacts),
     )
 
 

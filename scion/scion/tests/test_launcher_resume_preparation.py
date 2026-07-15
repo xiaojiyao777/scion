@@ -44,9 +44,7 @@ def test_prepare_resumed_campaign_quarantines_terminal_artifacts(
 
     assert (campaign_dir / "scion.db").read_text(encoding="utf-8") == "db"
     assert (campaign_dir / "champions" / "champion_v1" / "registry.yaml").is_file()
-    assert (
-        campaign_dir / "artifacts" / "branch_evidence" / "branch-a.json"
-    ).is_file()
+    assert (campaign_dir / "artifacts" / "branch_evidence" / "branch-a.json").is_file()
     for ref in (
         "run_status.json",
         "status.json",
@@ -65,9 +63,7 @@ def test_prepare_resumed_campaign_quarantines_terminal_artifacts(
     )
     assert preparation.source_had("run_status.json") is True
     assert preparation.source_had("campaign_summary.json") is True
-    assert {
-        item["original_ref"] for item in manifest["terminal_artifacts"]
-    } == {
+    assert {item["original_ref"] for item in manifest["terminal_artifacts"]} == {
         "run_status.json",
         "status.json",
         "campaign_summary.json",
