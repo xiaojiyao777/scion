@@ -1,4 +1,5 @@
 """Decision finalization boundary for campaign branch steps."""
+
 from __future__ import annotations
 
 import logging
@@ -8,7 +9,7 @@ from typing import Any, Callable, Iterable, Mapping, MutableMapping, Optional, P
 
 from scion.core.branch import BranchController, StateTransitionError
 from scion.core.decision_lifecycle_actions import (
-    update_branch_screening_evidence_summary as _update_branch_screening_evidence_summary,
+    update_branch_protocol_evidence_summary as _update_branch_protocol_evidence_summary,
 )
 from scion.core.models import (
     Branch,
@@ -25,19 +26,17 @@ from scion.core.models import (
 )
 from scion.core.promotion_service import PromotionCommitError, PromotionPlan
 from scion.core.step_result import StepResult
-from scion.core.screening_visibility import runtime_aggregate_exclusion_for_protocol
 from scion.core.telemetry_validation import screened_experiment_effective
+
 logger = logging.getLogger(__name__)
 
 
 class HypothesisStoreLike(Protocol):
-    def mark_status(self, hypothesis_id: str, status: str) -> None:
-        ...
+    def mark_status(self, hypothesis_id: str, status: str) -> None: ...
 
 
 class BranchStoreLike(Protocol):
-    def save(self, branch: Branch) -> None:
-        ...
+    def save(self, branch: Branch) -> None: ...
 
 
 class LineageRecorder(Protocol):
@@ -55,8 +54,8 @@ class LineageRecorder(Protocol):
         decision_reason_codes: Optional[tuple[str, ...]] = None,
         event_id: Optional[str] = None,
         strict: bool = False,
-    ) -> None:
-        ...
+    ) -> None: ...
+
 
 FormalCandidateArtifactRecorder = Callable[..., Optional[str]]
 
@@ -105,11 +104,27 @@ class DecisionFinalizer:
     ) -> StepResult:
         bid = branch.branch_id
         logger.info("Branch %s: decision=%s", bid, decision.value)
-        effective_reason_codes = decision_reason_codes or self.decision_reason_codes_for(
-            bid,
-            protocol_result,
+        effective_reason_codes = (
+            decision_reason_codes
+            or self.decision_reason_codes_for(
+                bid,
+                protocol_result,
+            )
         )
         patch = self.branch_patches.get(bid)
+        if (
+            decision == Decision.PROMOTE
+            and protocol_result is not None
+            and getattr(protocol_result, "stats", None) is not None
+        ):
+            # Promotion planning snapshots branch evidence. Project frozen
+            # facts before preparing the dossier so validation cannot remain
+            # mislabeled as the latest stage on a promoted branch.
+            _update_branch_protocol_evidence_summary(
+                branch,
+                protocol_result=protocol_result,
+                decision_reason_codes=effective_reason_codes,
+            )
         if decision == Decision.ABANDON:
             _sync_terminal_branch_evidence(
                 branch,
@@ -334,8 +349,11 @@ class DecisionFinalizer:
         proposal_attempt_ref: Mapping[str, Any] | None,
     ) -> StepResult:
         bid = branch.branch_id
-        if protocol_result is not None and _stage_value(protocol_result) == "screening":
-            _update_branch_screening_evidence_summary(
+        if (
+            protocol_result is not None
+            and getattr(protocol_result, "stats", None) is not None
+        ):
+            _update_branch_protocol_evidence_summary(
                 branch,
                 protocol_result=protocol_result,
                 decision_reason_codes=decision_reason_codes,
@@ -686,9 +704,7 @@ def _should_record_formal_candidate_artifact(
     if patch is None or protocol_result is None:
         return False
     if not (
-        contract_result.passed
-        and verification_result.passed
-        and canary_result.passed
+        contract_result.passed and verification_result.passed and canary_result.passed
     ):
         return False
     if getattr(protocol_result, "stats", None) is None:
@@ -716,10 +732,9 @@ def _with_protocol_accounting(
     stage = _stage_value(protocol_result)
     if stage not in {"screening", "validation", "frozen"}:
         return result
-    formal_evaluated = (
-        getattr(protocol_result, "stats", None) is not None
-        and screened_experiment_effective(protocol_result)
-    )
+    formal_evaluated = getattr(
+        protocol_result, "stats", None
+    ) is not None and screened_experiment_effective(protocol_result)
     result.protocol_stage = stage  # type: ignore[assignment]
     result.formal_protocol_evaluated = formal_evaluated
     result.screened_experiment_effective = stage == "screening" and formal_evaluated
@@ -772,8 +787,11 @@ def _sync_terminal_branch_evidence(
             if str(code).strip()
         )
     )
-    if protocol_result is not None and _stage_value(protocol_result) == "screening":
-        _update_branch_screening_evidence_summary(
+    if (
+        protocol_result is not None
+        and getattr(protocol_result, "stats", None) is not None
+    ):
+        _update_branch_protocol_evidence_summary(
             branch,
             protocol_result=protocol_result,
             decision_reason_codes=reason_codes,
@@ -792,11 +810,6 @@ def _sync_terminal_branch_evidence(
         )
 
     summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
-    if (
-        protocol_result is not None
-        and getattr(protocol_result, "stats", None) is not None
-    ):
-        _merge_protocol_evidence_summary(summary, protocol_result)
     summary.update(
         {
             "terminal_status": BranchState.ABANDONED.value,
@@ -807,6 +820,7 @@ def _sync_terminal_branch_evidence(
         }
     )
     branch.branch_evidence_summary = summary
+
 
 def _sync_retained_protocol_branch_evidence(
     branch: Branch,
@@ -829,62 +843,19 @@ def _sync_retained_protocol_branch_evidence(
     )
     if branch.direction is None:
         branch.direction = (
-            f"{hypothesis.change_locus}: "
-            f"{hypothesis.hypothesis_text or ''}"
+            f"{hypothesis.change_locus}: " f"{hypothesis.hypothesis_text or ''}"
         )
-    if _stage_value(protocol_result) == "screening":
-        _update_branch_screening_evidence_summary(
-            branch,
-            protocol_result=protocol_result,
-            decision_reason_codes=reason_codes,
-        )
-        return
-
-    summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
-    _merge_protocol_evidence_summary(summary, protocol_result)
-    if reason_codes:
-        summary["decision_reason_codes"] = list(reason_codes)
-        summary["reason_codes"] = list(reason_codes)
+    _update_branch_protocol_evidence_summary(
+        branch,
+        protocol_result=protocol_result,
+        decision_reason_codes=reason_codes,
+    )
+    if _stage_value(protocol_result) != "screening" and reason_codes:
+        summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
         summary["why_not_promoted_reason_codes"] = list(reason_codes)
-    summary["evidence_retention_status"] = "retained"
-    branch.branch_evidence_summary = summary
+        branch.branch_evidence_summary = summary
 
 
 def _stage_value(protocol_result: ProtocolResult) -> str:
     stage = getattr(protocol_result, "stage", "")
     return str(getattr(stage, "value", stage) or "")
-
-
-
-
-def _merge_protocol_evidence_summary(
-    summary: dict,
-    protocol_result: ProtocolResult,
-) -> None:
-    stats = protocol_result.stats
-    summary.setdefault("stage", _stage_value(protocol_result))
-    summary.setdefault("gate_outcome", protocol_result.gate_outcome)
-    for key, value in {
-        "wins": int(getattr(stats, "wins", 0) or 0),
-        "losses": int(getattr(stats, "losses", 0) or 0),
-        "ties": int(getattr(stats, "ties", 0) or 0),
-        "median_delta": getattr(stats, "median_delta", None),
-        "ci_low": getattr(stats, "ci_low", None),
-        "ci_high": getattr(stats, "ci_high", None),
-        "statistical_status": getattr(stats, "statistical_status", None),
-        "statistical_metric": getattr(stats, "statistical_metric", None),
-        "runtime_ratio_median": getattr(stats, "runtime_ratio_median", None),
-        "runtime_delta_median_ms": getattr(stats, "runtime_delta_median_ms", None),
-        "runtime_regression_rate": getattr(stats, "runtime_regression_rate", None),
-        "runtime_pairs": int(getattr(stats, "runtime_pairs", 0) or 0),
-    }.items():
-        if value is not None:
-            summary.setdefault(key, value)
-    runtime_aggregate_exclusion = runtime_aggregate_exclusion_for_protocol(
-        protocol_result
-    )
-    if runtime_aggregate_exclusion:
-        summary.setdefault(
-            "runtime_aggregate_exclusion",
-            runtime_aggregate_exclusion,
-        )

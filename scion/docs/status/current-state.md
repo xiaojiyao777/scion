@@ -7,17 +7,19 @@ Read `scion/TASK.md` first. Use
 
 ## Operational State
 
-No experiment is running. The latest live root, CVRP R6, is terminal,
-complete, valid, and read-only. Its only branch is `ready_validate`; its
-cumulative candidate must be evaluated in a distinct copied-state continuation.
+No experiment is running. The latest launched root is the terminal, complete,
+valid, read-only R6-R2 exact validation root ending
+`20260715T180743Z-claw`. Its only branch is `validating_expand`; the same
+candidate must next run the preregistered 12-case expanded validation in a
+distinct copied-state continuation, with no H/C/provider call.
+
 The prepare-only root ending `20260715T175626Z-claw` was never launched and is
 superseded: it exposed that quarantining the inherited formal index must remain
-visible to postrun lineage accounting. Re-prepare from a pushed runtime after
-that repair; do not start the superseded root.
+visible to postrun lineage accounting. Do not start the superseded root.
 
-Do not resume or relaunch R4, R5, or R6 in place. Do not use R6's round-2 v2
-formal artifact to reconstruct the candidate. Copy the complete R6 campaign
-workspace.
+Do not resume or relaunch R4, R5, R6, or the completed validation in place. Do
+not use R6's round-2 v2 artifact alone to reconstruct the candidate. Copy the
+complete terminal validation campaign workspace into a fresh root.
 
 ## R6 Identity
 
@@ -102,27 +104,54 @@ R6 report's formal-integrity check as superseded by the explicit audit. The
 exact candidate remains safely available through the complete campaign
 workspace.
 
-## Current Worktree
+## Exact Validation Identity and Result
+
+- root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-r6-r2-exact-validation-1r-gpt56sol-20260715T180743Z-claw`;
+- campaign: `<root>/campaign`;
+- runtime checkout:
+  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-5a441e4`;
+- runtime commit: `5a441e4488cc2d6d19ae7c92878ffb3864976e53`;
+- branch/hypothesis: `ccc5d6df... / 2a988064...`;
+- branch state/status: `validating_expand / clean`;
+- candidate hash: `0d9c2ce5...6535a`, unchanged;
+- champion: v1, unchanged;
+- data identity: 81 files, `ca7e470e...30743`.
+
+The one requested validation round completed with `32/32` valid fresh-runtime
+pairs and no candidate/champion/infra failure. Current-invocation H/C/provider/
+trace deltas are all zero; copied cumulative totals must not be attributed to
+this invocation. Postrun readiness is 28 `ok`, three optional `skipped`, and no
+failure.
+
+- case W/L/T: `6/1/1`;
+- pair W/L/T: `25/5/2`;
+- median/CI: `+7.75 / [0,77]`;
+- runtime ratio/delta: `1.0111 / +287.5 ms` across 32 fresh pairs;
+- Decision: `expand_validation / VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN`.
+
+The candidate is promising but unvalidated. `tai150a` loses by median `-84.5`;
+ALNS iterations fall `1202 -> 604`, while initial VNS time rises
+`138836 -> 299320 ms`. Formal validation has no swap-star-specific telemetry,
+so neither gains nor losses can yet be causally assigned to that operator.
+
+## Current Runtime Repair
 
 Branch: `v0.4-dev`.
 
-Owned changes in progress:
+The formal-artifact, resume-lineage, replay, feedback, and postrun repairs are
+already pushed through `5a441e44`. This revision adds:
 
-- formal artifact v3 cumulative replay closure;
-- exact champion snapshot resolution and editable identity manifest;
-- fixed replay and postrun fail-closed materialization validation;
-- canonical feedback attribution/scope/deduplication repairs;
-- CVRP ALNS evidence-scope labels;
-- R6 terminal report;
+- atomic current/latest/per-stage branch protocol evidence projection;
+- validation/frozen continue and frozen-promotion lifecycle coverage;
+- exact validation terminal report;
 - compact `TASK.md` and this resume document;
-- focused and boundary tests.
+- focused regression tests.
 
-Verification is green: the final formal-artifact/resume/postrun slice is
-`21 passed`, the complete unit suite is `707 passed`, and the standard
-repository-root suite is `1926 passed, 1 skipped`. The final review's
-partial-index crash-window P1
-has been repaired and independently retested; no substantive P0/P1 remains.
-Compileall and `git diff --check` pass.
+The focused projection/lifecycle slice passes `69`, the complete unit suite
+passes `712`, and the standard Scion suite passes `1934` with `1` skipped.
+Compileall, Black check, and `git diff --check` pass. Independent final review
+found no remaining P0/P1.
 
 Excluded and preserved:
 
@@ -131,29 +160,32 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Stage only the owned code/tests/docs, commit, and push `v0.4-dev`.
-2. Create a clean detached runtime worktree at that pushed commit.
-3. Prepare one diagnostic continuation with:
-   `launch_cvrp_direct_campaign.py --rounds 1 --resume-from-campaign <R6/campaign>`.
+1. Create a clean detached runtime worktree at the pushed current revision.
+2. Prepare one diagnostic continuation with:
+   `launch_cvrp_direct_campaign.py --rounds 1 --resume-from-campaign <exact-validation/campaign>`.
    Keep model `gpt-5.6-sol`, solver limit `30`, data root
    `/home/clawd/research/or-autoresearch-agent/vrp`, and key source
    `SCION_SHARED_PROXY_KEY`.
-4. Do not pass `--launch`, `--completion-preflight`, force flags, or
+3. Do not pass `--launch`, `--completion-preflight`, force flags, or
    `--skip-postrun-reports`; resume and completion-preflight are intentionally
    incompatible. Inspect the prepared root, then start its `run.sh` manually
    exactly once.
-5. Poll at low frequency and verify one validation result, no new H/C
-   transition or trace, unchanged candidate hash, fresh champion runtime, and
-   campaign-scoped postrun integrity.
-6. Write the validation report and update these two resume docs.
-7. Then prepare a separate clean four-round generative CVRP root. Expand to
-   eight only if the four-round evidence is still insufficient.
+4. Poll at low frequency. Early progress must show `stage=validation`,
+   `expand=true`, `expand_round=1`, 12 cases, four seeds, and 48 pairs.
+5. At terminal, verify no new H/C/provider/trace, unchanged candidate hash,
+   `48/48` valid pairs, fresh champion runtime, `validation_expand_count=1`,
+   and campaign-scoped postrun integrity.
+6. Write the expanded-validation report and update these two resume docs.
+7. Only after the same candidate reaches a terminal validation/frozen result,
+   prepare a separate clean four-round generative root. Expand to eight only if
+   the four-round evidence is still insufficient.
 
 ## Continuation Prelaunch Checks
 
-- source R6 PID is absent and source root is terminal complete/valid;
+- source validation PID is absent and source root is terminal complete/valid;
 - SQLite `PRAGMA integrity_check` is `ok`;
-- the only branch is `ready_validate`, clean, and has hash `0d9c2ce5...`;
+- the only branch is `validating_expand`, clean, has
+  `validation_expand_count=0`, and hash `0d9c2ce5...`;
 - source branch workspace exists and recomputes to the same editable hash;
 - copied campaign preserves branch id/state/workspace/hash;
 - `resume_snapshot/resume_source_manifest.v1.json` exists;
@@ -164,6 +196,11 @@ Excluded and preserved:
 - data identity remains `ca7e470e...`;
 - no provider call is expected; copied cumulative H/C counters are not counted
   as current invocation activity.
+
+During the expanded run, the in-memory expand count becomes one before the DB
+row is persisted; use `current_progress.expand=true/expand_round=1` and the
+48-pair partial metric as the early authority. A successful terminal run must
+persist count one. The expanded gate must not request a second expansion.
 
 ## Runner Notes
 
@@ -190,3 +227,5 @@ or place it in argv.
   `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r5-postrun-20260715.md`
 - R6 terminal report:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r6-postrun-20260715.md`
+- R6-R2 exact validation report:
+  `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-exact-validation-postrun-20260715.md`

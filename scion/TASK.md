@@ -94,14 +94,28 @@ R6 is complete and valid:
   `0d9c2ce5cd62dd88c4666fcfed7a6ef14001a07caf171a6af346c74c4706535a`;
 - branch state: `ready_validate`; champion v1 unchanged.
 
-The R2 signal is uncertain and heterogeneous. X loses `-55`; ALNS iterations
-fall `1857 -> 789`; round-2 comparative runtime is unavailable because all
-champion results were cached. Do not promote or attribute the gain to
-swap-star before fresh validation.
+The R2 signal was uncertain and heterogeneous. X lost `-55`; ALNS iterations
+fell `1857 -> 789`; round-2 comparative runtime was unavailable because all
+champion results were cached. The exact same candidate has now completed a
+fresh, disjoint eight-case validation in root
+`v04-cvrp-r6-r2-exact-validation-1r-gpt56sol-20260715T180743Z-claw`:
+
+- no new H/C/provider/trace activity;
+- `32/32` valid pairs with fully fresh champion runtime;
+- case `6/1/1`, pair `25/5/2`, median `+7.75`, CI `[0,77]`;
+- runtime median ratio `1.0111` with 32 high-confidence pairs;
+- `expand_validation / VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN`;
+- branch `validating_expand`, candidate hash unchanged, champion v1 unchanged.
+
+The stronger out-of-sample signal is still not a validation pass. `tai150a`
+loses by median `-84.5`; candidate ALNS iterations are roughly halved while
+initial VNS time more than doubles. Do not promote or causally attribute the
+gain to swap-star. Protocol requires the same candidate's 12-case expanded
+validation before any new generative run.
 
 ## Current Framework Repair
 
-R6 exposed two evidence-integrity problems:
+R6 and its exact validation exposed three evidence-integrity problems:
 
 1. Its v2 R2 formal artifact binds a champion base and cumulative code hash to
    only the incremental `local_search.py` patch. Champion plus that artifact
@@ -109,6 +123,8 @@ R6 exposed two evidence-integrity problems:
 2. Canonical feedback injected legacy `unknown` fields into a problem-owned
    evidence envelope, omitted Protocol outcome/scope, and allowed display
    schema evolution to duplicate a durable observation.
+3. Cross-stage branch evidence retained screening facts while replacing their
+   reason codes with validation reasons, producing a mixed resume/status card.
 
 The current repair:
 
@@ -124,31 +140,40 @@ The current repair:
   Protocol outcome, removes cross-metric pair median, and reconciles formal
   pair counts with retained pair rows fail-closed;
 - uses stable natural identity to upgrade an old durable row without duplicate
-  H feedback.
+  H feedback;
+- atomically replaces current protocol stage/stats/runtime/ref/reasons, exposes
+  `latest_protocol_evidence`, and retains one compact latest record per stage;
+- keeps full experiment history in append-only events/raw metrics instead of
+  duplicating it into provider context;
+- covers validation/frozen continue, abandon, and frozen promotion paths, and
+  allows Protocol `continue` to re-enter exploration from validation/frozen.
 
-The final formal-artifact/resume/postrun slice passes `21` tests, the complete
-unit suite passes `707`, and the standard repository-root suite passes `1926` with
-`1` skipped. Boundary coverage includes same-file cross-round edits,
+The current focused projection/lifecycle slice passes `69`, the complete unit
+suite passes `712`, and the standard Scion suite passes `1934` with `1`
+skipped. Boundary coverage includes same-file cross-round edits,
 create/delete, full reversion to champion, activation files, absent and
 partially missing indexes, inherited resume indexes, and
 closure/content/base/final-hash tampering.
 
 ## Execution Queue
 
-1. Stage only owned files, commit, and push `v0.4-dev`.
-2. Prepare a distinct eval-only continuation from the pushed clean runtime by
-   copying the complete R6 campaign workspace. Do not materialize from the
-   broken v2 R2 artifact.
-3. Before launch, prove copied branch/workspace/state/hash equality, data
-   identity, wrapper hash, resume manifest, and zero new provider intent.
+1. Create a clean detached runtime worktree at the pushed evidence-projection
+   repair revision.
+2. Prepare a distinct eval-only continuation from that clean runtime by
+   copying the exact validation campaign workspace. Do not materialize from
+   the historical v2 R2 artifact.
+3. Before launch, prove copied branch=`validating_expand`, workspace/state/hash
+   equality, data identity, wrapper hash, resume manifest, and zero new
+   provider intent.
 4. Launch once manually with `--rounds 1`, `--resume-from-campaign`, no
    completion preflight, no force flags, and low-frequency polling.
-5. Audit validation using current-invocation deltas: no new H/C transitions or
-   traces, one validation Protocol result, fresh champion runtime, unchanged
-   candidate identity.
-6. After validation, start a separate clean four-round generative CVRP run to
-   test longitudinal evidence use. Expand to eight rounds only if four still
-   leaves adaptation or reproducibility unresolved.
+5. Audit 12-case expanded validation using current-invocation deltas: no new
+   H/C/provider/trace, `48/48` valid pairs, fresh champion runtime, unchanged
+   candidate identity, and one terminal validation decision.
+6. Only after that same-candidate path terminates, start a separate clean
+   four-round generative CVRP run to test longitudinal evidence use. Expand to
+   eight rounds only if four still leaves adaptation or reproducibility
+   unresolved.
 
 Two, four, and eight are requested observation counts, not retry budgets or
 automatic stop rules. Each generative experiment uses a distinct clean root;
@@ -181,3 +206,5 @@ terminal roots remain read-only.
   `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r5-postrun-20260715.md`
 - R6 terminal report:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r6-postrun-20260715.md`
+- R6-R2 exact validation report:
+  `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-exact-validation-postrun-20260715.md`

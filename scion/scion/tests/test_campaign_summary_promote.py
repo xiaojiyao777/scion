@@ -2,6 +2,7 @@
 
 from .campaign_test_support import *  # noqa: F401,F403
 
+
 class TestCampaignSummaryJson:
     def test_campaign_summary_json_structure(self, tmp_path):
         """run() must produce campaign_summary.json with a 'steps' array."""
@@ -84,6 +85,16 @@ class TestPromoteWeightOptimizationHook:
         result = _run_to_promote(cm)
 
         assert result.decision == Decision.PROMOTE
+        promoted_branch = cm._branch_ctrl.get_branch(result.branch_id)
+        evidence = promoted_branch.branch_evidence_summary
+        assert evidence["stage"] == evidence["protocol_stage"] == "frozen"
+        assert evidence["latest_protocol_evidence"]["stage"] == "frozen"
+        assert "why_not_promoted_reason_codes" not in evidence
+        assert set(evidence["protocol_evidence_by_stage"]) == {
+            "screening",
+            "validation",
+            "frozen",
+        }
         dossier_ref = cm._champion.promotion_dossier_ref
         assert dossier_ref == "artifacts/promotions/champion_v2_promotion_dossier.json"
         dossier_path = Path(cm._campaign_dir) / dossier_ref
@@ -93,7 +104,9 @@ class TestPromoteWeightOptimizationHook:
         assert dossier["schema_version"] == "scion.promotion_dossier.v1"
         assert dossier["campaign_id"] == cm._campaign_id
         assert dossier["champion_version"] == 2
-        assert dossier["promotion_experiment_id"] == cm._champion.promotion_experiment_id
+        assert (
+            dossier["promotion_experiment_id"] == cm._champion.promotion_experiment_id
+        )
         assert dossier["branch_id"] == result.branch_id
         assert dossier["hypothesis_id"]
         assert dossier["base_champion_version"] == 1
@@ -141,7 +154,9 @@ class TestPromoteWeightOptimizationHook:
             def spawn_for_promoted_champion(
                 self, snapshot, version, current_weights, base_weight_revision=0
             ):
-                call_log.append((snapshot, version, dict(current_weights), base_weight_revision))
+                call_log.append(
+                    (snapshot, version, dict(current_weights), base_weight_revision)
+                )
 
         cm._weight_opt_coord = FakeWeightOptCoordinator()
         cm._on_promote(branch)
@@ -162,7 +177,9 @@ class TestPromoteWeightOptimizationHook:
         # Registry had swap + move — pool should include them
         assert "swap" in pool and "move" in pool
 
-    def test_on_promote_transitions_promoted_branch_before_stale_marking(self, tmp_path):
+    def test_on_promote_transitions_promoted_branch_before_stale_marking(
+        self, tmp_path
+    ):
         """Direct compatibility helper must not leave the promoted branch stale."""
         cm, branch, _ = _setup_for_on_promote(tmp_path)
         cm._spec.parameter_search.enabled = False
@@ -171,7 +188,9 @@ class TestPromoteWeightOptimizationHook:
 
         cm._on_promote(branch)
 
-        assert cm._branch_ctrl.get_branch(branch.branch_id).state == BranchState.PROMOTED
+        assert (
+            cm._branch_ctrl.get_branch(branch.branch_id).state == BranchState.PROMOTED
+        )
         assert cm._branch_ctrl.get_branch(sibling.branch_id).state == BranchState.STALE
 
     def test_promotion_store_failure_does_not_commit_side_effects(self, tmp_path):
@@ -219,13 +238,17 @@ class TestPromoteWeightOptimizationHook:
         assert "promote_commit_failed" in result.reason
         assert cm._champion.version == 1
         assert cm._branch_ctrl.get_branch(bid).state != BranchState.PROMOTED
-        assert cm._branch_ctrl.get_branch(sibling.branch_id).state == BranchState.EXPLORE
+        assert (
+            cm._branch_ctrl.get_branch(sibling.branch_id).state == BranchState.EXPLORE
+        )
         assert call_log == []
 
         rows = cm._registry.query_by_branch(bid)
         assert not any(row.get("decision") == "promote" for row in rows)
 
-    def test_promotion_later_hook_failure_reports_recoverable_advancement(self, tmp_path):
+    def test_promotion_later_hook_failure_reports_recoverable_advancement(
+        self, tmp_path
+    ):
         """After durable champion persistence, hook failures stay promotion-aware."""
 
         cm = _campaign(tmp_path, experiment_protocol=_promote_protocol())
@@ -253,7 +276,9 @@ class TestPromoteWeightOptimizationHook:
         assert promoted is not None
         assert promoted.promotion_experiment_id
         assert cm._branch_ctrl.get_branch(bid).state == BranchState.FROZEN_TESTING
-        assert cm._branch_ctrl.get_branch(sibling.branch_id).state == BranchState.EXPLORE
+        assert (
+            cm._branch_ctrl.get_branch(sibling.branch_id).state == BranchState.EXPLORE
+        )
 
         marker = cm._branch_ctrl.get_branch(bid).branch_evidence_summary[
             "promotion_integrity"
@@ -286,7 +311,9 @@ class TestPromoteWeightOptimizationHook:
 
         cm._on_promote(branch)
 
-        assert call_log == [], "_run_weight_optimization must not be called when disabled"
+        assert (
+            call_log == []
+        ), "_run_weight_optimization must not be called when disabled"
 
     def test_on_promote_without_runner(self, tmp_path):
         """experiment_protocol=None → no optimization triggered, no crash."""
@@ -304,4 +331,6 @@ class TestPromoteWeightOptimizationHook:
 
         cm._on_promote(branch)  # must not crash
 
-        assert call_log == [], "_run_weight_optimization must not be called without experiment_protocol"
+        assert (
+            call_log == []
+        ), "_run_weight_optimization must not be called without experiment_protocol"

@@ -4,7 +4,11 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from scion.core.models import (
-    Branch, BranchState, ChampionState, Decision, ExperimentStage,
+    Branch,
+    BranchState,
+    ChampionState,
+    Decision,
+    ExperimentStage,
 )
 
 
@@ -12,15 +16,17 @@ class StateTransitionError(Exception):
     pass
 
 
-_ACTIVE_STATES = frozenset({
-    BranchState.EXPLORE,
-    BranchState.EXPLORE_EXPAND,
-    BranchState.READY_VALIDATE,
-    BranchState.VALIDATING,
-    BranchState.VALIDATING_EXPAND,
-    BranchState.READY_FROZEN,
-    BranchState.FROZEN_TESTING,
-})
+_ACTIVE_STATES = frozenset(
+    {
+        BranchState.EXPLORE,
+        BranchState.EXPLORE_EXPAND,
+        BranchState.READY_VALIDATE,
+        BranchState.VALIDATING,
+        BranchState.VALIDATING_EXPAND,
+        BranchState.READY_FROZEN,
+        BranchState.FROZEN_TESTING,
+    }
+)
 
 # Maps (Decision, current_state) → new_state
 # ABANDON is allowed from any state
@@ -31,6 +37,12 @@ _DECISION_TRANSITIONS: Dict[Decision, Dict[BranchState, BranchState]] = {
         # Expand screening didn't yield a strong enough win_rate — fall back to
         # a fresh explore iteration on the same branch.
         BranchState.EXPLORE_EXPAND: BranchState.EXPLORE,
+        # Protocol may return ``unclear``/``continue`` after validation or
+        # frozen evaluation. Re-enter exploration on the same cumulative
+        # branch so the next hypothesis can use that evidence.
+        BranchState.VALIDATING: BranchState.EXPLORE,
+        BranchState.VALIDATING_EXPAND: BranchState.EXPLORE,
+        BranchState.FROZEN_TESTING: BranchState.EXPLORE,
     },
     Decision.VALIDATION_REPAIR_REQUIRED: {
         # Historical resume compatibility for already-durable campaigns. The
@@ -140,7 +152,10 @@ class BranchController:
         """
         affected: List[str] = []
         for branch in self._branches.values():
-            if branch.state in _ACTIVE_STATES and branch.state != BranchState.FROZEN_TESTING:
+            if (
+                branch.state in _ACTIVE_STATES
+                and branch.state != BranchState.FROZEN_TESTING
+            ):
                 branch.state = BranchState.STALE
                 branch.updated_at = datetime.now()
                 affected.append(branch.branch_id)
@@ -153,15 +168,17 @@ class BranchController:
         branches are conservatively reconciled before they can spend more
         validation/frozen budget against a changed champion weight revision.
         """
-        _WEIGHT_STALE_STATES = frozenset({
-            BranchState.EXPLORE,
-            BranchState.EXPLORE_EXPAND,
-            BranchState.NEW,
-            BranchState.READY_VALIDATE,
-            BranchState.VALIDATING,
-            BranchState.VALIDATING_EXPAND,
-            BranchState.READY_FROZEN,
-        })
+        _WEIGHT_STALE_STATES = frozenset(
+            {
+                BranchState.EXPLORE,
+                BranchState.EXPLORE_EXPAND,
+                BranchState.NEW,
+                BranchState.READY_VALIDATE,
+                BranchState.VALIDATING,
+                BranchState.VALIDATING_EXPAND,
+                BranchState.READY_FROZEN,
+            }
+        )
         affected: List[str] = []
         for branch in self._branches.values():
             if branch.state in _WEIGHT_STALE_STATES:
@@ -214,9 +231,7 @@ class BranchController:
         """
         branch = self._get(branch_id)
         if branch.state != BranchState.BLOCKED_INFRA:
-            raise StateTransitionError(
-                f"Branch {branch_id} is not BLOCKED_INFRA"
-            )
+            raise StateTransitionError(f"Branch {branch_id} is not BLOCKED_INFRA")
         prev = self._pre_infra_state.pop(branch_id, BranchState.EXPLORE)
         branch.state = prev
         branch.updated_at = datetime.now()
@@ -291,11 +306,7 @@ class BranchController:
             BranchState.ABANDONED,
             BranchState.PARKED_LINEAGE,
         }
-        return [
-            b
-            for b in self._branches.values()
-            if b.state not in terminal
-        ]
+        return [b for b in self._branches.values() if b.state not in terminal]
 
     def get_reportable_branches(self) -> List[Branch]:
         """Return live branch records that should still appear in status cards."""
