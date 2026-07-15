@@ -1,4 +1,5 @@
 """Evaluation-stage orchestration boundary."""
+
 from __future__ import annotations
 
 import logging
@@ -73,6 +74,7 @@ class EvaluationExecutionResult:
         ):
             raise ValueError("evaluated execution result requires a Decision")
 
+
 @dataclass
 class EvaluationOrchestrator:
     """Own protocol execution glue and typed decision coordination."""
@@ -135,9 +137,7 @@ class EvaluationOrchestrator:
         protocol = self.experiment_protocol_provider()
 
         expand, expand_round = self._prepare_expand(branch, protocol)
-        priority_case_ids = (
-            _branch_followup_priority_cases(branch) if expand else ()
-        )
+        priority_case_ids = _branch_followup_priority_cases(branch) if expand else ()
         request = EvaluationRequest(
             branch_id=bid,
             branch_state=branch.state,
@@ -202,6 +202,42 @@ class EvaluationOrchestrator:
 
         protocol_result = evaluation.protocol_result
         canary_result = evaluation.canary_result
+        if _champion_evidence_acquisition_blocked(protocol_result):
+            assert protocol_result is not None
+            reason_code = "EVALUATION_CHAMPION_EVIDENCE_BLOCKED"
+            stats = protocol_result.stats
+            self.decision_reason_codes[bid] = (reason_code,)
+            self._set_reason_provenance(
+                bid,
+                bypass=(reason_code,),
+            )
+            return EvaluationExecutionResult(
+                execution_outcome=ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.BLOCKED_INFRA,
+                    reason_code=reason_code,
+                    detail=(
+                        "champion/shared evidence acquisition failed; "
+                        "explicit operator review is required"
+                    ),
+                    provenance={
+                        "owner": "evaluation_orchestrator",
+                        "stage": protocol_result.stage.value,
+                        "failure_scope": "champion_or_shared",
+                        "raw_metrics_ref": protocol_result.raw_metrics_ref,
+                        "protocol_gate_outcome": protocol_result.gate_outcome,
+                        "protocol_reason_codes": list(protocol_result.reason_codes),
+                        "total_pairs": stats.total_pairs,
+                        "valid_pairs": stats.valid_pairs,
+                        "failed_pairs": stats.failed_pairs,
+                        "candidate_failed_pairs": stats.candidate_failed_pairs,
+                        "champion_failed_pairs": stats.champion_failed_pairs,
+                        "operator_resume_required": True,
+                    },
+                ),
+                decision=None,
+                protocol_result=None,
+                canary_result=canary_result,
+            )
         features = evaluation.decision_features
         coordinated = self.decision_coordinator.decide(features)
         self.decision_feature_snapshots[bid] = coordinated.features_snapshot
@@ -290,6 +326,32 @@ def _merge_reason_codes(
     second: tuple[str, ...],
 ) -> tuple[str, ...]:
     return tuple(dict.fromkeys([*first, *second]))
+
+
+def _champion_evidence_acquisition_blocked(
+    protocol_result: ProtocolResult | None,
+) -> bool:
+    """Return whether later-stage evidence failed outside candidate attribution.
+
+    Protocol remains responsible for marking the partial comparison as failed.
+    This predicate only separates a champion/shared evidence-acquisition incident
+    from a candidate-attributable runtime failure before Decision is invoked.
+    """
+
+    if protocol_result is None or protocol_result.stage not in (
+        ExperimentStage.VALIDATION,
+        ExperimentStage.FROZEN,
+    ):
+        return False
+    stats = protocol_result.stats
+    reason_codes = set(protocol_result.reason_codes)
+    return (
+        stats.failed_pairs > 0
+        and stats.champion_failed_pairs == stats.failed_pairs
+        and stats.candidate_failed_pairs == 0
+        and "INCOMPLETE_EVIDENCE" in reason_codes
+        and "CHAMPION_RUNTIME_FAILURE" in reason_codes
+    )
 
 
 def _branch_followup_priority_cases(branch: Branch) -> tuple[str, ...]:

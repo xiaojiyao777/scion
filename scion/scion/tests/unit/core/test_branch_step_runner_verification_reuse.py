@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 from types import SimpleNamespace
 
+from scion.core.branch import BranchController
 from scion.core.branch_step_runner import BranchStepRunner
 from scion.core.evaluation_orchestrator import EvaluationExecutionResult
 from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
@@ -52,7 +53,9 @@ def _patch() -> PatchProposal:
     )
 
 
-def _protocol_result(stage: ExperimentStage = ExperimentStage.VALIDATION) -> ProtocolResult:
+def _protocol_result(
+    stage: ExperimentStage = ExperimentStage.VALIDATION,
+) -> ProtocolResult:
     return ProtocolResult(
         stage=stage,
         stats=EvalStats(
@@ -103,8 +106,10 @@ def _runner_for_outcome_test(
         action=hypothesis.action,
         status="active",
     )
+    branch_controller = BranchController()
+    branch_controller.restore_branch(branch)
     return BranchStepRunner(
-        branch_controller=SimpleNamespace(apply_decision=lambda *args: None),
+        branch_controller=branch_controller,
         scheduler=Scheduler(),
         champion_lock=nullcontext(),
         get_champion=lambda: SimpleNamespace(code_snapshot_path="/tmp/champion"),
@@ -173,6 +178,52 @@ def test_eval_step_not_evaluated_skips_finalizer_and_preserves_candidate(
     durable = registry.get_latest_execution_outcome(branch_id=branch.branch_id)
     assert durable is not None
     assert durable["reason_code"] == "EVALUATION_EXCEPTION"
+
+
+def test_eval_step_champion_evidence_block_preserves_candidate_and_stage(
+    tmp_path,
+) -> None:
+    branch = _branch(BranchState.FROZEN_TESTING)
+    steps = []
+    finalized = []
+    registry = LineageRegistry(str(tmp_path / "lineage.db"))
+    runner = _runner_for_outcome_test(
+        branch=branch,
+        evaluate=lambda *args: EvaluationExecutionResult(
+            execution_outcome=ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.BLOCKED_INFRA,
+                reason_code="EVALUATION_CHAMPION_EVIDENCE_BLOCKED",
+                detail="champion evidence timeout",
+                provenance={
+                    "stage": "frozen",
+                    "raw_metrics_ref": "/tmp/frozen-partial.json",
+                },
+            )
+        ),
+        recorded_steps=steps,
+        finalized=finalized,
+        registry=registry,
+    )
+
+    result = runner.run_eval_step(branch)
+
+    assert finalized == []
+    assert result.execution_outcome is ExecutionOutcome.BLOCKED_INFRA
+    assert result.decision is None
+    assert steps[-1].protocol_result is None
+    assert steps[-1].decision is None
+    assert branch.state is BranchState.BLOCKED_INFRA
+    assert branch.branch_evidence_summary["infra_resume_state"] == {
+        "schema_version": "infra-resume-state.v1",
+        "state": "frozen_testing",
+    }
+    assert branch.branch_id in runner.branch_workspaces
+    assert branch.branch_id in runner.branch_current_hypothesis
+    assert branch.branch_id in runner.branch_patches
+    durable = registry.get_latest_execution_outcome(branch_id=branch.branch_id)
+    assert durable is not None
+    assert durable["reason_code"] == "EVALUATION_CHAMPION_EVIDENCE_BLOCKED"
+    assert durable["provenance"]["raw_metrics_ref"] == ("/tmp/frozen-partial.json")
 
 
 def test_eval_step_records_screening_verification_reuse_marker() -> None:
@@ -256,16 +307,15 @@ def test_eval_step_records_screening_verification_reuse_marker() -> None:
     assert check.metadata["verification_reused_from_screening"] is True
     assert check.metadata["strict_checks_rerun"] is False
     assert check.metadata["original_verification_audit_hash"]
-    assert "code_hash=verified-code-hash" in check.metadata[
-        "original_verification_audit_detail"
-    ]
+    assert (
+        "code_hash=verified-code-hash"
+        in check.metadata["original_verification_audit_detail"]
+    )
     assert "V1-V8 were not rerun" in check.detail
     assert step.verification_passed is True
     assert step.verification_detail is not None
     assert "V0_screening_verification_reuse" in step.verification_detail
     assert "original_verification_audit_hash=" in step.verification_detail
-
-
 
 
 def test_eval_step_blocks_reuse_when_current_hash_drifted(tmp_path) -> None:

@@ -176,7 +176,9 @@ def test_operator_resume_persists_event_before_unblocking() -> None:
 
     assert branch.state is BranchState.EXPLORE
     assert state_when_event_persisted == [BranchState.BLOCKED_INFRA]
-    resume_events = [e for e in registry.events if e["event_kind"] == "operator_resume_infra"]
+    resume_events = [
+        e for e in registry.events if e["event_kind"] == "operator_resume_infra"
+    ]
     assert len(resume_events) == 1
     payload = json.loads(resume_events[0]["audit_payload_json"])
     assert payload["operator_ack"] == "operator-ack-7"
@@ -233,7 +235,10 @@ def test_operator_resume_branch_write_failure_restores_hold() -> None:
         )
 
     assert branch.state is BranchState.BLOCKED_INFRA
-    assert len([e for e in registry.events if e["event_kind"] == "operator_resume_infra"]) == 1
+    assert (
+        len([e for e in registry.events if e["event_kind"] == "operator_resume_infra"])
+        == 1
+    )
 
 
 def test_operator_resume_is_durable_in_sqlite(tmp_path) -> None:
@@ -256,4 +261,47 @@ def test_operator_resume_is_durable_in_sqlite(tmp_path) -> None:
     assert persisted is not None
     assert persisted.state is BranchState.EXPLORE
     rows = registry.query_by_branch(branch.branch_id)
-    assert len([row for row in rows if row["event_kind"] == "operator_resume_infra"]) == 1
+    assert (
+        len([row for row in rows if row["event_kind"] == "operator_resume_infra"]) == 1
+    )
+
+
+def test_operator_resume_restores_persisted_frozen_state_after_reopen(tmp_path) -> None:
+    ctrl = BranchController()
+    branch = ctrl.create_branch(_champion())
+    branch.state = BranchState.FROZEN_TESTING
+    service, _, _, _, _ = _service(ctrl)
+    registry = LineageRegistry(str(tmp_path / "lineage.db"))
+    branch_store = BranchStore(registry)
+    service.registry = registry
+    service.branch_store = branch_store
+
+    service.handle_failure(
+        branch,
+        FailureEvent(category="infra", detail="champion evidence timeout"),
+    )
+
+    persisted = branch_store.load(branch.branch_id)
+    assert persisted is not None
+    assert persisted.state is BranchState.BLOCKED_INFRA
+    assert persisted.branch_evidence_summary["infra_resume_state"] == {
+        "schema_version": "infra-resume-state.v1",
+        "state": "frozen_testing",
+    }
+
+    reopened_ctrl = BranchController()
+    reopened_ctrl.restore_branch(persisted)
+    reopened_service, _, _, _, _ = _service(reopened_ctrl)
+    reopened_service.registry = registry
+    reopened_service.branch_store = branch_store
+
+    assert reopened_service.operator_resume_infra(
+        persisted.branch_id,
+        operator_reason="evidence runner repaired",
+        operator_ack="operator-ack-frozen",
+    )
+
+    restored = branch_store.load(persisted.branch_id)
+    assert restored is not None
+    assert restored.state is BranchState.FROZEN_TESTING
+    assert "infra_resume_state" not in restored.branch_evidence_summary

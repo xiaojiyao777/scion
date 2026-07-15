@@ -8,11 +8,34 @@ import pytest
 
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.config.protocol_config import ScreeningConfig
+from scion.core.screening_visibility_runtime import runtime_gate_visibility_summary
 from scion.core.evidence_recording.artifact_refs import _read_partial_metrics_snapshot
 from scion.core.models import ExperimentStage, RunResult, SolverOutput
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.protocol.experiment.cache import ChampionResultCache
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
+
+
+def test_champion_evidence_acquisition_failure_is_not_advisory() -> None:
+    visibility = runtime_gate_visibility_summary(
+        stage="frozen",
+        gate_outcome="fail",
+        reason_codes=("INCOMPLETE_EVIDENCE", "CHAMPION_RUNTIME_FAILURE"),
+        runtime_confidence="high",
+        runtime_evidence_status="sufficient",
+        runtime_pairs=24,
+        failed_pairs=2,
+        candidate_failed_pairs=0,
+        champion_failed_pairs=2,
+    )
+
+    assert visibility["reason_semantics"] == ["evidence_acquisition_blocked"]
+    assert visibility["reason_codes"] == ["CHAMPION_EVIDENCE_ACQUISITION_BLOCKED"]
+    assert visibility["rerun_recommendation"] == ("explicit_operator_review_required")
+    assert visibility["evidence_acquisition_scope"] == "champion_or_shared"
+    assert visibility["formal_objective_evidence_complete"] is False
+    assert visibility["formal_rerun_scheduled"] is False
+    assert visibility["decision_features_excluded"] is True
 
 
 def test_repeated_champion_result_is_reused_and_candidate_still_runs(tmp_path):
@@ -88,15 +111,11 @@ def test_cached_champion_runtime_tie_requires_fresh_runtime(tmp_path):
     assert second.stats.champion_cached_runtime_pairs == 1
     assert second.stats.runtime_evidence_status == "fresh_champion_required"
     assert second.runtime_evidence_status == "fresh_champion_required"
-    assert "runtime_evidence_status=fresh_champion_required" in (
-        second.exposed_summary
-    )
+    assert "runtime_evidence_status=fresh_champion_required" in (second.exposed_summary)
     assert "runtime_signal_role=audit_or_proposal_guidance_only" in (
         second.exposed_summary
     )
-    assert "runtime_standalone_optimization_signal=false" in (
-        second.exposed_summary
-    )
+    assert "runtime_standalone_optimization_signal=false" in (second.exposed_summary)
     assert "fresh_champion_required=true" in second.exposed_summary
     assert (
         "runtime_gate_reason_semantics=runtime_fresh_champion_required"
@@ -122,14 +141,10 @@ def test_cached_champion_runtime_tie_requires_fresh_runtime(tmp_path):
     assert policy["runtime_signal_role"] == "audit_or_proposal_guidance_only"
     assert policy["proposal_guidance_only"] is True
     assert policy["decision_features_excluded"] is True
-    assert "RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED" in (
-        policy["policy_reason_codes"]
-    )
+    assert "RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED" in (policy["policy_reason_codes"])
     visibility = raw["runtime_gate_visibility"]
     assert visibility["schema_version"] == "runtime_gate_visibility.v1"
-    assert visibility["reason_semantics"] == [
-        "runtime_fresh_champion_required"
-    ]
+    assert visibility["reason_semantics"] == ["runtime_fresh_champion_required"]
     assert visibility["fresh_champion_required"] is True
     assert visibility["rerun_recommendation"] == (
         "fresh_champion_re_evaluation_required"
@@ -186,9 +201,7 @@ def test_cache_key_changes_for_case_content_and_workspace_digest(tmp_path):
     case_path.write_text('{"input": 1}\n', encoding="utf-8")
     workspace_path = Path(base_args["champion_workspace"])
     (workspace_path / "source.py").write_text("VALUE = 2\n", encoding="utf-8")
-    changed_workspace_key = cache.build_key(
-        **{**base_args, "workspace_digest": None}
-    )
+    changed_workspace_key = cache.build_key(**{**base_args, "workspace_digest": None})
 
     assert changed_workspace_key["digest"] != base_key["digest"]
     assert cache.get(changed_workspace_key) is None

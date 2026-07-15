@@ -2,6 +2,7 @@
 
 from .protocol_test_support import *  # noqa: F401,F403
 
+
 def test_run_experiment_screening_fail(tmp_path):
     """Candidate always loses → fail.
     champ=better(splits=1, cost=900), cand=worse(splits=3, cost=1500).
@@ -43,7 +44,9 @@ def test_candidate_timeout_counts_as_screening_loss_and_is_recorded(tmp_path):
     assert all(p["champion_elapsed_ms"] == 100 for p in raw["pairs"])
 
 
-def test_shared_process_failure_is_not_recorded_as_candidate_algorithm_failure(tmp_path):
+def test_shared_process_failure_is_not_recorded_as_candidate_algorithm_failure(
+    tmp_path,
+):
     runner = MagicMock()
     stderr = """Traceback (most recent call last):
   File "solver.py", line 84, in _main
@@ -327,9 +330,7 @@ def test_frozen_fails_when_champion_runtime_failure_makes_pair_invalid(tmp_path)
     runner.run_solver.side_effect = side_effect
     proto = _make_protocol(runner, tmp_path)
 
-    result = proto.run_experiment(
-        ExperimentStage.FROZEN, "/cand", "/champ", "modify"
-    )
+    result = proto.run_experiment(ExperimentStage.FROZEN, "/cand", "/champ", "modify")
 
     assert result.gate_outcome == "fail"
     assert "INCOMPLETE_EVIDENCE" in result.reason_codes
@@ -337,3 +338,28 @@ def test_frozen_fails_when_champion_runtime_failure_makes_pair_invalid(tmp_path)
     raw = json.loads(open(result.raw_metrics_ref).read())
     assert raw["valid_pairs"] == 3
     assert raw["champion_failed_pairs"] == 1
+
+
+def test_frozen_dual_timeout_is_explicit_and_not_candidate_only(tmp_path):
+    runner = MagicMock()
+    side_effect = []
+    for _ in range(3):
+        side_effect.extend([_make_run_result(2, 1000), _make_run_result(1, 800)])
+    side_effect.extend([_make_run_failure("timeout"), _make_run_failure("timeout")])
+    runner.run_solver.side_effect = side_effect
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(ExperimentStage.FROZEN, "/cand", "/champ", "modify")
+
+    assert result.gate_outcome == "fail"
+    assert result.stats.failed_pairs == 1
+    assert result.stats.champion_failed_pairs == 1
+    assert result.stats.candidate_failed_pairs == 0
+    assert result.reason_codes == (
+        "INCOMPLETE_EVIDENCE",
+        "CHAMPION_RUNTIME_FAILURE",
+    )
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["failures"][0]["side"] == "both"
+    assert raw["failures"][0]["error_category"] == "dual_runtime_failure"
+    assert raw["pairs"][3]["decisive_metric"] == "dual_runtime_failure"

@@ -14,6 +14,7 @@ from scion.core.models import (
     ExperimentStage,
     PairwiseCaseFeedback,
     ProtocolResult,
+    RunResult,
 )
 from scion.core.runtime_budget_diagnostics import (
     format_runtime_budget_diagnostic,
@@ -26,7 +27,12 @@ from scion.core.screening_visibility import (
     runtime_gate_visibility_summary,
     runtime_evidence_policy_summary,
 )
-from scion.protocol.gates import GateResult, frozen_gate, screening_gate, validation_gate
+from scion.protocol.gates import (
+    GateResult,
+    frozen_gate,
+    screening_gate,
+    validation_gate,
+)
 from scion.protocol.stats import compute_eval_stats
 from scion.runtime.audit import (
     declared_surface_required_runtime_fields,
@@ -226,9 +232,7 @@ def run_experiment(
             runtime_deltas_ms,
         )
         runtime_confidence_snapshot = (
-            "low_cached_champion"
-            if champion_cached_runtime_pairs
-            else "high"
+            "low_cached_champion" if champion_cached_runtime_pairs else "high"
         )
         runtime_evidence_policy = runtime_evidence_policy_summary(
             runtime_confidence=runtime_confidence_snapshot,
@@ -246,24 +250,16 @@ def run_experiment(
                     "stage": stage.value,
                     "selected_surface": normalized_selected_surface,
                     "objective_semantics": objective_semantics,
-                    "requested_priority_case_ids": list(
-                        requested_priority_case_ids
-                    ),
-                    "configured_priority_case_ids": list(
-                        configured_priority_cases
-                    ),
-                    "effective_priority_case_ids": list(
-                        effective_priority_case_ids
-                    ),
+                    "requested_priority_case_ids": list(requested_priority_case_ids),
+                    "configured_priority_case_ids": list(configured_priority_cases),
+                    "effective_priority_case_ids": list(effective_priority_case_ids),
                     "case_ids": cases,
                     "time_limit_policy": protocol.time_limit_policy_summary(
                         stage=stage,
                         cases=tuple(cases),
                     ),
                     "case_path_resolution": {
-                        "strict": bool(
-                            getattr(protocol, "_strict_case_paths", False)
-                        ),
+                        "strict": bool(getattr(protocol, "_strict_case_paths", False)),
                         "status_counts": _case_path_resolution_status_counts(),
                         "cases": case_path_resolutions,
                     },
@@ -413,7 +409,9 @@ def run_experiment(
             if champion_result_source == "cached":
                 champion_cached_runtime_pairs += 1
             else:
-                if _append_elapsed_sample(champion_elapsed_samples_ms, champ_r.elapsed_ms):
+                if _append_elapsed_sample(
+                    champion_elapsed_samples_ms, champ_r.elapsed_ms
+                ):
                     champion_time_limit_samples_sec.append(float(pair_time_limit_sec))
             if _append_elapsed_sample(candidate_elapsed_samples_ms, cand_r.elapsed_ms):
                 candidate_time_limit_samples_sec.append(float(pair_time_limit_sec))
@@ -476,14 +474,19 @@ def run_experiment(
                 failed_pairs += 1
                 champion_failed_pairs += 1
                 side = "both" if not cand_r.success else "champion"
+                paired_failure_category = (
+                    _paired_process_failure_category(champ_r, cand_r)
+                    if side == "both"
+                    else None
+                )
                 failure_record = {
                     "case": case,
                     "seed": seed,
                     "side": side,
                     "comparison": "invalid",
                     "error_category": (
-                        "shared_process_failure"
-                        if side == "both"
+                        paired_failure_category
+                        if paired_failure_category is not None
                         else champ_r.error_category or "unknown"
                     ),
                     "champion_error_category": champ_r.error_category or "unknown",
@@ -498,30 +501,31 @@ def run_experiment(
                     **runtime_fields,
                     **pair_cache_fields,
                     "stderr": champ_r.stderr or "",
-                    "candidate_stderr": (
-                        cand_r.stderr or "" if side == "both" else ""
-                    ),
+                    "candidate_stderr": (cand_r.stderr or "" if side == "both" else ""),
                 }
                 raw_failures.append(failure_record)
-                raw_pairs.append({
-                    "case": case,
-                    "seed": seed,
-                    "comparison": "invalid",
-                    "delta": None,
-                    "decisive_metric": (
-                        "shared_process_failure"
-                        if side == "both"
-                        else "champion_runtime_failure"
-                    ),
-                    "metric_deltas": {},
-                    **pair_budget_fields,
-                    **runtime_fields,
-                    **pair_cache_fields,
-                    "failure": failure_record,
-                })
+                raw_pairs.append(
+                    {
+                        "case": case,
+                        "seed": seed,
+                        "comparison": "invalid",
+                        "delta": None,
+                        "decisive_metric": (
+                            paired_failure_category
+                            if paired_failure_category is not None
+                            else "champion_runtime_failure"
+                        ),
+                        "metric_deltas": {},
+                        **pair_budget_fields,
+                        **runtime_fields,
+                        **pair_cache_fields,
+                        "failure": failure_record,
+                    }
+                )
                 logger.info(
                     "Pair %s seed=%d: %s solver failed category=%s elapsed_ms=%d → invalid",
-                    os.path.basename(case), seed,
+                    os.path.basename(case),
+                    seed,
                     side,
                     champ_r.error_category or "unknown",
                     champ_r.elapsed_ms,
@@ -544,10 +548,16 @@ def run_experiment(
                 if candidate_first_runtime_failure is None:
                     candidate_first_runtime_failure = _runtime_failure_summary(
                         category=category,
-                        code=str(cand_r.error_category or cand_r.exit_code or "process_failure"),
+                        code=str(
+                            cand_r.error_category
+                            or cand_r.exit_code
+                            or "process_failure"
+                        ),
                         surface=None,
                         component="solver_process",
-                        detail_summary=cand_r.stderr or cand_r.stdout or "candidate solver process failed",
+                        detail_summary=cand_r.stderr
+                        or cand_r.stdout
+                        or "candidate solver process failed",
                     )
                 failed_pairs += 1
                 candidate_failed_pairs += 1
@@ -566,18 +576,20 @@ def run_experiment(
                     "stderr": cand_r.stderr or "",
                 }
                 raw_failures.append(failure_record)
-                raw_pairs.append({
-                    "case": case,
-                    "seed": seed,
-                    "comparison": "loss",
-                    "delta": -1.0,
-                    "decisive_metric": "runtime_failure",
-                    "metric_deltas": {},
-                    **pair_budget_fields,
-                    **runtime_fields,
-                    **pair_cache_fields,
-                    "failure": failure_record,
-                })
+                raw_pairs.append(
+                    {
+                        "case": case,
+                        "seed": seed,
+                        "comparison": "loss",
+                        "delta": -1.0,
+                        "decisive_metric": "runtime_failure",
+                        "metric_deltas": {},
+                        **pair_budget_fields,
+                        **runtime_fields,
+                        **pair_cache_fields,
+                        "failure": failure_record,
+                    }
+                )
                 pairs_by_case[os.path.basename(case)].append(
                     PairwiseCaseFeedback(
                         case_id=os.path.basename(case),
@@ -590,7 +602,8 @@ def run_experiment(
                 )
                 logger.info(
                     "Pair %s seed=%d: candidate solver failed category=%s elapsed_ms=%d → loss",
-                    os.path.basename(case), seed,
+                    os.path.basename(case),
+                    seed,
                     cand_r.error_category or "unknown",
                     cand_r.elapsed_ms,
                 )
@@ -629,18 +642,20 @@ def run_experiment(
                     **pair_cache_fields,
                 }
                 raw_failures.append(failure_record)
-                raw_pairs.append({
-                    "case": case,
-                    "seed": seed,
-                    "comparison": "invalid",
-                    "delta": None,
-                    "decisive_metric": "missing_output",
-                    "metric_deltas": {},
-                    **pair_budget_fields,
-                    **runtime_fields,
-                    **pair_cache_fields,
-                    "failure": failure_record,
-                })
+                raw_pairs.append(
+                    {
+                        "case": case,
+                        "seed": seed,
+                        "comparison": "invalid",
+                        "delta": None,
+                        "decisive_metric": "missing_output",
+                        "metric_deltas": {},
+                        **pair_budget_fields,
+                        **runtime_fields,
+                        **pair_cache_fields,
+                        "failure": failure_record,
+                    }
+                )
                 _write_metrics_snapshot(complete=False)
                 protocol._emit_progress(
                     stage=stage.value,
@@ -668,9 +683,11 @@ def run_experiment(
                 if audit_category not in (runtime_observation.get("categories") or {}):
                     _increment_category(candidate_runtime_categories, audit_category)
                 if candidate_first_runtime_failure is None:
-                    candidate_first_runtime_failure = _runtime_failure_summary_from_audit(
-                        cand_audit_failure,
-                        category=audit_category,
+                    candidate_first_runtime_failure = (
+                        _runtime_failure_summary_from_audit(
+                            cand_audit_failure,
+                            category=audit_category,
+                        )
                     )
                 failed_pairs += 1
                 candidate_failed_pairs += 1
@@ -689,18 +706,20 @@ def run_experiment(
                     "runtime_audit": cand_audit_failure,
                 }
                 raw_failures.append(failure_record)
-                raw_pairs.append({
-                    "case": case,
-                    "seed": seed,
-                    "comparison": "loss",
-                    "delta": -1.0,
-                    "decisive_metric": cand_audit_failure["error_category"],
-                    "metric_deltas": {},
-                    **pair_budget_fields,
-                    **runtime_fields,
-                    **pair_cache_fields,
-                    "failure": failure_record,
-                })
+                raw_pairs.append(
+                    {
+                        "case": case,
+                        "seed": seed,
+                        "comparison": "loss",
+                        "delta": -1.0,
+                        "decisive_metric": cand_audit_failure["error_category"],
+                        "metric_deltas": {},
+                        **pair_budget_fields,
+                        **runtime_fields,
+                        **pair_cache_fields,
+                        "failure": failure_record,
+                    }
+                )
                 pairs_by_case[os.path.basename(case)].append(
                     PairwiseCaseFeedback(
                         case_id=os.path.basename(case),
@@ -713,7 +732,8 @@ def run_experiment(
                 )
                 logger.info(
                     "Pair %s seed=%d: candidate runtime audit failed: %s",
-                    os.path.basename(case), seed,
+                    os.path.basename(case),
+                    seed,
                     format_runtime_audit_failure(cand_audit_failure),
                 )
                 _write_metrics_snapshot(complete=False)
@@ -746,21 +766,24 @@ def run_experiment(
                     "runtime_audit": champ_audit_failure,
                 }
                 raw_failures.append(failure_record)
-                raw_pairs.append({
-                    "case": case,
-                    "seed": seed,
-                    "comparison": "invalid",
-                    "delta": None,
-                    "decisive_metric": f"champion_{champ_audit_failure['error_category']}",
-                    "metric_deltas": {},
-                    **pair_budget_fields,
-                    **runtime_fields,
-                    **pair_cache_fields,
-                    "failure": failure_record,
-                })
+                raw_pairs.append(
+                    {
+                        "case": case,
+                        "seed": seed,
+                        "comparison": "invalid",
+                        "delta": None,
+                        "decisive_metric": f"champion_{champ_audit_failure['error_category']}",
+                        "metric_deltas": {},
+                        **pair_budget_fields,
+                        **runtime_fields,
+                        **pair_cache_fields,
+                        "failure": failure_record,
+                    }
+                )
                 logger.info(
                     "Pair %s seed=%d: champion runtime audit failed: %s",
-                    os.path.basename(case), seed,
+                    os.path.basename(case),
+                    seed,
                     format_runtime_audit_failure(champ_audit_failure),
                 )
                 _write_metrics_snapshot(complete=False)
@@ -779,7 +802,9 @@ def run_experiment(
                 cand_r.output.objective,
                 champ_r.output.objective,
             )
-            delta = protocol._compute_delta(cand_r.output.objective, champ_r.output.objective)
+            delta = protocol._compute_delta(
+                cand_r.output.objective, champ_r.output.objective
+            )
 
             raw_pairs.append(
                 {
@@ -789,9 +814,11 @@ def run_experiment(
                     "objective_semantics": objective_semantics,
                     "delta": delta,
                     "decisive_metric": breakdown.decisive_metric,
-                    "metric_deltas": {
-                        m.name: m.signed_delta for m in breakdown.metrics
-                    } if breakdown.metrics else {},
+                    "metric_deltas": (
+                        {m.name: m.signed_delta for m in breakdown.metrics}
+                        if breakdown.metrics
+                        else {}
+                    ),
                     **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
@@ -816,13 +843,25 @@ def run_experiment(
             pairs_by_case[os.path.basename(case)].append(pair_fb)
             # Log per-pair result with generic metric values
             _mc = {m.name: m for m in breakdown.metrics} if breakdown.metrics else {}
-            _cand_vals = " ".join(f"{m.name}={m.candidate_value}" for m in breakdown.metrics) if breakdown.metrics else ""
-            _chmp_vals = " ".join(f"{m.name}={m.champion_value}" for m in breakdown.metrics) if breakdown.metrics else ""
+            _cand_vals = (
+                " ".join(f"{m.name}={m.candidate_value}" for m in breakdown.metrics)
+                if breakdown.metrics
+                else ""
+            )
+            _chmp_vals = (
+                " ".join(f"{m.name}={m.champion_value}" for m in breakdown.metrics)
+                if breakdown.metrics
+                else ""
+            )
             logger.info(
                 "Pair %s seed=%d: cmp=%s delta=%.4f decisive=%s cand(%s) champ(%s)",
-                os.path.basename(case), seed, cmp, delta,
+                os.path.basename(case),
+                seed,
+                cmp,
+                delta,
                 breakdown.decisive_metric,
-                _cand_vals, _chmp_vals,
+                _cand_vals,
+                _chmp_vals,
             )
             _write_metrics_snapshot(complete=False)
             protocol._emit_progress(
@@ -847,8 +886,14 @@ def run_experiment(
 
     if not case_comparisons:
         stats = EvalStats(
-            n_cases=0, wins=0, losses=0, ties=0,
-            win_rate=0.0, median_delta=0.0, ci_low=-1.0, ci_high=-1.0,
+            n_cases=0,
+            wins=0,
+            losses=0,
+            ties=0,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=-1.0,
+            ci_high=-1.0,
         )
         gate = GateResult(outcome="fail", reason_codes=("NO_VALID_RUNS",))
     else:
@@ -862,8 +907,12 @@ def run_experiment(
             metric_order = ["weighted_sum"]
         else:
             metric_order = (
-                [m.name for m in sorted(protocol._metric_specs, key=lambda s: s.priority)]
-                if protocol._metric_specs is not None else None
+                [
+                    m.name
+                    for m in sorted(protocol._metric_specs, key=lambda s: s.priority)
+                ]
+                if protocol._metric_specs is not None
+                else None
             )
         stats = compute_eval_stats(
             case_comparisons,
@@ -911,7 +960,10 @@ def run_experiment(
                 runtime_evidence_status=runtime_evidence_status,
             )
 
-        if failed_pairs > 0 and stage in (ExperimentStage.VALIDATION, ExperimentStage.FROZEN):
+        if failed_pairs > 0 and stage in (
+            ExperimentStage.VALIDATION,
+            ExperimentStage.FROZEN,
+        ):
             reason_codes = ["INCOMPLETE_EVIDENCE"]
             if candidate_failed_pairs:
                 reason_codes.append("CANDIDATE_RUNTIME_FAILURE")
@@ -1001,7 +1053,9 @@ def run_experiment(
         if failure_category_summary
         else ""
     )
-    runtime_attempt_summary = _format_runtime_counter_summary(candidate_runtime_counters)
+    runtime_attempt_summary = _format_runtime_counter_summary(
+        candidate_runtime_counters
+    )
     phase_telemetry_summary = _format_phase_telemetry_summary(
         _finalize_phase_telemetry_summary(candidate_phase_telemetry_summary)
     )
@@ -1099,7 +1153,9 @@ def run_experiment(
         objective_semantics=objective_semantics,
         case_ids=tuple(cases),
         seed_set=tuple(seeds),
-        pair_feedback=tuple(all_pair_feedback) if stage == ExperimentStage.SCREENING else (),
+        pair_feedback=(
+            tuple(all_pair_feedback) if stage == ExperimentStage.SCREENING else ()
+        ),
         case_feedback=case_fb,
         pattern_summary=pattern,
         selected_surface=normalized_selected_surface or selected_surface,
@@ -1148,9 +1204,7 @@ def run_experiment(
         result,
         mechanism_evidence=mechanism_evidence,
         opportunity_diagnostics=opportunity_diagnostics,
-        opportunity_status=opportunity_status_for_diagnostics(
-            opportunity_diagnostics
-        ),
+        opportunity_status=opportunity_status_for_diagnostics(opportunity_diagnostics),
     )
 
 
@@ -1197,9 +1251,7 @@ def _screening_partial_champion_evidence(
     if stage != ExperimentStage.SCREENING or champion_failed_pairs <= 0:
         return None
     ratio = (
-        float(champion_failed_pairs) / float(total_pairs)
-        if total_pairs > 0
-        else 0.0
+        float(champion_failed_pairs) / float(total_pairs) if total_pairs > 0 else 0.0
     )
     return {
         "reason_code": SCREENING_PARTIAL_CHAMPION_EVIDENCE,
@@ -1210,6 +1262,20 @@ def _screening_partial_champion_evidence(
         "champion_failed_pair_ratio": ratio,
         "decision_complete_evidence": False,
     }
+
+
+def _paired_process_failure_category(
+    champion_result: RunResult,
+    candidate_result: RunResult,
+) -> str:
+    """Describe two failed, independently executed solver processes."""
+
+    if (
+        champion_result.error_category == "timeout"
+        and candidate_result.error_category == "timeout"
+    ):
+        return "dual_runtime_failure"
+    return "shared_process_failure"
 
 
 __all__ = ["run_experiment"]

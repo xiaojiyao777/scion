@@ -16,6 +16,18 @@ class StateTransitionError(Exception):
     pass
 
 
+def _infra_resume_state(marker: object) -> BranchState | None:
+    if not isinstance(marker, dict):
+        return None
+    if marker.get("schema_version") != "infra-resume-state.v1":
+        return None
+    try:
+        state = BranchState(str(marker.get("state") or ""))
+    except ValueError:
+        return None
+    return state if state in _ACTIVE_STATES else None
+
+
 _ACTIVE_STATES = frozenset(
     {
         BranchState.EXPLORE,
@@ -27,6 +39,8 @@ _ACTIVE_STATES = frozenset(
         BranchState.FROZEN_TESTING,
     }
 )
+
+_INFRA_RESUME_STATE_KEY = "infra_resume_state"
 
 # Maps (Decision, current_state) → new_state
 # ABANDON is allowed from any state
@@ -220,6 +234,10 @@ class BranchController:
                 f"Cannot block_infra from state {branch.state.value}"
             )
         self._pre_infra_state[branch_id] = branch.state
+        branch.branch_evidence_summary[_INFRA_RESUME_STATE_KEY] = {
+            "schema_version": "infra-resume-state.v1",
+            "state": branch.state.value,
+        }
         branch.state = BranchState.BLOCKED_INFRA
         branch.updated_at = datetime.now()
 
@@ -232,7 +250,26 @@ class BranchController:
         branch = self._get(branch_id)
         if branch.state != BranchState.BLOCKED_INFRA:
             raise StateTransitionError(f"Branch {branch_id} is not BLOCKED_INFRA")
-        prev = self._pre_infra_state.pop(branch_id, BranchState.EXPLORE)
+        persisted_marker = branch.branch_evidence_summary.get(_INFRA_RESUME_STATE_KEY)
+        persisted_state = _infra_resume_state(persisted_marker)
+        if persisted_marker is not None and persisted_state is None:
+            raise StateTransitionError(
+                f"Branch {branch_id} has invalid persisted infra resume state"
+            )
+        cached_state = self._pre_infra_state.get(branch_id)
+        if (
+            cached_state is not None
+            and persisted_state is not None
+            and cached_state is not persisted_state
+        ):
+            raise StateTransitionError(
+                f"Branch {branch_id} has conflicting infra resume state"
+            )
+        # EXPLORE is retained only for legacy blocked branches created before
+        # the durable resume-state marker existed.
+        prev = cached_state or persisted_state or BranchState.EXPLORE
+        self._pre_infra_state.pop(branch_id, None)
+        branch.branch_evidence_summary.pop(_INFRA_RESUME_STATE_KEY, None)
         branch.state = prev
         branch.updated_at = datetime.now()
 

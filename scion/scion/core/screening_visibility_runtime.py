@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-
 _RUNTIME_CONFIDENCE_MIN_PAIRS = 4
 _RUNTIME_SEVERE_SLOW_RATIO = 1.50
 _RUNTIME_SEVERE_SLOW_DELTA_MS = 100.0
@@ -217,9 +216,7 @@ def runtime_gate_visibility_summary(
     stage_value = _status_value(stage)
     outcome = _status_value(gate_outcome)
     codes = tuple(
-        str(code).strip()
-        for code in (reason_codes or ())
-        if str(code).strip()
+        str(code).strip() for code in (reason_codes or ()) if str(code).strip()
     )
     runtime_status = _status_value(runtime_evidence_status) or "unknown"
     runtime_conf = _status_value(runtime_confidence) or "unknown"
@@ -242,11 +239,16 @@ def runtime_gate_visibility_summary(
         runtime_status in _LOW_RUNTIME_STATUSES
         or "INCOMPLETE_EVIDENCE" in codes
         or "INCOMPLETE_RUNTIME_EVIDENCE" in codes
-        or (
-            cached_pair_count > 0
-            and runtime_pair_count <= 0
-            and not fresh_required
-        )
+        or (cached_pair_count > 0 and runtime_pair_count <= 0 and not fresh_required)
+    )
+    evidence_acquisition_blocked = (
+        stage_value in {"validation", "frozen"}
+        and outcome == "fail"
+        and failed_pair_count > 0
+        and champion_failed_count == failed_pair_count
+        and candidate_failed_count == 0
+        and "INCOMPLETE_EVIDENCE" in codes
+        and "CHAMPION_RUNTIME_FAILURE" in codes
     )
     objective_codes = tuple(
         code
@@ -259,7 +261,10 @@ def runtime_gate_visibility_summary(
     if objective_codes:
         reason_semantics.append("objective_fail")
         visibility_reason_codes.append("OBJECTIVE_GATE_REASON_PRESENT")
-    if fresh_required:
+    if evidence_acquisition_blocked:
+        reason_semantics.append("evidence_acquisition_blocked")
+        visibility_reason_codes.append("CHAMPION_EVIDENCE_ACQUISITION_BLOCKED")
+    elif fresh_required:
         reason_semantics.append("runtime_fresh_champion_required")
         visibility_reason_codes.append("RUNTIME_FRESH_CHAMPION_REEVALUATION_REQUIRED")
     elif runtime_incomplete:
@@ -272,7 +277,9 @@ def runtime_gate_visibility_summary(
         reason_semantics.append("formal_gate_only")
         visibility_reason_codes.append("FORMAL_GATE_REASON_ONLY")
     recommendation = "none"
-    if fresh_required:
+    if evidence_acquisition_blocked:
+        recommendation = "explicit_operator_review_required"
+    elif fresh_required:
         recommendation = "fresh_champion_re_evaluation_required"
     elif budget_code:
         recommendation = "inspect_runtime_budget_saturation"
@@ -300,6 +307,12 @@ def runtime_gate_visibility_summary(
             "candidate_failed_pairs": candidate_failed_count,
             "champion_failed_pairs": champion_failed_count,
             "fresh_champion_required": fresh_required,
+            "evidence_acquisition_scope": (
+                "champion_or_shared" if evidence_acquisition_blocked else None
+            ),
+            "formal_objective_evidence_complete": (
+                False if evidence_acquisition_blocked else None
+            ),
             "rerun_recommendation": recommendation,
             "fresh_champion_requirement": (
                 "fresh_champion_re_evaluation_required_before_runtime_tie_advances"

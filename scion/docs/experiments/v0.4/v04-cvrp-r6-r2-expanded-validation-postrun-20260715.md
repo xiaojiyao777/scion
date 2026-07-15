@@ -143,10 +143,15 @@ reason to add a gate, retry, provider call, or delay the frozen holdout.
 
 ## Next action
 
-Prepare one distinct copied-state continuation from this terminal campaign.
-It must reuse the exact `ready_frozen` branch and candidate, run the first
-eight frozen cases with seeds `[61,67,89]` (`24` pairs) plus the declared
-canary, make no H/C/provider call, and terminate in one frozen Decision. Only
-after that terminal result should Scion start a clean four-round generative
-run; expand to eight rounds only if adaptation or reproducibility remains
-unresolved.
+Completed on 2026-07-15. The distinct copied-state continuation is the frozen
+root ending `20260715T213106Z-claw`; it made no H/C/provider call and reached a
+terminal frozen Decision. The eight evaluated cases were deterministic evenly
+spaced selections from the 12-row frozen manifest, not its first eight rows:
+X-n139, X-n204, X-n251, X-n327, X-n401, X-n573, X-n641, and X-n1001. Two
+champion-involved runtime failures left only `22/24` valid comparisons, so the
+candidate was not promoted. See
+`v04-cvrp-r6-r2-frozen-evaluation-postrun-20260715.md`.
+
+After the common deadline/lifecycle repair is committed and pushed, the next
+action is a clean four-round generative run. Expand to eight only if adaptation
+or reproducibility remains unresolved.

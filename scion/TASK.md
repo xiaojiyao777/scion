@@ -127,6 +127,25 @@ Initial VNS time rises `+164.8%` while ALNS iterations fall `44.9%` relative to
 champion. Formal mechanism evidence is empty, so do not causally attribute the
 result to swap-star.
 
+The exact candidate then completed its independent frozen continuation in root
+`v04-cvrp-r6-r2-frozen-evaluation-1r-gpt56sol-20260715T213106Z-claw`:
+
+- no new H/C/provider/trace or formal-candidate activity;
+- deterministic evenly spaced frozen cases X-n139, X-n204, X-n251, X-n327,
+  X-n401, X-n573, X-n641, and X-n1001 with seeds `[61,67,89]`;
+- `24` attempted, `22` valid, and two invalid comparisons involving champion
+  timeouts;
+- on valid evidence, case `5/0/3`, pair `13/1/8`, median `+81.5`, CI
+  `[0,337]`;
+- Protocol `fail / INCOMPLETE_EVIDENCE + CHAMPION_RUNTIME_FAILURE` and
+  Decision `abandon / INCOMPLETE_RUNTIME_EVIDENCE`;
+- candidate hash and champion v1 unchanged; no promotion dossier.
+
+This is promising partial evidence, not a frozen pass. The 120-second tier
+systematically ran past its scientific limit, and the two failed pairs exposed
+a shared baseline deadline defect. Do not rerun, extend, or reinterpret this
+terminal root.
+
 ## Current Framework Repair
 
 R6 and its exact validation exposed four evidence-integrity problems:
@@ -170,32 +189,50 @@ The current repair:
 - fails preparation on noncanonical refs, row/metadata identity conflicts,
   missing or unindexed metadata, snapshot tampering, or mismatched ownership.
 
+The frozen audit added two narrower repairs before another generative run:
+
+- the problem-owned CVRP baseline now exposes the tighter of the runner
+  deadline and its existing `BASELINE_TIME_FRACTION=0.80` absolute search
+  deadline, and every expensive VNS neighborhood polls that deadline inside
+  its nested candidate scan before returning the current valid incumbent;
+- validation/frozen champion/shared evidence-acquisition failures remain
+  Protocol failures but bypass Decision into durable `BLOCKED_INFRA`, preserve
+  the raw partial-evidence ref, and require the existing explicit operator
+  resume; the pre-block stage is persisted across process restart;
+- two independent timeout results are exposed as `dual_runtime_failure`
+  instead of the over-broad `shared_process_failure`; candidate-only runtime
+  failure still hard-abandons.
+
 The current resume/lineage/launcher slice passes `47`, the complete unit suite
-passes `712`, and the standard Scion suite passes `1949` with `1` skipped.
+passes `724`, and the standard Scion suite passes `1962` with `1` skipped.
 Boundary coverage includes same-file cross-round edits,
 create/delete, full reversion to champion, activation files, absent and
 partially missing indexes, inherited resume indexes, and
 closure/content/base/final-hash tampering. Two independent reviews found no
 remaining P0/P1 in the multi-hop repair.
 
+A real X-n1001 seed-61 compliance probe with a 30-second scientific limit now
+returns a feasible 43-route incumbent with exit `0` in `23.78s`; construction
+used `20.745s`, initial VNS used `2.522s`, and the solver reported
+`stop_reason=time_limit`.
+
 ## Execution Queue
 
-1. Commit and push the expanded-validation terminal report and resume-doc
-   update on `v0.4-dev`.
-2. Create a clean detached runtime worktree at that exact pushed revision.
-3. Prepare a distinct eval-only continuation by copying the terminal expanded
-   campaign. Do not reconstruct from either historical v2 artifact.
-4. Before launch, prove branch=`ready_frozen`, workspace/state/hash equality,
-   champion v1, data identity, wrapper hash, two-row inherited lineage union,
-   no live candidate index, and zero new provider intent.
-5. Launch once manually with `--rounds 1`, `--resume-from-campaign`, no
-   completion preflight, no force flags, and low-frequency polling. It must
-   evaluate the first eight frozen cases with seeds `[61,67,89]` (`24` pairs)
-   plus the declared canary.
-6. Audit one terminal frozen Decision using current-invocation deltas. Only
-   after this same-candidate path terminates, start a separate clean four-round
-   generative CVRP run. Expand to eight rounds only if four still leaves
-   adaptation or reproducibility unresolved.
+1. Commit and push the frozen report, deadline/lifecycle repair, tests, and
+   compact resume-doc update on `v0.4-dev`.
+2. Create a clean detached runtime worktree at that exact pushed revision and
+   prove commit cleanliness, problem/data identity, wrapper hash, model/base
+   URL/key-env name, and completion-preflight configuration.
+3. Prepare one distinct fresh generative CVRP root with model `gpt-5.6-sol`,
+   runtime `direct_v3`, `--rounds 4`, completion preflight enabled, no resume,
+   no force controls, and launcher fallback solver limit `30`.
+4. Inspect the prepared root, inject the proxy key through process environment,
+   run one HTTP/model preflight, and launch its guarded wrapper exactly once.
+5. Poll observationally at low frequency. Audit H/C/provider/retry accounting,
+   cumulative source identity, Protocol/Decision transitions, runtime deadline
+   compliance, and terminal postrun integrity.
+6. Expand to a separate clean eight-round experiment only if the four-round
+   terminal evidence still leaves adaptation or reproducibility unresolved.
 
 Two, four, and eight are requested observation counts, not retry budgets or
 automatic stop rules. Each generative experiment uses a distinct clean root;
@@ -232,5 +269,7 @@ terminal roots remain read-only.
   `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-exact-validation-postrun-20260715.md`
 - R6-R2 expanded validation report:
   `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-expanded-validation-postrun-20260715.md`
+- R6-R2 frozen evaluation report:
+  `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-frozen-evaluation-postrun-20260715.md`
 - Multi-hop lineage repair report:
   `scion/docs/experiments/v0.4/v04-resume-formal-candidate-lineage-repair-20260715.md`

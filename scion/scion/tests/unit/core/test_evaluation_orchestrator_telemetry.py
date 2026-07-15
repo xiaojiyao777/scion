@@ -59,8 +59,6 @@ def _hypothesis() -> HypothesisProposal:
     )
 
 
-
-
 def test_branch_followup_priority_cases_prefer_losses_then_winners() -> None:
     branch = Branch(
         branch_id=str(uuid.uuid4()),
@@ -96,6 +94,11 @@ class _BranchController:
         pass
 
 
+class _FrozenBranchController(_BranchController):
+    def next_stage(self, _branch_id: str) -> ExperimentStage:
+        return ExperimentStage.FROZEN
+
+
 class _Protocol:
     def run_canary(self, *_args, **_kwargs) -> CanaryResult:
         return CanaryResult(passed=True)
@@ -124,9 +127,7 @@ class _Protocol:
                     "candidate_runs": 16,
                     "failures": [
                         {
-                            "code": (
-                                "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED"
-                            ),
+                            "code": ("TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED"),
                             "severity": "fail",
                             "category": "activation",
                             "mechanism": "iterated_local_search_perturbation",
@@ -152,6 +153,51 @@ class _RaisingProtocol:
 class _InfraRaisingProtocol(_RaisingProtocol):
     def run_experiment(self, **_kwargs) -> ProtocolResult:
         raise EvaluationInfrastructureError("runner transport unavailable")
+
+
+class _ChampionEvidenceBlockedProtocol:
+    candidate_failed_pairs = 0
+    champion_failed_pairs = 1
+
+    def run_canary(self, *_args, **_kwargs) -> CanaryResult:
+        return CanaryResult(passed=True)
+
+    def run_experiment(self, **_kwargs) -> ProtocolResult:
+        return ProtocolResult(
+            stage=ExperimentStage.FROZEN,
+            stats=EvalStats(
+                n_cases=8,
+                wins=5,
+                losses=0,
+                ties=3,
+                win_rate=0.625,
+                median_delta=81.5,
+                ci_low=0.0,
+                ci_high=337.0,
+                total_pairs=24,
+                attempted_pairs=24,
+                valid_pairs=23,
+                failed_pairs=1,
+                candidate_failed_pairs=self.candidate_failed_pairs,
+                champion_failed_pairs=self.champion_failed_pairs,
+            ),
+            gate_outcome="fail",
+            reason_codes=(
+                "INCOMPLETE_EVIDENCE",
+                (
+                    "CANDIDATE_RUNTIME_FAILURE"
+                    if self.candidate_failed_pairs
+                    else "CHAMPION_RUNTIME_FAILURE"
+                ),
+            ),
+            exposed_summary="later-stage evidence incomplete",
+            raw_metrics_ref="/tmp/frozen-partial-metrics.json",
+        )
+
+
+class _CandidateEvidenceFailureProtocol(_ChampionEvidenceBlockedProtocol):
+    candidate_failed_pairs = 1
+    champion_failed_pairs = 0
 
 
 class _PathSafetyCanaryProtocol:
@@ -303,9 +349,7 @@ class _EffectTelemetryZeroProtocol:
                             "category": "effect",
                             "mechanism": "iterated_local_search_perturbation",
                             "field": "solver_algorithm_best_delta.ils",
-                            "diagnostic_type": (
-                                "mechanism_executed_no_improvement"
-                            ),
+                            "diagnostic_type": ("mechanism_executed_no_improvement"),
                             "telemetry_outcome": "no_effect",
                             "repairable": False,
                             "candidate_missing": 0,
@@ -317,9 +361,7 @@ class _EffectTelemetryZeroProtocol:
                         {
                             "mechanism": "iterated_local_search_perturbation",
                             "passed": True,
-                            "diagnostic_type": (
-                                "mechanism_executed_no_improvement"
-                            ),
+                            "diagnostic_type": ("mechanism_executed_no_improvement"),
                             "telemetry_outcome": "no_effect",
                             "activation_status": "observed",
                             "runtime_status": "observed",
@@ -503,8 +545,6 @@ class _RuntimeSlowLowMidProtocol:
         )
 
 
-
-
 def test_explicit_evaluation_infra_cause_is_blocked_infra() -> None:
     branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
     orchestrator = EvaluationOrchestrator(
@@ -537,7 +577,105 @@ def test_explicit_evaluation_infra_cause_is_blocked_infra() -> None:
     assert result.decision is None
 
 
-def test_canary_config_failure_rewrites_public_reason_without_changing_decision_boundary() -> None:
+def _later_stage_orchestrator(
+    branch: Branch,
+    protocol_type,
+) -> EvaluationOrchestrator:
+    return EvaluationOrchestrator(
+        branch_controller=_FrozenBranchController(),
+        champion_lock=nullcontext(),
+        get_champion=_champion,
+        branch_patches={},
+        branch_workspaces={branch.branch_id: "/tmp/candidate"},
+        branch_hypotheses={},
+        branch_current_hypothesis={},
+        experiment_protocol_provider=protocol_type,
+        feature_extractor=SafeFeatureExtractor(),
+        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
+        decision_reason_codes={},
+        campaign_id="campaign",
+        registry=SimpleNamespace(),
+        materializer=SimpleNamespace(),
+        hypothesis_store=SimpleNamespace(),
+        persist_branch_state=lambda _branch_id: None,
+        begin_status_progress=lambda **_kwargs: None,
+        end_status_progress=lambda: None,
+        increment_experiment_count=lambda: None,
+    )
+
+
+def test_later_stage_champion_evidence_failure_blocks_before_decision() -> None:
+    branch = Branch(
+        str(uuid.uuid4()),
+        BranchState.FROZEN_TESTING,
+        1,
+        "champ",
+    )
+    orchestrator = _later_stage_orchestrator(
+        branch,
+        _ChampionEvidenceBlockedProtocol,
+    )
+
+    result = orchestrator.evaluate(branch, "/tmp/candidate", _hypothesis())
+
+    assert result.execution_outcome.outcome is ExecutionOutcome.BLOCKED_INFRA
+    assert (
+        result.execution_outcome.reason_code == "EVALUATION_CHAMPION_EVIDENCE_BLOCKED"
+    )
+    assert result.decision is None
+    assert result.protocol_result is None
+    assert result.canary_result is not None
+    assert result.canary_result.passed is True
+    assert result.execution_outcome.provenance == {
+        "owner": "evaluation_orchestrator",
+        "stage": "frozen",
+        "failure_scope": "champion_or_shared",
+        "raw_metrics_ref": "/tmp/frozen-partial-metrics.json",
+        "protocol_gate_outcome": "fail",
+        "protocol_reason_codes": [
+            "INCOMPLETE_EVIDENCE",
+            "CHAMPION_RUNTIME_FAILURE",
+        ],
+        "total_pairs": 24,
+        "valid_pairs": 23,
+        "failed_pairs": 1,
+        "candidate_failed_pairs": 0,
+        "champion_failed_pairs": 1,
+        "operator_resume_required": True,
+    }
+    assert orchestrator.decision_engine_reason_codes[branch.branch_id] == ()
+    assert orchestrator.bypass_reason_codes[branch.branch_id] == (
+        "EVALUATION_CHAMPION_EVIDENCE_BLOCKED",
+    )
+    assert branch.branch_id not in orchestrator.decision_feature_snapshots
+
+
+def test_later_stage_candidate_failure_remains_evaluated_abandon() -> None:
+    branch = Branch(
+        str(uuid.uuid4()),
+        BranchState.FROZEN_TESTING,
+        1,
+        "champ",
+    )
+    orchestrator = _later_stage_orchestrator(
+        branch,
+        _CandidateEvidenceFailureProtocol,
+    )
+
+    result = orchestrator.evaluate(branch, "/tmp/candidate", _hypothesis())
+
+    assert result.execution_outcome.outcome is ExecutionOutcome.EVALUATED
+    assert result.decision is Decision.ABANDON
+    assert result.protocol_result is not None
+    assert result.protocol_result.reason_codes == (
+        "INCOMPLETE_EVIDENCE",
+        "CANDIDATE_RUNTIME_FAILURE",
+    )
+
+
+def test_canary_config_failure_rewrites_public_reason_without_changing_decision_boundary() -> (
+    None
+):
     branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
     branch_controller = _BranchController()
     decision_reason_codes: dict[str, tuple[str, ...]] = {}

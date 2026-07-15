@@ -1,4 +1,5 @@
 """Local-search and VNS neighborhoods for the CVRP solver-design subject."""
+
 from __future__ import annotations
 
 from .config import _EPS
@@ -55,7 +56,13 @@ def _two_opt_intra(solution, context, reserve):
             customers = route.customers
             for i in range(len(customers) - 1):
                 for j in range(i + 1, len(customers)):
-                    trial = customers[:i] + list(reversed(customers[i : j + 1])) + customers[j + 1 :]
+                    if context.remaining_time() <= reserve:
+                        return improved
+                    trial = (
+                        customers[:i]
+                        + list(reversed(customers[i : j + 1]))
+                        + customers[j + 1 :]
+                    )
                     delta = _route_distance(solution.instance, trial) - route.cost
                     if delta < -_EPS:
                         route.customers = trial
@@ -81,6 +88,10 @@ def _two_opt_intra_polish(solution, context, reserve, phase):
                 if context.remaining_time() <= reserve:
                     break
                 for j in range(i + 1, len(customers)):
+                    if context.remaining_time() <= reserve:
+                        if accepted_moves <= 0:
+                            context.record_move(phase, attempted=1, accepted=0)
+                        return accepted_moves, delta_sum
                     trial = customers[:i] + list(reversed(customers[i : j + 1]))
                     trial += customers[j + 1 :]
                     delta = route.cost - _route_distance(solution.instance, trial)
@@ -125,6 +136,8 @@ def _relocate(solution, context, reserve):
                         continue
                     save = -src.cost_of_remove(pos)
                     for insert_pos in range(len(dst.customers) + 1):
+                        if context.remaining_time() <= reserve:
+                            return improved
                         gain = save - dst.cost_of_insert(customer, insert_pos)
                         if gain > best_gain:
                             best_gain = gain
@@ -154,6 +167,8 @@ def _swap(solution, context, reserve):
                 right = routes[right_idx]
                 for li, left_customer in enumerate(left.customers):
                     for ri, right_customer in enumerate(right.customers):
+                        if context.remaining_time() <= reserve:
+                            return improved
                         left_load = (
                             left.load
                             - _demand(solution.instance, left_customer)
@@ -164,7 +179,10 @@ def _swap(solution, context, reserve):
                             - _demand(solution.instance, right_customer)
                             + _demand(solution.instance, left_customer)
                         )
-                        if left_load > solution.instance.capacity or right_load > solution.instance.capacity:
+                        if (
+                            left_load > solution.instance.capacity
+                            or right_load > solution.instance.capacity
+                        ):
                             continue
                         trial_left = list(left.customers)
                         trial_right = list(right.customers)
@@ -220,7 +238,11 @@ def _or_opt(solution, seg_len, context, reserve):
                 segment_demand = sum(_demand(solution.instance, c) for c in segment)
                 src_without = src.customers[:pos] + src.customers[pos + seg_len :]
                 old_src = src.cost
-                new_src = _route_distance(solution.instance, src_without) if src_without else 0.0
+                new_src = (
+                    _route_distance(solution.instance, src_without)
+                    if src_without
+                    else 0.0
+                )
                 best_gain = _EPS
                 best_dst = -1
                 best_pos = -1
@@ -232,8 +254,16 @@ def _or_opt(solution, seg_len, context, reserve):
                         continue
                     for insert_pos in range(len(dst.customers) + 1):
                         for reverse in ([False, True] if seg_len > 1 else [False]):
-                            moved = list(reversed(segment)) if reverse else list(segment)
-                            trial_dst = dst.customers[:insert_pos] + moved + dst.customers[insert_pos:]
+                            if context.remaining_time() <= reserve:
+                                return improved
+                            moved = (
+                                list(reversed(segment)) if reverse else list(segment)
+                            )
+                            trial_dst = (
+                                dst.customers[:insert_pos]
+                                + moved
+                                + dst.customers[insert_pos:]
+                            )
                             gain = (
                                 old_src
                                 + dst.cost
@@ -249,7 +279,9 @@ def _or_opt(solution, seg_len, context, reserve):
                     moved = list(reversed(segment)) if best_rev else list(segment)
                     src.customers = src_without
                     dst = routes[best_dst]
-                    dst.customers = dst.customers[:best_pos] + moved + dst.customers[best_pos:]
+                    dst.customers = (
+                        dst.customers[:best_pos] + moved + dst.customers[best_pos:]
+                    )
                     src.recalculate()
                     dst.recalculate()
                     solution.remove_empty_routes()
@@ -275,8 +307,14 @@ def _two_opt_star(solution, context, reserve):
                 prefix_right = _prefix_loads(solution.instance, right.customers)
                 for left_pos in range(len(left.customers) + 1):
                     for right_pos in range(len(right.customers) + 1):
-                        new_left = left.customers[:left_pos] + right.customers[right_pos:]
-                        new_right = right.customers[:right_pos] + left.customers[left_pos:]
+                        if context.remaining_time() <= reserve:
+                            return improved
+                        new_left = (
+                            left.customers[:left_pos] + right.customers[right_pos:]
+                        )
+                        new_right = (
+                            right.customers[:right_pos] + left.customers[left_pos:]
+                        )
                         if (
                             prefix_left[left_pos]
                             + (prefix_right[-1] - prefix_right[right_pos])
