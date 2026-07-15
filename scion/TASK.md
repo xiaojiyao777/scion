@@ -1,7 +1,7 @@
 # Scion v0.4 Final Direct-Runtime Validation Task
 
 *Branch: `v0.4-dev`*
-*Last updated: 2026-07-14*
+*Last updated: 2026-07-15*
 
 This is the active task source. Start here and then read
 `scion/docs/status/current-state.md`. Experiment chronology belongs in focused
@@ -322,13 +322,15 @@ history.
 
 ## Immediate Queue
 
-1. Prepare a distinct fresh two-round CVRP confirmation root at the exact pushed
-   repair commit. Preparation only: do not launch automatically.
-2. Recheck guarded-wrapper readiness, clean-tree/runtime-commit identity,
-   environment-only proxy key transfer, and the pinned 81-file CVRP data
-   identity before any operator launch decision.
-3. If the operator launches it, verify H2 receives the round-1 compact causal
-   packet and the semantically deduplicated current source. Do not force a
+1. Keep the distinct R5 confirmation root unchanged and unlaunched. It is
+   prepared-only at exact pushed commit `3fb2f9a7`; guarded-wrapper readiness,
+   clean-tree/runtime identity, environment-only proxy-key transfer, and the
+   pinned 81-file CVRP data identity are green without a provider call.
+2. Only after explicit operator launch authorization, pass
+   `SCION_SHARED_PROXY_KEY` in the process environment and execute the existing
+   prepared `run.sh` exactly once. Do not edit or regenerate the root.
+3. If launched, verify H2 receives the round-1 compact causal packet and the
+   semantically deduplicated current source. Do not force a
    surface/action/target or reuse either rejected R4 candidate.
 4. Poll observationally at low frequency and perform the same terminal postrun
    and independent audit before drawing an algorithm or framework conclusion.
@@ -376,3 +378,5 @@ reintroducing governance noise.
   `scion/docs/experiments/v0.4/v04-warehouse-direct-context-confirm-r3-d57d6cd6-postrun-20260714.md`
 - CVRP R4 terminal postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-open-control-r4-postrun-20260715.md`
+- CVRP R5 prepared-only audit:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r5-prelaunch-20260715.md`

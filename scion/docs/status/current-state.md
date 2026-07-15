@@ -18,7 +18,10 @@ at pushed `1978b426`, made exactly one H call and no C call, then terminated on
 a provider-schema/Contract interface mismatch before any solver evaluation.
 The repair is pushed at `ff14318c`; a distinct R4 root at that exact runtime is
 now terminal, complete, and valid after two evaluated algorithm rounds. It was
-not retried and must not be resumed or reused.
+not retried and must not be resumed or reused. The causal-feedback repair is
+pushed at `3fb2f9a7`, and a distinct R5 root is prepared-only at that exact
+clean runtime. R5 has made no live completion or provider call and requires a
+separate explicit operator launch decision.
 
 ## Current Decision
 
@@ -81,9 +84,11 @@ The final standard suite completed `1900 passed, 1 skipped` in `497.39s`.
 Compileall, diff check, focused proposal/trajectory/context tests, Protocol/CVRP
 tests, and the R4 raw-metrics replay are green.
 
-No new experiment has been prepared or launched. The next operational action is
-prepare-only for a distinct fresh two-round CVRP confirmation root at the exact
-pushed repair commit; launching remains a separate operator decision.
+The distinct two-round CVRP R5 confirmation root is prepared-only at exact
+pushed commit `3fb2f9a7`. Guarded-wrapper readiness is green without a provider
+call. It has not been launched; its prepared bytes, runtime, manifest, and data
+identity must remain unchanged, and launching remains a separate explicit
+operator decision.
 
 A separate audit found that forced diagnostics emit `forced_research_target`
 while part of the governance/C0 path still looks for legacy
@@ -121,6 +126,10 @@ Terminal CVRP R4 algorithm-control root:
 
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r4-2r-gpt56sol-20260714T234816Z-claw`
 
+Prepared-only CVRP R5 causal-feedback confirmation root:
+
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-causal-feedback-r5-2r-gpt56sol-20260715T141236Z-claw`
+
 The first root is the fresh formal confirmation. The second and third are
 copied-state, diagnostic/non-formal continuations used only to evaluate the
 exact same cumulative candidate. Do not blur their wrapper status or evidence
@@ -141,6 +150,12 @@ interface repair is pushed.
 The CVRP R4 root is also terminal. It completed normally and contains valid
 negative algorithm evidence. Do not resume it, reuse either cumulative
 candidate, or create a third round inside the root.
+
+The CVRP R5 root is prepared-only at clean detached runtime `3fb2f9a7`.
+Guarded-wrapper readiness is true; the exact 81-file data identity and generated
+script SHA are pinned. It has no `pid`, exit record, completion receipt,
+campaign output, or provider call. Do not edit or launch it without explicit
+operator authorization.
 
 ## CVRP R3 Outcome
 
@@ -413,31 +428,32 @@ green.
 
 ## Worktree State
 
-- branch: `v0.4-dev`; call-local surface enum repair commit `ff14318c` is
-  pushed and is the clean detached runtime for the terminal R4 root;
-- intended changes now: the R4 postrun report, `TASK.md`, and this file;
-- final verification for those intended changes is green: the standard suite
-  passes `1886 passed, 1 skipped` in `499.32s`; independent latest-diff review
-  reports P0/P1/P2 = 0 and separately passes `103` tests; compileall and
-  `git diff --check` pass;
+- branch: `v0.4-dev`; causal-feedback repair commit `3fb2f9a7` is pushed and is
+  the clean detached runtime for the prepared-only R5 root;
+- intended changes now: the R5 prelaunch audit, `TASK.md`, and this file;
+- final repair verification is green: the standard suite passes
+  `1900 passed, 1 skipped` in `497.39s`; independent latest-diff review reports
+  P0/P1/P2=`0/0/0`; compileall and `git diff --check` pass;
 - `scion/docs/v0.4-measurement-readiness.md` is a pre-existing user-owned
   tracked change and must remain excluded;
 - unrelated untracked historical/future documents must remain excluded;
 - the terminal CVRP R3 root used clean detached runtime
   `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-1978b426`;
 - the terminal CVRP R4 root uses clean detached runtime
-  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-ff14318c`.
+  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-ff14318c`;
+- the prepared-only CVRP R5 root uses clean detached runtime
+  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-3fb2f9a7`.
 
 ## Resume Actions
 
-1. Implement the compact CVRP-owned causal summary from existing ALNS trace;
-   keep it proposal-only and non-gating.
-2. Remove duplicated second-round source context without adding a size budget
-   or truncation, and add one-change-object-per-file tool guidance.
-3. Repair postrun trajectory action/surface/target fields currently reported as
-   unknown, then run focused and full regression plus independent review.
-4. Prepare a distinct clean next root only after those repairs. Never resume or
-   reuse R4, and do not auto-launch another experiment.
+1. Keep the prepared R5 root unchanged and unlaunched until explicit operator
+   authorization.
+2. If authorized, provide `SCION_SHARED_PROXY_KEY` through the process
+   environment and execute the existing prepared `run.sh` exactly once.
+3. Poll only at low frequency; after terminal completion, verify H2's compact
+   causal packet and semantically deduplicated complete current source.
+4. Run terminal postrun and independent evidence audit before drawing an
+   algorithm or framework conclusion. Never resume or reuse R4.
 
 ## Runner Notes
 
@@ -466,3 +482,5 @@ and preflight check.
   `scion/docs/experiments/v0.4/v04-cvrp-direct-open-control-r1-precampaign-failure-20260714.md`
 - CVRP R4 terminal postrun:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-open-control-r4-postrun-20260715.md`
+- CVRP R5 prepared-only audit:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r5-prelaunch-20260715.md`
