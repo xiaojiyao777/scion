@@ -179,15 +179,22 @@ Decision feature.
 
 ## Repair Verification
 
-The final formal-artifact/postrun slice passes `17` tests, the complete unit
-suite passes `705`, and the standard suite run from the repository root passes
+The final formal-artifact/resume/postrun slice passes `21` tests, the complete
+unit suite passes `707`, and the standard suite run from the repository root passes
 `1926` with `1` skipped. The three apparent failures from an earlier full
 invocation were reproduced as a wrong-working-directory invocation: their
 repository-relative fixtures resolved through an extra `scion/` component and
 all pass under the standard root command. Final review also reproduced a crash
 window where an existing index could omit a newly written metadata artifact;
 postrun now always compares disk metadata with indexed references, and the
-partial-index fault-injection regression passes.
+partial-index fault-injection regression passes. Resume preparation quarantines
+the prior index so current-run counts start at zero; postrun now binds those
+metadata refs through the declared snapshot index without counting them as
+current validation artifacts. Missing inherited metadata and metadata absent
+from both live and snapshot indexes fail closed, while legitimate omitted rows
+remain non-artifacts. The inherited index is accepted only at the launcher's
+fixed quarantine path with the manifest-declared size and SHA-256, preventing a
+tampered snapshot from disguising a current-run orphan.
 
 ## Next Experiment
 

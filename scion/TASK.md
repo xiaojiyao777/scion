@@ -126,11 +126,12 @@ The current repair:
 - uses stable natural identity to upgrade an old durable row without duplicate
   H feedback.
 
-The final formal-artifact/postrun slice passes `17` tests, the complete unit
-suite passes `705`, and the standard repository-root suite passes `1926` with
+The final formal-artifact/resume/postrun slice passes `21` tests, the complete
+unit suite passes `707`, and the standard repository-root suite passes `1926` with
 `1` skipped. Boundary coverage includes same-file cross-round edits,
 create/delete, full reversion to champion, activation files, absent and
-partially missing indexes, and closure/content/base/final-hash tampering.
+partially missing indexes, inherited resume indexes, and
+closure/content/base/final-hash tampering.
 
 ## Execution Queue
 
@@ -142,10 +143,10 @@ partially missing indexes, and closure/content/base/final-hash tampering.
    identity, wrapper hash, resume manifest, and zero new provider intent.
 4. Launch once manually with `--rounds 1`, `--resume-from-campaign`, no
    completion preflight, no force flags, and low-frequency polling.
-7. Audit validation using current-invocation deltas: no new H/C transitions or
+5. Audit validation using current-invocation deltas: no new H/C transitions or
    traces, one validation Protocol result, fresh champion runtime, unchanged
    candidate identity.
-8. After validation, start a separate clean four-round generative CVRP run to
+6. After validation, start a separate clean four-round generative CVRP run to
    test longitudinal evidence use. Expand to eight rounds only if four still
    leaves adaptation or reproducibility unresolved.
 

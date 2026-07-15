@@ -9,8 +9,11 @@ Read `scion/TASK.md` first. Use
 
 No experiment is running. The latest live root, CVRP R6, is terminal,
 complete, valid, and read-only. Its only branch is `ready_validate`; its
-cumulative candidate must be evaluated in a distinct copied-state continuation
-after the current evidence-integrity repair is committed and pushed.
+cumulative candidate must be evaluated in a distinct copied-state continuation.
+The prepare-only root ending `20260715T175626Z-claw` was never launched and is
+superseded: it exposed that quarantining the inherited formal index must remain
+visible to postrun lineage accounting. Re-prepare from a pushed runtime after
+that repair; do not start the superseded root.
 
 Do not resume or relaunch R4, R5, or R6 in place. Do not use R6's round-2 v2
 formal artifact to reconstruct the candidate. Copy the complete R6 campaign
@@ -114,9 +117,10 @@ Owned changes in progress:
 - compact `TASK.md` and this resume document;
 - focused and boundary tests.
 
-Verification is green: the final formal-artifact/postrun slice is `17 passed`,
-the complete unit suite is `705 passed`, and the standard repository-root suite
-is `1926 passed, 1 skipped`. The final review's partial-index crash-window P1
+Verification is green: the final formal-artifact/resume/postrun slice is
+`21 passed`, the complete unit suite is `707 passed`, and the standard
+repository-root suite is `1926 passed, 1 skipped`. The final review's
+partial-index crash-window P1
 has been repaired and independently retested; no substantive P0/P1 remains.
 Compileall and `git diff --check` pass.
 
@@ -138,11 +142,11 @@ Excluded and preserved:
    `--skip-postrun-reports`; resume and completion-preflight are intentionally
    incompatible. Inspect the prepared root, then start its `run.sh` manually
    exactly once.
-7. Poll at low frequency and verify one validation result, no new H/C
+5. Poll at low frequency and verify one validation result, no new H/C
    transition or trace, unchanged candidate hash, fresh champion runtime, and
    campaign-scoped postrun integrity.
-8. Write the validation report and update these two resume docs.
-9. Then prepare a separate clean four-round generative CVRP root. Expand to
+6. Write the validation report and update these two resume docs.
+7. Then prepare a separate clean four-round generative CVRP root. Expand to
    eight only if the four-round evidence is still insufficient.
 
 ## Continuation Prelaunch Checks

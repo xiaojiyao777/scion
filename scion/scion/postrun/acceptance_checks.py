@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 import json
 from pathlib import Path
 import subprocess
@@ -14,6 +15,7 @@ from scion.core.fixed_candidate_replay import materialize_candidate_workspace
 from scion.core.formal_candidate_artifacts import (
     render_full_file_replacement_diff,
 )
+from scion.postrun.handoff.resume_snapshot import resume_snapshot_artifact_path
 
 
 FORMAL_CANDIDATE_PATCH_SCHEMA_V3 = "scion.formal_candidate_patch_artifact.v3"
@@ -270,26 +272,83 @@ def _formal_candidate_diff_integrity(root: Path) -> tuple[str, dict[str, Any]]:
         for path in index_path.parent.glob("**/candidate.patch.json")
         if path.is_file()
     }
+    prepared_manifest = _read_json_object(root / "prepared_run_manifest.v1.json")
+    run_status = _read_json_object(root / "run_status.json")
+    snapshot_index_path = resume_snapshot_artifact_path(
+        root=root,
+        manifest=prepared_manifest,
+        run_status=run_status,
+        original_ref="artifacts/formal_candidates/index.jsonl",
+    )
+    snapshot_index_failures = (
+        _resume_candidate_index_snapshot_integrity_failures(
+            root=root,
+            manifest=prepared_manifest,
+            run_status=run_status,
+            snapshot_index_path=snapshot_index_path,
+        )
+        if snapshot_index_path is not None
+        else []
+    )
+    if snapshot_index_path is not None and not snapshot_index_failures:
+        inherited_metadata_paths, inherited_index_failures = (
+            _formal_candidate_index_metadata_paths(
+                campaign_dir=campaign_dir,
+                index_path=snapshot_index_path,
+                reason_prefix="resume_candidate_index",
+            )
+        )
+    else:
+        inherited_metadata_paths = set()
+        inherited_index_failures = snapshot_index_failures
     if not index_path.is_file():
-        orphan_artifacts = sorted(str(path) for path in disk_metadata_paths)
+        orphan_artifacts = sorted(
+            str(path) for path in disk_metadata_paths - inherited_metadata_paths
+        )
+        failures = [
+            *inherited_index_failures,
+            *(
+                [
+                    {
+                        "reason": "candidate_metadata_not_indexed",
+                        "orphan_artifacts": orphan_artifacts,
+                    }
+                ]
+                if orphan_artifacts
+                else []
+            ),
+        ]
         return (
-            "failed" if orphan_artifacts else "ok",
+            "failed" if failures else "ok",
             {
                 "reason": (
-                    "formal_candidate_index_absent_with_orphan_artifacts"
+                    (
+                        "formal_candidate_index_absent_with_unindexed_artifacts"
+                        if inherited_metadata_paths
+                        else "formal_candidate_index_absent_with_orphan_artifacts"
+                    )
                     if orphan_artifacts
-                    else "formal_candidate_index_absent"
+                    else (
+                        "formal_candidate_index_absent_with_inherited_artifacts"
+                        if inherited_metadata_paths
+                        else "formal_candidate_index_absent"
+                    )
                 ),
                 "index_path": str(index_path),
+                "inherited_index_path": (
+                    str(snapshot_index_path) if snapshot_index_path else ""
+                ),
+                "inherited_candidates": len(inherited_metadata_paths),
                 "checked_candidates": 0,
                 "orphan_artifacts": orphan_artifacts,
+                "failures": failures,
             },
         )
 
-    failures: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = list(inherited_index_failures)
     validations: list[dict[str, Any]] = []
     legacy_unbound_rows: list[dict[str, Any]] = []
-    indexed_metadata_paths: set[Path] = set()
+    indexed_metadata_paths: set[Path] = set(inherited_metadata_paths)
     try:
         lines = index_path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
@@ -502,12 +561,166 @@ def _formal_candidate_diff_integrity(root: Path) -> tuple[str, dict[str, Any]]:
         status = "ok"
     return status, {
         "index_path": str(index_path),
+        "inherited_index_path": (
+            str(snapshot_index_path) if snapshot_index_path else ""
+        ),
+        "inherited_candidates": len(inherited_metadata_paths),
         "checked_candidates": len(validations),
         "legacy_unbound_rows": legacy_unbound_rows,
         "orphan_artifacts": orphan_artifacts,
         "validations": validations,
         "failures": failures,
     }
+
+
+def _formal_candidate_index_metadata_paths(
+    *,
+    campaign_dir: Path,
+    index_path: Path,
+    reason_prefix: str,
+) -> tuple[set[Path], list[dict[str, Any]]]:
+    """Resolve metadata refs from a lineage index without counting it as current."""
+
+    paths: set[Path] = set()
+    failures: list[dict[str, Any]] = []
+    try:
+        lines = index_path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        return paths, [
+            {
+                "reason": f"{reason_prefix}_unreadable",
+                "index_path": str(index_path),
+                "error": str(exc),
+            }
+        ]
+    for line_number, raw_line in enumerate(lines, start=1):
+        if not raw_line.strip():
+            continue
+        try:
+            row = json.loads(raw_line)
+        except json.JSONDecodeError as exc:
+            failures.append(
+                {
+                    "reason": f"{reason_prefix}_invalid_json",
+                    "index_path": str(index_path),
+                    "line": line_number,
+                    "error": str(exc),
+                }
+            )
+            continue
+        if not isinstance(row, Mapping):
+            failures.append(
+                {
+                    "reason": f"{reason_prefix}_row_not_object",
+                    "index_path": str(index_path),
+                    "line": line_number,
+                }
+            )
+            continue
+        artifact_ref = row.get("artifact_ref")
+        artifact_status = str(row.get("artifact_status") or "").strip()
+        if not artifact_ref:
+            if not artifact_status or artifact_status == "omitted":
+                continue
+            failures.append(
+                {
+                    "reason": f"{reason_prefix}_artifact_ref_missing",
+                    "index_path": str(index_path),
+                    "line": line_number,
+                    "artifact_status": artifact_status,
+                }
+            )
+            continue
+        metadata_path = _campaign_artifact_path(campaign_dir, artifact_ref)
+        if metadata_path is None:
+            failures.append(
+                {
+                    "reason": f"{reason_prefix}_artifact_ref_invalid",
+                    "index_path": str(index_path),
+                    "line": line_number,
+                    "artifact_ref": artifact_ref,
+                }
+            )
+            continue
+        if not metadata_path.is_file():
+            failures.append(
+                {
+                    "reason": f"{reason_prefix}_metadata_missing",
+                    "index_path": str(index_path),
+                    "line": line_number,
+                    "artifact_ref": artifact_ref,
+                }
+            )
+            continue
+        paths.add(metadata_path)
+    return paths, failures
+
+
+def _resume_candidate_index_snapshot_integrity_failures(
+    *,
+    root: Path,
+    manifest: Mapping[str, Any],
+    run_status: Mapping[str, Any],
+    snapshot_index_path: Path,
+) -> list[dict[str, Any]]:
+    """Bind inherited refs to the immutable index quarantined by the launcher."""
+
+    manifest_ref = str(manifest.get("resume_snapshot_ref") or "").strip()
+    if not manifest_ref:
+        manifest_ref = str(run_status.get("resume_snapshot_ref") or "").strip()
+    snapshot_manifest_path = (root / manifest_ref).resolve()
+    try:
+        snapshot_manifest_path.relative_to(root.resolve())
+    except ValueError:
+        return [
+            {
+                "reason": "resume_candidate_index_snapshot_integrity_mismatch",
+                "failures": ["resume_snapshot_manifest_outside_run_root"],
+            }
+        ]
+    snapshot_manifest = _read_json_object(snapshot_manifest_path)
+    item = next(
+        (
+            dict(value)
+            for value in snapshot_manifest.get("terminal_artifacts") or []
+            if isinstance(value, Mapping)
+            and value.get("original_ref")
+            == "artifacts/formal_candidates/index.jsonl"
+        ),
+        {},
+    )
+    expected_ref = (
+        "resume_snapshot/campaign/artifacts/formal_candidates/index.jsonl"
+    )
+    actual_ref = snapshot_index_path.relative_to(root.resolve()).as_posix()
+    failures: list[str] = []
+    if actual_ref != expected_ref or str(item.get("snapshot_ref") or "") != expected_ref:
+        failures.append("snapshot_ref_mismatch")
+    try:
+        expected_size = int(item.get("size_bytes"))
+    except (TypeError, ValueError):
+        expected_size = -1
+    try:
+        actual_bytes = snapshot_index_path.read_bytes()
+    except OSError:
+        actual_bytes = b""
+        failures.append("snapshot_index_unreadable")
+    else:
+        if expected_size != len(actual_bytes):
+            failures.append("snapshot_size_mismatch")
+        expected_sha256 = str(item.get("sha256") or "")
+        if expected_sha256 != sha256(actual_bytes).hexdigest():
+            failures.append("snapshot_sha256_mismatch")
+    if not failures:
+        return []
+    return [
+        {
+            "reason": "resume_candidate_index_snapshot_integrity_mismatch",
+            "snapshot_manifest_path": str(snapshot_manifest_path),
+            "snapshot_index_path": str(snapshot_index_path),
+            "failures": failures,
+        }
+    ]
 
 
 def _v3_diff_integrity(

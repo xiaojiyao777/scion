@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from hashlib import sha256
 import json
 from pathlib import Path
 
@@ -321,6 +322,181 @@ def test_artifact_acceptance_rejects_unindexed_candidate_when_index_exists(
     assert {
         failure["reason"] for failure in formal["detail"]["failures"]
     } == {"candidate_metadata_not_indexed"}
+
+
+def test_artifact_acceptance_binds_quarantined_resume_index_as_inherited(
+    tmp_path: Path,
+) -> None:
+    root, report_dir, manifest, brief_path, brief = _write_ready_artifacts(tmp_path)
+    indexed_artifact, _ = _write_v3_formal_candidate(root)
+    live_index = (
+        root / "campaign" / "artifacts" / "formal_candidates" / "index.jsonl"
+    )
+    snapshot_index = (
+        root
+        / "resume_snapshot"
+        / "campaign"
+        / "artifacts"
+        / "formal_candidates"
+        / "index.jsonl"
+    )
+    snapshot_index.parent.mkdir(parents=True)
+    live_index.replace(snapshot_index)
+    snapshot_index.write_text(
+        snapshot_index.read_text(encoding="utf-8")
+        + json.dumps(
+            {
+                "candidate_id": "omitted-inherited-candidate",
+                "artifact_status": "omitted",
+                "artifact_ref": None,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    snapshot_manifest = root / "resume_snapshot" / "resume_source_manifest.v1.json"
+    _write_json(
+        snapshot_manifest,
+        {
+            "schema_version": "scion.launcher_resume_preparation.v1",
+            "terminal_artifacts": [
+                {
+                    "original_ref": "artifacts/formal_candidates/index.jsonl",
+                    "snapshot_ref": (
+                        "resume_snapshot/campaign/artifacts/formal_candidates/"
+                        "index.jsonl"
+                    ),
+                    "size_bytes": snapshot_index.stat().st_size,
+                    "sha256": sha256(snapshot_index.read_bytes()).hexdigest(),
+                }
+            ],
+        },
+    )
+    _write_json(
+        root / "prepared_run_manifest.v1.json",
+        {"resume_snapshot_ref": "resume_snapshot/resume_source_manifest.v1.json"},
+    )
+
+    checks = _summarize_artifact_checks(
+        root=root,
+        report_dir=report_dir,
+        manifest=manifest,
+        brief_path=brief_path,
+        brief=brief,
+    )
+    formal = checks["formal_candidate_diff_integrity"]
+    assert formal["status"] == "ok"
+    assert formal["detail"]["reason"] == (
+        "formal_candidate_index_absent_with_inherited_artifacts"
+    )
+    assert formal["detail"]["inherited_candidates"] == 1
+    assert formal["detail"]["checked_candidates"] == 0
+    assert formal["detail"]["orphan_artifacts"] == []
+
+    orphan = indexed_artifact.parent.parent / "orphan" / "candidate.patch.json"
+    orphan.parent.mkdir(parents=True)
+    _write_json(orphan, {"schema": "scion.formal_candidate_patch_artifact.v3"})
+    checks = _summarize_artifact_checks(
+        root=root,
+        report_dir=report_dir,
+        manifest=manifest,
+        brief_path=brief_path,
+        brief=brief,
+    )
+    formal = checks["formal_candidate_diff_integrity"]
+    assert formal["status"] == "failed"
+    assert formal["detail"]["orphan_artifacts"] == [str(orphan)]
+    assert formal["detail"]["failures"] == [
+        {
+            "reason": "candidate_metadata_not_indexed",
+            "orphan_artifacts": [str(orphan)],
+        }
+    ]
+
+    snapshot_index.write_text(
+        snapshot_index.read_text(encoding="utf-8")
+        + json.dumps(
+            {
+                "candidate_id": "forged-inherited-candidate",
+                "artifact_status": "recorded",
+                "artifact_ref": orphan.relative_to(root / "campaign").as_posix(),
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    checks = _summarize_artifact_checks(
+        root=root,
+        report_dir=report_dir,
+        manifest=manifest,
+        brief_path=brief_path,
+        brief=brief,
+    )
+    formal = checks["formal_candidate_diff_integrity"]
+    assert formal["status"] == "failed"
+    assert formal["detail"]["inherited_candidates"] == 0
+    assert formal["detail"]["failures"][0]["reason"] == (
+        "resume_candidate_index_snapshot_integrity_mismatch"
+    )
+
+
+def test_artifact_acceptance_rejects_missing_inherited_candidate_metadata(
+    tmp_path: Path,
+) -> None:
+    root, report_dir, manifest, brief_path, brief = _write_ready_artifacts(tmp_path)
+    indexed_artifact, _ = _write_v3_formal_candidate(root)
+    live_index = (
+        root / "campaign" / "artifacts" / "formal_candidates" / "index.jsonl"
+    )
+    snapshot_index = (
+        root
+        / "resume_snapshot"
+        / "campaign"
+        / "artifacts"
+        / "formal_candidates"
+        / "index.jsonl"
+    )
+    snapshot_index.parent.mkdir(parents=True)
+    live_index.replace(snapshot_index)
+    snapshot_manifest = root / "resume_snapshot" / "resume_source_manifest.v1.json"
+    _write_json(
+        snapshot_manifest,
+        {
+            "schema_version": "scion.launcher_resume_preparation.v1",
+            "terminal_artifacts": [
+                {
+                    "original_ref": "artifacts/formal_candidates/index.jsonl",
+                    "snapshot_ref": (
+                        "resume_snapshot/campaign/artifacts/formal_candidates/"
+                        "index.jsonl"
+                    ),
+                    "size_bytes": snapshot_index.stat().st_size,
+                    "sha256": sha256(snapshot_index.read_bytes()).hexdigest(),
+                }
+            ],
+        },
+    )
+    _write_json(
+        root / "prepared_run_manifest.v1.json",
+        {"resume_snapshot_ref": "resume_snapshot/resume_source_manifest.v1.json"},
+    )
+    indexed_artifact.unlink()
+
+    checks = _summarize_artifact_checks(
+        root=root,
+        report_dir=report_dir,
+        manifest=manifest,
+        brief_path=brief_path,
+        brief=brief,
+    )
+    formal = checks["formal_candidate_diff_integrity"]
+    assert formal["status"] == "failed"
+    assert formal["detail"]["inherited_candidates"] == 0
+    assert formal["detail"]["failures"][0]["reason"] == (
+        "resume_candidate_index_metadata_missing"
+    )
 
 
 def _summarize_artifact_checks(
