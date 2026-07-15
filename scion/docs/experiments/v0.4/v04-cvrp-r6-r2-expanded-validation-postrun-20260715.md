@@ -56,7 +56,7 @@ The current campaign has no live formal-candidate index. Postrun integrity is
 
 ## Formal result
 
-- stage: expanded validation;
+- stage: `validation`, expanded with `validation_expand_count=1`;
 - cases/seeds: 12 cases with `[47,53,71,83]`;
 - attempted/valid pairs: `48/48`;
 - candidate/champion/total failures: `0/0/0`;

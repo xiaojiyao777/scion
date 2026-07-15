@@ -194,6 +194,7 @@ adds:
 - inherited/live separation so old candidates remain cumulative lineage and a
   new invocation's live index remains current-only;
 - exact validation terminal report;
+- expanded-validation terminal report;
 - compact `TASK.md` and this resume document;
 - focused multi-hop, conflict, tamper, legacy, and omitted-row tests.
 
@@ -214,7 +215,7 @@ Excluded and preserved:
 2. Create a clean detached runtime worktree at that exact pushed revision.
 3. Prepare one diagnostic continuation with:
    `launch_cvrp_direct_campaign.py --rounds 1 --resume-from-campaign <expanded-validation/campaign>`.
-   Keep model `gpt-5.6-sol`, solver limit `30`, data root
+   Keep model `gpt-5.6-sol`, launcher solver fallback `30`, data root
    `/home/clawd/research/or-autoresearch-agent/vrp`, and key source
    `SCION_SHARED_PROXY_KEY`.
 4. Do not pass `--launch`, `--completion-preflight`, force flags, or
@@ -250,6 +251,8 @@ Excluded and preserved:
 - data identity remains `ca7e470e...`;
 - frozen selection is the first eight frozen cases with seeds `[61,67,89]`
   and 24 pairs, plus the declared canary;
+- formal per-case limits override the launcher fallback: X139/X167/X204 use
+  `60s`, X251/X280/X327/X401 use `90s`, and X502 uses `120s`;
 - no provider call is expected; copied cumulative H/C counters are not counted
   as current invocation activity.
 
