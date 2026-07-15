@@ -96,7 +96,7 @@ R6 is complete and valid:
 
 The R2 signal was uncertain and heterogeneous. X lost `-55`; ALNS iterations
 fell `1857 -> 789`; round-2 comparative runtime was unavailable because all
-champion results were cached. The exact same candidate has now completed a
+champion results were cached. The exact same candidate first completed a
 fresh, disjoint eight-case validation in root
 `v04-cvrp-r6-r2-exact-validation-1r-gpt56sol-20260715T180743Z-claw`:
 
@@ -107,11 +107,25 @@ fresh, disjoint eight-case validation in root
 - `expand_validation / VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN`;
 - branch `validating_expand`, candidate hash unchanged, champion v1 unchanged.
 
-The stronger out-of-sample signal is still not a validation pass. `tai150a`
-loses by median `-84.5`; candidate ALNS iterations are roughly halved while
-initial VNS time more than doubles. Do not promote or causally attribute the
-gain to swap-star. Protocol requires the same candidate's 12-case expanded
-validation before any new generative run.
+The repaired copied-state continuation then completed the preregistered
+12-case expanded validation in root
+`v04-cvrp-r6-r2-expanded-validation-1r-gpt56sol-20260715T201008Z-claw`:
+
+- no new H/C/provider/trace or formal-candidate activity;
+- `48/48` valid pairs with fully fresh champion runtime;
+- case `8/2/2`, pair `33/13/2`, median `+6.5`, CI `[-7.25,47.75]`;
+- runtime median ratio `1.0118`, median delta `+367.5 ms`, and `35/48`
+  slower candidate pairs;
+- `queue_frozen / VALIDATION_EXPAND_EXHAUSTED_MARGINAL_PASS`;
+- branch `ready_frozen`, expand count one, candidate hash unchanged, champion
+  v1 unchanged.
+
+This is a marginal pass to an independent frozen holdout, not validation
+certainty or promotion. Gains are concentrated on X-n120/X-n157/X-n190;
+F-n72 and tai150a regress, tai75d is seed-sensitive, and the CI crosses zero.
+Initial VNS time rises `+164.8%` while ALNS iterations fall `44.9%` relative to
+champion. Formal mechanism evidence is empty, so do not causally attribute the
+result to swap-star.
 
 ## Current Framework Repair
 
@@ -166,23 +180,22 @@ remaining P0/P1 in the multi-hop repair.
 
 ## Execution Queue
 
-1. Create a clean detached runtime worktree at the latest pushed repair
-   revision (`94769f07` or its documentation-only successor).
-2. Prepare a distinct eval-only continuation from that clean runtime by
-   copying the exact validation campaign workspace. Do not materialize from
-   the historical v2 R2 artifact.
-3. Before launch, prove copied branch=`validating_expand`, workspace/state/hash
-   equality, data identity, wrapper hash, resume manifest, and zero new
-   provider intent.
-4. Launch once manually with `--rounds 1`, `--resume-from-campaign`, no
-   completion preflight, no force flags, and low-frequency polling.
-5. Audit 12-case expanded validation using current-invocation deltas: no new
-   H/C/provider/trace, `48/48` valid pairs, fresh champion runtime, unchanged
-   candidate identity, and one terminal validation decision.
-6. Only after that same-candidate path terminates, start a separate clean
-   four-round generative CVRP run to test longitudinal evidence use. Expand to
-   eight rounds only if four still leaves adaptation or reproducibility
-   unresolved.
+1. Commit and push the expanded-validation terminal report and resume-doc
+   update on `v0.4-dev`.
+2. Create a clean detached runtime worktree at that exact pushed revision.
+3. Prepare a distinct eval-only continuation by copying the terminal expanded
+   campaign. Do not reconstruct from either historical v2 artifact.
+4. Before launch, prove branch=`ready_frozen`, workspace/state/hash equality,
+   champion v1, data identity, wrapper hash, two-row inherited lineage union,
+   no live candidate index, and zero new provider intent.
+5. Launch once manually with `--rounds 1`, `--resume-from-campaign`, no
+   completion preflight, no force flags, and low-frequency polling. It must
+   evaluate the first eight frozen cases with seeds `[61,67,89]` (`24` pairs)
+   plus the declared canary.
+6. Audit one terminal frozen Decision using current-invocation deltas. Only
+   after this same-candidate path terminates, start a separate clean four-round
+   generative CVRP run. Expand to eight rounds only if four still leaves
+   adaptation or reproducibility unresolved.
 
 Two, four, and eight are requested observation counts, not retry budgets or
 automatic stop rules. Each generative experiment uses a distinct clean root;
@@ -217,5 +230,7 @@ terminal roots remain read-only.
   `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r6-postrun-20260715.md`
 - R6-R2 exact validation report:
   `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-exact-validation-postrun-20260715.md`
+- R6-R2 expanded validation report:
+  `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-expanded-validation-postrun-20260715.md`
 - Multi-hop lineage repair report:
   `scion/docs/experiments/v0.4/v04-resume-formal-candidate-lineage-repair-20260715.md`
