@@ -13,9 +13,11 @@ valid, read-only R6-R2 exact validation root ending
 candidate must next run the preregistered 12-case expanded validation in a
 distinct copied-state continuation, with no H/C/provider call.
 
-The prepare-only root ending `20260715T175626Z-claw` was never launched and is
-superseded: it exposed that quarantining the inherited formal index must remain
-visible to postrun lineage accounting. Do not start the superseded root.
+The prepare-only roots ending `20260715T175626Z-claw` and
+`20260715T193404Z-claw` were never launched and are superseded. The latter
+proved that a second resume copied both candidate metadata files but lost the
+inherited index held in the source root's outer snapshot. Do not start either
+superseded root.
 
 Do not resume or relaunch R4, R5, R6, or the completed validation in place. Do
 not use R6's round-2 v2 artifact alone to reconstruct the candidate. Copy the
@@ -139,19 +141,27 @@ so neither gains nor losses can yet be causally assigned to that operator.
 
 Branch: `v0.4-dev`.
 
-The formal-artifact, resume-lineage, replay, feedback, and postrun repairs are
-already pushed through `5a441e44`. This revision adds:
+The formal-artifact, replay, feedback, protocol-projection, postrun, and
+multi-hop resume repairs are pushed through `94769f07`. The current revision
+adds:
 
-- atomic current/latest/per-stage branch protocol evidence projection;
+- one atomic current/latest/per-stage branch protocol evidence projection;
 - validation/frozen continue and frozen-promotion lifecycle coverage;
+- transitive inherited formal-candidate ownership flattening in a dedicated
+  launcher module;
+- canonical row/ref/metadata identity validation, exact metadata coverage, and
+  snapshot size/SHA binding before launch;
+- inherited/live separation so old candidates remain cumulative lineage and a
+  new invocation's live index remains current-only;
 - exact validation terminal report;
 - compact `TASK.md` and this resume document;
-- focused regression tests.
+- focused multi-hop, conflict, tamper, legacy, and omitted-row tests.
 
-The focused projection/lifecycle slice passes `69`, the complete unit suite
-passes `712`, and the standard Scion suite passes `1934` with `1` skipped.
-Compileall, Black check, and `git diff --check` pass. Independent final review
-found no remaining P0/P1.
+The resume/lineage/launcher slice passes `47`, the complete unit suite passes
+`712`, and the standard Scion suite passes `1949` with `1` skipped. Compileall,
+Black check, and `git diff --check` pass. Two independent final reviews found
+no remaining P0/P1. The exact-validation source's two v2 candidate rows and
+two metadata files pass the stricter real-root preparation and postrun checks.
 
 Excluded and preserved:
 
@@ -160,7 +170,8 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Create a clean detached runtime worktree at the pushed current revision.
+1. Create a clean detached runtime worktree at `94769f07` or its
+   documentation-only successor.
 2. Prepare one diagnostic continuation with:
    `launch_cvrp_direct_campaign.py --rounds 1 --resume-from-campaign <exact-validation/campaign>`.
    Keep model `gpt-5.6-sol`, solver limit `30`, data root
@@ -189,6 +200,9 @@ Excluded and preserved:
 - source branch workspace exists and recomputes to the same editable hash;
 - copied campaign preserves branch id/state/workspace/hash;
 - `resume_snapshot/resume_source_manifest.v1.json` exists;
+- its fixed inherited formal-candidate index contains exactly the two source
+  rows, has manifest-bound size/SHA, covers both copied metadata files, and no
+  live index is present before the new invocation;
 - copied old status/summary/run markers are isolated as resume evidence;
 - `launch.env` has correct resume source, `COMPLETION_PREFLIGHT=0`, `ROUNDS=1`,
   `TIME_LIMIT_SEC=30`, model, base URL, and key-env name;
@@ -229,3 +243,5 @@ or place it in argv.
   `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r6-postrun-20260715.md`
 - R6-R2 exact validation report:
   `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-exact-validation-postrun-20260715.md`
+- Multi-hop lineage repair report:
+  `scion/docs/experiments/v0.4/v04-resume-formal-candidate-lineage-repair-20260715.md`

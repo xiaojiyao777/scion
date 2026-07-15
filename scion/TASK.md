@@ -115,7 +115,7 @@ validation before any new generative run.
 
 ## Current Framework Repair
 
-R6 and its exact validation exposed three evidence-integrity problems:
+R6 and its exact validation exposed four evidence-integrity problems:
 
 1. Its v2 R2 formal artifact binds a champion base and cumulative code hash to
    only the incremental `local_search.py` patch. Champion plus that artifact
@@ -125,6 +125,9 @@ R6 and its exact validation exposed three evidence-integrity problems:
    schema evolution to duplicate a durable observation.
 3. Cross-stage branch evidence retained screening facts while replacing their
    reason codes with validation reasons, producing a mixed resume/status card.
+4. The launcher treated the formal-candidate index as a single-hop terminal
+   artifact. A second resume copied candidate metadata but lost the inherited
+   ownership index held in the source root's outer resume snapshot.
 
 The current repair:
 
@@ -146,19 +149,25 @@ The current repair:
 - keeps full experiment history in append-only events/raw metrics instead of
   duplicating it into provider context;
 - covers validation/frozen continue, abandon, and frozen promotion paths, and
-  allows Protocol `continue` to re-enter exploration from validation/frozen.
+  allows Protocol `continue` to re-enter exploration from validation/frozen;
+- validates and flattens inherited plus source-live formal candidate indexes
+  into one immutable union in the new root, while leaving the new live index
+  empty for current-invocation accounting;
+- fails preparation on noncanonical refs, row/metadata identity conflicts,
+  missing or unindexed metadata, snapshot tampering, or mismatched ownership.
 
-The current focused projection/lifecycle slice passes `69`, the complete unit
-suite passes `712`, and the standard Scion suite passes `1934` with `1`
-skipped. Boundary coverage includes same-file cross-round edits,
+The current resume/lineage/launcher slice passes `47`, the complete unit suite
+passes `712`, and the standard Scion suite passes `1949` with `1` skipped.
+Boundary coverage includes same-file cross-round edits,
 create/delete, full reversion to champion, activation files, absent and
 partially missing indexes, inherited resume indexes, and
-closure/content/base/final-hash tampering.
+closure/content/base/final-hash tampering. Two independent reviews found no
+remaining P0/P1 in the multi-hop repair.
 
 ## Execution Queue
 
-1. Create a clean detached runtime worktree at the pushed evidence-projection
-   repair revision.
+1. Create a clean detached runtime worktree at the latest pushed repair
+   revision (`94769f07` or its documentation-only successor).
 2. Prepare a distinct eval-only continuation from that clean runtime by
    copying the exact validation campaign workspace. Do not materialize from
    the historical v2 R2 artifact.
@@ -208,3 +217,5 @@ terminal roots remain read-only.
   `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r6-postrun-20260715.md`
 - R6-R2 exact validation report:
   `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-exact-validation-postrun-20260715.md`
+- Multi-hop lineage repair report:
+  `scion/docs/experiments/v0.4/v04-resume-formal-candidate-lineage-repair-20260715.md`
