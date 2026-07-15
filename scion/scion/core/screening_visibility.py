@@ -28,6 +28,17 @@ def mechanism_evidence_for_protocol(protocol: Any) -> dict[str, Any]:
 
     existing = getattr(protocol, "mechanism_evidence", None)
     if isinstance(existing, Mapping) and existing:
+        from scion.protocol.experiment.proposal_evidence import (
+            is_proposal_mechanism_evidence_envelope,
+        )
+
+        # Problem-owned proposal evidence has its own typed scope.  Treating it
+        # as the legacy per-mechanism diagnostic shape manufactures
+        # ``unknown`` activation/effect fields that the provider never
+        # asserted and can mis-bind unrelated telemetry to the active
+        # hypothesis.
+        if is_proposal_mechanism_evidence_envelope(existing):
+            return dict(existing)
         payload = dict(existing)
         primary_entry = {
             "activation_status": payload.get("primary_activation_status"),

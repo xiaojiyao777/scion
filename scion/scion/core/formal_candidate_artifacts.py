@@ -8,7 +8,7 @@ import logging
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from scion.core.evidence_recording.replay_identity import (
     formal_replay_identity_missing_keys,
@@ -38,7 +38,8 @@ logger = logging.getLogger(__name__)
 class FormalCandidatePatchArtifactRecorder:
     """Persist replayable patch/diff artifacts outside branch workspace cleanup."""
 
-    schema = "scion.formal_candidate_patch_artifact.v2"
+    legacy_schema = "scion.formal_candidate_patch_artifact.v2"
+    cumulative_schema = "scion.formal_candidate_patch_artifact.v3"
 
     def __init__(
         self,
@@ -48,6 +49,7 @@ class FormalCandidatePatchArtifactRecorder:
         problem_spec_hash: str | None = None,
         split_manifest_hash: str | None = None,
         seed_ledger_hash: str | None = None,
+        identity_manifest_for: Callable[[str], Mapping[str, Any]] | None = None,
     ) -> None:
         self.campaign_dir = Path(campaign_dir)
         self.artifact_dir = self.campaign_dir / "artifacts" / "formal_candidates"
@@ -55,6 +57,15 @@ class FormalCandidatePatchArtifactRecorder:
         self.problem_spec_hash = problem_spec_hash
         self.split_manifest_hash = split_manifest_hash
         self.seed_ledger_hash = seed_ledger_hash
+        self.identity_manifest_for = identity_manifest_for
+        # Direct/unit callers without a problem-owned materializer retain the
+        # exact v2 artifact contract. Production composition supplies the
+        # identity callback and therefore records cumulative v3 replay closure.
+        self.schema = (
+            self.cumulative_schema
+            if identity_manifest_for is not None
+            else self.legacy_schema
+        )
 
     def record(
         self,
@@ -90,17 +101,51 @@ class FormalCandidatePatchArtifactRecorder:
             or ""
         )
         proposal_changes = patch_file_changes(patch) if patch is not None else ()
-        changes = _changes_with_activation_files(
-            proposal_changes,
-            workspace=workspace,
-            base_workspace=base_workspace,
-        )
-        activation_files = _activation_file_paths(proposal_changes, changes)
         proposal_paths = {
             normalize_relative_patch_path(change.file_path)
             for change in proposal_changes
         }
-        patch_digest = _patch_digest(changes) if patch is not None else ""
+        proposal_patch_digest = (
+            _patch_digest(proposal_changes) if patch is not None else ""
+        )
+        replay_materialization: dict[str, Any] | None = None
+        formal_gates_passed = (
+            contract_result.passed
+            and verification_result.passed
+            and canary_result.passed
+        )
+        if (
+            self.schema == self.cumulative_schema
+            and patch is not None
+            and formal_gates_passed
+        ):
+            replay_materialization = self._build_replay_materialization(
+                branch=branch,
+                proposal_changes=proposal_changes,
+                repair_attribution=tuple(patch.repair_attribution or ()),
+                workspace=workspace,
+                base_workspace=base_workspace,
+            )
+            changes = tuple(replay_materialization.pop("_changes"))
+            activation_files = list(replay_materialization["activation_files"])
+            inherited_files = list(replay_materialization["inherited_files"])
+            patch_digest = str(replay_materialization["patch_digest"])
+        elif self.schema == self.cumulative_schema:
+            # Omitted candidates keep current-attempt identity only; they have
+            # no replay artifact and therefore require no cumulative closure.
+            changes = proposal_changes
+            activation_files = []
+            inherited_files = []
+            patch_digest = proposal_patch_digest
+        else:
+            changes = _changes_with_activation_files(
+                proposal_changes,
+                workspace=workspace,
+                base_workspace=base_workspace,
+            )
+            activation_files = _activation_file_paths(proposal_changes, changes)
+            inherited_files = []
+            patch_digest = _patch_digest(changes) if patch is not None else ""
         replay_identity = (
             formal_replay_identity_payload(
                 problem_spec_hash=self.problem_spec_hash,
@@ -129,6 +174,7 @@ class FormalCandidatePatchArtifactRecorder:
             branch_id=branch.branch_id,
             hypothesis_id=h_record.hypothesis_id,
             stage=stage,
+            raw_metrics_ref=raw_metrics_ref,
             patch_digest=patch_digest
             or _omitted_candidate_digest(
                 branch=branch,
@@ -161,11 +207,7 @@ class FormalCandidatePatchArtifactRecorder:
             return None
         assert patch is not None
         assert replay_identity is not None
-        if not (
-            contract_result.passed
-            and verification_result.passed
-            and canary_result.passed
-        ):
+        if not formal_gates_passed:
             return None
         dest = (
             self.artifact_dir
@@ -174,25 +216,42 @@ class FormalCandidatePatchArtifactRecorder:
         )
         metadata_path = dest / "candidate.patch.json"
         diff_path = dest / "candidate.diff"
+        proposal_diff_path = dest / "proposal.diff"
         artifact_ref = public_artifact_ref(metadata_path, base_dir=self.campaign_dir)
-        if metadata_path.exists() and diff_path.exists():
-            _attach_formal_candidate_summary(
-                branch,
-                artifact_ref=artifact_ref,
-                stage=stage,
-                raw_metrics_ref=raw_metrics_ref,
-                selected_surface=selected_surface,
-                replay_identity=replay_identity,
-                patch_digest=patch_digest,
-            )
-            return artifact_ref
-
-        dest.mkdir(parents=True, exist_ok=True)
         diff_text = _render_candidate_diff(
             changes,
             base_workspace=base_workspace,
         )
-        diff_path.write_text(diff_text, encoding="utf-8")
+        proposal_diff_text = (
+            _render_candidate_diff(
+                proposal_changes,
+                base_workspace=base_workspace,
+            )
+            if self.schema == self.cumulative_schema
+            else None
+        )
+        patch_files = [
+            _change_payload(
+                change,
+                workspace=workspace,
+                base_workspace=base_workspace,
+                is_proposal_change=(
+                    self.schema == self.cumulative_schema
+                    or normalize_relative_patch_path(change.file_path)
+                    in proposal_paths
+                ),
+                repair_attribution=tuple(patch.repair_attribution or ()),
+            )
+            for change in (
+                proposal_changes
+                if self.schema == self.cumulative_schema
+                else changes
+            )
+        ]
+        proposal_target_files = [
+            normalize_relative_patch_path(change.file_path)
+            for change in proposal_changes
+        ]
         metadata = {
             "schema": self.schema,
             "created_at": datetime.now().isoformat(),
@@ -209,8 +268,10 @@ class FormalCandidatePatchArtifactRecorder:
             "branch_code_status": str(
                 getattr(branch, "branch_code_status", "") or ""
             ),
-            "target_files": [change.file_path for change in changes],
-            "proposal_target_files": [change.file_path for change in proposal_changes],
+            "target_files": [
+                normalize_relative_patch_path(change.file_path) for change in changes
+            ],
+            "proposal_target_files": proposal_target_files,
             "activation_files": activation_files,
             "base": {
                 "base_champion_id": branch.base_champion_id,
@@ -234,7 +295,11 @@ class FormalCandidatePatchArtifactRecorder:
                 "canary_passed": canary_result.passed,
             },
             "patch": {
-                "patch_digest": patch_digest,
+                "patch_digest": (
+                    proposal_patch_digest
+                    if self.schema == self.cumulative_schema
+                    else patch_digest
+                ),
                 "representation": "full_file_replacement",
                 "normalization_events": [
                     dict(item)
@@ -242,22 +307,12 @@ class FormalCandidatePatchArtifactRecorder:
                     if isinstance(item, Mapping)
                 ],
                 "diff_ref": public_artifact_ref(
-                    diff_path,
+                    proposal_diff_path
+                    if self.schema == self.cumulative_schema
+                    else diff_path,
                     base_dir=self.campaign_dir,
                 ),
-                "files": [
-                    _change_payload(
-                        change,
-                        workspace=workspace,
-                        base_workspace=base_workspace,
-                        is_proposal_change=(
-                            normalize_relative_patch_path(change.file_path)
-                            in proposal_paths
-                        ),
-                        repair_attribution=tuple(patch.repair_attribution or ()),
-                    )
-                    for change in changes
-                ],
+                "files": patch_files,
             },
             "replay_identity": replay_identity,
             "replay_metadata": {
@@ -266,10 +321,18 @@ class FormalCandidatePatchArtifactRecorder:
                 "replay_identity_ref": "candidate.patch.json#/replay_identity",
                 "replay_identity_status": replay_identity["identity_status"],
                 "patch_model": (
-                    "code_content is canonical full-file candidate content; "
-                    "base/current hashes and diff support audit replay; "
-                    "activation_files are runtime-owned support files required "
-                    "to materialize the executed candidate workspace"
+                    (
+                        "patch is the current proposal attempt; "
+                        "replay_materialization is the cumulative full-file "
+                        "closure from the declared champion base"
+                    )
+                    if self.schema == self.cumulative_schema
+                    else (
+                        "code_content is canonical full-file candidate content; "
+                        "base/current hashes and diff support audit replay; "
+                        "activation_files are runtime-owned support files required "
+                        "to materialize the executed candidate workspace"
+                    )
                 ),
                 "formal_replay_identity_ref": (
                     f"{artifact_ref}#/replay_identity" if artifact_ref else ""
@@ -281,27 +344,96 @@ class FormalCandidatePatchArtifactRecorder:
                 "target_file": h_record.target_file,
             },
         }
+        if self.schema == self.cumulative_schema:
+            assert replay_materialization is not None
+            materialized_proposal_files = sorted(
+                proposal_paths.intersection(metadata["target_files"])
+            )
+            metadata.update(
+                {
+                    "proposal_patch_digest": proposal_patch_digest,
+                    "formal_patch_digest": patch_digest,
+                    "parent_hypothesis_id": h_record.parent_hypothesis_id,
+                    "inherited_files": inherited_files,
+                    "candidate_attribution_scope": {
+                        "schema_version": (
+                            "formal-candidate-attribution-scope.v1"
+                        ),
+                        "scope": (
+                            "cumulative_branch_candidate_from_declared_champion_base"
+                        ),
+                        "proposal_target_files": proposal_target_files,
+                        "materialized_proposal_files": materialized_proposal_files,
+                        "inherited_files": inherited_files,
+                        "activation_files": activation_files,
+                    },
+                    "replay_materialization": {
+                        **replay_materialization,
+                        "diff_ref": public_artifact_ref(
+                            diff_path,
+                            base_dir=self.campaign_dir,
+                        ),
+                    },
+                }
+            )
+        index_payload = {
+            "schema": self.schema,
+            "candidate_id": candidate_id,
+            "branch_id": branch.branch_id,
+            "hypothesis_id": h_record.hypothesis_id,
+            **proposal_attempt_fields,
+            "stage": stage,
+            "branch_code_status": metadata["branch_code_status"],
+            "patch_digest": patch_digest,
+            **(
+                {
+                    "proposal_patch_digest": proposal_patch_digest,
+                    "formal_patch_digest": patch_digest,
+                    "parent_hypothesis_id": h_record.parent_hypothesis_id,
+                }
+                if self.schema == self.cumulative_schema
+                else {}
+            ),
+            "artifact_ref": artifact_ref,
+            "diff_ref": public_artifact_ref(diff_path, base_dir=self.campaign_dir),
+            "artifact_status": "recorded",
+            "replay_identity_status": replay_identity["identity_status"],
+            "missing_replay_identity_keys": [],
+        }
+        if metadata_path.exists():
+            _validate_existing_artifact_metadata(metadata_path, expected=metadata)
+            _restore_or_validate_artifact_text(diff_path, diff_text)
+            if proposal_diff_text is not None:
+                _restore_or_validate_artifact_text(
+                    proposal_diff_path,
+                    proposal_diff_text,
+                )
+            _append_index(
+                self.artifact_dir / "index.jsonl",
+                index_payload,
+            )
+            _attach_formal_candidate_summary(
+                branch,
+                artifact_ref=artifact_ref,
+                stage=stage,
+                raw_metrics_ref=raw_metrics_ref,
+                selected_surface=selected_surface,
+                replay_identity=replay_identity,
+                patch_digest=patch_digest,
+            )
+            return artifact_ref
+
+        dest.mkdir(parents=True, exist_ok=True)
+        diff_path.write_text(diff_text, encoding="utf-8")
+        if proposal_diff_text is not None:
+            proposal_diff_path.write_text(proposal_diff_text, encoding="utf-8")
         metadata_path.write_text(
             json.dumps(_jsonable(metadata), indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         _append_index(
             self.artifact_dir / "index.jsonl",
-            {
-                "schema": self.schema,
-                "candidate_id": candidate_id,
-                "branch_id": branch.branch_id,
-                "hypothesis_id": h_record.hypothesis_id,
-                **proposal_attempt_fields,
-                "stage": stage,
-                "branch_code_status": metadata["branch_code_status"],
-                "patch_digest": patch_digest,
-                "artifact_ref": artifact_ref,
-                "diff_ref": public_artifact_ref(diff_path, base_dir=self.campaign_dir),
-                "artifact_status": "recorded",
-                "replay_identity_status": replay_identity["identity_status"],
-                "missing_replay_identity_keys": [],
-            },
+            index_payload,
         )
         _attach_formal_candidate_summary(
             branch,
@@ -313,6 +445,102 @@ class FormalCandidatePatchArtifactRecorder:
             patch_digest=patch_digest,
         )
         return artifact_ref
+
+    def _build_replay_materialization(
+        self,
+        *,
+        branch: Branch,
+        proposal_changes: tuple[PatchFileChange, ...],
+        repair_attribution: tuple[Mapping[str, Any], ...],
+        workspace: str | None,
+        base_workspace: str | None,
+    ) -> dict[str, Any]:
+        """Build the complete candidate delta from the declared champion.
+
+        Path selection is deliberately delegated to the problem-owned
+        WorkspaceMaterializer callback. Comparing those two exact identity
+        manifests captures prior verified branch work, newly created files,
+        deletions, and reverts without consulting proposal history.
+        """
+
+        if self.identity_manifest_for is None:
+            raise ValueError("v3 replay materialization requires an identity callback")
+        if not workspace or not base_workspace:
+            raise ValueError(
+                "v3 replay materialization requires base/current workspaces"
+            )
+
+        base_manifest = _validated_identity_manifest(
+            self.identity_manifest_for(base_workspace),
+            workspace=base_workspace,
+        )
+        current_manifest = _validated_identity_manifest(
+            self.identity_manifest_for(workspace),
+            workspace=workspace,
+        )
+        branch_code_hash = str(getattr(branch, "current_code_hash", None) or "")
+        current_code_hash = str(current_manifest["code_hash"])
+        if not branch_code_hash or current_code_hash != branch_code_hash:
+            raise ValueError(
+                "formal replay identity does not match branch.current_code_hash: "
+                f"computed={current_code_hash} branch={branch_code_hash or 'missing'}"
+            )
+
+        identity_changes = _identity_manifest_changes(
+            base_manifest,
+            current_manifest,
+            workspace=workspace,
+        )
+        identity_paths = {
+            normalize_relative_patch_path(change.file_path)
+            for change in identity_changes
+        }
+        changes = _changes_with_activation_files(
+            identity_changes,
+            workspace=workspace,
+            base_workspace=base_workspace,
+        )
+        activation_files = sorted(
+            normalize_relative_patch_path(change.file_path)
+            for change in changes
+            if normalize_relative_patch_path(change.file_path) not in identity_paths
+        )
+        proposal_paths = {
+            normalize_relative_patch_path(change.file_path)
+            for change in proposal_changes
+        }
+        inherited_files = sorted(identity_paths - proposal_paths)
+        files = []
+        for change in changes:
+            path = normalize_relative_patch_path(change.file_path)
+            candidate_scope = (
+                "runtime_activation"
+                if path in activation_files
+                else "current_proposal"
+                if path in proposal_paths
+                else "inherited_verified"
+            )
+            files.append(
+                _change_payload(
+                    change,
+                    workspace=workspace,
+                    base_workspace=base_workspace,
+                    is_proposal_change=candidate_scope == "current_proposal",
+                    repair_attribution=repair_attribution,
+                    candidate_scope=candidate_scope,
+                )
+            )
+        return {
+            "schema_version": "scion.replay_materialization.v1",
+            "representation": "cumulative_full_file_replacement",
+            "base_identity_manifest": base_manifest,
+            "candidate_identity_manifest": current_manifest,
+            "patch_digest": _patch_digest(changes),
+            "files": files,
+            "activation_files": activation_files,
+            "inherited_files": inherited_files,
+            "_changes": changes,
+        }
 
     def _record_omitted(
         self,
@@ -658,6 +886,7 @@ def _candidate_id(
     branch_id: str,
     hypothesis_id: str,
     stage: str,
+    raw_metrics_ref: str | None,
     patch_digest: str,
 ) -> str:
     raw = json.dumps(
@@ -665,6 +894,7 @@ def _candidate_id(
             "branch_id": branch_id,
             "hypothesis_id": hypothesis_id,
             "stage": stage,
+            "raw_metrics_ref": raw_metrics_ref,
             "patch_digest": patch_digest,
         },
         sort_keys=True,
@@ -677,6 +907,109 @@ def _patch_digest(changes: Iterable[PatchFileChange]) -> str:
     return stable_patch_digest(changes)
 
 
+def _validated_identity_manifest(
+    manifest: Mapping[str, Any],
+    *,
+    workspace: str,
+) -> dict[str, Any]:
+    if manifest.get("schema_version") != "scion.editable_identity_manifest.v1":
+        raise ValueError("unsupported editable identity manifest")
+    raw_files = manifest.get("files")
+    code_hash = str(manifest.get("code_hash") or "")
+    if not isinstance(raw_files, list) or not _is_sha256(code_hash):
+        raise ValueError("invalid editable identity manifest")
+
+    entries: list[dict[str, str]] = []
+    seen: set[str] = set()
+    workspace_path = Path(workspace).resolve()
+    digest = hashlib.sha256()
+    for raw in raw_files:
+        if not isinstance(raw, Mapping):
+            raise ValueError("invalid editable identity manifest file entry")
+        file_path = normalize_relative_patch_path(str(raw.get("file_path") or ""))
+        expected_sha = str(raw.get("sha256") or "")
+        if file_path in seen or not _is_sha256(expected_sha):
+            raise ValueError(f"invalid editable identity file entry: {file_path}")
+        seen.add(file_path)
+        content = _workspace_file_bytes(workspace_path, file_path)
+        actual_sha = hashlib.sha256(content).hexdigest()
+        if actual_sha != expected_sha:
+            raise ValueError(f"editable identity file digest mismatch: {file_path}")
+        entries.append({"file_path": file_path, "sha256": expected_sha})
+
+    entries.sort(key=lambda item: item["file_path"])
+    for entry in entries:
+        content = _workspace_file_bytes(workspace_path, entry["file_path"])
+        digest.update(entry["file_path"].encode())
+        digest.update(content)
+    if digest.hexdigest() != code_hash:
+        raise ValueError("editable identity manifest code_hash mismatch")
+    return {
+        "schema_version": "scion.editable_identity_manifest.v1",
+        "files": entries,
+        "code_hash": code_hash,
+    }
+
+
+def _identity_manifest_changes(
+    base_manifest: Mapping[str, Any],
+    current_manifest: Mapping[str, Any],
+    *,
+    workspace: str,
+) -> tuple[PatchFileChange, ...]:
+    base_by_path = {
+        str(item["file_path"]): str(item["sha256"])
+        for item in base_manifest["files"]
+    }
+    current_by_path = {
+        str(item["file_path"]): str(item["sha256"])
+        for item in current_manifest["files"]
+    }
+    workspace_path = Path(workspace).resolve()
+    changes: list[PatchFileChange] = []
+    for file_path in sorted(base_by_path.keys() | current_by_path.keys()):
+        base_sha = base_by_path.get(file_path)
+        current_sha = current_by_path.get(file_path)
+        if base_sha == current_sha:
+            continue
+        if current_sha is None:
+            action = "delete"
+            code_content = ""
+        else:
+            action = "create" if base_sha is None else "modify"
+            raw_content = _workspace_file_bytes(workspace_path, file_path)
+            try:
+                code_content = raw_content.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError(
+                    f"editable replay file is not UTF-8 text: {file_path}"
+                ) from exc
+        changes.append(
+            PatchFileChange(
+                file_path=file_path,
+                action=action,
+                code_content=code_content,
+                test_hint="cumulative formal replay materialization",
+            )
+        )
+    return tuple(changes)
+
+
+def _workspace_file_bytes(workspace: Path, file_path: str) -> bytes:
+    target = (workspace / normalize_relative_patch_path(file_path)).resolve()
+    try:
+        target.relative_to(workspace)
+    except ValueError as exc:
+        raise ValueError(f"identity file escapes workspace: {file_path}") from exc
+    if not target.is_file():
+        raise ValueError(f"editable identity file is missing: {file_path}")
+    return target.read_bytes()
+
+
+def _is_sha256(value: str) -> bool:
+    return len(value) == 64 and all(char in "0123456789abcdef" for char in value)
+
+
 def _change_payload(
     change: PatchFileChange,
     *,
@@ -684,6 +1017,7 @@ def _change_payload(
     base_workspace: str | None,
     is_proposal_change: bool,
     repair_attribution: tuple[Mapping[str, Any], ...],
+    candidate_scope: str | None = None,
 ) -> dict[str, Any]:
     code = change.code_content or ""
     base_hash = _workspace_file_sha256(base_workspace, change.file_path)
@@ -697,8 +1031,14 @@ def _change_payload(
             base_hash=base_hash,
             is_proposal_change=is_proposal_change,
             repair_attribution=repair_attribution,
+            candidate_scope=candidate_scope,
         ),
     }
+    if candidate_scope is not None:
+        payload["candidate_attribution"] = {
+            "schema_version": "formal-file-candidate-attribution.v1",
+            "scope": candidate_scope,
+        }
     current_hash = _workspace_file_sha256(workspace, change.file_path)
     if current_hash:
         payload["workspace_current_sha256"] = current_hash
@@ -716,6 +1056,7 @@ def _file_source_attribution(
     base_hash: str | None,
     is_proposal_change: bool,
     repair_attribution: tuple[Mapping[str, Any], ...],
+    candidate_scope: str | None = None,
 ) -> dict[str, Any]:
     """Return the durable, per-file source identity used to form a patch."""
 
@@ -749,7 +1090,9 @@ def _file_source_attribution(
     owner = next(iter(owner_values), "")
     source_digest = source_digests[0] if source_digests else base_hash
 
-    if owner:
+    if candidate_scope == "inherited_verified":
+        origin = "inherited_verified_branch"
+    elif owner:
         origin = "proposal_source_ledger"
     elif not is_proposal_change:
         origin = "runtime_activation"
@@ -767,7 +1110,9 @@ def _file_source_attribution(
         visibility = "not_visible"
 
     provenance = (
-        provenance_values[0]
+        "verified_branch_workspace"
+        if candidate_scope == "inherited_verified"
+        else provenance_values[0]
         if provenance_values
         else "runtime_activation"
         if not is_proposal_change
@@ -785,6 +1130,67 @@ def _file_source_attribution(
         "source_visibility": visibility,
         "source_digest": source_digest,
     }
+
+
+def render_full_file_replacement_diff(
+    files: Iterable[Mapping[str, Any]],
+    *,
+    base_workspace: str | Path,
+) -> str:
+    """Render the canonical diff represented by full-file artifact entries."""
+
+    changes: list[PatchFileChange] = []
+    for entry in files:
+        if not isinstance(entry, Mapping):
+            raise ValueError("formal artifact file entry must be an object")
+        file_path = normalize_relative_patch_path(
+            str(entry.get("file_path") or "")
+        )
+        action = str(entry.get("action") or "").strip()
+        if action not in {"create", "modify", "delete"}:
+            raise ValueError(f"invalid formal artifact action: {file_path}")
+        if "code_content" not in entry:
+            raise ValueError(f"formal artifact content missing: {file_path}")
+        changes.append(
+            PatchFileChange(
+                file_path=file_path,
+                action=action,
+                code_content=str(entry.get("code_content") or ""),
+            )
+        )
+    return _render_candidate_diff(
+        changes,
+        base_workspace=str(base_workspace),
+    )
+
+
+def _validate_existing_artifact_metadata(
+    metadata_path: Path,
+    *,
+    expected: Mapping[str, Any],
+) -> None:
+    try:
+        existing = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("existing formal candidate metadata is unreadable") from exc
+    if not isinstance(existing, Mapping):
+        raise ValueError("existing formal candidate metadata is invalid")
+    comparable_expected = _jsonable(expected)
+    comparable_expected["created_at"] = existing.get("created_at")
+    if dict(existing) != comparable_expected:
+        raise ValueError("existing formal candidate metadata conflicts with record")
+
+
+def _restore_or_validate_artifact_text(path: Path, expected: str) -> None:
+    if not path.exists():
+        path.write_text(expected, encoding="utf-8")
+        return
+    try:
+        actual = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"formal candidate artifact is unreadable: {path.name}") from exc
+    if actual != expected:
+        raise ValueError(f"formal candidate artifact content mismatch: {path.name}")
 
 
 def _render_candidate_diff(

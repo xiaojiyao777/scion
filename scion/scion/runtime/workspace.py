@@ -297,6 +297,32 @@ class WorkspaceMaterializer:
         ws = Path(workspace)
         return _hash_files(ws, self._identity_files(ws))
 
+    def editable_identity_manifest(self, workspace: str) -> dict[str, object]:
+        """Return the exact editable-file identity used by ``compute_code_hash``.
+
+        Formal replay artifacts use this manifest to describe a cumulative
+        candidate without reimplementing research-surface path selection.
+        File contents remain in the replay materialization artifact; this
+        manifest carries only canonical paths, per-file hashes, and the tree
+        hash used by branch verification.
+        """
+
+        ws = Path(workspace).resolve()
+        if not ws.is_dir():
+            raise FileNotFoundError(f"workspace does not exist: {workspace}")
+        files = _dedupe_sorted_paths(self._identity_files(ws), ws)
+        return {
+            "schema_version": "scion.editable_identity_manifest.v1",
+            "files": [
+                {
+                    "file_path": path.relative_to(ws).as_posix(),
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+                for path in files
+            ],
+            "code_hash": _hash_files(ws, files),
+        }
+
     def compute_snapshot_hash(self, workspace: str) -> str:
         """Compute SHA-256 of editable identity files + registry.yaml.
 

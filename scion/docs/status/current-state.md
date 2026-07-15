@@ -2,500 +2,164 @@
 
 *Last updated: 2026-07-15*
 
-This is the operational resume point. Read `scion/TASK.md` first and use
+Read `scion/TASK.md` first. Use
 `scion/design/scion-architecture-v3.md` as the architecture tie-breaker.
 
-No experiment is running. The warehouse R3 lifecycle is resolved. Its
-round-2 candidate passed expanded screening, but the same cumulative branch
-failed eval-only validation on the larger locked split and is now `abandoned`.
-The validation wrapper and the repaired campaign-scoped postrun path are fully
-green. Do not retry, freeze, modify, or promote this branch. The first fresh
-CVRP control stopped before proposal generation on an incorrect external data
-root; it contains no algorithm result and was not retried. A distinct corrected
-R2 root was prepared at `6ec0db55` but guarded readiness rejected it before any
-provider call; it is also not launchable. A distinct R3 CVRP root launched once
-at pushed `1978b426`, made exactly one H call and no C call, then terminated on
-a provider-schema/Contract interface mismatch before any solver evaluation.
-The repair is pushed at `ff14318c`; a distinct R4 root at that exact runtime is
-now terminal, complete, and valid after two evaluated algorithm rounds. It was
-not retried and must not be resumed or reused. The causal-feedback repair is
-pushed at `3fb2f9a7`. Its distinct R5 root launched exactly once, then became
-terminal after the first Code patch failed C9e before solver execution. R5 has
-no evaluated round or H2 and must not be resumed or retried.
+## Operational State
 
-## Current Decision
+No experiment is running. The latest live root, CVRP R6, is terminal,
+complete, valid, and read-only. Its only branch is `ready_validate`; its
+cumulative candidate must be evaluated in a distinct copied-state continuation
+after the current evidence-integrity repair is committed and pushed.
 
-Commit `64137fc3` is pushed on `v0.4-dev` and was the exact clean runtime for
-the failed pre-campaign CVRP root. Commit `9c88ef6a` contains the resumed-
-postrun scope repair and was the exact validation runtime. The warehouse result
-remains a useful negative research lifecycle: Scion found a broad screening
-signal, expanded it, escalated the same candidate without another model call,
-and correctly rejected it when it failed to generalize.
+Do not resume or relaunch R4, R5, or R6 in place. Do not use R6's round-2 v2
+formal artifact to reconstruct the candidate. Copy the complete R6 campaign
+workspace.
 
-The launcher-integrity repair is pushed at `6ec0db55`. It validates the
-final explicit data root before creating a run root, repeats that check before
-provider access, pins the complete 81-file identity, rechecks it after campaign
-execution, redacts proxy auth receipts to readiness-only fields, keeps the key
-out of argv, and creates the receipt under `umask 077`. Do not carry warehouse
-target hints or mechanism instructions into CVRP, and do not auto-retry the
-failed root.
+## R6 Identity
 
-The first clean prepare after that commit exposed two narrow static-auditor
-drifts: identity SHA metadata was interpreted as a path, and the receipt
-allowlist did not recognize the exact `chmod 600` line. The minimal follow-up
-is pushed at `1978b426`. The R3 launch passed completion preflight and pre/post
-formal data identity. Its sole H proposed a substantive capacity-feasible
-SWAP* neighborhood in `local_search.py`, but the tool schema allowed a free-form
-`change_locus` while C2 required exact `solver_design`. The current repair moves
-that exact enum into the call-local provider tool and parse boundary while
-retaining C2. Do not resume or retry R3.
+- root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-direct-causal-feedback-r6-2r-gpt56sol-20260715T153632Z-claw`;
+- campaign:
+  `/home/clawd/research/scion-experiments/v04-cvrp-direct-causal-feedback-r6-2r-gpt56sol-20260715T153632Z-claw/campaign`;
+- runtime checkout:
+  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-56ba4851`;
+- exact runtime commit:
+  `56ba4851c92ef8e925a5d5e368d988a138c80286`;
+- model/runtime: `gpt-5.6-sol / direct_v3`;
+- branch id: `ccc5d6df-642e-4f78-adc3-46d15b1b99ac`;
+- branch state/status: `ready_validate / clean`;
+- current and last-clean code hash:
+  `0d9c2ce5cd62dd88c4666fcfed7a6ef14001a07caf171a6af346c74c4706535a`;
+- champion: v1, unchanged;
+- data identity: 81 files, digest
+  `ca7e470ec8d1f3569a690d10df5a170c4994108c71fecf5aa1a7a76b42630743`.
 
-The repair passes the standard suite at `1886 passed, 1 skipped` in `499.32s`.
-R4 then proved the repaired loop end to end: `2H/2C`, four unique successful
-provider attempts, two substantive cumulative candidates, 64/64 valid formal
-pairs, two evaluated outcomes, and complete lineage. There was no global tool
-mutation, retry/backoff, truncation, forced targeting, or agent/token/output
-budget control. Both candidates failed the correct screening rule; champion v1
-was not modified or promoted.
+Wrapper and campaign exits are `0`; requested/effective/evaluated rounds are
+`2/2/2`; all are screening. Provider accounting is exactly `2H/2C`, four
+successful durable attempts, retry/replacement=`0`. Formal pairs are `64/64`
+valid with no candidate, champion, solver, Contract, Verification, Canary, or
+infrastructure failure. Postrun readiness is 28 `ok`, 3 optional problem-owned
+`skipped`, and no failure.
 
-The R4 feedback/attribution repair is integrated in the commit containing this
-document. CVRP now owns a compact ALNS proposal-evidence provider; generic
-Protocol code passes only valid paired runtime mappings and marks the resulting
-packet proposal-visible, decision-feature-excluded, and non-gating. It retains
-all repair names and measured attempts, accepted uses, best updates, elapsed
-time, route-limit, and repair-error counts without top-k selection, a size
-budget, summary substitution, or truncation. Offline replay against both R4 raw
-metrics exactly reproduces the audited gold values, including round-2 pair
-`441/328/28`, total `377574 ms`, mean `856.18 ms`, candidate/champion
-route-limit `0/95`, and repair-error `21/0`.
-
-Second-round H source is also semantically deduplicated: unchanged paths remain
-complete champion source, while changed/new paths remain complete branch-current
-source, with deleted paths represented explicitly. Patch tool/schema/error
-guidance initially requested one change object per file. R5 showed that this
-made two non-contiguous edits per file unnecessarily hard to express: C added a
-new scheduler import but omitted the corresponding function and registration.
-C9e correctly rejected the undefined import. The current repair restores
-ordered same-file `exact_replace` composition with original source binding;
-wrong order, stale digest, and mixed create/delete/full-file sequences fail
-closed. Valid serial composition is ordinary typed normalization, not a retry
-or semantic host repair. Durable proposal attempts still carry compact typed
-surface/action/target facts, and statistical status/metric remain with CI.
-None of these facts enter `SafeFeatureExtractor`, Protocol gates, scheduler, or
-promotion logic.
-
-The final standard suite completed `1900 passed, 1 skipped` in `497.39s`.
-Compileall, diff check, focused proposal/trajectory/context tests, Protocol/CVRP
-tests, and the R4 raw-metrics replay are green.
-
-The R5 root is terminal at exact pushed runtime `3fb2f9a7`: wrapper and postrun
-exit 0, but campaign validity is `invalid_research_rejected_only`. It made
-exactly `1H/1C`, no retry, and zero solver/Protocol evaluations. The current
-repair passes `115` affected tests and the full suite at
-`1905 passed, 1 skipped` in `495.65s`; compileall/diff-check are green and
-independent review is P0/P1/P2=`0/0/0`.
-
-A separate audit found that forced diagnostics emit `forced_research_target`
-while part of the governance/C0 path still looks for legacy
-`forced_surface`/`forced_action`/`forced_target_file` keys. It did not affect
-this open, unforced R3 control. Keep it as a separate follow-up so the minimal
-surface-enum repair does not silently broaden into forced-run governance work.
-
-## Run Roots
-
-Formal fresh R3 root:
-
-`/home/clawd/research/scion-experiments/v04-warehouse-direct-repaired-context-confirm-r3-2r-gpt56sol-20260714T135820Z-claw`
-
-Expanded-screening continuation root:
-
-`/home/clawd/research/scion-experiments/v04-warehouse-r3-same-candidate-expand-1r-gpt56sol-20260714T142050Z-claw`
-
-Same-candidate validation root:
-
-`/home/clawd/research/scion-experiments/v04-warehouse-r3-same-candidate-validation-1r-gpt56sol-20260714T145307Z-claw`
-
-Failed pre-campaign CVRP root:
-
-`/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r1-2r-gpt56sol-20260714T151358Z-claw`
-
-Superseded prepared-only CVRP root:
-
-`/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r2-2r-gpt56sol-20260714T161411Z-claw`
-
-Terminal CVRP R3 interface-failure root:
-
-`/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r3-2r-gpt56sol-20260714T163231Z-claw`
-
-Terminal CVRP R4 algorithm-control root:
-
-`/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r4-2r-gpt56sol-20260714T234816Z-claw`
-
-Terminal CVRP R5 patch-contract root:
-
-`/home/clawd/research/scion-experiments/v04-cvrp-direct-causal-feedback-r5-2r-gpt56sol-20260715T141236Z-claw`
-
-The first root is the fresh formal confirmation. The second and third are
-copied-state, diagnostic/non-formal continuations used only to evaluate the
-exact same cumulative candidate. Do not blur their wrapper status or evidence
-scope.
-
-The CVRP root is infrastructure evidence only. Its healthy completion probe
-was followed by a split-data resolution failure before any H/C proposal call.
-Do not resume or relaunch it.
-
-The R2 root made no provider call. Its identity is correct, but its exact commit
-cannot pass guarded readiness because the static auditors predate the follow-up.
-Do not edit or launch it.
-
-The CVRP R3 root is terminal. It must not be replaced in place, resumed, or
-auto-retried. Any later control must use a distinct clean root after the
-interface repair is pushed.
-
-The CVRP R4 root is also terminal. It completed normally and contains valid
-negative algorithm evidence. Do not resume it, reuse either cumulative
-candidate, or create a third round inside the root.
-
-The CVRP R5 root is terminal at clean detached runtime `3fb2f9a7`. It completed
-wrapper/postrun reporting but stopped on first-round Patch Contract before
-Workspace, Verification, Protocol, or solver execution. Do not edit, resume,
-retry, or relaunch it.
-
-## CVRP R3 Outcome
-
-- prepared/runtime commit: clean detached `1978b426`;
-- model/rounds/solver limit: `gpt-5.6-sol`, `2`, `30` seconds per solver
-  subprocess;
-- force surface/action/target: all empty;
-- formal data identity: 81 files, digest
-  `ca7e470ec8d1f3569a690d10df5a170c4994108c71fecf5aa1a7a76b42630743`;
-- generated wrapper embeds that digest in both pre/post checks and matches its
-  prepared run.sh SHA anchor;
-- guarded-wrapper readiness: `true`, with no required or optional failures;
-- `launch_ready=false` only because no separate live completion was sent; the
-  wrapper owns the sole live pre-campaign completion preflight;
-- `launch.env` and the data identity receipt are mode `0600`; secret-field scans
-  are empty and the API key value is not persisted;
-- completion preflight: authenticated, HTTP 200, non-empty response;
-- provider calls: H=`1`, C=`0`, retry=`0`;
-- evaluated candidates and solver pairs: `0`;
-- terminal status: `invalid_research_rejected_only` /
-  `execution_research_rejected` in the current accounting vocabulary.
-
-The native first-H projection contains only the `solver_design` surface and 12
-targetable entries: 11 concrete CVRP algorithm files plus the declared
-`policies/baseline_modules/*.py` wildcard. It contains open algorithm guidance
-and zero matches for successor, target-intent, forced targeting, mechanism
-ranking/denylist, telemetry gate, candidate caps, retry/backoff, truncation, or
-semantic budget. Independent prelaunch review reported P0/P1/P2=`0/0/0`.
-
-The only H targeted `policies/baseline_modules/local_search.py` and proposed a
-capacity-feasible SWAP* neighborhood with best reinsertion, edge deltas,
-strict-improvement acceptance, time polling, and route/coverage/capacity
-invariants. C0, C1, C3, and K5 passed. C2 alone rejected the descriptive locus
-`solver_design local-search/VNS neighborhood set` because the exact allowed ID
-is `solver_design`. The provider tool had declared only a non-empty string, so
-this is a framework producer/consumer mismatch, not evidence that the algorithm
-idea failed.
-
-Postrun readiness has 28 `ok`, 3 `skipped`, and no required or optional
-failure. Pre/post data identities are identical. Lineage closes over the single
-initial attempt with no hidden retry. The root is analysis-ready but report-only
-and supports no algorithm-quality or promotion conclusion.
-
-## CVRP R4 Outcome
-
-- runtime commit/root: clean detached `ff14318c` at
-  `/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r4-2r-gpt56sol-20260714T234816Z-claw`;
-- terminal state: wrapper exit 0, `complete`, `valid`, requested rounds complete;
-- provider accounting: H=`2`, C=`2`, four unique successful attempts, retry=`0`;
-- protocol accounting: two screening candidates, 64/64 valid pairs, no solver,
-  candidate, champion, contract, verification, canary, or infrastructure
-  failure;
-- prepared/pre/post data identity: 81 files, digest
-  `ca7e470ec8d1f3569a690d10df5a170c4994108c71fecf5aa1a7a76b42630743`;
-- postrun: 28 `ok`, 3 `skipped`, no required/optional failure, lineage complete,
-  secret scan clean, analysis/delegation ready and report-only.
-
-Round 1 added route-cap-aware regret ordering and bounded one-customer ejection.
-It finished at case W/L/T=`1/2/5`, pair W/L/T=`13/14/5`, median delta `0`, CI
-`[-9, 1.5]`, so `SCREENING_FAIL_WIN_RATE` was correct and the evidence remained
-uncertain. Round 2 used the full first-round objective evidence, removed global
-capacity pressure, and added a separate adaptive pair-insertion repair. It
-finished at case W/L/T=`0/3/5`, pair W/L/T=`9/17/6`, median delta `-4`, CI
-`[-10.25, -0.5]`; this is negative evidence, not a gate artifact.
-
-The pair operator was active (441 attempts, 328 accepted uses, 28 best updates),
-but it only inserts two pending customers into existing routes. It cannot make
-an individually capacity-blocked customer feasible without ejecting or moving
-an incumbent customer, so its implementation does not match the claimed rescue
-mechanism. It also raised average iteration cost and reduced search iterations.
-Do not retain or retry this implementation.
-
-The highest-priority framework gap is compact causal feedback. Raw CVRP traces
-show route-limit rejection falling from champion 95 to candidate 0 while repair
-errors rise to 20/21, and they contain per-repair attempts, acceptance, best
-updates, and time. Yet the generic summary reports `mechanism_evidence={}` and
-`opportunity_status=unknown`. Add a problem-owned proposal-only aggregation;
-do not add a gate, target mandate, budget, or truncation. Secondary cleanup is
-second-round context duplication, one-change-object-per-file guidance, and
-trajectory fields currently emitted as `unknown`.
-
-## CVRP R5 Outcome
-
-- runtime/root: clean detached `3fb2f9a7` at
-  `/home/clawd/research/scion-experiments/v04-cvrp-direct-causal-feedback-r5-2r-gpt56sol-20260715T141236Z-claw`;
-- terminal state: wrapper exit 0, campaign incomplete,
-  `invalid_research_rejected_only`;
-- provider accounting: H=`1`, C=`1`, attempts=`2`, retry=`0`;
-- evaluated rounds/candidates/solver pairs: `0/0/0`;
-- postrun: 28 `ok`, 3 `skipped`, no required/optional failure, lineage
-  complete, conclusion eligibility `ineligible_zero_evaluated`;
-- completion preflight: authenticated, HTTP 200, non-empty;
-- force surface/action/target: empty; secret persisted: none.
-
-H1 proposed a substantive bounded ejection-chain repair in
-`destroy_repair.py`. C1 added `_route_distance` and a check-limit constant,
-then made scheduler import `_ejection_chain_insertion`, but never defined that
-function or registered it in `repair_ops`. C9e passed 18/19 structural checks
-and correctly rejected the missing import symbol. Host materialization saw all
-returned edits; this was not a stale-source or Workspace defect. There is no
-algorithm-quality result.
-
-The response was complete, schema-valid, and untruncated. C received 22,460
-input tokens / 95,351 provider-visible chars, provider-managed output with no
-ceiling, and all 11 unique complete SourceLedger files. The direct target,
-scheduler, and state sources were fully present. The immediate error was a Code
-model omission, amplified by the new one-change-object-per-file instruction:
-the H required target import+function and scheduler import+registration at
-non-contiguous locations.
-
-The minimal repair restores the deterministic host's existing ordered
-same-file `exact_replace` capability and classifies valid serial composition as
-ordinary `typed_edit_normalization`. It rejects wrong order, stale digest, and
-same-file create/delete/full-file mixtures while preserving C9e. It adds no
-retry, budget, truncation, or gate. R5 has no H2 and therefore does not validate
-the causal packet or semantic source deduplication; only a fresh R6 can do so.
-
-## Formal R3 Evidence
-
-- model: `gpt-5.6-sol`;
-- prepared/runtime commit: `d57d6cd6`;
-- guarded readiness: passed without a separate live probe;
-- preflight: authenticated HTTP 200, non-empty response;
-- requested/evaluated rounds: `2/2`;
-- durable provider calls: H=`2`, C=`2`, total=`4`;
-- retries or replacement attempts: `0`;
-- one branch across both rounds:
-  `52b0b193-7bc3-469c-97a2-216b494b4e4a`;
-- both candidates: Contract pass, Verification pass, Canary pass;
-- campaign and outer wrapper: green;
-- postrun required/optional checks: green;
-- decision/outcome identity: complete and consistent;
-- champion: version 1, unchanged.
-
-Actual H/C contexts contained none of the removed telemetry-counter,
-telemetry-guard, validation-transfer, top-k/max-candidate,
-runtime-budget-strategy, retry, or truncation text. H2 received round 1's
-canonical result; C2 received its verified current branch source.
-
-The run used no Scion prompt/session/tool/file/item/token budget, semantic
-termination budget, or truncation. The 30-second solver time limit is a
-scientific subprocess fact.
-
-## Algorithm Result
+## R6 Scientific Result
 
 ### Round 1
 
-The agent replaced `operators/destroy_rebuild.py` with a subcategory-focused
-beam destroy/rebuild search.
+The agent changed `destroy_repair.py` and `scheduler.py` to make regret repair
+route-cap-aware and mildly noise-perturbed.
 
-- case W/L/T: `2/2/2`;
-- pair W/L/T: `5/5/2`;
-- primary `subcategory_splits` delta: always `0`;
-- total-cost median delta: `-1150`, CI `[-10175, 550]`;
-- runtime ratio: `3.2567`;
-- Decision: `continue_explore / RUNTIME_REGRESSION`.
+- case W/L/T: `0/4/4`;
+- pair W/L/T: `9/16/7`;
+- median/CI: `-3.25 / [-9.25,0]`;
+- Decision: `continue_explore / SCREENING_FAIL_WIN_RATE`;
+- route-limit: candidate/champion `32/98`;
+- repair-error: candidate/champion `5/0`;
+- fresh runtime median ratio: `1.0021`.
 
-### Round 2 initial screen
+The mechanism reduced route-cap rejection but did not improve final quality.
 
-The same branch then replaced `operators/merge_vehicles.py` with a directed
-best-of-k vehicle merge. The H6 lookup key matches the oracle exactly:
-`f"{destination_country},{ship_method}"`.
+### Round 2
 
-- case W/L/T: `3/0/3`;
-- pair W/L/T: `8/1/3`;
-- primary delta: always `0`;
-- total-cost median delta: `+775`, CI `[150, 3000]`;
-- statistical status: positive;
-- Decision: `expand_screening`.
+H2 received exactly one complete R1 observation with all eight case rows, 32
+pair rows, objective/CI/runtime facts, route-limit `-66`, repair-error `+5`,
+and verified current source. It explicitly used the negative result and moved
+to a different mechanism: capacity-feasible swap-star in `local_search.py`.
+C2 exercised two ordered same-file `exact_replace` edits successfully.
 
-### Same-candidate expanded screen
+The evaluated candidate is cumulative R1 repair plus R2 swap-star:
 
-The continuation used the scheduler's eval-only path. Trace count remained
-four, so there was no new H/C call.
+- case W/L/T: `5/1/2`;
+- pair W/L/T: `20/11/1`;
+- median/CI: `+3.5 / [-11,12]`;
+- Decision: `queue_validate / SCREENING_PASS`;
+- statistical status: `uncertain`;
+- X-n110-k13 median: `-55`; CMT4 median: `-11`;
+- ALNS iterations: `1857 -> 789`;
+- initial VNS: `25639 -> 75078 ms`;
+- embedded VNS: `778603 -> 798764 ms`.
 
-- evaluated invocation rounds: `1/1`;
-- cases / pairs: `14 / 28`;
-- valid / failed pairs: `28 / 0`;
-- case W/L/T: `7/0/7`;
-- pair W/L/T: `19/2/7`;
-- primary median/CI: `0 / [0, 0]`;
-- total-cost median delta: `+625`, CI `[300, 1600]`;
-- fresh runtime ratio: `0.7004`, confidence high;
-- runtime delta: `-279 ms`, regression rate `0.4286`;
-- Protocol: pass;
-- Decision: `queue_validate`;
-- branch state: `ready_validate`;
-- screening expansion count: `1`.
+All round-2 champion results were cached, so comparative runtime status is
+`insufficient` and no runtime-ratio conclusion is allowed. The search-allocation
+shift is descriptive risk that fresh validation must resolve.
 
-This is the first strong warehouse signal, but attribution is incomplete. The
-branch still contains round 1's slower destroy/rebuild change, both changes
-alter RNG consumption, and current artifacts have no direct operator
-call/acceptance/causal-effect evidence. `_PAIR_LIMIT=24` also slices only after
-full directed `O(V^2)` pair enumeration. Six larger candidate pairs reached
-about 30 seconds even though the fresh median was faster than champion.
+## R6 Artifact Caveat
 
-### Same-candidate validation
+R6's live branch workspace is internally correct, but its old v2 R2 artifact is
+not cumulative:
 
-The validation continuation kept the same branch/workspace/code identity and
-made no H/C call. It evaluated five cases with seeds `7/19/83`.
+- declared base: `champions/champion_v1`;
+- stored R2 files: only `local_search.py`;
+- declared code hash: cumulative `0d9c2ce5...`;
+- champion plus stored R2 patch hash: `0cc21753...`;
+- missing inherited files: `destroy_repair.py`, `scheduler.py`.
 
-The copied `campaign/status.json` still displays cumulative H=`2`, C=`2` from
-the source campaign. Current campaign proposal-transition count is zero, and
-all four trace files are byte-identical pre-launch artifacts; use those scoped
-facts rather than the inherited counters when auditing eval-only behavior.
+The old postrun `git apply --check` accepted this incomplete artifact. Treat the
+R6 report's formal-integrity check as superseded by the explicit audit. The
+exact candidate remains safely available through the complete campaign
+workspace.
 
-- pairs: `15/15` valid, no solver failure;
-- case W/L/T: `2/3/0`;
-- pair W/L/T: `6/9/0`;
-- primary `subcategory_splits` median: `0`, CI `[0,1]`;
-- case win rate: `0.40`, below validation minimum `0.55`;
-- runtime ratio: `1.578`;
-- runtime delta: `+11072 ms`;
-- runtime regression rate: `13/15`;
-- Decision: `abandon / VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`;
-- final branch state: `abandoned`;
-- champion: unchanged; no frozen run or promotion.
+## Current Worktree
 
-`val_l01` improved splits by one on all seeds but worsened cost by
-`8000--11500`. `val_lx02` tied on splits and improved cost on all seeds.
-`val_l02`, `val_l04`, and `val_lx01` tied on splits and lost cost on all nine
-pairs. Even ignoring the hierarchical primary metric, the five case-level
-cost effects have median `-8300`. Twelve candidate runs were near 30 seconds.
-The screening signal was local to the smaller screen and did not generalize to
-the 308--457-order validation distribution.
+Branch: `v0.4-dev`.
 
-All production screening, validation, frozen, and canary fixtures have empty
-`amount_limits`, so the corrected H6 code path is not experimentally exercised.
-Validation contained many locked orders and all 15 pairs remained feasible, so
-the cumulative candidate is lock-safe on this surface. Locked-order counts were
-`12/49/43/15/58`. H6 remains untested because every amount-limit map is empty.
+Owned changes in progress:
 
-## Resume-Postrun False Failure
+- formal artifact v3 cumulative replay closure;
+- exact champion snapshot resolution and editable identity manifest;
+- fixed replay and postrun fail-closed materialization validation;
+- canonical feedback attribution/scope/deduplication repairs;
+- CVRP ALNS evidence-scope labels;
+- R6 terminal report;
+- compact `TASK.md` and this resume document;
+- focused and boundary tests.
 
-The expanded campaign is valid and its campaign wrapper exited `0`, but the
-original outer wrapper exited `64` on
-`summary_lineage_outcome_counts_mismatch`.
+Verification is green: the final formal-artifact/postrun slice is `17 passed`,
+the complete unit suite is `705 passed`, and the standard repository-root suite
+is `1926 passed, 1 skipped`. The final review's partial-index crash-window P1
+has been repaired and independently retested; no substantive P0/P1 remains.
+Compileall and `git diff --check` pass.
 
-The copied database contains:
+Excluded and preserved:
 
-- source campaign `acbb5338-...`: two evaluated outcomes;
-- current campaign `94d52219-...`: one evaluated outcome;
-- cumulative total: three evaluated outcomes.
+- tracked user change: `scion/docs/v0.4-measurement-readiness.md`;
+- unrelated untracked historical/future docs shown by `git status`.
 
-Postrun compared the current summary count `1` with cumulative count `3`. The
-repair preserves cumulative top-level event audit counts but uses the current
-summary/status campaign ID for execution-outcome and decision-correlation
-integrity. If current identity exists and its durable outcome is absent, the
-gate still fails closed. If a legacy schema cannot establish campaign scope,
-the counts are marked incomparable rather than mixed.
+## Immediate Resume Actions
 
-Current-source verification against the real root now reports:
+1. Stage only the owned code/tests/docs, commit, and push `v0.4-dev`.
+2. Create a clean detached runtime worktree at that pushed commit.
+3. Prepare one diagnostic continuation with:
+   `launch_cvrp_direct_campaign.py --rounds 1 --resume-from-campaign <R6/campaign>`.
+   Keep model `gpt-5.6-sol`, solver limit `30`, data root
+   `/home/clawd/research/or-autoresearch-agent/vrp`, and key source
+   `SCION_SHARED_PROXY_KEY`.
+4. Do not pass `--launch`, `--completion-preflight`, force flags, or
+   `--skip-postrun-reports`; resume and completion-preflight are intentionally
+   incompatible. Inspect the prepared root, then start its `run.sh` manually
+   exactly once.
+7. Poll at low frequency and verify one validation result, no new H/C
+   transition or trace, unchanged candidate hash, fresh champion runtime, and
+   campaign-scoped postrun integrity.
+8. Write the validation report and update these two resume docs.
+9. Then prepare a separate clean four-round generative CVRP root. Expand to
+   eight only if the four-round evidence is still insufficient.
 
-- cumulative evaluated: `3`;
-- scoped campaign: `94d52219-a51d-4215-ada5-e5f98ea72c93`;
-- scoped evaluated: `1`;
-- comparable: `true`;
-- consistent: `true`;
-- decision/outcome consistency: `consistent`.
+## Continuation Prelaunch Checks
 
-Focused postrun/lineage coverage passes, the full Scion suite passes
-`1859 passed, 1 skipped` in `494.65s`, and compileall plus
-`git diff --check` pass.
-
-The validation root proves the fix in a real continuation: its current campaign
-`a24b5d73-...` has one evaluated outcome, the copied database has four
-cumulative evaluated outcomes across three campaign IDs, current scoped
-summary/lineage counts are `1/1`, decision consistency is `consistent`, and
-postrun readiness has no required or optional failure.
-
-## CVRP Pre-Campaign Failure and Repair
-
-- prepared/runtime commit: `64137fc3`;
-- model/preflight: `gpt-5.6-sol`, authenticated HTTP 200, non-empty response;
-- proposal/code calls: `0 / 0`;
-- solver pairs: `0`;
-- failure: 40 formal external cases absent under the detached worktree's
-  partial `vrp/` directory;
-- retry/restart: none;
-- failed receipt: proxy key and account identity explicitly removed with a
-  security-redaction marker.
-
-The repaired launcher accepts an explicit data root and validates only that
-exact path; an ambient valid root cannot hide a bad prepared path. Generated
-run.sh repeats the check before completion preflight. Completion receipts keep
-only authenticated state and pool counts, take the key from the environment,
-and are created with owner-only permissions.
-
-The external main-checkout dataset is not tracked by git and is writable. The
-audited formal input set is 40 `.vrp` files, 40 sibling `.sol` files, and the
-package canary. Its ordered identity digest is
-`ca7e470ec8d1f3569a690d10df5a170c4994108c71fecf5aa1a7a76b42630743`.
-The repaired prepared contract records this identity, and the generated wrapper
-requires it before provider access and after execution.
-
-Repair verification is complete: `134` focused tests pass; the standard full
-suite passes `1872 passed, 1 skipped` in `496.65s`; compileall, diff-check,
-generated run.sh syntax, live identity construction, and independent formal-
-path P0/P1/P2 review are green.
-
-The subsequent two-auditor follow-up passes `124` focused tests and the standard
-full suite at `1875 passed, 1 skipped` in `502.33s`. Its chmod reference
-allowlist accepts only the exact generated command and rejects appended shell
-operations; compileall, `git diff --check`, and independent P0/P1/P2 review are
-green.
-
-## Worktree State
-
-- branch: `v0.4-dev`; causal-feedback commit `3fb2f9a7` is pushed and is the
-  clean detached runtime for terminal R5;
-- intended changes now: serial same-file typed-edit repair, its regression
-  tests, R5 terminal postrun, `TASK.md`, and this file;
-- final repair verification is green: `115` affected tests and the standard
-  suite pass (`1905 passed, 1 skipped` in `495.65s`); independent latest-diff
-  review reports P0/P1/P2=`0/0/0`; compileall and `git diff --check` pass;
-- `scion/docs/v0.4-measurement-readiness.md` is a pre-existing user-owned
-  tracked change and must remain excluded;
-- unrelated untracked historical/future documents must remain excluded;
-- the terminal CVRP R3 root used clean detached runtime
-  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-1978b426`;
-- the terminal CVRP R4 root uses clean detached runtime
-  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-ff14318c`;
-- the terminal CVRP R5 root uses clean detached runtime
-  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-3fb2f9a7`.
-
-## Resume Actions
-
-1. Commit and push the serial same-file typed-edit repair and R5 terminal
-   evidence, excluding user-owned files.
-2. Prepare and launch a distinct fresh R6 two-round CVRP root from the exact
-   clean pushed commit. Never resume or retry R5.
-3. Poll only at low frequency; if R1 evaluates, verify H2's compact causal
-   packet and semantically deduplicated complete current source.
-4. Run terminal postrun and independent evidence audit. If two evaluated rounds
-   are insufficient for longitudinal assessment, use a distinct clean 4- or
-   8-round experiment; extra rounds are not retries or a semantic budget.
+- source R6 PID is absent and source root is terminal complete/valid;
+- SQLite `PRAGMA integrity_check` is `ok`;
+- the only branch is `ready_validate`, clean, and has hash `0d9c2ce5...`;
+- source branch workspace exists and recomputes to the same editable hash;
+- copied campaign preserves branch id/state/workspace/hash;
+- `resume_snapshot/resume_source_manifest.v1.json` exists;
+- copied old status/summary/run markers are isolated as resume evidence;
+- `launch.env` has correct resume source, `COMPLETION_PREFLIGHT=0`, `ROUNDS=1`,
+  `TIME_LIMIT_SEC=30`, model, base URL, and key-env name;
+- generated `run.sh` hash equals both launch and prepared-manifest anchors;
+- data identity remains `ca7e470e...`;
+- no provider call is expected; copied cumulative H/C counters are not counted
+  as current invocation activity.
 
 ## Runner Notes
 
@@ -505,26 +169,20 @@ Server `claw`:
 - Python: `/home/clawd/miniconda3/envs/claw/bin/python`;
 - use for focused tests and one experiment at a time.
 
-WSL `scion` is reserved for large/concurrent work after a fresh connectivity
+WSL `scion` remains the large/concurrent runner only after a fresh connectivity
 and preflight check.
+
+Proxy key handling: `SCION_SHARED_PROXY_KEY` is the local proxy credential;
+inject the value through process environment only. Do not print it, persist it,
+or place it in argv.
 
 ## Pointers
 
 - Active task: `scion/TASK.md`
 - V3 architecture: `scion/design/scion-architecture-v3.md`
-- v0.4 direct-runtime addendum:
+- Direct-runtime addendum:
   `scion/design/scion-architecture-v3-v0.4-direct-runtime-addendum.md`
-- Main audit:
-  `scion/reports/v04-v3-runtime-and-research-effectiveness-audit-20260712.md`
-- Warehouse R2 control:
-  `scion/docs/experiments/v0.4/v04-warehouse-direct-control-r2-436b6e12-postrun-20260714.md`
-- Warehouse R3 plus expanded screening:
-  `scion/docs/experiments/v0.4/v04-warehouse-direct-context-confirm-r3-d57d6cd6-postrun-20260714.md`
-- CVRP pre-campaign failure:
-  `scion/docs/experiments/v0.4/v04-cvrp-direct-open-control-r1-precampaign-failure-20260714.md`
-- CVRP R4 terminal postrun:
-  `scion/docs/experiments/v0.4/v04-cvrp-direct-open-control-r4-postrun-20260715.md`
-- CVRP R5 prepared-only audit:
-  `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r5-prelaunch-20260715.md`
-- CVRP R5 terminal postrun:
+- R5 terminal report:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r5-postrun-20260715.md`
+- R6 terminal report:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r6-postrun-20260715.md`

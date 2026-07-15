@@ -333,6 +333,7 @@ def compose_campaign_services(
         problem_spec_hash=stable_identity_hash(problem_spec),
         split_manifest_hash=stable_identity_hash(owner._split_manifest),
         seed_ledger_hash=stable_identity_hash(owner._seed_ledger),
+        identity_manifest_for=owner._materializer.editable_identity_manifest,
     )
     owner._decision_finalizer = DecisionFinalizer(
         branch_controller=owner._branch_ctrl,
@@ -357,7 +358,10 @@ def compose_campaign_services(
         persist_branch_state=owner._persist_branch_state,
         record_formal_candidate_artifact=lambda **kwargs: formal_candidate_artifacts.record(
             **kwargs,
-            base_workspace=getattr(owner._champion, "code_snapshot_path", None),
+            base_workspace=_formal_candidate_base_workspace(
+                owner,
+                kwargs["branch"],
+            ),
         ),
     )
     owner._evaluation_orchestrator = EvaluationOrchestrator(
@@ -523,6 +527,26 @@ def required_service_names() -> tuple[str, ...]:
         "_proposal_pipeline",
         "_campaign_loop",
     )
+
+
+def _formal_candidate_base_workspace(owner: Any, branch: Any) -> str:
+    """Resolve the exact champion snapshot declared by the branch lineage."""
+
+    champion = next(
+        (
+            candidate
+            for candidate in reversed(owner._champion_store.get_history())
+            if candidate.version == branch.base_champion_id
+            and candidate.code_snapshot_hash == branch.base_champion_hash
+        ),
+        None,
+    )
+    if champion is None:
+        raise ValueError(
+            "formal candidate base champion is missing: "
+            f"version={branch.base_champion_id} hash={branch.base_champion_hash}"
+        )
+    return champion.code_snapshot_path
 
 
 def _persist_initial_champion(owner: Any) -> None:

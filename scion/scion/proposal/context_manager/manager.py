@@ -25,6 +25,7 @@ from scion.core.models import (
     StepRecord,
     patch_file_changes,
 )
+from scion.core.paths import normalize_relative_patch_path
 from scion.measurement.consumer_view import measurement_consumer_view
 from scion.problem.providers import (
     active_subject_code_constraints_payload,
@@ -536,13 +537,38 @@ def canonical_screening_record(step: StepRecord) -> dict[str, Any]:
     if protocol is None or protocol.stage != ExperimentStage.SCREENING:
         raise ValueError("canonical hypothesis evidence requires screening result")
     experiment_evidence = _screening_projection(protocol)
+    proposal_changes = patch_file_changes(step.patch) if step.patch is not None else ()
+    current_step = {
+        "hypothesis_id": step.hypothesis_id,
+        "target_files": sorted(
+            {
+                normalize_relative_patch_path(change.file_path)
+                for change in proposal_changes
+                if change.file_path
+            }
+        ),
+    }
+    has_current_patch = bool(proposal_changes)
+    candidate_composition = {
+        "attribution_scope": "cumulative_branch_candidate",
+        "protocol_comparison_scope": "candidate_vs_champion",
+        "evaluation_candidate": (
+            "branch_state_after_current_step_patch"
+            if has_current_patch
+            else "reused_verified_branch_state"
+        ),
+        "current_step_change_scope": (
+            "incremental_patch" if has_current_patch else "eval_only_reuse"
+        ),
+        "incremental_effect_isolated": False,
+        "current_step": _drop_empty(current_step),
+    }
     screening_attempt_id = stable_digest(
         {
             "branch_id": step.branch_id,
             "hypothesis_id": step.hypothesis_id,
             "round_num": step.round_num,
             "raw_metrics_ref": protocol.raw_metrics_ref,
-            "experiment_evidence": experiment_evidence,
         },
         length=32,
     )
@@ -551,6 +577,7 @@ def canonical_screening_record(step: StepRecord) -> dict[str, Any]:
         "attempt_id": step.hypothesis_id or f"{step.branch_id}:{step.round_num}",
         "round_num": step.round_num,
         "hypothesis": _hypothesis_projection(step.hypothesis),
+        "candidate_composition": candidate_composition,
         "experiment_evidence": experiment_evidence,
     }
 
@@ -570,21 +597,25 @@ def canonical_screening_history(
     records = [dict(item) for item in durable]
     positions: dict[str, int] = {}
     for index, record in enumerate(records):
-        screening_attempt_id = str(
-            record.get("screening_attempt_id") or ""
-        ).strip()
-        if not screening_attempt_id or screening_attempt_id in positions:
+        natural_key = _screening_record_natural_key(record)
+        if natural_key in positions:
             raise ValueError("branch canonical screening history identity is invalid")
-        positions[screening_attempt_id] = index
+        positions[natural_key] = index
     for step in steps:
         record = canonical_screening_record(step)
-        screening_attempt_id = str(record["screening_attempt_id"])
-        previous = positions.get(screening_attempt_id)
+        natural_key = _screening_record_natural_key(record)
+        previous = positions.get(natural_key)
         if previous is not None:
             if records[previous] != record:
+                if _legacy_screening_record_can_upgrade(
+                    records[previous],
+                    record,
+                ):
+                    records[previous] = record
+                    continue
                 raise ValueError("canonical screening history conflicts with current step")
             continue
-        positions[screening_attempt_id] = len(records)
+        positions[natural_key] = len(records)
         records.append(record)
     return records
 
@@ -600,18 +631,20 @@ def persist_canonical_screening_record(
         return False
     records = canonical_screening_history(branch, [])
     record = canonical_screening_record(step)
-    screening_attempt_id = str(record["screening_attempt_id"])
-    for existing in records:
-        if (
-            str(existing.get("screening_attempt_id") or "")
-            != screening_attempt_id
-        ):
+    natural_key = _screening_record_natural_key(record)
+    for index, existing in enumerate(records):
+        if _screening_record_natural_key(existing) != natural_key:
             continue
-        if existing != record:
-            raise ValueError("durable canonical screening record conflict")
-        return False
+        if existing == record:
+            return False
+        if _legacy_screening_record_can_upgrade(existing, record):
+            records[index] = record
+            break
+        raise ValueError("durable canonical screening record conflict")
+    else:
+        records.append(record)
     summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
-    summary[CANONICAL_SCREENING_HISTORY_KEY] = [*records, record]
+    summary[CANONICAL_SCREENING_HISTORY_KEY] = records
     created = list(summary.get(DURABLE_BRANCH_CREATED_FILES_KEY, []) or [])
     touched = list(summary.get(DURABLE_BRANCH_TOUCHED_FILES_KEY, []) or [])
     if not all(isinstance(path, str) for path in [*created, *touched]):
@@ -633,18 +666,117 @@ def persist_canonical_screening_record(
     return True
 
 
+def _screening_record_natural_key(record: Mapping[str, Any]) -> str:
+    attempt_id = str(record.get("attempt_id") or "").strip()
+    round_num = record.get("round_num")
+    if not attempt_id or isinstance(round_num, bool):
+        raise ValueError("branch canonical screening history identity is invalid")
+    try:
+        normalized_round = int(round_num)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "branch canonical screening history identity is invalid"
+        ) from exc
+    if normalized_round <= 0:
+        raise ValueError("branch canonical screening history identity is invalid")
+    return f"{attempt_id}:{normalized_round}"
+
+
+def _legacy_screening_record_needs_upgrade(record: Mapping[str, Any]) -> bool:
+    composition = record.get("candidate_composition")
+    evidence = record.get("experiment_evidence")
+    if not isinstance(composition, Mapping) or not isinstance(evidence, Mapping):
+        return True
+    objective = evidence.get("objective_outcome")
+    return (
+        "protocol_outcome" not in evidence
+        or not isinstance(objective, Mapping)
+        or not isinstance(objective.get("aggregation"), Mapping)
+    )
+
+
+def _legacy_screening_record_can_upgrade(
+    existing: Mapping[str, Any],
+    current: Mapping[str, Any],
+) -> bool:
+    """Upgrade only a schema-old row whose pre-existing facts still match."""
+
+    if not _legacy_screening_record_needs_upgrade(existing):
+        return False
+    return _legacy_screening_comparable_projection(
+        existing
+    ) == _legacy_screening_comparable_projection(current)
+
+
+def _legacy_screening_comparable_projection(
+    record: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Remove only fields introduced by the current display schema."""
+
+    comparable = dict(record)
+    comparable.pop("screening_attempt_id", None)
+    comparable.pop("candidate_composition", None)
+    evidence = comparable.get("experiment_evidence")
+    if isinstance(evidence, Mapping):
+        evidence_copy = dict(evidence)
+        evidence_copy.pop("protocol_outcome", None)
+        objective = evidence_copy.get("objective_outcome")
+        if isinstance(objective, Mapping):
+            objective_copy = dict(objective)
+            objective_copy.pop("aggregation", None)
+            evidence_copy["objective_outcome"] = objective_copy
+        comparable["experiment_evidence"] = evidence_copy
+    return comparable
+
+
 def _screening_projection(protocol: Any) -> dict[str, Any]:
     stats = protocol.stats
+    pair_feedback = list(protocol.pair_feedback or ())
+    pair_counts = {
+        "win": int(getattr(stats, "pair_wins", 0) or 0),
+        "loss": int(getattr(stats, "pair_losses", 0) or 0),
+        "tie": int(getattr(stats, "pair_ties", 0) or 0),
+    }
+    declared_pair_total = sum(pair_counts.values())
+    observed_pair_counts = {"win": 0, "loss": 0, "tie": 0}
+    for item in pair_feedback:
+        comparison = str(getattr(item, "comparison", "") or "").strip()
+        if comparison not in observed_pair_counts:
+            raise ValueError("screening pair feedback comparison is invalid")
+        observed_pair_counts[comparison] += 1
+    if observed_pair_counts != pair_counts:
+        raise ValueError("screening pair feedback conflicts with Protocol stats")
+    valid_pairs = int(getattr(stats, "valid_pairs", 0) or 0)
+    if valid_pairs != len(pair_feedback):
+        raise ValueError("screening valid-pair count conflicts with pair feedback")
+    aggregation = {
+        "statistical_unit": "case",
+        "win_rate_scope": "case_level_gate",
+        "median_delta_scope": "case_medians",
+        "ci_scope": "case_medians",
+    }
+    if declared_pair_total > 0:
+        aggregation.update(
+            {
+                "pair_win_rate_scope": "pair_level_protocol_stats",
+                "pair_win_rate": pair_counts["win"] / declared_pair_total,
+            }
+        )
     payload = {
         "stage": protocol.stage.value,
+        "protocol_outcome": {
+            "gate_outcome": protocol.gate_outcome,
+            "reason_codes": list(protocol.reason_codes or ()),
+        },
         "objective_outcome": {
             "semantics": protocol.objective_semantics,
             "aggregate": _primitive(stats),
+            "aggregation": aggregation,
         },
         "case_outcomes": {
             "case_ids": list(protocol.case_ids or ()),
             "seed_set": list(protocol.seed_set or ()),
-            "pair_feedback": _primitive(list(protocol.pair_feedback or ())),
+            "pair_feedback": _primitive(pair_feedback),
             "case_feedback": _primitive(list(protocol.case_feedback or ())),
         },
         "runtime_errors": {

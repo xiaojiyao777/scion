@@ -28,6 +28,7 @@ MEASUREMENT_GOVERNANCE_BY_ARM = {
 }
 FORMAL_CANDIDATE_PATCH_SCHEMA_V1 = "scion.formal_candidate_patch_artifact.v1"
 FORMAL_CANDIDATE_PATCH_SCHEMA_V2 = "scion.formal_candidate_patch_artifact.v2"
+FORMAL_CANDIDATE_PATCH_SCHEMA_V3 = "scion.formal_candidate_patch_artifact.v3"
 _SOURCE_ATTRIBUTION_KEYS = frozenset(
     {
         "schema_version",
@@ -53,6 +54,13 @@ _SOURCE_ATTRIBUTION_ORIGINS = frozenset(
         "new_file",
         "runtime_activation",
     }
+)
+_V3_MATERIALIZATION_SOURCE_ATTRIBUTION_ORIGINS = (
+    _SOURCE_ATTRIBUTION_ORIGINS | {"inherited_verified_branch"}
+)
+_CANDIDATE_ATTRIBUTION_KEYS = frozenset({"schema_version", "scope"})
+_CANDIDATE_ATTRIBUTION_SCOPES = frozenset(
+    {"current_proposal", "inherited_verified", "runtime_activation"}
 )
 
 
@@ -436,6 +444,7 @@ def _metadata_omission_reasons(
     if artifact_schema not in {
         FORMAL_CANDIDATE_PATCH_SCHEMA_V1,
         FORMAL_CANDIDATE_PATCH_SCHEMA_V2,
+        FORMAL_CANDIDATE_PATCH_SCHEMA_V3,
     }:
         reasons.append("candidate_patch_schema_unsupported")
     elif artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V2:
@@ -443,6 +452,11 @@ def _metadata_omission_reasons(
             _validated_file_source_attributions(metadata)
         except ValueError:
             reasons.append("candidate_patch_source_attribution_invalid")
+    elif artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V3:
+        try:
+            _validated_v3_replay_materialization(metadata)
+        except ValueError:
+            reasons.append("candidate_patch_replay_materialization_invalid")
     return _dedupe(reasons)
 
 
@@ -692,8 +706,12 @@ def materialize_candidate_workspace(
 ) -> Path:
     """Copy the base champion workspace and apply full-file patch entries."""
 
-    if _clean_str(candidate_patch.get("schema")) == FORMAL_CANDIDATE_PATCH_SCHEMA_V2:
+    artifact_schema = _clean_str(candidate_patch.get("schema"))
+    v3_materialization: Mapping[str, Any] | None = None
+    if artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V2:
         _validated_file_source_attributions(candidate_patch)
+    elif artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V3:
+        v3_materialization = _validated_v3_replay_materialization(candidate_patch)
 
     source_dir = Path(source_campaign_dir).expanduser().resolve()
     base = candidate_patch.get("base")
@@ -709,6 +727,16 @@ def materialize_candidate_workspace(
     )
     if not base_workspace.is_dir():
         raise FileNotFoundError(f"base workspace not found: {base_workspace}")
+    if v3_materialization is not None:
+        _validate_workspace_identity(
+            base_workspace,
+            v3_materialization["base_identity_manifest"],
+            label="base",
+        )
+        _validate_materialization_base_files(
+            base_workspace,
+            v3_materialization["files"],
+        )
 
     candidate_id = _safe_path_token(_clean_str(candidate.get("candidate_id")) or "candidate")
     arm_token = _safe_path_token(arm)
@@ -721,23 +749,76 @@ def materialize_candidate_workspace(
     shutil.copytree(base_workspace, workspace)
     _make_tree_user_writable(workspace)
 
-    patch = candidate_patch.get("patch")
-    if not isinstance(patch, Mapping):
-        raise ValueError("candidate patch missing patch object")
-    files = patch.get("files")
-    if not isinstance(files, list) or not files:
-        raise ValueError("candidate patch missing patch.files")
+    if v3_materialization is not None:
+        files = v3_materialization["files"]
+    else:
+        patch = candidate_patch.get("patch")
+        if not isinstance(patch, Mapping):
+            raise ValueError("candidate patch missing patch object")
+        files = patch.get("files")
+        if not isinstance(files, list) or not files:
+            raise ValueError("candidate patch missing patch.files")
     for entry in files:
         if not isinstance(entry, Mapping):
             raise ValueError("patch.files entries must be objects")
         _apply_full_file_patch_entry(workspace, entry)
+    if v3_materialization is not None:
+        final_code_hash = _validate_workspace_identity(
+            workspace,
+            v3_materialization["candidate_identity_manifest"],
+            label="candidate",
+        )
+        replay_identity = candidate_patch.get("replay_identity")
+        current = candidate_patch.get("current")
+        expected_hashes = {
+            _clean_str(
+                replay_identity.get("code_hash")
+                if isinstance(replay_identity, Mapping)
+                else ""
+            ),
+            _clean_str(
+                current.get("current_code_hash")
+                if isinstance(current, Mapping)
+                else ""
+            ),
+        }
+        if expected_hashes != {final_code_hash}:
+            raise ValueError("materialized candidate final code_hash mismatch")
     return workspace
 
 
 def _manifest_source_attribution_fields(
     metadata: Mapping[str, Any],
-) -> dict[str, list[dict[str, Any]]]:
-    if _clean_str(metadata.get("schema")) != FORMAL_CANDIDATE_PATCH_SCHEMA_V2:
+) -> dict[str, Any]:
+    artifact_schema = _clean_str(metadata.get("schema"))
+    if artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V3:
+        materialization = _validated_v3_replay_materialization(metadata)
+        return {
+            "file_source_attributions": _validated_source_attributions_for_files(
+                materialization["files"],
+                label="replay_materialization.files",
+                allow_empty=True,
+                allowed_origins=(
+                    _V3_MATERIALIZATION_SOURCE_ATTRIBUTION_ORIGINS
+                ),
+            ),
+            "proposal_file_source_attributions": (
+                _validated_file_source_attributions(metadata)
+            ),
+            "proposal_target_files": _string_list(
+                metadata.get("proposal_target_files")
+            ),
+            "inherited_files": _string_list(metadata.get("inherited_files")),
+            "activation_files": _string_list(metadata.get("activation_files")),
+            "proposal_patch_digest": _clean_str(
+                metadata.get("proposal_patch_digest")
+            ),
+            "formal_patch_digest": _clean_str(metadata.get("formal_patch_digest")),
+            "candidate_attribution_scope": dict(
+                metadata.get("candidate_attribution_scope") or {}
+            ),
+        }
+    if artifact_schema != FORMAL_CANDIDATE_PATCH_SCHEMA_V2:
         return {}
     return {
         "file_source_attributions": _validated_file_source_attributions(metadata)
@@ -751,6 +832,21 @@ def _validated_file_source_attributions(
     files = patch.get("files") if isinstance(patch, Mapping) else None
     if not isinstance(files, list) or not files:
         raise ValueError("candidate patch missing patch.files source attribution")
+    return _validated_source_attributions_for_files(
+        files,
+        label="patch.files",
+    )
+
+
+def _validated_source_attributions_for_files(
+    files: list[Any],
+    *,
+    label: str,
+    allow_empty: bool = False,
+    allowed_origins: frozenset[str] = _SOURCE_ATTRIBUTION_ORIGINS,
+) -> list[dict[str, Any]]:
+    if not files and not allow_empty:
+        raise ValueError(f"candidate patch missing {label} source attribution")
     result: list[dict[str, Any]] = []
     seen: set[str] = set()
     for entry in files:
@@ -771,7 +867,7 @@ def _validated_file_source_attributions(
         provenance = _clean_str(attribution.get("source_provenance"))
         visibility = _clean_str(attribution.get("source_visibility"))
         digest = _clean_str(attribution.get("source_digest"))
-        if origin not in _SOURCE_ATTRIBUTION_ORIGINS or not provenance:
+        if origin not in allowed_origins or not provenance:
             raise ValueError(f"invalid source attribution origin: {file_path}")
         if origin == "proposal_source_ledger":
             if owner not in _SOURCE_LEDGER_OWNERS:
@@ -791,6 +887,221 @@ def _validated_file_source_attributions(
     return result
 
 
+def _validated_v3_replay_materialization(
+    metadata: Mapping[str, Any],
+) -> dict[str, Any]:
+    patch = metadata.get("patch")
+    if not isinstance(patch, Mapping):
+        raise ValueError("candidate patch missing patch object")
+    proposal_files = patch.get("files")
+    if not isinstance(proposal_files, list) or not proposal_files:
+        raise ValueError("candidate patch missing patch.files")
+    _validated_source_attributions_for_files(proposal_files, label="patch.files")
+    proposal_digest = _stable_file_entries_digest(
+        proposal_files,
+        label="patch.files",
+    )
+    if {
+        _clean_str(patch.get("patch_digest")),
+        _clean_str(metadata.get("proposal_patch_digest")),
+    } != {proposal_digest}:
+        raise ValueError("proposal patch digest mismatch")
+
+    raw_materialization = metadata.get("replay_materialization")
+    if not isinstance(raw_materialization, Mapping):
+        raise ValueError("candidate patch missing replay_materialization")
+    if (
+        raw_materialization.get("schema_version")
+        != "scion.replay_materialization.v1"
+        or raw_materialization.get("representation")
+        != "cumulative_full_file_replacement"
+    ):
+        raise ValueError("unsupported replay materialization")
+    files = raw_materialization.get("files")
+    if not isinstance(files, list):
+        raise ValueError("replay_materialization.files must be a list")
+    _validated_source_attributions_for_files(
+        files,
+        label="replay_materialization.files",
+        allow_empty=True,
+        allowed_origins=_V3_MATERIALIZATION_SOURCE_ATTRIBUTION_ORIGINS,
+    )
+    formal_digest = _stable_file_entries_digest(
+        files,
+        label="replay_materialization.files",
+    )
+    replay_identity = metadata.get("replay_identity")
+    if not isinstance(replay_identity, Mapping):
+        raise ValueError("candidate patch missing replay_identity")
+    digest_fields = {
+        _clean_str(raw_materialization.get("patch_digest")),
+        _clean_str(metadata.get("formal_patch_digest")),
+        _clean_str(replay_identity.get("patch_digest")),
+        _clean_str(replay_identity.get("patch_hash")),
+    }
+    if digest_fields != {formal_digest}:
+        raise ValueError("formal replay materialization digest mismatch")
+
+    base_identity = _validated_identity_manifest_metadata(
+        raw_materialization.get("base_identity_manifest"),
+        label="base",
+    )
+    candidate_identity = _validated_identity_manifest_metadata(
+        raw_materialization.get("candidate_identity_manifest"),
+        label="candidate",
+    )
+    current = metadata.get("current")
+    current_code_hash = _clean_str(
+        current.get("current_code_hash") if isinstance(current, Mapping) else ""
+    )
+    if {
+        candidate_identity["code_hash"],
+        _clean_str(replay_identity.get("code_hash")),
+        current_code_hash,
+    } != {candidate_identity["code_hash"]}:
+        raise ValueError("candidate identity code_hash mismatch")
+
+    proposal_paths = [_required_entry_path(entry) for entry in proposal_files]
+    materialization_paths = [_required_entry_path(entry) for entry in files]
+    if _string_list(metadata.get("proposal_target_files")) != proposal_paths:
+        raise ValueError("proposal target file scope mismatch")
+    if _string_list(metadata.get("target_files")) != materialization_paths:
+        raise ValueError("formal target file scope mismatch")
+
+    scope_by_path: dict[str, str] = {}
+    for entry in files:
+        path = _required_entry_path(entry)
+        attribution = entry.get("candidate_attribution")
+        if (
+            not isinstance(attribution, Mapping)
+            or set(attribution) != _CANDIDATE_ATTRIBUTION_KEYS
+            or attribution.get("schema_version")
+            != "formal-file-candidate-attribution.v1"
+        ):
+            raise ValueError(f"invalid candidate attribution: {path}")
+        scope = _clean_str(attribution.get("scope"))
+        if scope not in _CANDIDATE_ATTRIBUTION_SCOPES:
+            raise ValueError(f"invalid candidate attribution scope: {path}")
+        scope_by_path[path] = scope
+        source = entry.get("source_attribution")
+        assert isinstance(source, Mapping)
+        origin = _clean_str(source.get("origin"))
+        if scope == "inherited_verified" and origin != "inherited_verified_branch":
+            raise ValueError(f"inherited file source attribution mismatch: {path}")
+        if scope == "runtime_activation" and origin != "runtime_activation":
+            raise ValueError(f"activation file source attribution mismatch: {path}")
+        if scope == "current_proposal" and origin in {
+            "inherited_verified_branch",
+            "runtime_activation",
+        }:
+            raise ValueError(f"proposal file source attribution mismatch: {path}")
+
+    materialized_proposal_files = sorted(
+        path for path, scope in scope_by_path.items() if scope == "current_proposal"
+    )
+    inherited_files = sorted(
+        path for path, scope in scope_by_path.items() if scope == "inherited_verified"
+    )
+    activation_files = sorted(
+        path for path, scope in scope_by_path.items() if scope == "runtime_activation"
+    )
+    if _string_list(metadata.get("inherited_files")) != inherited_files:
+        raise ValueError("inherited file scope mismatch")
+    if _string_list(metadata.get("activation_files")) != activation_files:
+        raise ValueError("activation file scope mismatch")
+    if _string_list(raw_materialization.get("inherited_files")) != inherited_files:
+        raise ValueError("materialization inherited file scope mismatch")
+    if _string_list(raw_materialization.get("activation_files")) != activation_files:
+        raise ValueError("materialization activation file scope mismatch")
+
+    candidate_scope = metadata.get("candidate_attribution_scope")
+    expected_scope = {
+        "schema_version": "formal-candidate-attribution-scope.v1",
+        "scope": "cumulative_branch_candidate_from_declared_champion_base",
+        "proposal_target_files": proposal_paths,
+        "materialized_proposal_files": materialized_proposal_files,
+        "inherited_files": inherited_files,
+        "activation_files": activation_files,
+    }
+    if (
+        not isinstance(candidate_scope, Mapping)
+        or dict(candidate_scope) != expected_scope
+    ):
+        raise ValueError("candidate attribution scope mismatch")
+
+    return {
+        **dict(raw_materialization),
+        "files": files,
+        "base_identity_manifest": base_identity,
+        "candidate_identity_manifest": candidate_identity,
+    }
+
+
+def _required_entry_path(entry: Any) -> str:
+    if not isinstance(entry, Mapping):
+        raise ValueError("patch file entry must be an object")
+    file_path = _clean_str(entry.get("file_path"))
+    _validate_patch_relative_path(file_path)
+    return file_path
+
+
+def _stable_file_entries_digest(files: list[Any], *, label: str) -> str:
+    payload: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for entry in files:
+        path = _required_entry_path(entry)
+        if path in seen:
+            raise ValueError(f"duplicate {label} file: {path}")
+        seen.add(path)
+        action = _clean_str(entry.get("action"))
+        if action not in {"create", "modify", "delete"}:
+            raise ValueError(f"invalid {label} action: {path}")
+        if "code_content" not in entry:
+            raise ValueError(f"missing {label} code_content: {path}")
+        content = str(entry.get("code_content") or "")
+        code_sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        if _clean_str(entry.get("code_sha256")) != code_sha:
+            raise ValueError(f"{label} code_sha256 mismatch: {path}")
+        payload.append(
+            {"file_path": path, "action": action, "code_sha256": code_sha}
+        )
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _validated_identity_manifest_metadata(
+    value: Any,
+    *,
+    label: str,
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"missing {label} identity manifest")
+    if value.get("schema_version") != "scion.editable_identity_manifest.v1":
+        raise ValueError(f"unsupported {label} identity manifest")
+    files = value.get("files")
+    code_hash = _clean_str(value.get("code_hash"))
+    if not isinstance(files, list) or not _is_sha256(code_hash):
+        raise ValueError(f"invalid {label} identity manifest")
+    normalized: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for entry in files:
+        path = _required_entry_path(entry)
+        sha = _clean_str(entry.get("sha256"))
+        if path in seen or not _is_sha256(sha):
+            raise ValueError(f"invalid {label} identity manifest file: {path}")
+        seen.add(path)
+        normalized.append({"file_path": path, "sha256": sha})
+    if normalized != sorted(normalized, key=lambda item: item["file_path"]):
+        raise ValueError(f"non-canonical {label} identity manifest order")
+    return {
+        "schema_version": "scion.editable_identity_manifest.v1",
+        "files": normalized,
+        "code_hash": code_hash,
+    }
+
+
 def _validate_patch_relative_path(value: str) -> None:
     rel = Path(value)
     if not value or "\\" in value or rel.is_absolute() or any(
@@ -804,9 +1115,8 @@ def _is_sha256(value: str) -> bool:
 
 
 def _target_files(metadata: Mapping[str, Any]) -> list[str]:
-    files = _string_list(metadata.get("target_files"))
-    if files:
-        return files
+    if "target_files" in metadata:
+        return _string_list(metadata.get("target_files"))
     patch = metadata.get("patch")
     if not isinstance(patch, Mapping):
         return []
@@ -1159,6 +1469,68 @@ def _apply_full_file_patch_entry(workspace: Path, entry: Mapping[str, Any]) -> N
             raise ValueError(f"code_sha256 mismatch for patch file: {relative_path}")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
+
+
+def _validate_materialization_base_files(
+    base_workspace: Path,
+    files: list[Any],
+) -> None:
+    for entry in files:
+        if not isinstance(entry, Mapping):
+            raise ValueError("replay materialization file entry must be an object")
+        relative_path = _required_entry_path(entry)
+        target = _workspace_child(base_workspace, relative_path)
+        action = _clean_str(entry.get("action"))
+        expected_base_sha = _clean_str(entry.get("base_sha256"))
+        if action == "create":
+            if target.exists() or expected_base_sha:
+                raise ValueError(
+                    f"replay create does not match champion base: {relative_path}"
+                )
+        else:
+            if not target.is_file() or not _is_sha256(expected_base_sha):
+                raise ValueError(
+                    f"replay existing file missing champion identity: {relative_path}"
+                )
+            actual_base_sha = hashlib.sha256(target.read_bytes()).hexdigest()
+            if actual_base_sha != expected_base_sha:
+                raise ValueError(
+                    f"replay base_sha256 mismatch: {relative_path}"
+                )
+        expected_current_sha = _clean_str(entry.get("workspace_current_sha256"))
+        if action == "delete":
+            if expected_current_sha:
+                raise ValueError(
+                    f"deleted replay file has current digest: {relative_path}"
+                )
+        elif expected_current_sha != _clean_str(entry.get("code_sha256")):
+            raise ValueError(
+                f"replay current file digest mismatch: {relative_path}"
+            )
+
+
+def _validate_workspace_identity(
+    workspace: Path,
+    manifest: Mapping[str, Any],
+    *,
+    label: str,
+) -> str:
+    validated = _validated_identity_manifest_metadata(manifest, label=label)
+    digest = hashlib.sha256()
+    for entry in validated["files"]:
+        relative_path = entry["file_path"]
+        target = _workspace_child(workspace, relative_path)
+        if not target.is_file():
+            raise ValueError(f"{label} identity file missing: {relative_path}")
+        content = target.read_bytes()
+        if hashlib.sha256(content).hexdigest() != entry["sha256"]:
+            raise ValueError(f"{label} identity file digest mismatch: {relative_path}")
+        digest.update(relative_path.encode())
+        digest.update(content)
+    code_hash = digest.hexdigest()
+    if code_hash != validated["code_hash"]:
+        raise ValueError(f"{label} identity code_hash mismatch")
+    return code_hash
 
 
 def _workspace_child(workspace: Path, relative_path: str) -> Path:

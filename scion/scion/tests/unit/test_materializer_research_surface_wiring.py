@@ -100,6 +100,13 @@ def test_campaign_composition_passes_cvrp_solver_design_editable_patterns(
         def compute_snapshot_hash(self, workspace: str) -> str:
             return "hash-for-" + str(self.editable_patterns)
 
+        def editable_identity_manifest(self, workspace: str) -> dict[str, object]:
+            return {
+                "schema_version": "scion.editable_identity_manifest.v1",
+                "files": [],
+                "code_hash": "0" * 64,
+            }
+
         def archive_workspace(self, workspace: str, branch_id: str) -> None:
             return None
 

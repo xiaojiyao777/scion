@@ -33,6 +33,8 @@ class CvrpProposalMechanismEvidenceProvider:
         )
         return {
             "schema_version": "scion.cvrp.alns_proposal_mechanism_evidence.v1",
+            "evidence_scope": "alns_repair_runtime_diagnostics",
+            "hypothesis_attribution": "unbound",
             "source_runtime_field": _TRACE_FIELD,
             "trace_coverage": {
                 "valid_pairs": len(runtime_pairs),

@@ -15,6 +15,8 @@ from scion.core.models import (
     ExperimentStage,
     HypothesisProposal,
     PairwiseCaseFeedback,
+    PatchFileChange,
+    PatchProposal,
     ProtocolResult,
     StepRecord,
 )
@@ -29,6 +31,7 @@ from scion.postrun.direct_v3_prompt_visibility import (
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_manager.manager import (
     CANONICAL_SCREENING_HISTORY_KEY,
+    canonical_screening_record,
     persist_canonical_screening_record,
 )
 from scion.proposal.context_owner_maps import proposal_context_snapshot
@@ -135,9 +138,14 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
                 median_delta=2.5,
                 ci_low=1.0,
                 ci_high=4.0,
+                total_pairs=1,
+                valid_pairs=1,
+                pair_wins=1,
+                pair_losses=0,
+                pair_ties=0,
             ),
             gate_outcome="pass",
-            reason_codes=("host-gate-noise",),
+            reason_codes=("SCREENING_PASS",),
             exposed_summary="duplicate summary noise",
             raw_metrics_ref="private/raw.json",
             objective_semantics="minimize total objective",
@@ -218,10 +226,35 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
     assert evidence["attempt_id"] == "attempt-screening-1"
     assert set(evidence["experiment_evidence"]) == {
         "stage",
+        "protocol_outcome",
         "objective_outcome",
         "case_outcomes",
         "runtime_errors",
     }
+    assert evidence["candidate_composition"] == {
+        "attribution_scope": "cumulative_branch_candidate",
+        "protocol_comparison_scope": "candidate_vs_champion",
+        "evaluation_candidate": "reused_verified_branch_state",
+        "current_step_change_scope": "eval_only_reuse",
+        "incremental_effect_isolated": False,
+        "current_step": {"hypothesis_id": "attempt-screening-1"},
+    }
+    protocol_outcome = evidence["experiment_evidence"]["protocol_outcome"]
+    assert protocol_outcome == {
+        "gate_outcome": "pass",
+        "reason_codes": ["SCREENING_PASS"],
+    }
+    aggregation = evidence["experiment_evidence"]["objective_outcome"][
+        "aggregation"
+    ]
+    assert aggregation["statistical_unit"] == "case"
+    assert aggregation["win_rate_scope"] == "case_level_gate"
+    assert aggregation["median_delta_scope"] == "case_medians"
+    assert aggregation["ci_scope"] == "case_medians"
+    assert aggregation["pair_win_rate_scope"] == "pair_level_protocol_stats"
+    assert aggregation["pair_win_rate"] == 1.0
+    assert "pair_level" not in aggregation
+    assert "pair_median_delta" not in aggregation
     assert objective_tail in rendered
     assert "case-visible" in rendered
     assert runtime_error_tail in rendered
@@ -315,6 +348,268 @@ def test_canonical_screening_history_deduplicates_durable_and_live_record() -> N
     assert persist_canonical_screening_record(branch, screening) is False
 
 
+def test_canonical_screening_history_upgrades_legacy_row_without_duplicate() -> None:
+    _spec, legacy, adapter, champion, branch = _runtime("cvrp")
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Test one durable screening observation.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+    )
+    screening = StepRecord(
+        round_num=1,
+        branch_id=branch.branch_id,
+        hypothesis=hypothesis,
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=1,
+                wins=0,
+                losses=1,
+                ties=0,
+                win_rate=0.0,
+                median_delta=-4.0,
+                ci_low=-10.0,
+                ci_high=-0.5,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="screening failed",
+            raw_metrics_ref="private/round.json",
+        ),
+        decision=Decision.CONTINUE_EXPLORE,
+        failure_stage=None,
+        failure_detail=None,
+        hypothesis_id="legacy-attempt",
+    )
+    legacy_record = canonical_screening_record(screening)
+    legacy_record.pop("candidate_composition")
+    legacy_evidence = legacy_record["experiment_evidence"]
+    legacy_evidence.pop("protocol_outcome")
+    legacy_evidence["objective_outcome"].pop("aggregation")
+    legacy_record["screening_attempt_id"] = "legacy-schema-dependent-id"
+    branch.branch_evidence_summary = {
+        CANONICAL_SCREENING_HISTORY_KEY: [legacy_record]
+    }
+
+    context = ContextManager(adapter=adapter).build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=[screening],
+    )
+
+    assert len(context["experiment_history"]) == 1
+    upgraded = context["experiment_history"][0]
+    assert upgraded["attempt_id"] == "legacy-attempt"
+    assert upgraded["screening_attempt_id"] != "legacy-schema-dependent-id"
+    assert "candidate_composition" in upgraded
+    assert "protocol_outcome" in upgraded["experiment_evidence"]
+    assert persist_canonical_screening_record(branch, screening) is True
+    assert len(
+        branch.branch_evidence_summary[CANONICAL_SCREENING_HISTORY_KEY]
+    ) == 1
+
+
+def test_canonical_screening_history_rejects_conflicting_legacy_fact() -> None:
+    _spec, legacy, adapter, champion, branch = _runtime("cvrp")
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Test conflicting durable evidence.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+    )
+    screening = StepRecord(
+        round_num=1,
+        branch_id=branch.branch_id,
+        hypothesis=hypothesis,
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=1,
+                wins=1,
+                losses=0,
+                ties=0,
+                win_rate=1.0,
+                median_delta=2.0,
+                ci_low=1.0,
+                ci_high=3.0,
+            ),
+            gate_outcome="pass",
+            reason_codes=("SCREENING_PASS",),
+            exposed_summary="screening passed",
+            raw_metrics_ref="metrics/legacy-conflict.json",
+        ),
+        decision=Decision.QUEUE_VALIDATE,
+        failure_stage=None,
+        failure_detail=None,
+        hypothesis_id="legacy-conflict",
+    )
+    legacy_record = canonical_screening_record(screening)
+    legacy_record.pop("candidate_composition")
+    evidence = legacy_record["experiment_evidence"]
+    evidence.pop("protocol_outcome")
+    evidence["objective_outcome"].pop("aggregation")
+    evidence["objective_outcome"]["aggregate"]["median_delta"] = -999.0
+    branch.branch_evidence_summary = {
+        CANONICAL_SCREENING_HISTORY_KEY: [legacy_record]
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="canonical screening history conflicts with current step",
+    ):
+        ContextManager(adapter=adapter).build_hypothesis_context(
+            branch=branch,
+            champion=champion,
+            problem_spec=legacy,
+            step_history=[screening],
+        )
+
+
+def test_canonical_screening_record_marks_incremental_patch_as_cumulative_state() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Add one integrated mechanism.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/solver.py",
+    )
+    patch = PatchProposal(
+        file_path="policies/solver.py",
+        action="modify",
+        code_content="def solve():\n    return 2\n",
+        additional_changes=(
+            PatchFileChange(
+                file_path="policies/scheduler.py",
+                action="modify",
+                code_content="ENABLED = True\n",
+            ),
+        ),
+    )
+    step = StepRecord(
+        round_num=2,
+        branch_id="branch-1",
+        hypothesis=hypothesis,
+        patch=patch,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=1,
+                wins=1,
+                losses=0,
+                ties=0,
+                win_rate=1.0,
+                median_delta=3.0,
+                ci_low=1.0,
+                ci_high=4.0,
+            ),
+            gate_outcome="pass",
+            reason_codes=("SCREENING_PASS",),
+            exposed_summary="passed",
+            raw_metrics_ref="metrics/round-2.json",
+        ),
+        decision=Decision.QUEUE_VALIDATE,
+        failure_stage=None,
+        failure_detail=None,
+        hypothesis_id="hypothesis-2",
+    )
+
+    record = canonical_screening_record(step)
+
+    composition = record["candidate_composition"]
+    assert composition["attribution_scope"] == "cumulative_branch_candidate"
+    assert composition["protocol_comparison_scope"] == "candidate_vs_champion"
+    assert composition["evaluation_candidate"] == (
+        "branch_state_after_current_step_patch"
+    )
+    assert composition["current_step_change_scope"] == "incremental_patch"
+    assert composition["incremental_effect_isolated"] is False
+    assert composition["current_step"]["hypothesis_id"] == "hypothesis-2"
+    assert composition["current_step"]["target_files"] == [
+        "policies/scheduler.py",
+        "policies/solver.py",
+    ]
+    aggregation = record["experiment_evidence"]["objective_outcome"][
+        "aggregation"
+    ]
+    assert "pair_win_rate_scope" not in aggregation
+    assert "pair_win_rate" not in aggregation
+
+
+@pytest.mark.parametrize(
+    ("pair_stats", "expected_error"),
+    (
+        ({}, "pair feedback conflicts with Protocol stats"),
+        (
+            {"total_pairs": 1, "pair_wins": 1},
+            "valid-pair count conflicts with pair feedback",
+        ),
+    ),
+)
+def test_canonical_screening_record_rejects_pair_stats_row_conflict(
+    pair_stats: dict[str, int],
+    expected_error: str,
+) -> None:
+    stats = EvalStats(
+        n_cases=1,
+        wins=1,
+        losses=0,
+        ties=0,
+        win_rate=1.0,
+        median_delta=1.0,
+        ci_low=0.0,
+        ci_high=2.0,
+        **pair_stats,
+    )
+    step = StepRecord(
+        round_num=1,
+        branch_id="branch-1",
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Test conflicting evidence.",
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/solver.py",
+        ),
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=stats,
+            gate_outcome="pass",
+            reason_codes=("SCREENING_PASS",),
+            exposed_summary="conflicting pair evidence",
+            raw_metrics_ref="metrics/conflict.json",
+            pair_feedback=(
+                PairwiseCaseFeedback(
+                    case_id="case-1",
+                    seed=11,
+                    comparison="win",
+                    delta=1.0,
+                ),
+            ),
+        ),
+        decision=Decision.QUEUE_VALIDATE,
+        failure_stage=None,
+        failure_detail=None,
+        hypothesis_id="hypothesis-1",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=expected_error,
+    ):
+        canonical_screening_record(step)
+
+
 def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() -> None:
     _spec, legacy, adapter, champion, branch = _runtime("cvrp")
     packet = problem_proposal_mechanism_evidence(
@@ -395,6 +690,10 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
     rendered = "\n".join(block["text"] for block in blocks) + user_prompt
     assert '"attempts": 1' in rendered
     assert '"repair_error": 1' in rendered
+    assert '"evidence_scope": "alns_repair_runtime_diagnostics"' in rendered
+    assert '"hypothesis_attribution": "unbound"' in rendered
+    assert "activation_evidence_status" not in rendered
+    assert "objective_effect_status" not in rendered
     assert '"solver_algorithm_alns_iteration_trace": [' not in rendered
 
 

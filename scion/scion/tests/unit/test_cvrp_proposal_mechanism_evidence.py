@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+from scion.core.screening_visibility import mechanism_evidence_for_protocol
 from scion.problems.cvrp.proposal_mechanism_evidence import (
     CvrpProposalMechanismEvidenceProvider,
+)
+from scion.protocol.experiment.proposal_evidence import (
+    problem_proposal_mechanism_evidence,
 )
 
 
@@ -70,6 +76,54 @@ def test_cvrp_proposal_evidence_aggregates_every_repair_without_truncation() -> 
     assert payload["comparison"]["route_limit"]["candidate_minus_champion"] == -1
     assert payload["comparison"]["repair_error"]["candidate_minus_champion"] == 1
     assert payload["trace_coverage"]["champion_result_sources"] == {"cached": 1}
+    assert payload["evidence_scope"] == "alns_repair_runtime_diagnostics"
+    assert payload["hypothesis_attribution"] == "unbound"
+
+
+def test_problem_owned_mechanism_envelope_does_not_gain_legacy_unknowns() -> None:
+    envelope = problem_proposal_mechanism_evidence(
+        stage="screening",
+        selected_surface="solver_design",
+        runtime_pairs=[
+            {
+                "candidate_runtime": {
+                    "solver_algorithm_alns_iteration_trace": [_event("regret2")]
+                },
+                "champion_runtime": {
+                    "solver_algorithm_alns_iteration_trace": [_event("greedy")]
+                },
+                "champion_result_source": "fresh",
+            }
+        ],
+        adapter=SimpleNamespace(
+            proposal_mechanism_evidence_provider=(
+                lambda: CvrpProposalMechanismEvidenceProvider()
+            )
+        ),
+    )
+
+    projected = mechanism_evidence_for_protocol(
+        SimpleNamespace(mechanism_evidence=envelope)
+    )
+
+    assert projected == envelope
+    assert "activation_evidence_status" not in projected
+    assert "objective_effect_status" not in projected
+
+
+def test_legacy_mechanism_shape_keeps_activation_and_effect_derivation() -> None:
+    projected = mechanism_evidence_for_protocol(
+        SimpleNamespace(
+            mechanism_evidence={
+                "primary_activation_status": "observed",
+                "primary_effect_status": "positive",
+            },
+            stats=SimpleNamespace(wins=1, losses=0, median_delta=2.0),
+        )
+    )
+
+    assert projected["activation_evidence_status"] == "observed"
+    assert projected["objective_effect_status"] == "positive"
 
 
 def test_cvrp_proposal_evidence_ignores_non_screening_and_missing_trace() -> None:

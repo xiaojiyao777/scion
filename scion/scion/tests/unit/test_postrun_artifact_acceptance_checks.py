@@ -1,13 +1,30 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 from pathlib import Path
 
+from scion.core.branch import BranchController
+from scion.core.formal_candidate_artifacts import FormalCandidatePatchArtifactRecorder
+from scion.core.models import (
+    CanaryResult,
+    ChampionState,
+    ContractResult,
+    Decision,
+    EvalStats,
+    ExperimentStage,
+    HypothesisProposal,
+    HypothesisRecord,
+    PatchProposal,
+    ProtocolResult,
+    VerificationResult,
+)
 from scion.postrun import (
     ANALYSIS_BRIEF_SCHEMA,
     REBUILD_SCHEMA,
     PostrunArtifactAcceptancePort,
 )
+from scion.runtime.workspace import WorkspaceMaterializer
 
 
 def test_artifact_acceptance_checks_emit_legacy_ready_payloads(tmp_path: Path) -> None:
@@ -127,6 +144,308 @@ def test_artifact_acceptance_checks_reject_boundary_drift(tmp_path: Path) -> Non
     assert checks["analysis_brief_boundary"]["detail"]["failures"] == [
         "analysis_brief_campaign_state_mutated_not_false"
     ]
+
+
+def test_artifact_acceptance_materializes_v3_and_fails_closed_on_tampering(
+    tmp_path: Path,
+) -> None:
+    root, report_dir, manifest, brief_path, brief = _write_ready_artifacts(tmp_path)
+    artifact_path, artifact = _write_v3_formal_candidate(root)
+
+    valid_checks = _summarize_artifact_checks(
+        root=root,
+        report_dir=report_dir,
+        manifest=manifest,
+        brief_path=brief_path,
+        brief=brief,
+    )
+    valid = valid_checks["formal_candidate_diff_integrity"]
+    assert valid["status"] == "ok"
+    validation = valid["detail"]["validations"][0]
+    assert validation["diff_ref"] == artifact["replay_materialization"]["diff_ref"]
+    assert validation["diff_ref"] != artifact["patch"]["diff_ref"]
+    assert validation["materialization_status"] == "ok"
+    assert validation["materialization_model"] == (
+        "champion_base_plus_cumulative_replay_materialization"
+    )
+
+    for corruption in ("closure", "content", "base_identity", "final_hash"):
+        corrupted = deepcopy(artifact)
+        closure = corrupted["replay_materialization"]
+        if corruption == "closure":
+            closure["files"] = []
+        elif corruption == "content":
+            closure["files"][0]["code_content"] = "VALUE = 999\n"
+        elif corruption == "base_identity":
+            closure["base_identity_manifest"]["files"][0]["sha256"] = "0" * 64
+        else:
+            wrong_hash = "0" * 64
+            closure["candidate_identity_manifest"]["code_hash"] = wrong_hash
+            corrupted["current"]["current_code_hash"] = wrong_hash
+            corrupted["replay_identity"]["code_hash"] = wrong_hash
+        _write_json(artifact_path, corrupted)
+
+        checks = _summarize_artifact_checks(
+            root=root,
+            report_dir=report_dir,
+            manifest=manifest,
+            brief_path=brief_path,
+            brief=brief,
+        )
+        formal = checks["formal_candidate_diff_integrity"]
+        assert formal["status"] == "failed", corruption
+        assert any(
+            failure["reason"] == "candidate_replay_materialization_invalid"
+            for failure in formal["detail"]["failures"]
+        ), corruption
+
+    _write_json(artifact_path, artifact)
+
+
+def test_artifact_acceptance_allows_v3_empty_cumulative_closure(
+    tmp_path: Path,
+) -> None:
+    root, report_dir, manifest, brief_path, brief = _write_ready_artifacts(tmp_path)
+    _, artifact = _write_v3_formal_candidate(root, revert_to_champion=True)
+
+    assert artifact["replay_materialization"]["files"] == []
+    checks = _summarize_artifact_checks(
+        root=root,
+        report_dir=report_dir,
+        manifest=manifest,
+        brief_path=brief_path,
+        brief=brief,
+    )
+    formal = checks["formal_candidate_diff_integrity"]
+    assert formal["status"] == "ok"
+    assert {
+        validation["validation_mode"]
+        for validation in formal["detail"]["validations"]
+    } == {"apply_check", "empty_cumulative_closure"}
+    assert all(
+        validation["materialization_status"] == "ok"
+        for validation in formal["detail"]["validations"]
+    )
+
+
+def test_artifact_acceptance_binds_v3_candidate_and_proposal_diffs(
+    tmp_path: Path,
+) -> None:
+    root, report_dir, manifest, brief_path, brief = _write_ready_artifacts(tmp_path)
+    artifact_path, artifact = _write_v3_formal_candidate(root)
+    campaign_dir = root / "campaign"
+    candidate_diff = campaign_dir / artifact["replay_materialization"]["diff_ref"]
+    proposal_diff = campaign_dir / artifact["patch"]["diff_ref"]
+
+    original_candidate_diff = candidate_diff.read_text(encoding="utf-8")
+    candidate_diff.write_text(
+        original_candidate_diff.replace("+VALUE = 1", "+VALUE = 2"),
+        encoding="utf-8",
+    )
+    checks = _summarize_artifact_checks(
+        root=root,
+        report_dir=report_dir,
+        manifest=manifest,
+        brief_path=brief_path,
+        brief=brief,
+    )
+    failures = checks["formal_candidate_diff_integrity"]["detail"]["failures"]
+    assert any(
+        failure["reason"] == "candidate_diff_content_mismatch"
+        for failure in failures
+    )
+
+    candidate_diff.write_text(original_candidate_diff, encoding="utf-8")
+    proposal_diff.unlink()
+    checks = _summarize_artifact_checks(
+        root=root,
+        report_dir=report_dir,
+        manifest=manifest,
+        brief_path=brief_path,
+        brief=brief,
+    )
+    failures = checks["formal_candidate_diff_integrity"]["detail"]["failures"]
+    assert any(failure["reason"] == "proposal_diff_missing" for failure in failures)
+
+
+def test_artifact_acceptance_rejects_orphan_formal_candidate_without_index(
+    tmp_path: Path,
+) -> None:
+    root, report_dir, manifest, brief_path, brief = _write_ready_artifacts(tmp_path)
+    orphan = (
+        root
+        / "campaign"
+        / "artifacts"
+        / "formal_candidates"
+        / "orphan"
+        / "candidate.patch.json"
+    )
+    orphan.parent.mkdir(parents=True)
+    _write_json(orphan, {"schema": "scion.formal_candidate_patch_artifact.v3"})
+
+    checks = _summarize_artifact_checks(
+        root=root,
+        report_dir=report_dir,
+        manifest=manifest,
+        brief_path=brief_path,
+        brief=brief,
+    )
+    formal = checks["formal_candidate_diff_integrity"]
+    assert formal["status"] == "failed"
+    assert formal["detail"]["reason"] == (
+        "formal_candidate_index_absent_with_orphan_artifacts"
+    )
+    assert formal["detail"]["orphan_artifacts"] == [str(orphan)]
+
+
+def test_artifact_acceptance_rejects_unindexed_candidate_when_index_exists(
+    tmp_path: Path,
+) -> None:
+    root, report_dir, manifest, brief_path, brief = _write_ready_artifacts(tmp_path)
+    indexed_artifact, _ = _write_v3_formal_candidate(root)
+    orphan = indexed_artifact.parent.parent / "orphan" / "candidate.patch.json"
+    orphan.parent.mkdir(parents=True)
+    _write_json(orphan, {"schema": "scion.formal_candidate_patch_artifact.v3"})
+
+    checks = _summarize_artifact_checks(
+        root=root,
+        report_dir=report_dir,
+        manifest=manifest,
+        brief_path=brief_path,
+        brief=brief,
+    )
+    formal = checks["formal_candidate_diff_integrity"]
+    assert formal["status"] == "failed"
+    assert formal["detail"]["checked_candidates"] == 1
+    assert formal["detail"]["orphan_artifacts"] == [str(orphan)]
+    assert {
+        failure["reason"] for failure in formal["detail"]["failures"]
+    } == {"candidate_metadata_not_indexed"}
+
+
+def _summarize_artifact_checks(
+    *,
+    root: Path,
+    report_dir: Path,
+    manifest: dict[str, object],
+    brief_path: Path,
+    brief: dict[str, object],
+) -> dict[str, dict[str, object]]:
+    return PostrunArtifactAcceptancePort().summarize(
+        root=root,
+        report_dir=report_dir,
+        rebuild_manifest=manifest,
+        inventory_source="stored_postrun_inventory",
+        inventory_path=report_dir / "inventory" / "inventory.v1.json",
+        analysis_brief_path=brief_path,
+        analysis_brief=brief,
+        postrun_counts={"inventory": 1},
+    ).to_payloads()
+
+
+def _write_v3_formal_candidate(
+    root: Path,
+    *,
+    revert_to_champion: bool = False,
+) -> tuple[Path, dict[str, object]]:
+    campaign_dir = root / "campaign"
+    base_workspace = campaign_dir / "champions" / "v1"
+    base_workspace.mkdir(parents=True)
+    (base_workspace / "solver.py").write_text("VALUE = 0\n", encoding="utf-8")
+    materializer = WorkspaceMaterializer(
+        str(campaign_dir),
+        editable_patterns=("*.py",),
+    )
+    branch = BranchController().create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver-hash",
+            code_snapshot_path=str(base_workspace),
+            code_snapshot_hash="champion-hash",
+        )
+    )
+    workspace = materializer.create_branch_workspace(
+        branch.branch_id,
+        str(base_workspace),
+    )
+    recorder = FormalCandidatePatchArtifactRecorder(
+        campaign_dir,
+        protocol_version="protocol-v3",
+        problem_spec_hash="problem-hash",
+        split_manifest_hash="split-hash",
+        seed_ledger_hash="seed-hash",
+        identity_manifest_for=materializer.editable_identity_manifest,
+    )
+    protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=2,
+            wins=1,
+            losses=0,
+            ties=1,
+            win_rate=0.5,
+            median_delta=1.0,
+            ci_low=0.0,
+            ci_high=2.0,
+        ),
+        gate_outcome="expand",
+        reason_codes=("SCREENING_EXPAND",),
+        exposed_summary="postrun v3",
+        raw_metrics_ref="metrics/screening.json",
+    )
+
+    def record_patch(
+        patch: PatchProposal,
+        *,
+        hypothesis_id: str,
+        parent_hypothesis_id: str | None = None,
+    ) -> str:
+        branch.current_code_hash = materializer.apply_patch(workspace, patch)
+        branch.last_clean_code_hash = branch.current_code_hash
+        artifact_ref = recorder.record(
+            branch=branch,
+            hypothesis=HypothesisProposal(
+                hypothesis_text="Postrun v3 materialization acceptance.",
+                change_locus="solver_design",
+                action="modify",
+                target_file="solver.py",
+            ),
+            h_record=HypothesisRecord(
+                hypothesis_id=hypothesis_id,
+                parent_hypothesis_id=parent_hypothesis_id,
+                branch_id=branch.branch_id,
+                change_locus="solver_design",
+                action="modify",
+                status="running",
+                target_file="solver.py",
+            ),
+            patch=patch,
+            protocol_result=protocol_result,
+            canary_result=CanaryResult(passed=True),
+            contract_result=ContractResult(passed=True, checks=()),
+            verification_result=VerificationResult(passed=True, checks=()),
+            decision=Decision.EXPAND_SCREENING,
+            decision_reason_codes=("SCREENING_EXPAND",),
+            workspace=workspace,
+            base_workspace=str(base_workspace),
+        )
+        assert artifact_ref
+        return artifact_ref
+
+    artifact_ref = record_patch(
+        PatchProposal("solver.py", "modify", "VALUE = 1\n"),
+        hypothesis_id="h-postrun-v3-r1",
+    )
+    if revert_to_champion:
+        artifact_ref = record_patch(
+            PatchProposal("solver.py", "modify", "VALUE = 0\n"),
+            hypothesis_id="h-postrun-v3-r2",
+            parent_hypothesis_id="h-postrun-v3-r1",
+        )
+    assert artifact_ref
+    artifact_path = campaign_dir / artifact_ref
+    return artifact_path, json.loads(artifact_path.read_text(encoding="utf-8"))
 
 
 def _write_ready_artifacts(

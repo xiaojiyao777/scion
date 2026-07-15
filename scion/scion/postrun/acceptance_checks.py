@@ -6,9 +6,17 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 from typing import Any, Mapping
 
 from scion.core.execution_outcome import ExecutionOutcome
+from scion.core.fixed_candidate_replay import materialize_candidate_workspace
+from scion.core.formal_candidate_artifacts import (
+    render_full_file_replacement_diff,
+)
+
+
+FORMAL_CANDIDATE_PATCH_SCHEMA_V3 = "scion.formal_candidate_patch_artifact.v3"
 
 ANALYSIS_BRIEF_SCHEMA = "scion.postrun_analysis_brief.v1"
 PHASE4_EVIDENCE_COVERAGE_SCHEMA = "scion.postrun_phase4_evidence_coverage.v1"
@@ -257,16 +265,31 @@ def _formal_candidate_diff_integrity(root: Path) -> tuple[str, dict[str, Any]]:
 
     campaign_dir = root / "campaign"
     index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    disk_metadata_paths = {
+        path.resolve()
+        for path in index_path.parent.glob("**/candidate.patch.json")
+        if path.is_file()
+    }
     if not index_path.is_file():
-        return "ok", {
-            "reason": "formal_candidate_index_absent",
-            "index_path": str(index_path),
-            "checked_candidates": 0,
-        }
+        orphan_artifacts = sorted(str(path) for path in disk_metadata_paths)
+        return (
+            "failed" if orphan_artifacts else "ok",
+            {
+                "reason": (
+                    "formal_candidate_index_absent_with_orphan_artifacts"
+                    if orphan_artifacts
+                    else "formal_candidate_index_absent"
+                ),
+                "index_path": str(index_path),
+                "checked_candidates": 0,
+                "orphan_artifacts": orphan_artifacts,
+            },
+        )
 
     failures: list[dict[str, Any]] = []
     validations: list[dict[str, Any]] = []
     legacy_unbound_rows: list[dict[str, Any]] = []
+    indexed_metadata_paths: set[Path] = set()
     try:
         lines = index_path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
@@ -305,6 +328,8 @@ def _formal_candidate_diff_integrity(root: Path) -> tuple[str, dict[str, Any]]:
             campaign_dir,
             row.get("artifact_ref"),
         )
+        if metadata_path is not None:
+            indexed_metadata_paths.add(metadata_path)
         if metadata_path is None or not metadata_path.is_file():
             failures.append(
                 {
@@ -325,13 +350,23 @@ def _formal_candidate_diff_integrity(root: Path) -> tuple[str, dict[str, Any]]:
             )
             continue
         patch = _mapping_or_empty(metadata.get("patch"))
-        diff_path = _campaign_artifact_path(campaign_dir, patch.get("diff_ref"))
+        artifact_schema = str(metadata.get("schema") or "")
+        replay_materialization = _mapping_or_empty(
+            metadata.get("replay_materialization")
+        )
+        diff_ref = (
+            replay_materialization.get("diff_ref")
+            if artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V3
+            else patch.get("diff_ref")
+        )
+        diff_path = _campaign_artifact_path(campaign_dir, diff_ref)
         if diff_path is None or not diff_path.is_file():
             failures.append(
                 {
                     "candidate_id": candidate_id,
                     "reason": "candidate_diff_missing",
-                    "diff_ref": patch.get("diff_ref"),
+                    "diff_ref": diff_ref,
+                    "artifact_schema": artifact_schema,
                 }
             )
             continue
@@ -341,58 +376,126 @@ def _formal_candidate_diff_integrity(root: Path) -> tuple[str, dict[str, Any]]:
             campaign_dir,
             base.get("base_workspace_ref"),
         )
-        if base_workspace is not None and base_workspace.is_dir():
-            command = ["git", "apply", "--check", str(diff_path)]
-            cwd = base_workspace
-            validation_mode = "apply_check"
+        v3_diff_detail: dict[str, Any] = {}
+        if artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V3:
+            v3_diff_failures, v3_diff_detail = _v3_diff_integrity(
+                campaign_dir=campaign_dir,
+                candidate_id=candidate_id,
+                metadata=metadata,
+                base_workspace=base_workspace,
+                cumulative_diff_path=diff_path,
+            )
+            failures.extend(v3_diff_failures)
+        empty_v3_closure = (
+            artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V3
+            and replay_materialization.get("files") == []
+        )
+        if empty_v3_closure:
+            validation_mode = "empty_cumulative_closure"
+            result_returncode = 0
+            result_stderr = ""
+            try:
+                if diff_path.read_text(encoding="utf-8"):
+                    result_returncode = 1
+                    result_stderr = "empty replay closure has non-empty diff"
+            except OSError as exc:
+                result_returncode = 1
+                result_stderr = str(exc)
         else:
-            command = ["git", "apply", "--numstat", str(diff_path)]
-            cwd = campaign_dir
-            validation_mode = "parse_only_base_unavailable"
-        try:
-            result = subprocess.run(
-                command,
-                cwd=cwd,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=10,
-            )
-        except subprocess.TimeoutExpired as exc:
-            failures.append(
-                {
-                    "candidate_id": candidate_id,
-                    "reason": "git_apply_timeout",
-                    "validation_mode": validation_mode,
-                    "timeout_seconds": exc.timeout,
-                }
-            )
-            continue
-        except OSError as exc:
-            failures.append(
-                {
-                    "candidate_id": candidate_id,
-                    "reason": "git_apply_unavailable",
-                    "validation_mode": validation_mode,
-                    "error": str(exc),
-                }
-            )
-            continue
+            if base_workspace is not None and base_workspace.is_dir():
+                command = ["git", "apply", "--check", str(diff_path)]
+                cwd = base_workspace
+                validation_mode = "apply_check"
+            else:
+                command = ["git", "apply", "--numstat", str(diff_path)]
+                cwd = campaign_dir
+                validation_mode = "parse_only_base_unavailable"
+            try:
+                result = subprocess.run(
+                    command,
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=10,
+                )
+            except subprocess.TimeoutExpired as exc:
+                failures.append(
+                    {
+                        "candidate_id": candidate_id,
+                        "reason": "git_apply_timeout",
+                        "validation_mode": validation_mode,
+                        "timeout_seconds": exc.timeout,
+                    }
+                )
+                continue
+            except OSError as exc:
+                failures.append(
+                    {
+                        "candidate_id": candidate_id,
+                        "reason": "git_apply_unavailable",
+                        "validation_mode": validation_mode,
+                        "error": str(exc),
+                    }
+                )
+                continue
+            result_returncode = result.returncode
+            result_stderr = result.stderr.strip()
         validation = {
             "candidate_id": candidate_id,
-            "diff_ref": patch.get("diff_ref"),
+            "diff_ref": diff_ref,
+            "artifact_schema": artifact_schema,
             "validation_mode": validation_mode,
-            "returncode": result.returncode,
+            "returncode": result_returncode,
+            **v3_diff_detail,
         }
-        validations.append(validation)
-        if result.returncode != 0:
+        if result_returncode != 0:
             failures.append(
                 {
                     **validation,
                     "reason": "candidate_diff_not_replayable",
-                    "stderr": result.stderr.strip(),
+                    "stderr": result_stderr,
                 }
             )
+        if artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V3:
+            try:
+                with tempfile.TemporaryDirectory(
+                    prefix="scion-postrun-formal-replay-"
+                ) as temporary_dir:
+                    materialize_candidate_workspace(
+                        candidate={"candidate_id": candidate_id},
+                        candidate_patch=metadata,
+                        source_campaign_dir=campaign_dir,
+                        output_dir=temporary_dir,
+                        arm="postrun_acceptance",
+                    )
+            except (AssertionError, KeyError, OSError, TypeError, ValueError) as exc:
+                validation["materialization_status"] = "failed"
+                failures.append(
+                    {
+                        "candidate_id": candidate_id,
+                        "reason": "candidate_replay_materialization_invalid",
+                        "artifact_schema": artifact_schema,
+                        "error": str(exc),
+                    }
+                )
+            else:
+                validation["materialization_status"] = "ok"
+                validation["materialization_model"] = (
+                    "champion_base_plus_cumulative_replay_materialization"
+                )
+        validations.append(validation)
+
+    orphan_artifacts = sorted(
+        str(path) for path in disk_metadata_paths - indexed_metadata_paths
+    )
+    if orphan_artifacts:
+        failures.append(
+            {
+                "reason": "candidate_metadata_not_indexed",
+                "orphan_artifacts": orphan_artifacts,
+            }
+        )
 
     status = "ok" if validations and not failures else "failed"
     if not validations and not failures:
@@ -401,9 +504,108 @@ def _formal_candidate_diff_integrity(root: Path) -> tuple[str, dict[str, Any]]:
         "index_path": str(index_path),
         "checked_candidates": len(validations),
         "legacy_unbound_rows": legacy_unbound_rows,
+        "orphan_artifacts": orphan_artifacts,
         "validations": validations,
         "failures": failures,
     }
+
+
+def _v3_diff_integrity(
+    *,
+    campaign_dir: Path,
+    candidate_id: str,
+    metadata: Mapping[str, Any],
+    base_workspace: Path | None,
+    cumulative_diff_path: Path,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Bind both stored v3 diffs to their validated full-file entries."""
+
+    patch = _mapping_or_empty(metadata.get("patch"))
+    materialization = _mapping_or_empty(metadata.get("replay_materialization"))
+    proposal_diff_ref = patch.get("diff_ref")
+    proposal_diff_path = _campaign_artifact_path(
+        campaign_dir,
+        proposal_diff_ref,
+    )
+    detail = {
+        "proposal_diff_ref": proposal_diff_ref,
+        "proposal_diff_status": "failed",
+        "cumulative_diff_status": "failed",
+    }
+    failures: list[dict[str, Any]] = []
+    if base_workspace is None or not base_workspace.is_dir():
+        failures.append(
+            {
+                "candidate_id": candidate_id,
+                "reason": "candidate_diff_base_workspace_missing",
+            }
+        )
+        return failures, detail
+    if proposal_diff_path is None or not proposal_diff_path.is_file():
+        failures.append(
+            {
+                "candidate_id": candidate_id,
+                "reason": "proposal_diff_missing",
+                "diff_ref": proposal_diff_ref,
+            }
+        )
+    else:
+        proposal_files = patch.get("files")
+        try:
+            expected_proposal = render_full_file_replacement_diff(
+                proposal_files if isinstance(proposal_files, list) else (),
+                base_workspace=base_workspace,
+            )
+            actual_proposal = proposal_diff_path.read_text(encoding="utf-8")
+        except (OSError, TypeError, ValueError) as exc:
+            failures.append(
+                {
+                    "candidate_id": candidate_id,
+                    "reason": "proposal_diff_validation_failed",
+                    "error": str(exc),
+                }
+            )
+        else:
+            if actual_proposal != expected_proposal:
+                failures.append(
+                    {
+                        "candidate_id": candidate_id,
+                        "reason": "proposal_diff_content_mismatch",
+                        "diff_ref": proposal_diff_ref,
+                    }
+                )
+            else:
+                detail["proposal_diff_status"] = "ok"
+
+    materialization_files = materialization.get("files")
+    try:
+        expected_cumulative = render_full_file_replacement_diff(
+            materialization_files
+            if isinstance(materialization_files, list)
+            else (),
+            base_workspace=base_workspace,
+        )
+        actual_cumulative = cumulative_diff_path.read_text(encoding="utf-8")
+    except (OSError, TypeError, ValueError) as exc:
+        failures.append(
+            {
+                "candidate_id": candidate_id,
+                "reason": "candidate_diff_validation_failed",
+                "error": str(exc),
+            }
+        )
+    else:
+        if actual_cumulative != expected_cumulative:
+            failures.append(
+                {
+                    "candidate_id": candidate_id,
+                    "reason": "candidate_diff_content_mismatch",
+                    "diff_ref": materialization.get("diff_ref"),
+                }
+            )
+        else:
+            detail["cumulative_diff_status"] = "ok"
+    return failures, detail
 
 
 def _campaign_artifact_path(campaign_dir: Path, ref: Any) -> Path | None:
