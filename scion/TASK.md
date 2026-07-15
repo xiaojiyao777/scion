@@ -305,16 +305,24 @@ facts exactly: `441/328/28`, `377574 ms`, mean `856.18 ms`, candidate versus
 champion route-limit `0/95`, and repair-error `21/0`.
 
 The same repair gives each current H source path one full owner (unchanged
-champion or changed branch), aligns every patch prompt surface on one change
-object per file, records typed proposal trajectory surface/action/target facts,
-and retains statistical status/metric in durable branch evidence. It introduces
-no budget, truncation, retry, target mandate, or gate. The remaining blocker is
-fresh formal confirmation that a second H uses these compact causal facts
-without degrading the open research loop.
+champion or changed branch), records typed proposal trajectory
+surface/action/target facts, and retains statistical status/metric in durable
+branch evidence. Its initial one-change-object-per-file guidance was too narrow.
+R5 exposed that expression regression before solver execution: a substantive
+ejection-chain H was followed by a C patch that added a scheduler import but
+omitted both the function definition and operator registration. C9e correctly
+rejected the undefined import. R5 is terminal at `1H/1C`, retry=`0`, evaluated
+rounds=`0`; it provides no H2 or algorithm evidence.
 
-The focused repair shards, compileall, diff check, and final standard suite are
-green. The standard suite completed `1900 passed, 1 skipped` in `497.39s`;
-independent review reports P0/P1/P2=`0/0/0`.
+The current minimal repair restores ordered same-file `exact_replace` objects
+already supported by the deterministic host normalizer. It keeps original
+source-digest binding, rejects wrong order, stale digest, and mixed
+create/delete/full-file sequences, records valid serial composition as ordinary
+`typed_edit_normalization`, and leaves C9e unchanged. It introduces no budget,
+truncation, retry, target mandate, or gate. The focused repair shard passes
+`115` tests; compileall and diff check pass; the standard suite completes
+`1905 passed, 1 skipped` in `495.65s`; independent review reports
+P0/P1/P2=`0/0/0`.
 
 Preserve the excluded user-owned
 `scion/docs/v0.4-measurement-readiness.md` change and unrelated untracked
@@ -322,18 +330,17 @@ history.
 
 ## Immediate Queue
 
-1. Keep the distinct R5 confirmation root unchanged and unlaunched. It is
-   prepared-only at exact pushed commit `3fb2f9a7`; guarded-wrapper readiness,
-   clean-tree/runtime identity, environment-only proxy-key transfer, and the
-   pinned 81-file CVRP data identity are green without a provider call.
-2. Only after explicit operator launch authorization, pass
-   `SCION_SHARED_PROXY_KEY` in the process environment and execute the existing
-   prepared `run.sh` exactly once. Do not edit or regenerate the root.
-3. If launched, verify H2 receives the round-1 compact causal packet and the
-   semantically deduplicated current source. Do not force a
-   surface/action/target or reuse either rejected R4 candidate.
-4. Poll observationally at low frequency and perform the same terminal postrun
-   and independent audit before drawing an algorithm or framework conclusion.
+1. Commit and push the serial same-file typed-edit repair and R5 terminal
+   evidence while preserving excluded user files.
+2. Prepare and launch a distinct fresh R6 two-round CVRP root at the exact
+   clean pushed repair commit. Never resume or retry R5.
+3. If R1 evaluates, verify H2 receives the compact causal packet and the
+   semantically deduplicated complete current source. Do not force a
+   surface/action/target or reuse rejected R4/R5 implementations.
+4. Poll observationally at low frequency and perform terminal postrun plus
+   independent audit. If two evaluated rounds are insufficient to assess
+   longitudinal evidence use, use a distinct clean 4- or 8-round experiment;
+   extra rounds are not retries or a semantic budget.
 
 Do not close v0.4 merely because framework tests pass. Close it only after both
 formal controls show that the simplified agent performs useful research without
@@ -349,9 +356,10 @@ reintroducing governance noise.
   minutes, or 2--5 minutes when justified by state), never a trigger for
   another provider attempt;
 - ordinary exact-replace materialization may record
-  `typed_edit_normalization`; any `typed_edit_noop_dropped` or
-  `patch_set_composition` makes the run characterization-only unless the raw
-  response and canonical patch receive explicit human review;
+  `typed_edit_normalization`, including
+  `composed_serial_exact_replace_changes`; any `typed_edit_noop_dropped` or
+  non-serial `patch_set_composition` makes the run characterization-only unless
+  the raw response and canonical patch receive explicit human review;
 - no formal run from a dirty tree or stale prepared root;
 - preserve unrelated dirty files;
 - stage/commit/push only with explicit user authorization.
@@ -380,3 +388,5 @@ reintroducing governance noise.
   `scion/docs/experiments/v0.4/v04-cvrp-direct-open-control-r4-postrun-20260715.md`
 - CVRP R5 prepared-only audit:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r5-prelaunch-20260715.md`
+- CVRP R5 terminal postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r5-postrun-20260715.md`

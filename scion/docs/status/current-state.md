@@ -19,9 +19,9 @@ a provider-schema/Contract interface mismatch before any solver evaluation.
 The repair is pushed at `ff14318c`; a distinct R4 root at that exact runtime is
 now terminal, complete, and valid after two evaluated algorithm rounds. It was
 not retried and must not be resumed or reused. The causal-feedback repair is
-pushed at `3fb2f9a7`, and a distinct R5 root is prepared-only at that exact
-clean runtime. R5 has made no live completion or provider call and requires a
-separate explicit operator launch decision.
+pushed at `3fb2f9a7`. Its distinct R5 root launched exactly once, then became
+terminal after the first Code patch failed C9e before solver execution. R5 has
+no evaluated round or H2 and must not be resumed or retried.
 
 ## Current Decision
 
@@ -72,23 +72,28 @@ route-limit `0/95`, and repair-error `21/0`.
 Second-round H source is also semantically deduplicated: unchanged paths remain
 complete champion source, while changed/new paths remain complete branch-current
 source, with deleted paths represented explicitly. Patch tool/schema/error
-guidance now consistently requests one change object per file while retaining
-host compatibility normalization. Durable proposal attempts carry a compact
-typed surface/action/target fingerprint, with old v1 rows still readable and a
-missing `create_new` target represented as null/unknown rather than a fake
-path. Statistical status and metric are retained with CI in branch evidence.
+guidance initially requested one change object per file. R5 showed that this
+made two non-contiguous edits per file unnecessarily hard to express: C added a
+new scheduler import but omitted the corresponding function and registration.
+C9e correctly rejected the undefined import. The current repair restores
+ordered same-file `exact_replace` composition with original source binding;
+wrong order, stale digest, and mixed create/delete/full-file sequences fail
+closed. Valid serial composition is ordinary typed normalization, not a retry
+or semantic host repair. Durable proposal attempts still carry compact typed
+surface/action/target facts, and statistical status/metric remain with CI.
 None of these facts enter `SafeFeatureExtractor`, Protocol gates, scheduler, or
-promotion logic. Independent review is P0/P1/P2=`0/0/0`.
+promotion logic.
 
 The final standard suite completed `1900 passed, 1 skipped` in `497.39s`.
 Compileall, diff check, focused proposal/trajectory/context tests, Protocol/CVRP
 tests, and the R4 raw-metrics replay are green.
 
-The distinct two-round CVRP R5 confirmation root is prepared-only at exact
-pushed commit `3fb2f9a7`. Guarded-wrapper readiness is green without a provider
-call. It has not been launched; its prepared bytes, runtime, manifest, and data
-identity must remain unchanged, and launching remains a separate explicit
-operator decision.
+The R5 root is terminal at exact pushed runtime `3fb2f9a7`: wrapper and postrun
+exit 0, but campaign validity is `invalid_research_rejected_only`. It made
+exactly `1H/1C`, no retry, and zero solver/Protocol evaluations. The current
+repair passes `115` affected tests and the full suite at
+`1905 passed, 1 skipped` in `495.65s`; compileall/diff-check are green and
+independent review is P0/P1/P2=`0/0/0`.
 
 A separate audit found that forced diagnostics emit `forced_research_target`
 while part of the governance/C0 path still looks for legacy
@@ -126,7 +131,7 @@ Terminal CVRP R4 algorithm-control root:
 
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r4-2r-gpt56sol-20260714T234816Z-claw`
 
-Prepared-only CVRP R5 causal-feedback confirmation root:
+Terminal CVRP R5 patch-contract root:
 
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-causal-feedback-r5-2r-gpt56sol-20260715T141236Z-claw`
 
@@ -151,11 +156,10 @@ The CVRP R4 root is also terminal. It completed normally and contains valid
 negative algorithm evidence. Do not resume it, reuse either cumulative
 candidate, or create a third round inside the root.
 
-The CVRP R5 root is prepared-only at clean detached runtime `3fb2f9a7`.
-Guarded-wrapper readiness is true; the exact 81-file data identity and generated
-script SHA are pinned. It has no `pid`, exit record, completion receipt,
-campaign output, or provider call. Do not edit or launch it without explicit
-operator authorization.
+The CVRP R5 root is terminal at clean detached runtime `3fb2f9a7`. It completed
+wrapper/postrun reporting but stopped on first-round Patch Contract before
+Workspace, Verification, Protocol, or solver execution. Do not edit, resume,
+retry, or relaunch it.
 
 ## CVRP R3 Outcome
 
@@ -236,6 +240,42 @@ updates, and time. Yet the generic summary reports `mechanism_evidence={}` and
 do not add a gate, target mandate, budget, or truncation. Secondary cleanup is
 second-round context duplication, one-change-object-per-file guidance, and
 trajectory fields currently emitted as `unknown`.
+
+## CVRP R5 Outcome
+
+- runtime/root: clean detached `3fb2f9a7` at
+  `/home/clawd/research/scion-experiments/v04-cvrp-direct-causal-feedback-r5-2r-gpt56sol-20260715T141236Z-claw`;
+- terminal state: wrapper exit 0, campaign incomplete,
+  `invalid_research_rejected_only`;
+- provider accounting: H=`1`, C=`1`, attempts=`2`, retry=`0`;
+- evaluated rounds/candidates/solver pairs: `0/0/0`;
+- postrun: 28 `ok`, 3 `skipped`, no required/optional failure, lineage
+  complete, conclusion eligibility `ineligible_zero_evaluated`;
+- completion preflight: authenticated, HTTP 200, non-empty;
+- force surface/action/target: empty; secret persisted: none.
+
+H1 proposed a substantive bounded ejection-chain repair in
+`destroy_repair.py`. C1 added `_route_distance` and a check-limit constant,
+then made scheduler import `_ejection_chain_insertion`, but never defined that
+function or registered it in `repair_ops`. C9e passed 18/19 structural checks
+and correctly rejected the missing import symbol. Host materialization saw all
+returned edits; this was not a stale-source or Workspace defect. There is no
+algorithm-quality result.
+
+The response was complete, schema-valid, and untruncated. C received 22,460
+input tokens / 95,351 provider-visible chars, provider-managed output with no
+ceiling, and all 11 unique complete SourceLedger files. The direct target,
+scheduler, and state sources were fully present. The immediate error was a Code
+model omission, amplified by the new one-change-object-per-file instruction:
+the H required target import+function and scheduler import+registration at
+non-contiguous locations.
+
+The minimal repair restores the deterministic host's existing ordered
+same-file `exact_replace` capability and classifies valid serial composition as
+ordinary `typed_edit_normalization`. It rejects wrong order, stale digest, and
+same-file create/delete/full-file mixtures while preserving C9e. It adds no
+retry, budget, truncation, or gate. R5 has no H2 and therefore does not validate
+the causal packet or semantic source deduplication; only a fresh R6 can do so.
 
 ## Formal R3 Evidence
 
@@ -428,12 +468,13 @@ green.
 
 ## Worktree State
 
-- branch: `v0.4-dev`; causal-feedback repair commit `3fb2f9a7` is pushed and is
-  the clean detached runtime for the prepared-only R5 root;
-- intended changes now: the R5 prelaunch audit, `TASK.md`, and this file;
-- final repair verification is green: the standard suite passes
-  `1900 passed, 1 skipped` in `497.39s`; independent latest-diff review reports
-  P0/P1/P2=`0/0/0`; compileall and `git diff --check` pass;
+- branch: `v0.4-dev`; causal-feedback commit `3fb2f9a7` is pushed and is the
+  clean detached runtime for terminal R5;
+- intended changes now: serial same-file typed-edit repair, its regression
+  tests, R5 terminal postrun, `TASK.md`, and this file;
+- final repair verification is green: `115` affected tests and the standard
+  suite pass (`1905 passed, 1 skipped` in `495.65s`); independent latest-diff
+  review reports P0/P1/P2=`0/0/0`; compileall and `git diff --check` pass;
 - `scion/docs/v0.4-measurement-readiness.md` is a pre-existing user-owned
   tracked change and must remain excluded;
 - unrelated untracked historical/future documents must remain excluded;
@@ -441,19 +482,20 @@ green.
   `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-1978b426`;
 - the terminal CVRP R4 root uses clean detached runtime
   `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-ff14318c`;
-- the prepared-only CVRP R5 root uses clean detached runtime
+- the terminal CVRP R5 root uses clean detached runtime
   `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-3fb2f9a7`.
 
 ## Resume Actions
 
-1. Keep the prepared R5 root unchanged and unlaunched until explicit operator
-   authorization.
-2. If authorized, provide `SCION_SHARED_PROXY_KEY` through the process
-   environment and execute the existing prepared `run.sh` exactly once.
-3. Poll only at low frequency; after terminal completion, verify H2's compact
-   causal packet and semantically deduplicated complete current source.
-4. Run terminal postrun and independent evidence audit before drawing an
-   algorithm or framework conclusion. Never resume or reuse R4.
+1. Commit and push the serial same-file typed-edit repair and R5 terminal
+   evidence, excluding user-owned files.
+2. Prepare and launch a distinct fresh R6 two-round CVRP root from the exact
+   clean pushed commit. Never resume or retry R5.
+3. Poll only at low frequency; if R1 evaluates, verify H2's compact causal
+   packet and semantically deduplicated complete current source.
+4. Run terminal postrun and independent evidence audit. If two evaluated rounds
+   are insufficient for longitudinal assessment, use a distinct clean 4- or
+   8-round experiment; extra rounds are not retries or a semantic budget.
 
 ## Runner Notes
 
@@ -484,3 +526,5 @@ and preflight check.
   `scion/docs/experiments/v0.4/v04-cvrp-direct-open-control-r4-postrun-20260715.md`
 - CVRP R5 prepared-only audit:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r5-prelaunch-20260715.md`
+- CVRP R5 terminal postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-causal-feedback-r5-postrun-20260715.md`

@@ -46,14 +46,15 @@ _PATCH_RESPONSE = {
 }
 
 
-def test_patch_tool_consistently_requests_one_change_object_per_file() -> None:
-    guidance = "exactly one change object per file_path"
+def test_patch_tool_consistently_supports_ordered_same_file_exact_replace() -> None:
+    guidance = "multiple ordered exact_replace change objects"
     assert guidance in PATCH_TOOL["description"]
     assert guidance in (
         PATCH_TOOL["input_schema"]["properties"]["additional_changes"][
             "description"
         ]
     )
+    assert "exactly one change object per file_path" not in PATCH_TOOL["description"]
 
 
 class _CaptureClient:

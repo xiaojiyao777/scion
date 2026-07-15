@@ -444,6 +444,19 @@ def _validate_same_file_action_sequence(
             prior_change_pointers=tuple(prior.json_pointers),
             detail="create mixed with modify/delete cannot be safely composed",
         )
+    next_intent = _effective_edit_intent(slot.raw)
+    intents = [*prior.intents, next_intent]
+    if len(intents) > 1 and "full_file" in intents:
+        _raise_duplicate_file_error(
+            reason="mixed_same_file_edit_intents",
+            file_path=file_path,
+            change_pointer=slot.pointer,
+            prior_change_pointers=tuple(prior.json_pointers),
+            detail=(
+                "full_file cannot be mixed with another same-file change; "
+                "emit one full_file object or ordered exact_replace objects"
+            ),
+        )
 
 
 def _validate_same_file_full_file_sequence(
@@ -504,12 +517,27 @@ def _composition_metadata(
     for record in composed_by_path.values():
         if len(record.json_pointers) < 2:
             continue
+        serial_exact_replace = all(
+            intent == "exact_replace" for intent in record.intents
+        )
         metadata.append(
             {
                 "field": "patch_set_change",
-                "repair_kind": "patch_set_composition",
-                "root_cause": "duplicate_file_path",
-                "action": "composed_duplicate_file_changes",
+                "repair_kind": (
+                    "typed_edit_normalization"
+                    if serial_exact_replace
+                    else "patch_set_composition"
+                ),
+                "root_cause": (
+                    "serial_same_file_exact_replace"
+                    if serial_exact_replace
+                    else "duplicate_file_path"
+                ),
+                "action": (
+                    "composed_serial_exact_replace_changes"
+                    if serial_exact_replace
+                    else "composed_duplicate_file_changes"
+                ),
                 "file_path": record.path,
                 "canonical_json_pointer": record.json_pointers[0],
                 "source_json_pointers": list(record.json_pointers),

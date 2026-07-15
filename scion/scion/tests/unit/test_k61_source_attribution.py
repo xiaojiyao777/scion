@@ -75,25 +75,49 @@ def _multi_file_patch(primary: str, integration: str):
             "action": "modify",
             "edit_intent": "exact_replace",
             "source_digest": source_digest_for_content(primary),
-            "old_string": "return 1",
-            "new_string": "return 2",
+            "old_string": "def solve():",
+            "new_string": "def solve(value=0):",
             "replace_all": False,
             "content_after": None,
             "full_file_reason": "",
             "evidence_refs": [],
             "additional_changes": [
                 {
-                    "file_path": "scheduler.py",
+                    "file_path": "solver.py",
                     "action": "modify",
                     "edit_intent": "exact_replace",
-                    "source_digest": source_digest_for_content(integration),
-                    "old_string": "return 1",
-                    "new_string": "return 3",
+                    "source_digest": source_digest_for_content(primary),
+                    "old_string": "def solve(value=0):\n    return 1",
+                    "new_string": "def solve(value=0):\n    return 2",
                     "replace_all": False,
                     "content_after": None,
                     "full_file_reason": "",
                     "evidence_refs": [],
-                }
+                },
+                {
+                    "file_path": "scheduler.py",
+                    "action": "modify",
+                    "edit_intent": "exact_replace",
+                    "source_digest": source_digest_for_content(integration),
+                    "old_string": "def schedule():",
+                    "new_string": "def schedule(value=0):",
+                    "replace_all": False,
+                    "content_after": None,
+                    "full_file_reason": "",
+                    "evidence_refs": [],
+                },
+                {
+                    "file_path": "scheduler.py",
+                    "action": "modify",
+                    "edit_intent": "exact_replace",
+                    "source_digest": source_digest_for_content(integration),
+                    "old_string": "def schedule(value=0):\n    return 1",
+                    "new_string": "def schedule(value=0):\n    return 3",
+                    "replace_all": False,
+                    "content_after": None,
+                    "full_file_reason": "",
+                    "evidence_refs": [],
+                },
             ],
             "test_hint": None,
         },
@@ -232,6 +256,19 @@ def test_direct_multi_file_source_attribution_survives_artifact_and_fixed_replay
     assert {
         event["repair_kind"] for event in normalization_events
     } == {"typed_edit_normalization", "typed_edit_noop_dropped"}
+    serial_events = [
+        event
+        for event in normalization_events
+        if event.get("action") == "composed_serial_exact_replace_changes"
+    ]
+    assert {event["file_path"] for event in serial_events} == {
+        "solver.py",
+        "scheduler.py",
+    }
+    assert not any(
+        event.get("repair_kind") == "patch_set_composition"
+        for event in normalization_events
+    )
     assert any(
         event == {
             "repair_kind": "typed_edit_noop_dropped",

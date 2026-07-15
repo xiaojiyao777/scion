@@ -177,8 +177,9 @@ def _unknown_patch_fields_message(
         f"Unsupported patch field(s) at {pointer}: {rendered}. "
         "Do not emit ad hoc edit fields such as old_string2/new_string2. "
         "For extra file edits, put each edit object in additional_changes[]. "
-        "Emit exactly one change object per file_path across the top-level "
-        "change and additional_changes. Compose same-file edits into one "
-        "exact_replace when practical; otherwise use one full_file change "
-        "containing the complete final content. Do not repeat a file_path."
+        "When one existing file needs multiple non-contiguous edits, emit "
+        "multiple ordered exact_replace change objects for the same file_path "
+        "and bind each to the original visible source_digest. The host applies "
+        "and composes them serially. Do not mix same-file exact_replace edits "
+        "with create, delete, or full_file; use one full_file change instead."
     )
