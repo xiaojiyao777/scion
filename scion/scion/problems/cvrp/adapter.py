@@ -79,6 +79,13 @@ class CvrpAdapter:
 
         return CvrpResearchGuidanceProvider()
 
+    def proposal_mechanism_evidence_provider(self) -> Any:
+        from scion.problems.cvrp.proposal_mechanism_evidence import (
+            CvrpProposalMechanismEvidenceProvider,
+        )
+
+        return CvrpProposalMechanismEvidenceProvider()
+
     def active_research_surface_names(self) -> tuple[str, ...]:
         return ACTIVE_RESEARCH_SURFACE_NAMES
 

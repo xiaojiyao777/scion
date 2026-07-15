@@ -268,6 +268,15 @@ def test_direct_success_records_one_durable_attempt_per_provider_call(
     assert hypothesis_terminal["patch_digest"] is None
     assert code_started["patch_digest"] is None
     assert len(code_terminal["patch_digest"]) == 64
+    expected_fingerprint = {
+        "selected_surface": hypothesis.change_locus,
+        "action": hypothesis.action,
+        "target_file": hypothesis.target_file,
+    }
+    assert "proposal_fingerprint" not in hypothesis_started
+    assert hypothesis_terminal["proposal_fingerprint"] == expected_fingerprint
+    assert code_started["proposal_fingerprint"] == expected_fingerprint
+    assert code_terminal["proposal_fingerprint"] == expected_fingerprint
     assert hypothesis_started["runtime_mode"] == "direct_v3"
     assert hypothesis_started["anchors"]["problem_id"] == problem_id
     assert hypothesis_started["anchors"]["split_manifest_hash"] == "split-hash"
@@ -296,6 +305,27 @@ def test_direct_success_records_one_durable_attempt_per_provider_call(
     assert phase_refs["code"] is ref
     assert pipeline.pop_proposal_attempt_ref(branch.branch_id) is ref
     assert branch.branch_id not in pipeline.proposal_attempt_refs
+
+
+def test_create_new_without_target_preserves_missing_trajectory_target() -> None:
+    registry = MemoryLineageRegistry()
+    creative = ReceiptCreative()
+    creative.hypothesis.target_file = None
+    pipeline, branch, _runtime, _failures, _balance = _pipeline(
+        creative=creative,
+        lineage_registry=registry,
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is not None
+    assert record is not None
+    terminal = _attempt_payload(registry.events[1])
+    assert terminal["proposal_fingerprint"] == {
+        "selected_surface": "local_search",
+        "action": "create_new",
+        "target_file": None,
+    }
 
 
 @pytest.mark.parametrize(

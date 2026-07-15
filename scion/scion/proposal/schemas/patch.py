@@ -396,9 +396,10 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
                 "solver_design module additions that also need scheduler or "
                 "entrypoint integration. Each change is independently checked "
                 "by Contract and applied in the same tainted candidate workspace. "
-                "For multiple edits to one file, prefer one file change, or use "
-                "serializable exact_replace typed edits for that same file_path. "
-                "Do not emit conflicting full_file entries for the same file."
+                "Emit exactly one change object per file_path across the top-level "
+                "change and additional_changes. Compose same-file edits into one "
+                "exact_replace when practical; otherwise use one full_file change "
+                "containing the complete final content. Do not repeat a file_path."
             ),
             "items": {
                 "type": "object",

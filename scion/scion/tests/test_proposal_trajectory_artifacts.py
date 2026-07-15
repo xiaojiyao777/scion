@@ -48,6 +48,12 @@ def test_manifest_uses_direct_attempts_and_formal_candidates_only(
         "zero_evaluated_attempt_count": 1,
     }
     assert manifest["call_kind_counts"] == {"code": 1, "hypothesis": 1}
+    assert manifest["proposal_distributions"] == {
+        "selected_surface": {"solver_design": 2},
+        "action": {"modify": 2},
+        "target_file": {"policies/baseline_modules/scheduler.py": 2},
+        "mechanism_id": {},
+    }
     assert manifest["coverage"]["missing_join_count"] == 1
     assert manifest["source_indexes"] == {
         "formal_candidate_index_ref": "artifacts/formal_candidates/index.jsonl",
@@ -169,6 +175,65 @@ def test_manifest_classifies_started_only_attempt_without_forging_terminal(
     assert attempt["terminal_status"] == "started"
     assert attempt["postrun_classification"] == "unrecovered_in_flight"
     assert [phase["status"] for phase in attempt["phases"]] == ["started"]
+
+
+def test_manifest_keeps_old_v1_attempts_without_fingerprint_compatible(
+    tmp_path: Path,
+) -> None:
+    campaign_dir = tmp_path / "campaign"
+    campaign_dir.mkdir()
+    legacy_rows = []
+    for event_id, raw in _attempt_pair(
+        attempt_id="legacy-attempt",
+        phase="hypothesis",
+        hypothesis_id="legacy-hypothesis",
+    ):
+        payload = json.loads(raw)
+        payload.pop("proposal_fingerprint", None)
+        legacy_rows.append((event_id, json.dumps(payload)))
+    _write_attempt_db(campaign_dir / "scion.db", legacy_rows)
+
+    manifest = build_proposal_trajectory_manifest(
+        campaign_dir,
+        observed_control_arm="on",
+        generated_at="2026-07-12T00:00:00+00:00",
+    )
+
+    assert manifest["counts"]["attempt_count"] == 1
+    assert manifest["proposal_distributions"]["selected_surface"] == {
+        "unknown": 1
+    }
+
+
+def test_manifest_reports_missing_create_target_as_unknown_not_string_none(
+    tmp_path: Path,
+) -> None:
+    campaign_dir = tmp_path / "campaign"
+    campaign_dir.mkdir()
+    rows = []
+    for event_id, raw in _attempt_pair(
+        attempt_id="create-attempt",
+        phase="hypothesis",
+        hypothesis_id="create-hypothesis",
+    ):
+        payload = json.loads(raw)
+        if "proposal_fingerprint" in payload:
+            payload["proposal_fingerprint"].update(
+                action="create_new",
+                target_file=None,
+            )
+        rows.append((event_id, json.dumps(payload)))
+    _write_attempt_db(campaign_dir / "scion.db", rows)
+
+    manifest = build_proposal_trajectory_manifest(
+        campaign_dir,
+        observed_control_arm="on",
+        generated_at="2026-07-12T00:00:00+00:00",
+    )
+
+    assert manifest["proposal_distributions"]["action"] == {"create_new": 1}
+    assert manifest["proposal_distributions"]["target_file"] == {"unknown": 1}
+    assert "None" not in json.dumps(manifest["proposal_distributions"])
 
 
 @pytest.mark.parametrize(
@@ -437,6 +502,11 @@ def _attempt_payload(
         "hypothesis_id": hypothesis_id,
         "hypothesis_digest": f"hypothesis-digest-{hypothesis_id}",
         "patch_digest": "patch-digest-code" if phase == "code" else None,
+        "proposal_fingerprint": {
+            "selected_surface": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/scheduler.py",
+        },
         "prompt_call": {
             "request_kind": phase,
             "context_digest": f"context-digest-{attempt_id}-{phase}",
@@ -501,6 +571,7 @@ def _attempt_pair(
     if phase == "hypothesis":
         started["hypothesis_id"] = None
         started["hypothesis_digest"] = None
+        started.pop("proposal_fingerprint", None)
     started["prompt_call"].update(
         trace_ref=None,
         prompt_manifest_ref=None,

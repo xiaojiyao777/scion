@@ -236,3 +236,5 @@ def test_patch_rejects_unknown_edit_fields_with_additional_changes_guidance():
     assert "old_string2" in message
     assert "new_string2" in message
     assert "additional_changes[]" in message
+    assert "exactly one change object per file_path" in message
+    assert "same file_path" not in message

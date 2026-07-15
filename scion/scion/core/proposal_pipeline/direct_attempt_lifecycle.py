@@ -50,7 +50,7 @@ class DirectAttemptState:
     phase_attempt_refs: dict[str, dict[str, Mapping[str, Any]]] = field(
         default_factory=dict
     )
-    approved_hypothesis_bindings: dict[str, Mapping[str, str]] = field(
+    approved_hypothesis_bindings: dict[str, Mapping[str, Any]] = field(
         default_factory=dict
     )
     execution_outcomes: dict[str, ExecutionOutcomeRecord] = field(
@@ -277,6 +277,7 @@ class DirectAttemptLifecycle:
         *,
         hypothesis_id: str,
         hypothesis_digest: str,
+        hypothesis: HypothesisProposal | None = None,
     ) -> None:
         hypothesis_attempt_id = self.state.attempt_ids[branch_id]
         self.state.hypothesis_ids[branch_id] = hypothesis_id
@@ -285,6 +286,7 @@ class DirectAttemptLifecycle:
             "hypothesis_digest": hypothesis_digest,
             "hypothesis_attempt_id": hypothesis_attempt_id,
             "last_attempt_id": hypothesis_attempt_id,
+            "proposal_fingerprint": _hypothesis_proposal_fingerprint(hypothesis),
         }
 
     def discard_approved_binding(self, branch_id: str) -> None:
@@ -430,6 +432,13 @@ class DirectAttemptLifecycle:
             if patch is not None
             else None
         )
+        proposal_fingerprint = _hypothesis_proposal_fingerprint(hypothesis)
+        if not proposal_fingerprint and phase == "code":
+            binding = state.approved_hypothesis_bindings.get(bid)
+            if isinstance(binding, Mapping):
+                proposal_fingerprint = dict(
+                    binding.get("proposal_fingerprint") or {}
+                )
         payload = {
             "schema_version": "proposal-attempt-transition.v1",
             "attempt_id": state.attempt_ids[bid],
@@ -459,6 +468,8 @@ class DirectAttemptLifecycle:
                 prompt_call
             ),
         }
+        if proposal_fingerprint:
+            payload["proposal_fingerprint"] = proposal_fingerprint
         attempt_kind = state.attempt_kinds.get(bid)
         if attempt_kind is not None:
             payload["attempt_kind"] = attempt_kind
@@ -759,6 +770,22 @@ class DirectAttemptLifecycle:
         cache = getattr(self.owner, "_proposal_session_ref_cache", None)
         if isinstance(cache, dict):
             cache.pop(branch_id, None)
+
+
+def _hypothesis_proposal_fingerprint(
+    hypothesis: HypothesisProposal | None,
+) -> dict[str, Any]:
+    if hypothesis is None:
+        return {}
+    return {
+        "selected_surface": str(hypothesis.change_locus),
+        "action": str(hypothesis.action),
+        "target_file": (
+            str(hypothesis.target_file)
+            if hypothesis.target_file is not None
+            else None
+        ),
+    }
 
 
 def _prompt_call_payload(receipt: PromptCallReceipt | None) -> dict[str, Any] | None:

@@ -295,12 +295,26 @@ correctly failed screening. Round 1 was uncertain; round 2 was significantly
 negative. Neither candidate may be promoted, resumed, or retried.
 
 R4 proves the open agent loop can perform substantive algorithm development and
-evidence-driven iteration without governance noise. The current blocker is now
-problem-owned causal feedback quality: existing ALNS operator trace is not
-projected into compact mechanism evidence, so the next H cannot reliably see
-activation, acceptance, best-update, repair-error, route-limit, and per-operator
-runtime effects. Do not compensate with a heavier gate, forced targeting,
-budget, truncation, or another blind experiment.
+evidence-driven iteration without governance noise. Its narrow feedback repair
+is implemented in the commit containing this document. A CVRP-owned provider
+aggregates every valid ALNS repair trace into proposal-only attempts,
+acceptance, best-update, elapsed-time, repair-error, and route-limit facts. The
+generic layer only dispatches and marks the packet as excluded from
+DecisionFeatures and gates. R4 raw metrics reproduce the expected round-2 pair
+facts exactly: `441/328/28`, `377574 ms`, mean `856.18 ms`, candidate versus
+champion route-limit `0/95`, and repair-error `21/0`.
+
+The same repair gives each current H source path one full owner (unchanged
+champion or changed branch), aligns every patch prompt surface on one change
+object per file, records typed proposal trajectory surface/action/target facts,
+and retains statistical status/metric in durable branch evidence. It introduces
+no budget, truncation, retry, target mandate, or gate. The remaining blocker is
+fresh formal confirmation that a second H uses these compact causal facts
+without degrading the open research loop.
+
+The focused repair shards, compileall, diff check, and final standard suite are
+green. The standard suite completed `1900 passed, 1 skipped` in `497.39s`;
+independent review reports P0/P1/P2=`0/0/0`.
 
 Preserve the excluded user-owned
 `scion/docs/v0.4-measurement-readiness.md` change and unrelated untracked
@@ -308,15 +322,16 @@ history.
 
 ## Immediate Queue
 
-1. Add a compact CVRP-owned, proposal-only causal summary from ALNS iteration
-   trace: per repair attempts/acceptance/best updates/time plus route-limit and
-   repair-error deltas. Keep it informational and non-gating.
-2. Deduplicate second-round context so branch-current code does not redundantly
-   carry the unchanged champion source; do not impose a size budget or truncate.
-3. Require one change object per file in the patch-tool description, and repair
-   postrun trajectory fields currently reported as `unknown`.
-4. Validate those narrow repairs, then prepare a fresh root. Do not reuse the
-   rejected pair-repair candidate or launch another campaign automatically.
+1. Prepare a distinct fresh two-round CVRP confirmation root at the exact pushed
+   repair commit. Preparation only: do not launch automatically.
+2. Recheck guarded-wrapper readiness, clean-tree/runtime-commit identity,
+   environment-only proxy key transfer, and the pinned 81-file CVRP data
+   identity before any operator launch decision.
+3. If the operator launches it, verify H2 receives the round-1 compact causal
+   packet and the semantically deduplicated current source. Do not force a
+   surface/action/target or reuse either rejected R4 candidate.
+4. Poll observationally at low frequency and perform the same terminal postrun
+   and independent audit before drawing an algorithm or framework conclusion.
 
 Do not close v0.4 merely because framework tests pass. Close it only after both
 formal controls show that the simplified agent performs useful research without

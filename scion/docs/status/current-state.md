@@ -55,6 +55,36 @@ mutation, retry/backoff, truncation, forced targeting, or agent/token/output
 budget control. Both candidates failed the correct screening rule; champion v1
 was not modified or promoted.
 
+The R4 feedback/attribution repair is integrated in the commit containing this
+document. CVRP now owns a compact ALNS proposal-evidence provider; generic
+Protocol code passes only valid paired runtime mappings and marks the resulting
+packet proposal-visible, decision-feature-excluded, and non-gating. It retains
+all repair names and measured attempts, accepted uses, best updates, elapsed
+time, route-limit, and repair-error counts without top-k selection, a size
+budget, summary substitution, or truncation. Offline replay against both R4 raw
+metrics exactly reproduces the audited gold values, including round-2 pair
+`441/328/28`, total `377574 ms`, mean `856.18 ms`, candidate/champion
+route-limit `0/95`, and repair-error `21/0`.
+
+Second-round H source is also semantically deduplicated: unchanged paths remain
+complete champion source, while changed/new paths remain complete branch-current
+source, with deleted paths represented explicitly. Patch tool/schema/error
+guidance now consistently requests one change object per file while retaining
+host compatibility normalization. Durable proposal attempts carry a compact
+typed surface/action/target fingerprint, with old v1 rows still readable and a
+missing `create_new` target represented as null/unknown rather than a fake
+path. Statistical status and metric are retained with CI in branch evidence.
+None of these facts enter `SafeFeatureExtractor`, Protocol gates, scheduler, or
+promotion logic. Independent review is P0/P1/P2=`0/0/0`.
+
+The final standard suite completed `1900 passed, 1 skipped` in `497.39s`.
+Compileall, diff check, focused proposal/trajectory/context tests, Protocol/CVRP
+tests, and the R4 raw-metrics replay are green.
+
+No new experiment has been prepared or launched. The next operational action is
+prepare-only for a distinct fresh two-round CVRP confirmation root at the exact
+pushed repair commit; launching remains a separate operator decision.
+
 A separate audit found that forced diagnostics emit `forced_research_target`
 while part of the governance/C0 path still looks for legacy
 `forced_surface`/`forced_action`/`forced_target_file` keys. It did not affect

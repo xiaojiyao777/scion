@@ -189,6 +189,7 @@ class ProposalPipeline(ProposalRecordMixin):
             bid,
             hypothesis_id=hypothesis_record.hypothesis_id,
             hypothesis_digest=hypothesis_digest,
+            hypothesis=hypothesis,
         )
         post_provider_stage["value"] = "hypothesis_transition_commit"
         if not self._direct_attempts.commit(

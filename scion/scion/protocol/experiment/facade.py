@@ -59,6 +59,7 @@ class ExperimentProtocol:
         self._require_metric_specs = require_metric_specs
         self._allow_legacy_objective_fallback = allow_legacy_objective_fallback
         self._problem_spec = problem_spec
+        self._problem_adapter: Any | None = None
         self._strict_case_paths = (
             bool(require_metric_specs)
             if strict_case_paths is None
@@ -93,6 +94,11 @@ class ExperimentProtocol:
                 "objective fallback"
             )
         os.makedirs(metrics_dir, exist_ok=True)
+
+    def set_problem_adapter(self, adapter: Any | None) -> None:
+        """Attach the campaign adapter for optional problem-owned projections."""
+
+        self._problem_adapter = adapter
 
     def set_progress_callback(self, callback: Optional[Callable[..., None]]) -> None:
         """Register a lightweight progress hook for long validation/frozen runs."""

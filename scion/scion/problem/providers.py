@@ -91,6 +91,19 @@ class ActiveSubjectCodeConstraintProvider(Protocol):
         """Return provider-owned code-stage object-model/API constraints."""
 
 
+class ProposalMechanismEvidenceProvider(Protocol):
+    """Optional problem-owned projection of measured runtime mechanism facts."""
+
+    def summarize_proposal_mechanism_evidence(
+        self,
+        *,
+        stage: str,
+        selected_surface: str | None,
+        runtime_pairs: Sequence[Mapping[str, Any]],
+    ) -> Mapping[str, Any]:
+        """Return a compact proposal-visible evidence payload."""
+
+
 def resolve_active_subject_policy_provider(
     *,
     problem_spec: Any = None,
@@ -361,6 +374,20 @@ def resolve_solver_design_prompt_provider(
             "proposal_prompt_provider",
             "prompt_provider",
         ),
+    )
+
+
+def resolve_proposal_mechanism_evidence_provider(
+    *,
+    problem_spec: Any = None,
+    adapter: Any = None,
+) -> Any | None:
+    """Return an optional problem-owned runtime-to-proposal evidence provider."""
+
+    return _resolve_provider(
+        problem_spec=problem_spec,
+        adapter=adapter,
+        factory_names=("proposal_mechanism_evidence_provider",),
     )
 
 
@@ -686,12 +713,14 @@ __all__ = [
     "ActiveSubjectPolicyProvider",
     "ActiveSubjectTaxonomyProvider",
     "ProblemProviderError",
+    "ProposalMechanismEvidenceProvider",
     "SolverDesignPromptProvider",
     "active_subject_policy_matches_path",
     "active_subject_code_constraints_payload",
     "active_subject_policy_payload",
     "active_subject_taxonomy_payload",
     "resolve_active_subject_policy_provider",
+    "resolve_proposal_mechanism_evidence_provider",
     "resolve_solver_design_prompt_provider",
     "typed_research_question_payload",
 ]

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import sqlite3
 from collections import Counter
 from collections.abc import Mapping
@@ -28,8 +29,16 @@ _ATTEMPT_REQUIRED_FIELDS = frozenset(
     }
 )
 _ATTEMPT_OPTIONAL_FIELDS = frozenset(
-    {"attempt_kind", "continuation_of_attempt_id", "trace_persistence_error"}
+    {
+        "attempt_kind", "continuation_of_attempt_id", "trace_persistence_error",
+        "proposal_fingerprint",
+    }
 )
+_PROPOSAL_FINGERPRINT_FIELDS = frozenset(
+    {"selected_surface", "action", "target_file"}
+)
+_PROPOSAL_ACTIONS = frozenset({"modify", "create_new", "remove"})
+_PROPOSAL_SURFACE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _ATTEMPT_ANCHOR_FIELDS = frozenset(
     {
         "problem_id", "problem_spec_hash", "split_manifest_hash",
@@ -275,6 +284,17 @@ def _validate_proposal_attempt_group(group_rows: list[dict[str, Any]]) -> str:
             or terminal.get("hypothesis_digest") != started.get("hypothesis_digest")
         ):
             return "identity_conflict"
+        started_fingerprint = _mapping(started.get("proposal_fingerprint"))
+        terminal_fingerprint = _mapping(terminal.get("proposal_fingerprint"))
+        if (
+            first["phase"] == "code"
+            and terminal_fingerprint != started_fingerprint
+        ) or (
+            first["phase"] == "hypothesis"
+            and started_fingerprint
+            and terminal_fingerprint != started_fingerprint
+        ):
+            return "identity_conflict"
     if first["phase"] == "hypothesis":
         if first_kind != "initial" or first.get("continuation_of_attempt_id") is not None:
             return "phase_order_invalid"
@@ -342,6 +362,23 @@ def _parse_proposal_attempt_payload(raw_payload: Any) -> dict[str, Any]:
         raise ValueError("invalid_prompt_call")
     if prompt_call.get("request_kind") != payload["phase"]:
         raise ValueError("prompt_phase_mismatch")
+    fingerprint = payload.get("proposal_fingerprint")
+    if fingerprint is not None:
+        if not isinstance(fingerprint, Mapping) or set(fingerprint) != (
+            _PROPOSAL_FINGERPRINT_FIELDS
+        ):
+            raise ValueError("invalid_proposal_fingerprint")
+        if not _PROPOSAL_SURFACE_RE.fullmatch(
+            _clean_str(fingerprint.get("selected_surface"))
+        ):
+            raise ValueError("invalid_proposal_fingerprint")
+        if fingerprint.get("action") not in _PROPOSAL_ACTIONS:
+            raise ValueError("invalid_proposal_fingerprint")
+        if not _is_public_target_file(
+            fingerprint.get("target_file"),
+            allow_missing=fingerprint.get("action") == "create_new",
+        ):
+            raise ValueError("invalid_proposal_fingerprint")
     for field in ("context_digest", "prompt_hash"):
         if not _clean_str(prompt_call.get(field)):
             raise ValueError(f"missing_{field}")
@@ -399,6 +436,8 @@ def _parse_proposal_attempt_payload(raw_payload: Any) -> dict[str, Any]:
             or payload.get("hypothesis_digest") is not None
         ):
             raise ValueError("started_hypothesis_identity_present")
+        if payload["phase"] == "hypothesis" and fingerprint is not None:
+            raise ValueError("started_hypothesis_fingerprint_present")
         if payload["phase"] == "code" and (
             not _clean_str(payload.get("hypothesis_id"))
             or not _clean_str(payload.get("hypothesis_digest"))
@@ -423,6 +462,9 @@ def _proposal_attempt_transition_projection(
             "hypothesis_id": payload.get("hypothesis_id"),
             "hypothesis_digest": payload.get("hypothesis_digest"),
             "patch_digest": payload.get("patch_digest"),
+            "proposal_fingerprint": dict(
+                _mapping(payload.get("proposal_fingerprint"))
+            ),
             "prompt_fingerprint": {
                 key: prompt.get(key) for key in _ATTEMPT_PROMPT_FIELDS
             },
@@ -464,6 +506,24 @@ def _is_public_attempt_ref(value: Any) -> bool:
         return False
     path_part = normalized.split("#", 1)[0].split("?", 1)[0]
     return all(part != ".." for part in path_part.split("/"))
+
+
+def _is_public_target_file(value: Any, *, allow_missing: bool = False) -> bool:
+    if value is None:
+        return allow_missing
+    if not isinstance(value, str) or not value.strip():
+        return False
+    target = value.strip().replace("\\", "/")
+    if (
+        len(target) > 1024
+        or "#" in target
+        or "?" in target
+        or target.startswith("//")
+    ):
+        return False
+    if contains_absolute_path(target):
+        return False
+    return all(part not in {"", ".", ".."} for part in target.split("/"))
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:

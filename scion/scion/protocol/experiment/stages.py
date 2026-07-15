@@ -56,6 +56,7 @@ from .phase_telemetry import (
     _phase_telemetry_summary_template,
     _record_phase_telemetry_sample,
 )
+from .proposal_evidence import problem_proposal_mechanism_evidence
 from .runtime_observation import (
     _build_runtime_stats,
     _candidate_runtime_counter_template,
@@ -157,6 +158,7 @@ def run_experiment(
     champion_cache_misses = 0
     champion_cache_writes = 0
     champion_cached_runtime_pairs = 0
+    problem_runtime_pairs: list[dict[str, Any]] = []
     runtime_evidence_status = "sufficient"
     runtime_gate_visibility: dict[str, Any] = {}
     normalized_selected_surface = normalize_surface_name(selected_surface) or None
@@ -795,6 +797,13 @@ def run_experiment(
                     **pair_cache_fields,
                 }
             )
+            problem_runtime_pairs.append(
+                {
+                    "candidate_runtime": dict(cand_r.output.runtime),
+                    "champion_runtime": dict(champ_r.output.runtime),
+                    "champion_result_source": champion_result_source,
+                }
+            )
             valid_pairs += 1
             pair_fb = PairwiseCaseFeedback(
                 case_id=os.path.basename(case),
@@ -1073,6 +1082,13 @@ def run_experiment(
         case_fb = tuple(_aggregate_case_feedback(all_pair_feedback))
         pattern = _build_pattern_summary(case_fb)
 
+    problem_mechanism_evidence = problem_proposal_mechanism_evidence(
+        stage=stage.value,
+        selected_surface=normalized_selected_surface or selected_surface,
+        runtime_pairs=problem_runtime_pairs,
+        problem_spec=protocol._problem_spec,
+        adapter=getattr(protocol, "_problem_adapter", None),
+    )
     result = ProtocolResult(
         stage=stage,
         stats=stats,
@@ -1113,6 +1129,7 @@ def run_experiment(
         champion_cached_runtime_pairs=champion_cached_runtime_pairs,
         runtime_confidence=runtime_confidence,
         runtime_evidence_status=runtime_evidence_status,
+        mechanism_evidence=problem_mechanism_evidence,
     )
     no_objective_effect = (
         stats.wins == 0

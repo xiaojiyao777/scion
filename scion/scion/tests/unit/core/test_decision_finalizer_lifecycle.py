@@ -3,15 +3,21 @@ from __future__ import annotations
 
 from scion.core.branch import BranchController
 from scion.core.decision_finalizer import DecisionFinalizer
+from scion.core.decision_lifecycle_actions import (
+    update_branch_screening_evidence_summary,
+)
 from scion.core.models import (
     BranchState,
     CanaryResult,
     ChampionState,
     ContractResult,
     Decision,
+    EvalStats,
+    ExperimentStage,
     HypothesisProposal,
     HypothesisRecord,
     PatchProposal,
+    ProtocolResult,
     VerificationResult,
 )
 
@@ -133,3 +139,38 @@ def test_abandon_is_terminal_and_records_only_formal_decision() -> None:
     assert controller.get_branch(branch.branch_id).state is BranchState.ABANDONED
     assert lineage == [Decision.ABANDON]
     assert store.statuses == [(record.hypothesis_id, "rejected")]
+
+
+def test_screening_summary_retains_statistical_status_metric_and_ci() -> None:
+    _finalizer, _controller, branch, *_rest = _fixture()
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=8,
+            wins=0,
+            losses=3,
+            ties=5,
+            win_rate=0.0,
+            median_delta=-4.0,
+            ci_low=-10.25,
+            ci_high=-0.5,
+            statistical_status="negative",
+            statistical_metric="total_distance",
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="screening failed",
+        raw_metrics_ref="private/metrics.json",
+    )
+
+    update_branch_screening_evidence_summary(
+        branch,
+        protocol_result=protocol,
+        decision_reason_codes=("SCREENING_FAIL_WIN_RATE",),
+    )
+
+    summary = branch.branch_evidence_summary
+    assert summary["statistical_status"] == "negative"
+    assert summary["statistical_metric"] == "total_distance"
+    assert (summary["ci_low"], summary["ci_high"]) == (-10.25, -0.5)
+    assert summary["decision_reason_codes"] == ["SCREENING_FAIL_WIN_RATE"]

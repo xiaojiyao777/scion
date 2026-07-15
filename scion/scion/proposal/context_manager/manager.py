@@ -64,7 +64,7 @@ from .io import (
     _list_branch_surface_files,
     _list_champion_operator_files,
     _list_champion_surface_files,
-    _read_branch_code,
+    _read_branch_code_projection,
 )
 from scion.proposal.solver_design_guidance import (
     RENDERER_INPUTS_KEY,
@@ -166,20 +166,21 @@ class ContextManager:
         include_operator_files = _include_operator_files_for_research_code(
             visible_surfaces
         )
-        champion_source = _read_champion_research_code(
-            champion,
-            research_surfaces=visible_surfaces,
-            include_operator_files=include_operator_files,
-        )
-        branch_source = (
-            _read_branch_code(
+        branch_source, branch_changed_paths = (
+            _read_branch_code_projection(
                 branch_workspace,
                 champion,
                 research_surfaces=visible_surfaces,
                 include_operator_files=include_operator_files,
             )
             if branch_workspace
-            else None
+            else (None, ())
+        )
+        champion_source = _read_champion_research_code(
+            champion,
+            research_surfaces=visible_surfaces,
+            include_operator_files=include_operator_files,
+            excluded_paths=branch_changed_paths,
         )
         targetable_files = _targetable_files(
             champion,
@@ -653,6 +654,12 @@ def _screening_projection(protocol: Any) -> dict[str, Any]:
             "first_error": _primitive(protocol.candidate_first_runtime_failure),
         },
     }
+    from scion.protocol.experiment.proposal_evidence import (
+        is_proposal_mechanism_evidence_envelope,
+    )
+
+    if is_proposal_mechanism_evidence_envelope(protocol.mechanism_evidence):
+        payload["mechanism_evidence"] = _primitive(protocol.mechanism_evidence)
     return _drop_empty(payload)
 
 

@@ -37,6 +37,9 @@ from scion.proposal.engine import (
     _split_code_context,
     _split_hypothesis_context,
 )
+from scion.protocol.experiment.proposal_evidence import (
+    problem_proposal_mechanism_evidence,
+)
 
 
 _PROBLEM_ROOT = Path(__file__).resolve().parents[2] / "problems"
@@ -310,6 +313,89 @@ def test_canonical_screening_history_deduplicates_durable_and_live_record() -> N
     assert len(context["experiment_history"]) == 1
     assert context["experiment_history"][0]["attempt_id"] == "same-hypothesis"
     assert persist_canonical_screening_record(branch, screening) is False
+
+
+def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() -> None:
+    _spec, legacy, adapter, champion, branch = _runtime("cvrp")
+    packet = problem_proposal_mechanism_evidence(
+        stage="screening",
+        selected_surface="solver_design",
+        runtime_pairs=[
+            {
+                "candidate_runtime": {
+                    "solver_algorithm_alns_iteration_trace": [
+                        {
+                            "repair_operator": "pair",
+                            "accepted": True,
+                            "best_improved": True,
+                            "acceptance_reason": "repair_error",
+                            "elapsed_ms_before": 10,
+                            "elapsed_ms_after": 30,
+                        }
+                    ]
+                },
+                "champion_runtime": {
+                    "solver_algorithm_alns_iteration_trace": [
+                        {
+                            "repair_operator": "greedy",
+                            "accepted": False,
+                            "best_improved": False,
+                            "acceptance_reason": "route_limit",
+                            "elapsed_ms_before": 5,
+                            "elapsed_ms_after": 15,
+                        }
+                    ]
+                },
+                "champion_result_source": "cached",
+            }
+        ],
+        problem_spec=legacy,
+        adapter=adapter,
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Test measured repair behavior.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+    )
+    screening = StepRecord(
+        round_num=1,
+        branch_id=branch.branch_id,
+        hypothesis=hypothesis,
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=1, wins=0, losses=1, ties=0, win_rate=0.0,
+                median_delta=-4.0, ci_low=-10.0, ci_high=-0.5,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="screening failed",
+            raw_metrics_ref="private/round.json",
+            mechanism_evidence=packet,
+        ),
+        decision=Decision.CONTINUE_EXPLORE,
+        failure_stage=None,
+        failure_detail=None,
+        hypothesis_id="mechanism-attempt",
+    )
+
+    context = ContextManager(adapter=adapter).build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=[screening],
+    )
+    evidence = context["experiment_history"][0]["experiment_evidence"]
+    assert evidence["mechanism_evidence"] == packet
+    blocks, user_prompt = _split_hypothesis_context(context)
+    rendered = "\n".join(block["text"] for block in blocks) + user_prompt
+    assert '"attempts": 1' in rendered
+    assert '"repair_error": 1' in rendered
+    assert '"solver_algorithm_alns_iteration_trace": [' not in rendered
 
 
 def test_canonical_screening_history_keeps_multiple_screenings_of_one_hypothesis() -> None:

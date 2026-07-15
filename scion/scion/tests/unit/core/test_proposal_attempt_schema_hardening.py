@@ -32,6 +32,11 @@ def _generated_hypothesis_payload() -> dict:
         "hypothesis_id": "hypothesis-1",
         "hypothesis_digest": "hypothesis-digest",
         "patch_digest": None,
+        "proposal_fingerprint": {
+            "selected_surface": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/scheduler.py",
+        },
         "prompt_call": {
             "request_kind": "hypothesis",
             "context_digest": "context-digest",
@@ -72,6 +77,7 @@ def _started_hypothesis_payload() -> dict:
         hypothesis_digest=None,
         tainted_artifact_refs=[],
     )
+    payload.pop("proposal_fingerprint", None)
     payload["prompt_call"].update(
         trace_ref=None,
         prompt_manifest_ref=None,
@@ -198,6 +204,55 @@ def test_exact_schema_rejects_unknown_and_body_fields() -> None:
     payload["prompt_call"]["raw_response"] = {"full": "body"}
     with pytest.raises(ValueError, match="prompt_call contains unsupported fields"):
         _record(payload)
+
+
+@pytest.mark.parametrize(
+    "fingerprint",
+    [
+        {"selected_surface": "solver_design", "action": "modify"},
+        {
+            "selected_surface": "solver_design",
+            "action": "rewrite",
+            "target_file": "policies/baseline_modules/scheduler.py",
+        },
+        {
+            "selected_surface": "solver_design",
+            "action": "modify",
+            "target_file": "/private/scheduler.py",
+        },
+        {
+            "selected_surface": "solver_design",
+            "action": "modify",
+            "target_file": "policies/../private.py",
+        },
+        {
+            "selected_surface": "solver_design",
+            "action": "modify",
+            "target_file": "policies/scheduler.py",
+            "hypothesis_text": "body must not leak",
+        },
+    ],
+)
+def test_proposal_fingerprint_is_compact_typed_and_public(fingerprint: dict) -> None:
+    payload = _generated_hypothesis_payload()
+    payload["proposal_fingerprint"] = fingerprint
+
+    with pytest.raises(ValueError, match="proposal_fingerprint"):
+        _record(payload)
+
+
+def test_create_new_fingerprint_allows_explicit_missing_target() -> None:
+    payload = _generated_hypothesis_payload()
+    payload["proposal_fingerprint"] = {
+        "selected_surface": "solver_design",
+        "action": "create_new",
+        "target_file": None,
+    }
+
+    registry, _ = _record(payload)
+
+    stored = json.loads(registry.events[0]["audit_payload_json"])
+    assert stored["proposal_fingerprint"]["target_file"] is None
 
 
 @pytest.mark.parametrize(

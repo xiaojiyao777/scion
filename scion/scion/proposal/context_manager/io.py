@@ -363,7 +363,40 @@ def _read_branch_code(
     Returns a formatted string showing modified files, or None if no
     differences are found or the workspace is unavailable.
     """
+    rendered, _ = _read_branch_code_projection(
+        branch_workspace,
+        champion,
+        research_surfaces=research_surfaces,
+        include_operator_files=include_operator_files,
+    )
+    return rendered
+
+
+def _read_branch_code_projection(
+    branch_workspace: str,
+    champion: ChampionState,
+    *,
+    research_surfaces: Optional[list[Any]] = None,
+    include_operator_files: bool = True,
+) -> tuple[Optional[str], tuple[str, ...]]:
+    """Return branch-current source plus paths that differ from champion.
+
+    The path projection lets callers render one complete current source owner
+    per file: unchanged files from champion and changed files from the branch.
+    No size threshold, diff compaction, summarization, or truncation is used.
+    """
+
+    if not os.path.isdir(branch_workspace):
+        return None, ()
+
     sections: List[str] = []
+    changed_paths: list[str] = []
+
+    def record_changed(path: str) -> None:
+        normalized = str(path or "").replace("\\", "/").lstrip("/")
+        if normalized and normalized not in changed_paths:
+            changed_paths.append(normalized)
+
     if include_operator_files:
         branch_ops_dir = os.path.join(branch_workspace, "operators")
         champ_ops_dir = os.path.join(champion.code_snapshot_path, "operators")
@@ -397,9 +430,27 @@ def _read_branch_code(
                 champ_content = None
 
             if champ_content is None or branch_content != champ_content:
+                record_changed(f"operators/{fname}")
                 sections.append(
                     f"### operators/{fname} (branch version)\n```python\n{branch_content}\n```"
                 )
+
+        if os.path.isdir(champ_ops_dir):
+            try:
+                champion_filenames = sorted(
+                    f for f in os.listdir(champ_ops_dir)
+                    if f.endswith(".py") and f not in ("__init__.py", "base.py")
+                )
+            except OSError:
+                champion_filenames = []
+            for fname in champion_filenames:
+                if not os.path.isfile(os.path.join(branch_ops_dir, fname)):
+                    deleted_path = f"operators/{fname}"
+                    record_changed(deleted_path)
+                    sections.append(
+                        f"### {deleted_path} (deleted from branch)\n"
+                        "(file is absent from the current branch workspace)"
+                    )
 
     branch_surface_files = _list_branch_surface_files(
         branch_workspace,
@@ -422,9 +473,24 @@ def _read_branch_code(
         except OSError:
             champ_content = None
         if champ_content is None or branch_content != champ_content:
+            record_changed(file_rel)
             sections.append(
                 f"### {file_rel} (branch research-surface version)\n"
                 f"```python\n{branch_content}\n```"
             )
 
-    return "\n\n".join(sections) if sections else None
+    for file_rel in _list_champion_surface_files(
+        champion,
+        research_surfaces=research_surfaces or [],
+    ):
+        if not os.path.isfile(os.path.join(branch_workspace, file_rel)):
+            record_changed(file_rel)
+            sections.append(
+                f"### {file_rel} (deleted from branch)\n"
+                "(file is absent from the current branch workspace)"
+            )
+
+    return (
+        "\n\n".join(sections) if sections else None,
+        tuple(changed_paths),
+    )

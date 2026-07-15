@@ -455,6 +455,9 @@ class TestContinueExplore:
         second_h_evidence = json.loads(
             hypothesis_calls[1]["system_blocks"][2]["text"].split("\n", 1)[1]
         )
+        second_h_static = json.loads(
+            hypothesis_calls[1]["system_blocks"][1]["text"].split("\n", 1)[1]
+        )
         assert len(second_h_evidence["experiment_history"]) == 1
         prior = second_h_evidence["experiment_history"][0]
         assert prior["experiment_evidence"]["stage"] == "screening"
@@ -464,6 +467,12 @@ class TestContinueExplore:
         assert prior_aggregate["win_rate"] == 0.1
         assert prior_aggregate["median_delta"] == -12.0
         assert "candidate = solution" in second_h_evidence["branch_current_code"]
+        assert "### operators/local_search.py" not in (
+            second_h_static["champion_operators_code"]
+        )
+        assert second_h_evidence["branch_current_code"].count(
+            "### operators/local_search.py"
+        ) == 1
 
         code_calls = [
             call for call in llm.provider_calls if call["request_kind"] == "code"

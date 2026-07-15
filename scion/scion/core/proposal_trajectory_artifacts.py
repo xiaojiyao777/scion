@@ -272,6 +272,7 @@ def _attempt_fingerprint(
             **dict(attempt),
             "proposal_fingerprint": _drop_empty(
                 {
+                    **dict(_mapping(terminal.get("proposal_fingerprint"))),
                     "hypothesis_id": terminal.get("hypothesis_id"),
                     "hypothesis_digest": terminal.get("hypothesis_digest"),
                     "patch_digest": terminal.get("patch_digest"),

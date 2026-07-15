@@ -172,6 +172,8 @@ def compose_campaign_services(
         **_materializer_kwargs_from_problem_spec(problem_spec),
     )
     owner._experiment_protocol = experiment_protocol
+    if hasattr(owner._experiment_protocol, "set_problem_adapter"):
+        owner._experiment_protocol.set_problem_adapter(adapter)
     os.makedirs(str(campaign_dir) + "/metrics", exist_ok=True)
     owner._vgate = CampaignVerificationFactory.build(
         problem_spec=problem_spec,

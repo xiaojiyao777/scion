@@ -132,15 +132,26 @@ def _read_champion_research_code(
     *,
     research_surfaces: list[Any],
     include_operator_files: bool = True,
+    excluded_paths: Sequence[str] = (),
 ) -> str:
     """Render hypothesis-facing champion research source."""
 
-    sections = [_read_champion_operators(champion)] if include_operator_files else []
+    excluded: set[str] = set()
+    for path in excluded_paths:
+        cleaned = _clean_history_path(path)
+        if cleaned:
+            excluded.add(cleaned)
+    sections = (
+        [_read_champion_operators(champion, excluded_paths=tuple(sorted(excluded)))]
+        if include_operator_files
+        else []
+    )
     sections.extend(
         _read_surface_file(champion, path, label="research surface")
         for path in _list_champion_surface_files(
             champion, research_surfaces=research_surfaces
         )
+        if path not in excluded
     )
     return "\n\n".join(section for section in sections if section)
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import uuid
 from typing import Any, Mapping, Protocol
 
@@ -36,6 +37,7 @@ _OPTIONAL_FIELDS = frozenset(
         "continuation_of_attempt_id",
         "non_resumable",
         "trace_persistence_error",
+        "proposal_fingerprint",
     }
 )
 _ALLOWED_FIELDS = _REQUIRED_FIELDS | _OPTIONAL_FIELDS
@@ -67,6 +69,11 @@ _PROMPT_CALL_FIELDS = frozenset(
     }
 )
 _TRACE_PERSISTENCE_ERROR_FIELDS = frozenset({"stage", "error_type"})
+_PROPOSAL_FINGERPRINT_FIELDS = frozenset(
+    {"selected_surface", "action", "target_file"}
+)
+_PROPOSAL_ACTIONS = frozenset({"modify", "create_new", "remove"})
+_PROPOSAL_SURFACE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _FORBIDDEN_FIELDS = frozenset(
     {
         "code_content",
@@ -142,6 +149,7 @@ class ProposalAttemptRecorder:
             raise ValueError("invalid proposal attempt runtime_mode")
         if payload.get("phase") not in {"hypothesis", "code"}:
             raise ValueError("invalid proposal attempt phase")
+        ProposalAttemptRecorder._validate_proposal_fingerprint(payload)
         ProposalAttemptRecorder._validate_continuation(payload)
         if payload.get("status") not in {
             "started",
@@ -341,6 +349,41 @@ class ProposalAttemptRecorder:
             json.dumps(payload, sort_keys=True, separators=(",", ":"))
         except (TypeError, ValueError) as exc:
             raise ValueError("proposal attempt transition must be JSON serializable") from exc
+
+    @staticmethod
+    def _validate_proposal_fingerprint(payload: Mapping[str, Any]) -> None:
+        fingerprint = payload.get("proposal_fingerprint")
+        if fingerprint is None:
+            return
+        if not isinstance(fingerprint, Mapping) or set(fingerprint) != (
+            _PROPOSAL_FINGERPRINT_FIELDS
+        ):
+            raise ValueError("invalid proposal attempt proposal_fingerprint")
+        surface = str(fingerprint.get("selected_surface") or "").strip()
+        if not _PROPOSAL_SURFACE_RE.fullmatch(surface):
+            raise ValueError("invalid proposal attempt proposal_fingerprint")
+        if fingerprint.get("action") not in _PROPOSAL_ACTIONS:
+            raise ValueError("invalid proposal attempt proposal_fingerprint")
+        raw_target = fingerprint.get("target_file")
+        if not (raw_target is None and fingerprint.get("action") == "create_new"):
+            if not isinstance(raw_target, str):
+                raise ValueError("invalid proposal attempt proposal_fingerprint")
+            target = raw_target.strip()
+            normalized = target.replace("\\", "/")
+            if (
+                not target
+                or len(normalized) > 1024
+                or "#" in normalized
+                or "?" in normalized
+                or normalized.startswith("//")
+                or contains_absolute_path(normalized)
+                or any(part in {"", ".", ".."} for part in normalized.split("/"))
+            ):
+                raise ValueError("invalid proposal attempt proposal_fingerprint")
+        if payload.get("phase") == "hypothesis" and payload.get("status") == "started":
+            raise ValueError(
+                "started hypothesis transition cannot contain proposal_fingerprint"
+            )
 
     @staticmethod
     def _validate_continuation(payload: Mapping[str, Any]) -> None:

@@ -61,6 +61,8 @@ def update_branch_screening_evidence_summary(
         "median_delta": getattr(stats, "median_delta", None),
         "ci_low": getattr(stats, "ci_low", None),
         "ci_high": getattr(stats, "ci_high", None),
+        "statistical_status": getattr(stats, "statistical_status", None),
+        "statistical_metric": getattr(stats, "statistical_metric", None),
         "runtime_ratio_median": getattr(stats, "runtime_ratio_median", None),
         "runtime_delta_median_ms": getattr(stats, "runtime_delta_median_ms", None),
         "runtime_regression_rate": getattr(stats, "runtime_regression_rate", None),

@@ -22,7 +22,7 @@ from scion.proposal.llm_client import (
     LLMProviderError,
 )
 from scion.proposal.prompt_manifest_accounting import _provider_prompt_hash
-from scion.proposal.schemas import HYPOTHESIS_TOOL
+from scion.proposal.schemas import HYPOTHESIS_TOOL, PATCH_TOOL
 
 
 _HYPOTHESIS_RESPONSE = {
@@ -44,6 +44,16 @@ _PATCH_RESPONSE = {
     "full_file_reason": "Create the approved new research-surface file.",
     "evidence_refs": [],
 }
+
+
+def test_patch_tool_consistently_requests_one_change_object_per_file() -> None:
+    guidance = "exactly one change object per file_path"
+    assert guidance in PATCH_TOOL["description"]
+    assert guidance in (
+        PATCH_TOOL["input_schema"]["properties"]["additional_changes"][
+            "description"
+        ]
+    )
 
 
 class _CaptureClient:
