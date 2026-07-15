@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-07-14*
+*Last updated: 2026-07-15*
 
 This is the operational resume point. Read `scion/TASK.md` first and use
 `scion/design/scion-architecture-v3.md` as the architecture tie-breaker.
@@ -16,8 +16,9 @@ R2 root was prepared at `6ec0db55` but guarded readiness rejected it before any
 provider call; it is also not launchable. A distinct R3 CVRP root launched once
 at pushed `1978b426`, made exactly one H call and no C call, then terminated on
 a provider-schema/Contract interface mismatch before any solver evaluation.
-The repair is pushed at `ff14318c`; a distinct R4 root is prepared-only there
-and has made no live completion, provider, or campaign call.
+The repair is pushed at `ff14318c`; a distinct R4 root at that exact runtime is
+now terminal, complete, and valid after two evaluated algorithm rounds. It was
+not retried and must not be resumed or reused.
 
 ## Current Decision
 
@@ -47,11 +48,12 @@ that exact enum into the call-local provider tool and parse boundary while
 retaining C2. Do not resume or retry R3.
 
 The repair passes the standard suite at `1886 passed, 1 skipped` in `499.32s`.
-R4 offline audit reconstructs the native first-H path and confirms the active
-surface and call-local enum are exactly `solver_design`, with no global tool
+R4 then proved the repaired loop end to end: `2H/2C`, four unique successful
+provider attempts, two substantive cumulative candidates, 64/64 valid formal
+pairs, two evaluated outcomes, and complete lineage. There was no global tool
 mutation, retry/backoff, truncation, forced targeting, or agent/token/output
-budget controls. The guarded wrapper, 81-file identity, clean runtime, and
-secret hygiene are green. R4 now waits for explicit launch authorization.
+budget control. Both candidates failed the correct screening rule; champion v1
+was not modified or promoted.
 
 A separate audit found that forced diagnostics emit `forced_research_target`
 while part of the governance/C0 path still looks for legacy
@@ -85,7 +87,7 @@ Terminal CVRP R3 interface-failure root:
 
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r3-2r-gpt56sol-20260714T163231Z-claw`
 
-Prepared-only CVRP R4 root:
+Terminal CVRP R4 algorithm-control root:
 
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r4-2r-gpt56sol-20260714T234816Z-claw`
 
@@ -105,6 +107,10 @@ Do not edit or launch it.
 The CVRP R3 root is terminal. It must not be replaced in place, resumed, or
 auto-retried. Any later control must use a distinct clean root after the
 interface repair is pushed.
+
+The CVRP R4 root is also terminal. It completed normally and contains valid
+negative algorithm evidence. Do not resume it, reuse either cumulative
+candidate, or create a third round inside the root.
 
 ## CVRP R3 Outcome
 
@@ -147,6 +153,44 @@ Postrun readiness has 28 `ok`, 3 `skipped`, and no required or optional
 failure. Pre/post data identities are identical. Lineage closes over the single
 initial attempt with no hidden retry. The root is analysis-ready but report-only
 and supports no algorithm-quality or promotion conclusion.
+
+## CVRP R4 Outcome
+
+- runtime commit/root: clean detached `ff14318c` at
+  `/home/clawd/research/scion-experiments/v04-cvrp-direct-open-control-r4-2r-gpt56sol-20260714T234816Z-claw`;
+- terminal state: wrapper exit 0, `complete`, `valid`, requested rounds complete;
+- provider accounting: H=`2`, C=`2`, four unique successful attempts, retry=`0`;
+- protocol accounting: two screening candidates, 64/64 valid pairs, no solver,
+  candidate, champion, contract, verification, canary, or infrastructure
+  failure;
+- prepared/pre/post data identity: 81 files, digest
+  `ca7e470ec8d1f3569a690d10df5a170c4994108c71fecf5aa1a7a76b42630743`;
+- postrun: 28 `ok`, 3 `skipped`, no required/optional failure, lineage complete,
+  secret scan clean, analysis/delegation ready and report-only.
+
+Round 1 added route-cap-aware regret ordering and bounded one-customer ejection.
+It finished at case W/L/T=`1/2/5`, pair W/L/T=`13/14/5`, median delta `0`, CI
+`[-9, 1.5]`, so `SCREENING_FAIL_WIN_RATE` was correct and the evidence remained
+uncertain. Round 2 used the full first-round objective evidence, removed global
+capacity pressure, and added a separate adaptive pair-insertion repair. It
+finished at case W/L/T=`0/3/5`, pair W/L/T=`9/17/6`, median delta `-4`, CI
+`[-10.25, -0.5]`; this is negative evidence, not a gate artifact.
+
+The pair operator was active (441 attempts, 328 accepted uses, 28 best updates),
+but it only inserts two pending customers into existing routes. It cannot make
+an individually capacity-blocked customer feasible without ejecting or moving
+an incumbent customer, so its implementation does not match the claimed rescue
+mechanism. It also raised average iteration cost and reduced search iterations.
+Do not retain or retry this implementation.
+
+The highest-priority framework gap is compact causal feedback. Raw CVRP traces
+show route-limit rejection falling from champion 95 to candidate 0 while repair
+errors rise to 20/21, and they contain per-repair attempts, acceptance, best
+updates, and time. Yet the generic summary reports `mechanism_evidence={}` and
+`opportunity_status=unknown`. Add a problem-owned proposal-only aggregation;
+do not add a gate, target mandate, budget, or truncation. Secondary cleanup is
+second-round context duplication, one-change-object-per-file guidance, and
+trajectory fields currently emitted as `unknown`.
 
 ## Formal R3 Evidence
 
@@ -340,9 +384,8 @@ green.
 ## Worktree State
 
 - branch: `v0.4-dev`; call-local surface enum repair commit `ff14318c` is
-  pushed and is the clean
-  detached runtime for the prepared-only R4 root;
-- intended changes now: the R4 prelaunch report, `TASK.md`, and this file;
+  pushed and is the clean detached runtime for the terminal R4 root;
+- intended changes now: the R4 postrun report, `TASK.md`, and this file;
 - final verification for those intended changes is green: the standard suite
   passes `1886 passed, 1 skipped` in `499.32s`; independent latest-diff review
   reports P0/P1/P2 = 0 and separately passes `103` tests; compileall and
@@ -352,17 +395,19 @@ green.
 - unrelated untracked historical/future documents must remain excluded;
 - the terminal CVRP R3 root used clean detached runtime
   `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-1978b426`;
-- the prepared-only CVRP R4 root uses clean detached runtime
+- the terminal CVRP R4 root uses clean detached runtime
   `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-ff14318c`.
 
 ## Resume Actions
 
-1. Keep R4 prepared-only until the operator explicitly authorizes launch.
-2. At launch, inject `SCION_SHARED_PROXY_KEY` only into the process environment
-   and let `run.sh` own the sole live completion preflight.
-3. Poll about every three minutes; never auto-retry, resume, or replace R4.
-4. After terminal outcome, audit H/C, solver pairs, lineage, algorithmic
-   materiality, runtime, and postrun readiness before any continuation.
+1. Implement the compact CVRP-owned causal summary from existing ALNS trace;
+   keep it proposal-only and non-gating.
+2. Remove duplicated second-round source context without adding a size budget
+   or truncation, and add one-change-object-per-file tool guidance.
+3. Repair postrun trajectory action/surface/target fields currently reported as
+   unknown, then run focused and full regression plus independent review.
+4. Prepare a distinct clean next root only after those repairs. Never resume or
+   reuse R4, and do not auto-launch another experiment.
 
 ## Runner Notes
 
@@ -389,3 +434,5 @@ and preflight check.
   `scion/docs/experiments/v0.4/v04-warehouse-direct-context-confirm-r3-d57d6cd6-postrun-20260714.md`
 - CVRP pre-campaign failure:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-open-control-r1-precampaign-failure-20260714.md`
+- CVRP R4 terminal postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-open-control-r4-postrun-20260715.md`

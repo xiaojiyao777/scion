@@ -285,18 +285,22 @@ The first CVRP control attempt produced no algorithm evidence: it failed before
 proposal generation on an incorrect external-data-root binding. No experiment
 is running, and automatic retry remains prohibited.
 
-The CVRP R3 root is terminal and must not be resumed or retried. It proves the
-agent can select a substantial solver mechanism, but also exposes a direct
-provider-schema/Contract mismatch that blocks it before code generation. The
-call-local enum repair is pushed at `ff14318c`: the standard suite passes `1886
-passed, 1 skipped` in `499.32s`, compileall and `git diff --check` pass, and
-independent review reports P0/P1/P2 = 0.
+The CVRP R3 root is terminal and must not be resumed or retried. Its call-local
+surface-enum repair is pushed at `ff14318c` and passed the standard suite.
 
-A distinct R4 root is now prepared-only at that exact clean commit. Its guarded
-readiness, 81-file data identity, secret hygiene, native first-H context, and
-call-local `change_locus.enum=["solver_design"]` are independently green. No
-provider/live-probe/campaign call has occurred. The current blocker is explicit
-launch authorization; do not launch automatically.
+The distinct R4 root at that commit is now terminal, complete, and valid. It
+completed two genuine algorithm rounds with `2H/2C`, 64/64 valid formal pairs,
+no retry or failure lane, and complete lineage/postrun evidence. Both candidates
+correctly failed screening. Round 1 was uncertain; round 2 was significantly
+negative. Neither candidate may be promoted, resumed, or retried.
+
+R4 proves the open agent loop can perform substantive algorithm development and
+evidence-driven iteration without governance noise. The current blocker is now
+problem-owned causal feedback quality: existing ALNS operator trace is not
+projected into compact mechanism evidence, so the next H cannot reliably see
+activation, acceptance, best-update, repair-error, route-limit, and per-operator
+runtime effects. Do not compensate with a heavier gate, forced targeting,
+budget, truncation, or another blind experiment.
 
 Preserve the excluded user-owned
 `scion/docs/v0.4-measurement-readiness.md` change and unrelated untracked
@@ -304,13 +308,15 @@ history.
 
 ## Immediate Queue
 
-1. Keep R4 prepared-only until the operator explicitly authorizes launch.
-2. At launch, provide `SCION_SHARED_PROXY_KEY` only in process environment;
-   let `run.sh` own the sole completion preflight and never auto-retry.
-3. Poll about every three minutes, then audit H/C, solver pairs, lineage,
-   algorithmic materiality, and postrun readiness after the terminal outcome.
-4. Keep the separate forced-governance wiring finding out of this minimal
-   unforced control.
+1. Add a compact CVRP-owned, proposal-only causal summary from ALNS iteration
+   trace: per repair attempts/acceptance/best updates/time plus route-limit and
+   repair-error deltas. Keep it informational and non-gating.
+2. Deduplicate second-round context so branch-current code does not redundantly
+   carry the unchanged champion source; do not impose a size budget or truncate.
+3. Require one change object per file in the patch-tool description, and repair
+   postrun trajectory fields currently reported as `unknown`.
+4. Validate those narrow repairs, then prepare a fresh root. Do not reuse the
+   rejected pair-repair candidate or launch another campaign automatically.
 
 Do not close v0.4 merely because framework tests pass. Close it only after both
 formal controls show that the simplified agent performs useful research without
@@ -353,3 +359,5 @@ reintroducing governance noise.
   `scion/docs/experiments/v0.4/v04-warehouse-direct-control-r2-436b6e12-postrun-20260714.md`
 - Formal warehouse R3 plus expanded screening:
   `scion/docs/experiments/v0.4/v04-warehouse-direct-context-confirm-r3-d57d6cd6-postrun-20260714.md`
+- CVRP R4 terminal postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-open-control-r4-postrun-20260715.md`
