@@ -278,6 +278,20 @@ resume, force controls, retry, semantic budget, or truncation; the 30-second
 limit remains the scientific solver subprocess fallback. Do not start another
 generative root while R10 is live.
 
+R10 H1 is terminal and H2 is in formal screening. H1/C1 were single-attempt,
+substantive ejection-chain edits in `destroy_repair.py` plus `scheduler.py`.
+All `32/32` pairs were valid with zero candidate/champion failure, but the
+result was `1/21/10` pair and `0/5/3` case, median `-14.25`, CI `[-48.75,0]`.
+The new repair produced `30` attempts and zero accepted chains while collapsing
+candidate/champion ALNS iterations to `69/1665`; Protocol failed only
+`SCREENING_FAIL_WIN_RATE` and Decision `continue_explore` committed. Its v3
+formal base ref is the correct relative `champions/champion_v1`, and all replay
+identities pass. H2 explicitly cites that route-limit/throughput failure and
+changes to candidate-list incremental VNS plus CROSS exchange in
+`local_search.py`; H2/C2 are again single-attempt and verified at `65f379...`.
+Audit whether it removes the bottleneck or merely stacks local search while
+retaining H1's expensive repair.
+
 ## Current Framework Repair
 
 R6 and its exact validation exposed four evidence-integrity problems:
@@ -421,9 +435,8 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 
 ## Execution Queue
 
-1. Monitor fresh R10 at low frequency; confirm the first H/C target, formal
-   artifact base ref, and transaction identities without interfering with the
-   live process.
+1. Monitor R10 H2 at low frequency without interfering with the live process;
+   its H/C and verified identities are complete and formal screening is live.
 2. Audit each completed algorithm round against its objective, case/pair,
    mechanism, Protocol, Decision, throughput, and code-diff evidence.
 3. At terminal state, rebuild postrun reports, verify end-to-end wrapper and
@@ -473,5 +486,7 @@ terminal roots remain read-only.
   `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r8-stopped-analysis-20260716.md`
 - R9 stopped analysis:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r9-stopped-analysis-20260716.md`
+- R10 inflight analysis:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r10-inflight-20260716.md`
 - Multi-hop lineage repair report:
   `scion/docs/experiments/v0.4/v04-resume-formal-candidate-lineage-repair-20260715.md`

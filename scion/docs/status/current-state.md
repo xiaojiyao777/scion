@@ -19,6 +19,24 @@ nonempty. The launcher stores only `SCION_SHARED_PROXY_KEY` as the environment
 variable name; no key value is persisted. Do not start another generative root
 while R10 is live.
 
+H1/C1 are terminal and H2 is in formal screening. H1 implemented a real
+ejection-chain repair in `destroy_repair.py` and `scheduler.py`; H/C were each
+single-attempt and all `32/32` pairs were valid with zero candidate/champion
+failure. The algorithm was strongly negative: pair `1/21/10`, case `0/5/3`,
+median `-14.25`, CI `[-48.75,0]`, actual ALNS iterations `69/1665`, and
+ejection-chain `30 attempts / 0 accepted`. Protocol failed only
+`SCREENING_FAIL_WIN_RATE`; Decision `continue_explore` committed. Formal v3
+replay now writes the correct relative
+`base_workspace_ref=champions/champion_v1`, with complete identity and matching
+current/replay/verified/executable hashes.
+
+H2 explicitly received H1's route-limit and throughput evidence. It targets
+`local_search.py` with candidate-list incremental inter-route VNS and bounded
+CROSS exchange; H2/C2 are again single-attempt and verified at `65f379...`.
+Formal evaluation is pending. The key audit is whether H2 causally removes the
+throughput bottleneck or only stacks local search while retaining H1's bad
+ejection repair.
+
 The explicit R9 diagnostic continuation is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r9-cont1-3r-gpt56sol-20260716T042653Z-claw`.
 It uses the clean detached runtime
@@ -494,8 +512,7 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Monitor R10 at low frequency; confirm first-round H/C targeting, formal base
-   reference, and transaction identities without disturbing the live process.
+1. Monitor R10 H2 at low frequency without disturbing the live process.
 2. Audit each completed R10 round for substantive code change, activation,
    objective/case/pair/mechanism evidence, throughput, Protocol, and Decision.
 3. At terminal state, require end-to-end postrun wrapper/readiness acceptance
@@ -564,5 +581,7 @@ or place it in argv.
   `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r8-stopped-analysis-20260716.md`
 - R9 stopped analysis:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r9-stopped-analysis-20260716.md`
+- R10 inflight analysis:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r10-inflight-20260716.md`
 - Multi-hop lineage repair report:
   `scion/docs/experiments/v0.4/v04-resume-formal-candidate-lineage-repair-20260715.md`
