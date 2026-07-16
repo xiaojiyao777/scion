@@ -59,12 +59,17 @@ agent can use evidence without accumulating framework noise.
 - C receives one approved H and one complete SourceLedger. Multi-file and
   ordered same-file `exact_replace` edits retain source owner, provenance, and
   digest; stale or ambiguous composition fails closed.
-- A single active branch is the v0.4 default. `continue_explore` reuses its
-  verified cumulative workspace; `queue_validate` re-evaluates the exact
-  candidate without another H/C call.
+- A single active scheduling branch is the v0.4 default. Screening evidence is
+  durable, but code inheritance is controlled by typed candidate disposition:
+  gate-failed code returns to its clean parent, provisional same-mechanism work
+  may be refined, and a mechanism pivot starts clean. `queue_validate`
+  re-evaluates the exact candidate without another H/C call.
 - Proposal-only mechanism evidence is excluded from DecisionFeatures and
   gates. It may inform the next H but cannot manufacture causal certainty.
 - Promotion remains atomic and requires complete formal evidence.
+- H history may use a reversible normalized ledger to declare repeated schemas
+  once while retaining every safe screening observation and pair. This is not
+  truncation, top-k selection, summary substitution, or a context budget.
 
 ## Current Evidence
 
@@ -611,6 +616,16 @@ The implementation order is fixed:
 8. begin hot-path modularization only after these behavioral boundaries are
    stable.
 
+R11c additionally exposed a normative candidate-ancestry defect: Protocol-
+rejected code currently remains the durable branch head and contaminates later
+mechanism pivots. The accepted correction is
+`scion/docs/planning/v0.4/v0.4-candidate-disposition-and-research-ledger-design-20260716.md`.
+It introduces immutable candidate snapshots, typed post-Protocol disposition,
+clean/provisional continuation bases, rejected-ancestry exclusion from
+SourceLedger/promotion, and a reversible normalized H research ledger. New
+generative matched experiments must wait for this correction; runner cleanup,
+SearchAllocationEvidence, and no-LLM controls may proceed first.
+
 Disk pressure is no longer a current blocker. A safe cleanup on 2026-07-16
 removed only inactive package caches and pre-R11c solver interchange files,
 raising free space from about `6.1 GiB` to `23 GiB` without touching any
@@ -638,8 +653,9 @@ from a recorded dry-run manifest.
 4. At terminal state, require wrapper, postrun rebuild, readiness acceptance,
    and an explicit search-allocation audit before changing code.
 5. After the R11c boundary, execute the approved design in order: runner-owned
-   temp lifecycle, proposal-only allocation evidence, current no-LLM profiles,
-   matched canonical/pure campaigns, then transplant replay.
+   temp lifecycle, proposal-only allocation evidence, candidate disposition,
+   normalized research ledger, current no-LLM profiles, matched canonical/pure
+   campaigns, then transplant replay.
 6. Continue retention-aware historical experiment cleanup in audited batches;
    do not delete a root required by the approved design or current closeout.
 7. After runner ownership and CVRP allocation evidence, align the warehouse

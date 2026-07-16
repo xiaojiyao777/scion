@@ -2,7 +2,7 @@
 
 *Status: normative for v0.4 where it conflicts with operational examples in
 `scion-architecture-v3.md`*
-*Updated: 2026-07-13*
+*Updated: 2026-07-16*
 
 ## Purpose and precedence
 
@@ -86,27 +86,44 @@ The hard gates exist to protect trust boundaries, not to grade research style:
 - Scheduler uses branch state, priority/FIFO, execution hold, and active slots.
   It does not use branch lessons, stagnation prose, or mechanism similarity.
 
-## v0.4 scientific-iteration scheduling
+## v0.4 scientific-iteration scheduling and candidate ancestry
 
-The default direct runtime admits one active research branch. This preserves
-the V3 meaning of one branch as one evolving direction:
+The default direct runtime admits one active scheduling branch. Evidence
+continuity and code inheritance are separate:
 
 ```text
-screening fail on branch A
-  -> Decision.CONTINUE_EXPLORE
-  -> branch A remains EXPLORE
-  -> next Scheduler selection reuses branch A
-  -> next H sees branch A's canonical screening evidence
-  -> next C sees branch A's verified current source through SourceLedger
+screening observation on branch A
+  -> next H retains the complete safe canonical evidence
+  -> typed Protocol/Decision outcome determines candidate disposition
+  -> continuation-base planning selects exact reuse, provisional repair,
+     clean code parent, or champion pivot
+  -> next C receives source only from that exact selected base
 ```
 
-The verified workspace, canonical screening history, and verified touched-file
-footprint are durable branch state for this continuation. A campaign reopen
-must restore all three without truncating or duplicating screening records;
-SourceLedger continues to label previously touched source as
-`branch_history_current`. If the branch hashes require a verified workspace but
-that workspace is unavailable, continuation fails closed instead of silently
-rebuilding from the champion.
+Verification produces an immutable candidate snapshot but does not by itself
+advance the branch research head. Expansion and queued validation/frozen stages
+reuse the exact candidate without another H/C call. `CONTINUE_EXPLORE` after a
+typed Protocol `fail` archives the negative candidate and returns code ownership
+to its clean parent; `unclear/continue` may retain a provisional same-mechanism
+head. A different problem-owned mechanism owner pivots from the current
+champion. Rejected code remains evidence but cannot enter current SourceLedger,
+promotion ancestry, or the next executable base.
+
+Candidate disposition and research-head ownership commit with the completed
+Decision transaction. Scheduler remains problem-neutral and reads only branch
+state, priority/FIFO, execution hold, and active slots. Problem packages own
+mechanism-owner classification; LLM free text cannot select a base.
+
+The canonical screening history remains complete. It may be transported as a
+normalized, reversible ledger that declares repeated schemas, cases, metrics,
+and candidate identities once while retaining every observation and pair row.
+This is lossless normalization, not recent-N selection, summary substitution,
+token-aware compaction, top-k, or truncation.
+
+A campaign reopen must restore canonical evidence, exact candidate snapshots,
+disposition, and research-head ownership without duplication. If a referenced
+snapshot is unavailable or its hash does not match, continuation fails closed
+instead of silently reconstructing from another base.
 
 This setting changes only scheduling topology. It does not cap provider calls,
 hypotheses, files, tokens, formal rounds, or campaign duration, and it does not

@@ -25,6 +25,19 @@ require one Protocol evaluation, unchanged durable source count before
 finalization, exactly one count increment on the committed Decision target, no
 owner mismatch, and one final execution outcome.
 
+R11c has already accepted the prospective-count repair on its first expansion:
+the source intent remained at count `0`, the completed Decision target committed
+count `1`, no owner mismatch occurred, and only one final evaluation outcome
+was recorded. The same run exposed a separate candidate-ancestry defect. H1's
+route-elimination mechanism was selected hundreds of times but never produced a
+nonempty candidate; expanded screening rejected it, yet H2 SWAP* inherited the
+H1 files because `continue_explore` retained the Verification-passed workspace.
+H2 evidence is therefore cumulative H1+H2, not SWAP*-only. The normative repair
+and reversible prompt-ledger design is frozen in
+`scion/docs/planning/v0.4/v0.4-candidate-disposition-and-research-ledger-design-20260716.md`.
+No new generative matched root may start until rejected code ancestry is
+excluded from continuation and promotion.
+
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
 Raw runtime already exposes VNS/ALNS phase facts, but next-H currently sees only
