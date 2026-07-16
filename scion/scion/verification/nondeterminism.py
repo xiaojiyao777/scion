@@ -90,13 +90,9 @@ def check_nondeterminism(
             )
         except Exception as exc:
             return None, str(exc)
-        if not r.success or r.output_path is None:
+        if not r.success or r.output is None:
             return None, r.stderr.strip() if r.stderr else ""
-        try:
-            with open(r.output_path, encoding="utf-8") as f:
-                return json.load(f), ""
-        except Exception as exc:
-            return None, str(exc)
+        return r.output.to_raw_mapping(), ""
 
     if first_execution is None:
         raw1, err1 = _run()

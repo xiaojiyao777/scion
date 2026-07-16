@@ -7,7 +7,7 @@ from typing import Mapping
 
 import pytest
 
-from scion.core.models import RunResult
+from scion.core.models import RunResult, SolverOutput
 from scion.problems.cvrp.evidence import (
     CvrpCaseEntry,
     CvrpCaseManifest,
@@ -97,14 +97,26 @@ class _FakeRunner:
         if key not in self._responses:
             raise AssertionError(f"unexpected runner call: {key!r}")
         response = self._responses[key]
+        raw = dict(response.raw or {})
+        output = None
+        if response.raw is not None:
+            output = SolverOutput(
+                objective=dict(raw.get("objective") or {}),
+                feasible=bool(raw.get("feasible", False)),
+                runtime=dict(raw.get("runtime") or {}),
+                solution_payload={
+                    key: value
+                    for key, value in raw.items()
+                    if key not in {"objective", "feasible", "runtime"}
+                },
+            )
         return RunResult(
             success=response.success,
             exit_code=response.exit_code if not response.success else 0,
             stdout="",
             stderr=response.stderr,
             elapsed_ms=response.elapsed_ms,
-            output=response.raw,  # type: ignore[arg-type]
-            output_path=None,
+            output=output,
             error_category=response.error_category,  # type: ignore[arg-type]
         )
 

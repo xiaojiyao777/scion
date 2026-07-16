@@ -110,10 +110,6 @@ def test_strict_adapter_backed_verification_gate_passes_cvrp_tiny(
     class StaticRunner:
         def run_solver(self, workdir, instance_path, seed, time_limit_sec, registry_path):
             calls.append((workdir, seed))
-            fd, output_path = tempfile.mkstemp(suffix=".json")
-            os.close(fd)
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(raw, f)
             return RunResult(
                 success=True,
                 exit_code=0,
@@ -129,7 +125,6 @@ def test_strict_adapter_backed_verification_gate_passes_cvrp_tiny(
                         if key not in {"objective", "feasible", "runtime"}
                     },
                 ),
-                output_path=output_path,
                 error_category=None,
             )
 

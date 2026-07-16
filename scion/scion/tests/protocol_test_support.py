@@ -162,7 +162,6 @@ def _make_missing_output(elapsed_ms: int = 100) -> RunResult:
         stderr="",
         elapsed_ms=elapsed_ms,
         output=None,
-        output_path=None,
     )
 
 
@@ -174,7 +173,6 @@ def _make_run_failure(category: str = "timeout", elapsed_ms: int = 1000) -> RunR
         stderr=category,
         elapsed_ms=elapsed_ms,
         output=None,
-        output_path=None,
         error_category=category,
     )
 

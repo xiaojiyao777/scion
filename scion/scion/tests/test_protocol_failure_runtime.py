@@ -62,7 +62,6 @@ FileNotFoundError: [Errno 2] No such file or directory: 'cvrplib/A/A-n32-k5.vrp'
         stderr=stderr,
         elapsed_ms=100,
         output=None,
-        output_path=None,
         error_category="crash",
     )
     candidate_failure = RunResult(
@@ -72,7 +71,6 @@ FileNotFoundError: [Errno 2] No such file or directory: 'cvrplib/A/A-n32-k5.vrp'
         stderr=stderr,
         elapsed_ms=120,
         output=None,
-        output_path=None,
         error_category="crash",
     )
     runner.run_solver.side_effect = [champion_failure, candidate_failure] * 4
@@ -151,7 +149,6 @@ FileNotFoundError: [Errno 2] No such file or directory: 'cvrplib/A/A-n32-k5.vrp'
             stderr=stderr,
             elapsed_ms=120,
             output=None,
-            output_path=None,
             error_category="crash",
         ),
     ] * 4

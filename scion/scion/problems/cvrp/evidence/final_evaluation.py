@@ -6,7 +6,6 @@ state and does not make promotion decisions.
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
@@ -419,20 +418,6 @@ def _failed_run_side(result: "RunResult") -> CvrpSideResult:
 def _load_raw_solver_output(
     result: "RunResult",
 ) -> tuple[Mapping[str, Any], tuple[str, str] | None]:
-    if result.output_path:
-        try:
-            with Path(result.output_path).open(encoding="utf-8") as handle:
-                raw = json.load(handle)
-        except FileNotFoundError:
-            return {}, ("missing_output", f"output file not found: {result.output_path}")
-        except json.JSONDecodeError as exc:
-            return {}, ("invalid_output", str(exc))
-        except OSError as exc:
-            return {}, ("invalid_output", str(exc))
-        if not isinstance(raw, Mapping):
-            return {}, ("invalid_output", "solver output JSON must be a mapping")
-        return raw, None
-
     raw_from_output = _raw_mapping_from_output_object(result.output)
     if raw_from_output is None:
         return {}, ("missing_output", "solver produced no output mapping")
@@ -444,9 +429,11 @@ def _raw_mapping_from_output_object(output: Any) -> Mapping[str, Any] | None:
         return None
     if isinstance(output, Mapping):
         return output
-    raw_output = getattr(output, "raw_output", None)
-    if isinstance(raw_output, Mapping):
-        return raw_output
+    to_raw_mapping = getattr(output, "to_raw_mapping", None)
+    if callable(to_raw_mapping):
+        raw_output = to_raw_mapping()
+        if isinstance(raw_output, Mapping):
+            return raw_output
 
     payload: dict[str, Any] = {}
     for attr in ("routes", "solution", "objective", "feasible", "runtime"):

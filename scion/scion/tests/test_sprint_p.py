@@ -1,13 +1,12 @@
 """Tests for Sprint P: campaign journal, weight-opt feedback, solution consistency, canary."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from types import SimpleNamespace
 
 from scion.config.problem import ProblemSpec, SearchSpace
 from scion.core.canary import CanarySetVersion
-from scion.core.models import RunResult
+from scion.core.models import RunResult, SolverOutput
 from scion.verification.state_mutation import check_state_mutation
 
 
@@ -118,9 +117,6 @@ def _make_spec(root: Path, canary: str) -> ProblemSpec:
 
 
 def _runner_for_output(root: Path, output: dict) -> SimpleNamespace:
-    output_path = root / "solver-output.json"
-    output_path.write_text(json.dumps(output), encoding="utf-8")
-
     def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
         return RunResult(
             success=True,
@@ -128,8 +124,16 @@ def _runner_for_output(root: Path, output: dict) -> SimpleNamespace:
             stdout="",
             stderr="",
             elapsed_ms=100,
-            output=None,
-            output_path=str(output_path),
+            output=SolverOutput(
+                objective=dict(output.get("objective") or {}),
+                feasible=bool(output.get("feasible", False)),
+                runtime=dict(output.get("runtime") or {}),
+                solution_payload={
+                    key: value
+                    for key, value in output.items()
+                    if key not in {"objective", "feasible", "runtime"}
+                },
+            ),
             error_category=None,
         )
 

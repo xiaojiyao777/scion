@@ -236,7 +236,10 @@ At the terminal audit snapshot, `/tmp` contained 252
 `scion_run_*.json` files totaling 419,331,485 bytes, all with modification times
 after the R11c launch. These are parsed solver interchange files, not formal
 metrics. They support the accepted runner-owned lifetime fix; they were not
-deleted during this audit.
+deleted during the terminal audit. After the ownership repair passed focused
+and full-suite verification, a separate cleanup confirmed zero live file
+owners and removed all 252 files; the residual count is zero. No R11c formal
+metric or durable V8 artifact was removed.
 
 ## Accepted work order
 

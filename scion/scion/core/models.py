@@ -413,6 +413,18 @@ class SolverOutput:
     runtime: Dict[str, Any] = field(default_factory=dict)
     solution_payload: Dict[str, Any] = field(default_factory=dict)
 
+    def to_raw_mapping(self) -> Dict[str, Any]:
+        """Reconstruct the complete solver mapping with stable key ownership."""
+        raw: Dict[str, Any] = {
+            "objective": dict(self.objective),
+            "feasible": bool(self.feasible),
+            "runtime": dict(self.runtime),
+        }
+        for key in sorted(self.solution_payload):
+            if key not in raw:
+                raw[key] = self.solution_payload[key]
+        return raw
+
 # --- Infrastructure ---
 
 @dataclass(frozen=True)
@@ -423,7 +435,6 @@ class RunResult:
     stderr: str
     elapsed_ms: int
     output: Optional[SolverOutput] = None
-    output_path: Optional[str] = None
     error_category: Optional[Literal["timeout", "oom", "crash"]] = None
 
 @dataclass(frozen=True)

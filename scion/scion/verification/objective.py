@@ -1,7 +1,6 @@
 """Objective check: solver-reported objective must match adapter recomputation."""
 from __future__ import annotations
 
-import json
 import os
 import time
 from typing import TYPE_CHECKING, Optional
@@ -77,7 +76,7 @@ def check_objective(
         except Exception as exc:
             return _cr(False, "heavy", f"runner error: {exc}", t0)
 
-        if not result.success or result.output_path is None:
+        if not result.success or result.output is None:
             return _cr(
                 False, "heavy",
                 f"solver failed: exit={result.exit_code} "
@@ -85,11 +84,7 @@ def check_objective(
                 t0,
             )
 
-        try:
-            with open(result.output_path, encoding="utf-8") as f:
-                raw = json.load(f)
-        except Exception as exc:
-            return _cr(False, "heavy", f"cannot read solver output: {exc}", t0)
+        raw = result.output.to_raw_mapping()
 
     audit_failure = runtime_audit_failure_from_raw(
         raw,

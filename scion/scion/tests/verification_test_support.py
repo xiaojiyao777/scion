@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional
@@ -198,6 +197,19 @@ def _solver_output_dict(splits: int = 2, cost: int = 6600) -> dict:
     }
 
 
+def _solver_output_from_dict(data: dict) -> SolverOutput:
+    return SolverOutput(
+        objective=dict(data.get("objective") or {}),
+        feasible=bool(data.get("feasible", False)),
+        runtime=dict(data.get("runtime") or {}),
+        solution_payload={
+            key: value
+            for key, value in data.items()
+            if key not in {"objective", "feasible", "runtime"}
+        },
+    )
+
+
 def _load_toy_tsp_adapter():
     import yaml
 
@@ -213,24 +225,18 @@ def _mock_runner(
     success: bool = True,
     elapsed_ms: int = 500,
     output_dict: dict | None = None,
-    output_path: str | None = None,
 ) -> Any:
-    """Create a mock runner that writes output to a temp file."""
+    """Create a mock runner with a self-contained parsed output."""
     runner = MagicMock()
 
     def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
         if not success:
             return RunResult(
                 success=False, exit_code=1, stdout="", stderr="fail",
-                elapsed_ms=elapsed_ms, output=None, output_path=None,
+                elapsed_ms=elapsed_ms, output=None,
                 error_category="crash",
             )
-        # Write output to a temp file.
-        fd, path = tempfile.mkstemp(suffix=".json")
-        os.close(fd)
         data = output_dict or _solver_output_dict()
-        with open(path, "w") as f:
-            json.dump(data, f)
         sol_out = SolverOutput(
             objective=data.get("objective", {}),
             feasible=data.get("feasible", False),
@@ -247,7 +253,7 @@ def _mock_runner(
         )
         return RunResult(
             success=True, exit_code=0, stdout="", stderr="",
-            elapsed_ms=elapsed_ms, output=sol_out, output_path=path,
+            elapsed_ms=elapsed_ms, output=sol_out,
             error_category=None,
         )
 
@@ -264,10 +270,6 @@ def _sequential_runner(outputs: list[dict]) -> Any:
         index = min(call_count[0], len(outputs) - 1)
         call_count[0] += 1
         data = outputs[index]
-        fd, path = tempfile.mkstemp(suffix=".json")
-        os.close(fd)
-        with open(path, "w") as f:
-            json.dump(data, f)
         return RunResult(
             success=True,
             exit_code=0,
@@ -288,7 +290,6 @@ def _sequential_runner(outputs: list[dict]) -> Any:
                     if key not in {"objective", "feasible", "runtime"}
                 },
             ),
-            output_path=path,
             error_category=None,
         )
 

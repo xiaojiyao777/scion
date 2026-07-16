@@ -79,17 +79,13 @@ def check_state_mutation(
         except Exception as exc:
             return _cr(False, f"solver run failed: {exc}", t0, diagnosis="ENV")
 
-        if not result.success or result.output_path is None:
+        if not result.success or result.output is None:
             detail = "solver run failed or no output"
             if result.stderr:
                 detail = f"solver run failed: {result.stderr.strip()}"
             return _cr(False, detail, t0, diagnosis="ENV")
 
-        try:
-            with open(result.output_path, encoding="utf-8") as f:
-                raw = json.load(f)
-        except Exception as exc:
-            return _cr(False, f"could not read output: {exc}", t0, diagnosis="ENV")
+        raw = result.output.to_raw_mapping()
 
     audit_failure = runtime_audit_failure_from_raw(
         raw,

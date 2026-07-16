@@ -1,7 +1,6 @@
 """CVRP solver smoke tests for adapter-loaded JSON and CVRPLIB inputs."""
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import Any
@@ -82,13 +81,7 @@ def _run_solver(instance_path: str) -> dict[str, Any]:
     assert result.success is True, result.stderr
     assert result.output is not None
     assert result.output.feasible is True
-    assert result.output_path is not None
-
-    output_path = Path(result.output_path)
-    try:
-        return json.loads(output_path.read_text(encoding="utf-8"))
-    finally:
-        output_path.unlink(missing_ok=True)
+    return result.output.to_raw_mapping()
 
 
 def _run_solver_with_env(instance_path: str, *, data_root: Path) -> dict[str, Any]:

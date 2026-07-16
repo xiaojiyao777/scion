@@ -37,6 +37,8 @@ def test_run_canary_fail_solver_crash(tmp_path):
     proto = _make_protocol(runner, tmp_path)
     result = proto.run_canary("/cand", "/champ")
     assert not result.passed
+    assert result.details["candidate_outcome"]["output_present"] is False
+    assert "output_path" not in result.details["candidate_outcome"]
 
 
 def test_run_canary_fail_candidate_operator_runtime_error(tmp_path):

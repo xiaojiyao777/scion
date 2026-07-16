@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -66,10 +64,6 @@ def _make_nondeterministic_runner(tmp_path: Path) -> MagicMock:
         call_count[0] += 1
         splits = 2 if call_count[0] == 1 else 5
         data = _solver_output_dict(splits=splits)
-        fd, path = tempfile.mkstemp(suffix=".json")
-        os.close(fd)
-        with open(path, "w") as f:
-            json.dump(data, f)
         sol = SolverOutput(
             objective=data["objective"],
             feasible=True,
@@ -81,7 +75,7 @@ def _make_nondeterministic_runner(tmp_path: Path) -> MagicMock:
         )
         return RunResult(
             success=True, exit_code=0, stdout="", stderr="",
-            elapsed_ms=100, output=sol, output_path=path, error_category=None,
+            elapsed_ms=100, output=sol, error_category=None,
         )
 
     runner.run_solver.side_effect = run_solver
@@ -94,10 +88,6 @@ def _make_deterministic_runner(tmp_path: Path) -> MagicMock:
 
     def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
         data = _solver_output_dict(splits=2, cost=6600)
-        fd, path = tempfile.mkstemp(suffix=".json")
-        os.close(fd)
-        with open(path, "w") as f:
-            json.dump(data, f)
         sol = SolverOutput(
             objective=data["objective"],
             feasible=True,
@@ -109,7 +99,7 @@ def _make_deterministic_runner(tmp_path: Path) -> MagicMock:
         )
         return RunResult(
             success=True, exit_code=0, stdout="", stderr="",
-            elapsed_ms=100, output=sol, output_path=path, error_category=None,
+            elapsed_ms=100, output=sol, error_category=None,
         )
 
     runner.run_solver.side_effect = run_solver

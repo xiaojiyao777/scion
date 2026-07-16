@@ -607,11 +607,11 @@ The controlling conclusions are:
 - removing VNS changes iteration count and iteration-based SA cooling, so time
   competition and search-trajectory effects must be reported separately.
 
-The implementation order is fixed; item 1 is complete:
+The implementation order is fixed; items 1-2 are complete:
 
 1. terminalize and audit R11c without changing its runtime;
-2. make `LocalSubprocessRunner` own and delete solver interchange files while
-   preserving all formal raw metrics;
+2. [complete] make `LocalSubprocessRunner` own and delete solver interchange
+   files while preserving all formal raw metrics;
 3. project existing runtime fields into problem-owned
    `SearchAllocationEvidence`, with no new instrumentation in the same slice;
 4. make finalized H/Patch/Verification `research_rejected` attempt-terminal but
@@ -652,18 +652,22 @@ wrapper shell, while retaining roots with unique traces or raw metrics; about
 `33.0 GiB` is now available. The exact paths, predicates, inventories, and
 retained gray set are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
-The `scion_run_*.json` accumulation is a runner ownership bug, not formal
-evidence loss. Future historical cleanup must protect live/current roots,
+The `scion_run_*.json` accumulation was a runner ownership bug, not formal
+evidence loss. The ownership repair passed `2075` tests with `1` skipped;
+focused regression passed `152`. After verifying that no live process held the
+R11c interchange files, the terminal set of `252` files / `419,331,485` bytes
+was removed and the residual count was zero. Future historical cleanup must
+protect live/current roots,
 unique unsummarized evidence, and the baseline-strength anchors required by the
 accepted design, and delete exact superseded/no-evidence/duplicate roots only
 from a recorded dry-run manifest.
 
 ## Execution Queue
 
-1. Execute the approved post-R11c design in order: runner-owned
-   temp lifecycle, proposal-only allocation evidence, candidate disposition,
-   research-rejection continuation, normalized research ledger, current no-LLM
-   profiles, matched canonical/pure campaigns, then transplant replay.
+1. Execute the remaining approved post-R11c design in order: proposal-only
+   allocation evidence, research-rejection continuation, candidate disposition,
+   normalized research ledger, current no-LLM profiles, matched canonical/pure
+   campaigns, then transplant replay. Runner-owned temp lifecycle is complete.
 2. Correct event replay identity, terminal status finalization, and postrun
    projection completeness within their owning slices; do not patch reports in
    isolation.

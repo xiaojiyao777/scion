@@ -8,7 +8,7 @@ from typing import Mapping
 
 import pytest
 
-from scion.core.models import RunResult
+from scion.core.models import RunResult, SolverOutput
 from scion.problems.cvrp.evidence import (
     CvrpFinalEvaluationConfig,
     build_cvrp_final_evidence_package,
@@ -87,18 +87,23 @@ class _FakeRunner:
             raise AssertionError(f"unexpected runner call: {key!r}")
         response = self._responses[key]
         if response.success and response.raw is not None:
-            output_path = self._tmp_path / f"run_{len(self.calls)}.json"
-            output_path.write_text(
-                json.dumps(response.raw),
-                encoding="utf-8",
-            )
+            raw = dict(response.raw)
             return RunResult(
                 success=True,
                 exit_code=response.exit_code,
                 stdout="",
                 stderr=response.stderr,
                 elapsed_ms=response.elapsed_ms,
-                output_path=str(output_path),
+                output=SolverOutput(
+                    objective=dict(raw.get("objective") or {}),
+                    feasible=bool(raw.get("feasible", False)),
+                    runtime=dict(raw.get("runtime") or {}),
+                    solution_payload={
+                        key: value
+                        for key, value in raw.items()
+                        if key not in {"objective", "feasible", "runtime"}
+                    },
+                ),
                 error_category=None,
             )
         return RunResult(
@@ -107,7 +112,6 @@ class _FakeRunner:
             stdout="",
             stderr=response.stderr,
             elapsed_ms=response.elapsed_ms,
-            output_path=None,
             error_category=response.error_category,  # type: ignore[arg-type]
         )
 

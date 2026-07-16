@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from typing import Any, Mapping
 
 from scion.core.models import RunResult
@@ -90,16 +89,6 @@ def run_candidate_canary(
 
 
 def _raw_output_from_result(result: RunResult) -> Mapping[str, Any] | None:
-    if result.output_path:
-        with open(result.output_path, encoding="utf-8") as handle:
-            raw = json.load(handle)
-        if not isinstance(raw, Mapping):
-            raise TypeError("solver output JSON must be an object")
-        return raw
     if result.output is None:
         return None
-    raw = dict(result.output.solution_payload)
-    raw["objective"] = dict(result.output.objective)
-    raw["feasible"] = bool(result.output.feasible)
-    raw["runtime"] = dict(result.output.runtime)
-    return raw
+    return result.output.to_raw_mapping()

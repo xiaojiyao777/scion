@@ -13,16 +13,21 @@ import tempfile
 import threading
 import time
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 from scion.core.models import RunResult, SolverOutput
-from scion.runtime.runner import ResourceLimits
+from scion.runtime.runner import (
+    STDIO_OFFLOAD_PREFIX,
+    ResourceLimits,
+    resolve_offloaded,
+)
 
 logger = logging.getLogger(__name__)
 
 MAX_INLINE_OUTPUT_BYTES = 50_000
-_OFFLOAD_PREFIX = "__offloaded__:"
+_OFFLOAD_PREFIX = STDIO_OFFLOAD_PREFIX
 _SOLVER_WALL_CLOCK_GRACE_SEC = 15
 _POST_KILL_DRAIN_GRACE_SEC = 1
 
@@ -175,9 +180,8 @@ class LocalSubprocessRunner:
                              --time-limit <sec> --registry <path>
                              --output <tmpfile>
 
-        Returns RunResult.  output_path points to the solver's output JSON when
-        the process exits with code 0; it is a temp file that the caller is
-        responsible for reading and deleting.
+        The solver interchange file is runner-owned. The returned result is
+        self-contained and the interchange file is removed before return.
         """
         solver_path = Path(workdir) / "solver.py"
         python_exe = sys.executable
@@ -197,39 +201,39 @@ class LocalSubprocessRunner:
             max_file_descriptors=self._limits.max_file_descriptors,
         )
 
-        # Create a temporary output file so the solver can write results
-        out_fd, out_path = tempfile.mkstemp(suffix=".json", prefix="scion_run_")
-        os.close(out_fd)
-
-        cmd = [
-            python_exe,
-            str(solver_path),
-            str(instance_path),
-            "--seed", str(seed),
-            "--time-limit", str(time_limit_sec),
-            "--registry", str(registry_path),
-            "--output", out_path,
-        ]
-
-        env = _build_clean_env()
-        surface = str(selected_surface or "").strip()
-        env.update(_effective_scion_env(surface or None))
-        if not surface:
-            env.pop("SCION_SELECTED_SURFACE", None)
-        # Ensure the workspace itself is on PYTHONPATH so operators can be imported
-        existing_pp = _pythonpath_for_child_cwd(
-            env.get("PYTHONPATH", ""),
-            parent_cwd=Path.cwd(),
-        )
-        env["PYTHONPATH"] = (
-            workdir + os.pathsep + existing_pp
-        ).rstrip(os.pathsep)
-
         start_ns = time.monotonic_ns()
-        error_category: Optional[str] = None
+        out_path: str | None = None
         proc: Optional[subprocess.Popen] = None
-
         try:
+            out_fd, out_path = tempfile.mkstemp(
+                suffix=".json",
+                prefix="scion_run_",
+            )
+            os.close(out_fd)
+
+            cmd = [
+                python_exe,
+                str(solver_path),
+                str(instance_path),
+                "--seed", str(seed),
+                "--time-limit", str(time_limit_sec),
+                "--registry", str(registry_path),
+                "--output", out_path,
+            ]
+
+            env = _build_clean_env()
+            surface = str(selected_surface or "").strip()
+            env.update(_effective_scion_env(surface or None))
+            if not surface:
+                env.pop("SCION_SELECTED_SURFACE", None)
+            existing_pp = _pythonpath_for_child_cwd(
+                env.get("PYTHONPATH", ""),
+                parent_cwd=Path.cwd(),
+            )
+            env["PYTHONPATH"] = (
+                workdir + os.pathsep + existing_pp
+            ).rstrip(os.pathsep)
+
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -247,6 +251,7 @@ class LocalSubprocessRunner:
                 selected_surface=surface or None,
             )
 
+            error_category: Optional[str] = None
             try:
                 stdout_bytes, stderr_bytes = proc.communicate(
                     timeout=effective_timeout
@@ -270,114 +275,120 @@ class LocalSubprocessRunner:
                     )
                 error_category = "timeout"
 
+            elapsed_ms = int((time.monotonic_ns() - start_ns) / 1_000_000)
+            stdout_str = stdout_bytes.decode("utf-8", errors="replace")
+            stderr_str = stderr_bytes.decode("utf-8", errors="replace")
+
+            run_id = str(uuid.uuid4())[:8]
+            stdout_str = self._maybe_offload(
+                stdout_str,
+                workdir,
+                f"{run_id}_stdout",
+            )
+            stderr_str = self._maybe_offload(
+                stderr_str,
+                workdir,
+                f"{run_id}_stderr",
+            )
+
+            exit_code = proc.returncode
+            if exit_code is None:
+                if error_category is None and _proc_is_running(proc):
+                    _kill_proc(proc)
+                exit_code = -signal.SIGKILL
+            self._emit_progress(
+                child_pid=None,
+                child_exit_code=exit_code,
+                child_elapsed_ms=elapsed_ms,
+                child_phase="solver_subprocess_complete",
+                case=instance_path,
+                seed=seed,
+                selected_surface=surface or None,
+            )
+
+            if error_category is None and exit_code != 0:
+                if exit_code in (-9, -signal.SIGKILL) or "MemoryError" in stderr_str:
+                    error_category = "oom"
+                else:
+                    error_category = "crash"
+
+            success = exit_code == 0 and error_category is None
+            solver_output: Optional[SolverOutput] = None
+            if success:
+                try:
+                    with open(out_path, "r", encoding="utf-8") as handle:
+                        raw = json.load(handle)
+                    if not isinstance(raw, Mapping):
+                        raise TypeError("solver output JSON must be an object")
+                    objective = raw.get("objective", {})
+                    runtime = raw.get("runtime", {})
+                    feasible = raw.get("feasible", False)
+                    if not isinstance(objective, Mapping):
+                        raise TypeError("solver output objective must be an object")
+                    if not isinstance(runtime, Mapping):
+                        raise TypeError("solver output runtime must be an object")
+                    if not isinstance(feasible, bool):
+                        raise TypeError("solver output feasible must be a boolean")
+                    solver_output = SolverOutput(
+                        objective=dict(objective),
+                        feasible=feasible,
+                        runtime=dict(runtime),
+                        solution_payload={
+                            key: value
+                            for key, value in raw.items()
+                            if key not in _SOLVER_OUTPUT_FRAMEWORK_FIELDS
+                        },
+                    )
+                except (OSError, UnicodeError, json.JSONDecodeError, TypeError) as exc:
+                    success = False
+                    error_category = "crash"
+                    stderr_str = _append_text_note(
+                        stderr_str,
+                        f"Solver output parse error: {exc}",
+                    )
+
+            return RunResult(
+                success=success,
+                exit_code=exit_code,
+                stdout=stdout_str,
+                stderr=stderr_str,
+                elapsed_ms=elapsed_ms,
+                output=solver_output if success else None,
+                error_category=error_category,
+            )
         except MemoryError:
-            if proc is not None:
+            if proc is not None and _proc_is_running(proc):
                 _kill_proc(proc)
             elapsed_ms = int((time.monotonic_ns() - start_ns) / 1_000_000)
-            _try_remove(out_path)
             return RunResult(
                 success=False,
                 exit_code=-1,
                 stdout="",
                 stderr="MemoryError in runner",
                 elapsed_ms=elapsed_ms,
-                output_path=None,
                 error_category="oom",
             )
         except Exception as exc:
-            if proc is not None:
+            if proc is not None and _proc_is_running(proc):
                 _kill_proc(proc)
             elapsed_ms = int((time.monotonic_ns() - start_ns) / 1_000_000)
-            _try_remove(out_path)
             return RunResult(
                 success=False,
                 exit_code=-1,
                 stdout="",
                 stderr=str(exc),
                 elapsed_ms=elapsed_ms,
-                output_path=None,
                 error_category="crash",
             )
+        except BaseException:
+            if proc is not None and _proc_is_running(proc):
+                _kill_proc(proc)
+            raise
         finally:
             if proc is not None:
                 self._unregister_proc(proc)
-
-        elapsed_ms = int((time.monotonic_ns() - start_ns) / 1_000_000)
-
-        stdout_str = stdout_bytes.decode("utf-8", errors="replace")
-        stderr_str = stderr_bytes.decode("utf-8", errors="replace")
-
-        # Offload large outputs to disk to keep RunResult lightweight
-        run_id = str(uuid.uuid4())[:8]
-        stdout_str = self._maybe_offload(stdout_str, workdir, f"{run_id}_stdout")
-        stderr_str = self._maybe_offload(stderr_str, workdir, f"{run_id}_stderr")
-
-        exit_code = proc.returncode
-        if exit_code is None:
-            exit_code = -signal.SIGKILL
-        self._emit_progress(
-            child_pid=None,
-            child_exit_code=exit_code,
-            child_elapsed_ms=elapsed_ms,
-            child_phase="solver_subprocess_complete",
-            case=instance_path,
-            seed=seed,
-            selected_surface=surface or None,
-        )
-
-        # Classify non-zero exits
-        if error_category is None and exit_code != 0:
-            # OOM: returncode -9 (SIGKILL) and stderr hints
-            if exit_code in (-9, -signal.SIGKILL) or "MemoryError" in stderr_str:
-                error_category = "oom"
-            else:
-                error_category = "crash"
-
-        success = exit_code == 0 and error_category is None
-
-        # Parse solver output JSON if successful
-        solver_output: Optional[SolverOutput] = None
-        if success and out_path and os.path.exists(out_path):
-            try:
-                with open(out_path, 'r') as f:
-                    raw = json.load(f)
-                if not isinstance(raw, dict):
-                    raise TypeError("solver output JSON must be an object")
-                solver_output = SolverOutput(
-                    objective=raw.get("objective", {}),
-                    feasible=raw.get("feasible", False),
-                    runtime=(
-                        raw.get("runtime", {})
-                        if isinstance(raw.get("runtime", {}), dict)
-                        else {}
-                    ),
-                    solution_payload={
-                        key: value
-                        for key, value in raw.items()
-                        if key not in _SOLVER_OUTPUT_FRAMEWORK_FIELDS
-                    },
-                )
-            except (json.JSONDecodeError, KeyError, TypeError) as e:
-                # JSON parse failure → treat as crash
-                success = False
-                error_category = "crash"
-                stderr_str += f"\nJSON parse error: {e}"
-
-        # If failed, clean up the (empty) output file
-        if not success:
-            _try_remove(out_path)
-            out_path = None  # type: ignore[assignment]
-
-        return RunResult(
-            success=success,
-            exit_code=exit_code,
-            stdout=stdout_str,
-            stderr=stderr_str,
-            elapsed_ms=elapsed_ms,
-            output=solver_output,
-            output_path=out_path if success else None,
-            error_category=error_category,
-        )
+            if out_path is not None:
+                _remove_interchange_file(out_path)
 
     def _emit_progress(self, **payload: Any) -> None:
         if self._progress_callback is None:
@@ -492,21 +503,19 @@ def _append_stderr_note(stderr_bytes: bytes, note: str) -> bytes:
     return stderr_bytes + separator + note.encode("utf-8")
 
 
-def _try_remove(path: str) -> None:
+def _remove_interchange_file(path: str) -> None:
     try:
         os.unlink(path)
-    except OSError:
-        pass
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        logger.warning(
+            "Failed to remove runner-owned solver interchange file %s: %s",
+            path,
+            exc,
+        )
 
 
-def resolve_offloaded(output: str) -> str:
-    """Resolve an offloaded output reference back to its full content.
-
-    If ``output`` is an ``__offloaded__:<path>`` reference, reads and returns
-    the content from disk.  Otherwise returns ``output`` unchanged.
-    """
-    if output.startswith(_OFFLOAD_PREFIX):
-        path = output[len(_OFFLOAD_PREFIX):]
-        with open(path, "r") as f:
-            return f.read()
-    return output
+def _append_text_note(value: str, note: str) -> str:
+    separator = "\n" if value else ""
+    return value + separator + note

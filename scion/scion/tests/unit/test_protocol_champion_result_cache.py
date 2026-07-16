@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -267,6 +268,61 @@ def test_cache_preserves_solution_payload(tmp_path):
     assert cached is not None
     assert cached.output is not None
     assert cached.output.solution_payload == {"artifact": {"items": [1, 2]}}
+
+    path = cache._entry_path(base_key["digest"])
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert "output_path" not in payload["run_result"]
+
+
+def test_cache_ignores_legacy_output_path(tmp_path):
+    cache, base_key, _base_args = _primed_cache(tmp_path)
+    path = cache._entry_path(base_key["digest"])
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["run_result"]["output_path"] = "/tmp/legacy-scion-run.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    cached = cache.get(base_key)
+
+    assert cached is not None
+    assert cached.output is not None
+    assert cached.output.to_raw_mapping()["objective"] == {"score": 2}
+    assert not hasattr(cached, "output_path")
+
+
+def test_cache_resolves_large_stdio_offloads_without_persisting_paths(tmp_path):
+    cache, base_key, _base_args = _primed_cache(tmp_path)
+    stdout = "stdout:" + "x" * 50_100
+    stderr = "stderr:" + "y" * 50_200
+    stdout_path = tmp_path / "random-stdout-offload.txt"
+    stderr_path = tmp_path / "random-stderr-offload.txt"
+    stdout_path.write_text(stdout, encoding="utf-8")
+    stderr_path.write_text(stderr, encoding="utf-8")
+    result = RunResult(
+        success=True,
+        exit_code=0,
+        stdout=f"__offloaded__:{stdout_path}",
+        stderr=f"__offloaded__:{stderr_path}",
+        elapsed_ms=12,
+        output=SolverOutput(objective={"score": 5}, feasible=True),
+    )
+
+    assert cache.put(base_key, result)
+
+    path = cache._entry_path(base_key["digest"])
+    serialized = path.read_text(encoding="utf-8")
+    payload = json.loads(serialized)["run_result"]
+    assert str(stdout_path) not in serialized
+    assert str(stderr_path) not in serialized
+    assert "__offloaded__:" not in serialized
+    assert payload["stdout"] == stdout
+    assert payload["stderr"] == stderr
+    assert payload["stdout_sha256"] == hashlib.sha256(stdout.encode()).hexdigest()
+    assert payload["stderr_sha256"] == hashlib.sha256(stderr.encode()).hexdigest()
+
+    cached = cache.get(base_key)
+    assert cached is not None
+    assert cached.stdout == stdout
+    assert cached.stderr == stderr
 
 
 def test_cache_restores_unknown_output_fields_as_solution_payload(tmp_path):

@@ -170,13 +170,7 @@ def _run_solver(
     assert result.success is True, result.stderr
     assert result.output is not None
     assert result.output.feasible is True
-    assert result.output_path is not None
-
-    output_path = Path(result.output_path)
-    try:
-        return json.loads(output_path.read_text(encoding="utf-8"))
-    finally:
-        output_path.unlink(missing_ok=True)
+    return result.output.to_raw_mapping()
 
 
 def _artifact(raw: dict[str, Any], workspace: Path, instance_path: str):

@@ -4,6 +4,7 @@ import dataclasses
 import hashlib
 import inspect
 import json
+import logging
 import os
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -11,6 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from scion.core.models import RunResult, SolverOutput
+from scion.runtime.runner import resolve_offloaded
+
+logger = logging.getLogger(__name__)
 
 _SOLVER_OUTPUT_FRAMEWORK_FIELDS = frozenset(
     {"objective", "feasible", "runtime", "solution_payload"}
@@ -112,10 +116,18 @@ class ChampionResultCache:
     def put(self, key: Mapping[str, Any], result: RunResult) -> bool:
         if not cacheable_champion_result(result):
             return False
+        try:
+            result_payload = _run_result_to_payload(result)
+        except OSError as exc:
+            logger.warning(
+                "Champion result cache skipped unreadable stdout/stderr offload: %s",
+                exc,
+            )
+            return False
         payload = {
             "schema": CHAMPION_RESULT_CACHE_VALUE_SCHEMA,
             "key": dict(key),
-            "run_result": _run_result_to_payload(result),
+            "run_result": result_payload,
         }
         path = self._entry_path(str(key.get("digest") or stable_digest(key)))
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -279,14 +291,13 @@ def _case_identity(case_path: str) -> dict[str, Any]:
 
 
 def _run_result_to_payload(result: RunResult) -> dict[str, Any]:
-    stdout = result.stdout or ""
-    stderr = result.stderr or ""
+    stdout = resolve_offloaded(result.stdout or "")
+    stderr = resolve_offloaded(result.stderr or "")
     return {
         "success": result.success,
         "exit_code": result.exit_code,
         "elapsed_ms": result.elapsed_ms,
         "output": _solver_output_to_payload(result.output),
-        "output_path": result.output_path,
         "error_category": result.error_category,
         "stdout_sha256": _text_digest(stdout),
         "stderr_sha256": _text_digest(stderr),
@@ -311,11 +322,6 @@ def _run_result_from_payload(payload: Mapping[str, Any]) -> RunResult | None:
         stderr=str(payload.get("stderr") or ""),
         elapsed_ms=int(payload.get("elapsed_ms") or 0),
         output=output,
-        output_path=(
-            str(payload.get("output_path"))
-            if payload.get("output_path") is not None
-            else None
-        ),
         error_category=payload.get("error_category"),
     )
 

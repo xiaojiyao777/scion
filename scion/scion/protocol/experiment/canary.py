@@ -306,7 +306,7 @@ def _run_outcome(result) -> dict:
         "error_category": getattr(result, "error_category", None),
         "elapsed_ms": getattr(result, "elapsed_ms", None),
         "feasible": getattr(output, "feasible", None) if output is not None else None,
-        "output_path": getattr(result, "output_path", None),
+        "output_present": output is not None,
     }
 
 

@@ -8,6 +8,18 @@ from typing import Optional, Protocol, runtime_checkable
 from scion.core.models import RunResult
 
 
+STDIO_OFFLOAD_PREFIX = "__offloaded__:"
+
+
+def resolve_offloaded(output: str) -> str:
+    """Resolve a runner stdio offload reference to stable text content."""
+    if output.startswith(STDIO_OFFLOAD_PREFIX):
+        path = output[len(STDIO_OFFLOAD_PREFIX):]
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read()
+    return output
+
+
 @dataclass
 class ResourceLimits:
     """Resource constraints applied to each solver subprocess."""
@@ -43,7 +55,7 @@ class Runner(Protocol):
 
         Returns:
             RunResult with success flag, exit code, stdout/stderr, elapsed_ms,
-            output_path and error_category.
+            self-contained parsed output and error_category.
         """
         ...
 

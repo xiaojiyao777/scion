@@ -55,12 +55,15 @@ Raw runtime already exposes VNS/ALNS phase facts, but next-H currently sees only
 ALNS repair summaries. The accepted first code slice adds compact problem-owned
 proposal evidence for phase time/share, ALNS throughput, and repair-to-polish
 value without touching DecisionFeatures, Protocol gates, or generic core
-tooling. Before that, the runner ownership slice removes `RunResult.output_path`
-and makes every returned solver result self-contained. At R11c terminal, `/tmp`
-contained 252 post-launch `scion_run_*.json` files totaling `419,331,485`
-bytes; these parsed interchange files are not formal evidence. A current
-direct-v3 matched canonical/pure-ALNS study follows only after the no-LLM
-four-profile characterization and the ancestry/research-rejection corrections.
+tooling. The preceding runner ownership slice is complete: `RunResult.output_path`
+is removed, returned solver results are self-contained, and the runner deletes
+its own interchange file across success, failure, cancellation, and malformed
+output paths. Focused regression passes `152`; the full suite passes `2075`
+with `1` skipped. The test run created no residual interchange files. After
+confirming zero live owners, the 252 R11c-era `scion_run_*.json` files totaling
+`419,331,485` bytes were deleted; residual count is zero. A current direct-v3
+matched canonical/pure-ALNS study follows only after the no-LLM four-profile
+characterization and the ancestry/research-rejection corrections.
 
 Disk pressure is no longer an active blocker. A safe cleanup removed inactive
 pip/npm caches plus `42,630` solver interchange files created before R11c,
@@ -77,8 +80,8 @@ traces or raw metrics remained. About `33.0 GiB` is now available. The exact,
 gray, and tracked-evidence manifests are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
 Current R6-R11c, baseline-strength inputs, recent roots, and ambiguous roots
-remain protected. The temp accumulation is tracked as a runner ownership
-defect; formal campaign metrics remain protected.
+remain protected. The runner ownership defect and its duplicate temp files are
+closed; formal campaign metrics remain protected.
 
 Warehouse direct-v3 has proven effective research behavior but not a retained
 current improvement. R3 performed two substantive algorithm rounds, used the
@@ -699,11 +702,11 @@ context and the maximum-scale compliance probe returns within the window. The
 explicit deadline-context telemetry proxy must be extended if a future
 baseline module starts using another context API.
 
-The final affected transaction/report/guidance review set passes `198`; the
-current champion-ref repair focus passes `58`, and the correctly rooted
-standard Scion suite passes `2040` with `1` skipped in `479.74s`. `compileall`
-and `git diff --check` pass. The earlier merged R7 verification/projection set
-passed `78`, and its focused deadline/lifecycle/protocol set passed `81`.
+The runner-ownership focus passes `152`, and the correctly rooted standard
+Scion suite passes `2075` with `1` skipped in `474.66s`. `compileall` and
+`git diff --check` pass. The earlier final affected
+transaction/report/guidance set passed `198`; the champion-ref repair focus
+passed `58`.
 
 Excluded and preserved:
 
@@ -712,20 +715,17 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Implement and verify runner-owned temp cleanup from the frozen contract;
-   preserve formal metrics/V8 artifacts and remove every production
-   `RunResult.output_path` consumer.
-2. Implement proposal-only CVRP SearchAllocationEvidence from existing fields,
+1. Implement proposal-only CVRP SearchAllocationEvidence from existing fields,
    including phase allocation, operator lifecycle, exact destroy-repair pairs,
    and feasibility/slack features; keep Decision/gates byte-stable.
-3. Make finalized research rejection attempt-terminal but scheduler-forward,
+2. Make finalized research rejection attempt-terminal but scheduler-forward,
    then implement clean/provisional candidate disposition and the reversible
    normalized research/rejection ledger.
-4. Correct event replay identity, terminal last-outcome ownership, and postrun
+3. Correct event replay identity, terminal last-outcome ownership, and postrun
    projection completeness in their owning lifecycle slices.
-5. Run serial no-LLM four-profile characterization, matched canonical/pure-ALNS
+4. Run serial no-LLM four-profile characterization, matched canonical/pure-ALNS
    campaigns, and canonical transplant replay in that order.
-6. Execute the warehouse fixed/decomposition plan after problem-owned mechanism
+5. Execute the warehouse fixed/decomposition plan after problem-owned mechanism
    attribution exists; protect every named evidence input.
 
 ## R9 Continuation Terminal Checks

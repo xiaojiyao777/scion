@@ -1,7 +1,6 @@
 """Feasibility check: run solver on canary case and verify adapter feasibility."""
 from __future__ import annotations
 
-import json
 import os
 import sys
 import time
@@ -79,14 +78,9 @@ def check_feasibility(
                 t0,
             )
 
-        if result.output_path is None:
-            return _cr(False, "heavy", "solver produced no output file", t0)
-
-        try:
-            with open(result.output_path, encoding="utf-8") as f:
-                raw = json.load(f)
-        except Exception as exc:
-            return _cr(False, "heavy", f"cannot read solver output: {exc}", t0)
+        if result.output is None:
+            return _cr(False, "heavy", "solver produced no output mapping", t0)
+        raw = result.output.to_raw_mapping()
 
     audit_failure = runtime_audit_failure_from_raw(
         raw,

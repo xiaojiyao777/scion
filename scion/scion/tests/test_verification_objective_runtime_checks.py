@@ -206,13 +206,9 @@ class TestStateleakCheck:
 
         def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
             call_count[0] += 1
-            fd, path = tempfile.mkstemp(suffix=".json")
-            os.close(fd)
             # Return different objective on second call.
             splits = 2 if call_count[0] == 1 else 5
             data = _solver_output_dict(splits=splits)
-            with open(path, "w") as f:
-                json.dump(data, f)
             sol = SolverOutput(
                 objective=data["objective"],
                 feasible=True,
@@ -224,7 +220,7 @@ class TestStateleakCheck:
             )
             return RunResult(
                 success=True, exit_code=0, stdout="", stderr="",
-                elapsed_ms=100, output=sol, output_path=path, error_category=None,
+                elapsed_ms=100, output=sol, error_category=None,
             )
 
         runner = MagicMock()
@@ -424,14 +420,12 @@ class TestPerfGuardCheck:
         def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
             call_count[0] += 1
             ms = 500 if workdir != champ_ws else 1000
-            fd, path = tempfile.mkstemp(suffix=".json")
-            os.close(fd)
             data = _solver_output_dict()
-            with open(path, "w") as f:
-                json.dump(data, f)
             return RunResult(
                 success=True, exit_code=0, stdout="", stderr="",
-                elapsed_ms=ms, output=None, output_path=path, error_category=None,
+                elapsed_ms=ms,
+                output=_solver_output_from_dict(data),
+                error_category=None,
             )
 
         runner = MagicMock()
@@ -499,14 +493,12 @@ class TestPerfGuardCheck:
         # Candidate: 6000ms, Champion: 1000ms → ratio=6 > 5 → fails
         def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
             ms = 6000 if workdir != champ_ws else 1000
-            fd, path = tempfile.mkstemp(suffix=".json")
-            os.close(fd)
             data = _solver_output_dict()
-            with open(path, "w") as f:
-                json.dump(data, f)
             return RunResult(
                 success=True, exit_code=0, stdout="", stderr="",
-                elapsed_ms=ms, output=None, output_path=path, error_category=None,
+                elapsed_ms=ms,
+                output=_solver_output_from_dict(data),
+                error_category=None,
             )
 
         runner = MagicMock()
@@ -526,13 +518,12 @@ class TestPerfGuardCheck:
 
         def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
             ms = 3000 if workdir != champ_ws else 1000
-            fd, path = tempfile.mkstemp(suffix=".json")
-            os.close(fd)
-            with open(path, "w") as f:
-                json.dump(_solver_output_dict(), f)
+            data = _solver_output_dict()
             return RunResult(
                 success=True, exit_code=0, stdout="", stderr="",
-                elapsed_ms=ms, output=None, output_path=path, error_category=None,
+                elapsed_ms=ms,
+                output=_solver_output_from_dict(data),
+                error_category=None,
             )
 
         runner = MagicMock()
@@ -553,13 +544,12 @@ class TestPerfGuardCheck:
 
         def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
             seen_limits.append(time_limit_sec)
-            fd, path = tempfile.mkstemp(suffix=".json")
-            os.close(fd)
-            with open(path, "w") as f:
-                json.dump(_solver_output_dict(), f)
+            data = _solver_output_dict()
             return RunResult(
                 success=True, exit_code=0, stdout="", stderr="",
-                elapsed_ms=100, output=None, output_path=path, error_category=None,
+                elapsed_ms=100,
+                output=_solver_output_from_dict(data),
+                error_category=None,
             )
 
         runner = MagicMock()
@@ -581,16 +571,14 @@ class TestPerfGuardCheck:
             if workdir == champ_ws:
                 return RunResult(
                     success=False, exit_code=1, stdout="", stderr="boom",
-                    elapsed_ms=50, output=None, output_path=None,
+                    elapsed_ms=50, output=None,
                     error_category="crash",
                 )
-            fd, path = tempfile.mkstemp(suffix=".json")
-            os.close(fd)
-            with open(path, "w") as f:
-                json.dump(_solver_output_dict(), f)
+            data = _solver_output_dict()
             return RunResult(
                 success=True, exit_code=0, stdout="", stderr="",
-                elapsed_ms=100, output=None, output_path=path,
+                elapsed_ms=100,
+                output=_solver_output_from_dict(data),
                 error_category=None,
             )
 

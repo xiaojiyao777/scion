@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from scion.config.problem import ProblemSpec, SearchSpace
 from scion.core.models import PatchProposal, RunResult, SolverOutput
 from scion.problem.contracts import CheckReport, SolverArtifact
@@ -53,9 +51,6 @@ class _CountingRunner:
                 "selected_surface": selected_surface,
             }
         )
-        output_path = f"{workdir}/shared-canary-{len(self.calls)}.json"
-        with open(output_path, "w", encoding="utf-8") as handle:
-            json.dump(self.raw, handle)
         return RunResult(
             success=True,
             exit_code=0,
@@ -68,7 +63,6 @@ class _CountingRunner:
                 runtime=dict(self.raw["runtime"]),
                 solution_payload={"solution": self.raw["solution"]},
             ),
-            output_path=output_path,
         )
 
 

@@ -159,16 +159,22 @@ class TestVerificationGateIntegration:
             if workdir == str(champion_ws):
                 return RunResult(
                     success=False, exit_code=1, stdout="", stderr="boom",
-                    elapsed_ms=50, output=None, output_path=None,
+                    elapsed_ms=50, output=None,
                     error_category="crash",
                 )
-            fd, output_path = tempfile.mkstemp(suffix=".json")
-            os.close(fd)
-            with open(output_path, "w") as f:
-                json.dump(_solver_output_dict(), f)
+            data = _solver_output_dict()
             return RunResult(
                 success=True, exit_code=0, stdout="", stderr="",
-                elapsed_ms=100, output=None, output_path=output_path,
+                elapsed_ms=100,
+                output=SolverOutput(
+                    objective=data["objective"],
+                    feasible=data["feasible"],
+                    solution_payload={
+                        key: value
+                        for key, value in data.items()
+                        if key not in {"objective", "feasible", "runtime"}
+                    },
+                ),
                 error_category=None,
             )
 
@@ -230,7 +236,6 @@ class TestVerificationGateIntegration:
                     feasible=True,
                     runtime={},
                 ),
-                output_path=None,
                 error_category=None,
             )
 
@@ -275,7 +280,6 @@ class TestVerificationGateIntegration:
                 stderr="timeout",
                 elapsed_ms=3000,
                 output=None,
-                output_path=None,
                 error_category="timeout",
             )
 
