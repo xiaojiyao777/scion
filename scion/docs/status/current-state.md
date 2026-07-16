@@ -7,20 +7,26 @@ Read `scion/TASK.md` first. Use
 
 ## Operational State
 
-Fresh eight-round R11 is live at
-`/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11-8r-gpt56sol-8r-gpt56sol-20260716T114132Z-claw`
-with wrapper PID `2878751`. Its clean detached runtime is
+Fresh eight-round R11b is live at
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11b-8r-gpt56sol-8r-gpt56sol-20260716T115118Z-claw`
+with wrapper PID `2879552`. Its clean detached runtime is
 `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-6a2f6765` at
 exact pushed code commit `6a2f6765ff141b8f1d17c3fae0391df73f3ac580`.
 It uses `gpt-5.6-sol / direct_v3`, `ROUNDS=8`, and the 30-second scientific
 solver subprocess fallback. It is fresh: no resume, force controls, retry,
 semantic budget, or truncation. Completion preflight is authenticated, HTTP
 `200`, and nonempty; only the `SCION_SHARED_PROXY_KEY` environment-variable
-name is persisted. H1 was generated in one provider call and autonomously
-selected a capacity-feasible regret-2 pair-insertion repair in
-`destroy_repair.py`; C1 is in flight. The elapsed-time-SA lead was not forced.
-Poll no more frequently than about three minutes and do not start another
-generative root while R11 is live.
+name is persisted. The elapsed-time-SA lead was not forced. Poll no more
+frequently than about three minutes and do not start another generative root
+while R11b is live.
+
+The preceding fresh R11 root ending `20260716T114132Z-claw` is terminal and
+invalid. Its one H/C pair reached verified candidate artifact recording, then
+failed with `ENOSPC` while the filesystem had only `4.6 MiB` free. It completed
+zero Protocol rounds and is not algorithm evidence. It was not resumed or
+retried in place. Only the generated `/tmp/pytest-of-clawd` tree was removed,
+restoring about `7.0 GiB`; historical experiment roots remain intact. R11b is
+the distinct clean replacement.
 
 Fresh eight-round R10 is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r10-8r-gpt56sol-20260716T063211Z-claw`
@@ -594,13 +600,13 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Monitor live R11 at low frequency and audit every terminal round against its
+1. Monitor live R11b at low frequency and audit every terminal round against its
    code, activation, objective/case/pair, throughput, Protocol, Decision, and
    replay evidence.
-2. If R11 creates a second branch, verify that its H receives all safe sibling
+2. If R11b creates a second branch, verify that its H receives all safe sibling
    screening records and no validation/frozen, terminal-state, raw-ref, patch,
    or failure-prose leakage.
-3. At R11 terminal state, require wrapper, postrun rebuild, and readiness
+3. At R11b terminal state, require wrapper, postrun rebuild, and readiness
    acceptance before planning another clean root.
 
 ## R9 Continuation Terminal Checks

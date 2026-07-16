@@ -267,20 +267,26 @@ terminal wrapper's historical failure status and markers are intentionally
 preserved; delegation readiness is true. Do not rewrite those terminal
 artifacts.
 
-Fresh eight-round R11 is live at
-`/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11-8r-gpt56sol-8r-gpt56sol-20260716T114132Z-claw`
-with wrapper PID `2878751`. It runs from the clean detached runtime
+Fresh eight-round R11b is live at
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11b-8r-gpt56sol-8r-gpt56sol-20260716T115118Z-claw`
+with wrapper PID `2879552`. It runs from the clean detached runtime
 `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-6a2f6765` at
 exact pushed code commit `6a2f6765ff141b8f1d17c3fae0391df73f3ac580`, using
 `gpt-5.6-sol / direct_v3`. Completion preflight is authenticated, HTTP `200`,
 and nonempty. This is a fresh `ROUNDS=8` campaign with no resume, force
 controls, retry, semantic budget, or truncation; the 30-second limit is the
 scientific solver subprocess fallback. Only the environment-variable name
-`SCION_SHARED_PROXY_KEY` is persisted. R11 H1 was generated in one provider
-call and autonomously chose a capacity-feasible regret-2 pair-insertion repair
-in `destroy_repair.py`; C1 is currently in flight. The elapsed-time-SA finding
-remains audit guidance and was not forced. Poll no more frequently than about
-three minutes and do not start another generative root while R11 is live.
+`SCION_SHARED_PROXY_KEY` is persisted. The elapsed-time-SA finding remains
+audit guidance and was not forced. Poll no more frequently than about three
+minutes and do not start another generative root while R11b is live.
+
+The preceding fresh R11 root ending `20260716T114132Z-claw` is terminal,
+invalid, and read-only. H1/C1 were each called once and C1 reached verified
+candidate artifact recording, but the filesystem had only `4.6 MiB` free and
+raised `ENOSPC`; zero Protocol rounds completed. It is infrastructure evidence,
+not algorithm evidence, and was not resumed or retried in place. Removing only
+the generated `/tmp/pytest-of-clawd` tree restored about `7.0 GiB`; historical
+experiment roots were preserved. R11b is the distinct clean replacement root.
 
 Fresh eight-round R10 is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r10-8r-gpt56sol-20260716T063211Z-claw`
@@ -510,10 +516,10 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 
 ## Execution Queue
 
-1. Monitor live R11 at low frequency and audit each completed round for code
+1. Monitor live R11b at low frequency and audit each completed round for code
    change, mechanism activation, objective/case/pair, throughput, Protocol,
    Decision, and replay integrity.
-2. If R11 creates a second branch, verify that its H receives all safe sibling
+2. If R11b creates a second branch, verify that its H receives all safe sibling
    screening history without validation/frozen, terminal-state, raw-ref,
    patch-body, or failure-prose leakage.
 3. Treat elapsed-time simulated-annealing cooling as an evidence-backed lead,
