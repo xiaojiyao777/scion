@@ -2,18 +2,22 @@
 
 ## Result
 
-Three exact, retention-aware cleanup batches removed 279 roots under
+Four exact, retention-aware cleanup batches removed 281 roots under
 `/home/clawd/research/scion-experiments`. The first two batches were
 prepared-only. The third batch extended the same evidence protections to empty
 roots, pre-Protocol infrastructure failures, duplicate local resume copies, and
-two superseded prepared validation roots whose formal replacements remain.
+two superseded prepared validation roots whose formal replacements remain. The
+fourth batch applied a tracked-evidence inventory to old formal/replay roots and
+removed only one fully reconstructible pre-Protocol replay failure and one
+empty wrapper shell with an identified retained rerun.
 
 | Batch | Roots | Deleted logical bytes | GiB | Scope |
 |---|---:|---:|---:|---|
 | batch-1 | 136 | 4,847,322,762 | 4.514 | old names containing `preflight` |
 | batch-2 | 120 | 4,113,033,342 | 3.831 | old prepared/report-only roots with other names |
 | batch-3 | 23 | 1,278,214,144 | 1.190 | empty, pre-Protocol failure, duplicate, or superseded |
-| **Total** | **279** | **10,238,570,248** | **9.535** | exact roots without unique retained evidence |
+| batch-4 | 2 | 250,163,200 | 0.233 | reconstructible failed replay and empty wrapper shell |
+| **Total** | **281** | **10,488,733,448** | **9.768** | exact roots without unique retained evidence |
 
 Filesystem observations:
 
@@ -22,10 +26,17 @@ Filesystem observations:
 - immediately before batch-3: 33,868,734,464 bytes available, 73% used;
 - after batch-3: 35,147,063,296 bytes available, 72% used;
 - batch-3 observed available-space change: +1,278,328,832 bytes (1.191 GiB).
+- batch-4 used-space observation: 87,579,115,520 to 87,329,017,856 bytes;
+- batch-4 observed freed space: 250,097,664 bytes (238.5 MiB).
 
 The filesystem delta is larger than the logical size sum because other
 processes may allocate or release blocks concurrently. The auditable cleanup
-quantity is the per-path logical-byte sum in the manifest.
+quantity is the per-path recorded-byte sum in the manifest.
+
+The historical manifest column name is retained for compatibility, but
+batches 3 and 4 recorded pre-delete allocated bytes from `du -s -B1`; the
+arithmetic total is therefore an audit sum of each batch's recorded byte
+measure, not a claim that every batch used one apparent-size metric.
 
 ## Prepared-only deletion predicate
 
@@ -103,6 +114,29 @@ infrastructure failures, two referenced pre-Protocol signal roots, and one
 referenced one-round formal signal. These remain fail-closed pending explicit
 evidence disposition:
 [`v04-experiment-retention-cleanup-gray-20260716.tsv`](./v04-experiment-retention-cleanup-gray-20260716.tsv).
+
+## Batch-4 tracked-evidence inventory
+
+Batch 4 inspected old large/formal candidates before deletion and recorded
+status, effective rounds, Protocol stages, raw-evidence counts, evidence
+fingerprint, report references, canonical/superseding roots, and disposition.
+It deleted exactly two roots:
+
+- a fixed-replay root whose 20/20 rows all failed before Protocol with the same
+  `FileNotFoundError`, had zero metrics, and whose normalized candidate
+  manifests/source material are reconstructible from retained source and
+  corrected replay roots;
+- an aborted wrapper shell with no campaign, LLM call, Protocol work, metric,
+  or nonempty log; its tracked launch report points to the retained actual
+  rerun.
+
+The inventory deliberately retained a zero-effective root containing unique
+hypothesis/code/tool traces, a report-excluded replay root containing 105
+unique raw metrics, and large v0.3/Phase-5/direct-VRP trees with unique formal
+or analysis artifacts. The exact inventory is
+[`v04-experiment-retention-tracked-evidence-inventory-batch4-20260716.tsv`](./v04-experiment-retention-tracked-evidence-inventory-batch4-20260716.tsv).
+The batch reduced top-level roots from 864 to 862 and did not change the live
+R11c root/runtime.
 
 ## Follow-up boundary
 
