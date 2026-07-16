@@ -39,11 +39,18 @@ ejection was `31 attempts / 0 accepted / 31 route-limit / 718244ms`. Protocol
 failed win rate and Decision committed; formal base ref and all identities pass
 at `65f379...`.
 
-H3 now directly removes ejection-chain from the active scheduler portfolio and
-adds cost-aware feasible repair selection with smoothed reward density and
-minimum exploration. H3/C3 are single-attempt, verified at `12ec5b...`, and in
-formal screening. Require zero ejection activation, recovered ALNS throughput,
-and correctly attributed repair timing before treating it as a causal fix.
+H3 directly removes ejection-chain from the active scheduler portfolio and
+adds cost-aware feasible repair selection. Initial screening was `32/32` valid,
+case `4/3/1`, pair `17/13/2`, median `+1.75`, CI `[-2.5,19.5]`; Protocol
+requested an independent 48-pair expansion. Expansion completed `48/48` valid
+with zero failures and `SCREENING_PASS`; Decision `queue_validate` committed,
+and fresh 32-pair validation is live. Ejection activation is zero and initial
+ALNS recovered to `1010/1665`.
+
+Do not attribute that recovery to H3's cost-aware weights: every solve stayed
+below `SEGMENT_LENGTH=100`, so no updated weight was reused in the same solve;
+runtime-density/weight telemetry is also absent. Treat ejection removal as the
+supported causal change and require validation before promotion conclusions.
 
 The explicit R9 diagnostic continuation is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r9-cont1-3r-gpt56sol-20260716T042653Z-claw`.
@@ -520,7 +527,8 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Monitor R10 H3 at low frequency without disturbing the live process.
+1. Monitor R10 H3 validation at low frequency without disturbing the live
+   process.
 2. Audit each completed R10 round for substantive code change, activation,
    objective/case/pair/mechanism evidence, throughput, Protocol, and Decision.
 3. At terminal state, require end-to-end postrun wrapper/readiness acceptance

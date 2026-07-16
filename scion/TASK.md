@@ -293,8 +293,15 @@ yet pair `2/26/4`, case `0/7/1`, median `-7.25`, CI `[-50.5,-2.0]`, ALNS
 `62/1665`; inherited ejection was `31/0/31` attempts, accepted, and route-limit
 with `718244ms`. Protocol failed win rate and Decision committed. H3 now
 directly removes ejection from the active scheduler portfolio and adds
-cost-aware feasible repair selection; H3/C3 are single-attempt, verified at
-`12ec5b...`, and formal screening is live.
+cost-aware feasible repair selection; H3/C3 are single-attempt and verified at
+`12ec5b...`. Initial screening was `32/32` valid, case `4/3/1`, pair `17/13/2`,
+median `+1.75`, CI `[-2.5,19.5]`; Protocol requested an independent 48-pair
+expansion. Expansion completed `48/48` valid with zero failures and
+`SCREENING_PASS`; Decision `queue_validate` committed, and 32-pair validation
+is live. Ejection activation is zero and initial ALNS recovered to `1010/1665`.
+Cost-aware weighting did not activate because every solve remained below its
+100-iteration update segment, so attribute recovery to ejection removal, not
+reward density.
 
 ## Current Framework Repair
 
@@ -439,8 +446,8 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 
 ## Execution Queue
 
-1. Monitor R10 H3 at low frequency without interfering with the live process;
-   require zero ejection activation and recovered ALNS throughput.
+1. Monitor R10 H3 validation at low frequency without interfering with the live
+   process; require valid fresh pairs and terminal Protocol/Decision evidence.
 2. Audit each completed algorithm round against its objective, case/pair,
    mechanism, Protocol, Decision, throughput, and code-diff evidence.
 3. At terminal state, rebuild postrun reports, verify end-to-end wrapper and

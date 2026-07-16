@@ -92,18 +92,32 @@ independently. H2's formal artifact again uses
 executable identity is `65f379...`, and transactional staging/journals are
 empty.
 
-## H3/C3 In Flight
+## H3/C3 Screening Pass, Validation In Flight
 
 H3 directly targets the causal failure in `scheduler.py`: remove ejection-chain
 from the active repair portfolio and make repair selection cost-aware through
 feasible-outcome reward density, runtime measurement, smoothed weights, and a
 minimum exploration floor for greedy/regret operators. H3/C3 are single-attempt
 and verified at current/last-clean/verified/executable identity `12ec5b...`
-over H2 base `65f379...`; formal screening is live.
+over H2 base `65f379...`.
 
-Require runtime evidence that ejection activation becomes zero and ALNS
-throughput recovers. Also audit whether repair timing and reward are assigned
-to the intended repair phase rather than conflating downstream polish/VNS.
+Initial screening completed `32/32` valid with case `4/3/1`, pair `17/13/2`,
+median `+1.75`, and CI `[-2.5,19.5]`. Protocol expanded the divergent,
+low-signal trajectory rather than passing it immediately. The independent
+expansion then completed `48/48` additional valid pairs with zero failures and
+returned `SCREENING_PASS`; Decision `queue_validate` committed. Validation is
+now live with a fresh 32-pair target. Both screening formal v3 artifacts use
+`base_workspace_ref=champions/champion_v1`, complete identity, the same patch
+digest, and a clean Branch.
+
+Mechanism evidence supports the causal removal: ejection attempts are zero and
+initial-screening ALNS recovered to `1010/1665`. It does not support the new
+cost-aware weighting claim. `SEGMENT_LENGTH=100`, while per-solve ALNS stayed
+below 100, so weights were never updated and then reused in the same solve.
+The mechanism also lacks runtime-density/weight telemetry, and configured
+`SIGMA_ACCEPTED=13` exceeds `SIGMA_BETTER=9`. Treat the screening recovery as
+ejection removal plus search-trajectory change; require validation before any
+promotion conclusion.
 
 ## Monitoring Rules
 
