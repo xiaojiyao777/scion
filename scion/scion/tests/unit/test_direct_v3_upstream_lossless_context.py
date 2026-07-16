@@ -349,6 +349,169 @@ def test_canonical_screening_history_deduplicates_durable_and_live_record() -> N
     assert persist_canonical_screening_record(branch, screening) is False
 
 
+def test_new_branch_sees_all_reopened_sibling_screenings_without_lifecycle_leaks(
+) -> None:
+    _spec, legacy, adapter, champion, old_branch = _runtime("cvrp")
+    old_branch.branch_id = "terminal-screening-owner"
+    old_branch.state = BranchState.ABANDONED
+    old_branch.direction = "FORBIDDEN_TERMINAL_DIRECTION"
+    old_branch.failure_codes = ["FORBIDDEN_TERMINAL_FAILURE"]
+    current_branch = Branch(
+        branch_id="fresh-sibling",
+        state=BranchState.EXPLORE,
+        base_champion_id=champion.version,
+        base_champion_hash=champion.code_snapshot_hash,
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Evaluate one reusable screening mechanism.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+    )
+
+    for round_num in range(1, 5):
+        step = StepRecord(
+            round_num=round_num,
+            branch_id=old_branch.branch_id,
+            hypothesis=hypothesis,
+            patch=PatchProposal(
+                file_path="policies/baseline_modules/local_search.py",
+                action="modify",
+                code_content=f"FORBIDDEN_PATCH_BODY_{round_num}",
+            ),
+            contract_passed=True,
+            verification_passed=True,
+            protocol_result=ProtocolResult(
+                stage=ExperimentStage.SCREENING,
+                stats=EvalStats(
+                    n_cases=1,
+                    wins=1,
+                    losses=0,
+                    ties=0,
+                    win_rate=1.0,
+                    median_delta=float(round_num),
+                    ci_low=0.0,
+                    ci_high=float(round_num),
+                ),
+                gate_outcome="pass",
+                reason_codes=("SCREENING_PASS",),
+                exposed_summary=f"FORBIDDEN_EXPOSED_SUMMARY_{round_num}",
+                raw_metrics_ref=f"FORBIDDEN_RAW_REF_{round_num}",
+            ),
+            decision=Decision.QUEUE_VALIDATE,
+            failure_stage=None,
+            failure_detail=None,
+            hypothesis_id=f"screening-attempt-{round_num}",
+            decision_reason_codes=("SCREENING_PASS",),
+        )
+        assert persist_canonical_screening_record(old_branch, step) is True
+
+    non_screening_steps = [
+        StepRecord(
+            round_num=5 + index,
+            branch_id=old_branch.branch_id,
+            hypothesis=HypothesisProposal(
+                hypothesis_text=f"FORBIDDEN_{stage.value.upper()}_HYPOTHESIS",
+                change_locus="solver_design",
+                action="modify",
+                target_file="policies/baseline_modules/local_search.py",
+            ),
+            patch=None,
+            contract_passed=True,
+            verification_passed=True,
+            protocol_result=ProtocolResult(
+                stage=stage,
+                stats=EvalStats(
+                    n_cases=1,
+                    wins=0,
+                    losses=1,
+                    ties=0,
+                    win_rate=0.0,
+                    median_delta=-1.0,
+                    ci_low=-2.0,
+                    ci_high=0.0,
+                ),
+                gate_outcome="fail",
+                reason_codes=(f"FORBIDDEN_{stage.value.upper()}_REASON",),
+                exposed_summary=f"FORBIDDEN_{stage.value.upper()}_SUMMARY",
+                raw_metrics_ref=f"FORBIDDEN_{stage.value.upper()}_RAW_REF",
+            ),
+            decision=Decision.ABANDON,
+            failure_stage=None,
+            failure_detail=f"FORBIDDEN_{stage.value.upper()}_FAILURE_DETAIL",
+            hypothesis_id=f"{stage.value}-attempt",
+        )
+        for index, stage in enumerate(
+            (ExperimentStage.VALIDATION, ExperimentStage.FROZEN)
+        )
+    ]
+    non_screening_steps.append(
+        StepRecord(
+            round_num=7,
+            branch_id=old_branch.branch_id,
+            hypothesis=HypothesisProposal(
+                hypothesis_text="FORBIDDEN_PREPROTOCOL_HYPOTHESIS",
+                change_locus="solver_design",
+                action="modify",
+                target_file="policies/baseline_modules/local_search.py",
+            ),
+            patch=None,
+            contract_passed=False,
+            verification_passed=False,
+            protocol_result=None,
+            decision=None,
+            failure_stage="verification",
+            failure_detail="FORBIDDEN_PREPROTOCOL_FAILURE_DETAIL",
+        )
+    )
+
+    context = ContextManager(adapter=adapter).build_hypothesis_context(
+        branch=current_branch,
+        champion=champion,
+        problem_spec=legacy,
+        # Simulate reopen: screening StepRecords are absent; only their durable
+        # terminal-branch owner remains available through BranchStore.load_all.
+        step_history=non_screening_steps,
+        campaign_branches=[old_branch, current_branch],
+    )
+
+    history = context["experiment_history"]
+    assert len(history) == 4
+    assert [record["round_num"] for record in history] == [1, 2, 3, 4]
+    assert {record["source_branch_id"] for record in history} == {
+        old_branch.branch_id
+    }
+    assert {record["relation"] for record in history} == {"sibling"}
+    for record in history:
+        assert set(record).isdisjoint(
+            {"branch_state", "state", "direction", "failure_detail"}
+        )
+    durable = old_branch.branch_evidence_summary[CANONICAL_SCREENING_HISTORY_KEY]
+    assert all("source_branch_id" not in record for record in durable)
+    assert all("relation" not in record for record in durable)
+
+    snapshot = proposal_context_snapshot("hypothesis", context)
+    blocks, user_prompt = _split_hypothesis_context(
+        snapshot.inputs.provider_context(include_renderer_inputs=True)
+    )
+    rendered = "\n".join(block["text"] for block in blocks) + user_prompt
+    for forbidden in (
+        "FORBIDDEN_TERMINAL_DIRECTION",
+        "FORBIDDEN_TERMINAL_FAILURE",
+        "FORBIDDEN_PATCH_BODY_",
+        "FORBIDDEN_EXPOSED_SUMMARY_",
+        "FORBIDDEN_RAW_REF_",
+        "FORBIDDEN_VALIDATION_",
+        "FORBIDDEN_FROZEN_",
+        "FORBIDDEN_PREPROTOCOL_",
+        "omitted_item_count",
+        "compact_to_fit",
+        "top_n",
+        "truncation",
+    ):
+        assert forbidden not in rendered
+
+
 def test_canonical_screening_history_upgrades_legacy_row_without_duplicate() -> None:
     _spec, legacy, adapter, champion, branch = _runtime("cvrp")
     hypothesis = HypothesisProposal(
@@ -777,6 +940,163 @@ def test_canonical_screening_history_fails_closed_on_malformed_durable_owner() -
             problem_spec=legacy,
             step_history=[],
         )
+
+
+def test_campaign_screening_history_fails_closed_on_duplicate_sibling_owner() -> None:
+    _spec, legacy, adapter, champion, first_owner = _runtime("cvrp")
+    first_owner.branch_id = "first-owner"
+    screening = StepRecord(
+        round_num=1,
+        branch_id=first_owner.branch_id,
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Own one canonical screening record.",
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/local_search.py",
+        ),
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=1,
+                wins=1,
+                losses=0,
+                ties=0,
+                win_rate=1.0,
+                median_delta=1.0,
+                ci_low=0.0,
+                ci_high=2.0,
+            ),
+            gate_outcome="pass",
+            reason_codes=("SCREENING_PASS",),
+            exposed_summary="screening passed",
+            raw_metrics_ref="private/owner.json",
+        ),
+        decision=Decision.QUEUE_VALIDATE,
+        failure_stage=None,
+        failure_detail=None,
+        hypothesis_id="one-global-attempt",
+    )
+    assert persist_canonical_screening_record(first_owner, screening) is True
+    duplicated = dict(
+        first_owner.branch_evidence_summary[CANONICAL_SCREENING_HISTORY_KEY][0]
+    )
+    second_owner = Branch(
+        branch_id="second-owner",
+        state=BranchState.ABANDONED,
+        base_champion_id=champion.version,
+        base_champion_hash=champion.code_snapshot_hash,
+        branch_evidence_summary={CANONICAL_SCREENING_HISTORY_KEY: [duplicated]},
+    )
+    current = Branch(
+        branch_id="current-owner",
+        state=BranchState.EXPLORE,
+        base_champion_id=champion.version,
+        base_champion_hash=champion.code_snapshot_hash,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="campaign canonical screening ownership is invalid",
+    ):
+        ContextManager(adapter=adapter).build_hypothesis_context(
+            branch=current,
+            champion=champion,
+            problem_spec=legacy,
+            step_history=[],
+            campaign_branches=[first_owner, second_owner, current],
+        )
+
+
+def test_campaign_screening_history_rejects_spoofed_durable_provenance() -> None:
+    _spec, legacy, adapter, champion, sibling = _runtime("cvrp")
+    sibling.branch_id = "spoofing-sibling"
+    sibling.branch_evidence_summary = {
+        CANONICAL_SCREENING_HISTORY_KEY: [
+            {
+                "attempt_id": "spoofed-attempt",
+                "round_num": 1,
+                "source_branch_id": "forged-owner",
+                "relation": "current",
+            }
+        ]
+    }
+    current = Branch(
+        branch_id="actual-current",
+        state=BranchState.EXPLORE,
+        base_champion_id=champion.version,
+        base_champion_hash=champion.code_snapshot_hash,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="canonical screening record provenance is reserved",
+    ):
+        ContextManager(adapter=adapter).build_hypothesis_context(
+            branch=current,
+            champion=champion,
+            problem_spec=legacy,
+            step_history=[],
+            campaign_branches=[sibling, current],
+        )
+
+
+def test_complete_campaign_scope_rejects_unknown_live_screening_owner() -> None:
+    _spec, legacy, adapter, champion, current = _runtime("cvrp")
+    unknown_step = StepRecord(
+        round_num=1,
+        branch_id="unknown-sibling",
+        hypothesis=HypothesisProposal(
+            hypothesis_text="FORBIDDEN_UNKNOWN_OWNER_HYPOTHESIS",
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/local_search.py",
+        ),
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=1,
+                wins=1,
+                losses=0,
+                ties=0,
+                win_rate=1.0,
+                median_delta=1.0,
+                ci_low=0.0,
+                ci_high=2.0,
+            ),
+            gate_outcome="pass",
+            reason_codes=("SCREENING_PASS",),
+            exposed_summary="screening passed",
+            raw_metrics_ref="private/unknown-owner.json",
+        ),
+        decision=Decision.QUEUE_VALIDATE,
+        failure_stage=None,
+        failure_detail=None,
+        hypothesis_id="unknown-owner-attempt",
+    )
+
+    with pytest.raises(ValueError, match="campaign screening step owner is unknown"):
+        ContextManager(adapter=adapter).build_hypothesis_context(
+            branch=current,
+            champion=champion,
+            problem_spec=legacy,
+            step_history=[unknown_step],
+            campaign_branches=[current],
+        )
+
+    legacy_context = ContextManager(adapter=adapter).build_hypothesis_context(
+        branch=current,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=[unknown_step],
+        campaign_branches=None,
+    )
+    assert legacy_context["experiment_history"] == []
 
 
 @pytest.mark.parametrize(

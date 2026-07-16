@@ -7,19 +7,22 @@ Read `scion/TASK.md` first. Use
 
 ## Operational State
 
-Fresh eight-round R10 is live at
+Fresh eight-round R10 is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r10-8r-gpt56sol-20260716T063211Z-claw`
-with wrapper PID `2848393`. Its clean detached runtime is
+with terminal wrapper PID `2848393`. Its clean detached runtime is
 `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-c936cde4` at
 exact pushed commit `c936cde41d746c9cbfcd308bae84ba54d85c7f4a`. It uses
 `gpt-5.6-sol / direct_v3`, `ROUNDS=8`, and the 30-second scientific solver
 subprocess fallback. It is fresh: no resume, force controls, retry, semantic
 budget, or truncation. Completion preflight is authenticated, HTTP `200`, and
 nonempty. The launcher stores only `SCION_SHARED_PROXY_KEY` as the environment
-variable name; no key value is persisted. Do not start another generative root
-while R10 is live.
+variable name; no key value is persisted. It completed all `8/8` experiments
+at `2026-07-16T10:31:55Z`; wrapper, campaign, postrun rebuild, and readiness
+exited zero. Status is `valid / complete`,
+`current_run_analysis_ready=true`, `delegation_ready=true`, and the failure
+report is empty.
 
-H1/C1 are terminal and H2 is in formal screening. H1 implemented a real
+H1 implemented a real
 ejection-chain repair in `destroy_repair.py` and `scheduler.py`; H/C were each
 single-attempt and all `32/32` pairs were valid with zero candidate/champion
 failure. The algorithm was strongly negative: pair `1/21/10`, case `0/5/3`,
@@ -47,14 +50,59 @@ with zero failures and `SCREENING_PASS`; Decision `queue_validate` committed.
 Validation completed `32/32` valid with zero failures, case `7/0/1`, pair
 `26/4/2`, median `+37.75`, CI `[6,199]`, and
 `VALIDATION_PASS_HIERARCHICAL`; Decision `queue_frozen` committed. Frozen has a
-fresh 24-pair target and is live at `10/24` valid with zero failures; champion
-remains v1. Ejection activation is zero and initial ALNS recovered to
-`1010/1665`.
+fresh 24-pair target and completed `24/24` valid with zero failures, but
+reversed to case `4/4/0`, pair `11/13/0`, median `-19.5`, CI `[-350,98]`.
+Protocol returned `FROZEN_FAIL_HIERARCHICAL_UNCERTAIN`; Decision abandoned the
+branch. Champion remains v1. Ejection activation was zero and initial ALNS
+recovered to `1010/1665`.
 
 Do not attribute that recovery to H3's cost-aware weights: every solve stayed
 below `SEGMENT_LENGTH=100`, so no updated weight was reused in the same solve;
 runtime-density/weight telemetry is also absent. Treat ejection removal as the
-supported causal change and require validation before promotion conclusions.
+supported causal change; frozen establishes split instability rather than a
+promotable result.
+
+H4 then opened a fresh branch from champion v1 and added a granular CROSS
+exchange of length-one-through-three route segments, verified at `454b6ab2...`.
+Screening was `32/32` valid, case `6/1/1`, pair `21/7/4`, median `+3.75`, CI
+`[0,7.5]`, and passed. Validation was `32/32` valid, case `4/0/4`, pair
+`20/5/7`, median `+11.75`, CI `[0,79.75]`, but the current gate classified the
+no-loss hierarchical uncertainty as `VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`
+and abandoned it. The case win rate `0.5` cannot pass the `0.66` gate, but the
+predeclared 8-to-12-case expansion can still mathematically reach it. The
+repair sends only this first, zero-loss, non-all-tie, reachable uncertain shape
+to the existing one-time expansion; expanded evidence still must meet the
+original case-level policy.
+
+R10 also exposes cross-branch research-memory loss. H2 and H3 received one and
+two complete canonical screening records; after H3's branch was abandoned, H4
+received `experiment_history=[]` although that terminal branch durably owned
+four records. H4 consequently repeated the CROSS family already attempted by
+H2. The repair aggregates all same-campaign canonical screening records from
+active and terminal durable branches and adds only context-local
+`source_branch_id / current|sibling` provenance. It does not expose
+validation/frozen details, terminal state, raw refs, patch bodies, or failure
+prose and introduces no ledger, summary substitution, top-N, budget,
+compression, or truncation.
+
+R10's five formal v3 artifacts pass apply-check and materialization; all six
+Decision intents are committed; both branches are abandoned; active slots,
+candidate staging, workspaces, and promotion journals are empty. Champion v1
+hash `06820ecd...` is unchanged and there is no promotion dossier.
+`formal_ready=false` only records normal completion without promoted final
+evidence; it does not block current-run analysis.
+
+The R10-derived context and validation repairs are implemented and independently
+reviewed. Campaign-wide canonical screening history now survives terminal
+reopen, retains complete durable plus live evidence, and adds only context-local
+source provenance. Duplicate ownership, provenance spoofing, unknown owners in
+a complete campaign scope, and corrupt terminal evidence fail closed. The
+validation change uses only the existing one-time expansion when the initial
+no-loss uncertain case result can still reach the unchanged threshold.
+Focused tests pass `168`; the correctly rooted full Scion suite passes `2053`
+with one existing skip. Compileall and `git diff --check` pass. The changes add
+no retry, semantic budget, truncation, top-N, compression, summary substitution,
+blacklist, or new gate.
 
 The explicit R9 diagnostic continuation is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r9-cont1-3r-gpt56sol-20260716T042653Z-claw`.
@@ -531,13 +579,13 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Monitor R10 H3 frozen evaluation at low frequency without disturbing the
-   live process; do not infer promotion before terminal Protocol/Decision.
-2. Audit each completed R10 round for substantive code change, activation,
-   objective/case/pair/mechanism evidence, throughput, Protocol, and Decision.
-3. At terminal state, require end-to-end postrun wrapper/readiness acceptance
-   and update the operating docs. R10 is reproducibility and longer-adaptation
-   evidence; R9 already proves substantive algorithm editing.
+1. Commit and push the reviewed R10-derived cross-branch canonical screening
+   continuity and reachable no-loss validation-expansion repairs.
+2. Launch a distinct fresh eight-round R11 root without resume, force controls,
+   retry, semantic budget, or truncation; keep R10 immutable.
+3. If R11 creates a second branch, verify that its H receives all safe sibling
+   screening records and no validation/frozen, terminal-state, raw-ref, patch,
+   or failure-prose leakage.
 
 ## R9 Continuation Terminal Checks
 

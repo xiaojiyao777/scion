@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 from scion.config.problem import ProblemSpec
 from scion.core.forced_surface import (
@@ -129,6 +129,7 @@ class ContextManager:
         champion: ChampionState,
         problem_spec: ProblemSpec,
         step_history: Optional[list[StepRecord]] = None,
+        campaign_branches: Optional[Sequence[Branch]] = None,
         branch_workspace: Optional[str] = None,
         forced_locus: Optional[str] = None,
         forced_action: Optional[str] = None,
@@ -196,13 +197,10 @@ class ContextManager:
                 research_surfaces=visible_surfaces,
             ),
         )
-        safe_steps = _filter_hypothesis_prompt_steps(step_history or [])
-        branch_steps = [
-            step for step in safe_steps if step.branch_id == branch.branch_id
-        ]
-        experiment_history = canonical_screening_history(
+        experiment_history = campaign_canonical_screening_history(
             branch,
-            branch_steps,
+            campaign_branches,
+            _filter_hypothesis_prompt_steps(step_history or []),
         )
         provider = (
             resolve_solver_design_prompt_provider(
@@ -620,6 +618,94 @@ def canonical_screening_history(
         positions[natural_key] = len(records)
         records.append(record)
     return records
+
+
+def campaign_canonical_screening_history(
+    current_branch: Branch,
+    campaign_branches: Optional[Sequence[Branch]],
+    steps: list[StepRecord],
+) -> list[dict[str, Any]]:
+    """Return every safe screening record owned by this campaign.
+
+    Durable records remain branch-owned and unchanged.  Source provenance is
+    added only to the proposal-context projection so a new branch can
+    distinguish its own evidence from sibling evidence without seeing branch
+    state, validation/frozen outcomes, or other lifecycle mirrors.
+    """
+
+    complete_campaign_scope = campaign_branches is not None
+    sources: dict[str, Branch] = {}
+    for source in campaign_branches or ():
+        source_id = str(getattr(source, "branch_id", "") or "").strip()
+        if not source_id:
+            raise ValueError("campaign screening source branch identity is invalid")
+        if source_id in sources:
+            raise ValueError("campaign screening source branch identity is duplicated")
+        sources[source_id] = source
+    # The in-memory current branch is authoritative over a persisted snapshot.
+    sources[current_branch.branch_id] = current_branch
+
+    steps_by_branch: dict[str, list[StepRecord]] = {}
+    for step in steps:
+        source_id = str(step.branch_id or "").strip()
+        if not source_id:
+            raise ValueError("campaign screening step branch identity is invalid")
+        steps_by_branch.setdefault(source_id, []).append(step)
+
+    merged: list[tuple[dict[str, Any], str]] = []
+    positions: dict[str, int] = {}
+
+    def merge_record(record: Mapping[str, Any], source_id: str) -> None:
+        projected = dict(record)
+        if {"source_branch_id", "relation"}.intersection(projected):
+            raise ValueError("canonical screening record provenance is reserved")
+        natural_key = _screening_record_natural_key(projected)
+        previous = positions.get(natural_key)
+        if previous is None:
+            positions[natural_key] = len(merged)
+            merged.append((projected, source_id))
+            return
+        existing, existing_source = merged[previous]
+        if existing_source != source_id:
+            raise ValueError("campaign canonical screening ownership is invalid")
+        if existing == projected:
+            return
+        if _legacy_screening_record_can_upgrade(existing, projected):
+            merged[previous] = (projected, source_id)
+            return
+        raise ValueError("campaign canonical screening history conflicts")
+
+    for source_id, source in sources.items():
+        for record in canonical_screening_history(
+            source,
+            steps_by_branch.pop(source_id, []),
+        ):
+            merge_record(record, source_id)
+
+    if steps_by_branch and complete_campaign_scope:
+        raise ValueError("campaign screening step owner is unknown")
+    # Compatibility for legacy/injected ContextManager callers that do not
+    # provide campaign ownership: retain only current-branch evidence.  Sibling
+    # steps cannot be attributed safely without the complete owner set.
+    steps_by_branch.clear()
+
+    merged.sort(
+        key=lambda item: (
+            int(item[0]["round_num"]),
+            item[1],
+            _screening_record_natural_key(item[0]),
+        )
+    )
+    return [
+        {
+            **record,
+            "source_branch_id": source_id,
+            "relation": (
+                "current" if source_id == current_branch.branch_id else "sibling"
+            ),
+        }
+        for record, source_id in merged
+    ]
 
 
 def persist_canonical_screening_record(

@@ -79,6 +79,8 @@ def validation_gate(
     Validation gate:
     - pass:   win_rate >= threshold AND ci_low >= 0
     - expand: win_rate >= threshold AND ci_low < 0 (CI straddles 0)
+    - expand: initial hierarchical uncertainty with no case losses when the
+              preregistered expanded sample can still reach the win threshold
     - fail:   ci_high < 0 (statistically negative)
     - fail:   win_rate < threshold
     """
@@ -99,14 +101,42 @@ def validation_gate(
         )
 
     if stats.statistical_status is not None:
-        if wr >= threshold and stats.statistical_status == "positive":
-            gate = GateResult(outcome="pass", reason_codes=("VALIDATION_PASS_HIERARCHICAL",))
+        if stats.statistical_status == "positive":
+            if wr >= threshold:
+                gate = GateResult(
+                    outcome="pass",
+                    reason_codes=("VALIDATION_PASS_HIERARCHICAL",),
+                )
+            else:
+                gate = GateResult(
+                    outcome="fail",
+                    reason_codes=("VALIDATION_FAIL_WIN_RATE",),
+                )
         elif stats.statistical_status == "negative":
-            gate = GateResult(outcome="fail", reason_codes=("VALIDATION_FAIL_HIERARCHICAL_NEGATIVE",))
-        elif wr >= threshold and stats.statistical_status == "uncertain":
-            gate = GateResult(outcome="expand", reason_codes=("VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN",))
+            gate = GateResult(
+                outcome="fail",
+                reason_codes=("VALIDATION_FAIL_HIERARCHICAL_NEGATIVE",),
+            )
+        elif stats.statistical_status == "uncertain":
+            if wr >= threshold or _initial_validation_expand_is_reachable(
+                stats,
+                config,
+                expanded=expanded,
+            ):
+                gate = GateResult(
+                    outcome="expand",
+                    reason_codes=("VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN",),
+                )
+            else:
+                gate = GateResult(
+                    outcome="fail",
+                    reason_codes=("VALIDATION_FAIL_WIN_RATE",),
+                )
         else:
-            gate = GateResult(outcome="fail", reason_codes=("VALIDATION_FAIL_NO_HIERARCHICAL_GAIN",))
+            gate = GateResult(
+                outcome="fail",
+                reason_codes=("VALIDATION_FAIL_NO_HIERARCHICAL_GAIN",),
+            )
     elif wr >= threshold and stats.ci_low >= 0:
         gate = GateResult(outcome="pass", reason_codes=("VALIDATION_PASS",))
     elif stats.ci_high < 0:
@@ -126,6 +156,26 @@ def validation_gate(
             reason_codes=("VALIDATION_EXPAND_EXHAUSTED_MARGINAL_PASS",),
         )
     return gate
+
+
+def _initial_validation_expand_is_reachable(
+    stats: EvalStats,
+    config: ProtocolConfig,
+    *,
+    expanded: bool,
+) -> bool:
+    """Allow one no-loss uncertain expand only when the win gate is reachable."""
+    if expanded or stats.losses != 0 or stats.wins <= 0:
+        return False
+
+    expanded_n_cases = config.validation.expand_to
+    remaining_cases = expanded_n_cases - stats.n_cases
+    if remaining_cases <= 0:
+        return False
+
+    maximum_wins = stats.wins + remaining_cases
+    maximum_win_rate = maximum_wins / expanded_n_cases
+    return maximum_win_rate >= config.validation_win_rate_threshold
 
 
 def frozen_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:

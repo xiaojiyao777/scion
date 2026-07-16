@@ -720,6 +720,129 @@ def test_validation_gate_expand():
     assert result.outcome == "expand"
 
 
+def test_validation_gate_expands_reachable_no_loss_hierarchical_uncertainty():
+    config = ProtocolConfig.model_validate(
+        {
+            "validation": {"n_cases": 8, "n_seeds": 4, "expand_to": 12},
+            "gates": {"validation": {"win_rate_min": 0.66}},
+        }
+    )
+    stats = _make_stats(
+        n_cases=8,
+        wins=4,
+        losses=0,
+        ties=4,
+        win_rate=0.5,
+        median_delta=11.75,
+        ci_low=0.0,
+        ci_high=79.75,
+        statistical_status="uncertain",
+        statistical_metric="total_distance",
+        pair_wins=20,
+        pair_losses=5,
+        pair_ties=7,
+    )
+
+    result = validation_gate(stats, config)
+
+    assert result.outcome == "expand"
+    assert result.reason_codes == (
+        "VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN",
+    )
+
+
+def test_expanded_validation_does_not_repeat_no_loss_reachability_exception():
+    config = ProtocolConfig.model_validate(
+        {
+            "validation": {"n_cases": 8, "n_seeds": 4, "expand_to": 12},
+            "gates": {"validation": {"win_rate_min": 0.66}},
+        }
+    )
+    stats = _make_stats(
+        n_cases=8,
+        wins=4,
+        losses=0,
+        ties=4,
+        win_rate=0.5,
+        median_delta=11.75,
+        ci_low=0.0,
+        ci_high=79.75,
+        statistical_status="uncertain",
+        statistical_metric="total_distance",
+        pair_wins=20,
+        pair_losses=5,
+        pair_ties=7,
+    )
+
+    result = validation_gate(stats, config, expanded=True)
+
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("VALIDATION_FAIL_WIN_RATE",)
+
+
+def test_validation_gate_does_not_expand_when_win_threshold_is_unreachable():
+    config = ProtocolConfig.model_validate(
+        {
+            "validation": {"n_cases": 8, "n_seeds": 4, "expand_to": 12},
+            "gates": {"validation": {"win_rate_min": 0.66}},
+        }
+    )
+    stats = _make_stats(
+        n_cases=8,
+        wins=3,
+        losses=0,
+        ties=5,
+        win_rate=3 / 8,
+        median_delta=1.0,
+        ci_low=0.0,
+        ci_high=10.0,
+        statistical_status="uncertain",
+        statistical_metric="total_distance",
+    )
+
+    result = validation_gate(stats, config)
+
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("VALIDATION_FAIL_WIN_RATE",)
+
+
+def test_validation_gate_hierarchical_tie_has_no_gain_and_negative_stays_negative():
+    tie_stats = _make_stats(
+        n_cases=8,
+        wins=0,
+        losses=0,
+        ties=8,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        statistical_status="tie",
+        statistical_metric="total_distance",
+    )
+    negative_stats = _make_stats(
+        n_cases=8,
+        wins=3,
+        losses=1,
+        ties=4,
+        win_rate=3 / 8,
+        median_delta=-1.0,
+        ci_low=-10.0,
+        ci_high=-0.1,
+        statistical_status="negative",
+        statistical_metric="total_distance",
+    )
+
+    tie_result = validation_gate(tie_stats, _cfg)
+    negative_result = validation_gate(negative_stats, _cfg)
+
+    assert tie_result.outcome == "fail"
+    assert tie_result.reason_codes == ("VALIDATION_FAIL_NO_HIERARCHICAL_GAIN",)
+    assert negative_result.outcome == "fail"
+    assert negative_result.reason_codes == (
+        "VALIDATION_FAIL_HIERARCHICAL_NEGATIVE",
+    )
+
+
 def test_frozen_gate_pass():
     stats = _make_stats(ci_low=0.005, ci_high=0.02)
     result = frozen_gate(stats, _cfg)

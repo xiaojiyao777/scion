@@ -34,6 +34,20 @@ def _json_mapping(raw: object) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def _strict_json_mapping(raw: object) -> dict:
+    """Decode a durable mapping without hiding non-empty corruption."""
+
+    if not raw:
+        return {}
+    try:
+        value = json.loads(str(raw))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("branch evidence summary JSON is invalid") from exc
+    if not isinstance(value, dict):
+        raise ValueError("branch evidence summary JSON is not a mapping")
+    return value
+
+
 class BranchStore:
     def __init__(self, registry: "LineageRegistry") -> None:
         self.registry = registry
@@ -98,9 +112,32 @@ class BranchStore:
             ).fetchall()
             return [self._row_to_branch(r) for r in rows]
 
+    def load_all(self) -> List[Branch]:
+        """Return every campaign branch in stable creation order.
+
+        Proposal context needs the screening records owned by terminal branches
+        as well as active ones.  This is intentionally separate from
+        ``load_all_active`` so scheduling semantics remain unchanged.
+        """
+
+        with sqlite3.connect(self.registry.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM branches ORDER BY created_at ASC, branch_id ASC"
+            ).fetchall()
+            return [
+                self._row_to_branch(r, strict_evidence_summary=True)
+                for r in rows
+            ]
+
     @staticmethod
-    def _row_to_branch(row: sqlite3.Row) -> Branch:
+    def _row_to_branch(
+        row: sqlite3.Row,
+        *,
+        strict_evidence_summary: bool = False,
+    ) -> Branch:
         d = dict(row)
+        raw_evidence_summary = d.get("branch_evidence_summary_json")
         return Branch(
             branch_id=d["branch_id"],
             state=BranchState(d["state"]),
@@ -117,8 +154,10 @@ class BranchStore:
             direction=d.get("direction"),
             weight_revision=d.get("weight_revision") or 0,
             branch_code_status=d.get("branch_code_status") or "clean",
-            branch_evidence_summary=_json_mapping(
-                d.get("branch_evidence_summary_json")
+            branch_evidence_summary=(
+                _strict_json_mapping(raw_evidence_summary)
+                if strict_evidence_summary
+                else _json_mapping(raw_evidence_summary)
             ),
             infra_block_count=d.get("infra_block_count") or 0,
         )

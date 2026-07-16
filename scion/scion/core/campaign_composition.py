@@ -560,6 +560,7 @@ def compose_campaign_services(
         step_history=owner._step_history,
         handle_failure=owner._handle_failure,
         mark_balance_exhausted=lambda: _mark_balance_exhausted(owner),
+        campaign_branches_provider=owner._branch_store.load_all,
         lineage_registry=owner._registry,
         campaign_id=owner._campaign_id,
         problem_id=problem_id_anchor(problem_spec),

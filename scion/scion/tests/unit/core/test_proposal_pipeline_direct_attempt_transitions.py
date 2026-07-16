@@ -9,6 +9,7 @@ import pytest
 
 from scion.contract.gate import ContractGate
 from scion.core.campaign import CampaignManager
+from scion.core.models import BranchState
 from scion.core.execution_outcome import (
     ExecutionOutcome,
     branch_has_execution_hold,
@@ -305,6 +306,42 @@ def test_direct_success_records_one_durable_attempt_per_provider_call(
     assert phase_refs["code"] is ref
     assert pipeline.pop_proposal_attempt_ref(branch.branch_id) is ref
     assert branch.branch_id not in pipeline.proposal_attempt_refs
+
+
+def test_hypothesis_context_receives_all_campaign_branches_from_provider() -> None:
+    pipeline, branch, runtime, _failures, _balance = _pipeline(
+        creative=ReceiptCreative(),
+    )
+    campaign_branches = pipeline.branch_controller.get_active_branches()
+    terminal = replace(
+        campaign_branches[-1],
+        branch_id="terminal-sibling",
+        state=BranchState.ABANDONED,
+    )
+    campaign_branches.append(terminal)
+    pipeline.campaign_branches_provider = lambda: campaign_branches
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is not None
+    assert record is not None
+    assert runtime.hypothesis_kwargs is not None
+    assert runtime.hypothesis_kwargs["campaign_branches"] == tuple(
+        campaign_branches
+    )
+
+
+def test_hypothesis_context_preserves_legacy_unknown_campaign_scope() -> None:
+    pipeline, branch, runtime, _failures, _balance = _pipeline(
+        creative=ReceiptCreative(),
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is not None
+    assert record is not None
+    assert runtime.hypothesis_kwargs is not None
+    assert runtime.hypothesis_kwargs["campaign_branches"] is None
 
 
 def test_create_new_without_target_preserves_missing_trajectory_target() -> None:

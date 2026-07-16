@@ -319,6 +319,57 @@ class TestBranchStore:
         assert "br_promoted" not in ids
         assert "br_parked" not in ids
 
+    def test_load_all_includes_terminal_in_stable_creation_order(self, tmp_path):
+        reg = LineageRegistry(str(tmp_path / "scion.db"))
+        store = BranchStore(reg)
+        later_active = _make_branch("br_later_active")
+        later_active.created_at = datetime.fromisoformat("2026-01-02T00:00:00")
+        earlier_terminal = _make_branch("br_earlier_terminal")
+        earlier_terminal.created_at = datetime.fromisoformat("2026-01-01T00:00:00")
+        earlier_terminal.state = BranchState.ABANDONED
+        store.save(later_active)
+        store.save(earlier_terminal)
+
+        results = store.load_all()
+
+        assert [branch.branch_id for branch in results] == [
+            "br_earlier_terminal",
+            "br_later_active",
+        ]
+        assert results[0].state == BranchState.ABANDONED
+
+    @pytest.mark.parametrize(
+        ("stored_json", "message"),
+        (
+            ("{not-json", "branch evidence summary JSON is invalid"),
+            ("[]", "branch evidence summary JSON is not a mapping"),
+        ),
+    )
+    def test_load_all_fails_closed_on_terminal_malformed_evidence(
+        self,
+        tmp_path,
+        stored_json,
+        message,
+    ):
+        reg = LineageRegistry(str(tmp_path / "scion.db"))
+        store = BranchStore(reg)
+        terminal = _make_branch("br_corrupt_terminal")
+        terminal.state = BranchState.ABANDONED
+        store.save(terminal)
+        with sqlite3.connect(reg.db_path) as conn:
+            conn.execute(
+                "UPDATE branches SET branch_evidence_summary_json = ? "
+                "WHERE branch_id = ?",
+                (stored_json, terminal.branch_id),
+            )
+
+        # Historical single-row and scheduler reads retain their tolerant
+        # decoder; the proposal-context all-branch read must not lose evidence.
+        assert store.load(terminal.branch_id).branch_evidence_summary == {}
+        assert store.load_all_active() == []
+        with pytest.raises(ValueError, match=message):
+            store.load_all()
+
     def test_failure_codes_roundtrip(self, tmp_path):
         reg = LineageRegistry(str(tmp_path / "scion.db"))
         store = BranchStore(reg)

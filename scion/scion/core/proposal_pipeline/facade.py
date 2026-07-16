@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, MutableMapping
+from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
 from scion.core.models import (
     Branch,
@@ -68,6 +68,7 @@ class ProposalPipeline(ProposalRecordMixin):
     step_history: list[StepRecord]
     handle_failure: Callable[[Branch, FailureEvent], None]
     mark_balance_exhausted: Callable[[], None]
+    campaign_branches_provider: Callable[[], Sequence[Branch]] | None = None
     hypothesis_failure_details: MutableMapping[str, str] = field(default_factory=dict)
     lineage_registry: Any | None = None
     campaign_id: str = ""
@@ -229,6 +230,11 @@ class ProposalPipeline(ProposalRecordMixin):
             branch=branch,
             champion=champ_snapshot,
             step_history=self.step_history,
+            campaign_branches=(
+                tuple(self.campaign_branches_provider() or ())
+                if self.campaign_branches_provider is not None
+                else None
+            ),
             branch_workspace=branch_workspace,
             forced_locus=forced_locus,
             forced_action=forced_action,
