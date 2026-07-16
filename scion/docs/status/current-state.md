@@ -88,6 +88,22 @@ formal replay explicit crash-recoverable owners. Implementation starts with D2a
 campaign/mode compatibility and remains production-disabled until D3/D4 are
 complete.
 
+D2a campaign/mode compatibility is now complete and deliberately unwired. A
+typed `CampaignOpenRequest` binds a stable caller-owned identity before
+composition; one `BEGIN IMMEDIATE` atomically claims campaign identity and
+candidate ownership mode. NEW rejects any prior durable state, REOPEN preserves
+an exact immutable mode, and pre-D2 adoption requires positive authoritative
+state rather than artifact or directory inference. The legacy path exposes only
+a read-only `LegacyVerifiedCandidateReader`: exact campaign/mode, complete
+canonical Branch/H (including proposal digest), committed verified artifact,
+Patch, workspace identity, and pending validation/frozen state must agree. The
+v1 completion codec and static byte goldens are unchanged. Focused D2a tests
+pass `117`, adjacent v1/research-rejection compatibility passes `67`, and the
+full suite passes `2332` with `1` skipped in `487.47s`; two independent audits
+report no P0/P1. No campaign manager, composition, or CLI calls this surface
+yet. D2b paired slot/dispatch/receipt is next, and generative production remains
+disabled until D2-D4 are complete.
+
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
 Raw runtime already exposed VNS/ALNS phase facts while next-H saw only ALNS

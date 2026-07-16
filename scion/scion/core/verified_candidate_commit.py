@@ -6,15 +6,23 @@ import hashlib
 import json
 import os
 import re
+import sqlite3
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
+from scion.core.decision_completion_transaction import (
+    _branch_payload_from_row,
+    _hypothesis_payload_from_row,
+    branch_to_payload,
+    hypothesis_to_payload,
+)
 from scion.core.evidence_recording.replay_identity import stable_patch_digest
 from scion.core.models import (
     Branch,
+    BranchState,
     HypothesisProposal,
     HypothesisRecord,
     PatchFileChange,
@@ -54,125 +62,13 @@ class VerifiedCandidateCommit:
     hypothesis_suggested_weight: float | None
 
 
-class VerifiedCandidateCommitRecorder:
-    """Write and validate the pre-formal verified-candidate commit record."""
+class _VerifiedCandidateCommitValidator:
+    """Shared physical validation without campaign-mode policy."""
 
     def __init__(self, campaign_dir: str | os.PathLike[str]) -> None:
         self.campaign_dir = Path(campaign_dir).resolve()
-        self.artifact_dir = (
-            self.campaign_dir / "artifacts" / "verified_candidate_commits"
-        )
 
-    def record(
-        self,
-        *,
-        branch: Branch,
-        hypothesis: HypothesisProposal,
-        h_record: HypothesisRecord,
-        patch: PatchProposal,
-        workspace: str,
-        base_code_hash: str | None,
-        materializer: CandidateIdentityMaterializer,
-        commit_kind: str = "explore",
-    ) -> str:
-        """Atomically prepare ownership before candidate workspace promotion."""
-
-        verified_code_hash = str(branch.current_code_hash or "")
-        if not verified_code_hash:
-            raise RuntimeError(
-                f"Branch {branch.branch_id}: verified candidate hash is unavailable"
-            )
-        actual_code_hash = materializer.compute_code_hash(workspace)
-        if actual_code_hash != verified_code_hash:
-            raise RuntimeError(
-                f"Branch {branch.branch_id}: verified candidate code identity mismatch"
-            )
-        executable_snapshot_hash = materializer.compute_snapshot_hash(workspace)
-        changes = patch_file_changes(patch)
-        patch_digest = stable_patch_digest(changes)
-        if commit_kind not in {"explore", "reconcile"}:
-            raise ValueError("verified candidate commit_kind is invalid")
-        payload = {
-            "schema_version": VERIFIED_CANDIDATE_COMMIT_SCHEMA,
-            "created_at": datetime.now().isoformat(),
-            "branch_id": branch.branch_id,
-            "lineage_id": branch.lineage_id or branch.branch_id,
-            "hypothesis_id": h_record.hypothesis_id,
-            "base_code_hash": base_code_hash,
-            "verified_code_hash": verified_code_hash,
-            "executable_snapshot_hash": executable_snapshot_hash,
-            "patch_digest": patch_digest,
-            "promotion_status": "prepared",
-            "evaluation_status": "pending",
-            "commit_kind": commit_kind,
-            "hypothesis": {
-                "change_locus": hypothesis.change_locus,
-                "action": hypothesis.action,
-                "target_file": hypothesis.target_file,
-                "hypothesis_text": hypothesis.hypothesis_text,
-                "predicted_direction": hypothesis.predicted_direction,
-                "suggested_weight": hypothesis.suggested_weight,
-            },
-            "patch": {
-                "representation": "full_file_replacement",
-                "files": [
-                    {
-                        "file_path": change.file_path,
-                        "action": change.action,
-                        "code_content": change.code_content,
-                        "test_hint": change.test_hint,
-                    }
-                    for change in changes
-                ],
-                "repair_attribution": [
-                    dict(item)
-                    for item in tuple(patch.repair_attribution or ())
-                    if isinstance(item, Mapping)
-                ],
-            },
-        }
-        artifact_bytes = (
-            json.dumps(payload, indent=2, sort_keys=True) + "\n"
-        ).encode("utf-8")
-        artifact_sha256 = hashlib.sha256(artifact_bytes).hexdigest()
-        # The same hypothesis can be reconciled more than once.  A content-
-        # addressed ref keeps the previously persisted commit immutable if a
-        # later reconcile is rolled back before its branch state is committed.
-        artifact_path = (
-            self.artifact_dir
-            / _safe_component(branch.branch_id)
-            / (
-                f"{_safe_component(h_record.hypothesis_id)}-"
-                f"{artifact_sha256}.json"
-            )
-        )
-        _atomic_write(artifact_path, artifact_bytes)
-        artifact_ref = artifact_path.relative_to(self.campaign_dir).as_posix()
-        summary = dict(branch.branch_evidence_summary or {})
-        summary[VERIFIED_CANDIDATE_COMMIT_SUMMARY_KEY] = {
-            "schema_version": VERIFIED_CANDIDATE_COMMIT_REF_SCHEMA,
-            "artifact_schema": VERIFIED_CANDIDATE_COMMIT_SCHEMA,
-            "artifact_ref": artifact_ref,
-            "artifact_sha256": artifact_sha256,
-            "hypothesis_id": h_record.hypothesis_id,
-            "verified_code_hash": verified_code_hash,
-            "executable_snapshot_hash": executable_snapshot_hash,
-            "patch_digest": patch_digest,
-            "promotion_status": "prepared",
-            "evaluation_status": "pending",
-            "commit_kind": commit_kind,
-        }
-        branch.branch_evidence_summary = summary
-        return artifact_ref
-
-    def mark_promotion_committed(self, branch: Branch) -> None:
-        marker = _verified_candidate_marker(branch)
-        marker["promotion_status"] = "committed"
-        summary = dict(branch.branch_evidence_summary or {})
-        summary[VERIFIED_CANDIDATE_COMMIT_SUMMARY_KEY] = marker
-        branch.branch_evidence_summary = summary
-
-    def load_and_validate(
+    def _load_and_validate_common(
         self,
         *,
         branch: Branch,
@@ -300,10 +196,7 @@ class VerifiedCandidateCommitRecorder:
             raise RuntimeError(
                 f"Branch {branch.branch_id}: verified candidate base identity mismatch"
             )
-        if (
-            commit_kind == "reconcile"
-            and base_code_hash != branch.base_champion_hash
-        ):
+        if commit_kind == "reconcile" and base_code_hash != branch.base_champion_hash:
             raise RuntimeError(
                 f"Branch {branch.branch_id}: verified candidate reconcile base mismatch"
             )
@@ -312,13 +205,9 @@ class VerifiedCandidateCommitRecorder:
             raise RuntimeError(
                 f"Branch {branch.branch_id}: verified candidate hypothesis ownership mismatch"
             )
-        hypothesis_change_locus = str(
-            hypothesis_payload.get("change_locus") or ""
-        )
+        hypothesis_change_locus = str(hypothesis_payload.get("change_locus") or "")
         hypothesis_action = str(hypothesis_payload.get("action") or "")
-        hypothesis_target_file = str(
-            hypothesis_payload.get("target_file") or ""
-        )
+        hypothesis_target_file = str(hypothesis_payload.get("target_file") or "")
         hypothesis_text = str(hypothesis_payload.get("hypothesis_text") or "")
         hypothesis_predicted_direction = str(
             hypothesis_payload.get("predicted_direction") or ""
@@ -332,9 +221,7 @@ class VerifiedCandidateCommitRecorder:
                 f"Branch {branch.branch_id}: verified candidate hypothesis ownership mismatch"
             )
         hypothesis_suggested_weight = (
-            float(suggested_weight_raw)
-            if suggested_weight_raw is not None
-            else None
+            float(suggested_weight_raw) if suggested_weight_raw is not None else None
         )
         if not all(
             (
@@ -404,6 +291,320 @@ class VerifiedCandidateCommitRecorder:
                 "verified candidate commit artifact ref escapes campaign root"
             ) from exc
         return resolved
+
+
+class LegacyVerifiedCandidateReader(_VerifiedCandidateCommitValidator):
+    """Strictly read one pending legacy validation/frozen candidate owner."""
+
+    _PENDING_STATES = frozenset(
+        {
+            BranchState.READY_VALIDATE,
+            BranchState.VALIDATING,
+            BranchState.VALIDATING_EXPAND,
+            BranchState.READY_FROZEN,
+            BranchState.FROZEN_TESTING,
+        }
+    )
+
+    def __init__(
+        self,
+        campaign_dir: str | os.PathLike[str],
+        *,
+        campaign_id: str,
+        db_path: str | os.PathLike[str] | None = None,
+    ) -> None:
+        super().__init__(campaign_dir)
+        normalized_campaign_id = str(campaign_id or "")
+        if (
+            not normalized_campaign_id
+            or normalized_campaign_id.strip() != normalized_campaign_id
+        ):
+            raise ValueError("legacy candidate reader campaign identity is invalid")
+        self.campaign_id = normalized_campaign_id
+        self.db_path = Path(db_path or self.campaign_dir / "scion.db").resolve()
+
+    def load_and_validate(
+        self,
+        *,
+        branch: Branch,
+        hypothesis_record: HypothesisRecord,
+        workspace: str,
+        materializer: CandidateIdentityMaterializer,
+    ) -> VerifiedCandidateCommit:
+        marker = (branch.branch_evidence_summary or {}).get(
+            VERIFIED_CANDIDATE_COMMIT_SUMMARY_KEY
+        )
+        if not isinstance(marker, Mapping):
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: pending legacy candidate owner is unavailable"
+            )
+        if marker.get("promotion_status") != "committed":
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: pending legacy candidate promotion is not committed"
+            )
+        if marker.get("evaluation_status") != "pending":
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: legacy candidate evaluation is not pending"
+            )
+        if branch.state not in self._PENDING_STATES:
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: legacy candidate Branch state is not pending validation/frozen"
+            )
+        hypothesis_row = self._load_durable_legacy_owner(branch, marker)
+        commit = self._load_and_validate_common(
+            branch=branch,
+            workspace=workspace,
+            materializer=materializer,
+        )
+        if commit is None:
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: pending legacy candidate owner is unavailable"
+            )
+        self._verify_durable_hypothesis(
+            branch,
+            hypothesis_record,
+            commit,
+            hypothesis_row,
+        )
+        return commit
+
+    def _load_durable_legacy_owner(
+        self,
+        branch: Branch,
+        marker: Mapping[str, Any],
+    ) -> sqlite3.Row:
+        if not self.db_path.is_file():
+            raise RuntimeError("legacy candidate campaign database is unavailable")
+        try:
+            with sqlite3.connect(
+                f"{self.db_path.as_uri()}?mode=ro",
+                uri=True,
+            ) as conn:
+                conn.row_factory = sqlite3.Row
+                identity = conn.execute(
+                    "SELECT campaign_id FROM campaign_identity WHERE singleton_id = 1"
+                ).fetchone()
+                mode = conn.execute(
+                    "SELECT campaign_id, mode FROM candidate_ownership_mode "
+                    "WHERE singleton = 1"
+                ).fetchone()
+                branch_row = conn.execute(
+                    "SELECT * FROM branches WHERE branch_id = ?",
+                    (branch.branch_id,),
+                ).fetchone()
+                hypothesis_row = conn.execute(
+                    "SELECT * FROM hypotheses WHERE hypothesis_id = ?",
+                    (str(marker.get("hypothesis_id") or ""),),
+                ).fetchone()
+        except sqlite3.Error as exc:
+            raise RuntimeError(
+                "legacy candidate campaign ownership is unavailable"
+            ) from exc
+        if (
+            identity is None
+            or tuple(identity) != (self.campaign_id,)
+            or mode is None
+            or tuple(mode) != (self.campaign_id, "legacy_verified_commit_v1")
+        ):
+            raise RuntimeError("legacy candidate campaign ownership mismatch")
+        if branch_row is None:
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: durable legacy Branch owner is unavailable"
+            )
+        try:
+            persisted_branch = _branch_payload_from_row(branch_row)
+        except (IndexError, KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: durable legacy Branch owner is invalid"
+            ) from exc
+        if persisted_branch != branch_to_payload(branch):
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: durable legacy Branch owner mismatch"
+            )
+        if hypothesis_row is None:
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: durable legacy hypothesis owner is unavailable"
+            )
+        return hypothesis_row
+
+    @staticmethod
+    def _verify_durable_hypothesis(
+        branch: Branch,
+        hypothesis_record: HypothesisRecord,
+        commit: VerifiedCandidateCommit,
+        row: sqlite3.Row,
+    ) -> None:
+        try:
+            persisted_hypothesis = _hypothesis_payload_from_row(row)
+            persisted_proposal_digest = row["proposal_digest"]
+        except (IndexError, KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: durable legacy hypothesis owner is invalid"
+            ) from exc
+        if (
+            persisted_hypothesis != hypothesis_to_payload(hypothesis_record)
+            or persisted_proposal_digest != hypothesis_record.proposal_digest
+        ):
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: durable legacy hypothesis owner mismatch"
+            )
+        commit_identity = {
+            "hypothesis_id": commit.hypothesis_id,
+            "branch_id": branch.branch_id,
+            "status": "active",
+            "change_locus": commit.hypothesis_change_locus,
+            "action": commit.hypothesis_action,
+            "target_file": commit.hypothesis_target_file,
+            "hypothesis_text": commit.hypothesis_text,
+            "predicted_direction": commit.hypothesis_predicted_direction,
+            "suggested_weight": commit.hypothesis_suggested_weight,
+        }
+        record_identity = {
+            "hypothesis_id": hypothesis_record.hypothesis_id,
+            "branch_id": hypothesis_record.branch_id,
+            "status": hypothesis_record.status,
+            "change_locus": hypothesis_record.change_locus,
+            "action": hypothesis_record.action,
+            "target_file": hypothesis_record.target_file,
+            "hypothesis_text": hypothesis_record.hypothesis_text,
+            "predicted_direction": hypothesis_record.predicted_direction,
+            "suggested_weight": hypothesis_record.suggested_weight,
+        }
+        if record_identity != commit_identity:
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: durable legacy hypothesis owner mismatch"
+            )
+
+
+class VerifiedCandidateCommitRecorder(_VerifiedCandidateCommitValidator):
+    """Write legacy commit records while retaining shared physical validation."""
+
+    def __init__(self, campaign_dir: str | os.PathLike[str]) -> None:
+        super().__init__(campaign_dir)
+        self.artifact_dir = (
+            self.campaign_dir / "artifacts" / "verified_candidate_commits"
+        )
+
+    def load_and_validate(
+        self,
+        *,
+        branch: Branch,
+        workspace: str,
+        materializer: CandidateIdentityMaterializer,
+    ) -> VerifiedCandidateCommit | None:
+        """Retain the historical recorder's broad compatibility reader."""
+
+        return self._load_and_validate_common(
+            branch=branch,
+            workspace=workspace,
+            materializer=materializer,
+        )
+
+    def record(
+        self,
+        *,
+        branch: Branch,
+        hypothesis: HypothesisProposal,
+        h_record: HypothesisRecord,
+        patch: PatchProposal,
+        workspace: str,
+        base_code_hash: str | None,
+        materializer: CandidateIdentityMaterializer,
+        commit_kind: str = "explore",
+    ) -> str:
+        """Atomically prepare ownership before candidate workspace promotion."""
+
+        verified_code_hash = str(branch.current_code_hash or "")
+        if not verified_code_hash:
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: verified candidate hash is unavailable"
+            )
+        actual_code_hash = materializer.compute_code_hash(workspace)
+        if actual_code_hash != verified_code_hash:
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: verified candidate code identity mismatch"
+            )
+        executable_snapshot_hash = materializer.compute_snapshot_hash(workspace)
+        changes = patch_file_changes(patch)
+        patch_digest = stable_patch_digest(changes)
+        if commit_kind not in {"explore", "reconcile"}:
+            raise ValueError("verified candidate commit_kind is invalid")
+        payload = {
+            "schema_version": VERIFIED_CANDIDATE_COMMIT_SCHEMA,
+            "created_at": datetime.now().isoformat(),
+            "branch_id": branch.branch_id,
+            "lineage_id": branch.lineage_id or branch.branch_id,
+            "hypothesis_id": h_record.hypothesis_id,
+            "base_code_hash": base_code_hash,
+            "verified_code_hash": verified_code_hash,
+            "executable_snapshot_hash": executable_snapshot_hash,
+            "patch_digest": patch_digest,
+            "promotion_status": "prepared",
+            "evaluation_status": "pending",
+            "commit_kind": commit_kind,
+            "hypothesis": {
+                "change_locus": hypothesis.change_locus,
+                "action": hypothesis.action,
+                "target_file": hypothesis.target_file,
+                "hypothesis_text": hypothesis.hypothesis_text,
+                "predicted_direction": hypothesis.predicted_direction,
+                "suggested_weight": hypothesis.suggested_weight,
+            },
+            "patch": {
+                "representation": "full_file_replacement",
+                "files": [
+                    {
+                        "file_path": change.file_path,
+                        "action": change.action,
+                        "code_content": change.code_content,
+                        "test_hint": change.test_hint,
+                    }
+                    for change in changes
+                ],
+                "repair_attribution": [
+                    dict(item)
+                    for item in tuple(patch.repair_attribution or ())
+                    if isinstance(item, Mapping)
+                ],
+            },
+        }
+        artifact_bytes = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode(
+            "utf-8"
+        )
+        artifact_sha256 = hashlib.sha256(artifact_bytes).hexdigest()
+        # The same hypothesis can be reconciled more than once.  A content-
+        # addressed ref keeps the previously persisted commit immutable if a
+        # later reconcile is rolled back before its branch state is committed.
+        artifact_path = (
+            self.artifact_dir
+            / _safe_component(branch.branch_id)
+            / (f"{_safe_component(h_record.hypothesis_id)}-" f"{artifact_sha256}.json")
+        )
+        _atomic_write(artifact_path, artifact_bytes)
+        artifact_ref = artifact_path.relative_to(self.campaign_dir).as_posix()
+        summary = dict(branch.branch_evidence_summary or {})
+        summary[VERIFIED_CANDIDATE_COMMIT_SUMMARY_KEY] = {
+            "schema_version": VERIFIED_CANDIDATE_COMMIT_REF_SCHEMA,
+            "artifact_schema": VERIFIED_CANDIDATE_COMMIT_SCHEMA,
+            "artifact_ref": artifact_ref,
+            "artifact_sha256": artifact_sha256,
+            "hypothesis_id": h_record.hypothesis_id,
+            "verified_code_hash": verified_code_hash,
+            "executable_snapshot_hash": executable_snapshot_hash,
+            "patch_digest": patch_digest,
+            "promotion_status": "prepared",
+            "evaluation_status": "pending",
+            "commit_kind": commit_kind,
+        }
+        branch.branch_evidence_summary = summary
+        return artifact_ref
+
+    def mark_promotion_committed(self, branch: Branch) -> None:
+        marker = _verified_candidate_marker(branch)
+        marker["promotion_status"] = "committed"
+        summary = dict(branch.branch_evidence_summary or {})
+        summary[VERIFIED_CANDIDATE_COMMIT_SUMMARY_KEY] = marker
+        branch.branch_evidence_summary = summary
 
 
 def _patch_from_payload(payload: Mapping[str, Any], branch_id: str) -> PatchProposal:
@@ -540,9 +741,7 @@ def _atomic_write(path: Path, content: bytes) -> None:
                     "verified candidate artifact exists but is unreadable"
                 ) from exc
             if existing != content:
-                raise RuntimeError(
-                    "verified candidate artifact is immutable"
-                )
+                raise RuntimeError("verified candidate artifact is immutable")
         directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(directory_fd)
