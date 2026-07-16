@@ -7,24 +7,59 @@ Read `scion/TASK.md` first. Use
 
 ## Operational State
 
-Fresh four-round R8 is terminal and read-only at
-`/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r8-4r-gpt56sol-20260716T002051Z-claw`.
+No experiment is live. The explicit R9 diagnostic continuation is terminal
+and read-only at
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r9-cont1-3r-gpt56sol-20260716T042653Z-claw`.
 It uses the clean detached runtime
-`/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-4a42ee3f` at
-exact pushed commit `4a42ee3f98bed4cde90e4a9be54fe79aefe5585d`, with
-`gpt-5.6-sol / direct_v3`, no resume source, and no force controls. Guarded
-readiness and the wrapper-owned completion preflight passed before campaign
-execution. Provider accounting was exactly `2H/2C`, with four durable calls,
-no retry/replacement, a null transport ceiling, and no truncation evidence. It
-completed one formal screening round, then stopped after R2 C2 was rejected by
-V1b. Wrapper and postrun exited zero; status is
+`/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-db971c57` at
+exact pushed commit `db971c57b7ed5f7ac79c88f151b182b11e2bb816`, with
+`gpt-5.6-sol / direct_v3`, no force controls, retry, semantic budget, or
+truncation. It is a distinct copied-root invocation from R9's verified clean
+H1 branch and is diagnostic, not a fresh formal-root control. It completed its
+requested `3/3` typed rounds with 96/96 valid pairs and
+`requested_rounds_completed`; campaign status is `valid / complete`.
+
+Together with fresh R9 H1, the cumulative canonical trajectory has four
+screening rounds. H3's ejection chain collapsed ALNS throughput; H4 replaced it
+with a granular three-route cycle and partially restored throughput; H5 moved
+to promise-gated embedded VNS and restored actual ALNS iterations to
+`8809/1678`, but all three continuation rounds still failed only
+`SCREENING_FAIL_WIN_RATE`. Champion v1 is unchanged. All four Decision intents
+are committed, verified/last-clean/workspace identities agree, and staging and
+promotion journals are empty.
+
+The historical outer wrapper remains at effective exit `64` because its
+original postrun readiness failed `formal_candidate_diff_integrity`. The
+current repair now resolves the three existing opaque v3 champion refs only
+through a campaign-local champion bound independently to the editable identity
+manifest and full snapshot hash. A read-only rebuild passes that formal check
+for all three candidates with `apply_check` and successful materialization;
+the campaign digest remains
+`02b2b2171598e1166ce2fe4728de326e73b51753f24a4a5efb755a5fe4d6315d`.
+`delegation_ready=true`; `current_run_analysis_ready=false` only because the
+immutable historical wrapper failure status and markers remain required
+checks. Do not rewrite them. This does not invalidate the 96 solver pairs or
+completed Protocol/Decision transactions.
+
+Fresh four-round R9 is terminal at
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r9-4r-gpt56sol-4r-gpt56sol-20260716T034629Z-claw`.
+It completed one valid screening round, then stopped when H2 C2 was correctly
+rejected by V1b. R1's related-customer pair repair produced case `3/2/3`, pair
+`9/11/12`, median `0`, CI `[-5.5,4]`, and
+`continue_explore / SCREENING_FAIL_WIN_RATE`. H2 saw the complete Protocol and
+outer Decision and changed to cross-route local search, but its code left two
+undefined names. Wrapper/postrun exited zero; status is
 `valid_but_incomplete / incomplete`; champion v1 is unchanged.
 
-R8 must never be resumed. Rejected C2 remained in the physical durable
-workspace while SQLite retained R1's clean hash and the final in-memory card
-retained the failed C2 current hash. This three-way split-brain is the active
-P0 repair target. The next live experiment will be a fresh four-round R9 from
-the exact clean pushed repair commit.
+R9 and its continuation accept the R8 transactional repair. The rejected H2 tree exists only in
+the archive; the durable workspace and all typed clean identities agree on H1
+hash `4a9771a9...`; candidate staging and promotion journals are empty. Formal
+and rejected-attempt accounting, Decision completion, and postrun reports also
+agree. Do not resume R9 or its continuation in place.
+
+R8 remains terminal and must never be resumed. Its rejected C2 polluted the
+physical durable workspace while SQLite retained R1's clean identity. That P0
+defect is repaired and live-accepted by R9 at `db971c57`.
 
 The preceding R7 root ending `20260715T232619Z-claw` is terminal and read-only.
 It requested four fresh generative rounds but completed only the first 32-pair
@@ -39,9 +74,9 @@ inherited index held in the source root's outer snapshot. Do not start either
 superseded root.
 
 Do not resume or relaunch R4, R5, R6, either completed validation, the frozen
-root, R7, or R8 in place. Do not use R6's round-2 v2 artifact alone to
-reconstruct the candidate. No experiment is live while the R8 repair is under
-review and verification.
+root, R7, R8, or R9 in place. Do not use R6's round-2 v2 artifact alone to
+reconstruct the candidate. No experiment is live while the repaired resolver
+finishes the correctly rooted standard suite and is committed and pushed.
 
 ## R6 Identity
 
@@ -437,8 +472,9 @@ explicit deadline-context telemetry proxy must be extended if a future
 baseline module starts using another context API.
 
 The final affected transaction/report/guidance review set passes `198`; the
-standard Scion suite passes `2034` with `1` skipped in `462.74s`. `compileall` and
-`git diff --check` pass. The earlier merged R7 verification/projection set
+current champion-ref repair focus passes `58`, and the correctly rooted
+standard Scion suite passes `2040` with `1` skipped in `479.74s`. `compileall`
+and `git diff --check` pass. The earlier merged R7 verification/projection set
 passed `78`, and its focused deadline/lifecycle/protocol set passed `81`.
 
 Excluded and preserved:
@@ -448,33 +484,39 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Commit and push the independently reviewed and fully verified R8 repair,
-   staging only intended files.
-2. Launch fresh four-round R9 from that exact pushed commit, with no resume
-   source and the existing guarded preflight.
-3. Poll R9 observationally at low frequency, normally every three minutes;
-   audit physical/hash/lineage identity as well as H/C/Protocol/Decision facts.
-4. Analyze durable observations and repair only evidence-backed defects. Do
-   not add automatic retry, semantic budgets, truncation, or a heavier gate.
-5. Expand to a separate clean eight-round root only if the clean four-round
-   evidence still leaves adaptation or reproducibility unresolved.
+1. Stage only the intended fully verified repair and operating documents,
+   commit, and push.
+2. Create a clean detached runtime at that exact pushed commit and launch a
+   fresh eight-round R10 root with no resume, force controls, retries, semantic
+   budget, or truncation.
+3. Monitor R10 at low frequency and use it as end-to-end wrapper/readiness,
+   reproducibility, and longer-adaptation evidence, not as proof that the agent
+   can make substantive algorithm changes; R9 already establishes that.
 
-## Four-Round Prelaunch Checks
+## R9 Continuation Terminal Checks
 
-- current branch is exact with origin and the runtime checkout is detached,
-  clean, and pinned to the new pushed commit;
-- the root is fresh: no resume source, copied campaign, inherited branch, or
-  historical formal-candidate index;
-- `launch.env` records `ROUNDS=4`, `TIME_LIMIT_SEC=30`, model
-  `gpt-5.6-sol`, runtime `direct_v3`, correct base URL, and only the proxy
+- runtime checkout is detached, clean, and pinned to pushed commit
+  `db971c57`;
+- resume preparation quarantined copied terminal status/summary/exit files and
+  flattened inherited formal-candidate ownership into the resume snapshot;
+- the copied Branch is `EXPLORE`, schedulable, and physically/typed clean at
+  H1 hash `4a9771a9...`;
+- `launch.env` records `ROUNDS=3`, `TIME_LIMIT_SEC=30`, model
+  `gpt-5.6-sol`, runtime `direct_v3`, the R9 resume source, and only the proxy
   key environment-variable name;
-- completion preflight is enabled and passes without making a durable proposal
-  attempt;
-- generated `run.sh` hash equals the launch and prepared-manifest anchors;
-- data identity remains `ca7e470e...`;
 - no force surface/action/target, retry control, semantic budget, truncation,
   or automatic expansion is present;
-- one manual guarded launch follows one successful proxy preflight.
+- an independent completion probe immediately before the manual diagnostic
+  launch returned authenticated HTTP 200 with nonempty content;
+- current-invocation formal counters began at zero; copied H/C traces and DB
+  history remain cumulative evidence and must not be counted as new calls;
+- current-invocation requested/effective rounds are `3/3`, cumulative H/C calls
+  are `5/5`, and no retry or replacement occurred;
+- canonical screening history is unique at rounds 1 through 4;
+- the repaired read-only postrun rebuild passes
+  `formal_candidate_diff_integrity` for all three current-invocation candidates;
+  whole-run readiness still records only the immutable historical wrapper
+  status/marker failures, while delegation readiness is true.
 
 ## Runner Notes
 
@@ -511,5 +553,7 @@ or place it in argv.
   `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r7-stopped-analysis-20260715.md`
 - R8 stopped analysis:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r8-stopped-analysis-20260716.md`
+- R9 stopped analysis:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r9-stopped-analysis-20260716.md`
 - Multi-hop lineage repair report:
   `scion/docs/experiments/v0.4/v04-resume-formal-candidate-lineage-repair-20260715.md`

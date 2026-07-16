@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 from .campaign_test_support import *  # noqa: F401,F403
+from scion.core.campaign_composition import _formal_candidate_base_workspace
 from scion.core.evidence_recording.replay_identity import stable_patch_digest
 from scion.core.models import HypothesisRecord, PatchFileChange
 from scion.proposal.llm_client import LLMProviderError
@@ -253,6 +254,53 @@ class TestCampaignBasics:
         assert reopened._champion.code_snapshot_path == str(
             tmp_path / "campaign" / "champions" / "champion_v1"
         )
+        branch = reopened._branch_ctrl.create_branch(reopened._champion)
+        assert _formal_candidate_base_workspace(reopened, branch) == str(
+            tmp_path / "campaign" / "champions" / "champion_v1"
+        )
+
+        local_snapshot = tmp_path / "campaign" / "champions" / "champion_v1"
+        reopened._champion_store._conn.execute(
+            "UPDATE champions SET code_snapshot_path = ? WHERE version = 1",
+            (str(local_snapshot),),
+        )
+        reopened._champion_store._conn.commit()
+        target = local_snapshot / "operators" / "local_search.py"
+        original = target.read_text(encoding="utf-8")
+        target.chmod(0o600)
+        target.write_text("# snapshot tampered\n", encoding="utf-8")
+        with pytest.raises(ValueError, match="snapshot hash mismatch"):
+            _formal_candidate_base_workspace(reopened, branch)
+
+        target.write_text(original, encoding="utf-8")
+        local_snapshot.rename(local_snapshot.with_name("removed_champion_v1"))
+        with pytest.raises(ValueError, match="no verified campaign-local snapshot"):
+            _formal_candidate_base_workspace(reopened, branch)
+
+    def test_nested_campaign_formal_candidate_base_fails_without_local_snapshot(
+        self, tmp_path
+    ):
+        problem_root = tmp_path / "problem"
+        (problem_root / "operators").mkdir(parents=True)
+        (problem_root / "operators" / "local_search.py").write_text(_VALID_CODE)
+        (problem_root / "solver.py").write_text(_VALID_CODE)
+        manager = CampaignManager(
+            problem_spec=_make_problem_spec(str(problem_root)),
+            protocol_config=_make_protocol_config(),
+            split_manifest=_make_split_manifest(),
+            seed_ledger=_make_seed_ledger(),
+            llm_client=MockLLMClient(
+                hypothesis_response=_VALID_HYPOTHESIS,
+                patch_response=_VALID_PATCH,
+            ),
+            champion=_make_champion(str(problem_root)),
+            campaign_dir=str(problem_root / "campaign"),
+            verification_gate=AlwaysPassVerificationGate(),
+        )
+        branch = manager._branch_ctrl.create_branch(manager._champion)
+
+        with pytest.raises(ValueError, match="no verified campaign-local snapshot"):
+            _formal_candidate_base_workspace(manager, branch)
 
     def test_final_round_leaves_validation_for_next_invocation(self, tmp_path):
         cm = _campaign(

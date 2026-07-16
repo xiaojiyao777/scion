@@ -7,7 +7,11 @@ import pytest
 
 from scion.core.research_surface_index import editable_identity_patterns
 from scion.core.models import PatchProposal
-from scion.runtime.workspace import FrozenFileError, WorkspaceMaterializer
+from scion.runtime.workspace import (
+    FrozenFileError,
+    WorkspaceMaterializer,
+    compute_snapshot_hash_for_files,
+)
 
 
 def test_editable_identity_patterns_prefer_research_surfaces() -> None:
@@ -58,6 +62,9 @@ def test_explicit_surface_hash_tracks_non_legacy_surface_only(tmp_path: Path) ->
 
     code_hash = materializer.compute_code_hash(str(ws))
     snapshot_hash = materializer.compute_snapshot_hash(str(ws))
+    manifest = materializer.editable_identity_manifest(str(ws))
+    identity_files = [ws / row["file_path"] for row in manifest["files"]]
+    assert compute_snapshot_hash_for_files(ws, identity_files) == snapshot_hash
 
     _write(ws / "surfaces" / "heuristic.py", "VALUE = 2\n")
     assert materializer.compute_code_hash(str(ws)) != code_hash

@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from scion.core.models import CanaryResult, EvalStats, ExperimentStage, ProtocolResult
 from scion.cli.main import app
+from scion.core.branch import BranchController
 from scion.core.fixed_candidate_replay import (
     COMPARISON_SCHEMA_VERSION,
     SCHEMA_VERSION,
@@ -15,6 +15,21 @@ from scion.core.fixed_candidate_replay import (
     execute_fixed_candidate_replay,
     materialize_candidate_workspace,
 )
+from scion.core.formal_candidate_artifacts import FormalCandidatePatchArtifactRecorder
+from scion.core.models import (
+    CanaryResult,
+    ChampionState,
+    ContractResult,
+    Decision,
+    EvalStats,
+    ExperimentStage,
+    HypothesisProposal,
+    HypothesisRecord,
+    PatchProposal,
+    ProtocolResult,
+    VerificationResult,
+)
+from scion.runtime.workspace import WorkspaceMaterializer
 
 
 runner = CliRunner()
@@ -517,6 +532,104 @@ def test_materializes_candidate_workspace_and_rejects_path_traversal(
         raise AssertionError("path traversal patch should have been rejected")
 
 
+@pytest.mark.parametrize(
+    "schema",
+    (
+        "scion.formal_candidate_patch_artifact.v1",
+        "scion.formal_candidate_patch_artifact.v2",
+    ),
+)
+def test_materializer_rejects_opaque_base_refs_before_v3(
+    tmp_path: Path,
+    schema: str,
+) -> None:
+    campaign_dir = tmp_path / "campaign"
+    base_workspace = campaign_dir / "champions" / "champion_v1"
+    base_workspace.mkdir(parents=True)
+    (base_workspace / "solver.py").write_text("BASE = True\n", encoding="utf-8")
+    code_content = "BASE = False\n"
+    candidate_patch = {
+        "schema": schema,
+        "base": {
+            "base_champion_id": 1,
+            "base_champion_hash": "a" * 64,
+            "base_workspace_ref": "artifact:champion_v1#0123456789ab",
+        },
+        "patch": {
+            "files": [
+                {
+                    "file_path": "solver.py",
+                    "action": "modify",
+                    "code_content": code_content,
+                    "code_sha256": _sha256(code_content),
+                    "source_attribution": {
+                        "schema_version": "formal-file-source-attribution.v1",
+                        "origin": "base_workspace",
+                        "source_ledger_owner": "",
+                        "source_provenance": "champion_base",
+                        "source_visibility": "full_current",
+                        "source_digest": _sha256("BASE = True\n"),
+                    },
+                }
+            ]
+        },
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="opaque base workspace refs require a v3 candidate patch",
+    ):
+        materialize_candidate_workspace(
+            candidate={"candidate_id": "candidate-opaque-legacy"},
+            candidate_patch=candidate_patch,
+            source_campaign_dir=campaign_dir,
+            output_dir=tmp_path / "replay",
+            arm="on",
+        )
+
+
+def test_executor_accepts_identity_bound_v3_opaque_base_with_registry(
+    tmp_path: Path,
+) -> None:
+    campaign_dir = tmp_path / "campaign"
+    artifact_ref = _write_v3_opaque_candidate(campaign_dir)
+    artifact = json.loads((campaign_dir / artifact_ref).read_text(encoding="utf-8"))
+    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    _append_index_row(
+        index_path,
+        {
+            "candidate_id": artifact["candidate_id"],
+            "branch_id": artifact["branch_id"],
+            "hypothesis_id": artifact["hypothesis_id"],
+            "stage": artifact["stage"],
+            "patch_digest": artifact["formal_patch_digest"],
+            "artifact_ref": artifact_ref,
+            "artifact_status": "recorded",
+            "replay_identity_status": "complete",
+            "missing_replay_identity_keys": [],
+        },
+    )
+    manifest = build_fixed_candidate_replay_manifest(
+        campaign_dir,
+        source_arm="record_only",
+        comparison_id="cmp-v3-opaque-registry",
+        generated_at="2026-07-16T00:00:00+00:00",
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    comparison_path = execute_fixed_candidate_replay(
+        manifest_path,
+        problem_yaml_path=tmp_path / "problem-v1.yaml",
+        output_dir=tmp_path / "replay",
+        protocol_factory=_fake_protocol_factory,
+    )
+
+    comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
+    assert comparison["rows"]
+    assert all(row["status"] == "completed" for row in comparison["rows"])
+
+
 def test_executor_writes_two_arm_rows_with_distinct_measurement_governance(
     tmp_path: Path,
 ) -> None:
@@ -900,6 +1013,97 @@ def _write_external_candidate_artifact(
     }
     artifact_path.write_text(json.dumps(metadata), encoding="utf-8")
     return artifact_path
+
+
+def _write_v3_opaque_candidate(campaign_dir: Path) -> str:
+    base_workspace = campaign_dir / "champions" / "champion_v1"
+    base_workspace.mkdir(parents=True)
+    (base_workspace / "solver.py").write_text("VALUE = 0\n", encoding="utf-8")
+    (base_workspace / "registry.yaml").write_text(
+        "operators:\n- name: baseline\n",
+        encoding="utf-8",
+    )
+    materializer = WorkspaceMaterializer(
+        str(campaign_dir),
+        editable_patterns=("solver.py",),
+    )
+    base_code_hash = materializer.compute_code_hash(str(base_workspace))
+    base_snapshot_hash = materializer.compute_snapshot_hash(str(base_workspace))
+    assert base_code_hash != base_snapshot_hash
+    branch = BranchController().create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver-hash",
+            code_snapshot_path=str(base_workspace),
+            code_snapshot_hash=base_snapshot_hash,
+        )
+    )
+    workspace = materializer.create_branch_workspace(
+        branch.branch_id,
+        str(base_workspace),
+    )
+    patch = PatchProposal("solver.py", "modify", "VALUE = 1\n")
+    branch.current_code_hash = materializer.apply_patch(workspace, patch)
+    branch.last_clean_code_hash = branch.current_code_hash
+    recorder = FormalCandidatePatchArtifactRecorder(
+        campaign_dir,
+        protocol_version="protocol-v3",
+        problem_spec_hash="problem-hash",
+        split_manifest_hash="split-hash",
+        seed_ledger_hash="seed-hash",
+        identity_manifest_for=materializer.editable_identity_manifest,
+    )
+    artifact_ref = recorder.record(
+        branch=branch,
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Exercise opaque replay through the executor.",
+            change_locus="solver_design",
+            action="modify",
+            target_file="solver.py",
+        ),
+        h_record=HypothesisRecord(
+            hypothesis_id="h-v3-opaque-executor",
+            branch_id=branch.branch_id,
+            change_locus="solver_design",
+            action="modify",
+            status="running",
+            target_file="solver.py",
+        ),
+        patch=patch,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=1,
+                wins=1,
+                losses=0,
+                ties=0,
+                win_rate=1.0,
+                median_delta=1.0,
+                ci_low=0.0,
+                ci_high=2.0,
+            ),
+            gate_outcome="expand",
+            reason_codes=("SCREENING_EXPAND",),
+            exposed_summary="opaque executor fixture",
+            raw_metrics_ref="metrics/screening.json",
+        ),
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        decision=Decision.EXPAND_SCREENING,
+        decision_reason_codes=("SCREENING_EXPAND",),
+        workspace=workspace,
+        base_workspace=str(base_workspace),
+    )
+    assert artifact_ref
+    artifact_path = campaign_dir / artifact_ref
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    artifact["base"]["base_workspace_ref"] = (
+        "artifact:champion_v1#0123456789ab"
+    )
+    artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+    return artifact_ref
 
 
 class _FakeProtocol:

@@ -4,6 +4,7 @@ from copy import deepcopy
 from hashlib import sha256
 import json
 from pathlib import Path
+import shutil
 
 from scion.core.branch import BranchController
 from scion.core.formal_candidate_artifacts import FormalCandidatePatchArtifactRecorder
@@ -201,6 +202,119 @@ def test_artifact_acceptance_materializes_v3_and_fails_closed_on_tampering(
         ), corruption
 
     _write_json(artifact_path, artifact)
+
+
+def test_artifact_acceptance_resolves_identity_bound_opaque_champion_ref(
+    tmp_path: Path,
+) -> None:
+    root, report_dir, manifest, brief_path, brief = _write_ready_artifacts(tmp_path)
+    artifact_path, artifact = _write_v3_formal_candidate(root)
+    artifact["base"]["base_workspace_ref"] = (
+        "artifact:champion_v1#0123456789ab"
+    )
+    _write_json(artifact_path, artifact)
+
+    checks = _summarize_artifact_checks(
+        root=root,
+        report_dir=report_dir,
+        manifest=manifest,
+        brief_path=brief_path,
+        brief=brief,
+    )
+    formal = checks["formal_candidate_diff_integrity"]
+    assert formal["status"] == "ok"
+    assert formal["detail"]["validations"][0]["validation_mode"] == "apply_check"
+    assert formal["detail"]["validations"][0]["materialization_status"] == "ok"
+
+    for field, value, expected_error in (
+        (
+            "base_champion_hash",
+            "0" * 64,
+            "local snapshot hash mismatch",
+        ),
+        (
+            "base_workspace_ref",
+            "artifact:champion_v1#not-a-digest",
+            "does not match base_champion_id",
+        ),
+        (
+            "base_workspace_ref",
+            "artifact:champion_v2#0123456789ab",
+            "does not match base_champion_id",
+        ),
+    ):
+        corrupted = deepcopy(artifact)
+        corrupted["base"][field] = value
+        _write_json(artifact_path, corrupted)
+        checks = _summarize_artifact_checks(
+            root=root,
+            report_dir=report_dir,
+            manifest=manifest,
+            brief_path=brief_path,
+            brief=brief,
+        )
+        formal = checks["formal_candidate_diff_integrity"]
+        assert formal["status"] == "failed"
+        assert any(
+            failure["reason"] == "candidate_diff_base_workspace_invalid"
+            and expected_error in failure["error"]
+            for failure in formal["detail"]["failures"]
+        )
+
+    _write_json(artifact_path, artifact)
+    registry_path = root / "campaign" / "champions" / "champion_v1" / "registry.yaml"
+    registry_path.write_text("operators:\n- name: tampered\n", encoding="utf-8")
+    checks = _summarize_artifact_checks(
+        root=root,
+        report_dir=report_dir,
+        manifest=manifest,
+        brief_path=brief_path,
+        brief=brief,
+    )
+    formal = checks["formal_candidate_diff_integrity"]
+    assert formal["status"] == "failed"
+    assert any(
+        failure["reason"] == "candidate_diff_base_workspace_invalid"
+        and "local snapshot hash mismatch" in failure["error"]
+        for failure in formal["detail"]["failures"]
+    )
+
+
+def test_artifact_acceptance_structures_opaque_champion_symlink_failures(
+    tmp_path: Path,
+) -> None:
+    for mode in ("missing", "escape", "loop"):
+        root = tmp_path / mode
+        root, report_dir, manifest, brief_path, brief = _write_ready_artifacts(root)
+        artifact_path, artifact = _write_v3_formal_candidate(root)
+        artifact["base"]["base_workspace_ref"] = (
+            "artifact:champion_v1#0123456789ab"
+        )
+        _write_json(artifact_path, artifact)
+        local_snapshot = root / "campaign" / "champions" / "champion_v1"
+        if mode == "missing":
+            shutil.rmtree(local_snapshot)
+        elif mode == "escape":
+            outside = tmp_path / "outside-champion"
+            local_snapshot.rename(outside)
+            local_snapshot.symlink_to(outside, target_is_directory=True)
+        else:
+            shutil.rmtree(local_snapshot)
+            local_snapshot.symlink_to("champion_v1", target_is_directory=True)
+
+        checks = _summarize_artifact_checks(
+            root=root,
+            report_dir=report_dir,
+            manifest=manifest,
+            brief_path=brief_path,
+            brief=brief,
+        )
+        formal = checks["formal_candidate_diff_integrity"]
+        assert formal["status"] == "failed"
+        assert any(
+            failure["reason"] == "candidate_diff_base_workspace_invalid"
+            for failure in formal["detail"]["failures"]
+        )
 
 
 def test_artifact_acceptance_allows_v3_empty_cumulative_closure(
@@ -525,20 +639,29 @@ def _write_v3_formal_candidate(
     revert_to_champion: bool = False,
 ) -> tuple[Path, dict[str, object]]:
     campaign_dir = root / "campaign"
-    base_workspace = campaign_dir / "champions" / "v1"
+    base_workspace = campaign_dir / "champions" / "champion_v1"
     base_workspace.mkdir(parents=True)
     (base_workspace / "solver.py").write_text("VALUE = 0\n", encoding="utf-8")
+    (base_workspace / "registry.yaml").write_text(
+        "operators:\n- name: baseline\n",
+        encoding="utf-8",
+    )
     materializer = WorkspaceMaterializer(
         str(campaign_dir),
         editable_patterns=("*.py",),
     )
+    base_code_hash = materializer.editable_identity_manifest(
+        str(base_workspace)
+    )["code_hash"]
+    base_snapshot_hash = materializer.compute_snapshot_hash(str(base_workspace))
+    assert base_snapshot_hash != base_code_hash
     branch = BranchController().create_branch(
         ChampionState(
             version=1,
             operator_pool={},
             solver_config_hash="solver-hash",
             code_snapshot_path=str(base_workspace),
-            code_snapshot_hash="champion-hash",
+            code_snapshot_hash=base_snapshot_hash,
         )
     )
     workspace = materializer.create_branch_workspace(

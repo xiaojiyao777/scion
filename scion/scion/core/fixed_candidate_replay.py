@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,7 @@ import yaml
 from scion.core.evidence_recording.replay_identity import (
     formal_replay_identity_missing_keys,
 )
+from scion.runtime.workspace import compute_snapshot_hash_for_files
 
 
 SCHEMA_VERSION = "scion.fixed_candidate_replay_manifest.v1"
@@ -29,6 +31,9 @@ MEASUREMENT_GOVERNANCE_BY_ARM = {
 FORMAL_CANDIDATE_PATCH_SCHEMA_V1 = "scion.formal_candidate_patch_artifact.v1"
 FORMAL_CANDIDATE_PATCH_SCHEMA_V2 = "scion.formal_candidate_patch_artifact.v2"
 FORMAL_CANDIDATE_PATCH_SCHEMA_V3 = "scion.formal_candidate_patch_artifact.v3"
+_OPAQUE_CHAMPION_WORKSPACE_REF_RE = re.compile(
+    r"artifact:champion_v(?P<champion_id>[0-9]+)#[0-9a-f]{12}"
+)
 _SOURCE_ATTRIBUTION_KEYS = frozenset(
     {
         "schema_version",
@@ -714,19 +719,10 @@ def materialize_candidate_workspace(
         v3_materialization = _validated_v3_replay_materialization(candidate_patch)
 
     source_dir = Path(source_campaign_dir).expanduser().resolve()
-    base = candidate_patch.get("base")
-    if not isinstance(base, Mapping):
-        raise ValueError("candidate patch missing base metadata")
-    base_ref = _clean_str(base.get("base_workspace_ref"))
-    if not base_ref:
-        raise ValueError("candidate patch missing base.base_workspace_ref")
-    base_workspace = _resolve_required_relative_path(
-        base_ref,
-        root=source_dir,
-        label="base.base_workspace_ref",
+    base_workspace = resolve_candidate_base_workspace(
+        candidate_patch,
+        source_campaign_dir=source_dir,
     )
-    if not base_workspace.is_dir():
-        raise FileNotFoundError(f"base workspace not found: {base_workspace}")
     if v3_materialization is not None:
         _validate_workspace_identity(
             base_workspace,
@@ -785,6 +781,82 @@ def materialize_candidate_workspace(
         if expected_hashes != {final_code_hash}:
             raise ValueError("materialized candidate final code_hash mismatch")
     return workspace
+
+
+def resolve_candidate_base_workspace(
+    candidate_patch: Mapping[str, Any],
+    *,
+    source_campaign_dir: str | Path,
+) -> Path:
+    """Resolve a replay base, including identity-bound copied-campaign refs."""
+
+    source_dir = Path(source_campaign_dir).expanduser().resolve()
+    base = candidate_patch.get("base")
+    if not isinstance(base, Mapping):
+        raise ValueError("candidate patch missing base metadata")
+    base_ref = _clean_str(base.get("base_workspace_ref"))
+    if not base_ref:
+        raise ValueError("candidate patch missing base.base_workspace_ref")
+
+    if not base_ref.startswith("artifact:"):
+        base_workspace = _resolve_required_relative_path(
+            base_ref,
+            root=source_dir,
+            label="base.base_workspace_ref",
+        )
+    else:
+        if (
+            _clean_str(candidate_patch.get("schema"))
+            != FORMAL_CANDIDATE_PATCH_SCHEMA_V3
+        ):
+            raise ValueError(
+                "opaque base workspace refs require a v3 candidate patch"
+            )
+        match = _OPAQUE_CHAMPION_WORKSPACE_REF_RE.fullmatch(base_ref)
+        base_champion_id = _clean_str(base.get("base_champion_id"))
+        if match is None or match.group("champion_id") != base_champion_id:
+            raise ValueError(
+                "opaque base workspace ref does not match base_champion_id"
+            )
+        materialization = candidate_patch.get("replay_materialization")
+        base_identity = (
+            materialization.get("base_identity_manifest")
+            if isinstance(materialization, Mapping)
+            else None
+        )
+        validated_identity = _validated_identity_manifest_metadata(
+            base_identity,
+            label="base",
+        )
+        base_champion_hash = _clean_str(base.get("base_champion_hash"))
+        if not _is_sha256(base_champion_hash):
+            raise ValueError("opaque base workspace ref champion hash is invalid")
+        base_workspace = (
+            source_dir / "champions" / f"champion_v{base_champion_id}"
+        ).resolve()
+        _assert_descendant(base_workspace, source_dir)
+
+    if not base_workspace.is_dir():
+        raise FileNotFoundError(f"base workspace not found: {base_workspace}")
+    if base_ref.startswith("artifact:"):
+        _validate_workspace_identity(
+            base_workspace,
+            validated_identity,
+            label="base",
+        )
+        identity_files = [
+            base_workspace / entry["file_path"]
+            for entry in validated_identity["files"]
+        ]
+        local_snapshot_hash = compute_snapshot_hash_for_files(
+            base_workspace,
+            identity_files,
+        )
+        if local_snapshot_hash != base_champion_hash:
+            raise ValueError(
+                "opaque base workspace ref local snapshot hash mismatch"
+            )
+    return base_workspace
 
 
 def _manifest_source_attribution_fields(
@@ -1259,11 +1331,9 @@ def _execute_replay_row(
             output_dir=output_dir,
             arm=arm,
         )
-        base_workspace_ref = _required_base_workspace_ref(candidate_patch)
-        champion_ws = _resolve_required_relative_path(
-            base_workspace_ref,
-            root=source_campaign_dir,
-            label="base.base_workspace_ref",
+        champion_ws = resolve_candidate_base_workspace(
+            candidate_patch,
+            source_campaign_dir=source_campaign_dir,
         )
         protocol = _build_protocol(
             problem_yaml_path=problem_yaml_path,
@@ -1612,13 +1682,6 @@ def _required_str(data: Mapping[str, Any], key: str) -> str:
     return value
 
 
-def _required_base_workspace_ref(candidate_patch: Mapping[str, Any]) -> str:
-    base = candidate_patch.get("base")
-    if not isinstance(base, Mapping):
-        raise ValueError("candidate patch missing base metadata")
-    return _required_str(base, "base_workspace_ref")
-
-
 def _measurement_governance_for_arm(arm: str) -> str:
     if arm not in MEASUREMENT_GOVERNANCE_BY_ARM:
         raise ValueError(f"unsupported replay arm: {arm}")
@@ -1709,6 +1772,7 @@ __all__ = [
     "build_fixed_candidate_replay_manifest",
     "execute_fixed_candidate_replay",
     "materialize_candidate_workspace",
+    "resolve_candidate_base_workspace",
     "resolve_formal_candidate_index",
     "write_fixed_candidate_replay_manifest",
 ]

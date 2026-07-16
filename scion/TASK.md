@@ -207,6 +207,66 @@ legacy report false negative for typed `verification_fail`; a corrected
 read-only query reports two gate outcomes, one V1b failure, and intercept rate
 `0.5`.
 
+The transactional repair is committed and pushed at
+`db971c57b7ed5f7ac79c88f151b182b11e2bb816`. Fresh four-round R9 is terminal:
+
+- root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r9-4r-gpt56sol-4r-gpt56sol-20260716T034629Z-claw`;
+- exact runtime: clean detached `db971c57`, `gpt-5.6-sol / direct_v3`;
+- requested/effective typed rounds: `4/1`;
+- exactly `2H/2C`, all successful, no retry or replacement;
+- R1 implemented related-customer regret-2 pair insertion and completed
+  `32/32` valid pairs with zero solver/fleet failure;
+- R1 case `3/2/3`, pair `9/11/12`, median `0`, CI `[-5.5,4]`, Protocol
+  `SCREENING_FAIL_WIN_RATE`, Decision `continue_explore`;
+- H2 received the full R1 Protocol and outer Decision, changed direction to a
+  cross-route 2-opt neighborhood, but C2 only registered the new name and
+  deleted the `_two_opt_star` header;
+- V1b correctly returned `research_rejected / V1b_undefined_names` before
+  Protocol; wrapper/postrun exited zero and status is
+  `valid_but_incomplete / incomplete`.
+
+R9 accepts the transactional repair: rejected H2 exists only in its archive,
+while the durable workspace, Branch current/last-clean, verified code, and
+executable snapshot all remain H1 hash `4a9771a9...`; staging and promotion
+journal directories are empty. The committed Decision intent, formal counts,
+typed rejection, and legacy postrun projections agree. H1 is a valid negative
+algorithm result; H2 is an implementation rejection, not an algorithm result.
+
+The current addendum deliberately stops an invocation on any non-`EVALUATED`
+outcome. Do not replace that with an unbounded internal loop or same-H repair
+retry. The explicit, distinct diagnostic continuation is terminal at
+`v04-cvrp-direct-longitudinal-r9-cont1-3r-gpt56sol-20260716T042653Z-claw`.
+It copies only R9's clean durable campaign state and requests three new typed
+Protocol rounds. It is not a fresh formal control. It completed `3/3` new
+screening rounds with 96/96 valid pairs, no retry, and a unique cumulative
+round-1-through-round-4 history.
+
+The continuation proves longitudinal algorithm adaptation. H3 added an active
+ejection chain but collapsed candidate/champion ALNS iterations to `422/1678`.
+H4 removed it, installed a granular three-route cycle, and restored iterations
+to `839/1678`. H5 moved from neighborhood design to promise-gated embedded VNS
+and restored actual ALNS iterations to `8809/1678`, but objective quality still
+failed: H3 pair `10/15/7`, H4 `8/15/9`, and H5 `10/15/7`; all Decisions were
+`continue_explore / SCREENING_FAIL_WIN_RATE`. The generic cross-phase search
+counter is not agent feedback; canonical mechanism evidence uses the correct
+ALNS trace.
+
+All continuation Decision intents are committed, verified/current/last-clean
+identities agree, and candidate staging/journals are empty. Campaign status is
+`valid / complete / requested_rounds_completed`. Historical outer wrapper
+status remains `64` because its original postrun replay treated an opaque
+stale-source champion ref as a relative path. The current repair makes future
+producers require a verified campaign-local champion, adds identity-bound v3
+compatibility for the three existing opaque refs, and keeps malformed, v1, v2,
+missing, mismatched, or escaping refs fail-closed. A read-only rebuild now
+passes `formal_candidate_diff_integrity` for all three new candidates with
+`apply_check` and successful materialization; the campaign tree digest is
+unchanged. Overall current-run readiness remains false only because the
+terminal wrapper's historical failure status and markers are intentionally
+preserved; delegation readiness is true. Do not rewrite those terminal
+artifacts.
+
 ## Current Framework Repair
 
 R6 and its exact validation exposed four evidence-integrity problems:
@@ -325,8 +385,9 @@ These are lifecycle, reporting, and generation-guidance repairs. They add no
 research gate, provider retry, semantic budget, truncation, or solver work.
 
 The final affected transaction/report/guidance review set passes `198`; the
-standard Scion suite passes `2034` with `1` skipped in `462.74s`. `compileall` and
-`git diff --check` pass. Boundary coverage includes same-file cross-round edits,
+current champion-ref repair focus passes `58`, and the correctly rooted
+standard Scion suite passes `2040` with `1` skipped in `479.74s`. `compileall`
+and `git diff --check` pass. Boundary coverage includes same-file cross-round edits,
 create/delete, full reversion to champion, activation files, absent and
 partially missing indexes, inherited resume indexes,
 closure/content/base/final-hash tampering, promotion and Decision crash
@@ -349,16 +410,12 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 
 ## Execution Queue
 
-1. Commit and push the independently reviewed R8 transactional workspace,
-   Decision completion, typed-failure reporting, feedback-semantics, and
-   deadline-guidance repair, staging only the intended files.
-2. Launch fresh four-round R9 from that exact clean pushed commit with no
-   resume source. Audit H/C accounting, physical/hash/lineage continuity,
-   Protocol/Decision transitions, and deadline compliance.
-3. Analyze every durable R9 observation and repair only evidence-backed
-   framework defects; do not convert a rejected hypothesis into a retry.
-4. Expand to a separate clean eight-round experiment only if the four-round
-   terminal evidence still leaves adaptation or reproducibility unresolved.
+1. Stage only the intended resolver/runtime/tests and operating documents,
+   then commit and push the fully verified repair.
+2. Launch a separate clean eight-round root from the exact pushed repair as the
+   end-to-end wrapper/readiness acceptance and longer-adaptation trajectory.
+3. Monitor that fresh root at low frequency, audit each terminal algorithm
+   round, and keep any future expansion in a distinct clean root.
 
 Two, four, and eight are requested observation counts, not retry budgets or
 automatic stop rules. Each generative experiment uses a distinct clean root;
@@ -401,5 +458,7 @@ terminal roots remain read-only.
   `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r7-stopped-analysis-20260715.md`
 - R8 stopped analysis:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r8-stopped-analysis-20260716.md`
+- R9 stopped analysis:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r9-stopped-analysis-20260716.md`
 - Multi-hop lineage repair report:
   `scion/docs/experiments/v0.4/v04-resume-formal-candidate-lineage-repair-20260715.md`

@@ -743,13 +743,7 @@ class WorkspaceMaterializer:
             Hex-encoded SHA-256 string.
         """
         ws = Path(workspace)
-        files = self._identity_files(ws)
-
-        registry_path = ws / "registry.yaml"
-        if registry_path.exists():
-            files = _dedupe_sorted_paths([*files, registry_path], ws)
-
-        return _hash_files(ws, files)
+        return compute_snapshot_hash_for_files(ws, self._identity_files(ws))
 
     def create_mutable_staging(self, source_workspace: str) -> str:
         """Create a writable staging copy of source_workspace.
@@ -908,6 +902,20 @@ def _hash_files(ws: Path, files: Iterable[Path]) -> str:
         h.update(rel.as_posix().encode())
         h.update(file_path.read_bytes())
     return h.hexdigest()
+
+
+def compute_snapshot_hash_for_files(
+    workspace: str | Path,
+    identity_files: Iterable[Path],
+) -> str:
+    """Hash one canonical editable identity plus optional ``registry.yaml``."""
+
+    ws = Path(workspace)
+    files = list(identity_files)
+    registry_path = ws / "registry.yaml"
+    if registry_path.exists():
+        files.append(registry_path)
+    return _hash_files(ws, files)
 
 
 def _explicit_identity_files(

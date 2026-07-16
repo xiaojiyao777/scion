@@ -11,7 +11,10 @@ import tempfile
 from typing import Any, Mapping
 
 from scion.core.execution_outcome import ExecutionOutcome
-from scion.core.fixed_candidate_replay import materialize_candidate_workspace
+from scion.core.fixed_candidate_replay import (
+    materialize_candidate_workspace,
+    resolve_candidate_base_workspace,
+)
 from scion.core.formal_candidate_artifacts import (
     render_full_file_replacement_diff,
 )
@@ -430,11 +433,20 @@ def _formal_candidate_diff_integrity(root: Path) -> tuple[str, dict[str, Any]]:
             )
             continue
 
-        base = _mapping_or_empty(metadata.get("base"))
-        base_workspace = _campaign_artifact_path(
-            campaign_dir,
-            base.get("base_workspace_ref"),
-        )
+        try:
+            base_workspace = resolve_candidate_base_workspace(
+                metadata,
+                source_campaign_dir=campaign_dir,
+            )
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            base_workspace = None
+            failures.append(
+                {
+                    "candidate_id": candidate_id,
+                    "reason": "candidate_diff_base_workspace_invalid",
+                    "error": str(exc),
+                }
+            )
         v3_diff_detail: dict[str, Any] = {}
         if artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V3:
             v3_diff_failures, v3_diff_detail = _v3_diff_integrity(
@@ -528,7 +540,14 @@ def _formal_candidate_diff_integrity(root: Path) -> tuple[str, dict[str, Any]]:
                         output_dir=temporary_dir,
                         arm="postrun_acceptance",
                     )
-            except (AssertionError, KeyError, OSError, TypeError, ValueError) as exc:
+            except (
+                AssertionError,
+                KeyError,
+                OSError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ) as exc:
                 validation["materialization_status"] = "failed"
                 failures.append(
                     {

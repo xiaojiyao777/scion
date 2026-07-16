@@ -620,7 +620,26 @@ def _formal_candidate_base_workspace(owner: Any, branch: Any) -> str:
             "formal candidate base champion is missing: "
             f"version={branch.base_champion_id} hash={branch.base_champion_hash}"
         )
-    return champion.code_snapshot_path
+    local = _reanchor_current_champion_snapshot(owner, champion)
+    campaign_dir = Path(owner._campaign_dir).resolve()
+    expected_local = campaign_dir / "champions" / f"champion_v{champion.version}"
+    try:
+        local_path = Path(local.code_snapshot_path).resolve()
+        resolved_expected = expected_local.resolve()
+        local_path.relative_to(campaign_dir)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise ValueError(
+            "formal candidate base champion has no verified campaign-local snapshot"
+        ) from exc
+    if local_path != resolved_expected or not local_path.is_dir():
+        raise ValueError(
+            "formal candidate base champion has no verified campaign-local snapshot"
+        )
+    if owner._materializer.compute_snapshot_hash(str(local_path)) != (
+        branch.base_champion_hash
+    ):
+        raise ValueError("formal candidate base champion snapshot hash mismatch")
+    return str(local_path)
 
 
 def _persist_initial_champion(owner: Any) -> None:
