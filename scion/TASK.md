@@ -629,11 +629,15 @@ The implementation order is fixed; items 1-3 are complete:
    leaving composition and production behavior unchanged. Its focused suite
    passes `117`, compatibility regression passes `67`, and the full suite passes
    `2332` with `1` skipped; two independent audits report no P0/P1. Four
-   adversarial design rounds accept D2 paired evaluation ownership, D3
-   continuation planning, and D4 SourceLedger/promotion/replay. Continue with
-   D2b paired slot/dispatch/receipt, D2c exact Decision transport, D2d isolated
-   snapshot handoff, and D2e v2 completion/recovery before D3/D4; then implement
-   the reversible L1-L3 ledger;
+   adversarial rounds froze the cross-cutting D2-D4 contract. The narrower D2b
+   implementation contract then passed five adversarial rounds by three
+   reviewers with no open P0/P1; it freezes Branch+H revision CAS, the explicit
+   evaluation lease and comparison guard, durable origin/mechanism ownership,
+   sealed dispatch capability, exact receipt/infra/uncertain edges, and atomic
+   successor-slot transfer. Continue with D2b.0a pure durable-owner codec
+   extraction, then the remaining D2b slices, D2c exact Decision transport, D2d
+   isolated snapshot handoff, and D2e v2 completion/recovery before D3/D4; then
+   implement the reversible L1-L3 ledger;
 6. run a serial no-LLM four-profile characterization using Protocol-resolved
    scientific limits;
 7. run two order-balanced matched pairs of fresh eight-observation direct-v3
@@ -690,9 +694,11 @@ scientific and lineage-owning artifacts remain in place.
 
 1. Execute the remaining approved post-R11c design in order: D1 candidate
    snapshot/disposition and D2a campaign/mode compatibility are complete but
-   unwired, and the D2b-D4 contract has passed four adversarial rounds with no
-   open P0/P1. Execute D2b paired slot/dispatch/receipt, D2c exact Decision
-   transport, D2d isolated snapshot handoff, and D2e v2 completion/recovery;
+   unwired, the D2b-D4 basis contract has passed four adversarial rounds, and
+   the D2b implementation contract has passed five more with no open P0/P1.
+   Execute D2b.0a pure codec extraction and the remaining paired
+   slot/dispatch/receipt slices, D2c exact Decision transport, D2d isolated
+   snapshot handoff, and D2e v2 completion/recovery;
    then D3-D4 continuation/lineage/promotion and L1-L3 normalized research
    ledger, current no-LLM profiles, matched canonical/pure campaigns, and
    transplant replay. Runner-owned temp lifecycle, proposal-only allocation

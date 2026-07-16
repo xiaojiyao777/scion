@@ -104,6 +104,21 @@ report no P0/P1. No campaign manager, composition, or CLI calls this surface
 yet. D2b paired slot/dispatch/receipt is next, and generative production remains
 disabled until D2-D4 are complete.
 
+The D2b paired-evaluation implementation contract is now frozen in
+`scion/docs/planning/v0.4/v0.4-d2b-paired-evaluation-ownership-implementation-plan-20260716.md`
+after five adversarial rounds by three independent reviewers, with no open
+P0/P1. It separates permanent snapshot/initial-pair identity from a temporary
+Branch+H evaluation lease; migrates all Branch/H writers to typed revision CAS
+with SQL lease predicates; requires durable origin and VerifiedCandidateOwner
+derivation; pairs snapshot, initial slot, and pre-first-dispatch comparison
+guard; seals dispatch with a non-reconstructible capability; and freezes exact
+receipt, infrastructure, uncertainty, operator-resume, successor-slot transfer,
+and crash-recovery edges. Initial snapshot dispatch requires H=`active`; every
+D2e exact-reuse successor carries the exact transferred H=`advanced` revision
+and atomically rearms its current-comparison guard. Production remains unwired.
+D2b.0a pure durable-owner codec extraction is the next implementation slice;
+each slice must be reviewed before the next begins.
+
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
 Raw runtime already exposed VNS/ALNS phase facts while next-H saw only ALNS
