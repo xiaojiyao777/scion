@@ -267,6 +267,17 @@ terminal wrapper's historical failure status and markers are intentionally
 preserved; delegation readiness is true. Do not rewrite those terminal
 artifacts.
 
+Fresh eight-round R10 is live at
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r10-8r-gpt56sol-20260716T063211Z-claw`
+with wrapper PID `2848393`. It runs from the clean detached runtime
+`/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-c936cde4` at
+exact pushed commit `c936cde41d746c9cbfcd308bae84ba54d85c7f4a`, using
+`gpt-5.6-sol / direct_v3`. Completion preflight is healthy: authenticated,
+HTTP `200`, nonempty response. It is a fresh campaign with `ROUNDS=8`, no
+resume, force controls, retry, semantic budget, or truncation; the 30-second
+limit remains the scientific solver subprocess fallback. Do not start another
+generative root while R10 is live.
+
 ## Current Framework Repair
 
 R6 and its exact validation exposed four evidence-integrity problems:
@@ -410,12 +421,14 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 
 ## Execution Queue
 
-1. Stage only the intended resolver/runtime/tests and operating documents,
-   then commit and push the fully verified repair.
-2. Launch a separate clean eight-round root from the exact pushed repair as the
-   end-to-end wrapper/readiness acceptance and longer-adaptation trajectory.
-3. Monitor that fresh root at low frequency, audit each terminal algorithm
-   round, and keep any future expansion in a distinct clean root.
+1. Monitor fresh R10 at low frequency; confirm the first H/C target, formal
+   artifact base ref, and transaction identities without interfering with the
+   live process.
+2. Audit each completed algorithm round against its objective, case/pair,
+   mechanism, Protocol, Decision, throughput, and code-diff evidence.
+3. At terminal state, rebuild postrun reports, verify end-to-end wrapper and
+   readiness status, update operating docs, and keep any future expansion in a
+   distinct clean root.
 
 Two, four, and eight are requested observation counts, not retry budgets or
 automatic stop rules. Each generative experiment uses a distinct clean root;

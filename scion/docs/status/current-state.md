@@ -7,8 +7,19 @@ Read `scion/TASK.md` first. Use
 
 ## Operational State
 
-No experiment is live. The explicit R9 diagnostic continuation is terminal
-and read-only at
+Fresh eight-round R10 is live at
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r10-8r-gpt56sol-20260716T063211Z-claw`
+with wrapper PID `2848393`. Its clean detached runtime is
+`/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-c936cde4` at
+exact pushed commit `c936cde41d746c9cbfcd308bae84ba54d85c7f4a`. It uses
+`gpt-5.6-sol / direct_v3`, `ROUNDS=8`, and the 30-second scientific solver
+subprocess fallback. It is fresh: no resume, force controls, retry, semantic
+budget, or truncation. Completion preflight is authenticated, HTTP `200`, and
+nonempty. The launcher stores only `SCION_SHARED_PROXY_KEY` as the environment
+variable name; no key value is persisted. Do not start another generative root
+while R10 is live.
+
+The explicit R9 diagnostic continuation is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r9-cont1-3r-gpt56sol-20260716T042653Z-claw`.
 It uses the clean detached runtime
 `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-db971c57` at
@@ -75,8 +86,7 @@ superseded root.
 
 Do not resume or relaunch R4, R5, R6, either completed validation, the frozen
 root, R7, R8, or R9 in place. Do not use R6's round-2 v2 artifact alone to
-reconstruct the candidate. No experiment is live while the repaired resolver
-finishes the correctly rooted standard suite and is committed and pushed.
+reconstruct the candidate. R10 is the only live experiment.
 
 ## R6 Identity
 
@@ -484,14 +494,13 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Stage only the intended fully verified repair and operating documents,
-   commit, and push.
-2. Create a clean detached runtime at that exact pushed commit and launch a
-   fresh eight-round R10 root with no resume, force controls, retries, semantic
-   budget, or truncation.
-3. Monitor R10 at low frequency and use it as end-to-end wrapper/readiness,
-   reproducibility, and longer-adaptation evidence, not as proof that the agent
-   can make substantive algorithm changes; R9 already establishes that.
+1. Monitor R10 at low frequency; confirm first-round H/C targeting, formal base
+   reference, and transaction identities without disturbing the live process.
+2. Audit each completed R10 round for substantive code change, activation,
+   objective/case/pair/mechanism evidence, throughput, Protocol, and Decision.
+3. At terminal state, require end-to-end postrun wrapper/readiness acceptance
+   and update the operating docs. R10 is reproducibility and longer-adaptation
+   evidence; R9 already proves substantive algorithm editing.
 
 ## R9 Continuation Terminal Checks
 
