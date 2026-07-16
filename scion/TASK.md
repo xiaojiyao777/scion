@@ -267,9 +267,9 @@ terminal wrapper's historical failure status and markers are intentionally
 preserved; delegation readiness is true. Do not rewrite those terminal
 artifacts.
 
-Fresh eight-round R11b is live at
+Fresh eight-round R11b is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11b-8r-gpt56sol-8r-gpt56sol-20260716T115118Z-claw`
-with wrapper PID `2879552`. It runs from the clean detached runtime
+with terminal wrapper PID `2879552`. It ran from the clean detached runtime
 `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-6a2f6765` at
 exact pushed code commit `6a2f6765ff141b8f1d17c3fae0391df73f3ac580`, using
 `gpt-5.6-sol / direct_v3`. Completion preflight is authenticated, HTTP `200`,
@@ -277,18 +277,37 @@ and nonempty. This is a fresh `ROUNDS=8` campaign with no resume, force
 controls, retry, semantic budget, or truncation; the 30-second limit is the
 scientific solver subprocess fallback. Only the environment-variable name
 `SCION_SHARED_PROXY_KEY` is persisted. The elapsed-time-SA finding remains
-audit guidance and was not forced. Poll no more frequently than about three
-minutes and do not start another generative root while R11b is live.
+audit guidance and was not forced.
 
 R11b H1/C1 were each generated once. H1 autonomously chose the same granular
 CROSS family as R10 H4, but C1 is a distinct implementation: 8-neighbor
 boundary filtering, original-orientation segments only, and explicit
 `cross_exchange` phase telemetry. Verified/executable code identity is
 `82878ff8...`; artifact, materialized file, source digest, and workspace agree.
-CROSS is strongly active, but embedded VNS still consumes about `89-91%` of
-candidate algorithm time. Screening is live at `9/32` valid with zero
-candidate/champion failure. Treat it as a near-duplicate mechanism retest, not
-a new algorithm family, and wait for terminal Protocol statistics.
+CROSS was strongly active, while embedded VNS consumed about `84.7-85.5%` of
+candidate algorithm time. Initial screening completed `32/32` valid with case
+`4/1/3`, pair `19/11/2`, median `+4.75`, CI `[-2.5,13]`, and committed
+`expand_screening`. Expanded screening completed another `48/48` valid with
+case `6/5/1`, pair `30/16/2`, median `+3`, and CI `[-3.75,15.5]`. The unchanged
+gate recomputes this as borderline negative, but no expanded Decision committed.
+
+R11b stopped after the expanded Protocol because the source branch was
+persisted with `screening_expand_count=0` and then mutated in memory to `1`.
+The strict Decision completion owner check correctly rejected the mismatch:
+`decision completion source branch is not the persisted owner`. Campaign exit
+was zero, strict postrun readiness/effective wrapper exit was `64`, and status
+is `valid_but_incomplete`; only one of eight typed rounds completed. This is a
+P1 framework transaction-boundary defect, not a provider, infrastructure,
+solver, or gate failure. Do not resume, backfill, or reinterpret R11b.
+
+The repair makes expansion preparation side-effect free, exposes prospective
+counts to Protocol/DecisionFeatures, and consumes the count only on the
+completed Decision target. The source-owner fail-closed guard is unchanged.
+Focused and adjacent review finds no P0/P1 blocker. The correctly rooted full
+Scion suite passes `2058` with one existing skip; compileall and
+`git diff --check` pass. The provisional formal artifact left by R11b's failed
+pre-intent path and legacy nontransaction finalization windows remain explicit
+P2 follow-up debt, not reasons to weaken the transaction guard.
 
 The preceding fresh R11 root ending `20260716T114132Z-claw` is terminal,
 invalid, and read-only. H1/C1 were each called once and C1 reached verified
@@ -526,17 +545,18 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 
 ## Execution Queue
 
-1. Monitor live R11b at low frequency and audit each completed round for code
-   change, mechanism activation, objective/case/pair, throughput, Protocol,
-   Decision, and replay integrity.
-2. If R11b creates a second branch, verify that its H receives all safe sibling
+1. Commit and push the fully tested prospective-count/atomic-target repair and
+   terminal R11b evidence; preserve the strict source-owner check.
+2. Launch fresh
+   eight-round R11c from an exact clean detached runtime. Never resume R11b.
+3. Poll R11c at low frequency and audit code change, mechanism activation,
+   objective/case/pair, throughput, Protocol, Decision, and replay integrity.
+4. If R11c creates another branch, verify that H receives all safe sibling
    screening history without validation/frozen, terminal-state, raw-ref,
    patch-body, or failure-prose leakage.
-3. Treat elapsed-time simulated-annealing cooling as an evidence-backed lead,
-   not a forced target. Judge any generated algorithm only through activation,
-   objective/case/pair, throughput, Protocol, Decision, and code-diff evidence.
-4. At terminal state, require wrapper, postrun rebuild, and readiness acceptance
-   before updating the next clean-root plan.
+5. Treat elapsed-time simulated-annealing cooling as an evidence-backed lead,
+   not a forced target; require terminal wrapper, postrun rebuild, and readiness
+   acceptance before the next root decision.
 
 Two, four, and eight are requested observation counts, not retry budgets or
 automatic stop rules. Each generative experiment uses a distinct clean root;

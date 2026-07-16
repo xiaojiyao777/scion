@@ -1,4 +1,4 @@
-# CVRP Direct Longitudinal R11/R11b Inflight
+# CVRP Direct Longitudinal R11/R11b Terminal Report
 
 ## R11 Launch Identity and Terminal Infra Failure
 
@@ -37,7 +37,7 @@ test snapshots. No pytest process was active. Removing only that temporary tree
 restored about `7.0 GiB` free. Historical `scion-experiments` roots were not
 deleted or modified.
 
-## R11b Fresh Replacement
+## R11b Fresh Replacement and Terminal Identity
 
 - run root:
   `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11b-8r-gpt56sol-8r-gpt56sol-20260716T115118Z-claw`;
@@ -50,8 +50,9 @@ deleted or modified.
 - fresh root: no resume, force controls, retry, semantic budget, or
   truncation.
 
-R11b is a distinct clean root, not a resume. It is the only live generative
-root and the valid replacement for the infrastructure-invalid R11 invocation.
+R11b is a distinct clean root, not a resume. It is the valid replacement for
+the infrastructure-invalid R11 invocation, but it is now terminal and must not
+be resumed.
 
 ## R11b H1/C1 Initial Audit
 
@@ -81,10 +82,57 @@ activation is trustworthy but `cross_exchange` and `vns` accepted/delta totals
 must not be added as independent gains. The implementation also overlaps the
 existing 1x1 swap and omits the reversal variants available in R10 H4.
 
-At `2026-07-16T12:01:31Z`, screening was live at `9/32` valid pairs with zero
-candidate or champion failure and `6.7 GiB` filesystem space remaining. Await
-terminal objective, case/pair, Protocol, and Decision evidence before judging
-quality.
+Initial screening completed `32/32` valid pairs with zero candidate or champion
+failure. Case evidence was `4/1/3`, pair evidence `19/11/2`, median delta
+`+4.75`, and hierarchical CI `[-2.5,13]`. Protocol returned
+`expand / SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT`; Decision
+`expand_screening` committed atomically.
+
+The preregistered expanded screening then completed `48/48` valid pairs across
+12 cases and four seeds, again with zero failures. Its diagnostic raw result is
+case `6/5/1`, pair `30/16/2`, median `+3`, and CI `[-3.75,15.5]`. A pure
+recalculation through the unchanged gate is a borderline-negative failure, but
+the corresponding Protocol/Decision transaction did not commit. This raw
+matrix may inform algorithm audit; it must not be represented as a formal
+Decision.
+
+Candidate/champion ALNS iterations were `1333/1633` initially and `1344/1610`
+in expansion. CROSS activated in every candidate pair, with initial
+attempted/accepted telemetry `5020/3562` and expanded `4996/3479`. Embedded VNS
+still consumed about `84.7-85.5%` of candidate algorithm time. Thus the operator
+was real and active, but its local activity did not yield a stable end-to-end
+gain across the wider split.
+
+## R11b Terminal Transaction Failure
+
+R11b ended at `2026-07-16T12:58:38Z`. The campaign command exited zero, but
+strict postrun readiness exited `64`, making the effective outer wrapper status
+`64`. Status is `valid_but_incomplete`: requested rounds `8`, completed typed
+Protocol rounds `1`, two actual Protocol evaluations, and one final
+`not_evaluated / EVAL_RUNTIME_ERROR` projection. Readiness fails only
+`execution_outcome_integrity` and remains usable for diagnostic delegation.
+
+The exact error is:
+
+```text
+decision completion source branch is not the persisted owner
+```
+
+`EvaluationOrchestrator` persisted the source branch while
+`screening_expand_count=0`, then incremented the same in-memory source to `1`
+before expanded Protocol execution. After the 48-pair matrix completed,
+`DecisionCompletionStore.prepare()` correctly compared the in-memory source
+payload against its durable owner and failed closed. This is a P1 framework
+transaction-boundary defect, not a provider, infrastructure, solver, or gate
+failure. It also left the second formal candidate artifact provisional/orphaned
+because artifact publication currently precedes intent preparation; canonical
+history and typed completion correctly retain only the initial screening.
+
+The repair keeps `_prepare_expand()` side-effect free, supplies prospective
+counts to Protocol and DecisionFeatures, and consumes the expansion count only
+on the completed Decision target. The strict source-owner guard is unchanged.
+R11b remains read-only; no Decision is backfilled and no result is replayed in
+place.
 
 ## Initial Proposal State
 
@@ -105,14 +153,13 @@ pair-insertion mechanism must be judged by its actual code diff, activation,
 throughput, objective/case/pair evidence, Protocol, Decision, and formal replay
 identity rather than by proposal prose.
 
-## Monitoring Rules
+## Disposition and Next Action
 
-- poll no more frequently than about three minutes;
-- do not signal, mutate, resume, or launch another generative root while R11b is
-  live;
-- treat `8` as a requested observation count, not a retry budget or semantic
-  stop rule;
-- audit each terminal round before making a causal attribution;
-- if a second branch opens, verify that its H sees complete safe sibling
-  screening history and no hidden-stage or lifecycle leakage;
-- require terminal wrapper, postrun rebuild, and readiness acceptance.
+- keep both R11 and R11b terminal and read-only;
+- do not resume, backfill, or reinterpret the uncommitted expansion Decision;
+- the prospective-count/atomic-target repair passes focused/adjacent review,
+  the full Scion suite (`2058` passed, one skipped), compileall, and diff-check;
+- commit and push the repair, then launch a fresh eight-round R11c from an
+  exact clean detached runtime;
+- poll R11c no more frequently than about three minutes and require wrapper,
+  postrun rebuild, and readiness acceptance at terminal state.

@@ -138,6 +138,12 @@ class EvaluationOrchestrator:
 
         expand, expand_round = self._prepare_expand(branch, protocol)
         priority_case_ids = _branch_followup_priority_cases(branch) if expand else ()
+        effective_screening_expand_count = branch.screening_expand_count
+        effective_validation_expand_count = branch.validation_expand_count
+        if expand and branch.state == BranchState.EXPLORE_EXPAND:
+            effective_screening_expand_count = expand_round
+        elif expand and branch.state == BranchState.VALIDATING_EXPAND:
+            effective_validation_expand_count = expand_round
         request = EvaluationRequest(
             branch_id=bid,
             branch_state=branch.state,
@@ -149,8 +155,8 @@ class EvaluationOrchestrator:
             selected_surface=hypothesis.change_locus,
             priority_case_ids=priority_case_ids,
             patch=self.branch_patches.get(bid),
-            screening_expand_count=branch.screening_expand_count,
-            validation_expand_count=branch.validation_expand_count,
+            screening_expand_count=effective_screening_expand_count,
+            validation_expand_count=effective_validation_expand_count,
             failure_codes=tuple(branch.failure_codes),
             force_fresh_champion=False,
         )
@@ -303,6 +309,8 @@ class EvaluationOrchestrator:
 
     @staticmethod
     def _prepare_expand(branch: Branch, protocol: Any) -> tuple[bool, int]:
+        """Compute the effective round without consuming persisted ownership."""
+
         expand = False
         expand_round = 1
         if protocol is None:
@@ -313,11 +321,9 @@ class EvaluationOrchestrator:
             BranchState.VALIDATING_EXPAND,
         )
         if branch.state == BranchState.EXPLORE_EXPAND:
-            branch.screening_expand_count += 1
-            expand_round = branch.screening_expand_count
+            expand_round = branch.screening_expand_count + 1
         elif branch.state == BranchState.VALIDATING_EXPAND:
-            branch.validation_expand_count += 1
-            expand_round = branch.validation_expand_count
+            expand_round = branch.validation_expand_count + 1
         return expand, expand_round
 
 

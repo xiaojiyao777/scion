@@ -42,6 +42,72 @@ def _reopen(tmp_path: Path, *, protocol=None, client=None) -> CampaignManager:
     )
 
 
+def test_screening_expand_terminal_decision_consumes_count_in_atomic_target(
+    tmp_path: Path,
+) -> None:
+    protocol = MockExperimentProtocol(
+        [
+            _make_protocol_result(
+                ExperimentStage.SCREENING,
+                gate_outcome="expand",
+            ),
+            _make_protocol_result(
+                ExperimentStage.SCREENING,
+                gate_outcome="continue",
+            ),
+        ]
+    )
+    cm = _campaign(tmp_path, experiment_protocol=protocol)
+
+    initial = cm.run_one_step()
+    assert initial.decision is Decision.EXPAND_SCREENING
+    bid = initial.branch_id
+    source = cm._branch_store.load(bid)
+    assert source.state is BranchState.EXPLORE_EXPAND
+    assert source.screening_expand_count == 0
+
+    terminal = cm.run_one_step()
+
+    assert terminal.decision is Decision.CONTINUE_EXPLORE
+    assert cm._branch_ctrl.get_branch(bid).screening_expand_count == 1
+    persisted = cm._branch_store.load(bid)
+    assert persisted.state is BranchState.EXPLORE
+    assert persisted.screening_expand_count == 1
+    assert cm._decision_completion_store.pending() == []
+    assert protocol.experiment_call_count == 2
+
+
+def test_validation_expand_retained_decision_consumes_and_persists_count(
+    tmp_path: Path,
+) -> None:
+    protocol = MockExperimentProtocol(
+        [
+            _make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass"),
+            _make_protocol_result(ExperimentStage.VALIDATION, gate_outcome="expand"),
+            _make_protocol_result(ExperimentStage.VALIDATION, gate_outcome="pass"),
+        ]
+    )
+    cm = _campaign(tmp_path, experiment_protocol=protocol)
+
+    screening = cm.run_one_step()
+    assert screening.decision is Decision.QUEUE_VALIDATE
+    bid = screening.branch_id
+    expansion = cm.run_one_step()
+    assert expansion.decision is Decision.EXPAND_VALIDATION
+    source = cm._branch_store.load(bid)
+    assert source.state is BranchState.VALIDATING_EXPAND
+    assert source.validation_expand_count == 0
+
+    retained = cm.run_one_step()
+
+    assert retained.decision is Decision.QUEUE_FROZEN
+    assert cm._branch_ctrl.get_branch(bid).validation_expand_count == 1
+    persisted = cm._branch_store.load(bid)
+    assert persisted.state is BranchState.READY_FROZEN
+    assert persisted.validation_expand_count == 1
+    assert protocol.experiment_call_count == 3
+
+
 @pytest.mark.parametrize(
     "fault_phase",
     ["before_hypothesis_update", "after_hypothesis_update"],

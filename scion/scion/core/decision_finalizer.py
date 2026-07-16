@@ -158,6 +158,7 @@ class DecisionFinalizer:
         # marker before any decision path persists branch/hypothesis state so
         # reopen cannot repeat an already-decided Protocol.
         mark_verified_candidate_evaluation_completed(branch)
+        _consume_completed_protocol_expansion(branch, protocol_result)
         patch = self.branch_patches.get(bid)
         if (
             decision == Decision.PROMOTE
@@ -331,6 +332,7 @@ class DecisionFinalizer:
         patch = self.branch_patches.get(bid)
         target = copy.deepcopy(branch)
         mark_verified_candidate_evaluation_completed(target)
+        _consume_completed_protocol_expansion(target, protocol_result)
 
         if decision == Decision.ABANDON:
             _sync_terminal_branch_evidence(
@@ -930,6 +932,20 @@ def _apply_decision_to_detached_branch(branch: Branch, decision: Decision) -> No
     controller = BranchController()
     controller.restore_branch(branch)
     controller.apply_decision(branch.branch_id, decision)
+
+
+def _consume_completed_protocol_expansion(
+    branch: Branch,
+    protocol_result: ProtocolResult | None,
+) -> None:
+    """Consume an expansion round only in the completed decision target."""
+
+    if protocol_result is None:
+        return
+    if branch.state is BranchState.EXPLORE_EXPAND:
+        branch.screening_expand_count += 1
+    elif branch.state is BranchState.VALIDATING_EXPAND:
+        branch.validation_expand_count += 1
 
 
 def _install_branch_snapshot(

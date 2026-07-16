@@ -5,6 +5,8 @@ from contextlib import nullcontext
 from dataclasses import replace
 from types import SimpleNamespace
 
+import pytest
+
 from scion.config.problem import ProtocolConfig
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.evaluation_orchestrator import (
@@ -139,6 +141,46 @@ class _Protocol:
                     ],
                 },
             },
+        )
+
+
+class _RecordingExpandProtocol:
+    def __init__(self, events: list[tuple[object, ...]]) -> None:
+        self.events = events
+
+    def run_canary(self, *_args, **_kwargs) -> CanaryResult:
+        return CanaryResult(passed=True)
+
+    def run_experiment(self, **kwargs) -> ProtocolResult:
+        stage = kwargs["stage"]
+        self.events.append(
+            (
+                "evaluate",
+                kwargs["expand"],
+                kwargs["expand_round"],
+                stage,
+            )
+        )
+        return ProtocolResult(
+            stage=stage,
+            stats=EvalStats(
+                n_cases=8,
+                wins=0,
+                losses=0,
+                ties=8,
+                win_rate=0.0,
+                median_delta=0.0,
+                ci_low=0.0,
+                ci_high=0.0,
+            ),
+            gate_outcome="fail",
+            reason_codes=(
+                "VALIDATION_FAIL_WIN_RATE"
+                if stage is ExperimentStage.VALIDATION
+                else "SCREENING_FAIL_WIN_RATE",
+            ),
+            exposed_summary="record expanded evaluation request",
+            raw_metrics_ref="/tmp/metrics.json",
         )
 
 
@@ -543,6 +585,105 @@ class _RuntimeSlowLowMidProtocol:
                 "telemetry_guard": {"passed": True, "candidate_runs": 10},
             },
         )
+
+
+@pytest.mark.parametrize(
+    (
+        "branch_state",
+        "initial_screening_count",
+        "initial_validation_count",
+        "effective_screening_count",
+        "effective_validation_count",
+        "expected_expand",
+        "expected_expand_round",
+        "expected_stage",
+    ),
+    (
+        (BranchState.EXPLORE_EXPAND, 2, 4, 3, 4, True, 3, ExperimentStage.SCREENING),
+        (
+            BranchState.VALIDATING_EXPAND,
+            2,
+            4,
+            2,
+            5,
+            True,
+            5,
+            ExperimentStage.VALIDATION,
+        ),
+        (BranchState.EXPLORE, 2, 4, 2, 4, False, 1, ExperimentStage.SCREENING),
+    ),
+)
+def test_expand_uses_effective_count_without_mutating_persisted_source(
+    branch_state: BranchState,
+    initial_screening_count: int,
+    initial_validation_count: int,
+    effective_screening_count: int,
+    effective_validation_count: int,
+    expected_expand: bool,
+    expected_expand_round: int,
+    expected_stage: ExperimentStage,
+) -> None:
+    branch = Branch(
+        str(uuid.uuid4()),
+        branch_state,
+        1,
+        "champ",
+        screening_expand_count=initial_screening_count,
+        validation_expand_count=initial_validation_count,
+    )
+    events: list[tuple[object, ...]] = []
+    protocol = _RecordingExpandProtocol(events)
+
+    def persist_branch_state(branch_id: str) -> None:
+        assert branch_id == branch.branch_id
+        events.append(
+            (
+                "persist",
+                branch.screening_expand_count,
+                branch.validation_expand_count,
+                branch.weight_revision,
+            )
+        )
+
+    orchestrator = EvaluationOrchestrator(
+        branch_controller=_BranchController(),
+        champion_lock=nullcontext(),
+        get_champion=lambda: replace(_champion(), weight_revision=7),
+        branch_patches={},
+        branch_workspaces={branch.branch_id: "/tmp/candidate"},
+        branch_hypotheses={},
+        branch_current_hypothesis={},
+        experiment_protocol_provider=lambda: protocol,
+        feature_extractor=SafeFeatureExtractor(),
+        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
+        decision_reason_codes={},
+        campaign_id="campaign",
+        registry=SimpleNamespace(),
+        materializer=SimpleNamespace(),
+        hypothesis_store=SimpleNamespace(),
+        persist_branch_state=persist_branch_state,
+        begin_status_progress=lambda **_kwargs: None,
+        end_status_progress=lambda: None,
+        increment_experiment_count=lambda: None,
+    )
+
+    result = orchestrator.evaluate(branch, "/tmp/candidate", _hypothesis())
+
+    assert result.execution_outcome.outcome is ExecutionOutcome.EVALUATED
+    assert events == [
+        (
+            "persist",
+            initial_screening_count,
+            initial_validation_count,
+            7,
+        ),
+        ("evaluate", expected_expand, expected_expand_round, expected_stage),
+    ]
+    assert branch.screening_expand_count == initial_screening_count
+    assert branch.validation_expand_count == initial_validation_count
+    features = orchestrator.decision_feature_snapshots[branch.branch_id]
+    assert features.screening_expand_count == effective_screening_count
+    assert features.validation_expand_count == effective_validation_count
 
 
 def test_explicit_evaluation_infra_cause_is_blocked_infra() -> None:
