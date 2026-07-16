@@ -620,13 +620,15 @@ The implementation order is fixed; items 1-3 are complete:
    provider attempt, canonical H/Patch identity, exact clean Branch target,
    typed event, and any candidate archive receipt; independent review has no
    P0/P1 and the full suite passes `2145` with `1` skipped;
-5. [D1 complete] add immutable candidate snapshots, exclusive append-only
-   snapshot ownership, and the pure clean/provisional disposition truth table.
-   The foundation is deliberately unwired; independent review has no P0/P1,
-   its combined focused suite passes `128`, and the full suite passes `2273`
-   with `1` skipped. Next wire completion, continuation, lineage, replay, and
-   promotion in D2-D4, then implement the reversible
-   normalized research/rejection ledger in L1-L3;
+5. [D1 complete; D2-D4 contract frozen] add immutable candidate snapshots,
+   exclusive append-only snapshot ownership, and the pure clean/provisional
+   disposition truth table. D1 remains deliberately unwired; its combined
+   focused suite passes `128` and the full suite passes `2273` with `1` skipped.
+   Four adversarial design rounds now accept D2 paired evaluation ownership,
+   D3 continuation planning, and D4 SourceLedger/promotion/replay with no open
+   P0/P1. Implement D2 as campaign/mode compatibility, paired slot/receipt,
+   exact Decision transport, isolated snapshot handoff, and v2 completion/
+   recovery slices before D3/D4; then implement the reversible L1-L3 ledger;
 6. run a serial no-LLM four-profile characterization using Protocol-resolved
    scientific limits;
 7. run two order-balanced matched pairs of fresh eight-observation direct-v3
@@ -682,8 +684,11 @@ scientific and lineage-owning artifacts remain in place.
 ## Execution Queue
 
 1. Execute the remaining approved post-R11c design in order: D1 candidate
-   snapshot/disposition foundation is complete but unwired; execute D2-D4
-   completion/continuation/lineage/promotion migration, then L1-L3 normalized
+   snapshot/disposition foundation is complete but unwired and the D2-D4
+   contract has passed four adversarial rounds with no open P0/P1. Execute D2a
+   campaign/mode compatibility, D2b paired slot/dispatch/receipt, D2c exact
+   Decision transport, D2d isolated snapshot handoff, and D2e v2 completion/
+   recovery; then D3-D4 continuation/lineage/promotion and L1-L3 normalized
    research ledger, current no-LLM profiles, matched canonical/pure campaigns,
    and transplant replay. Runner-owned temp lifecycle, proposal-only allocation
    evidence, and research-rejection continuation are complete.

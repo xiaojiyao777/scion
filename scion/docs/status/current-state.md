@@ -78,6 +78,16 @@ and promotion before the rejected-ancestry defect is closed. No new generative
 matched root may start before that migration and the following L1-L3 ledger
 work are accepted.
 
+The D2-D4 implementation contract is now frozen after four adversarial review
+rounds by three independent auditors, with no open P0/P1. It separates stable
+source identity from dispatch control state, makes snapshot/slot and formal
+observation ownership exact, stages future H under an awaiting-plan owner,
+requires prospective/verified mechanism agreement only for provisional
+inheritance, and gives SourceLedger, promotion, champion-CAS conflict, and
+formal replay explicit crash-recoverable owners. Implementation starts with D2a
+campaign/mode compatibility and remains production-disabled until D3/D4 are
+complete.
+
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
 Raw runtime already exposed VNS/ALNS phase facts while next-H saw only ALNS
@@ -757,15 +767,17 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Make finalized research rejection attempt-terminal but scheduler-forward,
-   then implement clean/provisional candidate disposition and the reversible
-   normalized research/rejection ledger.
+1. Implement frozen D2a-D2e in order: campaign/mode compatibility, paired
+   slot/dispatch/receipt ownership, exact DecisionOutcome transport, isolated
+   snapshot handoff, and v2 completion/recovery. Keep snapshot-mode production
+   dispatch disabled until D3 continuation planning and D4 SourceLedger/
+   promotion/replay are complete.
 2. Correct event replay identity, terminal last-outcome ownership, and postrun
    projection completeness in their owning lifecycle slices.
 3. Run serial no-LLM four-profile characterization, matched canonical/pure-ALNS
    campaigns, and canonical transplant replay in that order.
-4. Execute the warehouse fixed/decomposition plan now that problem-owned
-   mechanism attribution exists; protect every named evidence input.
+4. Execute the warehouse fixed/decomposition plan after D3 problem-owned
+   mechanism attribution is implemented; protect every named evidence input.
 
 ## R9 Continuation Terminal Checks
 
