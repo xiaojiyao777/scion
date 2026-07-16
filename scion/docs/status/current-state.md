@@ -20,6 +20,15 @@ name is persisted. The elapsed-time-SA lead was not forced. Poll no more
 frequently than about three minutes and do not start another generative root
 while R11b is live.
 
+R11b H1/C1 each used one provider call. The agent independently selected the
+R10 H4 granular CROSS mechanism family, but implemented a non-identical 8-NN,
+original-orientation segment exchange with explicit `cross_exchange` telemetry.
+Verified/executable identity is `82878ff8...`, and artifact, materialized file,
+source digest, and workspace agree. The operator is strongly active; embedded
+VNS nevertheless consumes about `89-91%` of candidate algorithm time.
+Screening is live at `9/32` valid with zero candidate/champion failure. Classify
+this as a near-duplicate mechanism retest until terminal Protocol evidence.
+
 The preceding fresh R11 root ending `20260716T114132Z-claw` is terminal and
 invalid. Its one H/C pair reached verified candidate artifact recording, then
 failed with `ENOSPC` while the filesystem had only `4.6 MiB` free. It completed

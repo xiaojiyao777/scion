@@ -280,6 +280,16 @@ scientific solver subprocess fallback. Only the environment-variable name
 audit guidance and was not forced. Poll no more frequently than about three
 minutes and do not start another generative root while R11b is live.
 
+R11b H1/C1 were each generated once. H1 autonomously chose the same granular
+CROSS family as R10 H4, but C1 is a distinct implementation: 8-neighbor
+boundary filtering, original-orientation segments only, and explicit
+`cross_exchange` phase telemetry. Verified/executable code identity is
+`82878ff8...`; artifact, materialized file, source digest, and workspace agree.
+CROSS is strongly active, but embedded VNS still consumes about `89-91%` of
+candidate algorithm time. Screening is live at `9/32` valid with zero
+candidate/champion failure. Treat it as a near-duplicate mechanism retest, not
+a new algorithm family, and wait for terminal Protocol statistics.
+
 The preceding fresh R11 root ending `20260716T114132Z-claw` is terminal,
 invalid, and read-only. H1/C1 were each called once and C1 reached verified
 candidate artifact recording, but the filesystem had only `4.6 MiB` free and

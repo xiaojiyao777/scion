@@ -53,6 +53,39 @@ deleted or modified.
 R11b is a distinct clean root, not a resume. It is the only live generative
 root and the valid replacement for the infrastructure-invalid R11 invocation.
 
+## R11b H1/C1 Initial Audit
+
+H1 and C1 each completed in one provider call. H1 autonomously selected a
+capacity-feasible, length-one-through-three granular CROSS exchange in
+`policies/baseline_modules/local_search.py`. This is a high-level near duplicate
+of R10 H4, not a new algorithm family, but the implementations are not byte
+duplicates:
+
+- both start from champion v1 hash `06820ecd...`, edit only `local_search.py`,
+  and register CROSS between existing swap and two-opt-star neighborhoods;
+- R10 H4 used 12-NN route/position candidates and considered segment reversal;
+- R11b uses 8-NN boundary-edge filtering, retains original segment orientation,
+  and records a separate `cross_exchange` phase.
+
+The verified/executable candidate identity is `82878ff8...`, patch digest is
+`4c82bcab...`, and the verified artifact, normalized code content, materialized
+workspace file, source digest, and champion base agree. At the audit snapshot,
+all observed candidate runtimes loaded the new operator with zero errors,
+valid solutions, zero fleet violation, and no route-count change. CROSS accepted
+roughly 210-229 improving moves per observed pair, so it is not dead code.
+
+The main mechanism risk remains runtime allocation. Embedded VNS consumes about
+`89-91%` of candidate algorithm time, leaving only roughly 1.8-2.2 seconds for
+the ALNS core. CROSS activation is nested inside the outer VNS phase, so phase
+activation is trustworthy but `cross_exchange` and `vns` accepted/delta totals
+must not be added as independent gains. The implementation also overlaps the
+existing 1x1 swap and omits the reversal variants available in R10 H4.
+
+At `2026-07-16T12:01:31Z`, screening was live at `9/32` valid pairs with zero
+candidate or champion failure and `6.7 GiB` filesystem space remaining. Await
+terminal objective, case/pair, Protocol, and Decision evidence before judging
+quality.
+
 ## Initial Proposal State
 
 The terminal R11 root opened one branch from champion v1 hash `06820ecd...`.
