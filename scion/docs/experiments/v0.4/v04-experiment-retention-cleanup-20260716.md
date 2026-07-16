@@ -2,14 +2,17 @@
 
 ## Result
 
-Four exact, retention-aware cleanup batches removed 281 roots under
+Five exact, retention-aware cleanup batches removed 301 roots under
 `/home/clawd/research/scion-experiments`. The first two batches were
 prepared-only. The third batch extended the same evidence protections to empty
 roots, pre-Protocol infrastructure failures, duplicate local resume copies, and
 two superseded prepared validation roots whose formal replacements remain. The
 fourth batch applied a tracked-evidence inventory to old formal/replay roots and
 removed only one fully reconstructible pre-Protocol replay failure and one
-empty wrapper shell with an identified retained rerun.
+empty wrapper shell with an identified retained rerun. The fifth batch removed
+20 copied prepared shells only after proving that their campaign trees were
+identical to retained CVRP/Warehouse canonical campaigns except for SQLite
+`wal/shm` transients.
 
 | Batch | Roots | Deleted logical bytes | GiB | Scope |
 |---|---:|---:|---:|---|
@@ -17,7 +20,8 @@ empty wrapper shell with an identified retained rerun.
 | batch-2 | 120 | 4,113,033,342 | 3.831 | old prepared/report-only roots with other names |
 | batch-3 | 23 | 1,278,214,144 | 1.190 | empty, pre-Protocol failure, duplicate, or superseded |
 | batch-4 | 2 | 250,163,200 | 0.233 | reconstructible failed replay and empty wrapper shell |
-| **Total** | **281** | **10,488,733,448** | **9.768** | exact roots without unique retained evidence |
+| batch-5 | 20 | 792,592,384 | 0.738 | copied prepared shells with retained canonical campaigns |
+| **Total** | **301** | **11,281,325,832** | **10.507** | exact roots without unique retained evidence |
 
 Filesystem observations:
 
@@ -34,7 +38,7 @@ processes may allocate or release blocks concurrently. The auditable cleanup
 quantity is the per-path recorded-byte sum in the manifest.
 
 The historical manifest column name is retained for compatibility, but
-batches 3 and 4 recorded pre-delete allocated bytes from `du -s -B1`; the
+batches 3 through 5 recorded pre-delete allocated bytes from `du -s -B1`; the
 arithmetic total is therefore an audit sum of each batch's recorded byte
 measure, not a claim that every batch used one apparent-size metric.
 
@@ -137,6 +141,41 @@ or analysis artifacts. The exact inventory is
 [`v04-experiment-retention-tracked-evidence-inventory-batch4-20260716.tsv`](./v04-experiment-retention-tracked-evidence-inventory-batch4-20260716.tsv).
 The batch reduced top-level roots from 864 to 862 and did not change the live
 R11c root/runtime.
+
+## Batch-5 copied prepared-shell inventory
+
+Batch 5 began from 862 roots and deleted exactly 20 inactive copied prepared
+shells: ten CVRP and ten Warehouse. Every candidate had only launch/preparation
+files at its top level, no wrapper/stdout/stderr log, no registered worktree,
+no live PID/cwd/cmdline/open-fd owner, and no repository reference outside this
+cleanup audit. Four candidates had a `run_status.json` whose typed state was
+`prepared_only=true`; the other 16 had no lifecycle status at all.
+
+The CVRP copies contained 344 campaign files including 35 metrics, three formal
+candidate files, seven LLM traces, and two transcripts. Their entire campaign
+trees matched retained canonical root
+`v04-cvrp-postpivot-guidance-agentic-1r-acc21ba-20260618T064210Z`. The Warehouse
+copies contained 2,405 campaign files including 73 metrics, seven formal
+candidate files, 37 LLM traces, and 15 transcripts. Their trees matched the
+retained `rep01/full_context/campaign` under
+`v04-warehouse-validation-transfer-contract-rerun6r-ce5d884-20260617T152944Z`.
+`diff -qr` was clean for all 20 after excluding only SQLite `scion.db-wal` and
+`scion.db-shm` transient files.
+
+Deletion initially stopped on the first root because copied champion
+directories were owner-read-only (`0555`). No later root was touched during
+that attempt. The retry changed only directory owner-write permission inside
+the exact 20 deletion candidates, repeated the live-owner check, and removed
+all candidates. Root count is now 842 and all 20 exact paths are absent. The
+full path, predicate, pre-delete allocated bytes, and retained canonical owner
+are recorded in
+[`v04-experiment-retention-cleanup-batch5-20260716.tsv`](./v04-experiment-retention-cleanup-batch5-20260716.tsv).
+
+Six similar `brief`, `healthcheck`, and `preparedstatus` copies remain
+fail-closed because historical documents refer to them. Unique-trace
+construction-pivot, successor38/44/44b, SIGTERM replay, Phase-5 replay, R6-R11c,
+Warehouse R2/R3, Phase A/B/C, validation/frozen, recent, and ambiguous formal
+roots also remain protected.
 
 ## Follow-up boundary
 

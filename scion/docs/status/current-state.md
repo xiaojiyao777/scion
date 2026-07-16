@@ -69,15 +69,17 @@ Disk pressure is no longer an active blocker. A safe cleanup removed inactive
 pip/npm caches plus `42,630` solver interchange files created before R11c,
 reclaiming about `16.6 GiB` and raising available space from about `6.1 GiB` to
 `23 GiB`. No experiment root, runtime, repository, user document, proxy data,
-or R11c output was touched in that pass. Four retention-audited cleanup
-batches then removed `281` exact experiment roots with a recorded per-path sum
-of `9.768 GiB`. Batch 3 removed `23` empty, pre-Protocol failure,
+or R11c output was touched in that pass. Five retention-audited cleanup
+batches then removed `301` exact experiment roots with a recorded per-path sum
+of `10.507 GiB`. Batch 3 removed `23` empty, pre-Protocol failure,
 zero-effective duplicate-local, and superseded-prepared roots only after
 protecting `73` active-doc roots and verifying retained canonical evidence.
 Batch 4 used a tracked-evidence inventory and removed only a reconstructible
 pre-Protocol replay failure plus an empty wrapper shell; roots with unique
-traces or raw metrics remained. About `33.0 GiB` is now available. The exact,
-gray, and tracked-evidence manifests are recorded in
+traces or raw metrics remained. Batch 5 removed 20 copied prepared shells after
+full campaign-tree equality checks against retained CVRP/Warehouse canonical
+roots; 842 roots remain and about `34 GiB` is available. The exact, gray, and
+tracked-evidence manifests are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
 Current R6-R11c, baseline-strength inputs, recent roots, and ambiguous roots
 remain protected. The runner ownership defect and its duplicate temp files are
