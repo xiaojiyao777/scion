@@ -297,8 +297,11 @@ cost-aware feasible repair selection; H3/C3 are single-attempt and verified at
 `12ec5b...`. Initial screening was `32/32` valid, case `4/3/1`, pair `17/13/2`,
 median `+1.75`, CI `[-2.5,19.5]`; Protocol requested an independent 48-pair
 expansion. Expansion completed `48/48` valid with zero failures and
-`SCREENING_PASS`; Decision `queue_validate` committed, and 32-pair validation
-is live. Ejection activation is zero and initial ALNS recovered to `1010/1665`.
+`SCREENING_PASS`; Decision `queue_validate` committed. Validation completed
+`32/32` valid with zero failures, case `7/0/1`, pair `26/4/2`, median `+37.75`,
+CI `[6,199]`; `VALIDATION_PASS_HIERARCHICAL` queued frozen. Frozen is live at
+`10/24` valid with zero failures and champion still v1. Ejection activation is
+zero and initial ALNS recovered to `1010/1665`.
 Cost-aware weighting did not activate because every solve remained below its
 100-iteration update segment, so attribute recovery to ejection removal, not
 reward density.
@@ -446,8 +449,9 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 
 ## Execution Queue
 
-1. Monitor R10 H3 validation at low frequency without interfering with the live
-   process; require valid fresh pairs and terminal Protocol/Decision evidence.
+1. Monitor R10 H3 frozen evaluation at low frequency without interfering with
+   the live process; require terminal Protocol/Decision before promotion or
+   rejection.
 2. Audit each completed algorithm round against its objective, case/pair,
    mechanism, Protocol, Decision, throughput, and code-diff evidence.
 3. At terminal state, rebuild postrun reports, verify end-to-end wrapper and

@@ -92,7 +92,7 @@ independently. H2's formal artifact again uses
 executable identity is `65f379...`, and transactional staging/journals are
 empty.
 
-## H3/C3 Screening Pass, Validation In Flight
+## H3/C3 Screening and Validation Pass, Frozen In Flight
 
 H3 directly targets the causal failure in `scheduler.py`: remove ejection-chain
 from the active repair portfolio and make repair selection cost-aware through
@@ -105,10 +105,18 @@ Initial screening completed `32/32` valid with case `4/3/1`, pair `17/13/2`,
 median `+1.75`, and CI `[-2.5,19.5]`. Protocol expanded the divergent,
 low-signal trajectory rather than passing it immediately. The independent
 expansion then completed `48/48` additional valid pairs with zero failures and
-returned `SCREENING_PASS`; Decision `queue_validate` committed. Validation is
-now live with a fresh 32-pair target. Both screening formal v3 artifacts use
+returned `SCREENING_PASS`; Decision `queue_validate` committed. Fresh
+validation completed `32/32` valid with zero failures, case `7/0/1`, pair
+`26/4/2`, median `+37.75`, and CI `[6,199]`. Protocol returned
+`VALIDATION_PASS_HIERARCHICAL`; Decision `queue_frozen` committed. Both
+screening formal v3 artifacts use
 `base_workspace_ref=champions/champion_v1`, complete identity, the same patch
 digest, and a clean Branch.
+
+Frozen evaluation has a fresh 24-pair target and is live at `10/24` valid with
+zero failures; champion remains v1. Its large-instance throughput is roughly
+one pair per three minutes. Do not promote or reject H3 before the frozen
+Protocol and Decision are durable.
 
 Mechanism evidence supports the causal removal: ejection attempts are zero and
 initial-screening ALNS recovered to `1010/1665`. It does not support the new
@@ -116,8 +124,8 @@ cost-aware weighting claim. `SEGMENT_LENGTH=100`, while per-solve ALNS stayed
 below 100, so weights were never updated and then reused in the same solve.
 The mechanism also lacks runtime-density/weight telemetry, and configured
 `SIGMA_ACCEPTED=13` exceeds `SIGMA_BETTER=9`. Treat the screening recovery as
-ejection removal plus search-trajectory change; require validation before any
-promotion conclusion.
+ejection removal plus search-trajectory change; the cost-aware claim remains
+unsupported even though validation quality is positive.
 
 ## Monitoring Rules
 

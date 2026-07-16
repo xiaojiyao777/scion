@@ -43,9 +43,13 @@ H3 directly removes ejection-chain from the active scheduler portfolio and
 adds cost-aware feasible repair selection. Initial screening was `32/32` valid,
 case `4/3/1`, pair `17/13/2`, median `+1.75`, CI `[-2.5,19.5]`; Protocol
 requested an independent 48-pair expansion. Expansion completed `48/48` valid
-with zero failures and `SCREENING_PASS`; Decision `queue_validate` committed,
-and fresh 32-pair validation is live. Ejection activation is zero and initial
-ALNS recovered to `1010/1665`.
+with zero failures and `SCREENING_PASS`; Decision `queue_validate` committed.
+Validation completed `32/32` valid with zero failures, case `7/0/1`, pair
+`26/4/2`, median `+37.75`, CI `[6,199]`, and
+`VALIDATION_PASS_HIERARCHICAL`; Decision `queue_frozen` committed. Frozen has a
+fresh 24-pair target and is live at `10/24` valid with zero failures; champion
+remains v1. Ejection activation is zero and initial ALNS recovered to
+`1010/1665`.
 
 Do not attribute that recovery to H3's cost-aware weights: every solve stayed
 below `SEGMENT_LENGTH=100`, so no updated weight was reused in the same solve;
@@ -527,8 +531,8 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Monitor R10 H3 validation at low frequency without disturbing the live
-   process.
+1. Monitor R10 H3 frozen evaluation at low frequency without disturbing the
+   live process; do not infer promotion before terminal Protocol/Decision.
 2. Audit each completed R10 round for substantive code change, activation,
    objective/case/pair/mechanism evidence, throughput, Protocol, and Decision.
 3. At terminal state, require end-to-end postrun wrapper/readiness acceptance
