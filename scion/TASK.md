@@ -562,6 +562,65 @@ returns a feasible 43-route incumbent with exit `0` in `23.78s`; construction
 used `20.745s`, initial VNS used `2.522s`, and the solver reported
 `stop_reason=time_limit`.
 
+## Approved Next Design: Search Allocation and Research Surfaces
+
+The accepted design is
+`scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
+Implementation must wait for the live R11c boundary and must follow that design
+instead of adding another runtime helper or gate.
+
+The controlling conclusions are:
+
+- the agent already has complete solver source and can modify VNS/ALNS, but the
+  next H does not receive measured `vns_initial / vns_embedded / alns_core`
+  allocation or repair-to-polish marginal value;
+- search allocation belongs in compact, screening-only, problem-owned proposal
+  evidence with `gate_influence=false`, not in DecisionFeatures or a new generic
+  interactive tool loop;
+- pure ALNS has already been studied under the old runtime: it is weaker but
+  more measurable and reached validation/frozen more often, yet produced no
+  promotion. The current task is a direct-v3/gpt-5.6 matched re-evaluation, not
+  a blind repeat;
+- current `USE_VNS=False` alone is not pure ALNS because it activates the
+  size-70 two-opt fallback. The copied pure profile must also disable initial,
+  embedded, and fallback polish while preserving the same ALNS scheduler;
+- ALNS+VNS and pure ALNS remain separate champion profiles and campaigns. A
+  pure-profile positive must undergo no-LLM transplant replay on the canonical
+  profile before supporting a canonical solver claim;
+- removing VNS changes iteration count and iteration-based SA cooling, so time
+  competition and search-trajectory effects must be reported separately.
+
+The implementation order is fixed:
+
+1. terminalize and audit R11c without changing its runtime;
+2. make `LocalSubprocessRunner` own and delete solver interchange files while
+   preserving all formal raw metrics;
+3. project existing runtime fields into problem-owned
+   `SearchAllocationEvidence`, with no new instrumentation in the same slice;
+4. run a serial no-LLM four-profile characterization using Protocol-resolved
+   scientific limits;
+5. run two order-balanced matched pairs of fresh eight-observation direct-v3
+   roots, canonical versus pure ALNS;
+6. replay pure-profile positives on the canonical profile;
+7. add operator-level VNS attribution only if the compact allocation evidence
+   proves insufficient;
+8. begin hot-path modularization only after these behavioral boundaries are
+   stable.
+
+Disk pressure is no longer a current blocker. A safe cleanup on 2026-07-16
+removed only inactive package caches and pre-R11c solver interchange files,
+raising free space from about `6.1 GiB` to `23 GiB` without touching any
+experiment root. A subsequent retention-audited cleanup removed `256`
+prepared-only, never-launched, superseded roots with a per-path logical sum of
+`8.345 GiB`; about `32 GiB` is now available. The exact paths and predicate are
+recorded in
+`scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
+The `scion_run_*.json` accumulation is a runner ownership bug, not formal
+evidence loss. Future historical cleanup must protect live/current roots,
+unique unsummarized evidence, and the baseline-strength anchors required by the
+accepted design, and delete exact superseded/no-evidence/duplicate roots only
+from a recorded dry-run manifest.
+
 ## Execution Queue
 
 1. Poll live R11c at low frequency and audit code change, mechanism activation,
@@ -572,9 +631,13 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 3. If R11c creates another branch, verify that H receives all safe sibling
    screening history without validation/frozen, terminal-state, raw-ref,
    patch-body, or failure-prose leakage.
-4. Treat elapsed-time simulated-annealing cooling as an evidence-backed lead,
-   not a forced target; require terminal wrapper, postrun rebuild, and readiness
-   acceptance before the next root decision.
+4. At terminal state, require wrapper, postrun rebuild, readiness acceptance,
+   and an explicit search-allocation audit before changing code.
+5. After the R11c boundary, execute the approved design in order: runner-owned
+   temp lifecycle, proposal-only allocation evidence, current no-LLM profiles,
+   matched canonical/pure campaigns, then transplant replay.
+6. Continue retention-aware historical experiment cleanup in audited batches;
+   do not delete a root required by the approved design or current closeout.
 
 Two, four, and eight are requested observation counts, not retry budgets or
 automatic stop rules. Each generative experiment uses a distinct clean root;

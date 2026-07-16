@@ -25,6 +25,28 @@ require one Protocol evaluation, unchanged durable source count before
 finalization, exactly one count increment on the committed Decision target, no
 owner mismatch, and one final execution outcome.
 
+The next post-R11c work is design-frozen in
+`scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
+Raw runtime already exposes VNS/ALNS phase facts, but next-H currently sees only
+ALNS repair summaries. The accepted first code slice adds compact problem-owned
+proposal evidence for phase time/share, ALNS throughput, and repair-to-polish
+value without touching DecisionFeatures, Protocol gates, generic core tooling,
+or the live R11c runtime. A current direct-v3 matched canonical/pure-ALNS study
+follows only after no-LLM four-profile characterization.
+
+Disk pressure is no longer an active blocker. A safe cleanup removed inactive
+pip/npm caches plus `42,630` solver interchange files created before R11c,
+reclaiming about `16.6 GiB` and raising available space from about `6.1 GiB` to
+`23 GiB`. No experiment root, runtime, repository, user document, proxy data,
+or R11c output was touched in that pass. A separate retention-audited cleanup
+then removed `256` prepared-only, never-launched, superseded experiment roots
+with a per-path logical sum of `8.345 GiB`; about `32 GiB` is now available.
+The exact manifest is recorded in
+`scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
+Current R6-R11c, baseline-strength inputs, recent roots, and ambiguous roots
+remain protected. The temp accumulation is tracked as a runner ownership
+defect; formal campaign metrics remain protected.
+
 Fresh eight-round R11b is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11b-8r-gpt56sol-8r-gpt56sol-20260716T115118Z-claw`
 with terminal wrapper PID `2879552`. Its clean detached runtime is
@@ -651,8 +673,13 @@ Excluded and preserved:
    one final execution outcome; keep the owner check fail-closed.
 3. If another branch opens, verify complete safe sibling screening continuity
    without later-stage or lifecycle leakage.
-4. Require terminal wrapper, postrun rebuild, and readiness acceptance before
-   planning the next clean root.
+4. Require terminal wrapper, postrun rebuild, readiness acceptance, and a
+   search-allocation audit before implementing the accepted post-R11c design.
+5. Then execute runner-owned temp cleanup, proposal-only allocation evidence,
+   no-LLM four-profile characterization, matched canonical/pure-ALNS campaigns,
+   and canonical transplant replay in that order.
+6. Continue historical experiment deletion only from retention dry-run
+   manifests; protect every input named by the accepted design.
 
 ## R9 Continuation Terminal Checks
 
