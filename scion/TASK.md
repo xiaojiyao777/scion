@@ -629,10 +629,12 @@ SearchAllocationEvidence, and no-LLM controls may proceed first.
 Disk pressure is no longer a current blocker. A safe cleanup on 2026-07-16
 removed only inactive package caches and pre-R11c solver interchange files,
 raising free space from about `6.1 GiB` to `23 GiB` without touching any
-experiment root. A subsequent retention-audited cleanup removed `256`
-prepared-only, never-launched, superseded roots with a per-path logical sum of
-`8.345 GiB`; about `32 GiB` is now available. The exact paths and predicate are
-recorded in
+experiment root. Three retention-audited batches have now removed `279` exact
+roots with a per-path sum of `9.535 GiB`. The third batch added `23` empty,
+pre-Protocol failure, zero-effective duplicate-local, and superseded-prepared
+roots only after protecting `73` active-doc roots and proving that canonical
+evidence remained; about `32.7 GiB` is now available. The exact paths,
+predicates, and retained gray set are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
 The `scion_run_*.json` accumulation is a runner ownership bug, not formal
 evidence loss. Future historical cleanup must protect live/current roots,
