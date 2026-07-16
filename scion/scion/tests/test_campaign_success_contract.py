@@ -259,7 +259,7 @@ class TestContractFailure:
         def fail_apply_patch(*args, **kwargs):
             raise OSError("disk write unavailable")
 
-        cm._workspace_lifecycle.apply_patch = fail_apply_patch
+        cm._workspace_lifecycle.apply_candidate_patch = fail_apply_patch
 
         result = cm.run_one_step()
 

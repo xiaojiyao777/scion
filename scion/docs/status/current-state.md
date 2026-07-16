@@ -7,15 +7,24 @@ Read `scion/TASK.md` first. Use
 
 ## Operational State
 
-Fresh four-round R8 is running at
+Fresh four-round R8 is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r8-4r-gpt56sol-20260716T002051Z-claw`.
 It uses the clean detached runtime
 `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-4a42ee3f` at
 exact pushed commit `4a42ee3f98bed4cde90e4a9be54fe79aefe5585d`, with
 `gpt-5.6-sol / direct_v3`, no resume source, and no force controls. Guarded
 readiness and the wrapper-owned completion preflight passed before campaign
-execution. Poll it observationally at low frequency and do not relaunch or
-retry it in place.
+execution. Provider accounting was exactly `2H/2C`, with four durable calls,
+no retry/replacement, a null transport ceiling, and no truncation evidence. It
+completed one formal screening round, then stopped after R2 C2 was rejected by
+V1b. Wrapper and postrun exited zero; status is
+`valid_but_incomplete / incomplete`; champion v1 is unchanged.
+
+R8 must never be resumed. Rejected C2 remained in the physical durable
+workspace while SQLite retained R1's clean hash and the final in-memory card
+retained the failed C2 current hash. This three-way split-brain is the active
+P0 repair target. The next live experiment will be a fresh four-round R9 from
+the exact clean pushed repair commit.
 
 The preceding R7 root ending `20260715T232619Z-claw` is terminal and read-only.
 It requested four fresh generative rounds but completed only the first 32-pair
@@ -30,9 +39,9 @@ inherited index held in the source root's outer snapshot. Do not start either
 superseded root.
 
 Do not resume or relaunch R4, R5, R6, either completed validation, the frozen
-root, or R7 in place. Do not use R6's round-2 v2 artifact alone to reconstruct
-the candidate. The R6 and R7 candidate paths are terminal. R8 is the sole live
-experiment.
+root, R7, or R8 in place. Do not use R6's round-2 v2 artifact alone to
+reconstruct the candidate. No experiment is live while the R8 repair is under
+review and verification.
 
 ## R6 Identity
 
@@ -280,6 +289,59 @@ case limits and had no champion timeout, watchdog failure, or infrastructure
 failure. The candidate exceptions are entirely attributable to the incomplete
 generated edit.
 
+## R8 Stopped Root
+
+- root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r8-4r-gpt56sol-20260716T002051Z-claw`;
+- runtime commit: `4a42ee3f98bed4cde90e4a9be54fe79aefe5585d`;
+- requested/effective typed rounds: `4/1`;
+- provider activity: exactly `2H/2C`, all successful, retry/replacement zero,
+  null transport ceiling, and no truncation evidence;
+- wrapper/postrun exits: `0/0`;
+- status: `valid_but_incomplete / incomplete`;
+- stop: `execution_research_rejected`;
+- champion: v1, unchanged.
+
+R1 implemented route-cap-aware regret repair with a bounded depth-2 ejection
+chain. Screening was fully valid: case `1/1/6`, pair `4/8/20`, median `0`, CI
+`[-0.5,0]`, Protocol `SCREENING_FAIL_WIN_RATE`, and Decision
+`continue_explore`. The descriptive candidate/champion route-limit counts
+`0/89` are `hypothesis_attribution=unbound` and cannot support causal claims.
+
+H2 received R1 objective, case, pair, and mechanism observations plus the
+Protocol failure; it demonstrably used that evidence and changed direction to
+inter-route cross-exchange. The old next-H projection omitted outer Decision
+`continue_explore`, so this proves partial longitudinal carryover rather than
+complete feedback fidelity. There is no evidence that the missing Decision
+caused C2's editing error. C2 did not complete that mechanism: it referenced
+`_cross_exchange` and `_or_opt_1` without definitions after an incorrect
+same-file replacement. V1b correctly rejected it before Protocol. R2 has no
+formal algorithm result.
+
+The rejection exposed a P0 durable-workspace defect. Physical workspace hash
+was failed C2 `7c3b0905...`; the final card's last-clean hash and SQLite clean
+hash were R1 `209d40d...`, while the card current hash remained C2. Resume
+would have reused the polluted tree without hashing it. The repair uses
+isolated unverified staging plus a typed verified-candidate commit, a retained
+backup, and a two-phase `prepared -> committed` promotion journal. Reopen rolls
+back when persisted identity is still the base, completes promotion when the
+persisted and physical candidate plus typed commit agree, and fails closed on
+all conflicting combinations. A `rolled_back` journal retains the exact H2
+owner until its uncommitted status is durably terminalized; a HypothesisStore
+write failure therefore remains recoverable on the next reopen. Rejection
+cleanup restores the clean identity even if hypothesis-status persistence
+fails.
+
+R8 also exposed a P1 report projection defect. Typed lineage had one
+`verification_fail`, but legacy summary/failure reports returned zero. The
+corrected read-only projection exposes stable `failed_check`, `failure_code`,
+and `failure_detail` while leaving pre-Decision `decision_reason` null. Contract
+opportunities include all gate outcomes; Verification opportunities exclude
+Contract-failed attempts. For R8 both denominators are `2`: Contract intercept
+rate is `0.0`, Verification intercept rate is `0.5`, and the sole failure code
+is `V1b_undefined_names`. Stored R8 reports remain untouched as evidence of the
+original false negative.
+
 ## Current Runtime Repair
 
 Branch: `v0.4-dev`.
@@ -330,17 +392,54 @@ The R7 repair worktree additionally contains:
   missing-output exclusions, and mismatch fail-closed behavior;
 - the R7 terminal analysis report.
 
-Nonblocking P2 debt remains visible: construction and destroy/repair do not
-poll inside every internal loop, although they now see the bounded context and
-the maximum-scale compliance probe returns within the window. The explicit
-deadline-context telemetry proxy must also be extended if a future baseline
-module starts using another context API.
+The current R8 repair worktree additionally contains:
 
-The resume/lineage/launcher slice passes `47`, the complete unit suite passes
-`724`, and the standard Scion suite passes `1971` with `1` skipped. The merged
-R7 verification/projection set passes `78`; the focused deadline/lifecycle/
-protocol set passes `81`. Independent reviews found no P0/P1 in either R7
-repair and agree the runner grace and frozen gate must remain unchanged.
+- isolated candidate workspaces with verified-only promotion and rejected
+  staging cleanup;
+- typed verified-candidate ownership, a retained backup, and a two-phase
+  promotion journal that rolls back or completes only provable identities;
+- an exact pending-evaluation continuation with `0H/0C`, screening-only
+  Protocol/Decision, and no H3 generation;
+- active-H typed ownership precedence, with strict legacy fallback only when no
+  typed marker exists;
+- transactional stale reconciliation from a newly locked champion into
+  isolated staging, with content-addressed `commit_kind=reconcile` ownership,
+  pre-Protocol typed Contract/Verification rejection, and exact recovered
+  screening at `0H/0C`;
+- persisted clean-hash restoration, reopen-time physical/executable identity
+  validation, and rejection rollback despite hypothesis-status write failure;
+- canonical H, lineage, base, patch, promotion-journal, backup/candidate/durable
+  identity binding before destructive recovery;
+- typed Decision completion for pending screening and any-stage terminal-H
+  Decisions, atomically committing Branch + H + marker + typed decision fact;
+- startup Decision convergence before branch/reconcile restore, plus
+  deterministic ABANDON archive receipts that recover a partially deleted
+  workspace without duplicate archives;
+- typed Contract/Verification failure projection with separate gate
+  opportunities and no synthetic pre-Decision reason;
+- outer Decision projection into canonical next-H history;
+- an association-only interpretation constraint for CVRP `unbound` mechanism
+  telemetry;
+- target guidance requiring nested destroy/repair searches to propagate and
+  poll the existing monotonic deadline context;
+- the R8 terminal analysis report.
+
+Nonblocking P2 debt remains visible: process death after local Protocol return
+but before Decision-intent preparation, and ordinary nonterminal retained
+transitions, use consistent at-least-once Protocol replay; typed recovery does
+not recreate every rich experiment/DecisionFeatures projection after that
+crash. Target-first source projection remains an architectural simplification,
+and strict postrun acceptance still lacks a cross-artifact count comparison.
+Construction and destroy/repair also do not poll inside every internal loop,
+although proposal guidance now requires the existing monotonic deadline
+context and the maximum-scale compliance probe returns within the window. The
+explicit deadline-context telemetry proxy must be extended if a future
+baseline module starts using another context API.
+
+The final affected transaction/report/guidance review set passes `198`; the
+standard Scion suite passes `2034` with `1` skipped in `462.74s`. `compileall` and
+`git diff --check` pass. The earlier merged R7 verification/projection set
+passed `78`, and its focused deadline/lifecycle/protocol set passed `81`.
 
 Excluded and preserved:
 
@@ -349,15 +448,16 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Poll R8 observationally at low frequency, normally every three minutes.
-2. At terminal, audit requested/effective typed rounds, exact H/C/provider/retry
-   accounting, cumulative source/hash continuity, Protocol/Decision sequence,
-   runtime compliance, and postrun integrity.
-3. Analyze every durable observation and repair only evidence-backed framework
-   defects; do not add automatic retry, semantic budgets, truncation, or a
-   heavier gate.
-4. Expand to a separate clean eight-round root only if four rounds still leave
-   adaptation or reproducibility unresolved.
+1. Commit and push the independently reviewed and fully verified R8 repair,
+   staging only intended files.
+2. Launch fresh four-round R9 from that exact pushed commit, with no resume
+   source and the existing guarded preflight.
+3. Poll R9 observationally at low frequency, normally every three minutes;
+   audit physical/hash/lineage identity as well as H/C/Protocol/Decision facts.
+4. Analyze durable observations and repair only evidence-backed defects. Do
+   not add automatic retry, semantic budgets, truncation, or a heavier gate.
+5. Expand to a separate clean eight-round root only if the clean four-round
+   evidence still leaves adaptation or reproducibility unresolved.
 
 ## Four-Round Prelaunch Checks
 
@@ -409,5 +509,7 @@ or place it in argv.
   `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-frozen-evaluation-postrun-20260715.md`
 - R7 stopped analysis:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r7-stopped-analysis-20260715.md`
+- R8 stopped analysis:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r8-stopped-analysis-20260716.md`
 - Multi-hop lineage repair report:
   `scion/docs/experiments/v0.4/v04-resume-formal-candidate-lineage-repair-20260715.md`

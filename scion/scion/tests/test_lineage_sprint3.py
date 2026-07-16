@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import sqlite3
 import uuid
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
+from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.models import (
     Branch,
     BranchState,
@@ -25,22 +27,24 @@ from scion.lineage.branch_store import BranchStore, HypothesisStore
 from scion.lineage.champion_store import ChampionStore
 from scion.lineage.registry import LineageRegistry
 
-
 # ---------------------------------------------------------------------------
 # LineageRegistry
 # ---------------------------------------------------------------------------
+
 
 class TestLineageRegistry:
     def test_record_and_query_by_branch(self, tmp_path):
         reg = LineageRegistry(str(tmp_path / "scion.db"))
         bid = str(uuid.uuid4())
-        eid = reg.record_event({
-            "event_id": str(uuid.uuid4()),
-            "branch_id": bid,
-            "timestamp": datetime.now().isoformat(),
-            "contract_result": "passed",
-            "verification_result": "passed",
-        })
+        eid = reg.record_event(
+            {
+                "event_id": str(uuid.uuid4()),
+                "branch_id": bid,
+                "timestamp": datetime.now().isoformat(),
+                "contract_result": "passed",
+                "verification_result": "passed",
+            }
+        )
         rows = reg.query_by_branch(bid)
         assert len(rows) == 1
         assert rows[0]["branch_id"] == bid
@@ -103,14 +107,22 @@ class TestLineageRegistry:
     def test_query_failures_returns_failed_rows(self, tmp_path):
         reg = LineageRegistry(str(tmp_path / "scion.db"))
         bid = "br_fail"
-        reg.record_event({
-            "branch_id": bid, "timestamp": "t1",
-            "contract_result": "failed", "verification_result": "passed",
-        })
-        reg.record_event({
-            "branch_id": bid, "timestamp": "t2",
-            "contract_result": "passed", "verification_result": "passed",
-        })
+        reg.record_event(
+            {
+                "branch_id": bid,
+                "timestamp": "t1",
+                "contract_result": "failed",
+                "verification_result": "passed",
+            }
+        )
+        reg.record_event(
+            {
+                "branch_id": bid,
+                "timestamp": "t2",
+                "contract_result": "passed",
+                "verification_result": "passed",
+            }
+        )
         failures = reg.query_failures()
         assert len(failures) == 1
         assert failures[0]["contract_result"] == "failed"
@@ -118,14 +130,20 @@ class TestLineageRegistry:
     def test_query_failures_with_category(self, tmp_path):
         reg = LineageRegistry(str(tmp_path / "scion.db"))
         bid = "br_cat"
-        reg.record_event({
-            "branch_id": bid, "timestamp": "t1",
-            "contract_result": "failed",
-        })
-        reg.record_event({
-            "branch_id": bid, "timestamp": "t2",
-            "verification_result": "failed",
-        })
+        reg.record_event(
+            {
+                "branch_id": bid,
+                "timestamp": "t1",
+                "contract_result": "failed",
+            }
+        )
+        reg.record_event(
+            {
+                "branch_id": bid,
+                "timestamp": "t2",
+                "verification_result": "failed",
+            }
+        )
         # Only contract failures
         rows = reg.query_failures(category="failed")
         assert len(rows) == 2  # both have 'failed' in some field
@@ -140,18 +158,97 @@ class TestLineageRegistry:
     def test_get_campaign_summary_counts(self, tmp_path):
         reg = LineageRegistry(str(tmp_path / "scion.db"))
         for i in range(3):
-            reg.record_event({
-                "branch_id": f"br_{i}",
-                "timestamp": f"t{i}",
-                "decision": "abandon" if i < 2 else "promote",
-                "contract_result": "failed" if i == 0 else "passed",
-            })
+            reg.record_event(
+                {
+                    "branch_id": f"br_{i}",
+                    "timestamp": f"t{i}",
+                    "decision": "abandon" if i < 2 else "promote",
+                    "contract_result": "failed" if i == 0 else "passed",
+                }
+            )
         summary = reg.get_campaign_summary()
         assert summary["total_events"] == 3
         assert summary["n_branches"] == 3
         assert summary["by_decision"]["abandon"] == 2
         assert summary["by_decision"]["promote"] == 1
         assert summary["contract_failures"] == 1
+
+    def test_typed_verification_failure_is_in_failure_queries_and_summary(
+        self,
+        tmp_path,
+    ):
+        reg = LineageRegistry(str(tmp_path / "scion.db"))
+        reg.record_execution_outcome(
+            campaign_id="campaign-1",
+            branch_id="branch-1",
+            hypothesis_id="hypothesis-1",
+            record=ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                reason_code="VERIFICATION_LIGHT_REJECTED",
+                detail="verification rejected",
+                provenance={
+                    "owner": "verification_gate",
+                    "stage": "verification",
+                    "verification_checks": [
+                        {"name": "V1_syntax", "passed": True},
+                        {"name": "V1b_undefined_names", "passed": False},
+                    ],
+                },
+            ),
+            event_kind="verification_fail",
+            stage="verification",
+        )
+
+        failures = reg.query_failures()
+        assert len(failures) == 1
+        assert failures[0]["verification_result"] == "failed"
+        assert failures[0]["decision_reason"] is None
+        assert failures[0]["failed_check"] == "V1b_undefined_names"
+        assert failures[0]["failure_code"] == "V1b_undefined_names"
+        assert failures[0]["failure_detail"] == "V1b_undefined_names"
+        assert reg.query_failures(category="failed") == failures
+        assert reg.query_failures(category="V1b_undefined_names") == failures
+
+        summary = reg.get_campaign_summary()
+        assert summary["total_events"] == 0
+        assert summary["gate_outcome_events"] == 1
+        assert summary["contract_gate_outcome_events"] == 1
+        assert summary["verification_gate_outcome_events"] == 1
+        assert summary["verification_failures"] == 1
+
+    def test_typed_verification_failure_survives_malformed_provenance(
+        self,
+        tmp_path,
+    ):
+        reg = LineageRegistry(str(tmp_path / "scion.db"))
+        with sqlite3.connect(reg.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO experiment_events (
+                    event_id, branch_id, timestamp, event_kind,
+                    execution_outcome, execution_outcome_reason_code,
+                    execution_outcome_detail, execution_outcome_provenance_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "event-1",
+                    "branch-1",
+                    "t1",
+                    "verification_fail",
+                    "research_rejected",
+                    "VERIFICATION_LIGHT_REJECTED",
+                    "V2_interface",
+                    "{malformed",
+                ),
+            )
+
+        failures = reg.query_failures()
+        assert len(failures) == 1
+        assert failures[0]["verification_result"] == "failed"
+        assert failures[0]["decision_reason"] is None
+        assert failures[0]["failed_check"] is None
+        assert failures[0]["failure_code"] == "VERIFICATION_LIGHT_REJECTED"
+        assert failures[0]["failure_detail"] == "V2_interface"
 
     def test_persistence_across_instances(self, tmp_path):
         db_path = str(tmp_path / "scion.db")
@@ -165,6 +262,7 @@ class TestLineageRegistry:
 # ---------------------------------------------------------------------------
 # BranchStore
 # ---------------------------------------------------------------------------
+
 
 def _make_branch(branch_id: str = None) -> Branch:
     return Branch(
@@ -231,11 +329,10 @@ class TestBranchStore:
         assert loaded.failure_codes == ["CONTRACT", "VERIFICATION"]
 
 
-
-
 # ---------------------------------------------------------------------------
 # HypothesisStore
 # ---------------------------------------------------------------------------
+
 
 class TestHypothesisStore:
     def test_save_hypothesis(self, tmp_path):
@@ -251,6 +348,7 @@ class TestHypothesisStore:
         )
         store.save(hyp)
         import sqlite3
+
         with sqlite3.connect(reg.db_path) as conn:
             row = conn.execute(
                 "SELECT * FROM hypotheses WHERE hypothesis_id = 'h1'"
@@ -263,13 +361,17 @@ class TestHypothesisStore:
 # ChampionStore
 # ---------------------------------------------------------------------------
 
+
 def _make_champion_state(version: int = 1) -> ChampionState:
     return ChampionState(
         version=version,
         operator_pool={
             "ls": OperatorConfig(
-                name="ls", file_path="ops/ls.py",
-                category="local_search", weight=1.0, class_name="LS",
+                name="ls",
+                file_path="ops/ls.py",
+                category="local_search",
+                weight=1.0,
+                class_name="LS",
             )
         },
         solver_config_hash="cfg_hash",
@@ -305,6 +407,7 @@ class TestChampionStore:
         store = ChampionStore(str(tmp_path / "scion.db"), str(tmp_path / "snaps"))
         store.promote(_make_champion_state(1))
         import sqlite3
+
         with pytest.raises(sqlite3.IntegrityError):
             store.promote(_make_champion_state(1))
 

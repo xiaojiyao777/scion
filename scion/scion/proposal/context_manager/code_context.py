@@ -33,6 +33,19 @@ def _branch_steps(
     return tuple(step for step in steps if step.branch_id == branch.branch_id)
 
 
+def _verified_branch_steps(
+    branch: Branch,
+    steps: Sequence[StepRecord],
+) -> tuple[StepRecord, ...]:
+    """Return only patch facts that reached the durable verified workspace."""
+
+    return tuple(
+        step
+        for step in _branch_steps(branch, steps)
+        if step.verification_passed and step.patch is not None
+    )
+
+
 def _clean_history_path(value: Any) -> str:
     text = str(value or "").strip().replace("\\", "/").lstrip("/")
     if not text or any(part in {"", ".", ".."} for part in text.split("/")):
@@ -61,7 +74,7 @@ def branch_created_files(
     files: list[str] = []
     for path in durable:
         _append_unique_path(files, path)
-    for step in _branch_steps(branch, steps or ()):
+    for step in _verified_branch_steps(branch, steps or ()):
         hypothesis = getattr(step, "hypothesis", None)
         if getattr(hypothesis, "action", None) == "create_new":
             _append_unique_path(files, getattr(hypothesis, "target_file", ""))
@@ -89,7 +102,7 @@ def branch_touched_files(
     files: list[str] = []
     for path in durable:
         _append_unique_path(files, path)
-    for step in _branch_steps(branch, steps or ()):
+    for step in _verified_branch_steps(branch, steps or ()):
         hypothesis = getattr(step, "hypothesis", None)
         _append_unique_path(files, getattr(hypothesis, "target_file", ""))
         patch = getattr(step, "patch", None)
@@ -109,7 +122,7 @@ def branch_current_file_sources(
     if branch is None:
         return {}
     sources: dict[str, str] = {}
-    for step in _branch_steps(branch, steps or ()):
+    for step in _verified_branch_steps(branch, steps or ()):
         patch = getattr(step, "patch", None)
         if patch is None:
             continue

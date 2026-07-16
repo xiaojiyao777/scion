@@ -1,4 +1,5 @@
 """Explore-step pipeline facade class."""
+
 from __future__ import annotations
 
 import logging
@@ -33,6 +34,9 @@ from scion.core.evaluation_orchestrator import (
 from scion.core.step_result import StepResult
 from scion.core.telemetry_validation import screened_experiment_effective
 from scion.core.verification_call import run_verification_gate
+from scion.core.verified_candidate_commit import (
+    discard_prepared_verified_candidate_commit,
+)
 from scion.contract.result_payload import diagnostic_checks
 from scion.proposal.context_manager.code_context import branch_current_file_sources
 
@@ -65,6 +69,7 @@ def _advisory_contract_diagnostic(
         "metadata": diagnostic_metadata,
     }
 
+
 __all__ = [
     "ExploreStepPipeline",
 ]
@@ -96,19 +101,28 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     record_step: Callable[[StepRecord], None]
     setup_workspace: Callable[[Branch], Optional[str]]
     apply_patch: Callable[..., Any]
-    record_verification_pass: Callable[[Branch, str], None]
+    record_verification_pass: Callable[[Branch, str, str, str], str]
+    reject_candidate_workspace: Callable[[Branch, str], None]
+    record_verified_candidate_commit: Callable[..., str | None]
+    commit_verified_candidate_promotion: Callable[[Branch], None]
     archive_failed_workspace: Callable[[str, str, int], Optional[str]]
     evaluate: Callable[
         [Branch, str, HypothesisProposal],
         EvaluationExecutionResult,
     ]
     apply_decision_and_finalize: Callable[..., StepResult]
-    decision_reason_codes_for: Callable[[str, Optional[ProtocolResult]], Optional[Tuple[str, ...]]]
-    proposal_failure_detail_for: Callable[[str], Optional[str]] = lambda _branch_id: None
+    decision_reason_codes_for: Callable[
+        [str, Optional[ProtocolResult]], Optional[Tuple[str, ...]]
+    ]
+    proposal_failure_detail_for: Callable[[str], Optional[str]] = (
+        lambda _branch_id: None
+    )
     proposal_execution_outcome_for: Callable[
         [str], Optional[ExecutionOutcomeRecord]
     ] = lambda _branch_id: None
-    proposal_session_ref_for: Callable[[str], Optional[dict[str, Any]]] = lambda _branch_id: None
+    proposal_session_ref_for: Callable[[str], Optional[dict[str, Any]]] = (
+        lambda _branch_id: None
+    )
     proposal_governance_envelope_for: Callable[[str], Any | None] = (
         lambda _branch_id: None
     )
@@ -136,8 +150,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         hypothesis, h_record = self.generate_hypothesis(branch)
         if hypothesis is None:
             failure_detail = (
-                self.proposal_failure_detail_for(bid)
-                or "hypothesis generation failed"
+                self.proposal_failure_detail_for(bid) or "hypothesis generation failed"
             )
             session_ref = self._proposal_session_ref(bid)
             proposal_outcome = self.proposal_execution_outcome_for(bid)
@@ -159,9 +172,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 hypothesis_id=None,
                 event_kind="proposal_execution_outcome",
             )
-            outcome_kwargs = execution_outcome_projection_kwargs(
-                proposal_outcome
-            )
+            outcome_kwargs = execution_outcome_projection_kwargs(proposal_outcome)
             if install_branch_execution_hold(branch, proposal_outcome):
                 self.persist_branch_state(bid)
             self.record_step(
@@ -213,9 +224,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         )
         governance_envelope = self.proposal_governance_envelope_for(bid)
         session_ref = self._proposal_session_ref(bid)
-        envelope_digest = str(
-            getattr(governance_envelope, "digest", "") or ""
-        )
+        envelope_digest = str(getattr(governance_envelope, "digest", "") or "")
         governance_diagnostics = (
             _advisory_contract_diagnostic(
                 "governance_envelope",
@@ -250,9 +259,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 h_record.hypothesis_id,
                 "research_rejected",
             )
-            outcome_kwargs = execution_outcome_projection_kwargs(
-                contract_outcome
-            )
+            outcome_kwargs = execution_outcome_projection_kwargs(contract_outcome)
             self.record_step(
                 StepRecord(
                     round_num=rnum,
@@ -286,12 +293,8 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
 
         durable_record = self.hypothesis_store.get_one(h_record.hypothesis_id)
         if durable_record is None:
-            raise RuntimeError(
-                f"Branch {bid}: direct hypothesis record is not durable"
-            )
+            raise RuntimeError(f"Branch {bid}: direct hypothesis record is not durable")
         h_record = durable_record
-        self.branch_hypotheses[bid] = hypothesis
-
         self._emit_status_progress(
             branch,
             phase="proposal_code",
@@ -339,9 +342,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 hypothesis_id=h_record.hypothesis_id,
                 event_kind="proposal_execution_outcome",
             )
-            outcome_kwargs = execution_outcome_projection_kwargs(
-                proposal_outcome
-            )
+            outcome_kwargs = execution_outcome_projection_kwargs(proposal_outcome)
             if install_branch_execution_hold(branch, proposal_outcome):
                 self.persist_branch_state(bid)
             self.record_step(
@@ -405,9 +406,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 hypothesis_id=h_record.hypothesis_id,
                 patch=patch,
             )
-            outcome_kwargs = execution_outcome_projection_kwargs(
-                contract_outcome
-            )
+            outcome_kwargs = execution_outcome_projection_kwargs(contract_outcome)
             self.hypothesis_store.mark_status(
                 h_record.hypothesis_id,
                 "research_rejected",
@@ -482,9 +481,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 "blocked_infra",
             )
             session_ref = self._proposal_session_ref(bid)
-            outcome_kwargs = execution_outcome_projection_kwargs(
-                workspace_outcome
-            )
+            outcome_kwargs = execution_outcome_projection_kwargs(workspace_outcome)
             self.record_step(
                 StepRecord(
                     round_num=rnum,
@@ -515,6 +512,12 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 )
             )
 
+        materialization_champion = self.get_champion()
+        base_code_hash = (
+            branch.last_clean_code_hash
+            or branch.current_code_hash
+            or getattr(materialization_champion, "code_snapshot_hash", None)
+        )
         try:
             self._emit_status_progress(
                 branch,
@@ -531,6 +534,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 remember_patch=True,
                 sync_registry=True,
             )
+            workspace = applied.workspace
             code_hash = applied.code_hash
         except Exception as exc:
             logger.warning("Branch %s: apply_patch failed: %s", bid, exc)
@@ -563,9 +567,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 "blocked_infra",
             )
             session_ref = self._proposal_session_ref(bid)
-            outcome_kwargs = execution_outcome_projection_kwargs(
-                workspace_outcome
-            )
+            outcome_kwargs = execution_outcome_projection_kwargs(workspace_outcome)
             self.record_step(
                 StepRecord(
                     round_num=rnum,
@@ -605,13 +607,21 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             hypothesis=hypothesis,
             patch=patch,
         )
-        vresult = run_verification_gate(
-            self.verification_gate,
-            workspace,
-            champ_ws,
-            patch,
-            hypothesis=hypothesis,
-        )
+        try:
+            vresult = run_verification_gate(
+                self.verification_gate,
+                workspace,
+                champ_ws,
+                patch,
+                hypothesis=hypothesis,
+            )
+        except Exception:
+            self._rollback_candidate_after_precommit_exception(
+                branch=branch,
+                workspace=workspace,
+                hypothesis_id=h_record.hypothesis_id,
+            )
+            raise
         if not vresult.passed:
             verification_outcome = self._handle_verification_failure(
                 branch=branch,
@@ -625,18 +635,47 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 champion_workspace=champ_ws,
             )
             if verification_outcome.step_result is not None:
-                return self._finish_status_progress(
-                    verification_outcome.step_result
-                )
+                return self._finish_status_progress(verification_outcome.step_result)
             code_hash = verification_outcome.code_hash
             vresult = verification_outcome.verification_result
 
-        self.record_verification_pass(branch, code_hash)
+        try:
+            self.record_verified_candidate_commit(
+                branch=branch,
+                hypothesis=hypothesis,
+                h_record=h_record,
+                patch=patch,
+                workspace=workspace,
+                base_code_hash=base_code_hash,
+            )
+        except Exception:
+            self._rollback_candidate_after_precommit_exception(
+                branch=branch,
+                workspace=workspace,
+                hypothesis_id=h_record.hypothesis_id,
+            )
+            raise
+        try:
+            workspace = self.record_verification_pass(
+                branch,
+                code_hash,
+                workspace,
+                h_record.hypothesis_id,
+            )
+        except BaseException:
+            discard_prepared_verified_candidate_commit(branch)
+            raise
+        self.persist_branch_state(bid)
+        self.commit_verified_candidate_promotion(branch)
         self.failure_streak.clear()
+        self.branch_hypotheses[bid] = hypothesis
         self.branch_current_hypothesis[bid] = h_record
 
         fresh = self.branch_controller.get_branch(bid)
-        if fresh and fresh.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
+        if fresh and fresh.state in (
+            BranchState.STALE,
+            BranchState.STALE_WEIGHT_UPDATE,
+        ):
             logger.info(
                 "Branch %s: marked stale by async weight-opt during explore - deferring",
                 bid,
@@ -791,6 +830,38 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         )
         return self._finish_status_progress(result)
 
+    def _rollback_candidate_after_precommit_exception(
+        self,
+        *,
+        branch: Branch,
+        workspace: str,
+        hypothesis_id: str,
+    ) -> None:
+        """Rollback staging identity without masking the triggering exception."""
+
+        try:
+            self.reject_candidate_workspace(branch, workspace)
+        except Exception:
+            logger.exception(
+                "Branch %s: candidate rollback failed after pre-commit exception",
+                branch.branch_id,
+            )
+        try:
+            self.persist_branch_state(branch.branch_id)
+        except Exception:
+            logger.exception(
+                "Branch %s: clean rollback state could not be persisted",
+                branch.branch_id,
+            )
+        try:
+            self.hypothesis_store.mark_status(hypothesis_id, "blocked_infra")
+        except Exception:
+            logger.debug(
+                "Branch %s: hypothesis rollback status was not persisted",
+                branch.branch_id,
+                exc_info=True,
+            )
+
     def _emit_status_progress(
         self,
         branch: Branch,
@@ -847,8 +918,7 @@ def _evaluation_failure_detail(
     if protocol_result is None:
         return None, None
     reason_codes = {
-        str(code).lower()
-        for code in getattr(protocol_result, "reason_codes", ()) or ()
+        str(code).lower() for code in getattr(protocol_result, "reason_codes", ()) or ()
     }
     if "evaluation_failed" not in reason_codes:
         return None, None
@@ -866,10 +936,9 @@ def _annotate_protocol_accounting(
     stage = str(getattr(stage_obj, "value", stage_obj) or "")
     if stage not in {"screening", "validation", "frozen"}:
         return
-    formal_evaluated = (
-        getattr(protocol_result, "stats", None) is not None
-        and screened_experiment_effective(protocol_result)
-    )
+    formal_evaluated = getattr(
+        protocol_result, "stats", None
+    ) is not None and screened_experiment_effective(protocol_result)
     result.protocol_stage = stage  # type: ignore[assignment]
     result.formal_protocol_evaluated = formal_evaluated
     result.screened_experiment_effective = stage == "screening" and formal_evaluated

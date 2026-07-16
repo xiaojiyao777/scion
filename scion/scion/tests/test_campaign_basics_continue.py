@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 from .campaign_test_support import *  # noqa: F401,F403
+from scion.core.evidence_recording.replay_identity import stable_patch_digest
 from scion.core.models import HypothesisRecord, PatchFileChange
 from scion.proposal.llm_client import LLMProviderError
 
@@ -127,10 +128,26 @@ class TestCampaignBasics:
             "artifacts/formal_candidates/8b1621af/"
             "screening-active-demand-slack-candidate/candidate.patch.json"
         )
+        legacy_changes = [
+            PatchFileChange(
+                file_path="policies/baseline_modules/destroy_repair.py",
+                action="modify",
+                code_content="# restored destroy repair\n",
+            ),
+            PatchFileChange(
+                file_path="policies/baseline_algorithm.py",
+                action="modify",
+                code_content="# restored support file\n",
+            ),
+        ]
         (artifact_dir / "candidate.patch.json").write_text(
             json.dumps(
                 {
+                    "schema": "scion.formal_candidate_patch_artifact.v3",
+                    "branch_id": branch.branch_id,
+                    "hypothesis_id": "active-demand-slack",
                     "patch": {
+                        "patch_digest": stable_patch_digest(legacy_changes),
                         "files": [
                             {
                                 "file_path": (
@@ -168,6 +185,9 @@ class TestCampaignBasics:
         workspace = tmp_path / "campaign" / "workspaces" / branch.branch_id
         workspace.mkdir(parents=True)
         (workspace / "solver.py").write_text("# retained branch workspace\n")
+        branch.current_code_hash = cm._materializer.compute_code_hash(str(workspace))
+        branch.last_clean_code_hash = branch.current_code_hash
+        cm._branch_store.save(branch)
         cm._champion_store.promote(
             ChampionState(
                 version=2,

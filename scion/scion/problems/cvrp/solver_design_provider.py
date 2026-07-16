@@ -45,7 +45,11 @@ class CvrpSolverDesignProvider:
             "policies/baseline_modules/destroy_repair.py": (
                 "This module owns destroy and repair operators. Scheduler wiring "
                 "may import exact symbols defined by the same patch and register "
-                "them in the existing destroy or repair collection."
+                "them in the existing destroy or repair collection. Pass the "
+                "existing monotonic deadline context and reserve into any "
+                "potentially long-running repair; poll remaining_time inside "
+                "nested customer, route, position, and recursive searches, and "
+                "exit before committing a partial repair when time expires."
             ),
             "policies/baseline_modules/local_search.py": (
                 "Integrate local-search moves through `_default_vns_operators()` "

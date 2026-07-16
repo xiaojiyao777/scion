@@ -1,10 +1,12 @@
 """Workspace and patch materialization lifecycle service."""
+
 from __future__ import annotations
 
 import logging
 import os
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Callable, MutableMapping, Protocol
 
 from scion.core.models import (
@@ -18,25 +20,44 @@ logger = logging.getLogger(__name__)
 
 
 class WorkspaceMaterializerLike(Protocol):
-    def create_branch_workspace(self, branch_id: str, source_snapshot: str) -> str:
-        ...
+    def create_branch_workspace(self, branch_id: str, source_snapshot: str) -> str: ...
 
-    def apply_patch(self, workspace: str, patch: PatchProposal) -> str:
-        ...
+    def apply_patch(self, workspace: str, patch: PatchProposal) -> str: ...
 
-    def cleanup(self, workspace: str) -> None:
-        ...
+    def create_candidate_workspace(
+        self,
+        branch_id: str,
+        source_workspace: str,
+    ) -> str: ...
+
+    def promote_candidate_workspace(
+        self,
+        candidate_workspace: str,
+        branch_id: str,
+        *,
+        base_code_hash: str | None = None,
+        hypothesis_id: str | None = None,
+        terminalize_hypothesis_on_rollback: bool = True,
+        promotion_kind: str = "explore",
+    ) -> str: ...
+
+    def finalize_candidate_promotion(self, branch_id: str) -> None: ...
+
+    def cleanup_candidate_workspace(self, candidate_workspace: str) -> None: ...
+
+    def compute_code_hash(self, workspace: str) -> str: ...
+
+    def compute_snapshot_hash(self, workspace: str) -> str: ...
+
+    def cleanup(self, workspace: str) -> None: ...
 
 
 class BranchControllerLike(Protocol):
-    def get_code_base(self, branch_id: str) -> str:
-        ...
+    def get_code_base(self, branch_id: str) -> str: ...
 
-    def record_candidate_code(self, branch_id: str, code_hash: str) -> None:
-        ...
+    def record_candidate_code(self, branch_id: str, code_hash: str) -> None: ...
 
-    def record_verification_pass(self, branch_id: str, code_hash: str) -> None:
-        ...
+    def record_verification_pass(self, branch_id: str, code_hash: str) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -44,6 +65,21 @@ class AppliedPatch:
     workspace: str
     code_hash: str
     patch: PatchProposal
+
+
+@dataclass(frozen=True)
+class PendingCandidate:
+    workspace: str
+    code_hash: str
+    patch: PatchProposal
+    remember_patch: bool
+
+
+@dataclass(frozen=True)
+class CandidateCleanupReport:
+    workspace: str
+    cleaned: bool
+    cleanup_error: str | None = None
 
 
 @dataclass
@@ -56,6 +92,9 @@ class WorkspaceLifecycleService:
     branch_patches: MutableMapping[str, PatchProposal]
     champion_lock: Any
     get_champion: Callable[[], ChampionState]
+    pending_candidates: MutableMapping[str, PendingCandidate] = field(
+        default_factory=dict
+    )
 
     @classmethod
     def from_owner(cls, owner: Any) -> "WorkspaceLifecycleService":
@@ -77,11 +116,23 @@ class WorkspaceLifecycleService:
         """Reuse a verified branch workspace or materialize from the champion."""
 
         bid = branch.branch_id
-        if not force_champion and self.branch_controller.get_code_base(
-            bid
-        ) == "branch_workspace":
+        if (
+            not force_champion
+            and self.branch_controller.get_code_base(bid) == "branch_workspace"
+        ):
             existing = self.branch_workspaces.get(bid)
             if existing and os.path.isdir(existing):
+                actual_hash = self.materializer.compute_code_hash(existing)
+                expected_hash = branch.last_clean_code_hash
+                if actual_hash != expected_hash:
+                    logger.error(
+                        "Branch %s: verified workspace hash mismatch "
+                        "(expected=%s actual=%s); refusing reuse",
+                        bid,
+                        expected_hash,
+                        actual_hash,
+                    )
+                    return None
                 return existing
             logger.error(
                 "Branch %s: verified branch workspace is unavailable; "
@@ -119,6 +170,168 @@ class WorkspaceLifecycleService:
             self.sync_pool_registry(workspace, hypothesis, patch)
         self.branch_controller.record_candidate_code(branch.branch_id, code_hash)
         return AppliedPatch(workspace=workspace, code_hash=code_hash, patch=patch)
+
+    def apply_candidate_patch(
+        self,
+        branch: Branch,
+        base_workspace: str,
+        patch: PatchProposal,
+        *,
+        hypothesis: HypothesisProposal | None = None,
+        remember_patch: bool = False,
+        sync_registry: bool = False,
+    ) -> AppliedPatch:
+        """Apply a research patch to isolated staging, never the durable base."""
+
+        bid = branch.branch_id
+        if bid in self.pending_candidates:
+            raise RuntimeError(f"Branch {bid} already has a pending candidate")
+        candidate = self.materializer.create_candidate_workspace(
+            bid,
+            base_workspace,
+        )
+        try:
+            code_hash = self.materializer.apply_patch(candidate, patch)
+            if sync_registry and hypothesis is not None:
+                self.sync_pool_registry(candidate, hypothesis, patch)
+        except BaseException:
+            self._cleanup_candidate_best_effort(candidate, bid)
+            branch.current_code_hash = branch.last_clean_code_hash
+            branch.branch_code_status = "clean"
+            branch.updated_at = datetime.now()
+            raise
+        self.pending_candidates[bid] = PendingCandidate(
+            workspace=candidate,
+            code_hash=code_hash,
+            patch=patch,
+            remember_patch=remember_patch,
+        )
+        try:
+            self.branch_controller.record_candidate_code(bid, code_hash)
+        except BaseException:
+            self._rollback_pending_candidate(
+                branch,
+                pending=self.pending_candidates[bid],
+            )
+            raise
+        return AppliedPatch(workspace=candidate, code_hash=code_hash, patch=patch)
+
+    def promote_verified_candidate(
+        self,
+        branch: Branch,
+        code_hash: str,
+        candidate_workspace: str,
+        hypothesis_id: str | None = None,
+        *,
+        terminalize_hypothesis_on_rollback: bool = True,
+        promotion_kind: str = "explore",
+    ) -> str:
+        """Commit exactly one verified candidate as the durable branch source."""
+
+        bid = branch.branch_id
+        pending = self.pending_candidates.get(bid)
+        if pending is None:
+            raise RuntimeError(f"Branch {bid} has no pending candidate")
+        previous_last_clean_hash = branch.last_clean_code_hash
+        try:
+            self._require_pending_candidate(bid, candidate_workspace)
+            if pending.code_hash != code_hash:
+                raise RuntimeError(
+                    f"Branch {bid} candidate hash changed before promotion"
+                )
+            actual_hash = self.materializer.compute_code_hash(candidate_workspace)
+            if actual_hash != code_hash:
+                raise RuntimeError(
+                    f"Branch {bid} candidate workspace hash mismatch before promotion"
+                )
+            # Commit the in-memory identity first.  It is not durable until the
+            # caller persists the branch, and it can still be rolled back if the
+            # filesystem promotion fails.
+            self.branch_controller.record_verification_pass(bid, code_hash)
+            durable = self.materializer.promote_candidate_workspace(
+                candidate_workspace,
+                bid,
+                base_code_hash=previous_last_clean_hash,
+                hypothesis_id=hypothesis_id,
+                terminalize_hypothesis_on_rollback=(
+                    terminalize_hypothesis_on_rollback
+                ),
+                promotion_kind=promotion_kind,
+            )
+        except BaseException:
+            branch.last_clean_code_hash = previous_last_clean_hash
+            self._rollback_pending_candidate(branch, pending=pending)
+            raise
+        self.pending_candidates.pop(bid, None)
+        self.branch_workspaces[bid] = durable
+        if pending.remember_patch:
+            self.branch_patches[bid] = pending.patch
+        return durable
+
+    def finalize_candidate_promotion(self, branch: Branch) -> None:
+        self.materializer.finalize_candidate_promotion(branch.branch_id)
+
+    def reject_candidate(
+        self,
+        branch: Branch,
+        candidate_workspace: str,
+    ) -> CandidateCleanupReport:
+        """Discard a rejected staging tree and restore the clean hash identity."""
+
+        bid = branch.branch_id
+        pending = self._require_pending_candidate(bid, candidate_workspace)
+        return self._rollback_pending_candidate(branch, pending=pending)
+
+    def _rollback_pending_candidate(
+        self,
+        branch: Branch,
+        *,
+        pending: PendingCandidate,
+    ) -> CandidateCleanupReport:
+        """Restore semantic clean state even when staging cleanup leaves debris."""
+
+        bid = branch.branch_id
+        self.pending_candidates.pop(bid, None)
+        branch.current_code_hash = branch.last_clean_code_hash
+        branch.branch_code_status = "clean"
+        branch.updated_at = datetime.now()
+        return self._cleanup_candidate_best_effort(pending.workspace, bid)
+
+    def _cleanup_candidate_best_effort(
+        self,
+        candidate_workspace: str,
+        branch_id: str,
+    ) -> CandidateCleanupReport:
+        try:
+            self.materializer.cleanup_candidate_workspace(candidate_workspace)
+        except Exception as exc:
+            logger.warning(
+                "Branch %s: candidate cleanup left debris at %s: %s",
+                branch_id,
+                candidate_workspace,
+                exc,
+            )
+            return CandidateCleanupReport(
+                workspace=candidate_workspace,
+                cleaned=False,
+                cleanup_error=f"{type(exc).__name__}: {exc}",
+            )
+        return CandidateCleanupReport(
+            workspace=candidate_workspace,
+            cleaned=True,
+        )
+
+    def _require_pending_candidate(
+        self,
+        branch_id: str,
+        candidate_workspace: str,
+    ) -> PendingCandidate:
+        pending = self.pending_candidates.get(branch_id)
+        if pending is None:
+            raise RuntimeError(f"Branch {branch_id} has no pending candidate")
+        if os.path.realpath(pending.workspace) != os.path.realpath(candidate_workspace):
+            raise RuntimeError(f"Branch {branch_id} candidate workspace changed")
+        return pending
 
     def record_verification_pass(self, branch: Branch, code_hash: str) -> None:
         self.branch_controller.record_verification_pass(branch.branch_id, code_hash)

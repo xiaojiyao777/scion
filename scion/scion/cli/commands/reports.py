@@ -214,9 +214,7 @@ def register_report_commands(report_app: typer.Typer) -> None:
                 {
                     "manifest_path": str(manifest_path),
                     "candidate_count": manifest["candidate_count"],
-                    "filtered_out_row_count": manifest.get(
-                        "filtered_out_row_count", 0
-                    ),
+                    "filtered_out_row_count": manifest.get("filtered_out_row_count", 0),
                     "omitted_row_count": len(manifest["omitted_rows"]),
                     "stage_filter": manifest.get("stage_filter", []),
                     "external_candidate_artifact_count": manifest.get(
@@ -353,6 +351,15 @@ def register_report_commands(report_app: typer.Typer) -> None:
             n_champions = db_summary.get("n_champions", 0)
             contract_failures = db_summary.get("contract_failures", 0)
             verification_failures = db_summary.get("verification_failures", 0)
+            gate_outcome_events = db_summary.get("gate_outcome_events", total_events)
+            contract_gate_outcome_events = db_summary.get(
+                "contract_gate_outcome_events",
+                gate_outcome_events,
+            )
+            verification_gate_outcome_events = db_summary.get(
+                "verification_gate_outcome_events",
+                gate_outcome_events,
+            )
             by_decision = db_summary.get("by_decision", {})
             screening_rate_fields = {
                 key: db_summary.get(key)
@@ -400,10 +407,13 @@ def register_report_commands(report_app: typer.Typer) -> None:
             all_failures = registry.query_failures()
             for evt in all_failures:
                 if evt.get("verification_result") == "failed":
-                    stage = evt.get("decision_reason") or "unknown"
+                    stage = evt.get("failure_code") or "unknown"
                     vfail_breakdown[stage] = vfail_breakdown.get(stage, 0) + 1
         else:
             total_events = n_champions = contract_failures = verification_failures = 0
+            gate_outcome_events = 0
+            contract_gate_outcome_events = 0
+            verification_gate_outcome_events = 0
             by_decision = {}
             screening_rate_fields = {}
             family_dist = {}
@@ -411,13 +421,13 @@ def register_report_commands(report_app: typer.Typer) -> None:
             vfail_breakdown = {}
 
         v_intercept = (
-            round(verification_failures / total_events, 4)
-            if total_events > 0
+            round(verification_failures / verification_gate_outcome_events, 4)
+            if verification_gate_outcome_events > 0
             else 0.0
         )
         c_intercept = (
-            round(contract_failures / total_events, 4)
-            if total_events > 0
+            round(contract_failures / contract_gate_outcome_events, 4)
+            if contract_gate_outcome_events > 0
             else 0.0
         )
         screening_pass = by_decision.get("queue_validate", 0)
@@ -426,9 +436,7 @@ def register_report_commands(report_app: typer.Typer) -> None:
             for d in ["continue_explore", "expand_screening", "queue_validate"]
         )
         screening_pass_rate = (
-            round(screening_pass / screening_total, 4)
-            if screening_total > 0
-            else 0.0
+            round(screening_pass / screening_total, 4) if screening_total > 0 else 0.0
         )
         promoted = by_decision.get("promote", 0)
 
@@ -440,6 +448,9 @@ def register_report_commands(report_app: typer.Typer) -> None:
             ),
             "problem_name": meta.get("problem_name", "unknown"),
             "total_experiments": total_events,
+            "gate_outcome_events": gate_outcome_events,
+            "contract_gate_outcome_events": contract_gate_outcome_events,
+            "verification_gate_outcome_events": verification_gate_outcome_events,
             "champion_promotions": promoted,
             "latest_champion_version": n_champions,
             "contract_intercept_rate": c_intercept,
@@ -460,6 +471,8 @@ def register_report_commands(report_app: typer.Typer) -> None:
                 n_champions=n_champions,
                 c_intercept=c_intercept,
                 v_intercept=v_intercept,
+                contract_gate_outcome_events=contract_gate_outcome_events,
+                verification_gate_outcome_events=verification_gate_outcome_events,
                 screening_pass_rate=screening_pass_rate,
                 screening_rate_fields=screening_rate_fields,
                 family_dist=family_dist,
@@ -502,14 +515,14 @@ def register_report_commands(report_app: typer.Typer) -> None:
         for evt in all_failures:
             contract_failed = evt.get("contract_result") == "failed"
             verification_failed = evt.get("verification_result") == "failed"
-            v_check = evt.get("verification_result", "")
+            failure_code = evt.get("failure_code") or ""
 
             if contract_failed:
                 key = "contract"
             elif verification_failed:
                 key = (
-                    f"verification:{v_check}"
-                    if v_check and v_check != "failed"
+                    f"verification:{failure_code}"
+                    if failure_code
                     else "verification"
                 )
             else:
@@ -525,8 +538,14 @@ def register_report_commands(report_app: typer.Typer) -> None:
                     "event_id": e.get("event_id"),
                     "branch_id": e.get("branch_id"),
                     "timestamp": e.get("timestamp"),
+                    "event_kind": e.get("event_kind"),
                     "contract_result": e.get("contract_result"),
                     "verification_result": e.get("verification_result"),
+                    "failure_detail": (
+                        e.get("failure_detail") or e.get("execution_outcome_detail")
+                    ),
+                    "failure_code": e.get("failure_code"),
+                    "failed_check": e.get("failed_check"),
                     "decision": e.get("decision"),
                 }
                 for e in all_failures
@@ -549,6 +568,8 @@ def _summary_report_markdown(
     n_champions: int,
     c_intercept: float,
     v_intercept: float,
+    contract_gate_outcome_events: int,
+    verification_gate_outcome_events: int,
     screening_pass_rate: float,
     screening_rate_fields: dict,
     family_dist: dict,
@@ -562,8 +583,14 @@ def _summary_report_markdown(
         f"- Total experiments: {total_events}",
         f"- Champion promotions: {promoted}",
         f"- Latest champion version: {n_champions}",
-        f"- Contract intercept rate: {c_intercept:.1%}",
-        f"- Verification intercept rate: {v_intercept:.1%}",
+        (
+            f"- Contract intercept rate: {c_intercept:.1%} "
+            f"({contract_gate_outcome_events} opportunities)"
+        ),
+        (
+            f"- Verification intercept rate: {v_intercept:.1%} "
+            f"({verification_gate_outcome_events} opportunities)"
+        ),
         f"- Screening pass rate: {screening_pass_rate:.1%}",
         (
             "- Screening case/gate win rate: "

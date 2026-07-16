@@ -4,6 +4,7 @@ The context manager has one job: expose the smallest complete set of research
 facts needed by the two proposal calls.  It does not steer the search through
 quality gates, retry advice, portfolio controls, or host-generated repairs.
 """
+
 from __future__ import annotations
 
 import os
@@ -74,7 +75,6 @@ from scion.proposal.solver_design_guidance import (
 )
 from scion.proposal.prompt_manifest import stable_digest
 
-
 _MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS = (
     "pair_evidence",
     "pair_rows",
@@ -96,6 +96,7 @@ _MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS = (
 )
 
 CANONICAL_SCREENING_HISTORY_KEY = "canonical_screening_history"
+
 
 def _filter_hypothesis_prompt_steps(
     step_history: list[StepRecord],
@@ -219,9 +220,7 @@ class ContextManager:
             ),
             "problem_object": _build_problem_object(adapter=self._adapter),
             "solver_mechanics": _build_solver_mechanics(adapter=self._adapter),
-            "objective_policy_guidance": _build_objective_policy_guidance(
-                adapter_spec
-            ),
+            "objective_policy_guidance": _build_objective_policy_guidance(adapter_spec),
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
             "research_surfaces": _hypothesis_surface_projections(
@@ -262,9 +261,7 @@ class ContextManager:
             phase="hypothesis",
         )
         if any(guidance.values()):
-            context[RENDERER_INPUTS_KEY] = {
-                SOLVER_DESIGN_GUIDANCE_KEY: guidance
-            }
+            context[RENDERER_INPUTS_KEY] = {SOLVER_DESIGN_GUIDANCE_KEY: guidance}
         return context
 
     def build_code_context(
@@ -293,9 +290,7 @@ class ContextManager:
             branch,
             step_history or [],
         )
-        workspace_visible = bool(
-            branch_workspace and os.path.isdir(branch_workspace)
-        )
+        workspace_visible = bool(branch_workspace and os.path.isdir(branch_workspace))
         created = (
             branch_created_files(branch, step_history or [])
             if workspace_visible or branch_file_sources
@@ -365,9 +360,7 @@ class ContextManager:
             hypothesis=hypothesis,
         )
         if any(guidance.values()):
-            context[RENDERER_INPUTS_KEY] = {
-                SOLVER_DESIGN_GUIDANCE_KEY: guidance
-            }
+            context[RENDERER_INPUTS_KEY] = {SOLVER_DESIGN_GUIDANCE_KEY: guidance}
         return context
 
 
@@ -398,9 +391,7 @@ def _targetable_files(
             for surface in research_surfaces
             for path in surface_target_files(surface)
         ]
-        files.update(
-            _expand_surface_targets_for_root(branch_workspace, declared)
-        )
+        files.update(_expand_surface_targets_for_root(branch_workspace, declared))
     else:
         declared = [
             path
@@ -446,11 +437,13 @@ def _build_objective_policy_guidance(adapter_spec: Any | None) -> dict[str, Any]
         "interpretation": (
             "Improve the weighted aggregate while preserving feasibility."
             if mode == "weighted_sum"
-            else "Improve the declared objective while preserving feasibility."
-            if mode == "single"
             else (
-                "Preserve higher-priority objectives within their tie tolerances "
-                "before claiming a lower-priority gain."
+                "Improve the declared objective while preserving feasibility."
+                if mode == "single"
+                else (
+                    "Preserve higher-priority objectives within their tie tolerances "
+                    "before claiming a lower-priority gain."
+                )
             )
         ),
     }
@@ -537,6 +530,13 @@ def canonical_screening_record(step: StepRecord) -> dict[str, Any]:
     if protocol is None or protocol.stage != ExperimentStage.SCREENING:
         raise ValueError("canonical hypothesis evidence requires screening result")
     experiment_evidence = _screening_projection(protocol)
+    if step.decision is not None:
+        experiment_evidence["decision_outcome"] = _drop_empty(
+            {
+                "decision": _primitive(step.decision),
+                "reason_codes": list(step.decision_reason_codes or ()),
+            }
+        )
     proposal_changes = patch_file_changes(step.patch) if step.patch is not None else ()
     current_step = {
         "hypothesis_id": step.hypothesis_id,
@@ -613,7 +613,9 @@ def canonical_screening_history(
                 ):
                     records[previous] = record
                     continue
-                raise ValueError("canonical screening history conflicts with current step")
+                raise ValueError(
+                    "canonical screening history conflicts with current step"
+                )
             continue
         positions[natural_key] = len(records)
         records.append(record)
@@ -690,6 +692,7 @@ def _legacy_screening_record_needs_upgrade(record: Mapping[str, Any]) -> bool:
     objective = evidence.get("objective_outcome")
     return (
         "protocol_outcome" not in evidence
+        or "decision_outcome" not in evidence
         or not isinstance(objective, Mapping)
         or not isinstance(objective.get("aggregation"), Mapping)
     )
@@ -720,6 +723,7 @@ def _legacy_screening_comparable_projection(
     if isinstance(evidence, Mapping):
         evidence_copy = dict(evidence)
         evidence_copy.pop("protocol_outcome", None)
+        evidence_copy.pop("decision_outcome", None)
         objective = evidence_copy.get("objective_outcome")
         if isinstance(objective, Mapping):
             objective_copy = dict(objective)
@@ -784,9 +788,7 @@ def _screening_projection(protocol: Any) -> dict[str, Any]:
             "case_feedback": _primitive(list(protocol.case_feedback or ())),
         },
         "runtime_errors": {
-            "categories": _primitive(
-                protocol.candidate_runtime_failure_categories
-            ),
+            "categories": _primitive(protocol.candidate_runtime_failure_categories),
             "first_error": _primitive(protocol.candidate_first_runtime_failure),
         },
     }
@@ -837,9 +839,7 @@ def _problem_measurement_diagnostics(
             "practical_delta_screen": view.practical_delta_screen,
             "practical_delta_validate": view.practical_delta_validate,
         }
-        payload["measurement_readiness"] = (
-            view.to_readiness_status_payload()
-        )
+        payload["measurement_readiness"] = view.to_readiness_status_payload()
     hook = getattr(adapter, "render_problem_measurement_diagnostics", None)
     if callable(hook):
         try:
@@ -851,9 +851,7 @@ def _problem_measurement_diagnostics(
             if redacted:
                 payload["problem_owned_diagnostics"] = redacted
     return {
-        key: value
-        for key, value in payload.items()
-        if value not in (None, "", [], {})
+        key: value for key, value in payload.items() if value not in (None, "", [], {})
     }
 
 
@@ -864,8 +862,7 @@ def _redact_measurement_payload(value: Any) -> Any:
             key = str(raw_key)
             lowered = key.lower()
             if any(
-                fragment in lowered
-                for fragment in _MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS
+                fragment in lowered for fragment in _MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS
             ):
                 continue
             projected[key] = _redact_measurement_payload(child)

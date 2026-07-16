@@ -45,9 +45,7 @@ def _with_screening_case_level_gate_aliases(event: Dict[str, Any]) -> Dict[str, 
         )
         if all(count is not None for count in counts):
             updates["screening_case_total"] = sum(int(count or 0) for count in counts)
-            updates["screening_case_level_gate_total"] = updates[
-                "screening_case_total"
-            ]
+            updates["screening_case_level_gate_total"] = updates["screening_case_total"]
     return dict(event, **updates) if updates else event
 
 
@@ -133,38 +131,42 @@ class LineageRegistry:
                 )
             """)
             # Migrate existing databases: add columns that may not exist yet
-            self._ensure_columns(conn, "experiment_events", {
-                "event_kind":        "TEXT DEFAULT 'experiment'",
-                "model_id":          "TEXT",
-                "protocol_version":  "TEXT",
-                "prompt_tokens":     "INTEGER",
-                "completion_tokens": "INTEGER",
-                "audit_payload_json": "TEXT",
-                "execution_outcome": "TEXT",
-                "execution_outcome_reason_code": "TEXT",
-                "execution_outcome_detail": "TEXT",
-                "execution_outcome_provenance_json": "TEXT",
-                "contract_diagnostics_json": "TEXT",
-                "screening_win_rate_scope": "TEXT",
-                "screening_case_wins": "INTEGER",
-                "screening_case_losses": "INTEGER",
-                "screening_case_ties": "INTEGER",
-                "screening_case_total": "INTEGER",
-                "screening_case_win_rate": "REAL",
-                "screening_case_level_gate_wins": "INTEGER",
-                "screening_case_level_gate_losses": "INTEGER",
-                "screening_case_level_gate_ties": "INTEGER",
-                "screening_case_level_gate_total": "INTEGER",
-                "screening_case_level_gate_win_rate": "REAL",
-                "screening_gate_win_rate": "REAL",
-                "screening_pair_wins": "INTEGER",
-                "screening_pair_losses": "INTEGER",
-                "screening_pair_ties": "INTEGER",
-                "screening_pair_total": "INTEGER",
-                "screening_pair_win_rate": "REAL",
-                "scheduler_slot": "TEXT",
-                "scheduler_reason": "TEXT",
-            })
+            self._ensure_columns(
+                conn,
+                "experiment_events",
+                {
+                    "event_kind": "TEXT DEFAULT 'experiment'",
+                    "model_id": "TEXT",
+                    "protocol_version": "TEXT",
+                    "prompt_tokens": "INTEGER",
+                    "completion_tokens": "INTEGER",
+                    "audit_payload_json": "TEXT",
+                    "execution_outcome": "TEXT",
+                    "execution_outcome_reason_code": "TEXT",
+                    "execution_outcome_detail": "TEXT",
+                    "execution_outcome_provenance_json": "TEXT",
+                    "contract_diagnostics_json": "TEXT",
+                    "screening_win_rate_scope": "TEXT",
+                    "screening_case_wins": "INTEGER",
+                    "screening_case_losses": "INTEGER",
+                    "screening_case_ties": "INTEGER",
+                    "screening_case_total": "INTEGER",
+                    "screening_case_win_rate": "REAL",
+                    "screening_case_level_gate_wins": "INTEGER",
+                    "screening_case_level_gate_losses": "INTEGER",
+                    "screening_case_level_gate_ties": "INTEGER",
+                    "screening_case_level_gate_total": "INTEGER",
+                    "screening_case_level_gate_win_rate": "REAL",
+                    "screening_gate_win_rate": "REAL",
+                    "screening_pair_wins": "INTEGER",
+                    "screening_pair_losses": "INTEGER",
+                    "screening_pair_ties": "INTEGER",
+                    "screening_pair_total": "INTEGER",
+                    "screening_pair_win_rate": "REAL",
+                    "scheduler_slot": "TEXT",
+                    "scheduler_reason": "TEXT",
+                },
+            )
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS branches (
                     branch_id           TEXT PRIMARY KEY,
@@ -186,16 +188,20 @@ class LineageRegistry:
                     infra_block_count   INTEGER DEFAULT 0
                 )
             """)
-            self._ensure_columns(conn, "branches", {
-                "screening_expand_count": "INTEGER DEFAULT 0",
-                "validation_expand_count": "INTEGER DEFAULT 0",
-                "lineage_id": "TEXT",
-                "direction": "TEXT",
-                "weight_revision": "INTEGER DEFAULT 0",
-                "branch_code_status": "TEXT DEFAULT 'clean'",
-                "branch_evidence_summary_json": "TEXT",
-                "infra_block_count": "INTEGER DEFAULT 0",
-            })
+            self._ensure_columns(
+                conn,
+                "branches",
+                {
+                    "screening_expand_count": "INTEGER DEFAULT 0",
+                    "validation_expand_count": "INTEGER DEFAULT 0",
+                    "lineage_id": "TEXT",
+                    "direction": "TEXT",
+                    "weight_revision": "INTEGER DEFAULT 0",
+                    "branch_code_status": "TEXT DEFAULT 'clean'",
+                    "branch_evidence_summary_json": "TEXT",
+                    "infra_block_count": "INTEGER DEFAULT 0",
+                },
+            )
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS hypotheses (
                     hypothesis_id        TEXT PRIMARY KEY,
@@ -229,10 +235,14 @@ class LineageRegistry:
                     PRIMARY KEY (version, weight_revision)
                 )
             """)
-            self._ensure_columns(conn, "champions", {
-                "weight_revision": "INTEGER DEFAULT 0",
-                "promotion_dossier_ref": "TEXT",
-            })
+            self._ensure_columns(
+                conn,
+                "champions",
+                {
+                    "weight_revision": "INTEGER DEFAULT 0",
+                    "promotion_dossier_ref": "TEXT",
+                },
+            )
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS weight_optimizations (
                     optimization_id        TEXT PRIMARY KEY,
@@ -251,10 +261,14 @@ class LineageRegistry:
                 )
             """)
             # Migrate hypotheses table
-            self._ensure_columns(conn, "hypotheses", {
-                "base_champion_version": "INTEGER DEFAULT 0",
-                "predicted_direction": "TEXT",
-            })
+            self._ensure_columns(
+                conn,
+                "hypotheses",
+                {
+                    "base_champion_version": "INTEGER DEFAULT 0",
+                    "predicted_direction": "TEXT",
+                },
+            )
 
     # ------------------------------------------------------------------
     # Schema helpers
@@ -282,8 +296,7 @@ class LineageRegistry:
         if direct_outcome_fields:
             raise ValueError(
                 "typed execution outcomes must be written through "
-                "record_execution_outcome: "
-                + ", ".join(direct_outcome_fields)
+                "record_execution_outcome: " + ", ".join(direct_outcome_fields)
             )
         return self._insert_event(event)
 
@@ -565,32 +578,93 @@ class LineageRegistry:
         return latest
 
     def query_failures(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Return events where contract_result or verification_result = 'failed'.
+        """Return legacy and typed Contract/Verification failure events.
 
-        If category is given, filter by that specific result field value.
+        If category is given, filter after projecting typed failed-check codes.
         """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            if category is not None:
-                cursor = conn.execute(
-                    """
-                    SELECT * FROM experiment_events
-                    WHERE contract_result = ?
-                       OR verification_result = ?
-                    ORDER BY timestamp DESC
-                    """,
-                    (category, category),
-                )
-            else:
-                cursor = conn.execute(
-                    """
-                    SELECT * FROM experiment_events
-                    WHERE contract_result = 'failed'
-                       OR verification_result = 'failed'
-                    ORDER BY timestamp DESC
-                    """
-                )
-            return [dict(row) for row in cursor.fetchall()]
+            cursor = conn.execute("""
+                SELECT * FROM experiment_events
+                WHERE contract_result = 'failed'
+                   OR verification_result = 'failed'
+                   OR event_kind IN ('contract_fail', 'verification_fail')
+                ORDER BY timestamp DESC
+                """)
+            failures = [
+                self._failure_event_from_row(dict(row)) for row in cursor.fetchall()
+            ]
+        if category is None:
+            return failures
+        return [
+            row
+            for row in failures
+            if category
+            in {
+                row.get("contract_result"),
+                row.get("verification_result"),
+                row.get("failure_code"),
+                row.get("failure_detail"),
+            }
+        ]
+
+    @staticmethod
+    def _failure_event_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
+        """Project typed rejection rows onto explicit failure report fields."""
+
+        event_kind = str(row.get("event_kind") or "")
+        if event_kind == "verification_fail":
+            row.setdefault("verification_result", None)
+            row["verification_result"] = row["verification_result"] or "failed"
+            failed_check = LineageRegistry._verification_failed_check(row)
+            row["failed_check"] = failed_check or None
+            row["failure_code"] = (
+                failed_check
+                or row.get("execution_outcome_reason_code")
+                or "verification_failed"
+            )
+            row["failure_detail"] = (
+                failed_check
+                or row.get("execution_outcome_detail")
+                or row["failure_code"]
+            )
+        elif event_kind == "contract_fail":
+            row.setdefault("contract_result", None)
+            row["contract_result"] = row["contract_result"] or "failed"
+            row["failure_code"] = (
+                row.get("execution_outcome_reason_code") or "contract_failed"
+            )
+            row["failure_detail"] = (
+                row.get("execution_outcome_detail")
+                or row["failure_code"]
+            )
+        else:
+            row["failure_code"] = row.get("decision_reason") or "legacy_failure"
+            row["failure_detail"] = row.get("decision_reason") or row["failure_code"]
+        return row
+
+    @staticmethod
+    def _verification_failed_check(row: Mapping[str, Any]) -> str:
+        """Return the first typed failed-check name, tolerating corrupt history."""
+
+        provenance_json = row.get("execution_outcome_provenance_json") or "{}"
+        try:
+            provenance = json.loads(str(provenance_json))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            provenance = {}
+        if isinstance(provenance, Mapping):
+            checks = provenance.get("verification_checks", ())
+            if isinstance(checks, list):
+                for check in checks:
+                    if (
+                        not isinstance(check, Mapping)
+                        or check.get("passed") is not False
+                    ):
+                        continue
+                    name = check.get("name")
+                    if isinstance(name, str) and name.strip():
+                        return name.strip()
+        return ""
 
     def get_campaign_summary(self) -> Dict[str, Any]:
         """Return aggregate stats across all recorded events."""
@@ -608,16 +682,27 @@ class LineageRegistry:
                 "SELECT COUNT(DISTINCT branch_id) FROM experiment_events "
                 "WHERE event_kind = 'experiment'"
             ).fetchone()[0]
-            n_champions = conn.execute(
-                "SELECT COUNT(*) FROM champions"
-            ).fetchone()[0]
+            n_champions = conn.execute("SELECT COUNT(*) FROM champions").fetchone()[0]
             contract_failures = conn.execute(
                 "SELECT COUNT(*) FROM experiment_events "
-                "WHERE event_kind = 'experiment' AND contract_result = 'failed'"
+                "WHERE (event_kind = 'experiment' AND contract_result = 'failed') "
+                "OR event_kind = 'contract_fail'"
             ).fetchone()[0]
             verification_failures = conn.execute(
                 "SELECT COUNT(*) FROM experiment_events "
-                "WHERE event_kind = 'experiment' AND verification_result = 'failed'"
+                "WHERE (event_kind = 'experiment' AND verification_result = 'failed') "
+                "OR event_kind = 'verification_fail'"
+            ).fetchone()[0]
+            gate_outcome_events = conn.execute(
+                "SELECT COUNT(*) FROM experiment_events "
+                "WHERE event_kind IN ('experiment', 'contract_fail', 'verification_fail')"
+            ).fetchone()[0]
+            contract_gate_outcome_events = gate_outcome_events
+            verification_gate_outcome_events = conn.execute(
+                "SELECT COUNT(*) FROM experiment_events "
+                "WHERE event_kind = 'verification_fail' "
+                "OR (event_kind = 'experiment' "
+                "AND COALESCE(contract_result, '') != 'failed')"
             ).fetchone()[0]
             screening = conn.execute("""
                 SELECT
@@ -691,6 +776,9 @@ class LineageRegistry:
             "n_champions": n_champions,
             "contract_failures": contract_failures,
             "verification_failures": verification_failures,
+            "gate_outcome_events": gate_outcome_events,
+            "contract_gate_outcome_events": contract_gate_outcome_events,
+            "verification_gate_outcome_events": verification_gate_outcome_events,
             "screening_win_rate": screening_case_win_rate,
             "screening_win_rate_scope": "case_level_gate",
             "screening_case_wins": screening_case_wins,
@@ -766,7 +854,8 @@ class LineageRegistry:
                 GROUP BY h.family_id
             """).fetchall():
                 by_family[row["family_id"]] = {
-                    "total": row["total"], "failed": row["failed"],
+                    "total": row["total"],
+                    "failed": row["failed"],
                 }
 
             recent = [dict(r) for r in conn.execute("""
@@ -797,6 +886,7 @@ class LineageRegistry:
     ) -> str:
         """Record a weight optimization result. Returns optimization_id."""
         import json as _json
+
         opt_id = str(uuid.uuid4())
         row = {
             "optimization_id": opt_id,

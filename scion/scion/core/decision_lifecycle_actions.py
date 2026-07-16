@@ -18,6 +18,7 @@ _DURABLE_SCREENING_KEYS = (
     "protocol_evidence_by_stage",
     "verified_branch_created_files",
     "verified_branch_touched_files",
+    "verified_candidate_commit",
 )
 
 # These fields form one current-protocol projection.  Clear them together

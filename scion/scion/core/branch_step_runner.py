@@ -39,6 +39,10 @@ from scion.core.scheduler import (
 from scion.core.step_result import StepResult
 from scion.core.telemetry_validation import screened_experiment_effective
 from scion.core.verification_call import run_verification_gate
+from scion.core.verified_candidate_commit import (
+    verified_candidate_commit_kind,
+    verified_candidate_pending_evaluation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +86,11 @@ class BranchStepRunner:
     decision_provenance_for: Callable[[str], dict[str, Any]] = lambda _branch_id: {}
     registry: Any = None
     campaign_id: str = ""
+    apply_reconcile_candidate: Callable[..., Any] | None = None
+    reject_reconcile_candidate: Callable[[Branch, str], Any] | None = None
+    record_reconcile_candidate_commit: Callable[..., str | None] | None = None
+    promote_reconcile_candidate: Callable[..., str] | None = None
+    commit_reconcile_candidate_promotion: Callable[[Branch], None] | None = None
 
     def _select_next(self, active: list[Branch]) -> SchedulerAction:
         return self.scheduler.select_next(active)
@@ -173,6 +182,14 @@ class BranchStepRunner:
 
         if branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
             return finalize(self.run_reconcile_step_callback(branch))
+
+        if branch.state == BranchState.EXPLORE and verified_candidate_pending_evaluation(
+            branch
+        ):
+            try:
+                return finalize(self.run_eval_step_callback(branch))
+            except RuntimeError as exc:
+                return finalize(self._handle_eval_runtime_error(branch, exc))
 
         if branch.state == BranchState.EXPLORE:
             return finalize(self.run_explore_step(branch))
@@ -490,16 +507,23 @@ class BranchStepRunner:
         patch = self.branch_patches.get(bid)
         h_record = self.branch_current_hypothesis.get(bid)
 
-        def cleanup() -> None:
+        def cleanup(hypothesis_status: str = "rejected") -> None:
             if h_record is not None:
                 try:
-                    self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+                    self.hypothesis_store.mark_status(
+                        h_record.hypothesis_id,
+                        hypothesis_status,
+                    )
                 except Exception:
                     pass
                 self.branch_current_hypothesis.pop(bid, None)
 
-        def abandon_stale(reason: str) -> StepResult:
-            cleanup()
+        def abandon_stale(
+            reason: str,
+            *,
+            hypothesis_status: str = "rejected",
+        ) -> StepResult:
+            cleanup(hypothesis_status)
             self.branch_controller.reconcile_stale(
                 bid,
                 success=False,
@@ -565,52 +589,57 @@ class BranchStepRunner:
                 bid,
                 contract_result.failure_reason,
             )
-            return abandon_stale(
-                f"reconcile contract failed: {contract_result.failure_reason}"
+            reason = f"reconcile contract failed: {contract_result.failure_reason}"
+            abandon_stale(reason, hypothesis_status="research_rejected")
+            outcome = _contract_rejection_outcome(contract_result)
+            checks = outcome.provenance.get("contract_checks", [])
+            self.registry.record_contract_failure(
+                campaign_id=self.campaign_id,
+                branch_id=bid,
+                hypothesis_id=h_record.hypothesis_id,
+                hypothesis_text=hypothesis.hypothesis_text or "",
+                change_locus=hypothesis.change_locus,
+                action=patch.action,
+                target_file=patch.file_path,
+                failure_reason=contract_result.failure_reason or "",
+                stage="patch_contract",
+                reason_code="PATCH_CONTRACT_REJECTED",
+                contract_checks=checks,
+                provenance={"attempt_kind": "reconcile_lifecycle"},
             )
-
-        workspace = self.setup_workspace(branch, force_champion=True)
-        if workspace is None:
-            return preserve_stale(
-                reason_code="RECONCILE_WORKSPACE_MISSING",
-                detail="workspace setup failed",
+            round_num = self.increment_round()
+            self.record_step(
+                StepRecord(
+                    round_num=round_num,
+                    branch_id=bid,
+                    hypothesis=hypothesis,
+                    patch=patch,
+                    contract_passed=False,
+                    verification_passed=False,
+                    protocol_result=None,
+                    decision=None,
+                    failure_stage="patch_contract",
+                    failure_detail=contract_result.failure_reason,
+                    contract_diagnostics=tuple(checks),
+                    hypothesis_id=h_record.hypothesis_id,
+                    attempt_kind="reconcile_lifecycle",
+                    **execution_outcome_projection_kwargs(outcome),
+                )
             )
-
-        try:
-            applied = self.apply_patch(
-                branch,
-                workspace,
-                patch,
-                remember_patch=False,
+            return StepResult(
+                action="reconcile",
+                branch_id=bid,
+                reason=reason,
+                attempt_kind="reconcile_lifecycle",
+                failure_stage="patch_contract",
+                failure_detail=contract_result.failure_reason,
+                failure_category=ExecutionOutcome.RESEARCH_REJECTED.value,
+                **execution_outcome_projection_kwargs(outcome),
             )
-            code_hash = applied.code_hash
-        except Exception as exc:
-            logger.info("Branch %s: reconcile apply_patch failed: %s", bid, exc)
-            return abandon_stale(f"apply_patch failed: {exc}")
-
-        champion_workspace = self.get_champion().code_snapshot_path
-        verification_result = run_verification_gate(
-            self.verification_gate,
-            workspace,
-            champion_workspace,
-            patch,
-            hypothesis=hypothesis,
-        )
-        if not verification_result.passed:
-            logger.info(
-                "Branch %s: reconcile verification failed: %s",
-                bid,
-                verification_result.first_failure,
-            )
-            return abandon_stale(
-                f"reconcile verification failed: {verification_result.first_failure}"
-            )
-
-        self.record_verification_pass(branch, code_hash)
 
         if self.experiment_protocol_provider() is None:
             logger.info(
-                "Branch %s: no experiment protocol for reconcile re-screening - abandoning stale branch",
+                "Branch %s: no experiment protocol for reconcile re-screening",
                 bid,
             )
             return preserve_stale(
@@ -618,12 +647,167 @@ class BranchStepRunner:
                 detail="no experiment protocol for re-screening",
             )
 
-        self.branch_controller.reconcile_stale(
-            bid,
-            success=True,
-            new_champion=self.get_champion(),
+        transactional_callbacks = (
+            self.apply_reconcile_candidate,
+            self.reject_reconcile_candidate,
+            self.record_reconcile_candidate_commit,
+            self.promote_reconcile_candidate,
+            self.commit_reconcile_candidate_promotion,
         )
-        self.persist_branch_state(bid)
+        if any(callback is None for callback in transactional_callbacks):
+            return preserve_stale(
+                reason_code="RECONCILE_TRANSACTION_UNAVAILABLE",
+                detail="transactional reconcile workspace service unavailable",
+            )
+
+        with self.champion_lock:
+            champion = self.get_champion()
+            champion_workspace = champion.code_snapshot_path
+        previous_evidence_summary = dict(branch.branch_evidence_summary or {})
+        workspace: str | None = None
+
+        def reject_staging() -> None:
+            nonlocal workspace
+            if workspace is not None:
+                assert self.reject_reconcile_candidate is not None
+                self.reject_reconcile_candidate(branch, workspace)
+                workspace = None
+            branch.branch_evidence_summary = previous_evidence_summary
+
+        try:
+            assert self.apply_reconcile_candidate is not None
+            applied = self.apply_reconcile_candidate(
+                branch,
+                champion_workspace,
+                patch,
+                hypothesis=hypothesis,
+                remember_patch=False,
+                sync_registry=True,
+            )
+            workspace = applied.workspace
+            code_hash = applied.code_hash
+        except Exception as exc:
+            logger.info("Branch %s: reconcile apply_patch failed: %s", bid, exc)
+            return abandon_stale(f"apply_patch failed: {exc}")
+
+        try:
+            verification_result = run_verification_gate(
+                self.verification_gate,
+                workspace,
+                champion_workspace,
+                patch,
+                hypothesis=hypothesis,
+            )
+        except BaseException:
+            reject_staging()
+            raise
+        if not verification_result.passed:
+            logger.info(
+                "Branch %s: reconcile verification failed: %s",
+                bid,
+                verification_result.first_failure,
+            )
+            reject_staging()
+            reason = (
+                f"reconcile verification failed: {verification_result.first_failure}"
+            )
+            abandon_stale(reason, hypothesis_status="research_rejected")
+            outcome = _verification_rejection_outcome(verification_result)
+            record_execution_outcome_event(
+                registry=self.registry,
+                campaign_id=self.campaign_id,
+                branch_id=bid,
+                record=outcome,
+                hypothesis_id=h_record.hypothesis_id,
+                event_kind="verification_fail",
+            )
+            round_num = self.increment_round()
+            self.record_step(
+                StepRecord(
+                    round_num=round_num,
+                    branch_id=bid,
+                    hypothesis=hypothesis,
+                    patch=patch,
+                    contract_passed=True,
+                    verification_passed=False,
+                    protocol_result=None,
+                    decision=None,
+                    failure_stage="verification",
+                    failure_detail=verification_result.first_failure,
+                    verification_detail=_verification_result_detail(
+                        verification_result
+                    ),
+                    hypothesis_id=h_record.hypothesis_id,
+                    attempt_kind="reconcile_lifecycle",
+                    **execution_outcome_projection_kwargs(outcome),
+                )
+            )
+            return StepResult(
+                action="reconcile",
+                branch_id=bid,
+                reason=reason,
+                attempt_kind="reconcile_lifecycle",
+                failure_stage="verification",
+                failure_detail=verification_result.first_failure,
+                failure_category=ExecutionOutcome.RESEARCH_REJECTED.value,
+                **execution_outcome_projection_kwargs(outcome),
+            )
+
+        promoted = False
+        with self.champion_lock:
+            current_champion = self.get_champion()
+            if not _same_champion_identity(champion, current_champion):
+                reject_staging()
+                return preserve_stale(
+                    reason_code="RECONCILE_CHAMPION_DRIFTED",
+                    detail="champion changed during reconcile verification",
+                )
+            try:
+                assert self.record_reconcile_candidate_commit is not None
+                self.record_reconcile_candidate_commit(
+                    branch=branch,
+                    hypothesis=hypothesis,
+                    h_record=h_record,
+                    patch=patch,
+                    workspace=workspace,
+                    base_code_hash=champion.code_snapshot_hash,
+                    commit_kind="reconcile",
+                )
+            except BaseException:
+                reject_staging()
+                raise
+            try:
+                assert self.promote_reconcile_candidate is not None
+                workspace = self.promote_reconcile_candidate(
+                    branch,
+                    code_hash,
+                    workspace,
+                    h_record.hypothesis_id,
+                    terminalize_hypothesis_on_rollback=False,
+                    promotion_kind="reconcile",
+                )
+                promoted = True
+                self.branch_controller.reconcile_stale(
+                    bid,
+                    success=True,
+                    new_champion=champion,
+                )
+                self.persist_branch_state(bid)
+                assert self.commit_reconcile_candidate_promotion is not None
+                self.commit_reconcile_candidate_promotion(branch)
+            except BaseException:
+                if promoted:
+                    try:
+                        self.branch_controller.block_infra(bid)
+                    except Exception:
+                        logger.exception(
+                            "Branch %s: failed to install in-memory reconcile hold",
+                            bid,
+                        )
+                        branch.state = BranchState.BLOCKED_INFRA
+                else:
+                    branch.branch_evidence_summary = previous_evidence_summary
+                raise
         branch = self.branch_controller.get_branch(bid)
         if branch is None:
             return StepResult(
@@ -846,7 +1030,9 @@ class BranchStepRunner:
 
     @staticmethod
     def _eval_action_label(branch: Branch) -> str:
-        if branch.state == BranchState.EXPLORE_EXPAND:
+        if branch.state in (BranchState.EXPLORE, BranchState.EXPLORE_EXPAND):
+            if verified_candidate_commit_kind(branch) == "reconcile":
+                return "reconcile"
             return "explore"
         if branch.state in (BranchState.VALIDATING, BranchState.VALIDATING_EXPAND):
             return "validate"
@@ -1011,6 +1197,79 @@ def _verification_result_detail(vresult: VerificationResult) -> str | None:
     for check in checks:
         lines.append(f"  [{check.name}] ({check.severity}) {check.detail}")
     return "\n".join(lines) if lines else None
+
+
+def _verification_rejection_outcome(
+    vresult: VerificationResult,
+) -> ExecutionOutcomeRecord:
+    severity = vresult.failure_severity or "light"
+    reason_code = (
+        "VERIFICATION_LIGHT_REJECTED"
+        if severity == "light"
+        else "VERIFICATION_HEAVY_REJECTED"
+    )
+    checks = [
+        {
+            "name": check.name,
+            "passed": check.passed,
+            "severity": check.severity,
+            "detail": check.detail,
+            "elapsed_ms": check.elapsed_ms,
+            "metadata": dict(check.metadata or {}),
+        }
+        for check in vresult.checks
+    ]
+    return ExecutionOutcomeRecord(
+        outcome=ExecutionOutcome.RESEARCH_REJECTED,
+        reason_code=reason_code,
+        detail=vresult.first_failure or "",
+        provenance={
+            "owner": "verification_gate",
+            "stage": "verification",
+            "severity": severity,
+            "verification_checks": checks,
+            "attempt_kind": "reconcile_lifecycle",
+        },
+    )
+
+
+def _contract_rejection_outcome(
+    result: ContractResult,
+) -> ExecutionOutcomeRecord:
+    checks = [
+        {
+            "name": check.name,
+            "passed": check.passed,
+            "severity": check.severity,
+            "detail": check.detail,
+            "elapsed_ms": check.elapsed_ms,
+            "metadata": dict(check.metadata or {}),
+        }
+        for check in result.checks
+    ]
+    return ExecutionOutcomeRecord(
+        outcome=ExecutionOutcome.RESEARCH_REJECTED,
+        reason_code="PATCH_CONTRACT_REJECTED",
+        detail=result.failure_reason or "",
+        provenance={
+            "owner": "outer_contract",
+            "stage": "patch_contract",
+            "contract_checks": checks,
+            "attempt_kind": "reconcile_lifecycle",
+        },
+    )
+
+
+def _same_champion_identity(left: ChampionState, right: ChampionState) -> bool:
+    return (
+        left.version,
+        left.code_snapshot_hash,
+        left.weight_revision,
+    ) == (
+        right.version,
+        right.code_snapshot_hash,
+        right.weight_revision,
+    )
 
 
 def _scheduler_max_active_branches(scheduler: Any) -> int | None:

@@ -4,6 +4,7 @@ This module owns the constructor-time wiring for CampaignManager.  The manager
 remains the public facade and callback owner; service construction lives here so
 new runtime boundaries do not keep growing campaign.py.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,9 +26,14 @@ from scion.core.branch_step_runner import BranchStepRunner
 from scion.core.campaign_adapters import _workspace_service_for
 from scion.core.campaign_loop import CampaignLoop
 from scion.core.decision_coordinator import DecisionCoordinator
+from scion.core.decision_completion_transaction import (
+    DecisionCompletionIntent,
+    DecisionCompletionStore,
+)
 from scion.core.decision_finalizer import DecisionFinalizer
 from scion.core.evaluation_orchestrator import EvaluationOrchestrator
 from scion.core.evidence_recorder import EvidenceRecorder
+from scion.core.evidence_recording.replay_identity import stable_patch_digest
 from scion.core.explore_step_pipeline import ExploreStepPipeline
 from scion.core.failure_lifecycle import FailureLifecycleService
 from scion.core.formal_candidate_artifacts import (
@@ -60,6 +66,9 @@ from scion.core.research_surface_index import editable_identity_patterns
 from scion.core.scheduler import Scheduler
 from scion.core.status_reporter import StatusReporter
 from scion.core.verification_factory import CampaignVerificationFactory
+from scion.core.verified_candidate_commit import (
+    VerifiedCandidateCommitRecorder,
+)
 from scion.core.weight_opt_committer import WeightOptCommitter
 from scion.core.workspace_lifecycle import WorkspaceLifecycleService
 from scion.failure.router import FailureRouter
@@ -198,7 +207,10 @@ def compose_campaign_services(
         owner._experiment_protocol.set_progress_callback(owner._on_protocol_progress)
 
     def _read_promotion_weights(registry_path: str) -> dict[str, float]:
-        if owner._spec.parameter_search.enabled and owner._experiment_protocol is not None:
+        if (
+            owner._spec.parameter_search.enabled
+            and owner._experiment_protocol is not None
+        ):
             from scion.runtime.pool_manager import read_weights
 
             return read_weights(registry_path)
@@ -255,14 +267,23 @@ def compose_campaign_services(
     owner._branch_current_hypothesis = {}
     owner._step_history = []
     owner._round_num = 0
+    owner._verified_candidate_commits = VerifiedCandidateCommitRecorder(
+        owner._campaign_dir
+    )
+    owner._decision_completion_store = DecisionCompletionStore(
+        owner._registry.db_path
+    )
+    owner._decision_completion_store.recover_pending(
+        cleanup=lambda intent: _recover_decision_cleanup(owner, intent),
+    )
     _restore_persisted_active_branches(owner)
+    owner._round_num = _restored_round_num(owner)
 
     owner._n_experiments = 0
     owner._start_time = datetime.now()
 
     owner._balance_exhausted = False
     owner._runtime_preflight_checked = False
-
 
     from scion.core.token_usage import TokenUsageTracker
 
@@ -356,6 +377,12 @@ def compose_campaign_services(
         archive_workspace=owner._materializer.archive_workspace,
         cleanup_workspace=owner._materializer.cleanup,
         persist_branch_state=owner._persist_branch_state,
+        decision_completion_store=owner._decision_completion_store,
+        current_round_num=lambda: owner._round_num,
+        complete_decision_cleanup=lambda intent: _recover_decision_cleanup(
+            owner,
+            intent,
+        ),
         record_formal_candidate_artifact=lambda **kwargs: formal_candidate_artifacts.record(
             **kwargs,
             base_workspace=_formal_candidate_base_workspace(
@@ -392,9 +419,7 @@ def compose_campaign_services(
             "_n_experiments",
             owner._n_experiments + 1,
         ),
-        require_experiment_protocol=(
-            production_campaign
-        ),
+        require_experiment_protocol=(production_campaign),
     )
     owner._explore_step_pipeline = ExploreStepPipeline(
         branch_controller=owner._branch_ctrl,
@@ -417,10 +442,30 @@ def compose_campaign_services(
         setup_workspace=owner._setup_workspace,
         apply_patch=lambda branch, workspace, patch, **kwargs: _workspace_service_for(
             owner
-        ).apply_patch(branch, workspace, patch, **kwargs),
-        record_verification_pass=lambda branch, code_hash: _workspace_service_for(
+        ).apply_candidate_patch(branch, workspace, patch, **kwargs),
+        record_verification_pass=(
+            lambda branch, code_hash, workspace, hypothesis_id: _workspace_service_for(
+                owner
+            ).promote_verified_candidate(
+                branch,
+                code_hash,
+                workspace,
+                hypothesis_id,
+            )
+        ),
+        reject_candidate_workspace=lambda branch, workspace: _workspace_service_for(
             owner
-        ).record_verification_pass(branch, code_hash),
+        ).reject_candidate(branch, workspace),
+        record_verified_candidate_commit=(
+            lambda **kwargs: owner._verified_candidate_commits.record(
+                **kwargs,
+                materializer=owner._materializer,
+            )
+        ),
+        commit_verified_candidate_promotion=lambda branch: _commit_verified_candidate_promotion(
+            owner,
+            branch,
+        ),
         archive_failed_workspace=owner._archive_failed_workspace,
         evaluate=owner._evaluate,
         apply_decision_and_finalize=owner._apply_decision_and_finalize,
@@ -429,9 +474,7 @@ def compose_campaign_services(
         proposal_failure_detail_for=owner._proposal_failure_detail_for,
         proposal_execution_outcome_for=owner._proposal_execution_outcome_for,
         proposal_session_ref_for=owner._proposal_session_ref_for,
-        proposal_governance_envelope_for=(
-            owner._proposal_governance_envelope_for
-        ),
+        proposal_governance_envelope_for=(owner._proposal_governance_envelope_for),
         persist_branch_state=owner._persist_branch_state,
         update_status_progress=owner._update_status_progress,
         step_history=owner._step_history,
@@ -473,6 +516,37 @@ def compose_campaign_services(
         hypothesis_store=owner._hyp_store,
         registry=owner._registry,
         campaign_id=owner._campaign_id,
+        apply_reconcile_candidate=(
+            lambda branch, workspace, patch, **kwargs: _workspace_service_for(
+                owner
+            ).apply_candidate_patch(branch, workspace, patch, **kwargs)
+        ),
+        reject_reconcile_candidate=(
+            lambda branch, workspace: _workspace_service_for(owner).reject_candidate(
+                branch,
+                workspace,
+            )
+        ),
+        record_reconcile_candidate_commit=(
+            lambda **kwargs: owner._verified_candidate_commits.record(
+                **kwargs,
+                materializer=owner._materializer,
+            )
+        ),
+        promote_reconcile_candidate=(
+            lambda branch, code_hash, workspace, hypothesis_id, **kwargs: (
+                _workspace_service_for(owner).promote_verified_candidate(
+                    branch,
+                    code_hash,
+                    workspace,
+                    hypothesis_id,
+                    **kwargs,
+                )
+            )
+        ),
+        commit_reconcile_candidate_promotion=(
+            lambda branch: _commit_verified_candidate_promotion(owner, branch)
+        ),
     )
     owner._proposal_pipeline = ProposalPipeline(
         creative=owner._creative,
@@ -584,32 +658,238 @@ def _persist_initial_champion(owner: Any) -> None:
     owner._champion = persisted
 
 
+def _commit_verified_candidate_promotion(owner: Any, branch: Any) -> None:
+    owner._verified_candidate_commits.mark_promotion_committed(branch)
+    owner._persist_branch_state(branch.branch_id)
+    _workspace_service_for(owner).finalize_candidate_promotion(branch)
+
+
+def _recover_decision_cleanup(
+    owner: Any,
+    intent: DecisionCompletionIntent,
+) -> None:
+    if intent.cleanup_action != "abandon_workspace":
+        return
+    workspace = os.path.join(
+        owner._campaign_dir,
+        "workspaces",
+        intent.branch_id,
+    )
+    identity = intent.payload.get("verified_candidate_identity") or {}
+    expected_code_hash = str(identity.get("verified_code_hash") or "")
+    expected_snapshot_hash = str(identity.get("executable_snapshot_hash") or "")
+    # The materializer checks a pre-cleanup workspace only when no receipt
+    # exists. Once the atomic receipt exists, its archive is authoritative and
+    # a partial prior rmtree must not be mistaken for candidate tampering.
+    owner._materializer.archive_decision_workspace(
+        workspace,
+        intent.branch_id,
+        intent.transaction_id,
+        expected_code_hash=expected_code_hash,
+        expected_snapshot_hash=expected_snapshot_hash,
+    )
+    if os.path.isdir(workspace):
+        owner._materializer.cleanup(workspace)
+
+
 def _restore_persisted_active_branches(owner: Any) -> None:
     """Restore schedulable branch state when reopening an existing campaign."""
     for branch in owner._branch_store.load_all_active():
         owner._branch_ctrl.restore_branch(branch)
+        promotion_recovery = owner._materializer.recover_candidate_promotion(
+            branch.branch_id,
+            persisted_current_hash=branch.current_code_hash,
+            persisted_last_clean_hash=branch.last_clean_code_hash,
+        )
+        if promotion_recovery.status == "rolled_back":
+            if promotion_recovery.terminalize_hypothesis_on_rollback:
+                _terminalize_rolled_back_hypothesis(
+                    owner,
+                    branch,
+                    promotion_recovery.hypothesis_id,
+                )
+            owner._materializer.finalize_candidate_promotion(branch.branch_id)
+        workspace = os.path.join(owner._campaign_dir, "workspaces", branch.branch_id)
+        verified_commit = None
+        persisted_summary = branch.branch_evidence_summary or {}
+        persisted_marker = persisted_summary.get("verified_candidate_commit")
+        owns_typed_durable = "verified_candidate_commit" in persisted_summary
+        if (
+            owner._branch_ctrl.get_code_base(branch.branch_id) != "branch_workspace"
+            and not owns_typed_durable
+        ):
+            workspace = ""
+        else:
+            if not os.path.isdir(workspace):
+                raise RuntimeError(
+                    f"Branch {branch.branch_id}: persisted verified workspace is unavailable"
+                )
+            expected_hash = branch.last_clean_code_hash
+            if branch.current_code_hash != expected_hash:
+                raise RuntimeError(
+                    f"Branch {branch.branch_id}: persisted branch hashes are not clean"
+                )
+            actual_hash = owner._materializer.compute_code_hash(workspace)
+            if actual_hash != expected_hash:
+                raise RuntimeError(
+                    f"Branch {branch.branch_id}: persisted verified workspace hash mismatch"
+                )
+            verified_commit = owner._verified_candidate_commits.load_and_validate(
+                branch=branch,
+                workspace=workspace,
+                materializer=owner._materializer,
+            )
+            marker = (branch.branch_evidence_summary or {}).get(
+                "verified_candidate_commit"
+            )
+            if promotion_recovery.status == "candidate_committed":
+                if verified_commit is None or not isinstance(marker, dict):
+                    raise RuntimeError(
+                        f"Branch {branch.branch_id}: committed promotion has no typed commit"
+                    )
+                if (
+                    promotion_recovery.hypothesis_id
+                    != verified_commit.hypothesis_id
+                    or promotion_recovery.promotion_kind
+                    != verified_commit.commit_kind
+                ):
+                    raise RuntimeError(
+                        f"Branch {branch.branch_id}: committed promotion ownership conflict"
+                    )
+                if marker.get("promotion_status") == "prepared":
+                    owner._verified_candidate_commits.mark_promotion_committed(branch)
+                    owner._branch_store.save(branch)
+                owner._materializer.finalize_candidate_promotion(branch.branch_id)
+            elif (
+                isinstance(marker, dict)
+                and marker.get("promotion_status") == "prepared"
+            ):
+                raise RuntimeError(
+                    f"Branch {branch.branch_id}: prepared promotion journal is unavailable"
+                )
+            owner._branch_workspaces[branch.branch_id] = workspace
+
         active_hypothesis = _latest_active_hypothesis_for_branch(
             owner._hyp_store,
             branch.branch_id,
         )
+        marker = (branch.branch_evidence_summary or {}).get(
+            "verified_candidate_commit"
+        )
+        pending_evaluation = (
+            isinstance(marker, dict)
+            and marker.get("evaluation_status") == "pending"
+        )
+        if (
+            active_hypothesis is not None
+            and verified_commit is not None
+            and verified_commit.hypothesis_id != active_hypothesis.hypothesis_id
+        ):
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: active hypothesis ownership conflict"
+            )
+        if active_hypothesis is not None and verified_commit is not None:
+            active_identity = (
+                active_hypothesis.change_locus,
+                active_hypothesis.action,
+                active_hypothesis.target_file or "",
+                active_hypothesis.hypothesis_text or "",
+                active_hypothesis.predicted_direction,
+                active_hypothesis.suggested_weight,
+            )
+            verified_identity = (
+                verified_commit.hypothesis_change_locus,
+                verified_commit.hypothesis_action,
+                verified_commit.hypothesis_target_file,
+                verified_commit.hypothesis_text,
+                verified_commit.hypothesis_predicted_direction,
+                verified_commit.hypothesis_suggested_weight,
+            )
+            if active_identity != verified_identity:
+                raise RuntimeError(
+                    f"Branch {branch.branch_id}: active hypothesis metadata conflict"
+                )
+        if pending_evaluation and (
+            active_hypothesis is None
+            or verified_commit is None
+            or verified_commit.hypothesis_id != active_hypothesis.hypothesis_id
+        ):
+            raise RuntimeError(
+                f"Branch {branch.branch_id}: pending evaluation ownership conflict"
+            )
         if active_hypothesis is not None:
             owner._branch_current_hypothesis[branch.branch_id] = active_hypothesis
             owner._branch_hypotheses[branch.branch_id] = (
                 _hypothesis_proposal_from_record(active_hypothesis)
             )
-            patch = _patch_proposal_from_candidate_artifact(
-                owner._campaign_dir,
-                branch,
-                active_hypothesis,
-            )
+            if (
+                verified_commit is not None
+                and verified_commit.hypothesis_id == active_hypothesis.hypothesis_id
+            ):
+                patch = verified_commit.patch
+            elif verified_commit is None:
+                patch = _patch_proposal_from_candidate_artifact(
+                    owner._campaign_dir,
+                    branch,
+                    active_hypothesis,
+                )
+            else:
+                patch = None
             if patch is not None:
                 owner._branch_patches[branch.branch_id] = patch
-        workspace = os.path.join(owner._campaign_dir, "workspaces", branch.branch_id)
-        if (
-            owner._branch_ctrl.get_code_base(branch.branch_id) == "branch_workspace"
-            and os.path.isdir(workspace)
-        ):
-            owner._branch_workspaces[branch.branch_id] = workspace
+
+
+def _restored_round_num(owner: Any) -> int:
+    """Continue durable screening round identities across campaign reopen."""
+
+    maximum = 0
+    for branch in owner._branch_ctrl._branches.values():
+        history = (branch.branch_evidence_summary or {}).get(
+            "canonical_screening_history",
+            (),
+        )
+        if not isinstance(history, list):
+            continue
+        for record in history:
+            if not isinstance(record, dict):
+                continue
+            round_num = record.get("round_num")
+            if isinstance(round_num, bool):
+                continue
+            try:
+                maximum = max(maximum, int(round_num))
+            except (TypeError, ValueError):
+                continue
+    return maximum
+
+
+def _terminalize_rolled_back_hypothesis(
+    owner: Any,
+    branch: Any,
+    hypothesis_id: str | None,
+) -> None:
+    if not hypothesis_id:
+        raise RuntimeError(
+            f"Branch {branch.branch_id}: rolled-back promotion has no hypothesis owner"
+        )
+    record = owner._hyp_store.get_one(hypothesis_id)
+    if record is None or record.branch_id != branch.branch_id:
+        raise RuntimeError(
+            f"Branch {branch.branch_id}: rolled-back promotion ownership conflict"
+        )
+    if record.status == "active":
+        owner._hyp_store.mark_status(hypothesis_id, "blocked_infra")
+        return
+    if record.status not in {
+        "blocked_infra",
+        "rejected",
+        "research_rejected",
+        "not_evaluated",
+        "resource_exhausted",
+    }:
+        raise RuntimeError(
+            f"Branch {branch.branch_id}: rolled-back hypothesis status conflict"
+        )
 
 
 def _latest_active_hypothesis_for_branch(
@@ -645,23 +925,34 @@ def _patch_proposal_from_candidate_artifact(
         return None
     try:
         payload = json.loads(artifact_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("legacy formal candidate artifact is invalid") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("legacy formal candidate artifact is invalid")
+    if payload.get("schema") not in {
+        "scion.formal_candidate_patch_artifact.v2",
+        "scion.formal_candidate_patch_artifact.v3",
+    }:
+        raise RuntimeError("legacy formal candidate artifact schema mismatch")
+    if payload.get("branch_id") != getattr(branch, "branch_id", None):
+        raise RuntimeError("legacy formal candidate artifact branch mismatch")
+    if payload.get("hypothesis_id") != h_record.hypothesis_id:
+        raise RuntimeError("legacy formal candidate artifact hypothesis mismatch")
     patch_payload = payload.get("patch")
     if not isinstance(patch_payload, dict):
-        return None
+        raise RuntimeError("legacy formal candidate artifact patch is invalid")
     files = patch_payload.get("files")
     if not isinstance(files, list) or not files:
-        return None
+        raise RuntimeError("legacy formal candidate artifact patch is invalid")
     changes: list[PatchFileChange] = []
     for item in files:
         if not isinstance(item, dict):
-            return None
+            raise RuntimeError("legacy formal candidate artifact patch is invalid")
         file_path = str(item.get("file_path") or "").strip()
         action = str(item.get("action") or "").strip()
         code_content = item.get("code_content")
         if not file_path or action not in {"modify", "create", "delete"}:
-            return None
+            raise RuntimeError("legacy formal candidate artifact patch is invalid")
         changes.append(
             PatchFileChange(
                 file_path=file_path,
@@ -671,13 +962,17 @@ def _patch_proposal_from_candidate_artifact(
             )
         )
     primary, *additional = changes
-    return PatchProposal(
+    patch = PatchProposal(
         file_path=primary.file_path,
         action=primary.action,
         code_content=primary.code_content,
         test_hint=primary.test_hint,
         additional_changes=tuple(additional),
     )
+    expected_digest = str(patch_payload.get("patch_digest") or "")
+    if not expected_digest or stable_patch_digest(changes) != expected_digest:
+        raise RuntimeError("legacy formal candidate artifact patch digest mismatch")
+    return patch
 
 
 def _candidate_patch_artifact_path(
@@ -688,11 +983,14 @@ def _candidate_patch_artifact_path(
     root = Path(campaign_dir)
     summary = getattr(branch, "branch_evidence_summary", {}) or {}
     if isinstance(summary, dict):
+        declared_ref = summary.get("formal_candidate_patch_artifact_ref")
         path = _resolve_campaign_artifact_ref(
             root,
-            summary.get("formal_candidate_patch_artifact_ref"),
+            declared_ref,
         )
-        if path is not None and path.is_file():
+        if declared_ref:
+            if path is None or not path.is_file():
+                raise RuntimeError("legacy formal candidate artifact is unavailable")
             return path
     index_path = root / "artifacts" / "formal_candidates" / "index.jsonl"
     if not index_path.is_file():
@@ -728,9 +1026,12 @@ def _resolve_campaign_artifact_ref(root: Path, ref: Any) -> Path | None:
     if not text:
         return None
     path = Path(text)
-    if path.is_absolute():
-        return path
-    return root / path
+    resolved = path.resolve() if path.is_absolute() else (root / path).resolve()
+    try:
+        resolved.relative_to(root.resolve())
+    except ValueError as exc:
+        raise RuntimeError("legacy formal candidate artifact escapes campaign root") from exc
+    return resolved
 
 
 def _reanchor_current_champion_snapshot(
@@ -755,7 +1056,9 @@ def _reanchor_current_champion_snapshot(
     return replace(current, code_snapshot_path=local_path)
 
 
-def _normalize_operator_pool(operator_pool: dict[str, Any]) -> dict[str, OperatorConfig]:
+def _normalize_operator_pool(
+    operator_pool: dict[str, Any],
+) -> dict[str, OperatorConfig]:
     """Normalize legacy name->weight pools before persistence."""
     normalized: dict[str, OperatorConfig] = {}
     for name, cfg in (operator_pool or {}).items():

@@ -44,7 +44,6 @@ from scion.protocol.experiment.proposal_evidence import (
     problem_proposal_mechanism_evidence,
 )
 
-
 _PROBLEM_ROOT = Path(__file__).resolve().parents[2] / "problems"
 
 
@@ -227,6 +226,7 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
     assert set(evidence["experiment_evidence"]) == {
         "stage",
         "protocol_outcome",
+        "decision_outcome",
         "objective_outcome",
         "case_outcomes",
         "runtime_errors",
@@ -244,9 +244,10 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
         "gate_outcome": "pass",
         "reason_codes": ["SCREENING_PASS"],
     }
-    aggregation = evidence["experiment_evidence"]["objective_outcome"][
-        "aggregation"
-    ]
+    assert evidence["experiment_evidence"]["decision_outcome"] == {
+        "decision": "continue_explore",
+    }
+    aggregation = evidence["experiment_evidence"]["objective_outcome"]["aggregation"]
     assert aggregation["statistical_unit"] == "case"
     assert aggregation["win_rate_scope"] == "case_level_gate"
     assert aggregation["median_delta_scope"] == "case_medians"
@@ -389,11 +390,10 @@ def test_canonical_screening_history_upgrades_legacy_row_without_duplicate() -> 
     legacy_record.pop("candidate_composition")
     legacy_evidence = legacy_record["experiment_evidence"]
     legacy_evidence.pop("protocol_outcome")
+    legacy_evidence.pop("decision_outcome")
     legacy_evidence["objective_outcome"].pop("aggregation")
     legacy_record["screening_attempt_id"] = "legacy-schema-dependent-id"
-    branch.branch_evidence_summary = {
-        CANONICAL_SCREENING_HISTORY_KEY: [legacy_record]
-    }
+    branch.branch_evidence_summary = {CANONICAL_SCREENING_HISTORY_KEY: [legacy_record]}
 
     context = ContextManager(adapter=adapter).build_hypothesis_context(
         branch=branch,
@@ -408,10 +408,11 @@ def test_canonical_screening_history_upgrades_legacy_row_without_duplicate() -> 
     assert upgraded["screening_attempt_id"] != "legacy-schema-dependent-id"
     assert "candidate_composition" in upgraded
     assert "protocol_outcome" in upgraded["experiment_evidence"]
+    assert upgraded["experiment_evidence"]["decision_outcome"] == {
+        "decision": "continue_explore",
+    }
     assert persist_canonical_screening_record(branch, screening) is True
-    assert len(
-        branch.branch_evidence_summary[CANONICAL_SCREENING_HISTORY_KEY]
-    ) == 1
+    assert len(branch.branch_evidence_summary[CANONICAL_SCREENING_HISTORY_KEY]) == 1
 
 
 def test_canonical_screening_history_rejects_conflicting_legacy_fact() -> None:
@@ -455,11 +456,10 @@ def test_canonical_screening_history_rejects_conflicting_legacy_fact() -> None:
     legacy_record.pop("candidate_composition")
     evidence = legacy_record["experiment_evidence"]
     evidence.pop("protocol_outcome")
+    evidence.pop("decision_outcome")
     evidence["objective_outcome"].pop("aggregation")
     evidence["objective_outcome"]["aggregate"]["median_delta"] = -999.0
-    branch.branch_evidence_summary = {
-        CANONICAL_SCREENING_HISTORY_KEY: [legacy_record]
-    }
+    branch.branch_evidence_summary = {CANONICAL_SCREENING_HISTORY_KEY: [legacy_record]}
 
     with pytest.raises(
         ValueError,
@@ -473,7 +473,9 @@ def test_canonical_screening_history_rejects_conflicting_legacy_fact() -> None:
         )
 
 
-def test_canonical_screening_record_marks_incremental_patch_as_cumulative_state() -> None:
+def test_canonical_screening_record_marks_incremental_patch_as_cumulative_state() -> (
+    None
+):
     hypothesis = HypothesisProposal(
         hypothesis_text="Add one integrated mechanism.",
         change_locus="solver_design",
@@ -537,9 +539,7 @@ def test_canonical_screening_record_marks_incremental_patch_as_cumulative_state(
         "policies/scheduler.py",
         "policies/solver.py",
     ]
-    aggregation = record["experiment_evidence"]["objective_outcome"][
-        "aggregation"
-    ]
+    aggregation = record["experiment_evidence"]["objective_outcome"]["aggregation"]
     assert "pair_win_rate_scope" not in aggregation
     assert "pair_win_rate" not in aggregation
 
@@ -664,8 +664,14 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
         protocol_result=ProtocolResult(
             stage=ExperimentStage.SCREENING,
             stats=EvalStats(
-                n_cases=1, wins=0, losses=1, ties=0, win_rate=0.0,
-                median_delta=-4.0, ci_low=-10.0, ci_high=-0.5,
+                n_cases=1,
+                wins=0,
+                losses=1,
+                ties=0,
+                win_rate=0.0,
+                median_delta=-4.0,
+                ci_low=-10.0,
+                ci_high=-0.5,
             ),
             gate_outcome="fail",
             reason_codes=("SCREENING_FAIL_WIN_RATE",),
@@ -693,12 +699,15 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
     assert '"repair_error": 1' in rendered
     assert '"evidence_scope": "alns_repair_runtime_diagnostics"' in rendered
     assert '"hypothesis_attribution": "unbound"' in rendered
+    assert "association_only: unbound telemetry does not establish" in rendered
     assert "activation_evidence_status" not in rendered
     assert "objective_effect_status" not in rendered
     assert '"solver_algorithm_alns_iteration_trace": [' not in rendered
 
 
-def test_canonical_screening_history_keeps_multiple_screenings_of_one_hypothesis() -> None:
+def test_canonical_screening_history_keeps_multiple_screenings_of_one_hypothesis() -> (
+    None
+):
     _spec, legacy, adapter, champion, branch = _runtime("cvrp")
     hypothesis = HypothesisProposal(
         hypothesis_text="Expand screening for the same hypothesis.",
@@ -829,9 +838,7 @@ def test_direct_v3_code_context_contains_source_not_research_history(
     ledger = context["proposal_source_ledger"]
     visibility = direct_v3_code_source_visibility(context)
     guarantees = visibility["code_phase_guarantees"]
-    target = next(
-        item for item in ledger["entries"] if item["path"] == target_file
-    )
+    target = next(item for item in ledger["entries"] if item["path"] == target_file)
 
     assert target["visibility"] == "full_current"
     assert target["content"]
@@ -883,12 +890,8 @@ def test_direct_v3_cvrp_create_ledger_proves_target_and_support_sources() -> Non
         step_history=[],
     )
     ledger = context["proposal_source_ledger"]
-    target = next(
-        item for item in ledger["entries"] if item["path"] == target_file
-    )
-    guarantees = direct_v3_code_source_visibility(context)[
-        "code_phase_guarantees"
-    ]
+    target = next(item for item in ledger["entries"] if item["path"] == target_file)
+    guarantees = direct_v3_code_source_visibility(context)["code_phase_guarantees"]
 
     assert target["visibility"] == "new_file_placeholder"
     assert target_file not in ledger["views"]["api_reference"]

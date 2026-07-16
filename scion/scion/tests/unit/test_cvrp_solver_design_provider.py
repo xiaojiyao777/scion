@@ -55,9 +55,14 @@ def test_cvrp_code_constraints_expose_real_source_and_object_model() -> None:
 def test_cvrp_target_module_guidance_matches_mechanism_ownership() -> None:
     provider = _provider()
 
-    assert "destroy and repair operators" in provider.solver_design_target_api_guidance(
+    destroy_repair_guidance = provider.solver_design_target_api_guidance(
         "policies/baseline_modules/destroy_repair.py"
     )
+    assert "destroy and repair operators" in destroy_repair_guidance
+    assert "monotonic deadline context" in destroy_repair_guidance
+    assert "remaining_time" in destroy_repair_guidance
+    assert "recursive searches" in destroy_repair_guidance
+    assert "partial repair" in destroy_repair_guidance
     assert "_default_vns_operators" in provider.solver_design_target_api_guidance(
         "policies/baseline_modules/local_search.py"
     )

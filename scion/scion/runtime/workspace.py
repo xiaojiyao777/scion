@@ -1,14 +1,18 @@
 """WorkspaceMaterializer: create and manage branch workspaces."""
+
 from __future__ import annotations
 
 import hashlib
+import json
 import os
+import re
 import shutil
 import stat
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable, Literal, Optional
 
 from scion.core.models import (
     ChampionState,
@@ -20,13 +24,20 @@ from scion.core.path_match import segment_glob_match
 from scion.core.paths import normalize_relative_patch_path
 from scion.core.research_surface_index import normalize_editable_identity_patterns
 
-
 # Generic runtime has no problem-specific frozen files by default.
 _DEFAULT_FROZEN_PATTERNS = frozenset()
 
 
 class FrozenFileError(Exception):
     """Raised when apply_patch attempts to modify a frozen file."""
+
+
+@dataclass(frozen=True)
+class CandidatePromotionRecovery:
+    status: Literal["none", "rolled_back", "candidate_committed"]
+    hypothesis_id: str | None = None
+    terminalize_hypothesis_on_rollback: bool = True
+    promotion_kind: str = "explore"
 
 
 class WorkspaceMaterializer:
@@ -49,11 +60,11 @@ class WorkspaceMaterializer:
     ) -> None:
         self._campaign_dir = Path(campaign_dir)
         self._workspaces_dir = self._campaign_dir / "workspaces"
+        self._candidate_workspaces_dir = self._campaign_dir / "candidate_workspaces"
         self._champions_dir = self._campaign_dir / "champions"
+        self._promotion_journals_dir = self._campaign_dir / "promotion_journals"
         self._frozen_patterns = (
-            _DEFAULT_FROZEN_PATTERNS
-            if frozen_patterns is None
-            else frozen_patterns
+            _DEFAULT_FROZEN_PATTERNS if frozen_patterns is None else frozen_patterns
         )
         self._editable_patterns = (
             None
@@ -62,7 +73,9 @@ class WorkspaceMaterializer:
         )
 
         self._workspaces_dir.mkdir(parents=True, exist_ok=True)
+        self._candidate_workspaces_dir.mkdir(parents=True, exist_ok=True)
         self._champions_dir.mkdir(parents=True, exist_ok=True)
+        self._promotion_journals_dir.mkdir(parents=True, exist_ok=True)
         self._archive_dir = self._campaign_dir / "archive"
         self._archive_dir.mkdir(parents=True, exist_ok=True)
 
@@ -95,6 +108,304 @@ class WorkspaceMaterializer:
         # Ensure workspace is writable even if copied from a read-only champion snapshot
         _make_tree_writable(dest)
         return str(dest)
+
+    def create_candidate_workspace(
+        self,
+        branch_id: str,
+        source_workspace: str,
+    ) -> str:
+        """Copy a clean branch base into an isolated candidate workspace."""
+
+        src = Path(source_workspace).resolve()
+        if not src.is_dir():
+            raise FileNotFoundError(
+                f"candidate source workspace does not exist: {source_workspace}"
+            )
+        branch_dir = self._candidate_workspaces_dir / branch_id
+        branch_dir.mkdir(parents=True, exist_ok=True)
+        candidate = branch_dir / uuid.uuid4().hex
+        shutil.copytree(src, candidate, symlinks=False)
+        _make_tree_writable(candidate)
+        return str(candidate)
+
+    def promote_candidate_workspace(
+        self,
+        candidate_workspace: str,
+        branch_id: str,
+        *,
+        base_code_hash: str | None = None,
+        hypothesis_id: str | None = None,
+        terminalize_hypothesis_on_rollback: bool = True,
+        promotion_kind: str = "explore",
+    ) -> str:
+        """Promote a candidate while retaining a rollback journal and backup."""
+
+        if not isinstance(hypothesis_id, str) or not hypothesis_id.strip():
+            raise ValueError("candidate promotion hypothesis_id is required")
+        if not isinstance(terminalize_hypothesis_on_rollback, bool):
+            raise TypeError(
+                "terminalize_hypothesis_on_rollback must be bool"
+            )
+        if promotion_kind not in {"explore", "reconcile"}:
+            raise ValueError("candidate promotion kind is invalid")
+        if terminalize_hypothesis_on_rollback != (promotion_kind == "explore"):
+            raise ValueError("candidate promotion rollback ownership is invalid")
+        journal_path = self._promotion_journal_path(branch_id)
+        candidate = Path(candidate_workspace).resolve()
+        expected_parent = (self._candidate_workspaces_dir / branch_id).resolve()
+        if candidate.parent != expected_parent or not candidate.is_dir():
+            raise ValueError("candidate workspace is not owned by the requested branch")
+
+        durable = self._workspaces_dir / branch_id
+        backup = (
+            self._workspaces_dir / f".{branch_id}.verified-backup-{uuid.uuid4().hex}"
+        )
+        if backup.exists():  # pragma: no cover - UUID collision guard
+            raise FileExistsError(f"candidate promotion backup exists: {backup}")
+
+        if journal_path.exists():
+            raise RuntimeError(f"candidate promotion journal already exists: {branch_id}")
+        journal = {
+            "schema_version": "candidate-promotion-journal.v1",
+            "branch_id": branch_id,
+            "status": "prepared",
+            "candidate_workspace": str(candidate),
+            "durable_workspace": str(durable.resolve()),
+            "backup_workspace": str(backup.resolve()),
+            "base_code_hash": base_code_hash,
+            "base_physical_code_hash": (
+                self.compute_code_hash(str(durable)) if durable.is_dir() else None
+            ),
+            "candidate_code_hash": self.compute_code_hash(str(candidate)),
+            "hypothesis_id": hypothesis_id.strip(),
+            "terminalize_hypothesis_on_rollback": bool(
+                terminalize_hypothesis_on_rollback
+            ),
+            "promotion_kind": promotion_kind,
+        }
+        _atomic_json_write(journal_path, journal)
+
+        try:
+            if durable.exists():
+                durable.rename(backup)
+            candidate.rename(durable)
+            journal["status"] = "promoted"
+            _atomic_json_write(journal_path, journal)
+        except BaseException:
+            try:
+                if durable.exists() and not candidate.exists():
+                    durable.rename(candidate)
+                if backup.exists():
+                    if durable.exists():
+                        raise RuntimeError(
+                            "durable workspace still exists during promotion rollback"
+                        )
+                    backup.rename(durable)
+                if candidate.exists():
+                    _make_tree_writable(candidate)
+                    shutil.rmtree(candidate)
+            except BaseException as rollback_exc:
+                raise RuntimeError(
+                    "candidate promotion failed and rollback is incomplete; "
+                    "prepared journal retained"
+                ) from rollback_exc
+            journal["status"] = "rolled_back"
+            _atomic_json_write(journal_path, journal)
+            raise
+        _prune_empty_candidate_parent(expected_parent, self._candidate_workspaces_dir)
+        return str(durable)
+
+    def finalize_candidate_promotion(self, branch_id: str) -> None:
+        """Release a retained backup after branch/artifact state is committed."""
+
+        journal_path = self._promotion_journal_path(branch_id)
+        journal = _read_promotion_journal(journal_path, branch_id)
+        if journal is None:
+            return
+        _, backup, _ = self._validated_promotion_paths(journal, branch_id)
+        if backup.exists():
+            _make_tree_writable(backup)
+            shutil.rmtree(backup)
+        journal_path.unlink(missing_ok=True)
+
+    def recover_candidate_promotion(
+        self,
+        branch_id: str,
+        *,
+        persisted_current_hash: str | None,
+        persisted_last_clean_hash: str | None,
+    ) -> CandidatePromotionRecovery:
+        """Resolve a promotion journal against persisted and physical identity."""
+
+        journal_path = self._promotion_journal_path(branch_id)
+        journal = _read_promotion_journal(journal_path, branch_id)
+        if journal is None:
+            return CandidatePromotionRecovery(status="none")
+        durable, backup, candidate = self._validated_promotion_paths(
+            journal,
+            branch_id,
+        )
+        candidate_hash = str(journal.get("candidate_code_hash") or "")
+        hypothesis_id = str(journal.get("hypothesis_id") or "") or None
+        terminalize_hypothesis_on_rollback = journal[
+            "terminalize_hypothesis_on_rollback"
+        ]
+        promotion_kind = str(journal["promotion_kind"])
+        base_hash = journal.get("base_code_hash")
+        persisted_is_candidate = (
+            persisted_current_hash == candidate_hash
+            and persisted_last_clean_hash == candidate_hash
+        )
+        persisted_is_base = (
+            persisted_current_hash == base_hash
+            and persisted_last_clean_hash == base_hash
+        )
+        durable_hash = self.compute_code_hash(str(durable)) if durable.is_dir() else None
+        if journal.get("status") == "rolled_back":
+            if (
+                not persisted_is_base
+                or durable_hash != journal.get("base_physical_code_hash")
+                or backup.exists()
+                or candidate.exists()
+            ):
+                raise RuntimeError(
+                    f"Branch {branch_id}: rolled-back promotion identity conflict"
+                )
+            return CandidatePromotionRecovery(
+                status="rolled_back",
+                hypothesis_id=hypothesis_id,
+                terminalize_hypothesis_on_rollback=(
+                    terminalize_hypothesis_on_rollback
+                ),
+                promotion_kind=promotion_kind,
+            )
+        if persisted_is_candidate and durable_hash == candidate_hash:
+            return CandidatePromotionRecovery(
+                status="candidate_committed",
+                hypothesis_id=hypothesis_id,
+                terminalize_hypothesis_on_rollback=(
+                    terminalize_hypothesis_on_rollback
+                ),
+                promotion_kind=promotion_kind,
+            )
+        if not persisted_is_base:
+            raise RuntimeError(
+                f"Branch {branch_id}: candidate promotion journal identity conflict"
+            )
+
+        # Roll back every pre-commit physical shape, including a crash between
+        # durable->backup and candidate->durable renames.
+        base_physical_hash = journal.get("base_physical_code_hash")
+        backup_exists = backup.exists()
+        candidate_exists = candidate.exists()
+        if (backup_exists and not backup.is_dir()) or (
+            candidate_exists and not candidate.is_dir()
+        ):
+            raise RuntimeError(
+                f"Branch {branch_id}: candidate promotion rollback identity conflict"
+            )
+        backup_hash = (
+            self.compute_code_hash(str(backup)) if backup.is_dir() else None
+        )
+        candidate_physical_hash = (
+            self.compute_code_hash(str(candidate)) if candidate.is_dir() else None
+        )
+        if candidate_exists and candidate_physical_hash != candidate_hash:
+            raise RuntimeError(
+                f"Branch {branch_id}: candidate promotion rollback identity conflict"
+            )
+        if backup_exists:
+            if (
+                not isinstance(base_physical_hash, str)
+                or not base_physical_hash
+                or backup_hash != base_physical_hash
+                or durable_hash not in {None, candidate_hash}
+                or (durable_hash is None) == (not candidate_exists)
+            ):
+                raise RuntimeError(
+                    f"Branch {branch_id}: candidate promotion rollback identity conflict"
+                )
+        elif base_physical_hash is not None:
+            # With an old durable base, a missing backup is safe only before
+            # the first rename: durable is still the base and staging is whole.
+            if durable_hash != base_physical_hash or not candidate_exists:
+                raise RuntimeError(
+                    f"Branch {branch_id}: candidate promotion rollback identity conflict"
+                )
+        elif not (
+            (durable_hash is None and candidate_exists)
+            or (durable_hash == candidate_hash and not candidate_exists)
+        ):
+            raise RuntimeError(
+                f"Branch {branch_id}: candidate promotion rollback identity conflict"
+            )
+
+        if backup_exists:
+            if durable.exists():
+                _make_tree_writable(durable)
+                shutil.rmtree(durable)
+            backup.rename(durable)
+        elif base_physical_hash is None and durable_hash == candidate_hash:
+            _make_tree_writable(durable)
+            shutil.rmtree(durable)
+        if candidate.exists():
+            _make_tree_writable(candidate)
+            shutil.rmtree(candidate)
+        journal["status"] = "rolled_back"
+        _atomic_json_write(journal_path, journal)
+        return CandidatePromotionRecovery(
+            status="rolled_back",
+            hypothesis_id=hypothesis_id,
+            terminalize_hypothesis_on_rollback=(
+                terminalize_hypothesis_on_rollback
+            ),
+            promotion_kind=promotion_kind,
+        )
+
+    def _promotion_journal_path(self, branch_id: str) -> Path:
+        if not re.fullmatch(
+            r"[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?",
+            str(branch_id or ""),
+        ):
+            raise ValueError("candidate promotion branch_id is unsafe")
+        return self._promotion_journals_dir / f"{branch_id}.json"
+
+    def _validated_promotion_paths(
+        self,
+        journal: dict[str, object],
+        branch_id: str,
+    ) -> tuple[Path, Path, Path]:
+        durable = Path(str(journal.get("durable_workspace") or "")).resolve()
+        backup = Path(str(journal.get("backup_workspace") or "")).resolve()
+        candidate = Path(str(journal.get("candidate_workspace") or "")).resolve()
+        workspaces_root = self._workspaces_dir.resolve()
+        candidate_parent = (self._candidate_workspaces_dir / branch_id).resolve()
+        expected_durable = (self._workspaces_dir / branch_id).resolve()
+        if (
+            durable != expected_durable
+            or backup.parent != workspaces_root
+            or not backup.name.startswith(f".{branch_id}.verified-backup-")
+            or candidate.parent != candidate_parent
+        ):
+            raise RuntimeError(
+                f"Branch {branch_id}: candidate promotion journal path ownership mismatch"
+            )
+        return durable, backup, candidate
+
+    def cleanup_candidate_workspace(self, candidate_workspace: str) -> None:
+        """Delete an isolated candidate without touching its durable base."""
+
+        candidate = Path(candidate_workspace).resolve()
+        candidate_root = self._candidate_workspaces_dir.resolve()
+        if (
+            not _is_relative_to(candidate, candidate_root)
+            or candidate == candidate_root
+        ):
+            raise ValueError("refusing to clean a non-candidate workspace")
+        if candidate.exists():
+            _make_tree_writable(candidate)
+            shutil.rmtree(candidate)
+        _prune_empty_candidate_parent(candidate.parent, candidate_root)
 
     def apply_patch(self, workspace: str, patch: PatchProposal) -> str:
         """Atomically materialize every declared file change.
@@ -280,9 +591,106 @@ class WorkspaceMaterializer:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, dest, follow_symlinks=False)
         import logging as _logging
+
         _logging.getLogger(__name__).info(
             "Archived research surfaces from branch %s → %s", branch_id, archive_dest
         )
+        return str(archive_dest)
+
+    def archive_decision_workspace(
+        self,
+        workspace: str,
+        branch_id: str,
+        transaction_id: str,
+        *,
+        expected_code_hash: str,
+        expected_snapshot_hash: str | None = None,
+    ) -> str:
+        """Idempotently archive one ABANDON transaction's editable identity.
+
+        The deterministic destination is also the durable cleanup receipt.  A
+        startup retry may therefore distinguish "archive completed, cleanup
+        crashed" from a missing source instead of creating ``_1`` archives or
+        silently accepting evidence loss.
+        """
+
+        if re.fullmatch(r"[0-9a-f]{64}", str(transaction_id or "")) is None:
+            raise ValueError("decision archive transaction identity is invalid")
+        if re.fullmatch(r"[0-9a-f]{64}", str(expected_code_hash or "")) is None:
+            raise ValueError("decision archive code identity is invalid")
+        safe_branch = re.sub(r"[^A-Za-z0-9_.-]", "_", str(branch_id or ""))
+        if not safe_branch:
+            raise ValueError("decision archive branch identity is invalid")
+        branch_digest = hashlib.sha256(str(branch_id).encode("utf-8")).hexdigest()[:8]
+        archive_dest = self._archive_dir / (
+            f"{safe_branch[:40]}-{branch_digest}-decision-{transaction_id[:16]}"
+        )
+        receipt_path = self._archive_dir / f".{transaction_id}.receipt.json"
+        ws = Path(workspace).resolve()
+        expected_ws = (self._workspaces_dir / str(branch_id)).resolve()
+        if ws != expected_ws:
+            raise ValueError("decision archive workspace ownership mismatch")
+
+        receipt = _read_decision_archive_receipt(receipt_path)
+        expected_receipt = {
+            "schema_version": "decision-archive-receipt.v1",
+            "transaction_id": transaction_id,
+            "branch_id": str(branch_id),
+            "archive_name": archive_dest.name,
+            "code_hash": expected_code_hash,
+            "snapshot_hash": str(expected_snapshot_hash or ""),
+        }
+        if receipt is not None:
+            if receipt != expected_receipt:
+                raise RuntimeError("decision archive receipt identity conflict")
+            if not archive_dest.is_dir():
+                raise RuntimeError("decision archive receipt has no archive")
+            if self.compute_code_hash(str(archive_dest)) != expected_code_hash:
+                raise RuntimeError("decision archive code identity conflict")
+            return str(archive_dest)
+        if archive_dest.exists() and not archive_dest.is_dir():
+            raise RuntimeError("decision archive destination is not a directory")
+        if not ws.is_dir():
+            raise RuntimeError(
+                "decision workspace is missing without a verified archive receipt"
+            )
+        if self.compute_code_hash(str(ws)) != expected_code_hash:
+            raise RuntimeError("decision workspace code identity conflict")
+        if (
+            expected_snapshot_hash
+            and self.compute_snapshot_hash(str(ws)) != expected_snapshot_hash
+        ):
+            raise RuntimeError("decision workspace executable identity conflict")
+
+        if not archive_dest.is_dir():
+            temporary = self._archive_dir / (
+                f".{archive_dest.name}.tmp-{uuid.uuid4().hex}"
+            )
+            try:
+                temporary.mkdir(parents=False)
+                for source in self._identity_files(ws):
+                    rel = source.relative_to(ws)
+                    dest = temporary / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, dest, follow_symlinks=False)
+                if self.compute_code_hash(str(temporary)) != expected_code_hash:
+                    raise RuntimeError("decision archive copy identity conflict")
+                os.replace(temporary, archive_dest)
+                directory_fd = os.open(
+                    self._archive_dir,
+                    os.O_RDONLY | os.O_DIRECTORY,
+                )
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+            finally:
+                if temporary.exists():
+                    _make_tree_writable(temporary)
+                    shutil.rmtree(temporary)
+        elif self.compute_code_hash(str(archive_dest)) != expected_code_hash:
+            raise RuntimeError("decision archive code identity conflict")
+        _atomic_json_write(receipt_path, expected_receipt)
         return str(archive_dest)
 
     def compute_code_hash(self, workspace: str) -> str:
@@ -415,6 +823,82 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _prune_empty_candidate_parent(path: Path, candidate_root: Path) -> None:
+    """Remove empty per-branch candidate directories, never the shared root."""
+
+    if path == candidate_root or not _is_relative_to(path, candidate_root):
+        return
+    try:
+        path.rmdir()
+    except OSError:
+        pass
+
+
+def _atomic_json_write(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.parent / f".{path.name}.tmp-{uuid.uuid4().hex}"
+    try:
+        content = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode(
+            "utf-8"
+        )
+        with temporary.open("wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _read_promotion_journal(path: Path, branch_id: str) -> dict[str, object] | None:
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"Branch {branch_id}: candidate promotion journal is invalid"
+        ) from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema_version") != "candidate-promotion-journal.v1"
+        or payload.get("branch_id") != branch_id
+        or payload.get("status") not in {"prepared", "promoted", "rolled_back"}
+        or not isinstance(payload.get("hypothesis_id"), str)
+        or not str(payload.get("hypothesis_id")).strip()
+        or not isinstance(
+            payload.get("terminalize_hypothesis_on_rollback"),
+            bool,
+        )
+        or payload.get("promotion_kind") not in {"explore", "reconcile"}
+        or payload.get("terminalize_hypothesis_on_rollback")
+        != (payload.get("promotion_kind") == "explore")
+    ):
+        raise RuntimeError(
+            f"Branch {branch_id}: candidate promotion journal is invalid"
+        )
+    return payload
+
+
+def _read_decision_archive_receipt(path: Path) -> dict[str, object] | None:
+    if not path.exists():
+        return None
+    if not path.is_file():
+        raise RuntimeError("decision archive receipt is invalid")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("decision archive receipt is invalid") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("decision archive receipt is invalid")
+    return payload
 
 
 def _hash_files(ws: Path, files: Iterable[Path]) -> str:

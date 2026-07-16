@@ -35,7 +35,14 @@ def test_cvrp_proposal_evidence_aggregates_every_repair_without_truncation() -> 
     candidate_trace = [_event(name) for name in repairs]
     candidate_trace.extend(
         [
-            _event("pair", accepted=True, best=True, reason="route_limit", before=5, after=15),
+            _event(
+                "pair",
+                accepted=True,
+                best=True,
+                reason="route_limit",
+                before=5,
+                after=15,
+            ),
             _event("pair", accepted=True, reason="repair_error", before=20, after=50),
             _event("pair", before=50, after=40),
             {"repair_operator": "pair", "elapsed_ms_before": "bad"},
@@ -78,6 +85,8 @@ def test_cvrp_proposal_evidence_aggregates_every_repair_without_truncation() -> 
     assert payload["trace_coverage"]["champion_result_sources"] == {"cached": 1}
     assert payload["evidence_scope"] == "alns_repair_runtime_diagnostics"
     assert payload["hypothesis_attribution"] == "unbound"
+    assert payload["interpretation_constraint"].startswith("association_only")
+    assert "does not establish" in payload["interpretation_constraint"]
 
 
 def test_problem_owned_mechanism_envelope_does_not_gain_legacy_unknowns() -> None:
@@ -128,13 +137,19 @@ def test_legacy_mechanism_shape_keeps_activation_and_effect_derivation() -> None
 
 def test_cvrp_proposal_evidence_ignores_non_screening_and_missing_trace() -> None:
     provider = CvrpProposalMechanismEvidenceProvider()
-    assert provider.summarize_proposal_mechanism_evidence(
-        stage="validation",
-        selected_surface="solver_design",
-        runtime_pairs=[],
-    ) == {}
-    assert provider.summarize_proposal_mechanism_evidence(
-        stage="screening",
-        selected_surface="solver_design",
-        runtime_pairs=[{"candidate_runtime": {"unrelated": []}}],
-    ) == {}
+    assert (
+        provider.summarize_proposal_mechanism_evidence(
+            stage="validation",
+            selected_surface="solver_design",
+            runtime_pairs=[],
+        )
+        == {}
+    )
+    assert (
+        provider.summarize_proposal_mechanism_evidence(
+            stage="screening",
+            selected_surface="solver_design",
+            runtime_pairs=[{"candidate_runtime": {"unrelated": []}}],
+        )
+        == {}
+    )

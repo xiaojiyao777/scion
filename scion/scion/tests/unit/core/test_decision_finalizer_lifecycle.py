@@ -131,6 +131,21 @@ def test_queue_validate_applies_formal_transition_without_advisory_override() ->
     assert store.statuses == []
 
 
+def test_legacy_branch_without_pending_typed_marker_bypasses_transaction() -> None:
+    finalizer, controller, branch, hypothesis, record, store, *_rest = _fixture()
+
+    class UnexpectedTransaction:
+        def prepare(self, **_kwargs):
+            raise AssertionError("legacy decision must not create a typed intent")
+
+    finalizer.decision_completion_store = UnexpectedTransaction()  # type: ignore[assignment]
+    result = _apply(finalizer, branch, hypothesis, record, Decision.QUEUE_VALIDATE)
+
+    assert result.decision is Decision.QUEUE_VALIDATE
+    assert controller.get_branch(branch.branch_id).state is BranchState.READY_VALIDATE
+    assert store.statuses == []
+
+
 def test_continue_explore_retains_verified_codebase_and_clears_attempt() -> None:
     fixture = _fixture()
     finalizer, controller, branch, hypothesis, record, store = fixture[:6]

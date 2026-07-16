@@ -1,10 +1,10 @@
 """Problem-owned compact CVRP mechanism evidence for the next proposal turn."""
+
 from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any
-
 
 _TRACE_FIELD = "solver_algorithm_alns_iteration_trace"
 
@@ -35,6 +35,10 @@ class CvrpProposalMechanismEvidenceProvider:
             "schema_version": "scion.cvrp.alns_proposal_mechanism_evidence.v1",
             "evidence_scope": "alns_repair_runtime_diagnostics",
             "hypothesis_attribution": "unbound",
+            "interpretation_constraint": (
+                "association_only: unbound telemetry does not establish that "
+                "the prior hypothesis caused the observed difference"
+            ),
             "source_runtime_field": _TRACE_FIELD,
             "trace_coverage": {
                 "valid_pairs": len(runtime_pairs),

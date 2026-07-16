@@ -1,4 +1,5 @@
 """Verification rejection handling for explore-step execution."""
+
 from __future__ import annotations
 
 import logging
@@ -10,7 +11,14 @@ from scion.core.execution_outcome import (
     execution_outcome_projection_kwargs,
     record_execution_outcome_event,
 )
-from scion.core.models import Branch, HypothesisProposal, HypothesisRecord, PatchProposal, StepRecord, VerificationResult
+from scion.core.models import (
+    Branch,
+    HypothesisProposal,
+    HypothesisRecord,
+    PatchProposal,
+    StepRecord,
+    VerificationResult,
+)
 from scion.core.step_result import StepResult
 
 from .common import (
@@ -81,11 +89,21 @@ class VerificationMixin:
                 "verification_checks": checks,
             },
         )
-        self.hypothesis_store.mark_status(
-            h_record.hypothesis_id,
-            "research_rejected",
-        )
-        archive_ref = self.archive_failed_workspace(workspace, bid, rnum)
+        try:
+            self.hypothesis_store.mark_status(
+                h_record.hypothesis_id,
+                "research_rejected",
+            )
+            archive_ref = self.archive_failed_workspace(workspace, bid, rnum)
+        except Exception:
+            self._rollback_candidate_after_precommit_exception(
+                branch=branch,
+                workspace=workspace,
+                hypothesis_id=h_record.hypothesis_id,
+            )
+            raise
+        self.reject_candidate_workspace(branch, workspace)
+        self.persist_branch_state(bid)
         record_execution_outcome_event(
             registry=self.registry,
             campaign_id=self.campaign_id,
@@ -163,7 +181,6 @@ class VerificationMixin:
         else:
             ref = self.proposal_session_ref_for(branch_id)
         return ref
-
 
 
 def build_verification_detail(vresult: VerificationResult) -> Optional[str]:
