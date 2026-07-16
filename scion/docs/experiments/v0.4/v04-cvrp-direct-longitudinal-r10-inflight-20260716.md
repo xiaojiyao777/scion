@@ -59,7 +59,7 @@ The repaired formal-artifact path is accepted live:
 - formal current/replay/verified/executable identity: `cd8f6b...`;
 - candidate staging and promotion journals: empty after Decision completion.
 
-## H2/C2 In Flight
+## H2/C2 Terminal
 
 H2 directly cites H1's `30/30` route-limit activations and the `1665 -> 69`
 throughput collapse. It changed direction to
@@ -67,13 +67,43 @@ throughput collapse. It changed direction to
 incremental inter-route VNS plus bounded 2-for-1/1-for-2 CROSS exchange. H2 and
 C2 again each used one successful provider attempt, with no retry. Verification
 committed current/last-clean/verified/executable identity `65f379...` over H1
-base `cd8f6b...`; formal evaluation is pending.
+base `cd8f6b...`.
 
-The main audit question is whether H2 fixes the causal bottleneck or merely
-adds a faster local-search mechanism while retaining H1's expensive ejection
-repair in the cumulative candidate. Do not infer recovery from the hypothesis
-text alone; require runtime activation, throughput, objective, Protocol, and
-Decision evidence.
+H2 completed `32/32` valid formal pairs with zero candidate/champion/fleet
+failure, but remained strongly negative:
+
+- pair outcome: `2W / 26L / 4T`;
+- case outcome: `0W / 7L / 1T`;
+- case median: `-7.25`;
+- case CI: `[-50.5, -2.0]`;
+- candidate/champion ALNS iterations: `62 / 1665`;
+- inherited ejection attempts/accepted/route-limit: `31 / 0 / 31`;
+- inherited ejection runtime: `718244ms`;
+- Protocol: `fail / SCREENING_FAIL_WIN_RATE`;
+- Decision: `continue_explore`, transaction committed.
+
+The code-correct CROSS/VNS path did not solve the causal bottleneck. H1's
+`destroy_repair.py` and `scheduler.py` remained unchanged and active. Candidate
+lists were rebuilt per VNS call and filtered only after broad route-position
+enumeration; unrestricted fallback scans also repeated after later stalls.
+CROSS lacked neighborhood-specific telemetry and could not be credited
+independently. H2's formal artifact again uses
+`base_workspace_ref=champions/champion_v1`; last-clean/current/replay/verified/
+executable identity is `65f379...`, and transactional staging/journals are
+empty.
+
+## H3/C3 In Flight
+
+H3 directly targets the causal failure in `scheduler.py`: remove ejection-chain
+from the active repair portfolio and make repair selection cost-aware through
+feasible-outcome reward density, runtime measurement, smoothed weights, and a
+minimum exploration floor for greedy/regret operators. H3/C3 are single-attempt
+and verified at current/last-clean/verified/executable identity `12ec5b...`
+over H2 base `65f379...`; formal screening is live.
+
+Require runtime evidence that ejection activation becomes zero and ALNS
+throughput recovers. Also audit whether repair timing and reward are assigned
+to the intended repair phase rather than conflating downstream polish/VNS.
 
 ## Monitoring Rules
 

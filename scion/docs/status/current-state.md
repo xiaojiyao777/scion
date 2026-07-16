@@ -30,12 +30,20 @@ replay now writes the correct relative
 `base_workspace_ref=champions/champion_v1`, with complete identity and matching
 current/replay/verified/executable hashes.
 
-H2 explicitly received H1's route-limit and throughput evidence. It targets
-`local_search.py` with candidate-list incremental inter-route VNS and bounded
-CROSS exchange; H2/C2 are again single-attempt and verified at `65f379...`.
-Formal evaluation is pending. The key audit is whether H2 causally removes the
-throughput bottleneck or only stacks local search while retaining H1's bad
-ejection repair.
+H2 explicitly received H1's route-limit and throughput evidence and added
+candidate-list incremental VNS plus bounded CROSS exchange in `local_search.py`,
+but retained H1's bad repair. H2/C2 were single-attempt and `32/32` valid with
+zero candidate/champion/fleet failure, yet remained negative: pair `2/26/4`,
+case `0/7/1`, median `-7.25`, CI `[-50.5,-2.0]`, ALNS `62/1665`. Inherited
+ejection was `31 attempts / 0 accepted / 31 route-limit / 718244ms`. Protocol
+failed win rate and Decision committed; formal base ref and all identities pass
+at `65f379...`.
+
+H3 now directly removes ejection-chain from the active scheduler portfolio and
+adds cost-aware feasible repair selection with smoothed reward density and
+minimum exploration. H3/C3 are single-attempt, verified at `12ec5b...`, and in
+formal screening. Require zero ejection activation, recovered ALNS throughput,
+and correctly attributed repair timing before treating it as a causal fix.
 
 The explicit R9 diagnostic continuation is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r9-cont1-3r-gpt56sol-20260716T042653Z-claw`.
@@ -512,7 +520,7 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Monitor R10 H2 at low frequency without disturbing the live process.
+1. Monitor R10 H3 at low frequency without disturbing the live process.
 2. Audit each completed R10 round for substantive code change, activation,
    objective/case/pair/mechanism evidence, throughput, Protocol, and Decision.
 3. At terminal state, require end-to-end postrun wrapper/readiness acceptance

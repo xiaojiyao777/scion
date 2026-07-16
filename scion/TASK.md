@@ -286,11 +286,15 @@ The new repair produced `30` attempts and zero accepted chains while collapsing
 candidate/champion ALNS iterations to `69/1665`; Protocol failed only
 `SCREENING_FAIL_WIN_RATE` and Decision `continue_explore` committed. Its v3
 formal base ref is the correct relative `champions/champion_v1`, and all replay
-identities pass. H2 explicitly cites that route-limit/throughput failure and
-changes to candidate-list incremental VNS plus CROSS exchange in
-`local_search.py`; H2/C2 are again single-attempt and verified at `65f379...`.
-Audit whether it removes the bottleneck or merely stacks local search while
-retaining H1's expensive repair.
+identities pass. H2 explicitly cited that route-limit/throughput failure and
+added candidate-list incremental VNS plus CROSS exchange in `local_search.py`,
+but retained H1's bad repair. H2 was again single-attempt and `32/32` valid,
+yet pair `2/26/4`, case `0/7/1`, median `-7.25`, CI `[-50.5,-2.0]`, ALNS
+`62/1665`; inherited ejection was `31/0/31` attempts, accepted, and route-limit
+with `718244ms`. Protocol failed win rate and Decision committed. H3 now
+directly removes ejection from the active scheduler portfolio and adds
+cost-aware feasible repair selection; H3/C3 are single-attempt, verified at
+`12ec5b...`, and formal screening is live.
 
 ## Current Framework Repair
 
@@ -435,8 +439,8 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 
 ## Execution Queue
 
-1. Monitor R10 H2 at low frequency without interfering with the live process;
-   its H/C and verified identities are complete and formal screening is live.
+1. Monitor R10 H3 at low frequency without interfering with the live process;
+   require zero ejection activation and recovered ALNS throughput.
 2. Audit each completed algorithm round against its objective, case/pair,
    mechanism, Protocol, Decision, throughput, and code-diff evidence.
 3. At terminal state, rebuild postrun reports, verify end-to-end wrapper and
