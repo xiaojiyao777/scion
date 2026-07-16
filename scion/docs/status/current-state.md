@@ -60,9 +60,23 @@ Legacy committed Decision and physically validated candidate owners remain
 reopen-compatible, while genuinely unowned or ambiguous attempts hold
 fail-closed. Independent review found no P0/P1. The full Scion suite passes
 `2145` with `1` skipped in `490.33s`; compileall and `git diff --check` pass,
-and no `scion_run_*.json` files remain. D1 immutable candidate snapshots and
-the post-Protocol disposition truth table are next; no new generative matched
-root may start before the rejected-ancestry correction is complete.
+and no `scion_run_*.json` files remain.
+
+D1 immutable candidate ownership foundation is now complete but deliberately
+unwired. It adds a versioned manifest/delta snapshot, stable candidate identity
+separate from the full artifact digest, explicit per-campaign ownership mode,
+append-only natural-origin registry with prepared-to-committed recovery, and a
+pure post-Decision disposition truth table. Authoritative workspace manifests
+are read before prepare and again before commit; candidate-parent artifacts are
+digest-pinned recursively; artifact and campaign-root reachability are pinned
+by directory descriptors. Exact relocated retries, crash phases, manifest
+collisions, hidden drift, strict decode, and root/directory replacement all have
+regressions. The combined focused suite passes `128`; the correctly rooted full
+Scion suite passes `2273` with `1` skipped in `492.10s`; independent review has
+no open P0/P1. D2-D4 must now wire completion, continuation, lineage, replay,
+and promotion before the rejected-ancestry defect is closed. No new generative
+matched root may start before that migration and the following L1-L3 ledger
+work are accepted.
 
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.

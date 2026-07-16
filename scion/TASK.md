@@ -620,9 +620,13 @@ The implementation order is fixed; items 1-3 are complete:
    provider attempt, canonical H/Patch identity, exact clean Branch target,
    typed event, and any candidate archive receipt; independent review has no
    P0/P1 and the full suite passes `2145` with `1` skipped;
-5. implement clean/provisional candidate disposition and the reversible
-   normalized research/rejection ledger, including replay/status/postrun
-   projection corrections;
+5. [D1 complete] add immutable candidate snapshots, exclusive append-only
+   snapshot ownership, and the pure clean/provisional disposition truth table.
+   The foundation is deliberately unwired; independent review has no P0/P1,
+   its combined focused suite passes `128`, and the full suite passes `2273`
+   with `1` skipped. Next wire completion, continuation, lineage, replay, and
+   promotion in D2-D4, then implement the reversible
+   normalized research/rejection ledger in L1-L3;
 6. run a serial no-LLM four-profile characterization using Protocol-resolved
    scientific limits;
 7. run two order-balanced matched pairs of fresh eight-observation direct-v3
@@ -677,11 +681,12 @@ scientific and lineage-owning artifacts remain in place.
 
 ## Execution Queue
 
-1. Execute the remaining approved post-R11c design in order: candidate
-   disposition, normalized research ledger, current no-LLM profiles, matched
-   canonical/pure campaigns, then transplant replay. Runner-owned temp
-   lifecycle, proposal-only allocation evidence, and research-rejection
-   continuation are complete.
+1. Execute the remaining approved post-R11c design in order: D1 candidate
+   snapshot/disposition foundation is complete but unwired; execute D2-D4
+   completion/continuation/lineage/promotion migration, then L1-L3 normalized
+   research ledger, current no-LLM profiles, matched canonical/pure campaigns,
+   and transplant replay. Runner-owned temp lifecycle, proposal-only allocation
+   evidence, and research-rejection continuation are complete.
 2. Correct event replay identity, terminal status finalization, and postrun
    projection completeness within their owning slices; do not patch reports in
    isolation.
