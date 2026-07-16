@@ -31,6 +31,7 @@ from scion.postrun.direct_v3_prompt_visibility import (
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_manager.manager import (
     CANONICAL_SCREENING_HISTORY_KEY,
+    _screening_projection,
     canonical_screening_record,
     persist_canonical_screening_record,
 )
@@ -784,6 +785,7 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
                 "candidate_runtime": {
                     "solver_algorithm_alns_iteration_trace": [
                         {
+                            "iteration": 1,
                             "repair_operator": "pair",
                             "accepted": True,
                             "best_improved": True,
@@ -796,6 +798,7 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
                 "champion_runtime": {
                     "solver_algorithm_alns_iteration_trace": [
                         {
+                            "iteration": 1,
                             "repair_operator": "greedy",
                             "accepted": False,
                             "best_improved": False,
@@ -858,14 +861,74 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
     assert evidence["mechanism_evidence"] == packet
     blocks, user_prompt = _split_hypothesis_context(context)
     rendered = "\n".join(block["text"] for block in blocks) + user_prompt
-    assert '"attempts": 1' in rendered
+    assert '"iterations": 1' in rendered
     assert '"repair_error": 1' in rendered
-    assert '"evidence_scope": "alns_repair_runtime_diagnostics"' in rendered
+    assert '"evidence_scope": "screening_search_allocation"' in rendered
     assert '"hypothesis_attribution": "unbound"' in rendered
-    assert "association_only: unbound telemetry does not establish" in rendered
+    assert '"interpretation_constraint": "association_only"' in rendered
+    assert '"gate_influence": false' in rendered
     assert "activation_evidence_status" not in rendered
     assert "objective_effect_status" not in rendered
     assert '"solver_algorithm_alns_iteration_trace": [' not in rendered
+
+
+def test_unmarked_mechanism_mapping_keeps_existing_screening_projection_behavior() -> None:
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=0,
+            wins=0,
+            losses=0,
+            ties=0,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="screening failed",
+        raw_metrics_ref="private/round.json",
+        mechanism_evidence={"legacy_unmarked_diagnostic": {"empty": None}},
+    )
+
+    assert "mechanism_evidence" not in _screening_projection(protocol)
+
+
+def test_marked_legacy_mechanism_envelope_round_trips_losslessly() -> None:
+    legacy_envelope = {
+        "schema_version": "scion.problem_proposal_mechanism_evidence.v1",
+        "problem_family": "cvrp",
+        "producer": "problem_provider",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "gate_influence": False,
+        "evidence": {
+            "schema_version": "scion.cvrp.alns_proposal_mechanism_evidence.v1",
+            "trace_coverage": {"candidate_trace_pairs": 0},
+            "candidate": {"repairs": {}, "unavailable": None},
+        },
+    }
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=0,
+            wins=0,
+            losses=0,
+            ties=0,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="screening failed",
+        raw_metrics_ref="private/round.json",
+        mechanism_evidence=legacy_envelope,
+    )
+
+    assert _screening_projection(protocol)["mechanism_evidence"] == legacy_envelope
 
 
 def test_canonical_screening_history_keeps_multiple_screenings_of_one_hypothesis() -> (

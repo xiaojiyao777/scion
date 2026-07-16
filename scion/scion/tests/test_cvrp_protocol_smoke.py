@@ -159,6 +159,41 @@ def test_cvrp_protocol_screening_runs_complete_with_metric_specs(tmp_path: Path)
     )
 
 
+def test_cvrp_screening_keeps_static_case_coverage_when_all_solver_pairs_fail(
+    tmp_path: Path,
+) -> None:
+    candidate_ws = tmp_path / "failing_candidate"
+    shutil.copytree(CVRP_DIR, candidate_ws)
+    (candidate_ws / "policies" / "baseline_algorithm.py").write_text(
+        "def solve(instance, rng, time_limit_sec, context):\n"
+        "    raise RuntimeError('synthetic candidate failure')\n",
+        encoding="utf-8",
+    )
+    proto, _ = _make_protocol(tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        candidate_ws=str(candidate_ws),
+        champion_ws=str(CVRP_DIR),
+        hypothesis_action="modify",
+        selected_surface="solver_design",
+    )
+
+    assert result.stats.valid_pairs == 0
+    assert result.stats.candidate_failed_pairs == 4
+    evidence = result.mechanism_evidence["evidence"]
+    assert evidence["coverage"]["provider_inputs"] == 2
+    assert evidence["coverage"]["runtime_pairs"] == 0
+    assert evidence["instance_feasibility"]["coverage"] == {
+        "requested_cases": 2,
+        "observed_cases": 0,
+        "unavailable_cases": 2,
+        "reference_route_cases": 0,
+        "reference_route_source_counts": {"allowed_routes": 0, "bks_routes": 0},
+    }
+    assert str(candidate_ws) not in json.dumps(evidence, sort_keys=True)
+
+
 def test_cvrp_protocol_solver_design_metrics_preserve_required_runtime_fields(
     tmp_path: Path,
 ) -> None:
@@ -208,6 +243,18 @@ def test_cvrp_protocol_solver_design_metrics_preserve_required_runtime_fields(
     assert pair_runtime["solver_algorithm_search_iterations"] == 1
     assert pair_runtime["solver_algorithm_move_attempts"] == 1
     assert "candidate_construct" in pair_runtime["solver_algorithm_phase_runtime_ms"]
+    evidence = result.mechanism_evidence["evidence"]
+    assert evidence["schema_version"] == "scion.cvrp.search_allocation_evidence.v1"
+    assert evidence["instance_feasibility"]["coverage"] == {
+        "requested_cases": 2,
+        "observed_cases": 0,
+        "unavailable_cases": 2,
+        "reference_route_cases": 0,
+        "reference_route_source_counts": {"allowed_routes": 0, "bks_routes": 0},
+    }
+    rendered_evidence = json.dumps(evidence, sort_keys=True)
+    assert str(candidate_ws) not in rendered_evidence
+    assert "case_path" not in rendered_evidence
 
 
 def test_cvrp_protocol_solver_design_metrics_preserve_phase_runtime_fields(

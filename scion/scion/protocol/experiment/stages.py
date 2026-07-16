@@ -214,6 +214,14 @@ def run_experiment(
             "champion": champion_resolution.resolved,
             "candidate": candidate_resolution.resolved,
         }
+    # Problem providers receive every distinct screening case even when no
+    # solver pair completes.  These path-only inputs are ephemeral and never
+    # enter raw Protocol metrics or the generic proposal envelope.
+    if stage == ExperimentStage.SCREENING:
+        problem_runtime_pairs.extend(
+            {"case_path": resolved_case_paths[case]["candidate"]}
+            for case in cases
+        )
 
     def _case_path_resolution_status_counts() -> dict[str, int]:
         counts: dict[str, int] = {}

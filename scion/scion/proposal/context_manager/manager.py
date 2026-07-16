@@ -882,9 +882,16 @@ def _screening_projection(protocol: Any) -> dict[str, Any]:
         is_proposal_mechanism_evidence_envelope,
     )
 
+    mechanism_evidence = None
     if is_proposal_mechanism_evidence_envelope(protocol.mechanism_evidence):
-        payload["mechanism_evidence"] = _primitive(protocol.mechanism_evidence)
-    return _drop_empty(payload)
+        mechanism_evidence = _primitive(protocol.mechanism_evidence)
+    projected = _drop_empty(payload)
+    if mechanism_evidence is not None:
+        # The verified generic envelope is already the visibility boundary.
+        # Keep unavailable/empty problem-owned observations byte-for-byte;
+        # interpreting them here would acquire problem semantics in core.
+        projected["mechanism_evidence"] = mechanism_evidence
+    return projected
 
 
 def _forced_target_projection(

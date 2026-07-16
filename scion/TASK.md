@@ -607,12 +607,12 @@ The controlling conclusions are:
 - removing VNS changes iteration count and iteration-based SA cooling, so time
   competition and search-trajectory effects must be reported separately.
 
-The implementation order is fixed; items 1-2 are complete:
+The implementation order is fixed; items 1-3 are complete:
 
 1. terminalize and audit R11c without changing its runtime;
 2. [complete] make `LocalSubprocessRunner` own and delete solver interchange
    files while preserving all formal raw metrics;
-3. project existing runtime fields into problem-owned
+3. [complete] project existing runtime fields into problem-owned
    `SearchAllocationEvidence`, with no new instrumentation in the same slice;
 4. make finalized H/Patch/Verification `research_rejected` attempt-terminal but
    scheduler-forward, with a new H and no same-H/C retry, cap, or formal count;
@@ -666,10 +666,11 @@ from a recorded dry-run manifest.
 
 ## Execution Queue
 
-1. Execute the remaining approved post-R11c design in order: proposal-only
-   allocation evidence, research-rejection continuation, candidate disposition,
-   normalized research ledger, current no-LLM profiles, matched canonical/pure
-   campaigns, then transplant replay. Runner-owned temp lifecycle is complete.
+1. Execute the remaining approved post-R11c design in order:
+   research-rejection continuation, candidate disposition, normalized research
+   ledger, current no-LLM profiles, matched canonical/pure campaigns, then
+   transplant replay. Runner-owned temp lifecycle and proposal-only allocation
+   evidence are complete.
 2. Correct event replay identity, terminal status finalization, and postrun
    projection completeness within their owning slices; do not patch reports in
    isolation.

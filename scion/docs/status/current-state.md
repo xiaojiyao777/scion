@@ -51,11 +51,18 @@ scientific projections. Full report:
 
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
-Raw runtime already exposes VNS/ALNS phase facts, but next-H currently sees only
-ALNS repair summaries. The accepted first code slice adds compact problem-owned
-proposal evidence for phase time/share, ALNS throughput, and repair-to-polish
-value without touching DecisionFeatures, Protocol gates, or generic core
-tooling. The preceding runner ownership slice is complete: `RunResult.output_path`
+Raw runtime already exposed VNS/ALNS phase facts while next-H saw only ALNS
+repair summaries. The first code slice is now complete: compact problem-owned
+proposal evidence carries phase time/share, ALNS throughput, exact
+destroy-repair lifecycle, repair-to-polish value, and static capacity
+feasibility without touching DecisionFeatures, Protocol gates, or generic core
+semantics. A real R11c replay matches `2300/1589` ALNS iterations, `511` empty
+route-destroy selections, embedded-VNS runtime `662010/701990` ms, and the
+`1 feasible / 7 infeasible` route-reduction split, with no path/case/seed
+leakage. Independent review has no P0/P1; the 1430-line problem-owned module is
+explicit P2 modularization debt. Focused verification passes `81`; the complete
+suite passes `2093` with `1` skipped. The preceding runner ownership slice is
+also complete: `RunResult.output_path`
 is removed, returned solver results are self-contained, and the runner deletes
 its own interchange file across success, failure, cancellation, and malformed
 output paths. Focused regression passes `152`; the full suite passes `2075`
@@ -717,18 +724,15 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Implement proposal-only CVRP SearchAllocationEvidence from existing fields,
-   including phase allocation, operator lifecycle, exact destroy-repair pairs,
-   and feasibility/slack features; keep Decision/gates byte-stable.
-2. Make finalized research rejection attempt-terminal but scheduler-forward,
+1. Make finalized research rejection attempt-terminal but scheduler-forward,
    then implement clean/provisional candidate disposition and the reversible
    normalized research/rejection ledger.
-3. Correct event replay identity, terminal last-outcome ownership, and postrun
+2. Correct event replay identity, terminal last-outcome ownership, and postrun
    projection completeness in their owning lifecycle slices.
-4. Run serial no-LLM four-profile characterization, matched canonical/pure-ALNS
+3. Run serial no-LLM four-profile characterization, matched canonical/pure-ALNS
    campaigns, and canonical transplant replay in that order.
-5. Execute the warehouse fixed/decomposition plan after problem-owned mechanism
-   attribution exists; protect every named evidence input.
+4. Execute the warehouse fixed/decomposition plan now that problem-owned
+   mechanism attribution exists; protect every named evidence input.
 
 ## R9 Continuation Terminal Checks
 

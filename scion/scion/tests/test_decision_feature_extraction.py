@@ -1,13 +1,22 @@
 """Focused tests split from test_decision.py."""
 
+import json
 from dataclasses import fields, replace
+from types import SimpleNamespace
 
 from .decision_test_support import *  # noqa: F401,F403
+from scion.core.decision_features_serialization import decision_features_to_payload
 from scion.core.features import (
     RUNTIME_EVIDENCE_CONFIDENCE_VALUES,
     RUNTIME_EVIDENCE_STATUS_VALUES,
 )
 from scion.core.models import DecisionFeatures
+from scion.problems.cvrp.proposal_mechanism_evidence import (
+    CvrpProposalMechanismEvidenceProvider,
+)
+from scion.protocol.experiment.proposal_evidence import (
+    problem_proposal_mechanism_evidence,
+)
 
 
 def test_decision_features_field_set_preserves_v3_boundary():
@@ -250,6 +259,68 @@ def test_extract_ignores_telemetry_free_text_from_exposed_summary():
     _validate_no_free_text(features)
     assert "alns" not in repr(features)
     assert "solver_algorithm_phase_runtime_ms" not in repr(features)
+
+
+def test_problem_proposal_evidence_leaves_safe_features_and_decision_byte_stable():
+    envelope = problem_proposal_mechanism_evidence(
+        stage="screening",
+        selected_surface="solver_design",
+        runtime_pairs=[
+            {
+                "candidate_runtime": {
+                    "solver_algorithm_alns_iteration_trace": [
+                        {
+                            "iteration": 1,
+                            "destroy_operator": "shaw",
+                            "repair_operator": "regret3",
+                            "accepted": True,
+                            "best_improved": True,
+                            "acceptance_reason": "new_best",
+                        }
+                    ]
+                },
+                "champion_runtime": {
+                    "solver_algorithm_alns_iteration_trace": []
+                },
+            }
+        ],
+        adapter=SimpleNamespace(
+            proposal_mechanism_evidence_provider=(
+                lambda: CvrpProposalMechanismEvidenceProvider()
+            )
+        ),
+    )
+    branch = _branch()
+    without_evidence = _protocol()
+    with_evidence = replace(without_evidence, mechanism_evidence=envelope)
+
+    def extract(protocol):
+        return _extractor.extract(
+            branch=branch,
+            hypothesis_action="modify",
+            contract=_contract(),
+            verification=_verification(),
+            canary=_canary(),
+            protocol=protocol,
+        )
+
+    without_features = extract(without_evidence)
+    with_features = extract(with_evidence)
+    without_bytes = json.dumps(
+        decision_features_to_payload(without_features),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    with_bytes = json.dumps(
+        decision_features_to_payload(with_features),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+
+    assert with_bytes == without_bytes
+    assert repr(_engine.decide(with_features)).encode() == repr(
+        _engine.decide(without_features)
+    ).encode()
 
 
 def test_extract_protocol_runtime_confidence_from_cached_champion():
