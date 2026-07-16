@@ -1,4 +1,8 @@
-# CVRP Direct Longitudinal R11c Inflight
+# CVRP Direct Longitudinal R11c Launch Record
+
+R11c is terminal. This file preserves the launch contract; the authoritative
+terminal analysis is
+[`v04-cvrp-direct-longitudinal-r11c-postrun-20260716.md`](./v04-cvrp-direct-longitudinal-r11c-postrun-20260716.md).
 
 ## Launch Identity
 

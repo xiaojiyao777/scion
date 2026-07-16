@@ -42,11 +42,11 @@ For v0.4, use this order:
 | §4.2 | `recent_retry_count` and `budget_remaining_ratio` in the example `DecisionFeatures` | They are not Decision inputs. Decision consumes hard-safety facts and the typed Protocol gate outcome. |
 | §5.1 | Contract `novelty check` | Contract checks schema, locus, path, source, interface, import/API and approved-H binding. Novelty/material difference is not a hard gate. |
 | §8.7 | automatic infra retry | Provider SDK retries are zero. Infra failure terminalizes the durable attempt; a later invocation requires an explicit operator action. Statistical expand remains a Protocol action and is not a provider retry. |
-| §10.4, §13 | LLM repair after light Contract/Verification failure | No automatic H/C repair call. Invalid response, Contract rejection, Verification failure, infra failure, and interruption remain distinct terminal outcomes. |
+| §10.4, §13 | LLM repair after light Contract/Verification failure | No automatic repair or second call for the same H/C. A finalized Contract/Verification `RESEARCH_REJECTED` ends that attempt and may schedule a fresh H on the exact clean base. Invalid provider response, infra/resource failure, replay conflict, non-progress, and interruption remain invocation-terminal. |
 | §11.5, §12.2 | candidate fix budgets and campaign budget termination | v0.4 does not impose Scion-semantic prompt/session/tool/file/item/token/retry budgets. An operator-selected formal-round target and scientific subprocess/solver timeouts remain explicit experiment boundaries. A provider-required `max_tokens` parameter is an explicit transport ceiling, not a Scion stopping or research policy. |
 | §11.1, §11.5 | one branch is one iterative direction; `max_active_branches = 3` is configurable | The v0.4 production default is one active branch so a screening continuation consumes that branch's preceding evidence on the next invocation. Explicit wider `Scheduler(max_active_branches=...)` configurations remain available for breadth ablation; they are not the formal-control default. |
 | §15.1–15.3 | recent-N context, compression, blacklist | H receives complete safe current context plus one canonical record per visible screening attempt. C receives the approved H and complete `SourceLedger`. There is no compact-to-fit, top-N, blacklist steering, or summary substitution. |
-| §18 | `continue` after proposal/verification failure, possibly returning to Code | Any non-`EVALUATED` execution outcome stops the current campaign invocation. The loop continues only after a formal candidate has reached a typed Protocol result. |
+| §18 | `continue` after proposal/verification failure, possibly returning to Code | A finalized Contract/Verification `RESEARCH_REJECTED` is attempt-terminal but scheduler-forward: no same-H/C repair, no formal-round count, then a new H on the exact clean base. Other non-`EVALUATED` outcomes stop/hold the invocation fail-closed. |
 
 ## Direct v0.4 control flow
 
@@ -69,6 +69,36 @@ There is no target-intent call, model tool-selection loop, preview/grounding
 repair, partial provider resume, or successor-specific host steering on this
 path. Multi-file algorithm changes are supported by the typed patch and exact
 per-file source ownership; the direct runtime is small, not single-file.
+
+## Pre-Protocol research rejection
+
+The user-selected round target counts formal Protocol observations, not H/C
+attempts. A completed research rejection must not silently reduce that target.
+The typed boundary is:
+
+| Execution outcome | Attempt | Invocation | Formal count |
+|---|---|---|---:|
+| `EVALUATED` | complete | continue or finish target | 1 |
+| finalized `RESEARCH_REJECTED` | rejected and immutable | schedule a new H | 0 |
+| `NOT_EVALUATED` | no trusted research conclusion | stop/hold | 0 |
+| `BLOCKED_INFRA` | unavailable | stop/hold | 0 |
+| `RESOURCE_EXHAUSTED` | unavailable | stop/hold | 0 |
+| `INTERRUPTED` | incomplete | stop/hold | 0 |
+
+Scheduler-forward rejection is limited to a structured H Contract, Patch
+Contract, or Verification rejection whose identity, diagnostic code, clean
+base, archive/cleanup disposition, and unique completion are durably owned.
+Provider parse/schema failure is `NOT_EVALUATED`, not permission to call the
+model again. A new attempt receives a new attempt ID and H ID; it cannot repair
+or regenerate the rejected C.
+
+Research-rejection completion has one transactional owner distinct from
+Decision completion, because no Protocol/Decision exists. Reopen must finish a
+prepared rejection idempotently before another provider call. If rejection
+identity cannot be proven, replay conflicts, or the Scheduler cannot prove a
+monotonic state transition, the invocation stops fail-closed. There is no
+rejection cap, attempt budget, hidden timeout, or content-similarity gate; an
+operator may stop explicitly at an attempt boundary.
 
 ## Gate interpretation
 
@@ -126,10 +156,11 @@ snapshot is unavailable or its hash does not match, continuation fails closed
 instead of silently reconstructing from another base.
 
 This setting changes only scheduling topology. It does not cap provider calls,
-hypotheses, files, tokens, formal rounds, or campaign duration, and it does not
-authorize retry after a non-`EVALUATED` outcome. A wider explicit portfolio is
-a separate breadth experiment and must not be silently substituted for the
-v0.4 warehouse/CVRP completion controls.
+hypotheses, files, tokens, formal rounds, or campaign duration. Scheduler-forward
+`RESEARCH_REJECTED` continuation is a new attempt, not retry authorization;
+every other non-`EVALUATED` outcome remains invocation-terminal. A wider
+explicit portfolio is a separate breadth experiment and must not be silently
+substituted for the v0.4 warehouse/CVRP completion controls.
 
 ## Formal-launch interpretation
 

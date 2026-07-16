@@ -276,24 +276,32 @@ terminal wrapper's historical failure status and markers are intentionally
 preserved; delegation readiness is true. Do not rewrite those terminal
 artifacts.
 
-Fresh eight-round R11c is live at
+Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
-with wrapper PID `2892669`. It runs from clean detached runtime
+with terminal wrapper PID `2892669`. It ran from clean detached runtime
 `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-56bc445d` at
 exact pushed commit `56bc445d07b19587ecb8e4b763ab448c4ceb9115`, using
 `gpt-5.6-sol / direct_v3`, `ROUNDS=8`, and the 30-second scientific solver
 subprocess fallback. It is a fresh root: no resume, force controls, retry,
 semantic budget, or truncation. Completion preflight is authenticated, HTTP
 `200`, and nonempty. Only the `SCION_SHARED_PROXY_KEY` environment-variable
-name is persisted. Poll no more frequently than about three minutes and do not
-start another generative root while R11c is live.
+name is persisted. Wrapper, campaign, postrun rebuild, and strict readiness
+exited zero, but the scientific status is `valid_but_incomplete`: four of eight
+formal observations completed, then round 5 H3 failed light Verification with
+`V1b_undefined_names` and typed `research_rejected` prematurely stopped the
+campaign. R11c must not be resumed or backfilled.
 
-R11c is the clean acceptance run for the prospective-count/atomic-target fix;
-it is also an open algorithm control. Do not force it toward CROSS or the
-elapsed-time simulated-annealing lead. Audit any expansion for one Protocol
-evaluation, an unchanged source owner until finalization, exactly one committed
-count increment, one final execution outcome, and matching typed/canonical
-lineage.
+The prospective-count/atomic-target fix passed: the expansion source stayed at
+count zero until the completed Decision atomically committed count one, with no
+owner mismatch or duplicate outcome. H1 route elimination never activated and
+accumulated 1,540 empty selections; H2 SWAP* activated strongly and was broadly
+positive, but on tai150a it extended initial VNS to about 46 seconds, produced
+zero ALNS iterations, and lost all four seeds. Validation abandon is therefore
+scientifically justified. H2 nevertheless inherited rejected H1 code, so its
+effect is cumulative and not isolated. H3 used a clean branch and safe sibling
+screening-only history, but one repairable code-closure rejection ended the
+entire invocation. Full evidence and prioritized defects are recorded in
+`scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r11c-postrun-20260716.md`.
 
 Fresh eight-round R11b is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11b-8r-gpt56sol-8r-gpt56sol-20260716T115118Z-claw`
@@ -575,8 +583,8 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 
 The accepted design is
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
-Implementation must wait for the live R11c boundary and must follow that design
-instead of adding another runtime helper or gate.
+The R11c boundary and full terminal audit are complete. Implementation must now
+follow that design instead of adding another runtime helper or gate.
 
 The controlling conclusions are:
 
@@ -599,21 +607,26 @@ The controlling conclusions are:
 - removing VNS changes iteration count and iteration-based SA cooling, so time
   competition and search-trajectory effects must be reported separately.
 
-The implementation order is fixed:
+The implementation order is fixed; item 1 is complete:
 
 1. terminalize and audit R11c without changing its runtime;
 2. make `LocalSubprocessRunner` own and delete solver interchange files while
    preserving all formal raw metrics;
 3. project existing runtime fields into problem-owned
    `SearchAllocationEvidence`, with no new instrumentation in the same slice;
-4. run a serial no-LLM four-profile characterization using Protocol-resolved
+4. make finalized H/Patch/Verification `research_rejected` attempt-terminal but
+   scheduler-forward, with a new H and no same-H/C retry, cap, or formal count;
+5. implement clean/provisional candidate disposition and the reversible
+   normalized research/rejection ledger, including replay/status/postrun
+   projection corrections;
+6. run a serial no-LLM four-profile characterization using Protocol-resolved
    scientific limits;
-5. run two order-balanced matched pairs of fresh eight-observation direct-v3
+7. run two order-balanced matched pairs of fresh eight-observation direct-v3
    roots, canonical versus pure ALNS;
-6. replay pure-profile positives on the canonical profile;
-7. add operator-level VNS attribution only if the compact allocation evidence
+8. replay pure-profile positives on the canonical profile;
+9. add operator-level VNS attribution only if the compact allocation evidence
    proves insufficient;
-8. begin hot-path modularization only after these behavioral boundaries are
+10. begin hot-path modularization only after these behavioral boundaries are
    stable.
 
 R11c additionally exposed a normative candidate-ancestry defect: Protocol-
@@ -647,23 +660,17 @@ from a recorded dry-run manifest.
 
 ## Execution Queue
 
-1. Poll live R11c at low frequency and audit code change, mechanism activation,
-   objective/case/pair, throughput, Protocol, Decision, and replay integrity.
-2. On the first expansion, verify the prospective source count remains durable
-   until Decision target commit, then advances exactly once without an owner
-   mismatch or duplicate execution outcome.
-3. If R11c creates another branch, verify that H receives all safe sibling
-   screening history without validation/frozen, terminal-state, raw-ref,
-   patch-body, or failure-prose leakage.
-4. At terminal state, require wrapper, postrun rebuild, readiness acceptance,
-   and an explicit search-allocation audit before changing code.
-5. After the R11c boundary, execute the approved design in order: runner-owned
+1. Execute the approved post-R11c design in order: runner-owned
    temp lifecycle, proposal-only allocation evidence, candidate disposition,
-   normalized research ledger, current no-LLM profiles, matched canonical/pure
-   campaigns, then transplant replay.
-6. Continue retention-aware historical experiment cleanup in audited batches;
+   research-rejection continuation, normalized research ledger, current no-LLM
+   profiles, matched canonical/pure campaigns, then transplant replay.
+2. Correct event replay identity, terminal status finalization, and postrun
+   projection completeness within their owning slices; do not patch reports in
+   isolation.
+3. Continue retention-aware historical experiment cleanup only when a tracked
+   evidence inventory proves that a root is reconstructible and non-unique;
    do not delete a root required by the approved design or current closeout.
-7. After runner ownership and CVRP allocation evidence, align the warehouse
+4. After runner ownership and CVRP allocation evidence, align the warehouse
    protocol with its distinct manifest population, freeze locked-group
    semantics, add directed no-LLM constraint probes, and decompose R3 into
    champion/destroy-only/merge-only/cumulative fixed arms. Do not launch another
@@ -714,5 +721,7 @@ terminal roots remain read-only.
   `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r9-stopped-analysis-20260716.md`
 - R10 inflight analysis:
   `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r10-inflight-20260716.md`
+- R11c terminal audit:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r11c-postrun-20260716.md`
 - Multi-hop lineage repair report:
   `scion/docs/experiments/v0.4/v04-resume-formal-candidate-lineage-repair-20260715.md`

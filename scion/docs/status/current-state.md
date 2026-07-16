@@ -7,45 +7,60 @@ Read `scion/TASK.md` first. Use
 
 ## Operational State
 
-Fresh eight-round R11c is live at
+Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
-with wrapper PID `2892669`. Its clean detached runtime is
+with terminal wrapper PID `2892669`. Its clean detached runtime is
 `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-56bc445d` at
 exact pushed commit `56bc445d07b19587ecb8e4b763ab448c4ceb9115`. It uses
 `gpt-5.6-sol / direct_v3`, `ROUNDS=8`, and the 30-second scientific solver
 subprocess fallback. It is fresh: no resume, force controls, retry, semantic
 budget, or truncation. Completion preflight is authenticated, HTTP `200`, and
 nonempty; only the `SCION_SHARED_PROXY_KEY` environment-variable name is
-persisted. Poll no more frequently than about three minutes and do not start
-another generative root while R11c is live.
+persisted. Wrapper/campaign/postrun/strict readiness exited zero, but scientific
+status is `valid_but_incomplete`: formal observations `4/8`, then round 5 H3
+failed `V1b_undefined_names`; the correctly typed `research_rejected` attempt
+was incorrectly promoted to an invocation-wide stop. Do not resume or backfill
+this historical root.
 
-R11c is both the clean acceptance run for the R11b prospective-count repair and
-an open algorithm control. No target or mechanism was forced. On any expansion,
-require one Protocol evaluation, unchanged durable source count before
-finalization, exactly one count increment on the committed Decision target, no
-owner mismatch, and one final execution outcome.
-
-R11c has already accepted the prospective-count repair on its first expansion:
+R11c accepted the prospective-count repair on its first expansion:
 the source intent remained at count `0`, the completed Decision target committed
 count `1`, no owner mismatch occurred, and only one final evaluation outcome
 was recorded. The same run exposed a separate candidate-ancestry defect. H1's
-route-elimination mechanism was selected hundreds of times but never produced a
-nonempty candidate; expanded screening rejected it, yet H2 SWAP* inherited the
-H1 files because `continue_explore` retained the Verification-passed workspace.
-H2 evidence is therefore cumulative H1+H2, not SWAP*-only. The normative repair
-and reversible prompt-ledger design is frozen in
+route-elimination mechanism accumulated `1,540` empty selections and never
+produced a nonempty candidate; expanded screening rejected it, yet H2 SWAP*
+inherited the H1 files because `continue_explore` retained the
+Verification-passed workspace. H2 was strongly active and broadly positive,
+but tai150a lost all four seeds because initial VNS consumed about 46 seconds
+and ALNS performed zero iterations. Validation abandon is justified; H2
+evidence is still cumulative H1+H2, not SWAP*-only. The normative repair and
+reversible prompt-ledger design is frozen in
 `scion/docs/planning/v0.4/v0.4-candidate-disposition-and-research-ledger-design-20260716.md`.
 No new generative matched root may start until rejected code ancestry is
 excluded from continuation and promotion.
+
+H3 used a clean champion base and received exactly three safe sibling screening
+records without validation/frozen/terminal/raw-ref/patch leakage. Its joint
+destroy-repair edit left six old variable references, and light Verification
+correctly rejected it before Protocol. The P0 defect is campaign continuation:
+a finalized pre-Protocol research rejection must end that attempt without a
+same-H/C retry, then schedule a fresh H on the exact clean base rather than
+ending the requested observation program. The terminal audit also found an
+event replay-digest mismatch, stale top-level last outcome, and missing postrun
+scientific projections. Full report:
+`scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r11c-postrun-20260716.md`.
 
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
 Raw runtime already exposes VNS/ALNS phase facts, but next-H currently sees only
 ALNS repair summaries. The accepted first code slice adds compact problem-owned
 proposal evidence for phase time/share, ALNS throughput, and repair-to-polish
-value without touching DecisionFeatures, Protocol gates, generic core tooling,
-or the live R11c runtime. A current direct-v3 matched canonical/pure-ALNS study
-follows only after no-LLM four-profile characterization.
+value without touching DecisionFeatures, Protocol gates, or generic core
+tooling. Before that, the runner ownership slice removes `RunResult.output_path`
+and makes every returned solver result self-contained. At R11c terminal, `/tmp`
+contained 252 post-launch `scion_run_*.json` files totaling `419,331,485`
+bytes; these parsed interchange files are not formal evidence. A current
+direct-v3 matched canonical/pure-ALNS study follows only after the no-LLM
+four-profile characterization and the ancestry/research-rejection corrections.
 
 Disk pressure is no longer an active blocker. A safe cleanup removed inactive
 pip/npm caches plus `42,630` solver interchange files created before R11c,
@@ -288,7 +303,8 @@ superseded root.
 
 Do not resume or relaunch R4, R5, R6, either completed validation, the frozen
 root, R7, R8, or R9 in place. Do not use R6's round-2 v2 artifact alone to
-reconstruct the candidate. R11c is the only live generative root.
+reconstruct the candidate. No generative root is live; R11c is the latest
+terminal control and remains read-only.
 
 ## R6 Identity
 
@@ -696,20 +712,21 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Poll R11c at low frequency and audit every completed round against code,
-   activation, objective/case/pair, throughput, Protocol, Decision, and replay
-   evidence.
-2. On the first expansion, verify prospective-count/atomic-target behavior and
-   one final execution outcome; keep the owner check fail-closed.
-3. If another branch opens, verify complete safe sibling screening continuity
-   without later-stage or lifecycle leakage.
-4. Require terminal wrapper, postrun rebuild, readiness acceptance, and a
-   search-allocation audit before implementing the accepted post-R11c design.
-5. Then execute runner-owned temp cleanup, proposal-only allocation evidence,
-   no-LLM four-profile characterization, matched canonical/pure-ALNS campaigns,
-   and canonical transplant replay in that order.
-6. Continue historical experiment deletion only from retention dry-run
-   manifests; protect every input named by the accepted design.
+1. Implement and verify runner-owned temp cleanup from the frozen contract;
+   preserve formal metrics/V8 artifacts and remove every production
+   `RunResult.output_path` consumer.
+2. Implement proposal-only CVRP SearchAllocationEvidence from existing fields,
+   including phase allocation, operator lifecycle, exact destroy-repair pairs,
+   and feasibility/slack features; keep Decision/gates byte-stable.
+3. Make finalized research rejection attempt-terminal but scheduler-forward,
+   then implement clean/provisional candidate disposition and the reversible
+   normalized research/rejection ledger.
+4. Correct event replay identity, terminal last-outcome ownership, and postrun
+   projection completeness in their owning lifecycle slices.
+5. Run serial no-LLM four-profile characterization, matched canonical/pure-ALNS
+   campaigns, and canonical transplant replay in that order.
+6. Execute the warehouse fixed/decomposition plan after problem-owned mechanism
+   attribution exists; protect every named evidence input.
 
 ## R9 Continuation Terminal Checks
 
