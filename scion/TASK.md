@@ -267,6 +267,21 @@ terminal wrapper's historical failure status and markers are intentionally
 preserved; delegation readiness is true. Do not rewrite those terminal
 artifacts.
 
+Fresh eight-round R11 is live at
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11-8r-gpt56sol-8r-gpt56sol-20260716T114132Z-claw`
+with wrapper PID `2878751`. It runs from the clean detached runtime
+`/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-6a2f6765` at
+exact pushed code commit `6a2f6765ff141b8f1d17c3fae0391df73f3ac580`, using
+`gpt-5.6-sol / direct_v3`. Completion preflight is authenticated, HTTP `200`,
+and nonempty. This is a fresh `ROUNDS=8` campaign with no resume, force
+controls, retry, semantic budget, or truncation; the 30-second limit is the
+scientific solver subprocess fallback. Only the environment-variable name
+`SCION_SHARED_PROXY_KEY` is persisted. R11 H1 was generated in one provider
+call and autonomously chose a capacity-feasible regret-2 pair-insertion repair
+in `destroy_repair.py`; C1 is currently in flight. The elapsed-time-SA finding
+remains audit guidance and was not forced. Poll no more frequently than about
+three minutes and do not start another generative root while R11 is live.
+
 Fresh eight-round R10 is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r10-8r-gpt56sol-20260716T063211Z-claw`
 with terminal wrapper PID `2848393`. It ran from the clean detached runtime
@@ -495,14 +510,17 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 
 ## Execution Queue
 
-1. Commit and push the reviewed R10-derived cross-branch canonical screening
-   continuity and reachable no-loss validation-expansion repairs.
-2. Launch one distinct fresh eight-round R11 root with no force controls,
-   resume, retry, semantic budget, or truncation. Audit whether any second
-   branch receives sibling screening history without hidden-stage leakage.
+1. Monitor live R11 at low frequency and audit each completed round for code
+   change, mechanism activation, objective/case/pair, throughput, Protocol,
+   Decision, and replay integrity.
+2. If R11 creates a second branch, verify that its H receives all safe sibling
+   screening history without validation/frozen, terminal-state, raw-ref,
+   patch-body, or failure-prose leakage.
 3. Treat elapsed-time simulated-annealing cooling as an evidence-backed lead,
    not a forced target. Judge any generated algorithm only through activation,
    objective/case/pair, throughput, Protocol, Decision, and code-diff evidence.
+4. At terminal state, require wrapper, postrun rebuild, and readiness acceptance
+   before updating the next clean-root plan.
 
 Two, four, and eight are requested observation counts, not retry budgets or
 automatic stop rules. Each generative experiment uses a distinct clean root;
