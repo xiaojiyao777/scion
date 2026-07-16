@@ -2,7 +2,7 @@
 
 ## Result
 
-Five exact, retention-aware cleanup batches removed 301 roots under
+Seven exact, retention-aware cleanup batches removed 367 roots under
 `/home/clawd/research/scion-experiments`. The first two batches were
 prepared-only. The third batch extended the same evidence protections to empty
 roots, pre-Protocol infrastructure failures, duplicate local resume copies, and
@@ -12,7 +12,10 @@ removed only one fully reconstructible pre-Protocol replay failure and one
 empty wrapper shell with an identified retained rerun. The fifth batch removed
 20 copied prepared shells only after proving that their campaign trees were
 identical to retained CVRP/Warehouse canonical campaigns except for SQLite
-`wal/shm` transients.
+`wal/shm` transients. Batch 6 removed only tiny pre-campaign shells whose
+complete contents were launch metadata, stale PIDs, empty logs, or recorded
+infrastructure errors. Batch 7 applied a larger-history disposition inventory
+and removed only two roots whose completed replacements are retained.
 
 | Batch | Roots | Deleted logical bytes | GiB | Scope |
 |---|---:|---:|---:|---|
@@ -21,7 +24,9 @@ identical to retained CVRP/Warehouse canonical campaigns except for SQLite
 | batch-3 | 23 | 1,278,214,144 | 1.190 | empty, pre-Protocol failure, duplicate, or superseded |
 | batch-4 | 2 | 250,163,200 | 0.233 | reconstructible failed replay and empty wrapper shell |
 | batch-5 | 20 | 792,592,384 | 0.738 | copied prepared shells with retained canonical campaigns |
-| **Total** | **301** | **11,281,325,832** | **10.507** | exact roots without unique retained evidence |
+| batch-6 | 64 | 868,352 | 0.001 | pre-campaign shells and trivial launch failures |
+| batch-7 | 2 | 39,088,128 | 0.036 | failed matrix and aborted wrapper with completed replacements |
+| **Total** | **367** | **11,321,282,312** | **10.544** | exact roots without unique retained evidence |
 
 Filesystem observations:
 
@@ -32,13 +37,14 @@ Filesystem observations:
 - batch-3 observed available-space change: +1,278,328,832 bytes (1.191 GiB).
 - batch-4 used-space observation: 87,579,115,520 to 87,329,017,856 bytes;
 - batch-4 observed freed space: 250,097,664 bytes (238.5 MiB).
+- after batches 6 and 7: 35,629,588,480 bytes available, 71% used.
 
 The filesystem delta is larger than the logical size sum because other
 processes may allocate or release blocks concurrently. The auditable cleanup
 quantity is the per-path recorded-byte sum in the manifest.
 
 The historical manifest column name is retained for compatibility, but
-batches 3 through 5 recorded pre-delete allocated bytes from `du -s -B1`; the
+batches 3 through 7 recorded pre-delete allocated bytes from `du -s -B1`; the
 arithmetic total is therefore an audit sum of each batch's recorded byte
 measure, not a claim that every batch used one apparent-size metric.
 
@@ -59,8 +65,9 @@ These roots could contain copied source, baseline caches, readiness output, or
 handoff material, but did not contain a launched formal experiment transaction.
 Cleanup was path-exact and was not an age-only deletion.
 
-The complete per-path record is in
+The batch 1-4 and 6-7 per-path record is in
 [`v04-experiment-retention-cleanup-manifest-20260716.tsv`](./v04-experiment-retention-cleanup-manifest-20260716.tsv).
+Batch 5 remains in its dedicated exact manifest linked below.
 
 ## Batch-3 deletion predicate
 
@@ -102,21 +109,23 @@ open-control, formal validation/expanded roots, and each duplicate local
 resume's canonical source still existed after deletion. R11c wrapper/campaign
 PIDs 2892669/2892705 remained live and its root/runtime were untouched.
 
-Ten old `status=prepared` roots lacking `prepared_run_manifest.v1.json` were
-retained fail-closed (353,693,897 logical bytes total):
+Six old `status=prepared` roots lacking `prepared_run_manifest.v1.json` remain
+retained fail-closed:
 
-- `v04-cvrp-postpivot-resume-ready-{preparedstatus,healthcheck,inventory,coverage,brief}-1r-gpt55-*`;
-- `v04-warehouse-v2-followup-ready-{preparedstatus,healthcheck,inventory,coverage,brief}-6r-gpt55-*`.
+- `v04-cvrp-postpivot-resume-ready-{preparedstatus,healthcheck,brief}-1r-gpt55-*`;
+- `v04-warehouse-v2-followup-ready-{preparedstatus,healthcheck,brief}-6r-gpt55-*`.
 
 The live-owner scan at batch-1 time resolved only R11c paths, with PIDs 2892669,
 2892705, and a transient solver child 2901041. Recent roots skipped during
 batch-2 included the direct open-control root and two R6 validation roots.
 
-The batch-3 gray manifest retains 23 exact roots totaling 685,924,047 current
-apparent bytes. It includes missing-manifest prepared lineages, two referenced
-infrastructure failures, two referenced pre-Protocol signal roots, and one
-referenced one-round formal signal. These remain fail-closed pending explicit
-evidence disposition:
+The batch-3 gray manifest originally retained 23 roots. Batch 5 resolved and
+deleted 12 copied shells after exact campaign-tree equality checks; those rows
+are now owned by the batch-5 deletion manifest. The current gray manifest
+retains 11 exact roots totaling 261,582,536 recorded bytes: six referenced
+missing-manifest prepared roots, two referenced infrastructure failures, two
+referenced pre-Protocol signal roots, and one referenced one-round formal
+signal. These remain fail-closed pending explicit evidence disposition:
 [`v04-experiment-retention-cleanup-gray-20260716.tsv`](./v04-experiment-retention-cleanup-gray-20260716.tsv).
 
 ## Batch-4 tracked-evidence inventory
@@ -176,6 +185,101 @@ fail-closed because historical documents refer to them. Unique-trace
 construction-pivot, successor38/44/44b, SIGTERM replay, Phase-5 replay, R6-R11c,
 Warehouse R2/R3, Phase A/B/C, validation/frozen, recent, and ambiguous formal
 roots also remain protected.
+
+## Batch-6 pre-campaign shells
+
+Batch 6 inspected all roots occupying at most 24 KiB and selected exactly 64
+unreferenced roots. Every selected root contained only launch/environment
+metadata, stale PID markers, runner scripts, empty logs, or one short
+pre-campaign error. Four contained empty `campaign` or `agentic_sessions`
+directories, but none contained a campaign file, database, metric, formal
+candidate, LLM trace, workspace, or champion. Three other small roots were
+excluded because they carried a current document reference or a result JSON.
+
+Immediately before deletion, every selected path matched its recorded
+allocated size, repository-reference scan, artifact predicate, git/worktree
+check, and `/proc` cwd/open-fd scan. All 64 exact paths are absent. Their file
+shape or exact error class is retained in
+[`v04-experiment-retention-cleanup-batch6-20260716.tsv`](./v04-experiment-retention-cleanup-batch6-20260716.tsv).
+
+## Batch-7 historical disposition
+
+Batch 7 independently inspected 15 large-history candidates rather than
+treating a later run as automatic authorization to delete earlier evidence.
+It deleted exactly two roots:
+
+- the first Phase-5 Warehouse context-control matrix, whose cells produced
+  zero metrics and stopped on invalid proxy authentication or immediately
+  after startup; the same commit/configuration matrix completed in retained
+  root `v04-phase5-warehouse-controlpair-full-vs-nomeas-4x2-8r-20260613T011820Z-claw`;
+- a seven-file Warehouse wrapper that failed on a bad problem path before
+  campaign creation; corrected retained rerun
+  `v04-p1-intent-replay-lifecycle-warehouse-verify-rerun-20r-gpt55-20r-gpt55-20260608T131951Z-claw`
+  completed `20/20` valid rounds.
+
+The first deletion attempt stopped inside the failed Phase-5 root because its
+copied champion directories were owner-read-only. The retry changed only
+directory owner-write permission within that exact candidate, repeated the
+active-owner check, and completed both deletions.
+
+Twelve other candidates remain. One v0.3 root has three exact repository
+references; two zero-effective SIGTERM roots contain unique hypothesis/tool/
+provider traces; and the remaining v0.3, partial, smoke, and complete formal
+roots contain unique metrics or formal artifacts. A later, longer run does not
+make those files exact duplicates. The full delete/retain reasoning and each
+retained successor are recorded in
+[`v04-experiment-retention-disposition-batch7-20260716.tsv`](./v04-experiment-retention-disposition-batch7-20260716.tsv).
+
+After batch 7, 776 top-level experiment directories remain. Current R6-R11c,
+Warehouse R2/R3, Phase A/B/C, and every protected large-history candidate
+still exist.
+
+## Batches 8-10 exact static-subtree compaction
+
+Batches 8-10 did not delete experiment roots or scientific evidence. They
+removed only repeated static source/data/test subtrees below directories that
+own a `registry.yaml`, after proving each occurrence byte-for-byte equivalent
+to a retained Git owner commit. Python caches were allowed as untracked extras;
+they were included in the recorded allocated-byte deletion but excluded from
+the source-content hash because Git cannot restore caches.
+
+| Batch | Roots retained | Registry parents | Subtrees | Allocated bytes | GiB |
+|---|---:|---:|---:|---:|---:|
+| batch-8 | 8 | 229 | 1,374 | 2,726,719,488 | 2.539 |
+| batch-9 | 6 | 268 | 1,154 | 2,947,604,480 | 2.745 |
+| batch-10 | 6 | 97 | 194 | 956,686,336 | 0.891 |
+| **Static total** | **20 root memberships** | **594** | **2,722** | **6,631,010,304** | **6.176** |
+
+For every occurrence, the audit verified that the owner commit exists, the
+Git source subtree exists, no symlink is present, a recursive comparison has
+zero mismatches after excluding only `__pycache__`, `.pytest_cache`, and
+`*.pyc`, and the current allocated size matches the manifest. The manifests
+record root, registry-parent-relative path, subtree, allocated bytes, full Git
+commit, Git source, deterministic source-tree SHA-256, and a restore command
+template:
+
+- [`v04-experiment-static-subtree-cleanup-batch8-20260716.tsv`](./v04-experiment-static-subtree-cleanup-batch8-20260716.tsv);
+- [`v04-experiment-static-subtree-cleanup-batch9-20260716.tsv`](./v04-experiment-static-subtree-cleanup-batch9-20260716.tsv);
+- [`v04-experiment-static-subtree-cleanup-batch10-20260716.tsv`](./v04-experiment-static-subtree-cleanup-batch10-20260716.tsv).
+
+Batch 8 compacted six static subtrees from Phase-5 Warehouse matrix/replay
+copies. Batch 9 compacted four or five static subtrees from retained v0.3
+validation trees; `v03-validation` correctly uses distinct historical owners
+for `data/tests` and `sprint-f4-milp-results/milp_bounds`. Batch 10 compacted
+only `data` and `tests` from Sprint-F roots.
+
+Deletion changed owner-write permission only while removing an exact subtree
+and restored each retained registry parent's original mode. Full post-delete
+checks found all 2,722 target paths absent while registry, database, metric,
+LLM/session, formal-artifact, and log counts remained unchanged within every
+batch. Operators, root Python, registry files, workspaces, archives, champions,
+formal patches, DBs, metrics, statuses, summaries, traces, logs, and postrun
+reports were not selected. The 20 root memberships remain in place.
+
+Across whole-root deletion and static compaction, the recorded per-path/
+per-subtree audit sum is 17,952,292,616 bytes (16.719 GiB). After batch 10,
+776 top-level experiment directories remain and the filesystem reports
+42,230,607,872 bytes available (about 39.3 GiB), 66% used.
 
 ## Follow-up boundary
 

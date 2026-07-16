@@ -642,16 +642,21 @@ SearchAllocationEvidence, and no-LLM controls may proceed first.
 Disk pressure is no longer a current blocker. A safe cleanup on 2026-07-16
 removed only inactive package caches and pre-R11c solver interchange files,
 raising free space from about `6.1 GiB` to `23 GiB` without touching any
-experiment root. Five retention-audited batches have now removed `301` exact
-roots with a recorded per-path sum of `10.507 GiB`. The third batch added `23` empty,
+experiment root. Seven retention-audited batches have now removed `367` exact
+roots with a recorded per-path sum of `10.544 GiB`. The third batch added `23` empty,
 pre-Protocol failure, zero-effective duplicate-local, and superseded-prepared
 roots only after protecting `73` active-doc roots and proving that canonical
 evidence remained. The fourth used a tracked-evidence inventory and removed
 only one fully reconstructible pre-Protocol replay failure and one empty
 wrapper shell, while retaining roots with unique traces or raw metrics. The
 fifth batch removed 20 copied prepared shells only after full campaign-tree
-equality against retained CVRP/Warehouse canonical roots; 842 roots remain and
-about `34 GiB` is available. The exact paths, predicates, inventories, and
+equality against retained CVRP/Warehouse canonical roots. Batches 6-7 removed
+64 pre-campaign shells plus two superseded failures while preserving twelve
+large-history candidates with unique or referenced evidence. Batches 8-10
+then compacted `2,722` Git-restorable static subtree copies totaling
+`6.176 GiB` without deleting any additional root or changing registry/DB/metrics/
+trace/formal/log counts. `776` roots remain and about `39.3 GiB` is available.
+The exact paths, predicates, restore manifests, inventories, and
 retained gray set are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
 The `scion_run_*.json` accumulation was a runner ownership bug, not formal
@@ -662,7 +667,9 @@ was removed and the residual count was zero. Future historical cleanup must
 protect live/current roots,
 unique unsummarized evidence, and the baseline-strength anchors required by the
 accepted design, and delete exact superseded/no-evidence/duplicate roots only
-from a recorded dry-run manifest.
+from a recorded dry-run manifest. Component compaction is allowed only for an
+exact Git-restorable static subtree with a full owner/hash/restore manifest;
+scientific and lineage-owning artifacts remain in place.
 
 ## Execution Queue
 
