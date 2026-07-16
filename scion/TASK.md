@@ -267,6 +267,25 @@ terminal wrapper's historical failure status and markers are intentionally
 preserved; delegation readiness is true. Do not rewrite those terminal
 artifacts.
 
+Fresh eight-round R11c is live at
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
+with wrapper PID `2892669`. It runs from clean detached runtime
+`/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-56bc445d` at
+exact pushed commit `56bc445d07b19587ecb8e4b763ab448c4ceb9115`, using
+`gpt-5.6-sol / direct_v3`, `ROUNDS=8`, and the 30-second scientific solver
+subprocess fallback. It is a fresh root: no resume, force controls, retry,
+semantic budget, or truncation. Completion preflight is authenticated, HTTP
+`200`, and nonempty. Only the `SCION_SHARED_PROXY_KEY` environment-variable
+name is persisted. Poll no more frequently than about three minutes and do not
+start another generative root while R11c is live.
+
+R11c is the clean acceptance run for the prospective-count/atomic-target fix;
+it is also an open algorithm control. Do not force it toward CROSS or the
+elapsed-time simulated-annealing lead. Audit any expansion for one Protocol
+evaluation, an unchanged source owner until finalization, exactly one committed
+count increment, one final execution outcome, and matching typed/canonical
+lineage.
+
 Fresh eight-round R11b is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11b-8r-gpt56sol-8r-gpt56sol-20260716T115118Z-claw`
 with terminal wrapper PID `2879552`. It ran from the clean detached runtime
@@ -545,16 +564,15 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 
 ## Execution Queue
 
-1. Commit and push the fully tested prospective-count/atomic-target repair and
-   terminal R11b evidence; preserve the strict source-owner check.
-2. Launch fresh
-   eight-round R11c from an exact clean detached runtime. Never resume R11b.
-3. Poll R11c at low frequency and audit code change, mechanism activation,
+1. Poll live R11c at low frequency and audit code change, mechanism activation,
    objective/case/pair, throughput, Protocol, Decision, and replay integrity.
-4. If R11c creates another branch, verify that H receives all safe sibling
+2. On the first expansion, verify the prospective source count remains durable
+   until Decision target commit, then advances exactly once without an owner
+   mismatch or duplicate execution outcome.
+3. If R11c creates another branch, verify that H receives all safe sibling
    screening history without validation/frozen, terminal-state, raw-ref,
    patch-body, or failure-prose leakage.
-5. Treat elapsed-time simulated-annealing cooling as an evidence-backed lead,
+4. Treat elapsed-time simulated-annealing cooling as an evidence-backed lead,
    not a forced target; require terminal wrapper, postrun rebuild, and readiness
    acceptance before the next root decision.
 

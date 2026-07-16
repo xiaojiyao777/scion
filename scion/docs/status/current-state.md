@@ -7,6 +7,24 @@ Read `scion/TASK.md` first. Use
 
 ## Operational State
 
+Fresh eight-round R11c is live at
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
+with wrapper PID `2892669`. Its clean detached runtime is
+`/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-56bc445d` at
+exact pushed commit `56bc445d07b19587ecb8e4b763ab448c4ceb9115`. It uses
+`gpt-5.6-sol / direct_v3`, `ROUNDS=8`, and the 30-second scientific solver
+subprocess fallback. It is fresh: no resume, force controls, retry, semantic
+budget, or truncation. Completion preflight is authenticated, HTTP `200`, and
+nonempty; only the `SCION_SHARED_PROXY_KEY` environment-variable name is
+persisted. Poll no more frequently than about three minutes and do not start
+another generative root while R11c is live.
+
+R11c is both the clean acceptance run for the R11b prospective-count repair and
+an open algorithm control. No target or mechanism was forced. On any expansion,
+require one Protocol evaluation, unchanged durable source count before
+finalization, exactly one count increment on the committed Decision target, no
+owner mismatch, and one final execution outcome.
+
 Fresh eight-round R11b is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11b-8r-gpt56sol-8r-gpt56sol-20260716T115118Z-claw`
 with terminal wrapper PID `2879552`. Its clean detached runtime is
@@ -218,8 +236,7 @@ superseded root.
 
 Do not resume or relaunch R4, R5, R6, either completed validation, the frozen
 root, R7, R8, or R9 in place. Do not use R6's round-2 v2 artifact alone to
-reconstruct the candidate. No generative root is live while the R11b repair is
-under final verification.
+reconstruct the candidate. R11c is the only live generative root.
 
 ## R6 Identity
 
@@ -627,13 +644,13 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Commit and push the fully tested R11b prospective-count/atomic-target repair;
-   keep the owner check fail-closed.
-2. Launch a fresh eight-round R11c from an exact clean
-   detached runtime. Do not resume or backfill R11b.
-3. Poll R11c at low frequency and audit every completed round against code,
+1. Poll R11c at low frequency and audit every completed round against code,
    activation, objective/case/pair, throughput, Protocol, Decision, and replay
    evidence.
+2. On the first expansion, verify prospective-count/atomic-target behavior and
+   one final execution outcome; keep the owner check fail-closed.
+3. If another branch opens, verify complete safe sibling screening continuity
+   without later-stage or lifecycle leakage.
 4. Require terminal wrapper, postrun rebuild, and readiness acceptance before
    planning the next clean root.
 
