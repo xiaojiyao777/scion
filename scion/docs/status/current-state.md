@@ -7,11 +7,12 @@ Read `scion/TASK.md` first. Use
 
 ## Operational State
 
-No experiment is running. The latest launched root is the terminal, complete,
-valid, read-only R6-R2 frozen evaluation root ending
-`20260715T213106Z-claw`. Its only branch is `abandoned` because two frozen
-comparisons lacked valid champion evidence. Champion v1 is unchanged and no
-candidate was promoted.
+No experiment is running. The latest launched root is the terminal, read-only
+R7 root ending `20260715T232619Z-claw`. It requested four fresh generative
+rounds but completed only the first 32-pair screening matrix before a canonical
+feedback persistence exception stopped the wrapper. Postrun classifies it as
+`valid_but_incomplete`; effective completed rounds are zero. Champion v1 is
+unchanged and no candidate was promoted.
 
 The prepare-only roots ending `20260715T175626Z-claw` and
 `20260715T193404Z-claw` were never launched and are superseded. The latter
@@ -19,10 +20,10 @@ proved that a second resume copied both candidate metadata files but lost the
 inherited index held in the source root's outer snapshot. Do not start either
 superseded root.
 
-Do not resume or relaunch R4, R5, R6, either completed validation, or the
-frozen root in place. Do not use R6's round-2 v2 artifact alone to reconstruct
-the candidate. The R6 candidate path is terminal. The next experiment is a
-separate fresh four-round generative root from a clean exact pushed framework
+Do not resume or relaunch R4, R5, R6, either completed validation, the frozen
+root, or R7 in place. Do not use R6's round-2 v2 artifact alone to reconstruct
+the candidate. The R6 and R7 candidate paths are terminal. The next experiment
+is a separate fresh four-round R8 root from a clean exact pushed repair
 revision.
 
 ## R6 Identity
@@ -234,6 +235,43 @@ initial VNS saw the full subprocess clock and O(n^2)-to-O(n^3) neighborhood
 loops polled only at coarse outer boundaries. The runner watchdog and frozen
 gate worked fail-closed and must not be relaxed.
 
+## R7 Stopped Root
+
+- root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r7-4r-gpt56sol-20260715T232619Z-claw`;
+- campaign: `<root>/campaign`;
+- runtime checkout:
+  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-3dc0aee4`;
+- runtime commit: `3dc0aee4d2b65375e1c4728e82c935bc73856c95`;
+- model/runtime: `gpt-5.6-sol / direct_v3`;
+- requested/effective rounds: `4/0`;
+- provider activity: exactly `1H/1C`, both successful, retry/replacement zero;
+- wrapper exit: `1`, `exception:ValueError`;
+- postrun validity/completeness: `valid_but_incomplete / incomplete`;
+- champion: v1, unchanged.
+
+R7 H1 selected a substantive scheduler mechanism: joint adaptive weights for
+destroy-repair operator pairs instead of independent marginals. C1 changed the
+main path correctly but left `destroy_weights`, `repair_weights`, `d_idx`, and
+`r_idx` in the `repair_error`, `infeasible`, and `route_limit` branches.
+Formal screening finished `32/32` attempted with `22` valid objective pairs,
+`10` candidate `NameError` failures, and zero champion failure. Valid-only pair
+W/L/T was `10/7/5`; Protocol failed screening and Decision abandoned for
+`CANDIDATE_RUNTIME_FAILURE`. This selectively incomplete evidence is not an
+algorithm-quality result.
+
+After that correct decision, canonical screening persistence asserted
+`valid_pairs == len(pair_feedback)` and crashed. Candidate-only failures are
+intentionally synthetic loss feedback, so R7's correct invariant was
+`22 + 10 == 32`. Champion/shared/missing-output invalid rows remain excluded.
+The stopped root must remain read-only and must not be presented as a
+four-round campaign.
+
+The shared deadline repair did hold in R7: the formal matrix used 30/45-second
+case limits and had no champion timeout, watchdog failure, or infrastructure
+failure. The candidate exceptions are entirely attributable to the incomplete
+generated edit.
+
 ## Current Runtime Repair
 
 Branch: `v0.4-dev`.
@@ -271,6 +309,19 @@ no automatic retry. Candidate-only runtime failure remains a hard abandon.
 Two independent timeouts are exposed as `dual_runtime_failure` rather than a
 shared-process crash.
 
+The R7 repair worktree additionally contains:
+
+- `V1b_undefined_names`, a stdlib `symtable` check over complete primary and
+  additional candidate modules between syntax and interface verification;
+  R7 replay rejects exactly its four stale names, while current CVRP sources
+  scan without false positives;
+- corrected canonical screening accounting:
+  `len(pair_feedback) == valid_pairs + candidate_failed_pairs`, with exact
+  W/L/T reconciliation and existing failure-side semantics retained;
+- focused tests for mixed and candidate-only failures, champion/shared and
+  missing-output exclusions, and mismatch fail-closed behavior;
+- the R7 terminal analysis report.
+
 Nonblocking P2 debt remains visible: construction and destroy/repair do not
 poll inside every internal loop, although they now see the bounded context and
 the maximum-scale compliance probe returns within the window. The explicit
@@ -278,9 +329,10 @@ deadline-context telemetry proxy must also be extended if a future baseline
 module starts using another context API.
 
 The resume/lineage/launcher slice passes `47`, the complete unit suite passes
-`724`, and the standard Scion suite passes `1962` with `1` skipped. The focused
-deadline/lifecycle/protocol set passes `81`. Two independent reviews agree the
-runner grace and frozen gate must remain unchanged.
+`724`, and the standard Scion suite passes `1971` with `1` skipped. The merged
+R7 verification/projection set passes `78`; the focused deadline/lifecycle/
+protocol set passes `81`. Independent reviews found no P0/P1 in either R7
+repair and agree the runner grace and frozen gate must remain unchanged.
 
 Excluded and preserved:
 
@@ -289,23 +341,24 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Commit and push the frozen report, deadline/lifecycle repair, tests, and
-   compact docs.
-2. Create a clean detached runtime worktree at that exact pushed revision.
-3. Prepare one fresh four-round root with `gpt-5.6-sol / direct_v3`, completion
+1. Complete the R7 projection regression and independent review.
+2. Commit and push the unresolved-name/projection repairs, tests, R7 report,
+   and compact docs without staging the excluded user files.
+3. Create a clean detached runtime worktree at that exact pushed revision.
+4. Prepare one fresh four-round R8 root with `gpt-5.6-sol / direct_v3`, completion
    preflight enabled, no resume source, no force controls, launcher fallback
    solver limit `30`, data root
    `/home/clawd/research/or-autoresearch-agent/vrp`, and key source
    `SCION_SHARED_PROXY_KEY`.
-4. Inspect commit cleanliness, launch/control identity, data and wrapper hashes,
+5. Inspect commit cleanliness, launch/control identity, data and wrapper hashes,
    completion preflight, model/base URL/key-env name, and absence of prior
    campaign state. Inject the key only through process environment.
-5. Run proxy preflight, launch the guarded wrapper exactly once, and poll
+6. Run proxy preflight, launch the guarded wrapper exactly once, and poll
    observationally at low frequency, normally every three minutes.
-6. At terminal, audit requested/effective typed rounds, exact H/C/provider/retry
+7. At terminal, audit requested/effective typed rounds, exact H/C/provider/retry
    accounting, cumulative source/hash continuity, Protocol/Decision sequence,
    runtime compliance, and postrun integrity.
-7. Expand to a separate clean eight-round root only if four rounds still leave
+8. Expand to a separate clean eight-round root only if four rounds still leave
    adaptation or reproducibility unresolved.
 
 ## Four-Round Prelaunch Checks
@@ -356,5 +409,7 @@ or place it in argv.
   `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-expanded-validation-postrun-20260715.md`
 - R6-R2 frozen evaluation report:
   `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-frozen-evaluation-postrun-20260715.md`
+- R7 stopped analysis:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r7-stopped-analysis-20260715.md`
 - Multi-hop lineage repair report:
   `scion/docs/experiments/v0.4/v04-resume-formal-candidate-lineage-repair-20260715.md`

@@ -550,7 +550,8 @@ def test_canonical_screening_record_marks_incremental_patch_as_cumulative_state(
         ({}, "pair feedback conflicts with Protocol stats"),
         (
             {"total_pairs": 1, "pair_wins": 1},
-            "valid-pair count conflicts with pair feedback",
+            "pair feedback cardinality conflicts with "
+            "valid/candidate-failure pair counts",
         ),
     ),
 )

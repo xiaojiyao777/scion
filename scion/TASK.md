@@ -146,6 +146,31 @@ systematically ran past its scientific limit, and the two failed pairs exposed
 a shared baseline deadline defect. Do not rerun, extend, or reinterpret this
 terminal root.
 
+The fresh four-round R7 root
+`v04-cvrp-direct-longitudinal-r7-4r-gpt56sol-20260715T232619Z-claw`
+then completed only its first screening matrix before a core persistence
+exception stopped the campaign:
+
+- exactly `1H/1C`, no provider retry or replacement;
+- substantive destroy-repair pair-weight hypothesis and implementation;
+- `32/32` attempted, `22` valid, `10` candidate failures, and zero champion
+  failures;
+- the generated patch left four deleted marginal-weight names in three
+  rejection branches, causing ten `NameError` fallbacks;
+- Protocol correctly failed screening and Decision correctly abandoned for
+  `CANDIDATE_RUNTIME_FAILURE`;
+- canonical feedback then incorrectly asserted
+  `valid_pairs == len(pair_feedback)` even though candidate-only failures are
+  intentionally retained as synthetic screening losses;
+- the correct R7 accounting was `22 valid + 10 candidate failures = 32 pair
+  feedback rows`;
+- wrapper exit `1`, postrun classification `valid_but_incomplete`, zero
+  effective completed rounds, and no promotion.
+
+R7 is a terminal diagnostic root, not a four-round scientific result. Its
+common deadline behavior was healthy: formal 30/45-second rows produced no
+champion timeout or watchdog failure. Do not resume or relaunch it.
+
 ## Current Framework Repair
 
 R6 and its exact validation exposed four evidence-integrity problems:
@@ -203,8 +228,19 @@ The frozen audit added two narrower repairs before another generative run:
   instead of the over-broad `shared_process_failure`; candidate-only runtime
   failure still hard-abandons.
 
+R7 added two more narrow correctness repairs without increasing solver work or
+governance weight:
+
+- Verification now performs a stdlib `symtable` unresolved-name scan after
+  syntax and before interface checks over complete primary and additional
+  candidate modules. It rejects the exact four stale R7 names in milliseconds
+  without executing candidate code or scheduling a retry;
+- canonical screening history now reconciles pair feedback against
+  `valid_pairs + candidate_failed_pairs`, while retaining exact W/L/T checks
+  and excluding champion/shared/missing-output invalid rows from feedback.
+
 The current resume/lineage/launcher slice passes `47`, the complete unit suite
-passes `724`, and the standard Scion suite passes `1962` with `1` skipped.
+passes `724`, and the standard Scion suite passes `1971` with `1` skipped.
 Boundary coverage includes same-file cross-round edits,
 create/delete, full reversion to champion, activation files, absent and
 partially missing indexes, inherited resume indexes, and
@@ -218,20 +254,22 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 
 ## Execution Queue
 
-1. Commit and push the frozen report, deadline/lifecycle repair, tests, and
-   compact resume-doc update on `v0.4-dev`.
-2. Create a clean detached runtime worktree at that exact pushed revision and
+1. Finish the R7 projection repair regression and independent review; record
+   the stopped-root analysis without mutating R7.
+2. Commit and push the unresolved-name and screening-projection repairs, R7
+   report, tests, and compact resume-doc update on `v0.4-dev`.
+3. Create a clean detached runtime worktree at that exact pushed revision and
    prove commit cleanliness, problem/data identity, wrapper hash, model/base
    URL/key-env name, and completion-preflight configuration.
-3. Prepare one distinct fresh generative CVRP root with model `gpt-5.6-sol`,
+4. Prepare one distinct fresh generative CVRP R8 root with model `gpt-5.6-sol`,
    runtime `direct_v3`, `--rounds 4`, completion preflight enabled, no resume,
    no force controls, and launcher fallback solver limit `30`.
-4. Inspect the prepared root, inject the proxy key through process environment,
+5. Inspect the prepared root, inject the proxy key through process environment,
    run one HTTP/model preflight, and launch its guarded wrapper exactly once.
-5. Poll observationally at low frequency. Audit H/C/provider/retry accounting,
+6. Poll observationally at low frequency. Audit H/C/provider/retry accounting,
    cumulative source identity, Protocol/Decision transitions, runtime deadline
    compliance, and terminal postrun integrity.
-6. Expand to a separate clean eight-round experiment only if the four-round
+7. Expand to a separate clean eight-round experiment only if the four-round
    terminal evidence still leaves adaptation or reproducibility unresolved.
 
 Two, four, and eight are requested observation counts, not retry budgets or
@@ -271,5 +309,7 @@ terminal roots remain read-only.
   `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-expanded-validation-postrun-20260715.md`
 - R6-R2 frozen evaluation report:
   `scion/docs/experiments/v0.4/v04-cvrp-r6-r2-frozen-evaluation-postrun-20260715.md`
+- R7 stopped analysis:
+  `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r7-stopped-analysis-20260715.md`
 - Multi-hop lineage repair report:
   `scion/docs/experiments/v0.4/v04-resume-formal-candidate-lineage-repair-20260715.md`

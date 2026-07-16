@@ -747,8 +747,12 @@ def _screening_projection(protocol: Any) -> dict[str, Any]:
     if observed_pair_counts != pair_counts:
         raise ValueError("screening pair feedback conflicts with Protocol stats")
     valid_pairs = int(getattr(stats, "valid_pairs", 0) or 0)
-    if valid_pairs != len(pair_feedback):
-        raise ValueError("screening valid-pair count conflicts with pair feedback")
+    candidate_failed_pairs = int(getattr(stats, "candidate_failed_pairs", 0) or 0)
+    if valid_pairs + candidate_failed_pairs != len(pair_feedback):
+        raise ValueError(
+            "screening pair feedback cardinality conflicts with "
+            "valid/candidate-failure pair counts"
+        )
     aggregation = {
         "statistical_unit": "case",
         "win_rate_scope": "case_level_gate",

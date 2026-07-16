@@ -2,6 +2,7 @@
 
 Checks (in order):
   V1_syntax                light   AST parse of patch code
+  V1b_undefined_names      light   unresolved-name scan of candidate modules
   V2_interface             light   Operator subclass + execute signature
   V3_unit_tests            light   pytest unit tests in candidate workspace
   V4_regression_tests      light   pytest regression/solver tests in candidate workspace
@@ -25,6 +26,7 @@ unless strict_runtime_checks=True, in which case missing runtime verification
 
 Test checks (V3, V4) are skipped when runner is None or no test file is found.
 """
+
 from __future__ import annotations
 
 import os
@@ -35,6 +37,7 @@ from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult, PatchProposal, VerificationResult
 from scion.runtime.runner import Runner
 from scion.verification.syntax import check_syntax
+from scion.verification.undefined_names import check_undefined_names
 from scion.verification.interface import check_interface
 from scion.verification.tests import (
     check_regression_tests,
@@ -94,8 +97,7 @@ class VerificationGate:
         )
         self._strict_runtime_checks = strict_runtime_checks or spec_requires_adapter
         self._require_adapter_for_runtime = (
-            require_adapter_for_runtime
-            or spec_requires_adapter
+            require_adapter_for_runtime or spec_requires_adapter
         )
         self._operator_execute_signature = operator_execute_signature
         self._max_runtime_ratio = max_runtime_ratio
@@ -160,6 +162,13 @@ class VerificationGate:
         # --- V1: syntax (light) ---
         # V1_syntax: AST parse of patch code
         r = check_syntax(patch)
+        checks.append(r)
+        if not r.passed:
+            return _fail(checks, r)
+
+        # --- V1b: undefined names (light) ---
+        # Python symtable-based scan of primary and additional module sources.
+        r = check_undefined_names(patch)
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)

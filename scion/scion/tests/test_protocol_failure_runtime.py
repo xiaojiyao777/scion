@@ -34,6 +34,8 @@ def test_candidate_timeout_counts_as_screening_loss_and_is_recorded(tmp_path):
     assert result.stats.valid_pairs == 0
     assert result.stats.failed_pairs == 4
     assert result.stats.candidate_failed_pairs == 4
+    assert len(result.pair_feedback) == 4
+    assert all(item.comparison == "loss" for item in result.pair_feedback)
     assert "failed_pairs=4" in result.exposed_summary
     raw = json.loads(open(result.raw_metrics_ref).read())
     assert raw["failed_pairs"] == 4
@@ -83,6 +85,7 @@ FileNotFoundError: [Errno 2] No such file or directory: 'cvrplib/A/A-n32-k5.vrp'
     assert result.stats.failed_pairs == 4
     assert result.stats.champion_failed_pairs == 4
     assert result.stats.candidate_failed_pairs == 0
+    assert result.pair_feedback == ()
     assert result.candidate_runtime_failure_categories == {}
     assert result.candidate_first_runtime_failure is None
     raw = json.loads(open(result.raw_metrics_ref).read())
@@ -114,6 +117,7 @@ def test_mixed_screening_champion_failures_are_explicit_partial_evidence(tmp_pat
     assert result.stats.valid_pairs == 3
     assert result.stats.failed_pairs == 1
     assert result.stats.champion_failed_pairs == 1
+    assert len(result.pair_feedback) == 3
     assert result.gate_outcome == "unclear"
     assert "SCREENING_PARTIAL_CHAMPION_EVIDENCE" in result.reason_codes
     assert "champion_failures=1" in result.exposed_summary
@@ -242,6 +246,7 @@ def test_missing_output_records_both_elapsed_values(tmp_path):
     raw = json.loads(open(result.raw_metrics_ref).read())
     assert raw["failed_pairs"] == 4
     assert len(raw["failures"]) == 4
+    assert result.pair_feedback == ()
     assert all(f["candidate_elapsed_ms"] == 95 for f in raw["failures"])
     assert all(f["champion_elapsed_ms"] == 80 for f in raw["failures"])
     assert all(p["runtime_delta_ms"] == 15 for p in raw["pairs"])
