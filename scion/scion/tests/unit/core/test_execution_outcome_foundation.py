@@ -7,7 +7,12 @@ import pytest
 
 from scion.core.evidence_recording import EvidenceRecorder
 from scion.core.evaluation_orchestrator import EvaluationExecutionResult
-from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
+from scion.core.execution_outcome import (
+    AttemptDisposition,
+    ExecutionOutcome,
+    ExecutionOutcomeRecord,
+    ResearchRejectionDisposition,
+)
 from scion.core.models import (
     ChampionState,
     Decision,
@@ -305,3 +310,41 @@ def test_summary_and_status_project_explicit_non_evaluated_without_screening(
     assert summary["steps"][0]["screened_experiment"] is False
     assert summary["steps"][0]["screened_experiment_effective"] is False
     assert step.execution_outcome is ExecutionOutcome.NOT_EVALUATED
+
+
+def test_status_and_summary_project_typed_research_rejection_disposition(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="campaign-1", campaign_dir=tmp_path)
+    marker = ResearchRejectionDisposition(
+        disposition=AttemptDisposition.ATTEMPT_REJECT_TO_BASE,
+        completion_id="a" * 64,
+        campaign_id="campaign-1",
+        provider_attempt_id="attempt-1",
+        rejection_phase="verification",
+    )
+    result = StepResult(
+        action="explore",
+        branch_id="branch-1",
+        execution_outcome=ExecutionOutcome.RESEARCH_REJECTED,
+        execution_outcome_reason_code="VERIFICATION_LIGHT_REJECTED",
+        attempt_disposition=marker,
+    )
+    step = _step(ExecutionOutcome.RESEARCH_REJECTED)
+    step.attempt_disposition = marker
+
+    status = recorder.write_status(last_result=result)
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="config",
+            code_snapshot_path="snapshot",
+            code_snapshot_hash="hash",
+        ),
+    )
+
+    assert status["last_result"]["attempt_disposition"] == marker.to_primitive()
+    assert summary["steps"][0]["attempt_disposition"] == marker.to_primitive()

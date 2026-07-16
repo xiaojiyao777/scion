@@ -8,7 +8,11 @@ import pytest
 
 from scion.core.campaign_loop import CampaignLoop, _attempt_kind
 from scion.core.campaign import CampaignManager
-from scion.core.execution_outcome import ExecutionOutcome
+from scion.core.execution_outcome import (
+    AttemptDisposition,
+    ExecutionOutcome,
+    ResearchRejectionDisposition,
+)
 from scion.core.step_result import StepResult
 
 
@@ -36,7 +40,18 @@ def _non_evaluated(outcome: ExecutionOutcome) -> StepResult:
     )
 
 
-def _run(results: list[StepResult], *, rounds: int) -> SimpleNamespace:
+def _run(
+    results: list[StepResult],
+    *,
+    rounds: int,
+    verify_research_rejection=lambda _marker: False,
+    get_research_rejection_counts=lambda: {
+        "total": 0,
+        "by_phase": {},
+        "by_reason": {},
+        "completion_ids": [],
+    },
+) -> SimpleNamespace:
     calls = 0
     statuses: list[dict[str, Any]] = []
     stopped_reasons: list[str | None] = []
@@ -63,9 +78,29 @@ def _run(results: list[StepResult], *, rounds: int) -> SimpleNamespace:
         write_campaign_summary=lambda: None,
         get_final_wait_timeout=lambda: 0.0,
         wait_weight_opt_all=lambda timeout: None,
+        verify_research_rejection=verify_research_rejection,
+        get_research_rejection_counts=get_research_rejection_counts,
     )
     loop.run(requested_rounds=rounds)
     return SimpleNamespace(calls=calls, statuses=statuses, stopped=stopped_reasons)
+
+
+def _rejected(completion_digit: str, *, attempt_id: str) -> StepResult:
+    marker = ResearchRejectionDisposition(
+        disposition=AttemptDisposition.ATTEMPT_REJECT_TO_BASE,
+        completion_id=completion_digit * 64,
+        campaign_id="campaign-1",
+        provider_attempt_id=attempt_id,
+        rejection_phase="verification",
+    )
+    return StepResult(
+        action="explore",
+        branch_id="b1",
+        reason="candidate rejected",
+        execution_outcome=ExecutionOutcome.RESEARCH_REJECTED,
+        execution_outcome_reason_code="VERIFICATION_LIGHT_REJECTED",
+        attempt_disposition=marker,
+    )
 
 
 def test_attempt_kind_is_explicit_and_never_inferred_from_reason_text() -> None:
@@ -160,3 +195,54 @@ def test_loop_status_has_no_provider_attempt_or_quality_budget_fields() -> None:
         "pending_retry",
     }
     assert forbidden.isdisjoint(status)
+
+
+@pytest.mark.parametrize("rejection_count", [1, 2])
+def test_committed_rejections_schedule_forward_until_formal_target(
+    rejection_count: int,
+) -> None:
+    rejected = [
+        _rejected(str(index + 1), attempt_id=f"attempt-{index + 1}")
+        for index in range(rejection_count)
+    ]
+    committed: list[ResearchRejectionDisposition] = []
+
+    def verify(marker: ResearchRejectionDisposition) -> bool:
+        if marker not in {item.attempt_disposition for item in rejected}:
+            return False
+        committed.append(marker)
+        return True
+
+    run = _run(
+        [*rejected, _evaluated()],
+        rounds=1,
+        verify_research_rejection=verify,
+        get_research_rejection_counts=lambda: {
+            "total": len(committed),
+            "by_phase": {"verification": len(committed)},
+            "by_reason": {"VERIFICATION_LIGHT_REJECTED": len(committed)},
+            "completion_ids": [item.completion_id for item in committed],
+        },
+    )
+
+    assert run.calls == rejection_count + 1
+    assert run.statuses[-1]["effective_rounds_completed"] == 1
+    assert run.statuses[-1]["scheduled_calls"] == rejection_count + 1
+    assert run.statuses[-1]["research_rejection_audit"]["committed"] == (
+        rejection_count
+    )
+    assert "requested_rounds_completed" in run.stopped
+
+
+def test_repeated_committed_completion_is_non_progress() -> None:
+    rejected = _rejected("a", attempt_id="attempt-a")
+    run = _run(
+        [rejected, rejected, _evaluated()],
+        rounds=1,
+        verify_research_rejection=lambda marker: marker
+        == rejected.attempt_disposition,
+    )
+
+    assert run.calls == 2
+    assert "research_rejection_non_progress_identity_conflict" in run.stopped
+    assert run.statuses[-1]["effective_rounds_completed"] == 0

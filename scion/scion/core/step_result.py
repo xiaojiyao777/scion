@@ -6,6 +6,8 @@ from typing import Any, Dict, Literal, Optional, Tuple
 
 from scion.core.execution_outcome import (
     ExecutionOutcome,
+    ResearchRejectionDisposition,
+    validate_research_rejection_disposition,
     validate_execution_outcome_projection,
 )
 from scion.core.models import Decision
@@ -51,6 +53,7 @@ class StepResult:
     execution_outcome_reason_code: str = ""
     execution_outcome_detail: str = ""
     execution_outcome_provenance: Dict[str, Any] = field(default_factory=dict)
+    attempt_disposition: ResearchRejectionDisposition | None = None
 
     def __post_init__(self) -> None:
         validate_execution_outcome_projection(
@@ -59,4 +62,8 @@ class StepResult:
             detail=self.execution_outcome_detail,
             provenance=self.execution_outcome_provenance,
             decision=self.decision,
+        )
+        validate_research_rejection_disposition(
+            self.attempt_disposition,
+            execution_outcome=self.execution_outcome,
         )

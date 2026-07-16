@@ -693,6 +693,291 @@ class WorkspaceMaterializer:
         _atomic_json_write(receipt_path, expected_receipt)
         return str(archive_dest)
 
+    def validate_research_rejection_ownership(
+        self,
+        payload: dict[str, object],
+        *,
+        require_cleanup_receipt: bool,
+    ) -> None:
+        """Validate the physical clean parent and rejected-candidate owner."""
+
+        completion_id = str(payload.get("completion_id") or "")
+        branch_id = str(payload.get("branch_id") or "")
+        clean_parent = payload.get("clean_code_parent")
+        candidate = payload.get("rejected_candidate")
+        archive_ref = payload.get("archive_ref")
+        if not isinstance(clean_parent, dict):
+            raise RuntimeError("research rejection clean parent is invalid")
+        clean = self._resolve_campaign_ref(
+            str(clean_parent.get("ref") or ""),
+            allowed_roots={"workspaces", "champions"},
+        )
+        if not clean.is_dir():
+            raise RuntimeError("research rejection clean parent is unavailable")
+        if self.compute_code_hash(str(clean)) != clean_parent.get("code_hash"):
+            raise RuntimeError("research rejection clean parent code identity conflict")
+        if self.compute_snapshot_hash(str(clean)) != clean_parent.get("snapshot_hash"):
+            raise RuntimeError(
+                "research rejection clean parent snapshot identity conflict"
+            )
+        if candidate is None:
+            if archive_ref is not None:
+                raise RuntimeError("contract rejection unexpectedly owns an archive")
+            return
+        if not isinstance(candidate, dict):
+            raise RuntimeError("research rejection candidate identity is invalid")
+        candidate_path = self._resolve_campaign_ref(
+            str(candidate.get("workspace_ref") or ""),
+            allowed_roots={"candidate_workspaces"},
+        )
+        expected_parent = (self._candidate_workspaces_dir / branch_id).resolve()
+        if candidate_path.parent != expected_parent:
+            raise RuntimeError("research rejection candidate ownership mismatch")
+        receipt, archive = self._research_rejection_receipt(
+            completion_id=completion_id,
+            branch_id=branch_id,
+            candidate=candidate,
+            archive_ref=str(archive_ref or ""),
+        )
+        if receipt is not None:
+            self._validate_research_rejection_archive(archive, candidate)
+            if candidate_path.exists():
+                self._validate_research_rejection_candidate(candidate_path, candidate)
+            if require_cleanup_receipt and candidate_path.exists():
+                raise RuntimeError("committed rejected candidate was not cleaned")
+            return
+        if require_cleanup_receipt:
+            raise RuntimeError("research rejection cleanup receipt is unavailable")
+        self._validate_research_rejection_candidate(candidate_path, candidate)
+
+    def validate_research_rejection_sources(
+        self,
+        *,
+        branch_id: str,
+        clean_parent: dict[str, object],
+        candidate: dict[str, object] | None,
+    ) -> None:
+        """Validate physical identities during the SQLite prepare transaction."""
+
+        clean = self._resolve_campaign_ref(
+            str(clean_parent.get("ref") or ""),
+            allowed_roots={"workspaces", "champions"},
+        )
+        if not clean.is_dir():
+            raise RuntimeError("research rejection clean parent is unavailable")
+        if self.compute_code_hash(str(clean)) != clean_parent.get("code_hash"):
+            raise RuntimeError("research rejection clean parent code identity conflict")
+        if self.compute_snapshot_hash(str(clean)) != clean_parent.get("snapshot_hash"):
+            raise RuntimeError(
+                "research rejection clean parent snapshot identity conflict"
+            )
+        if candidate is None:
+            return
+        candidate_path = self._resolve_campaign_ref(
+            str(candidate.get("workspace_ref") or ""),
+            allowed_roots={"candidate_workspaces"},
+        )
+        if candidate_path.parent != (
+            self._candidate_workspaces_dir / str(branch_id)
+        ).resolve():
+            raise RuntimeError("research rejection candidate ownership mismatch")
+        self._validate_research_rejection_candidate(candidate_path, candidate)
+
+    def validate_research_rejection_archive_receipt(
+        self,
+        payload: dict[str, object],
+    ) -> None:
+        """Validate immutable cleanup evidence without reusing a mutable base."""
+
+        candidate = payload.get("rejected_candidate")
+        if candidate is None:
+            if payload.get("archive_ref") is not None:
+                raise RuntimeError("contract rejection unexpectedly owns an archive")
+            return
+        if not isinstance(candidate, dict):
+            raise RuntimeError("research rejection candidate identity is invalid")
+        receipt, archive = self._research_rejection_receipt(
+            completion_id=str(payload.get("completion_id") or ""),
+            branch_id=str(payload.get("branch_id") or ""),
+            candidate=candidate,
+            archive_ref=str(payload.get("archive_ref") or ""),
+        )
+        if receipt is None:
+            raise RuntimeError("research rejection cleanup receipt is unavailable")
+        self._validate_research_rejection_archive(archive, candidate)
+
+    def archive_research_rejection_candidate(
+        self,
+        payload: dict[str, object],
+    ) -> str:
+        """Archive and remove one exact candidate using a deterministic receipt."""
+
+        self.validate_research_rejection_ownership(
+            payload,
+            require_cleanup_receipt=False,
+        )
+        completion_id = str(payload["completion_id"])
+        branch_id = str(payload["branch_id"])
+        candidate = payload["rejected_candidate"]
+        if not isinstance(candidate, dict):
+            raise RuntimeError("verification rejection candidate is unavailable")
+        candidate_path = self._resolve_campaign_ref(
+            str(candidate["workspace_ref"]),
+            allowed_roots={"candidate_workspaces"},
+        )
+        receipt, archive = self._research_rejection_receipt(
+            completion_id=completion_id,
+            branch_id=branch_id,
+            candidate=candidate,
+            archive_ref=str(payload["archive_ref"]),
+        )
+        if receipt is None:
+            if not archive.exists():
+                temporary = self._archive_dir / f".{archive.name}.tmp-{uuid.uuid4().hex}"
+                try:
+                    temporary.mkdir(parents=False)
+                    files = list(self._identity_files(candidate_path))
+                    registry_path = candidate_path / "registry.yaml"
+                    if registry_path.is_file():
+                        files.append(registry_path)
+                    for source in _dedupe_sorted_paths(files, candidate_path):
+                        rel = source.relative_to(candidate_path)
+                        destination = temporary / rel
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(source, destination, follow_symlinks=False)
+                    self._validate_research_rejection_archive(temporary, candidate)
+                    os.replace(temporary, archive)
+                    directory_fd = os.open(
+                        self._archive_dir,
+                        os.O_RDONLY | os.O_DIRECTORY,
+                    )
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
+                finally:
+                    if temporary.exists():
+                        _make_tree_writable(temporary)
+                        shutil.rmtree(temporary)
+            else:
+                self._validate_research_rejection_archive(archive, candidate)
+            receipt_path = self._archive_dir / (
+                f".research-rejection-{completion_id}.receipt.json"
+            )
+            _atomic_json_write(
+                receipt_path,
+                self._research_rejection_receipt_payload(
+                    completion_id=completion_id,
+                    branch_id=branch_id,
+                    candidate=candidate,
+                    archive_ref=str(payload["archive_ref"]),
+                ),
+            )
+        if candidate_path.exists():
+            self._validate_research_rejection_candidate(candidate_path, candidate)
+            self.cleanup_candidate_workspace(str(candidate_path))
+        self.validate_research_rejection_ownership(
+            payload,
+            require_cleanup_receipt=True,
+        )
+        return str(archive)
+
+    def _research_rejection_receipt(
+        self,
+        *,
+        completion_id: str,
+        branch_id: str,
+        candidate: dict[str, object],
+        archive_ref: str,
+    ) -> tuple[dict[str, object] | None, Path]:
+        if re.fullmatch(r"[0-9a-f]{64}", completion_id) is None:
+            raise RuntimeError("research rejection completion identity is invalid")
+        archive = self._resolve_campaign_ref(
+            archive_ref,
+            allowed_roots={"archive"},
+        )
+        expected_archive = (
+            self._archive_dir / f"research-rejection-{completion_id}"
+        ).resolve()
+        if archive != expected_archive:
+            raise RuntimeError("research rejection archive ownership mismatch")
+        receipt_path = self._archive_dir / (
+            f".research-rejection-{completion_id}.receipt.json"
+        )
+        receipt = _read_decision_archive_receipt(receipt_path)
+        if receipt is not None and receipt != self._research_rejection_receipt_payload(
+            completion_id=completion_id,
+            branch_id=branch_id,
+            candidate=candidate,
+            archive_ref=archive_ref,
+        ):
+            raise RuntimeError("research rejection receipt identity conflict")
+        if receipt is None and archive.exists():
+            self._validate_research_rejection_archive(archive, candidate)
+        return receipt, archive
+
+    @staticmethod
+    def _research_rejection_receipt_payload(
+        *,
+        completion_id: str,
+        branch_id: str,
+        candidate: dict[str, object],
+        archive_ref: str,
+    ) -> dict[str, object]:
+        return {
+            "schema_version": "research-rejection-archive-receipt.v1",
+            "completion_id": completion_id,
+            "branch_id": branch_id,
+            "candidate_workspace_ref": candidate["workspace_ref"],
+            "archive_ref": archive_ref,
+            "code_hash": candidate["code_hash"],
+            "snapshot_hash": candidate["snapshot_hash"],
+            "patch_digest": candidate["patch_digest"],
+            "hypothesis_id": candidate["hypothesis_id"],
+        }
+
+    def _validate_research_rejection_candidate(
+        self,
+        candidate_path: Path,
+        candidate: dict[str, object],
+    ) -> None:
+        if not candidate_path.is_dir():
+            raise RuntimeError("research rejection candidate is unavailable")
+        if self.compute_code_hash(str(candidate_path)) != candidate["code_hash"]:
+            raise RuntimeError("research rejection candidate code identity conflict")
+        if self.compute_snapshot_hash(str(candidate_path)) != candidate["snapshot_hash"]:
+            raise RuntimeError(
+                "research rejection candidate snapshot identity conflict"
+            )
+
+    def _validate_research_rejection_archive(
+        self,
+        archive: Path,
+        candidate: dict[str, object],
+    ) -> None:
+        if not archive.is_dir():
+            raise RuntimeError("research rejection archive is unavailable")
+        if self.compute_code_hash(str(archive)) != candidate["code_hash"]:
+            raise RuntimeError("research rejection archive code identity conflict")
+        if self.compute_snapshot_hash(str(archive)) != candidate["snapshot_hash"]:
+            raise RuntimeError("research rejection archive snapshot identity conflict")
+
+    def _resolve_campaign_ref(
+        self,
+        ref: str,
+        *,
+        allowed_roots: set[str],
+    ) -> Path:
+        if not ref or Path(ref).is_absolute():
+            raise RuntimeError("research rejection artifact ref is invalid")
+        parts = Path(ref).parts
+        if not parts or parts[0] not in allowed_roots or ".." in parts:
+            raise RuntimeError("research rejection artifact ref is invalid")
+        resolved = (self._campaign_dir / ref).resolve()
+        if not _is_relative_to(resolved, self._campaign_dir.resolve()):
+            raise RuntimeError("research rejection artifact ref escapes campaign")
+        return resolved
+
     def compute_code_hash(self, workspace: str) -> str:
         """Compute SHA-256 of editable identity files.
 

@@ -282,6 +282,24 @@ class WorkspaceLifecycleService:
         pending = self._require_pending_candidate(bid, candidate_workspace)
         return self._rollback_pending_candidate(branch, pending=pending)
 
+    def release_rejected_candidate_binding(
+        self,
+        branch: Branch,
+        candidate_workspace: str,
+    ) -> None:
+        """Drop process-local staging ownership after durable cleanup commits."""
+
+        bid = branch.branch_id
+        pending = self._require_pending_candidate(bid, candidate_workspace)
+        if os.path.exists(pending.workspace):
+            raise RuntimeError(
+                f"Branch {bid}: rejected candidate still exists after completion"
+            )
+        # ResearchRejectionCompletionStore has already installed and persisted
+        # the exact target Branch.  This method owns only the process-local
+        # staging binding; mutating Branch here would drift it from that commit.
+        self.pending_candidates.pop(bid, None)
+
     def _rollback_pending_candidate(
         self,
         branch: Branch,

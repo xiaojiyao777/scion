@@ -49,6 +49,21 @@ event replay-digest mismatch, stale top-level last outcome, and missing postrun
 scientific projections. Full report:
 `scion/docs/experiments/v0.4/v04-cvrp-direct-longitudinal-r11c-postrun-20260716.md`.
 
+The first ancestry correction slice is now complete. H Contract, Patch
+Contract, and Verification research rejection share one exact-once durable
+completion owner; the rejected H/C is attempt-terminal, the exact clean Branch
+base is restored, and CampaignLoop schedules a new H without adding a formal
+observation, same-H/C retry, rejection cap, or attempt budget. Campaign identity,
+canonical H/Patch digests, candidate archive receipts, typed completion events,
+and active-H reopen ownership are verified from SQLite before continuation.
+Legacy committed Decision and physically validated candidate owners remain
+reopen-compatible, while genuinely unowned or ambiguous attempts hold
+fail-closed. Independent review found no P0/P1. The full Scion suite passes
+`2145` with `1` skipped in `490.33s`; compileall and `git diff --check` pass,
+and no `scion_run_*.json` files remain. D1 immutable candidate snapshots and
+the post-Protocol disposition truth table are next; no new generative matched
+root may start before the rejected-ancestry correction is complete.
+
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
 Raw runtime already exposed VNS/ALNS phase facts while next-H saw only ALNS

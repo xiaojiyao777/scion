@@ -59,6 +59,14 @@ from scion.core.problem_runtime import ProblemRuntime
 from scion.core.problem_identity import problem_id_anchor, stable_identity_hash
 from scion.core.promotion_lifecycle import PromotionLifecycleService
 from scion.core.promotion_service import PromotionService
+from scion.core.research_rejection_completion import (
+    ResearchRejectionCompletionIntent,
+    ResearchRejectionCompletionStore,
+)
+from scion.core.research_rejection_active_audit import (
+    audit_unowned_active_attempts,
+)
+from scion.core.research_rejection_finalizer import ResearchRejectionFinalizer
 from scion.core.proposal_pipeline import (
     ProposalPipeline,
 )
@@ -235,6 +243,7 @@ def compose_campaign_services(
 
     os.makedirs(campaign_dir, exist_ok=True)
     owner._registry = LineageRegistry(os.path.join(campaign_dir, "scion.db"))
+    owner._campaign_id = owner._registry.claim_campaign_id(owner._campaign_id)
     owner._hyp_store = HypothesisStore(owner._registry)
     owner._branch_store = BranchStore(owner._registry)
     owner._evidence_recorder = EvidenceRecorder(
@@ -270,6 +279,19 @@ def compose_campaign_services(
     owner._verified_candidate_commits = VerifiedCandidateCommitRecorder(
         owner._campaign_dir
     )
+    owner._research_rejection_completion_store = ResearchRejectionCompletionStore(
+        owner._registry.db_path
+    )
+    owner._research_rejection_completion_store.recover_pending(
+        cleanup=lambda intent: _recover_research_rejection_cleanup(owner, intent),
+        ownership_validator=(
+            lambda intent, require_receipt: _validate_research_rejection_ownership(
+                owner,
+                intent,
+                require_receipt=require_receipt,
+            )
+        ),
+    )
     owner._decision_completion_store = DecisionCompletionStore(
         owner._registry.db_path
     )
@@ -277,6 +299,19 @@ def compose_campaign_services(
         cleanup=lambda intent: _recover_decision_cleanup(owner, intent),
     )
     _restore_persisted_active_branches(owner)
+    owner._research_rejection_active_holds = audit_unowned_active_attempts(
+        db_path=owner._registry.db_path,
+        campaign_id=owner._campaign_id,
+        branches=tuple(owner._branch_ctrl.get_active_branches()),
+        active_hypotheses=tuple(owner._hyp_store.get_by_status("active")),
+        branch_store=owner._branch_store,
+        registry=owner._registry,
+        prevalidated_candidate_owners={
+            branch_id: hypothesis.hypothesis_id
+            for branch_id, hypothesis in owner._branch_current_hypothesis.items()
+            if branch_id in owner._branch_patches
+        },
+    )
     owner._round_num = _restored_round_num(owner)
 
     owner._n_experiments = 0
@@ -313,6 +348,22 @@ def compose_campaign_services(
         branch_patches=owner._branch_patches,
         champion_lock=owner._champion_lock,
         get_champion=lambda: owner._champion,
+    )
+    owner._research_rejection_finalizer = ResearchRejectionFinalizer(
+        campaign_id=owner._campaign_id,
+        campaign_dir=owner._campaign_dir,
+        store=owner._research_rejection_completion_store,
+        branch_store=owner._branch_store,
+        materializer=owner._materializer,
+        workspace_lifecycle=owner._workspace_lifecycle,
+        branch_hypotheses=owner._branch_hypotheses,
+        branch_patches=owner._branch_patches,
+        branch_current_hypothesis=owner._branch_current_hypothesis,
+        discard_approved_hypothesis_binding=(
+            lambda branch_id: owner._proposal_pipeline._direct_attempts.discard_approved_binding(
+                branch_id
+            )
+        ),
     )
     owner._weight_opt_coord = AsyncWeightOptCoordinator(owner)
     owner._weight_opt_committer = WeightOptCommitter(
@@ -466,7 +517,7 @@ def compose_campaign_services(
             owner,
             branch,
         ),
-        archive_failed_workspace=owner._archive_failed_workspace,
+        finalize_research_rejection=owner._research_rejection_finalizer.finalize,
         evaluate=owner._evaluate,
         apply_decision_and_finalize=owner._apply_decision_and_finalize,
         decision_reason_codes_for=owner._decision_reason_codes_for,
@@ -590,6 +641,26 @@ def compose_campaign_services(
         wait_weight_opt_all=lambda timeout: owner._weight_opt_coord.wait_all(
             timeout=timeout
         ),
+        verify_research_rejection=(
+            lambda marker: owner._research_rejection_completion_store.verify_committed(
+                marker,
+                ownership_validator=(
+                    lambda intent, require_receipt: _validate_research_rejection_ownership(
+                        owner,
+                        intent,
+                        require_receipt=require_receipt,
+                    )
+                ),
+            )
+        ),
+        get_research_rejection_counts=(
+            lambda: owner._research_rejection_completion_store.durable_counts(
+                owner._campaign_id,
+                archive_validator=lambda intent: owner._materializer.validate_research_rejection_archive_receipt(
+                    dict(intent.payload)
+                ),
+            )
+        ),
     )
 
 
@@ -710,6 +781,28 @@ def _recover_decision_cleanup(
     )
     if os.path.isdir(workspace):
         owner._materializer.cleanup(workspace)
+
+
+def _recover_research_rejection_cleanup(
+    owner: Any,
+    intent: ResearchRejectionCompletionIntent,
+) -> None:
+    if intent.workspace_disposition == "archive_cleanup":
+        owner._materializer.archive_research_rejection_candidate(
+            dict(intent.payload)
+        )
+
+
+def _validate_research_rejection_ownership(
+    owner: Any,
+    intent: ResearchRejectionCompletionIntent,
+    *,
+    require_receipt: bool,
+) -> None:
+    owner._materializer.validate_research_rejection_ownership(
+        dict(intent.payload),
+        require_cleanup_receipt=require_receipt,
+    )
 
 
 def _restore_persisted_active_branches(owner: Any) -> None:

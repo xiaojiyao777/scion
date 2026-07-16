@@ -193,6 +193,19 @@ class DecisionCompletionStore:
             ).fetchall()
         return [_intent_from_row(row) for row in rows]
 
+    def verify_committed(self, transaction_id: str) -> bool:
+        """Validate one current committed Decision owner without mutating it."""
+
+        intent = self.load(transaction_id)
+        if intent is None or intent.status != "committed":
+            return False
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("BEGIN")
+            _validate_committed_state(conn, intent)
+            conn.rollback()
+        return True
+
     def commit_state(self, intent: DecisionCompletionIntent) -> None:
         """Atomically commit target Branch, terminal H status, and intent phase."""
 

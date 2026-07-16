@@ -130,6 +130,13 @@ class LineageRegistry:
                     created_at             TEXT DEFAULT (datetime('now'))
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS campaign_identity (
+                    singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+                    campaign_id TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL
+                )
+            """)
             # Migrate existing databases: add columns that may not exist yet
             self._ensure_columns(
                 conn,
@@ -218,7 +225,8 @@ class LineageRegistry:
                     family_id            TEXT,
                     family_source        TEXT,
                     taxonomy_version     TEXT,
-                    predicted_direction  TEXT
+                    predicted_direction  TEXT,
+                    proposal_digest      TEXT
                 )
             """)
             conn.execute("""
@@ -267,12 +275,59 @@ class LineageRegistry:
                 {
                     "base_champion_version": "INTEGER DEFAULT 0",
                     "predicted_direction": "TEXT",
+                    "proposal_digest": "TEXT",
                 },
             )
 
     # ------------------------------------------------------------------
     # Schema helpers
     # ------------------------------------------------------------------
+
+    def claim_campaign_id(self, proposed_campaign_id: str) -> str:
+        """Claim the database's one durable campaign identity.
+
+        Older databases did not own this singleton.  They may be adopted only
+        when their event history has zero or one distinct non-empty campaign
+        identity; multiple identities are an unrecoverable ownership conflict.
+        """
+
+        proposed = str(proposed_campaign_id or "").strip()
+        if not proposed:
+            raise ValueError("proposed campaign identity is required")
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT campaign_id FROM campaign_identity WHERE singleton_id = 1"
+            ).fetchone()
+            if row is not None:
+                campaign_id = str(row["campaign_id"] or "").strip()
+                if not campaign_id:
+                    raise RuntimeError("durable campaign identity is invalid")
+                conn.commit()
+                return campaign_id
+            existing = [
+                str(item[0])
+                for item in conn.execute(
+                    """
+                    SELECT DISTINCT campaign_id FROM experiment_events
+                    WHERE campaign_id IS NOT NULL AND TRIM(campaign_id) != ''
+                    ORDER BY campaign_id ASC
+                    """
+                ).fetchall()
+            ]
+            if len(existing) > 1:
+                raise RuntimeError("legacy campaign identity is ambiguous")
+            claimed = existing[0] if existing else proposed
+            conn.execute(
+                """
+                INSERT INTO campaign_identity
+                (singleton_id, campaign_id, created_at) VALUES (1, ?, ?)
+                """,
+                (claimed, datetime.now().isoformat()),
+            )
+            conn.commit()
+            return claimed
 
     @staticmethod
     def _ensure_columns(

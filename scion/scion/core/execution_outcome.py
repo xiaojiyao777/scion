@@ -16,6 +16,63 @@ class ExecutionOutcome(Enum):
     INTERRUPTED = "interrupted"
 
 
+class AttemptDisposition(Enum):
+    """Typed post-attempt state change independent of Protocol/Decision."""
+
+    ATTEMPT_REJECT_TO_BASE = "attempt_reject_to_base"
+
+
+@dataclass(frozen=True)
+class ResearchRejectionDisposition:
+    """Immutable marker returned only after durable rejection completion."""
+
+    disposition: AttemptDisposition
+    completion_id: str
+    campaign_id: str
+    provider_attempt_id: str
+    rejection_phase: str
+
+    def __post_init__(self) -> None:
+        if self.disposition is not AttemptDisposition.ATTEMPT_REJECT_TO_BASE:
+            raise ValueError("unsupported research rejection disposition")
+        if len(self.completion_id) != 64 or any(
+            char not in "0123456789abcdef" for char in self.completion_id
+        ):
+            raise ValueError("research rejection completion identity is invalid")
+        if not self.campaign_id or not self.provider_attempt_id:
+            raise ValueError("research rejection owner identity is incomplete")
+        if self.rejection_phase not in {
+            "hypothesis_contract",
+            "patch_contract",
+            "verification",
+        }:
+            raise ValueError("research rejection phase is invalid")
+
+    def to_primitive(self) -> Dict[str, str]:
+        return {
+            "disposition": self.disposition.value,
+            "completion_id": self.completion_id,
+            "campaign_id": self.campaign_id,
+            "provider_attempt_id": self.provider_attempt_id,
+            "rejection_phase": self.rejection_phase,
+        }
+
+
+def validate_research_rejection_disposition(
+    marker: ResearchRejectionDisposition | None,
+    *,
+    execution_outcome: ExecutionOutcome | None,
+) -> None:
+    if marker is None:
+        return
+    if not isinstance(marker, ResearchRejectionDisposition):
+        raise TypeError("attempt disposition must be a typed immutable marker")
+    if execution_outcome is not ExecutionOutcome.RESEARCH_REJECTED:
+        raise ValueError(
+            "research rejection disposition requires RESEARCH_REJECTED outcome"
+        )
+
+
 _EXECUTION_HOLD_OUTCOMES = frozenset(
     {
         ExecutionOutcome.NOT_EVALUATED,

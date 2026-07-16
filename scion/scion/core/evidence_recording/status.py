@@ -601,6 +601,11 @@ class StatusWriterMixin:
                 self.last_status_result["proposal_session_ref"] = dict(
                     proposal_session_ref
                 )
+            attempt_disposition = getattr(last_result, "attempt_disposition", None)
+            if attempt_disposition is not None:
+                self.last_status_result["attempt_disposition"] = (
+                    attempt_disposition.to_primitive()
+                )
             failure_stage = getattr(last_result, "failure_stage", None)
             failure_category = getattr(last_result, "failure_category", None)
             failure_detail = getattr(last_result, "failure_detail", None)
@@ -795,6 +800,17 @@ class StatusWriterMixin:
                 execution_outcome_counts=payload.get("execution_outcome_counts"),
                 last_execution_outcome=payload.get("last_execution_outcome"),
                 unknown_outcome_count=payload.get("unknown_outcome_count"),
+                committed_research_rejections=(
+                    (loop_mapping.get("research_rejection_audit") or {}).get(
+                        "committed",
+                        0,
+                    )
+                    if isinstance(
+                        loop_mapping.get("research_rejection_audit"),
+                        Mapping,
+                    )
+                    else 0
+                ),
             )
             payload["run_validity_status"] = payload["run_validity"]["reason"]
             apply_lineage_integrity_to_run_validity(payload, lineage_integrity)

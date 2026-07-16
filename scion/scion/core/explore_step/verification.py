@@ -9,7 +9,6 @@ from scion.core.execution_outcome import (
     ExecutionOutcome,
     ExecutionOutcomeRecord,
     execution_outcome_projection_kwargs,
-    record_execution_outcome_event,
 )
 from scion.core.models import (
     Branch,
@@ -89,28 +88,15 @@ class VerificationMixin:
                 "verification_checks": checks,
             },
         )
-        try:
-            self.hypothesis_store.mark_status(
-                h_record.hypothesis_id,
-                "research_rejected",
-            )
-            archive_ref = self.archive_failed_workspace(workspace, bid, rnum)
-        except Exception:
-            self._rollback_candidate_after_precommit_exception(
-                branch=branch,
-                workspace=workspace,
-                hypothesis_id=h_record.hypothesis_id,
-            )
-            raise
-        self.reject_candidate_workspace(branch, workspace)
-        self.persist_branch_state(bid)
-        record_execution_outcome_event(
-            registry=self.registry,
-            campaign_id=self.campaign_id,
-            branch_id=bid,
-            record=outcome,
-            hypothesis_id=h_record.hypothesis_id,
-            event_kind="verification_fail",
+        finalization = self.finalize_research_rejection(
+            branch=branch,
+            hypothesis_record=h_record,
+            proposal_attempt_ref=self._proposal_session_ref(bid),
+            rejection_phase="verification",
+            outcome=outcome,
+            checks=tuple(checks),
+            rejected_candidate_workspace=workspace,
+            patch=patch,
         )
         self.record_step(
             self._verification_failure_step(
@@ -120,8 +106,9 @@ class VerificationMixin:
                 patch=patch,
                 h_record=h_record,
                 vresult=vresult,
-                archive_ref=archive_ref,
+                archive_ref=finalization.archive_ref,
                 outcome=outcome,
+                attempt_disposition=finalization.marker,
             )
         )
         return _VerificationOutcome(
@@ -133,6 +120,7 @@ class VerificationMixin:
                 failure_detail=vresult.first_failure,
                 failure_category=ExecutionOutcome.RESEARCH_REJECTED.value,
                 proposal_session_ref=self._proposal_session_ref(bid),
+                attempt_disposition=finalization.marker,
                 **execution_outcome_projection_kwargs(outcome),
             ),
             code_hash=code_hash,
@@ -150,6 +138,7 @@ class VerificationMixin:
         vresult: VerificationResult,
         archive_ref: Optional[str],
         outcome: ExecutionOutcomeRecord,
+        attempt_disposition: Any,
     ) -> StepRecord:
         return StepRecord(
             round_num=rnum,
@@ -166,6 +155,7 @@ class VerificationMixin:
             code_archive_ref=archive_ref,
             hypothesis_id=h_record.hypothesis_id,
             proposal_session_ref=self._proposal_session_ref(bid),
+            attempt_disposition=attempt_disposition,
             **execution_outcome_projection_kwargs(outcome),
         )
 

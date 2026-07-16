@@ -825,7 +825,7 @@ class TestVerificationGate:
         assert gate.calls == 2
         assert cm._workspace_lifecycle.pending_candidates == {}
 
-    def test_cleanup_failure_does_not_block_same_manager_after_rejection(
+    def test_cleanup_failure_requires_reopen_before_rejection_is_committed(
         self,
         tmp_path,
         monkeypatch,
@@ -852,26 +852,38 @@ class TestVerificationGate:
             "cleanup_candidate_workspace",
             fail_cleanup,
         )
-        rejected = cm.run_one_step()
+        with pytest.raises(OSError, match="cleanup unavailable"):
+            cm.run_one_step()
 
-        assert rejected.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
-        branch = cm._branch_ctrl.get_branch(rejected.branch_id)
-        assert branch.current_code_hash == branch.last_clean_code_hash
-        assert cm._workspace_lifecycle.pending_candidates == {}
+        pending = cm._research_rejection_completion_store.pending()
+        assert len(pending) == 1
+        assert pending[0].status == "state_committed"
+        assert pending[0].workspace_disposition == "archive_cleanup"
 
         monkeypatch.setattr(
             cm._materializer,
             "cleanup_candidate_workspace",
             original_cleanup,
         )
-        cm._vgate = AlwaysPassVerificationGate()
-        cm._explore_step_pipeline.verification_gate = cm._vgate
-        continued = cm.run_one_step()
+        shutil.rmtree(tmp_path / "champion_code")
+        reopened = _campaign(
+            tmp_path,
+            verification_gate=AlwaysPassVerificationGate(),
+            experiment_protocol=MockExperimentProtocol(results=[]),
+        )
 
-        assert continued.decision == Decision.CONTINUE_EXPLORE
-        assert cm._workspace_lifecycle.pending_candidates == {}
+        assert reopened._research_rejection_completion_store.pending() == []
+        counts = reopened._research_rejection_completion_store.durable_counts(
+            reopened._campaign_id,
+            archive_validator=lambda intent: reopened._materializer.validate_research_rejection_archive_receipt(
+                dict(intent.payload)
+            ),
+        )
+        assert counts["total"] == 1
+        restored = reopened._branch_store.load(pending[0].branch_id)
+        assert restored.current_code_hash == restored.last_clean_code_hash
 
-    def test_reject_status_persistence_exception_still_rolls_back_candidate(
+    def test_rejection_completion_does_not_use_nontransactional_mark_status(
         self,
         tmp_path,
         monkeypatch,
@@ -894,13 +906,15 @@ class TestVerificationGate:
             raise OSError("hypothesis store unavailable")
 
         monkeypatch.setattr(cm._hyp_store, "mark_status", fail_mark_status)
-        with pytest.raises(OSError, match="hypothesis store unavailable"):
-            cm.run_one_step()
+        rejected = cm.run_one_step()
 
-        branch = next(iter(cm._branch_ctrl._branches.values()))
+        assert rejected.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
+        branch = cm._branch_ctrl.get_branch(rejected.branch_id)
         assert cm._workspace_lifecycle.pending_candidates == {}
         assert branch.current_code_hash == branch.last_clean_code_hash
         assert branch.branch_code_status == "clean"
+        record = cm._hyp_store.get_one(cm._step_history[-1].hypothesis_id)
+        assert record.status == "research_rejected"
 
         monkeypatch.setattr(cm._hyp_store, "mark_status", original_mark_status)
         cm._vgate = AlwaysPassVerificationGate()

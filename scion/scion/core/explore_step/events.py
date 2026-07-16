@@ -54,21 +54,6 @@ class ExploreStepEventMixin:
             detail=detail,
             provenance=provenance,
         )
-        self.registry.record_contract_failure(
-            campaign_id=self.campaign_id,
-            branch_id=branch_id,
-            hypothesis_id=hypothesis_id,
-            hypothesis_text=hypothesis.hypothesis_text or "",
-            change_locus=hypothesis.change_locus,
-            action=patch.action if patch is not None else hypothesis.action,
-            target_file=(
-                patch.file_path if patch is not None else hypothesis.target_file
-            ),
-            failure_reason=detail,
-            stage=stage,
-            reason_code=reason_code,
-            contract_checks=checks,
-        )
         return record
 
     def _record_agent_quality_branch_signal(

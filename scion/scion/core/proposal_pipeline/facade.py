@@ -177,12 +177,13 @@ class ProposalPipeline(ProposalRecordMixin):
         """Durably identify, bind, and publish one provider hypothesis."""
 
         bid = branch.branch_id
+        hypothesis_digest = self._direct_attempts.hypothesis_digest(hypothesis)
         hypothesis_record = self._hypothesis_record(
             branch,
             hypothesis,
             champion=champion,
+            proposal_digest=hypothesis_digest,
         )
-        hypothesis_digest = self._direct_attempts.hypothesis_digest(hypothesis)
         post_provider_stage["value"] = "hypothesis_store_write"
         self.hypothesis_store.save(hypothesis_record)
         post_provider_stage["value"] = "post_store_binding"

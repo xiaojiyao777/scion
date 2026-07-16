@@ -105,7 +105,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     reject_candidate_workspace: Callable[[Branch, str], None]
     record_verified_candidate_commit: Callable[..., str | None]
     commit_verified_candidate_promotion: Callable[[Branch], None]
-    archive_failed_workspace: Callable[[str, str, int], Optional[str]]
+    finalize_research_rejection: Callable[..., Any]
     evaluate: Callable[
         [Branch, str, HypothesisProposal],
         EvaluationExecutionResult,
@@ -255,9 +255,13 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 stage=failure_stage,
                 hypothesis_id=h_record.hypothesis_id,
             )
-            self.hypothesis_store.mark_status(
-                h_record.hypothesis_id,
-                "research_rejected",
+            finalization = self.finalize_research_rejection(
+                branch=branch,
+                hypothesis_record=h_record,
+                proposal_attempt_ref=session_ref,
+                rejection_phase=failure_stage,
+                outcome=contract_outcome,
+                checks=tuple(contract_outcome.provenance["contract_checks"]),
             )
             outcome_kwargs = execution_outcome_projection_kwargs(contract_outcome)
             self.record_step(
@@ -275,6 +279,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     contract_diagnostics=h_contract_diagnostics,
                     hypothesis_id=h_record.hypothesis_id,
                     proposal_session_ref=session_ref,
+                    attempt_disposition=finalization.marker,
                     **outcome_kwargs,
                 )
             )
@@ -287,6 +292,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_detail=failure_detail,
                     failure_category=ExecutionOutcome.RESEARCH_REJECTED.value,
                     proposal_session_ref=session_ref,
+                    attempt_disposition=finalization.marker,
                     **outcome_kwargs,
                 )
             )
@@ -407,9 +413,14 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 patch=patch,
             )
             outcome_kwargs = execution_outcome_projection_kwargs(contract_outcome)
-            self.hypothesis_store.mark_status(
-                h_record.hypothesis_id,
-                "research_rejected",
+            finalization = self.finalize_research_rejection(
+                branch=branch,
+                hypothesis_record=h_record,
+                proposal_attempt_ref=session_ref,
+                rejection_phase="patch_contract",
+                outcome=contract_outcome,
+                checks=tuple(contract_outcome.provenance["contract_checks"]),
+                patch=patch,
             )
             self.record_step(
                 StepRecord(
@@ -429,6 +440,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     ),
                     hypothesis_id=h_record.hypothesis_id,
                     proposal_session_ref=session_ref,
+                    attempt_disposition=finalization.marker,
                     **outcome_kwargs,
                 )
             )
@@ -441,6 +453,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_detail=p_result.failure_reason,
                     failure_category=ExecutionOutcome.RESEARCH_REJECTED.value,
                     proposal_session_ref=session_ref,
+                    attempt_disposition=finalization.marker,
                     **outcome_kwargs,
                 )
             )

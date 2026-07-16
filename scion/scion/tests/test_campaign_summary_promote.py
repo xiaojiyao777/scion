@@ -31,9 +31,23 @@ class TestCampaignSummaryJson:
         import json
         from pathlib import Path
 
+        class FailOnceThenPassVerificationGate(AlwaysFailVerificationGate):
+            def __init__(self):
+                self.calls = 0
+
+            def run(self, workspace, champion_workspace, patch):
+                self.calls += 1
+                if self.calls == 1:
+                    return super().run(workspace, champion_workspace, patch)
+                return AlwaysPassVerificationGate().run(
+                    workspace,
+                    champion_workspace,
+                    patch,
+                )
+
         cm = _campaign(
             tmp_path,
-            verification_gate=AlwaysFailVerificationGate(),
+            verification_gate=FailOnceThenPassVerificationGate(),
             experiment_protocol=None,
         )
         cm.run(requested_rounds=2)

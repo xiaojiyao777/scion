@@ -100,7 +100,7 @@ class ProposalAttemptRecorder:
 
     def record_transition(self, payload: Mapping[str, Any]) -> str:
         normalized = dict(payload)
-        self._validate(normalized)
+        self.validate_transition(normalized)
         event_id = str(uuid.uuid4())
         event = {
             "event_id": event_id,
@@ -119,7 +119,9 @@ class ProposalAttemptRecorder:
         return str(recorded_id or event_id)
 
     @staticmethod
-    def _validate(payload: Mapping[str, Any]) -> None:
+    def validate_transition(payload: Mapping[str, Any]) -> None:
+        """Validate one durable transition with the recorder's full schema."""
+
         missing = sorted(_REQUIRED_FIELDS - payload.keys())
         if missing:
             raise ValueError(

@@ -7,6 +7,8 @@ import uuid
 
 from scion.core.execution_outcome import (
     ExecutionOutcome,
+    ResearchRejectionDisposition,
+    validate_research_rejection_disposition,
     validate_execution_outcome_projection,
 )
 
@@ -402,6 +404,10 @@ class HypothesisRecord:
     created_at: datetime = field(default_factory=datetime.now)
     base_champion_version: int = 0      # champion version at hypothesis creation time
     predicted_direction: Literal["improve", "tradeoff", "exploratory"] = "exploratory"
+    # Canonical digest of the complete provider HypothesisProposal.  This is
+    # persisted because HypothesisRecord intentionally does not duplicate every
+    # proposal field (for example target_weakness and expected_effect).
+    proposal_digest: Optional[str] = None
 
 # --- Solver Output ---
 
@@ -527,6 +533,7 @@ class StepRecord:
     execution_outcome_reason_code: str = ""
     execution_outcome_detail: str = ""
     execution_outcome_provenance: Dict[str, Any] = field(default_factory=dict)
+    attempt_disposition: ResearchRejectionDisposition | None = None
 
     def __post_init__(self) -> None:
         validate_execution_outcome_projection(
@@ -536,4 +543,8 @@ class StepRecord:
             provenance=self.execution_outcome_provenance,
             decision=self.decision,
             protocol_result=self.protocol_result,
+        )
+        validate_research_rejection_disposition(
+            self.attempt_disposition,
+            execution_outcome=self.execution_outcome,
         )

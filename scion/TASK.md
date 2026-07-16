@@ -614,8 +614,12 @@ The implementation order is fixed; items 1-3 are complete:
    files while preserving all formal raw metrics;
 3. [complete] project existing runtime fields into problem-owned
    `SearchAllocationEvidence`, with no new instrumentation in the same slice;
-4. make finalized H/Patch/Verification `research_rejected` attempt-terminal but
-   scheduler-forward, with a new H and no same-H/C retry, cap, or formal count;
+4. [complete] make finalized H/Patch/Verification `research_rejected`
+   attempt-terminal but scheduler-forward, with a new H and no same-H/C retry,
+   cap, or formal count. One durable completion owner now binds campaign,
+   provider attempt, canonical H/Patch identity, exact clean Branch target,
+   typed event, and any candidate archive receipt; independent review has no
+   P0/P1 and the full suite passes `2145` with `1` skipped;
 5. implement clean/provisional candidate disposition and the reversible
    normalized research/rejection ledger, including replay/status/postrun
    projection corrections;
@@ -673,11 +677,11 @@ scientific and lineage-owning artifacts remain in place.
 
 ## Execution Queue
 
-1. Execute the remaining approved post-R11c design in order:
-   research-rejection continuation, candidate disposition, normalized research
-   ledger, current no-LLM profiles, matched canonical/pure campaigns, then
-   transplant replay. Runner-owned temp lifecycle and proposal-only allocation
-   evidence are complete.
+1. Execute the remaining approved post-R11c design in order: candidate
+   disposition, normalized research ledger, current no-LLM profiles, matched
+   canonical/pure campaigns, then transplant replay. Runner-owned temp
+   lifecycle, proposal-only allocation evidence, and research-rejection
+   continuation are complete.
 2. Correct event replay identity, terminal status finalization, and postrun
    projection completeness within their owning slices; do not patch reports in
    isolation.

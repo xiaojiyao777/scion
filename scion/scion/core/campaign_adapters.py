@@ -366,10 +366,12 @@ def _explore_step_pipeline_for(owner: Any) -> ExploreStepPipeline:
         reject_candidate_workspace=reject_candidate_workspace,
         record_verified_candidate_commit=record_verified_candidate_commit,
         commit_verified_candidate_promotion=commit_verified_candidate_promotion,
-        archive_failed_workspace=getattr(
-            owner,
-            "_archive_failed_workspace",
-            lambda workspace, branch_id, round_num: None,
+        finalize_research_rejection=getattr(
+            getattr(owner, "_research_rejection_finalizer", None),
+            "finalize",
+            lambda **kwargs: (_ for _ in ()).throw(
+                RuntimeError("research rejection finalizer is unavailable")
+            ),
         ),
         evaluate=getattr(owner, "_evaluate", missing_evaluate),
         apply_decision_and_finalize=getattr(

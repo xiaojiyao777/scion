@@ -1,6 +1,7 @@
 """Focused tests split from test_campaign_control_boundaries.py."""
 
 from .campaign_control_boundaries_test_support import *  # noqa: F401,F403
+import hashlib
 import scion.verification.tests as verification_tests
 from scion.verification.gate import VerificationGate
 
@@ -8,10 +9,36 @@ from scion.verification.gate import VerificationGate
 def test_explore_pipeline_production_wiring_uses_step_history_base_overrides(
     tmp_path: Path,
 ) -> None:
-    cm = _campaign(tmp_path)
-    branch = cm._branch_ctrl.create_branch(cm._champion)
     helper_path = "operators/branch_helper.py"
     helper_source = "def branch_helper(value):\n    return value + 1\n"
+    cm = _campaign(
+        tmp_path,
+        llm_client=MockLLMClient(
+            hypothesis_response={
+                "hypothesis_text": "Refine the same helper on this branch.",
+                "change_locus": "local_search",
+                "action": "modify",
+                "target_file": helper_path,
+                "predicted_direction": "improve",
+                "target_weakness": "helper is conservative",
+                "expected_effect": "increase helper response",
+                "suggested_weight": 0.3,
+            },
+            patch_response={
+                "file_path": helper_path,
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": hashlib.sha256(
+                    helper_source.encode("utf-8")
+                ).hexdigest(),
+                "old_string": "    return value + 1\n",
+                "new_string": "    return value + 2\n",
+                "test_hint": None,
+            },
+        ),
+    )
+    branch = cm._branch_ctrl.create_branch(cm._champion)
+    cm._branch_store.save(branch)
     cm._step_history.append(
         StepRecord(
             round_num=1,
@@ -35,37 +62,9 @@ def test_explore_pipeline_production_wiring_uses_step_history_base_overrides(
             failure_detail=None,
         )
     )
-    followup_hypothesis = HypothesisProposal(
-        hypothesis_text="Refine the same helper on this branch.",
-        change_locus="local_search",
-        action="modify",
-        target_file=helper_path,
-    )
-    followup_record = HypothesisRecord(
-        hypothesis_id="followup-hyp",
-        branch_id=branch.branch_id,
-        change_locus=followup_hypothesis.change_locus,
-        action=followup_hypothesis.action,
-        status="active",
-        target_file=helper_path,
-        hypothesis_text=followup_hypothesis.hypothesis_text,
-    )
-    followup_patch = PatchProposal(
-        file_path=helper_path,
-        action="modify",
-        code_content="def branch_helper(value):\n    return value + 2\n",
-    )
     captured_overrides: list[dict[str, str]] = []
 
     assert cm._explore_step_pipeline.step_history is cm._step_history
-    cm._explore_step_pipeline.generate_hypothesis = lambda _branch: (
-        followup_hypothesis,
-        followup_record,
-    )
-    cm._hyp_store.save(followup_record)
-    cm._explore_step_pipeline.generate_code = (
-        lambda _branch, _hypothesis: followup_patch
-    )
     cm._contract_gate.validate_hypothesis = lambda *_args, **_kwargs: ContractResult(
         passed=True,
         checks=(CheckResult("H", True, "light", "ok", 0),),

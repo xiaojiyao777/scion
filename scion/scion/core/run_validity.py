@@ -144,6 +144,7 @@ def build_run_validity(
     execution_outcome_counts: Mapping[str, Any] | None = None,
     last_execution_outcome: Mapping[str, Any] | None = None,
     unknown_outcome_count: Any = 0,
+    committed_research_rejections: Any = 0,
 ) -> dict[str, Any]:
     """Build a stable validity record for wrapper/report consumers.
 
@@ -160,15 +161,44 @@ def build_run_validity(
         default=_coerce_int(effective_protocol_rounds, default=experiments),
     )
     counts = _normalized_counts(failure_categories or {})
-    typed_outcomes_available = execution_outcome_counts is not None
+    committed_rejections = max(
+        0,
+        _coerce_int(committed_research_rejections, default=0),
+    )
+    typed_outcomes_available = (
+        execution_outcome_counts is not None or committed_rejections > 0
+    )
+    projected_outcome_counts = (
+        dict(execution_outcome_counts)
+        if execution_outcome_counts is not None
+        else ({} if committed_rejections else None)
+    )
+    if projected_outcome_counts is not None and committed_rejections:
+        projected_outcome_counts[ExecutionOutcome.RESEARCH_REJECTED.value] = max(
+            _coerce_int(
+                projected_outcome_counts.get(
+                    ExecutionOutcome.RESEARCH_REJECTED.value
+                ),
+                default=0,
+            ),
+            committed_rejections,
+        )
     outcome_evidence = execution_outcome_evidence_from_counts(
-        execution_outcome_counts,
+        projected_outcome_counts,
         last_execution_outcome=last_execution_outcome,
         unknown_count=_coerce_int(unknown_outcome_count, default=0),
     )
     outcome_counts = outcome_evidence["execution_outcome_counts"]
     evaluated_count = outcome_evidence["evaluated_count"]
     non_evaluated_count = outcome_evidence["non_evaluated_count"]
+    scheduler_forward_rejections = min(
+        committed_rejections,
+        outcome_counts[ExecutionOutcome.RESEARCH_REJECTED.value],
+    )
+    blocking_non_evaluated_count = max(
+        0,
+        non_evaluated_count - scheduler_forward_rejections,
+    )
     stopped_reason_infra = (
         False
         if typed_outcomes_available
@@ -217,7 +247,7 @@ def build_run_validity(
         status = "pending"
         valid = None
     elif typed_outcomes_available and evaluated_count > 0:
-        if completed_requested and non_evaluated_count == 0:
+        if completed_requested and blocking_non_evaluated_count == 0:
             reason = RUN_VALIDITY_VALID
         else:
             reason = (
@@ -303,7 +333,7 @@ def build_run_validity(
     if completed_requested:
         partial_campaign = False
     elif typed_outcomes_available and evaluated_count > 0 and (
-        non_evaluated_count > 0
+        blocking_non_evaluated_count > 0
         or outcome_evidence["unknown_outcome_count"] > 0
     ):
         partial_campaign = True
@@ -340,6 +370,8 @@ def build_run_validity(
         "failure_categories": counts,
         "infra_failure_attempts": infra_failures,
         "noninfra_failure_attempts": noninfra_failures,
+        "committed_scheduler_forward_rejections": scheduler_forward_rejections,
+        "blocking_non_evaluated_count": blocking_non_evaluated_count,
         **outcome_evidence,
     }
     if reason == RUN_VALIDITY_INVALID_INFRA_ONLY:

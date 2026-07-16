@@ -463,6 +463,17 @@ class CampaignSummaryMixin:
             execution_outcome_counts=summary["execution_outcome_counts"],
             last_execution_outcome=summary["last_execution_outcome"],
             unknown_outcome_count=summary["unknown_outcome_count"],
+            committed_research_rejections=(
+                (
+                    loop_status.get("research_rejection_audit")
+                    or {}
+                ).get("committed", 0)
+                if isinstance(loop_status, Mapping)
+                and isinstance(
+                    loop_status.get("research_rejection_audit"), Mapping
+                )
+                else 0
+            ),
         )
         summary["run_validity_status"] = summary["run_validity"]["reason"]
         lineage_integrity = self.lineage_integrity_snapshot(
@@ -710,6 +721,9 @@ class CampaignSummaryMixin:
             step_data["execution_outcome_provenance"] = execution_outcome[
                 "provenance"
             ]
+        attempt_disposition = getattr(step, "attempt_disposition", None)
+        if attempt_disposition is not None:
+            step_data["attempt_disposition"] = attempt_disposition.to_primitive()
         canary_payload = _canary_result_payload(
             getattr(step, "canary_result", None),
             base_dir=self.campaign_dir,

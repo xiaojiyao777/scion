@@ -911,21 +911,6 @@ class CampaignManager:
         return True
 
     # ------------------------------------------------------------------
-    # Workspace archiving
-    # ------------------------------------------------------------------
-
-    def _archive_failed_workspace(
-        self, workspace: str, branch_id: str, round_num: int
-    ) -> Optional[str]:
-        """Archive operators/ from a failed workspace. Returns archive path or None."""
-        tag = f"round_{round_num}_{branch_id[:8]}"
-        try:
-            return self._materializer.archive_workspace(workspace=workspace, branch_id=tag)
-        except Exception as exc:
-            logger.debug("Branch %s: archive_failed_workspace failed: %s", branch_id, exc)
-            return None
-
-    # ------------------------------------------------------------------
     # Campaign summary
     # ------------------------------------------------------------------
 

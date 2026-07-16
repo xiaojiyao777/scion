@@ -64,6 +64,7 @@ def test_minimal_hypothesis_survives_store_and_attempt_digest(tmp_path):
         "expected_effect": "faster convergence",
     }
     proposal = _parse_hypothesis(raw)
+    digest = DirectAttemptLifecycle.hypothesis_digest(proposal)
     registry = LineageRegistry(str(tmp_path / "scion.db"))
     store = HypothesisStore(registry)
     store.save(
@@ -75,13 +76,14 @@ def test_minimal_hypothesis_survives_store_and_attempt_digest(tmp_path):
             status="active",
             target_file=proposal.target_file,
             hypothesis_text=proposal.hypothesis_text,
+            proposal_digest=digest,
         )
     )
 
     loaded = store.get_one("direct-lossless")
     assert loaded is not None
     assert loaded.hypothesis_text == proposal.hypothesis_text
-    digest = DirectAttemptLifecycle.hypothesis_digest(proposal)
+    assert loaded.proposal_digest == digest
     assert digest == stable_digest(asdict(proposal), length=64)
     changed = replace(proposal, expected_effect="more stable convergence")
     assert DirectAttemptLifecycle.hypothesis_digest(changed) != digest
