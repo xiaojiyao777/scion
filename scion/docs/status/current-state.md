@@ -1,18 +1,27 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-07-15*
+*Last updated: 2026-07-16*
 
 Read `scion/TASK.md` first. Use
 `scion/design/scion-architecture-v3.md` as the architecture tie-breaker.
 
 ## Operational State
 
-No experiment is running. The latest launched root is the terminal, read-only
-R7 root ending `20260715T232619Z-claw`. It requested four fresh generative
-rounds but completed only the first 32-pair screening matrix before a canonical
-feedback persistence exception stopped the wrapper. Postrun classifies it as
-`valid_but_incomplete`; effective completed rounds are zero. Champion v1 is
-unchanged and no candidate was promoted.
+Fresh four-round R8 is running at
+`/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r8-4r-gpt56sol-20260716T002051Z-claw`.
+It uses the clean detached runtime
+`/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-4a42ee3f` at
+exact pushed commit `4a42ee3f98bed4cde90e4a9be54fe79aefe5585d`, with
+`gpt-5.6-sol / direct_v3`, no resume source, and no force controls. Guarded
+readiness and the wrapper-owned completion preflight passed before campaign
+execution. Poll it observationally at low frequency and do not relaunch or
+retry it in place.
+
+The preceding R7 root ending `20260715T232619Z-claw` is terminal and read-only.
+It requested four fresh generative rounds but completed only the first 32-pair
+screening matrix before a canonical feedback persistence exception stopped the
+wrapper. Postrun classifies it as `valid_but_incomplete`; effective completed
+rounds are zero. Champion v1 is unchanged and no candidate was promoted.
 
 The prepare-only roots ending `20260715T175626Z-claw` and
 `20260715T193404Z-claw` were never launched and are superseded. The latter
@@ -22,9 +31,8 @@ superseded root.
 
 Do not resume or relaunch R4, R5, R6, either completed validation, the frozen
 root, or R7 in place. Do not use R6's round-2 v2 artifact alone to reconstruct
-the candidate. The R6 and R7 candidate paths are terminal. The next experiment
-is a separate fresh four-round R8 root from a clean exact pushed repair
-revision.
+the candidate. The R6 and R7 candidate paths are terminal. R8 is the sole live
+experiment.
 
 ## R6 Identity
 
@@ -341,24 +349,14 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Complete the R7 projection regression and independent review.
-2. Commit and push the unresolved-name/projection repairs, tests, R7 report,
-   and compact docs without staging the excluded user files.
-3. Create a clean detached runtime worktree at that exact pushed revision.
-4. Prepare one fresh four-round R8 root with `gpt-5.6-sol / direct_v3`, completion
-   preflight enabled, no resume source, no force controls, launcher fallback
-   solver limit `30`, data root
-   `/home/clawd/research/or-autoresearch-agent/vrp`, and key source
-   `SCION_SHARED_PROXY_KEY`.
-5. Inspect commit cleanliness, launch/control identity, data and wrapper hashes,
-   completion preflight, model/base URL/key-env name, and absence of prior
-   campaign state. Inject the key only through process environment.
-6. Run proxy preflight, launch the guarded wrapper exactly once, and poll
-   observationally at low frequency, normally every three minutes.
-7. At terminal, audit requested/effective typed rounds, exact H/C/provider/retry
+1. Poll R8 observationally at low frequency, normally every three minutes.
+2. At terminal, audit requested/effective typed rounds, exact H/C/provider/retry
    accounting, cumulative source/hash continuity, Protocol/Decision sequence,
    runtime compliance, and postrun integrity.
-8. Expand to a separate clean eight-round root only if four rounds still leave
+3. Analyze every durable observation and repair only evidence-backed framework
+   defects; do not add automatic retry, semantic budgets, truncation, or a
+   heavier gate.
+4. Expand to a separate clean eight-round root only if four rounds still leave
    adaptation or reproducibility unresolved.
 
 ## Four-Round Prelaunch Checks

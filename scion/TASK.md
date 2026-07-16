@@ -1,7 +1,7 @@
 # Scion v0.4 Direct-Runtime Research Task
 
 *Branch: `v0.4-dev`*
-*Last updated: 2026-07-15*
+*Last updated: 2026-07-16*
 
 This is the active task source. Read it with
 `scion/docs/status/current-state.md`; use
@@ -171,6 +171,19 @@ R7 is a terminal diagnostic root, not a four-round scientific result. Its
 common deadline behavior was healthy: formal 30/45-second rows produced no
 champion timeout or watchdog failure. Do not resume or relaunch it.
 
+Fresh R8 is now running from the exact pushed R7-repair revision:
+
+- root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r8-4r-gpt56sol-20260716T002051Z-claw`;
+- clean detached runtime:
+  `/home/clawd/research/or-autoresearch-agent-v04-direct-runtime-4a42ee3f`;
+- exact commit: `4a42ee3f98bed4cde90e4a9be54fe79aefe5585d`;
+- requested configuration: four fresh generative rounds,
+  `gpt-5.6-sol / direct_v3`, no resume or force controls;
+- guarded readiness and the wrapper-owned completion preflight passed before
+  campaign execution; observe this root at low frequency and do not relaunch
+  or retry it in place.
+
 ## Current Framework Repair
 
 R6 and its exact validation exposed four evidence-integrity problems:
@@ -254,22 +267,14 @@ used `20.745s`, initial VNS used `2.522s`, and the solver reported
 
 ## Execution Queue
 
-1. Finish the R7 projection repair regression and independent review; record
-   the stopped-root analysis without mutating R7.
-2. Commit and push the unresolved-name and screening-projection repairs, R7
-   report, tests, and compact resume-doc update on `v0.4-dev`.
-3. Create a clean detached runtime worktree at that exact pushed revision and
-   prove commit cleanliness, problem/data identity, wrapper hash, model/base
-   URL/key-env name, and completion-preflight configuration.
-4. Prepare one distinct fresh generative CVRP R8 root with model `gpt-5.6-sol`,
-   runtime `direct_v3`, `--rounds 4`, completion preflight enabled, no resume,
-   no force controls, and launcher fallback solver limit `30`.
-5. Inspect the prepared root, inject the proxy key through process environment,
-   run one HTTP/model preflight, and launch its guarded wrapper exactly once.
-6. Poll observationally at low frequency. Audit H/C/provider/retry accounting,
+1. Poll the running R8 root observationally at low frequency. Audit
+   H/C/provider/retry accounting,
    cumulative source identity, Protocol/Decision transitions, runtime deadline
    compliance, and terminal postrun integrity.
-7. Expand to a separate clean eight-round experiment only if the four-round
+2. Analyze every durable R8 observation and repair only evidence-backed
+   framework defects; do not convert a rejected research hypothesis into a
+   framework retry.
+3. Expand to a separate clean eight-round experiment only if the four-round
    terminal evidence still leaves adaptation or reproducibility unresolved.
 
 Two, four, and eight are requested observation counts, not retry budgets or
