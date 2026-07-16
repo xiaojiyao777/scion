@@ -47,6 +47,18 @@ Current R6-R11c, baseline-strength inputs, recent roots, and ambiguous roots
 remain protected. The temp accumulation is tracked as a runner ownership
 defect; formal campaign metrics remain protected.
 
+Warehouse direct-v3 has proven effective research behavior but not a retained
+current improvement. R3 performed two substantive algorithm rounds, used the
+first result to change direction, expanded the exact cumulative candidate to
+`28/28` valid pairs without another provider call, and then correctly abandoned
+it on `15/15` valid locked validation pairs. Champion stayed v1. The accepted
+closure design is
+`scion/docs/planning/v0.4/v0.4-warehouse-effective-research-closure-design-20260716.md`.
+It protects the R2/R3 roots, aligns protocol counts to the distinct manifest
+population, resolves locked-group semantics, adds no-LLM constraint probes,
+and decomposes R3 into fixed destroy-only/merge-only/cumulative arms. No new
+warehouse generative root is queued.
+
 Fresh eight-round R11b is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11b-8r-gpt56sol-8r-gpt56sol-20260716T115118Z-claw`
 with terminal wrapper PID `2879552`. Its clean detached runtime is

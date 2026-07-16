@@ -68,10 +68,14 @@ agent can use evidence without accumulating framework noise.
 
 ## Current Evidence
 
-Warehouse is resolved: the direct loop found a screening-positive cumulative
-candidate, expanded it without a provider call, then correctly abandoned it on
-the locked validation split. This proves the eval-only escalation path and
-negative lifecycle integrity; it is not a retained algorithm.
+Warehouse's effective-research process is resolved, but retained improvement is
+not proven. The direct loop generated substantive operators, adapted direction
+from branch evidence, found a screening-positive cumulative candidate, expanded
+it without a provider call, and correctly abandoned it on the locked validation
+split. This proves iterative research, eval-only escalation, exact-candidate
+identity, and negative lifecycle integrity; it is not a retained algorithm.
+The remaining asset, attribution, and fixed-decomposition work is frozen in
+`scion/docs/planning/v0.4/v0.4-warehouse-effective-research-closure-design-20260716.md`.
 
 CVRP R4 proved two substantive evaluated algorithm rounds but both were
 negative. R5 exposed an overly narrow one-change-object-per-file instruction;
@@ -638,6 +642,11 @@ from a recorded dry-run manifest.
    matched canonical/pure campaigns, then transplant replay.
 6. Continue retention-aware historical experiment cleanup in audited batches;
    do not delete a root required by the approved design or current closeout.
+7. After runner ownership and CVRP allocation evidence, align the warehouse
+   protocol with its distinct manifest population, freeze locked-group
+   semantics, add directed no-LLM constraint probes, and decompose R3 into
+   champion/destroy-only/merge-only/cumulative fixed arms. Do not launch another
+   warehouse generative root before problem-owned mechanism attribution exists.
 
 Two, four, and eight are requested observation counts, not retry budgets or
 automatic stop rules. Each generative experiment uses a distinct clean root;
