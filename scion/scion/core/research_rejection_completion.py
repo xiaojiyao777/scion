@@ -16,10 +16,12 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from scion.core.decision_completion_transaction import (
-    _branch_payload_from_row,
-    _hypothesis_payload_from_row,
     _upsert_branch,
+)
+from scion.core.durable_owner_codec import (
     branch_from_payload,
+    branch_payload_from_row,
+    hypothesis_payload_from_row,
 )
 from scion.core.execution_outcome import (
     AttemptDisposition,
@@ -62,10 +64,9 @@ class ResearchRejectionCompletionStore:
         self,
         db_path: str | Path,
         *,
-        fault_hook: Callable[
-            [str, ResearchRejectionCompletionIntent], None
-        ]
-        | None = None,
+        fault_hook: (
+            Callable[[str, ResearchRejectionCompletionIntent], None] | None
+        ) = None,
     ) -> None:
         self.db_path = str(db_path)
         self.fault_hook = fault_hook
@@ -147,7 +148,7 @@ class ResearchRejectionCompletionStore:
                 raise RuntimeError(
                     "research rejection source branch is not the persisted owner"
                 )
-            source_branch_payload = _branch_payload_from_row(persisted_branch)
+            source_branch_payload = branch_payload_from_row(persisted_branch)
             if (
                 source_branch_payload["state"] != BranchState.EXPLORE.value
                 or source_branch_payload["branch_code_status"] != "clean"
@@ -171,7 +172,7 @@ class ResearchRejectionCompletionStore:
                 raise RuntimeError(
                     "research rejection source hypothesis is not the persisted owner"
                 )
-            source_hypothesis = _hypothesis_payload_from_row(persisted_hypothesis)
+            source_hypothesis = hypothesis_payload_from_row(persisted_hypothesis)
             if (
                 source_hypothesis["branch_id"] != branch_id
                 or source_hypothesis["status"] != "active"
@@ -191,9 +192,7 @@ class ResearchRejectionCompletionStore:
                 patch_contract_digest is not None
                 and patch_contract_digest != transition["patch_digest"]
             ):
-                raise RuntimeError(
-                    "patch Contract rejected patch identity conflict"
-                )
+                raise RuntimeError("patch Contract rejected patch identity conflict")
             if candidate is not None:
                 if candidate["patch_digest"] != transition["patch_digest"]:
                     raise RuntimeError(
@@ -356,7 +355,7 @@ class ResearchRejectionCompletionStore:
             ).fetchone()
             if branch_row is None:
                 raise RuntimeError("research rejection branch is unavailable")
-            branch_digest = stable_digest(_branch_payload_from_row(branch_row))
+            branch_digest = stable_digest(branch_payload_from_row(branch_row))
             if branch_digest not in {
                 current.payload["source_branch_sha256"],
                 current.payload["target_branch_sha256"],
@@ -370,7 +369,7 @@ class ResearchRejectionCompletionStore:
             if hypothesis_row is None:
                 raise RuntimeError("research rejection hypothesis is unavailable")
             hypothesis_digest = stable_digest(
-                _hypothesis_payload_from_row(hypothesis_row)
+                hypothesis_payload_from_row(hypothesis_row)
             )
             if hypothesis_digest not in {
                 current.payload["source_hypothesis_sha256"],
@@ -410,9 +409,7 @@ class ResearchRejectionCompletionStore:
         intent: ResearchRejectionCompletionIntent,
         *,
         cleanup: Callable[[ResearchRejectionCompletionIntent], None],
-        ownership_validator: Callable[
-            [ResearchRejectionCompletionIntent, bool], None
-        ],
+        ownership_validator: Callable[[ResearchRejectionCompletionIntent, bool], None],
     ) -> ResearchRejectionCompletionIntent:
         """Converge one intent through cleanup and final committed marker."""
 
@@ -461,9 +458,7 @@ class ResearchRejectionCompletionStore:
         self,
         *,
         cleanup: Callable[[ResearchRejectionCompletionIntent], None],
-        ownership_validator: Callable[
-            [ResearchRejectionCompletionIntent, bool], None
-        ],
+        ownership_validator: Callable[[ResearchRejectionCompletionIntent, bool], None],
     ) -> tuple[str, ...]:
         """Recover using each intent's own persisted campaign identity."""
 
@@ -481,16 +476,13 @@ class ResearchRejectionCompletionStore:
         self,
         marker: ResearchRejectionDisposition,
         *,
-        ownership_validator: Callable[
-            [ResearchRejectionCompletionIntent, bool], None
-        ],
+        ownership_validator: Callable[[ResearchRejectionCompletionIntent, bool], None],
     ) -> bool:
         """Control-grade read-only authorization for scheduler continuation."""
 
         if (
             not isinstance(marker, ResearchRejectionDisposition)
-            or marker.disposition
-            is not AttemptDisposition.ATTEMPT_REJECT_TO_BASE
+            or marker.disposition is not AttemptDisposition.ATTEMPT_REJECT_TO_BASE
         ):
             return False
         intent = self.load(marker.completion_id)
@@ -515,9 +507,7 @@ class ResearchRejectionCompletionStore:
                 "status": provider["status"],
             }
             if provider.get("continuation_of_attempt_id"):
-                ref["hypothesis_attempt_id"] = provider[
-                    "continuation_of_attempt_id"
-                ]
+                ref["hypothesis_attempt_id"] = provider["continuation_of_attempt_id"]
             transition = self._validate_proposal_transition(
                 conn,
                 campaign_id=intent.campaign_id,
@@ -590,7 +580,9 @@ class ResearchRejectionCompletionStore:
         event_id = str(proposal_attempt_ref.get("lineage_event_id") or "")
         expected_phase = _PHASE_TO_ATTEMPT_PHASE[rejection_phase]
         if not attempt_id or not event_id:
-            raise ValueError("research rejection proposal attempt identity is incomplete")
+            raise ValueError(
+                "research rejection proposal attempt identity is incomplete"
+            )
         parent_attempt_ref = (
             str(proposal_attempt_ref.get("hypothesis_attempt_id") or "")
             if expected_phase == "code"
@@ -636,7 +628,9 @@ class ResearchRejectionCompletionStore:
             for payload in (started, terminal)
             for key, value in common.items()
         ):
-            raise RuntimeError("research rejection proposal transition ownership conflict")
+            raise RuntimeError(
+                "research rejection proposal transition ownership conflict"
+            )
         if (
             started.get("status") != "started"
             or terminal.get("status") != "generated"
@@ -657,7 +651,9 @@ class ResearchRejectionCompletionStore:
             or proposal_attempt_ref.get("started_lineage_event_id")
             != started_row["event_id"]
         ):
-            raise RuntimeError("research rejection proposal transition ownership conflict")
+            raise RuntimeError(
+                "research rejection proposal transition ownership conflict"
+            )
         for key in ("attempt_kind", "continuation_of_attempt_id"):
             if started.get(key) != terminal.get(key):
                 raise RuntimeError(
@@ -689,8 +685,7 @@ class ResearchRejectionCompletionStore:
                 not parent_attempt_id
                 or started.get("hypothesis_id") != hypothesis_id
                 or started_row["hypothesis_id"] != hypothesis_id
-                or started.get("hypothesis_digest")
-                != terminal.get("hypothesis_digest")
+                or started.get("hypothesis_digest") != terminal.get("hypothesis_digest")
                 or started.get("patch_digest") is not None
                 or not str(terminal.get("hypothesis_digest") or "")
                 or not str(terminal.get("patch_digest") or "")
@@ -721,9 +716,7 @@ class ResearchRejectionCompletionStore:
             "status": "generated",
             "patch_digest": terminal.get("patch_digest"),
             "hypothesis_digest": terminal.get("hypothesis_digest"),
-            "continuation_of_attempt_id": terminal.get(
-                "continuation_of_attempt_id"
-            ),
+            "continuation_of_attempt_id": terminal.get("continuation_of_attempt_id"),
             "anchors": terminal["anchors"],
             "transition_group_sha256": stable_digest([started, terminal]),
         }
@@ -797,7 +790,7 @@ def _validate_committed_state(
     ).fetchone()
     if (
         branch_row is None
-        or stable_digest(_branch_payload_from_row(branch_row))
+        or stable_digest(branch_payload_from_row(branch_row))
         != intent.payload["target_branch_sha256"]
     ):
         raise RuntimeError("committed research rejection branch identity conflict")
@@ -807,7 +800,7 @@ def _validate_committed_state(
     ).fetchone()
     if (
         hypothesis_row is None
-        or stable_digest(_hypothesis_payload_from_row(hypothesis_row))
+        or stable_digest(hypothesis_payload_from_row(hypothesis_row))
         != intent.payload["target_hypothesis_sha256"]
     ):
         raise RuntimeError("committed research rejection hypothesis identity conflict")
@@ -839,17 +832,20 @@ def _validate_durable_completion(
     ).fetchone()
     if (
         hypothesis_row is None
-        or stable_digest(_hypothesis_payload_from_row(hypothesis_row))
+        or stable_digest(hypothesis_payload_from_row(hypothesis_row))
         != intent.payload["target_hypothesis_sha256"]
     ):
         raise RuntimeError("durable research rejection hypothesis identity conflict")
     _validate_durable_hypothesis_proposal(hypothesis_row, intent)
     _validate_provider_bindings(intent)
     event_id = f"research-rejection-completion:{intent.completion_id}"
-    if conn.execute(
-        "SELECT event_id FROM experiment_events WHERE event_id = ?",
-        (event_id,),
-    ).fetchone() is None:
+    if (
+        conn.execute(
+            "SELECT event_id FROM experiment_events WHERE event_id = ?",
+            (event_id,),
+        ).fetchone()
+        is None
+    ):
         raise RuntimeError("durable research rejection event is unavailable")
     upsert_and_validate_research_rejection_event(conn, intent)
     provider = intent.payload["provider_attempt"]
@@ -897,9 +893,8 @@ def _validate_provider_bindings(
     intent: ResearchRejectionCompletionIntent,
 ) -> None:
     provider = intent.payload.get("provider_attempt") or {}
-    if (
-        intent.payload.get("hypothesis_proposal_digest")
-        != provider.get("hypothesis_digest")
+    if intent.payload.get("hypothesis_proposal_digest") != provider.get(
+        "hypothesis_digest"
     ):
         raise RuntimeError("research rejection provider hypothesis identity conflict")
     rejected_patch_digest = intent.payload.get("rejected_patch_digest")
@@ -925,9 +920,7 @@ def _validate_clean_parent_against_branch(
     else:
         if clean_parent.get("kind") != "champion_snapshot":
             raise RuntimeError("fresh branch clean parent is not its champion")
-        if clean_parent.get("snapshot_hash") != source_branch.get(
-            "base_champion_hash"
-        ):
+        if clean_parent.get("snapshot_hash") != source_branch.get("base_champion_hash"):
             raise RuntimeError("clean champion parent does not match branch anchor")
 
 
@@ -935,11 +928,10 @@ def _validate_transition_anchors_against_branch(
     anchors: Mapping[str, Any],
     source_branch: Mapping[str, Any],
 ) -> None:
-    if (
-        anchors.get("branch_base_champion_id")
-        != source_branch.get("base_champion_id")
-        or anchors.get("branch_base_champion_hash")
-        != source_branch.get("base_champion_hash")
+    if anchors.get("branch_base_champion_id") != source_branch.get(
+        "base_champion_id"
+    ) or anchors.get("branch_base_champion_hash") != source_branch.get(
+        "base_champion_hash"
     ):
         raise RuntimeError("research rejection proposal branch anchor conflicts")
 
@@ -975,9 +967,7 @@ def _claimed_proposal_transition_groups(
         except (TypeError, ValueError):
             decoded = None
         payload = decoded if isinstance(decoded, dict) else None
-        payload_attempt_id = str(
-            (payload or {}).get("attempt_id") or ""
-        ).strip()
+        payload_attempt_id = str((payload or {}).get("attempt_id") or "").strip()
         target_claim = (
             payload_attempt_id == attempt_id
             or str(row["event_id"]) in current_event_ids

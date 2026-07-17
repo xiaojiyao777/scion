@@ -7,10 +7,8 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from scion.core.decision_completion_transaction import (
-    DecisionCompletionStore,
-    branch_to_payload,
-)
+from scion.core.decision_completion_transaction import DecisionCompletionStore
+from scion.core.durable_owner_codec import branch_to_payload
 from scion.core.execution_outcome import (
     ExecutionOutcome,
     ExecutionOutcomeRecord,
@@ -193,10 +191,9 @@ def _unowned_hold_for_branch(
             reason="active hypothesis transition ownership is incomplete/ambiguous",
         )
     h_terminal = h_groups[0][-1]
-    if (
-        not _valid_sha256(hypothesis.proposal_digest)
-        or hypothesis.proposal_digest != h_terminal.get("hypothesis_digest")
-    ):
+    if not _valid_sha256(
+        hypothesis.proposal_digest
+    ) or hypothesis.proposal_digest != h_terminal.get("hypothesis_digest"):
         return ActiveAttemptHold(
             branch_id=branch.branch_id,
             hypothesis_id=hypothesis.hypothesis_id,

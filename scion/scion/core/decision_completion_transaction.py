@@ -17,9 +17,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
+from scion.core import durable_owner_codec as _owner_codec
 from scion.core.models import (
     Branch,
-    BranchState,
     Decision,
     HypothesisRecord,
     ProtocolResult,
@@ -92,9 +92,9 @@ class DecisionCompletionStore:
             source_branch,
             hypothesis_record,
         )
-        source_payload = branch_to_payload(source_branch)
-        target_payload = branch_to_payload(target_branch)
-        source_hypothesis = hypothesis_to_payload(hypothesis_record)
+        source_payload = _owner_codec.branch_to_payload(source_branch)
+        target_payload = _owner_codec.branch_to_payload(target_branch)
+        source_hypothesis = _owner_codec.hypothesis_to_payload(hypothesis_record)
         target_hypothesis = dict(source_hypothesis)
         if target_hypothesis_status:
             target_hypothesis["status"] = target_hypothesis_status
@@ -130,7 +130,7 @@ class DecisionCompletionStore:
             ).fetchone()
             if (
                 persisted is None
-                or _stable_digest(_branch_payload_from_row(persisted))
+                or _stable_digest(_owner_codec.branch_payload_from_row(persisted))
                 != payload["source_branch_sha256"]
             ):
                 raise RuntimeError(
@@ -142,7 +142,9 @@ class DecisionCompletionStore:
             ).fetchone()
             if (
                 persisted_hypothesis is None
-                or _stable_digest(_hypothesis_payload_from_row(persisted_hypothesis))
+                or _stable_digest(
+                    _owner_codec.hypothesis_payload_from_row(persisted_hypothesis)
+                )
                 != payload["source_hypothesis_sha256"]
             ):
                 raise RuntimeError(
@@ -225,7 +227,9 @@ class DecisionCompletionStore:
                 _validate_committed_state(conn, current)
                 conn.commit()
                 return
-            target_branch = branch_from_payload(current.payload["target_branch"])
+            target_branch = _owner_codec.branch_from_payload(
+                current.payload["target_branch"]
+            )
             source_digest = str(current.payload["source_branch_sha256"])
             target_digest = str(current.payload["target_branch_sha256"])
             branch_row = conn.execute(
@@ -234,7 +238,9 @@ class DecisionCompletionStore:
             ).fetchone()
             if branch_row is None:
                 raise RuntimeError("decision completion branch is unavailable")
-            persisted_digest = _stable_digest(_branch_payload_from_row(branch_row))
+            persisted_digest = _stable_digest(
+                _owner_codec.branch_payload_from_row(branch_row)
+            )
             if persisted_digest not in {source_digest, target_digest}:
                 raise RuntimeError("decision completion branch identity conflict")
 
@@ -246,7 +252,7 @@ class DecisionCompletionStore:
             if hypothesis_row is None:
                 raise RuntimeError("decision completion hypothesis is unavailable")
             persisted_hypothesis_digest = _stable_digest(
-                _hypothesis_payload_from_row(hypothesis_row)
+                _owner_codec.hypothesis_payload_from_row(hypothesis_row)
             )
             if persisted_hypothesis_digest not in {
                 current.payload["source_hypothesis_sha256"],
@@ -357,70 +363,6 @@ class DecisionCompletionStore:
         return conn
 
 
-def branch_to_payload(branch: Branch) -> dict[str, Any]:
-    return {
-        "branch_id": branch.branch_id,
-        "state": branch.state.value,
-        "base_champion_id": branch.base_champion_id,
-        "base_champion_hash": branch.base_champion_hash,
-        "lineage_id": branch.lineage_id or branch.branch_id,
-        "current_code_hash": branch.current_code_hash,
-        "last_clean_code_hash": branch.last_clean_code_hash,
-        "screening_expand_count": branch.screening_expand_count,
-        "validation_expand_count": branch.validation_expand_count,
-        "failure_codes": list(branch.failure_codes or ()),
-        "created_at": branch.created_at.isoformat(),
-        "updated_at": branch.updated_at.isoformat(),
-        "direction": branch.direction,
-        "weight_revision": branch.weight_revision,
-        "branch_code_status": branch.branch_code_status,
-        "branch_evidence_summary": _jsonable(branch.branch_evidence_summary or {}),
-        "infra_block_count": branch.infra_block_count,
-    }
-
-
-def branch_from_payload(payload: Mapping[str, Any]) -> Branch:
-    return Branch(
-        branch_id=str(payload["branch_id"]),
-        state=BranchState(str(payload["state"])),
-        base_champion_id=int(payload["base_champion_id"]),
-        base_champion_hash=str(payload["base_champion_hash"]),
-        lineage_id=str(payload.get("lineage_id") or payload["branch_id"]),
-        current_code_hash=payload.get("current_code_hash"),
-        last_clean_code_hash=payload.get("last_clean_code_hash"),
-        screening_expand_count=int(payload.get("screening_expand_count") or 0),
-        validation_expand_count=int(payload.get("validation_expand_count") or 0),
-        failure_codes=list(payload.get("failure_codes") or ()),
-        created_at=datetime.fromisoformat(str(payload["created_at"])),
-        updated_at=datetime.fromisoformat(str(payload["updated_at"])),
-        direction=payload.get("direction"),
-        weight_revision=int(payload.get("weight_revision") or 0),
-        branch_code_status=str(payload.get("branch_code_status") or "clean"),
-        branch_evidence_summary=dict(payload.get("branch_evidence_summary") or {}),
-        infra_block_count=int(payload.get("infra_block_count") or 0),
-    )
-
-
-def hypothesis_to_payload(record: HypothesisRecord) -> dict[str, Any]:
-    return {
-        "hypothesis_id": record.hypothesis_id,
-        "branch_id": record.branch_id,
-        "change_locus": record.change_locus,
-        "action": record.action,
-        "status": record.status,
-        "target_file": record.target_file,
-        "parent_hypothesis_id": record.parent_hypothesis_id,
-        "suggested_weight": record.suggested_weight,
-        "hypothesis_text": record.hypothesis_text,
-        "created_at": record.created_at.isoformat(),
-        "base_champion_version": record.base_champion_version,
-        "family_id": record.family_id,
-        "family_source": record.family_source,
-        "taxonomy_version": record.taxonomy_version,
-        "predicted_direction": record.predicted_direction,
-    }
-
-
 def protocol_result_identity(
     protocol_result: ProtocolResult | None,
 ) -> dict[str, Any]:
@@ -448,7 +390,7 @@ def _verified_candidate_identity(
         # atomic H-terminal boundary.  Their strongest durable candidate
         # identity is the canonical H plus branch lineage and code hashes.
         # Keep all of those facts explicit; do not manufacture a typed commit.
-        canonical_hypothesis = hypothesis_to_payload(hypothesis_record)
+        canonical_hypothesis = _owner_codec.hypothesis_to_payload(hypothesis_record)
         candidate_hash = str(
             branch.current_code_hash or branch.last_clean_code_hash or ""
         )
@@ -634,7 +576,7 @@ def _validate_committed_state(
     ).fetchone()
     if (
         branch_row is None
-        or _stable_digest(_branch_payload_from_row(branch_row))
+        or _stable_digest(_owner_codec.branch_payload_from_row(branch_row))
         != intent.payload["target_branch_sha256"]
     ):
         raise RuntimeError("committed decision branch identity conflict")
@@ -644,7 +586,7 @@ def _validate_committed_state(
     ).fetchone()
     if (
         hypothesis_row is None
-        or _stable_digest(_hypothesis_payload_from_row(hypothesis_row))
+        or _stable_digest(_owner_codec.hypothesis_payload_from_row(hypothesis_row))
         != intent.payload["target_hypothesis_sha256"]
     ):
         raise RuntimeError("committed decision hypothesis identity conflict")
@@ -670,9 +612,7 @@ def _validate_committed_state(
             "transaction_id": intent.transaction_id,
             "intent_sha256": _stable_digest(intent.payload),
             "protocol_identity": protocol,
-            "protocol_identity_sha256": intent.payload[
-                "protocol_identity_sha256"
-            ],
+            "protocol_identity_sha256": intent.payload["protocol_identity_sha256"],
             "verified_candidate_identity": verified,
             "decision": intent.decision.value,
             "reason_codes": reason_codes,
@@ -702,54 +642,6 @@ def _validate_committed_state(
     )
     if tuple(event) != expected:
         raise RuntimeError("committed typed decision lineage identity conflict")
-
-
-def _branch_payload_from_row(row: sqlite3.Row) -> dict[str, Any]:
-    return branch_to_payload(
-        Branch(
-            branch_id=row["branch_id"],
-            state=BranchState(row["state"]),
-            base_champion_id=row["base_champion_id"],
-            base_champion_hash=row["base_champion_hash"],
-            lineage_id=row["lineage_id"] or row["branch_id"],
-            current_code_hash=row["current_code_hash"],
-            last_clean_code_hash=row["last_clean_code_hash"],
-            screening_expand_count=row["screening_expand_count"] or 0,
-            validation_expand_count=row["validation_expand_count"] or 0,
-            failure_codes=json.loads(row["failure_codes"] or "[]"),
-            created_at=datetime.fromisoformat(row["created_at"]),
-            updated_at=datetime.fromisoformat(row["updated_at"]),
-            direction=row["direction"],
-            weight_revision=row["weight_revision"] or 0,
-            branch_code_status=row["branch_code_status"] or "clean",
-            branch_evidence_summary=json.loads(
-                row["branch_evidence_summary_json"] or "{}"
-            ),
-            infra_block_count=row["infra_block_count"] or 0,
-        )
-    )
-
-
-def _hypothesis_payload_from_row(row: sqlite3.Row) -> dict[str, Any]:
-    return hypothesis_to_payload(
-        HypothesisRecord(
-            hypothesis_id=row["hypothesis_id"],
-            branch_id=row["branch_id"] or "",
-            change_locus=row["change_locus"] or "",
-            action=row["action"] or "modify",
-            status=row["status"] or "active",
-            target_file=row["target_file"],
-            parent_hypothesis_id=row["parent_hypothesis_id"],
-            suggested_weight=row["suggested_weight"],
-            hypothesis_text=row["hypothesis_text"],
-            created_at=datetime.fromisoformat(row["created_at"]),
-            base_champion_version=row["base_champion_version"] or 0,
-            family_id=row["family_id"],
-            family_source=row["family_source"],
-            taxonomy_version=row["taxonomy_version"],
-            predicted_direction=row["predicted_direction"] or "exploratory",
-        )
-    )
 
 
 def _intent_from_row(row: sqlite3.Row) -> DecisionCompletionIntent:
@@ -785,7 +677,9 @@ def _intent_from_row(row: sqlite3.Row) -> DecisionCompletionIntent:
 
 def _normalized_reason_codes(values: Iterable[str] | None) -> list[str]:
     return list(
-        dict.fromkeys(str(value).strip() for value in (values or ()) if str(value).strip())
+        dict.fromkeys(
+            str(value).strip() for value in (values or ()) if str(value).strip()
+        )
     )
 
 

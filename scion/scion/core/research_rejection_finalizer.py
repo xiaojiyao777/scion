@@ -6,7 +6,7 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, Mapping, MutableMapping
 
-from scion.core.decision_completion_transaction import (
+from scion.core.durable_owner_codec import (
     branch_from_payload,
     branch_to_payload,
 )
@@ -69,7 +69,9 @@ class ResearchRejectionFinalizer:
             "outcome_provenance": dict(outcome.provenance),
             "proposal": {
                 "hypothesis_text": hypothesis_record.hypothesis_text or "",
-                "action": patch.action if patch is not None else hypothesis_record.action,
+                "action": (
+                    patch.action if patch is not None else hypothesis_record.action
+                ),
                 "target_file": (
                     patch.file_path
                     if patch is not None
@@ -171,8 +173,8 @@ class ResearchRejectionFinalizer:
             path = campaign / "workspaces" / source_branch.branch_id
             kind = "branch_workspace"
         else:
-            path = campaign / "champions" / (
-                f"champion_v{source_branch.base_champion_id}"
+            path = (
+                campaign / "champions" / (f"champion_v{source_branch.base_champion_id}")
             )
             kind = "champion_snapshot"
         path = path.resolve()
@@ -248,18 +250,16 @@ class ResearchRejectionFinalizer:
             raise RuntimeError(
                 "verification rejection Branch owner changed before completion"
             )
-        if live["screening_expand_count"] != 0 or live[
-            "validation_expand_count"
-        ] != 0:
+        if live["screening_expand_count"] != 0 or live["validation_expand_count"] != 0:
             raise RuntimeError("verification rejection expansion owner changed")
         if candidate is None or live["current_code_hash"] != candidate["code_hash"]:
-            raise RuntimeError("verification rejection candidate Branch binding changed")
+            raise RuntimeError(
+                "verification rejection candidate Branch binding changed"
+            )
 
     def _cleanup(self, intent: ResearchRejectionCompletionIntent) -> None:
         if intent.workspace_disposition == "archive_cleanup":
-            self.materializer.archive_research_rejection_candidate(
-                dict(intent.payload)
-            )
+            self.materializer.archive_research_rejection_candidate(dict(intent.payload))
 
     def _validate_ownership(
         self,

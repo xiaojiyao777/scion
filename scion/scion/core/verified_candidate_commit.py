@@ -13,10 +13,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
-from scion.core.decision_completion_transaction import (
-    _branch_payload_from_row,
-    _hypothesis_payload_from_row,
+from scion.core.durable_owner_codec import (
+    branch_payload_from_row,
     branch_to_payload,
+    hypothesis_payload_from_row,
     hypothesis_to_payload,
 )
 from scion.core.evidence_recording.replay_identity import stable_patch_digest
@@ -412,7 +412,7 @@ class LegacyVerifiedCandidateReader(_VerifiedCandidateCommitValidator):
                 f"Branch {branch.branch_id}: durable legacy Branch owner is unavailable"
             )
         try:
-            persisted_branch = _branch_payload_from_row(branch_row)
+            persisted_branch = branch_payload_from_row(branch_row)
         except (IndexError, KeyError, TypeError, ValueError) as exc:
             raise RuntimeError(
                 f"Branch {branch.branch_id}: durable legacy Branch owner is invalid"
@@ -435,7 +435,7 @@ class LegacyVerifiedCandidateReader(_VerifiedCandidateCommitValidator):
         row: sqlite3.Row,
     ) -> None:
         try:
-            persisted_hypothesis = _hypothesis_payload_from_row(row)
+            persisted_hypothesis = hypothesis_payload_from_row(row)
             persisted_proposal_digest = row["proposal_digest"]
         except (IndexError, KeyError, TypeError, ValueError) as exc:
             raise RuntimeError(

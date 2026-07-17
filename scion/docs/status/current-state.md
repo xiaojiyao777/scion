@@ -116,8 +116,20 @@ receipt, infrastructure, uncertainty, operator-resume, successor-slot transfer,
 and crash-recovery edges. Initial snapshot dispatch requires H=`active`; every
 D2e exact-reuse successor carries the exact transferred H=`advanced` revision
 and atomically rearms its current-comparison guard. Production remains unwired.
-D2b.0a pure durable-owner codec extraction is the next implementation slice;
-each slice must be reviewed before the next begins.
+D2b.0a pure durable-owner codec extraction is complete. Frozen v1 Branch/H
+payload and row projections now have one owner without changing either v1
+golden or historical fallback; Decision completion, research rejection, active
+audit, rejection finalization, and the legacy candidate reader use it. A
+separate `stable-source-hypothesis.v1` projection strictly binds the proposal
+digest and structural H allowlist while excluding lifecycle/storage noise; its
+numeric identity is canonical across Python and SQLite REAL, including signed
+zero. No SQL mutation, schema, revision, lease, or production composition was
+added. The focused compatibility matrix passes `193`; the correctly rooted
+full suite passes `2388` with `1` skipped in `470.17s`; two independent final
+reviews report no P0/P1. D2b.0b global Branch/H revision CAS, dormant
+evaluation-lease schema, and SQL writer predicates are next. The remaining
+private `_upsert_branch` cross-module dependency is explicitly owned by that
+slice.
 
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
