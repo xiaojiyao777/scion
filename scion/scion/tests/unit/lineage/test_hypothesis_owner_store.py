@@ -72,8 +72,7 @@ def _harness(
     initial = _hypothesis()
     token = RevisionedHypothesisRecord.from_value(initial, owner_revision=0)
     try:
-        connection.execute(
-            """
+        connection.execute("""
             CREATE TABLE hypotheses (
                 hypothesis_id TEXT PRIMARY KEY,
                 branch_id TEXT NOT NULL,
@@ -94,8 +93,7 @@ def _harness(
                 owner_revision INTEGER NOT NULL,
                 owner_protocol_generation TEXT NOT NULL
             )
-            """
-        )
+            """)
         if include_initial:
             values = hypothesis_storage_payload(initial)
             values["owner_revision"] = 0
@@ -148,8 +146,30 @@ def _raw_row(harness: _Harness) -> sqlite3.Row | None:
 def _attach(
     transaction: sqlite_boundary.ImmediateTransaction,
     harness: _Harness,
-) -> object:
+) -> owner._OwnerReceiptLedger:
     return owner._attach_owner_receipt_ledger(transaction, harness.authority)
+
+
+def _authorize_hypothesis_creation(
+    transaction: sqlite_boundary.ImmediateTransaction,
+    harness: _Harness,
+    ledger: owner._OwnerReceiptLedger,
+    target: RevisionedHypothesisRecord,
+) -> tuple[
+    owner._OwnerCreationAuthorizerAuthority,
+    owner._OwnerCreationAuthorization,
+]:
+    authorizer = owner._issue_hypothesis_creation_authorizer_authority(
+        harness.authority
+    )
+    authorization = owner._register_hypothesis_creation_authorization(
+        authorizer,
+        transaction,
+        ledger,
+        target.hypothesis_id,
+        target.payload_sha256,
+    )
+    return authorizer, authorization
 
 
 def _insert_hypothesis(
@@ -180,11 +200,28 @@ def _commit_mutation(
 
 
 def _commit_creation(
-    ledger: object,
+    transaction: sqlite_boundary.ImmediateTransaction,
+    ledger: owner._OwnerReceiptLedger,
+    authorizer: owner._OwnerCreationAuthorizerAuthority,
+    authorization: owner._OwnerCreationAuthorization,
     receipt: owner.OwnerCreationReceipt,
 ) -> None:
-    owner._consume_hypothesis_creation_receipt(ledger, receipt)  # type: ignore[arg-type]
-    owner._seal_owner_receipt_ledger(ledger, (receipt,))  # type: ignore[arg-type]
+    outcome_witness = owner._issue_hypothesis_semantic_creation_outcome_witness(
+        authorizer,
+        transaction,
+        ledger,
+        authorization,
+    )
+    owner._complete_hypothesis_creation_authorization(
+        authorizer,
+        transaction,
+        ledger,
+        authorization,
+        receipt,
+        outcome_witness,
+    )
+    owner._consume_hypothesis_creation_receipt(ledger, receipt)
+    owner._seal_owner_receipt_ledger(ledger, (receipt,))
 
 
 def test_registry_snapshot_readers_return_single_inventory_and_branch_bundle(
@@ -206,10 +243,13 @@ def test_registry_snapshot_readers_return_single_inventory_and_branch_bundle(
     with sqlite_boundary._independent_authority_read_snapshot(
         harness.authority
     ) as snapshot:
-        assert harness.store._load_revisioned_hypothesis_from_snapshot(
-            snapshot,
-            harness.token.hypothesis_id,
-        ) == harness.token
+        assert (
+            harness.store._load_revisioned_hypothesis_from_snapshot(
+                snapshot,
+                harness.token.hypothesis_id,
+            )
+            == harness.token
+        )
         assert (
             harness.store._load_revisioned_hypothesis_from_snapshot(
                 snapshot,
@@ -224,10 +264,13 @@ def test_registry_snapshot_readers_return_single_inventory_and_branch_bundle(
             snapshot,
             "branch-1",
         ) == (harness.token, second)
-        assert harness.store._load_branch_hypotheses_from_snapshot(
-            snapshot,
-            "branch-empty",
-        ) == ()
+        assert (
+            harness.store._load_branch_hypotheses_from_snapshot(
+                snapshot,
+                "branch-empty",
+            )
+            == ()
+        )
 
     with pytest.raises(sqlite_boundary.InactiveImmediateTransactionError):
         harness.store._load_revisioned_hypothesis_from_snapshot(
@@ -294,13 +337,30 @@ def test_insert_once_round_trip_writes_complete_revision_zero_owner(
             harness.store.load_revisioned_in(transaction, hypothesis.hypothesis_id)
             is None
         )
-        receipt = harness.store.insert_once_in(transaction, hypothesis)
+        target_token = RevisionedHypothesisRecord.from_value(hypothesis, 0)
+        authorizer, authorization = _authorize_hypothesis_creation(
+            transaction,
+            harness,
+            ledger,
+            target_token,
+        )
+        receipt = harness.store.insert_once_in(
+            transaction,
+            hypothesis,
+            authorization,
+        )
         committed = harness.store.load_revisioned_in(
             transaction,
             hypothesis.hypothesis_id,
         )
         assert committed == RevisionedHypothesisRecord.from_value(hypothesis, 0)
-        _commit_creation(ledger, receipt)
+        _commit_creation(
+            transaction,
+            ledger,
+            authorizer,
+            authorization,
+            receipt,
+        )
 
     connection = sqlite_boundary._connect_sqlite(harness.path)
     try:
@@ -455,7 +515,9 @@ def test_zero_row_cas_is_integrity_failure_and_rolls_back(tmp_path: Path) -> Non
     subject._HYPOTHESIS_CAS_SQL = original + " AND owner_revision = -1"
     try:
         with pytest.raises(DurableOwnerIntegrityError, match="changed zero rows"):
-            with sqlite_boundary.immediate_transaction(harness.authority) as transaction:
+            with sqlite_boundary.immediate_transaction(
+                harness.authority
+            ) as transaction:
                 ledger = _attach(transaction, harness)
                 harness.store.compare_and_swap_in(transaction, harness.token, target)
     finally:
@@ -476,7 +538,18 @@ def test_duplicate_insert_never_replaces_equal_or_drifted_owner(
     with pytest.raises(OwnerAlreadyExists):
         with sqlite_boundary.immediate_transaction(harness.authority) as transaction:
             ledger = _attach(transaction, harness)
-            harness.store.insert_once_in(transaction, duplicate)
+            target_token = RevisionedHypothesisRecord.from_value(duplicate, 0)
+            _, authorization = _authorize_hypothesis_creation(
+                transaction,
+                harness,
+                ledger,
+                target_token,
+            )
+            harness.store.insert_once_in(
+                transaction,
+                duplicate,
+                authorization,
+            )
     row = _raw_row(harness)
     assert row is not None
     assert row["status"] == "active"
@@ -523,13 +596,20 @@ def test_successful_write_without_sealed_receipt_rolls_back(tmp_path: Path) -> N
 
 def test_public_api_hides_ledger_sql_parameters_facts_and_committed_tokens() -> None:
     signatures = {
-        name: tuple(inspect.signature(getattr(subject.HypothesisStore, name)).parameters)
+        name: tuple(
+            inspect.signature(getattr(subject.HypothesisStore, name)).parameters
+        )
         for name in ("load_revisioned_in", "compare_and_swap_in", "insert_once_in")
     }
     assert signatures == {
         "load_revisioned_in": ("self", "transaction", "hypothesis_id"),
         "compare_and_swap_in": ("self", "transaction", "expected", "target"),
-        "insert_once_in": ("self", "transaction", "hypothesis"),
+        "insert_once_in": (
+            "self",
+            "transaction",
+            "hypothesis",
+            "creation_authorization",
+        ),
     }
     forbidden = {"ledger", "sql", "parameters", "write_fact", "committed_token"}
     assert all(forbidden.isdisjoint(parameters) for parameters in signatures.values())
@@ -599,7 +679,7 @@ def test_store_sql_is_fixed_complete_and_avoids_replace_surfaces() -> None:
             continue
         name = node.func.attr
         if name in expected_sql_arguments:
-            argument = node.args[3]
+            argument = node.args[4 if name == "_execute_hypothesis_owner_insert" else 3]
             assert isinstance(argument, ast.Name)
             found[name] = argument.id
     assert found == expected_sql_arguments

@@ -282,9 +282,7 @@ class HypothesisStore:
                 "expected must be an exact RevisionedHypothesisRecord"
             )
         if type(target) is not HypothesisRecord:
-            raise DurableOwnerIntegrityError(
-                "target must be an exact HypothesisRecord"
-            )
+            raise DurableOwnerIntegrityError("target must be an exact HypothesisRecord")
         ledger = _owner._require_hypothesis_store_ledger(
             transaction,
             self.__store_authority,
@@ -336,6 +334,7 @@ class HypothesisStore:
         self,
         transaction: _sqlite.ImmediateTransaction,
         hypothesis: HypothesisRecord,
+        creation_authorization: _owner._OwnerCreationAuthorization,
     ) -> _owner.OwnerCreationReceipt:
         """Create one revision-zero owner without replacement semantics."""
 
@@ -351,10 +350,7 @@ class HypothesisStore:
             hypothesis,
             owner_revision=0,
         )
-        if (
-            self._read_optional_in(transaction, target_token.hypothesis_id)
-            is not None
-        ):
+        if self._read_optional_in(transaction, target_token.hypothesis_id) is not None:
             raise OwnerAlreadyExists(
                 f"hypothesis owner already exists: {target_token.hypothesis_id}"
             )
@@ -362,6 +358,7 @@ class HypothesisStore:
         result, write_fact = _owner._execute_hypothesis_owner_insert(
             self.__store_authority,
             ledger,
+            creation_authorization,
             target_token.hypothesis_id,
             _HYPOTHESIS_INSERT_SQL,
             _write_parameters(target_token),
@@ -497,9 +494,7 @@ def _decode_hypothesis_row(row: Any) -> RevisionedHypothesisRecord:
         )
     created_at = raw["created_at"]
     if type(created_at) is not str:
-        raise DurableOwnerIntegrityError(
-            "hypothesis creation time must be a string"
-        )
+        raise DurableOwnerIntegrityError("hypothesis creation time must be a string")
     try:
         decoded_created_at = datetime.fromisoformat(created_at)
         value = HypothesisRecord(

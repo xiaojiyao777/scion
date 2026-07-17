@@ -672,8 +672,8 @@ The implementation order is fixed; items 1-3 are complete:
    creation authority, schema, writer cutover, retry, budget, cap, gate, cutoff,
    or truncation. Two independent implementation audits close at P0=0/P1=0;
    its expanded responsibility regression passes `183`, and the correctly
-   rooted suite passes `2607` with `1` skipped in `474.04s`. Next implement the
-   authorization-bound creation participants. Their implementation contract is
+   rooted suite passes `2607` with `1` skipped in `474.04s`. The authorization-
+   bound creation participants' implementation contract is
    now frozen in
    `scion/docs/planning/v0.4/v0.4-d2b0b-authorization-bound-owner-creation-plan-20260716.md`
    after three specialized audits and three adversarial revision rounds close
@@ -683,8 +683,24 @@ The implementation order is fixed; items 1-3 are complete:
    publication. A provider-time generation view binds the exact Branch and H
    history head before one started attempt and one provider call; legacy
    pre-binding history is admitted only through a sealed completion-only
-   activation inventory. The foundation remains production-disabled and has no
-   schema effect. Implement it by responsibility layer, then perform the
+   activation inventory. Its first dormant responsibility checkpoint is now
+   complete: the generic ledger proves exact creation authorization/write/
+   receipt/witness closure; the connection-scoped champion participant and
+   focused Branch/H INSERTs require exact authorization; and a committed,
+   strictly reread hypothesis START is the only source of the one-shot provider
+   permit and provider-issued sealed generated result. Rolled-back/replaced
+   STARTs and mismatched persisted context/prompt fail before transport. The
+   combined focused set passes `219`; the correctly rooted suite passes `2672`
+   with `1` skipped in `503.28s`; independent review closes P0=0/P1=0 after its
+   rollback finding was fixed. Production remains uncomposed and no schema is
+   created. Two maintainability reviews require keeping the generic ledger and
+   provider result state machines colocated for now: splitting them before the
+   H participant and Registry transition graph stabilizes would introduce
+   cross-module mutable authority, callbacks, or circular helper ownership.
+   Reassess package-level mechanical decomposition after those boundaries are
+   complete. Next finish the proposal-attempt generated-event/binding/H
+   authorization and classification participant, then add Registry generation/
+   creation views and fused publication. Only then perform the
    indivisible D2b.0b.C schema/all-writer cutover and D2b.0b.V acceptance; no
    intermediate runnable
    state may combine active revisions with a legacy writer. Then continue the
@@ -735,6 +751,11 @@ identical to a retained completed eight-round owner. Batch 18 removed one pre-
 evaluation permission-failure replay shell and one
 zero-effective capacity-blocked successor after copy-isolated database review
 proved complete retained-owner coverage and no unique scientific evidence.
+Read-only batch 19 then rescanned all `752` remaining roots and found no
+further whole-root candidate with complete retained-owner equivalence. Old
+zero-valued status fields were not treated as absence: affected roots retained
+unique traces, newer accounting/formal evidence, or protected launch archives.
+No path and zero bytes were deleted in batch 19.
 Batches 8-10 and 12 then compacted
 `2,850` Git-restorable static subtree copies totaling `6.759 GiB` without
 deleting any additional root or changing registry/DB/metrics/trace/formal/log
@@ -767,9 +788,12 @@ scientific and lineage-owning artifacts remain in place.
    complete and production-unimported; owner transaction, focused stores, and
    the mutation-only one-root Registry are also complete and dormant. The
    authorization-bound creation contract has now passed its own champion,
-   proposal-attempt, and generic-ledger reviews with P0=0/P1=0. Continue with
-   its dormant responsibility-layer implementation, then indivisible offline
-   cutover,
+   proposal-attempt, and generic-ledger reviews with P0=0/P1=0. Its generic
+   creation ledger, champion/Branch authorization participant, committed START,
+   provider permit, and generated-result proof are implemented and dormant.
+   Continue with the generated-event/attempt-to-H binding/H authorization
+   participant and Registry generation/creation publication layers, then the
+   indivisible offline cutover,
    and closure exactly as frozen, then implement the remaining paired
    slot/dispatch/receipt slices, D2c exact Decision transport, D2d isolated
    snapshot handoff, and D2e v2 completion/recovery;

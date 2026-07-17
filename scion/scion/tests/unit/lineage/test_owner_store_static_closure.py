@@ -5,9 +5,10 @@ from pathlib import Path
 
 from scion.core import campaign_owner_registry
 from scion.lineage import branch_owner_store
+from scion.lineage import champion_store
 from scion.lineage import hypothesis_owner_store
 from scion.lineage import owner_transaction
-
+from scion.lineage import proposal_attempt_owner
 
 _BRANCH_PRIVATE = frozenset(
     {
@@ -44,6 +45,14 @@ _CREATION_REGISTRY_PRIVATE = frozenset(
         "_consume_hypothesis_creation_receipt",
     }
 )
+_CHAMPION_CREATION_PRIVATE = frozenset(
+    {
+        "_issue_branch_creation_authorizer_authority",
+        "_register_branch_creation_authorization",
+        "_issue_branch_semantic_creation_outcome_witness",
+        "_complete_branch_creation_authorization",
+    }
+)
 _REGISTRY_PRIVATE = _MUTATION_REGISTRY_PRIVATE | _CREATION_REGISTRY_PRIVATE
 _SQLITE_BRIDGE_PRIVATE = frozenset(
     {
@@ -70,6 +79,16 @@ _REGISTRY_SQLITE_STATE_PRIVATE = frozenset(
     }
 )
 _SHARED_SQLITE_AUTHORITY_PRIVATE = frozenset({"_lookup_authority_state"})
+_CHAMPION_DORMANT_SURFACE = frozenset(
+    {
+        "ConnectionScopedChampionStore",
+        "_authorize_branch_creation_in",
+        "_complete_branch_creation_in",
+        "_require_branch_creation_outcome",
+        "_settle_branch_creation_outcome",
+        "_discard_branch_creation_outcome",
+    }
+)
 
 
 def _production_trees() -> dict[Path, ast.Module]:
@@ -113,7 +132,12 @@ def _owner_internal_private_names() -> frozenset[str]:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         and node.name.startswith("_")
     }
-    approved_cross_module = _BRANCH_PRIVATE | _HYPOTHESIS_PRIVATE | _REGISTRY_PRIVATE
+    approved_cross_module = (
+        _BRANCH_PRIVATE
+        | _HYPOTHESIS_PRIVATE
+        | _REGISTRY_PRIVATE
+        | _CHAMPION_CREATION_PRIVATE
+    )
     return frozenset(private_definitions - approved_cross_module)
 
 
@@ -129,9 +153,7 @@ def _dynamic_private_references(
             function_name = (
                 node.func.id
                 if isinstance(node.func, ast.Name)
-                else node.func.attr
-                if isinstance(node.func, ast.Attribute)
-                else None
+                else node.func.attr if isinstance(node.func, ast.Attribute) else None
             )
             if function_name not in {"getattr", "__import__", "import_module"}:
                 continue
@@ -150,6 +172,8 @@ def test_owner_private_importers_are_an_exact_dormant_allowlist() -> None:
     branch_path = Path(branch_owner_store.__file__).resolve()
     hypothesis_path = Path(hypothesis_owner_store.__file__).resolve()
     owner_path = Path(owner_transaction.__file__).resolve()
+    champion_path = Path(champion_store.__file__).resolve()
+    proposal_attempt_path = Path(proposal_attempt_owner.__file__).resolve()
     registry_path = Path(campaign_owner_registry.__file__).resolve()
 
     assert all(
@@ -159,6 +183,13 @@ def test_owner_private_importers_are_an_exact_dormant_allowlist() -> None:
     assert all(
         callers == {hypothesis_path}
         for callers in _attribute_callers(trees, _HYPOTHESIS_PRIVATE).values()
+    )
+    assert all(
+        callers == {champion_path}
+        for callers in _attribute_callers(
+            trees,
+            _CHAMPION_CREATION_PRIVATE,
+        ).values()
     )
     assert all(
         callers == {registry_path}
@@ -177,7 +208,14 @@ def test_owner_private_importers_are_an_exact_dormant_allowlist() -> None:
     assert _attribute_callers(
         trees,
         _SHARED_SQLITE_AUTHORITY_PRIVATE,
-    ) == {"_lookup_authority_state": {owner_path, registry_path}}
+    ) == {
+        "_lookup_authority_state": {
+            owner_path,
+            registry_path,
+            champion_path,
+            proposal_attempt_path,
+        }
+    }
     assert all(
         not callers
         for callers in _attribute_callers(
@@ -229,6 +267,23 @@ def test_focused_owner_stores_have_no_production_importer() -> None:
     assert importers == {registry_path}
 
 
+def test_connection_scoped_champion_creation_surface_has_zero_wiring() -> None:
+    trees = _production_trees()
+    champion_path = Path(champion_store.__file__).resolve()
+    callers = _attribute_callers(
+        trees,
+        _CHAMPION_DORMANT_SURFACE,
+    )
+    assert callers == {
+        "ConnectionScopedChampionStore": set(),
+        "_authorize_branch_creation_in": set(),
+        "_complete_branch_creation_in": set(),
+        "_require_branch_creation_outcome": {champion_path},
+        "_settle_branch_creation_outcome": set(),
+        "_discard_branch_creation_outcome": set(),
+    }
+
+
 def test_focused_store_registry_surface_has_exact_production_callers() -> None:
     trees = _production_trees()
     registry_path = Path(campaign_owner_registry.__file__).resolve()
@@ -275,8 +330,7 @@ def test_campaign_owner_registry_has_no_production_composition_importer() -> Non
                 or (
                     node.module == "scion.core"
                     and any(
-                        alias.name == "campaign_owner_registry"
-                        for alias in node.names
+                        alias.name == "campaign_owner_registry" for alias in node.names
                     )
                 )
             ):
@@ -293,6 +347,7 @@ def test_private_owner_symbols_are_not_reached_dynamically() -> None:
         | _REGISTRY_SQLITE_PRIVATE
         | _REGISTRY_SQLITE_STATE_PRIVATE
         | _SHARED_SQLITE_AUTHORITY_PRIVATE
+        | _CHAMPION_DORMANT_SURFACE
         | _owner_internal_private_names()
     )
     assert _dynamic_private_references(_production_trees(), protected) == []
@@ -310,9 +365,7 @@ def test_static_closure_detects_alias_direct_and_dynamic_private_access() -> Non
         direct_path: ast.parse(
             "from scion.lineage.owner_transaction import _issue_receipt\n"
         ),
-        dynamic_path: ast.parse(
-            "getattr(owner, '_require_store_ledger')\n"
-        ),
+        dynamic_path: ast.parse("getattr(owner, '_require_store_ledger')\n"),
     }
     callers = _attribute_callers(
         trees,
@@ -337,6 +390,7 @@ def test_owner_public_exports_are_receipts_and_typed_errors_only() -> None:
         "OwnerReceiptClosureError",
         "OwnerTransactionError",
         "OwnerWriteProtocolError",
+        "SemanticCreationOutcomeWitness",
     )
     assert branch_owner_store.__all__ == ("BranchStore",)
     assert hypothesis_owner_store.__all__ == ("HypothesisStore",)

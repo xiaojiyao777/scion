@@ -197,7 +197,9 @@ def _decode_branch_row(
     try:
         values = tuple(row)  # type: ignore[arg-type]
     except (TypeError, ValueError) as exc:
-        raise DurableOwnerIntegrityError("Branch owner row is not materialized") from exc
+        raise DurableOwnerIntegrityError(
+            "Branch owner row is not materialized"
+        ) from exc
     if len(values) != len(_BRANCH_COLUMNS):
         raise DurableOwnerIntegrityError(
             "Branch owner row does not contain the complete final schema"
@@ -577,6 +579,7 @@ class BranchStore:
         self,
         transaction: _sqlite.ImmediateTransaction,
         target: Branch,
+        creation_authorization: _owner._OwnerCreationAuthorization,
     ) -> _owner.OwnerCreationReceipt:
         if type(target) is not Branch:
             raise DurableOwnerIntegrityError("Branch creation target must be a Branch")
@@ -601,6 +604,7 @@ class BranchStore:
         result, write_fact = _owner._execute_branch_owner_insert(
             self.__store_authority,
             ledger,
+            creation_authorization,
             target_token.branch_id,
             _BRANCH_INSERT_SQL,
             (*target_values, 0, _OWNER_PROTOCOL_GENERATION),

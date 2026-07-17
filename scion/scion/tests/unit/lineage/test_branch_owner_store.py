@@ -70,8 +70,7 @@ def _target(
 
 
 def _create_schema(connection: sqlite3.Connection) -> None:
-    connection.executescript(
-        """
+    connection.executescript("""
         CREATE TABLE branches (
             branch_id TEXT PRIMARY KEY,
             state TEXT NOT NULL,
@@ -112,8 +111,7 @@ def _create_schema(connection: sqlite3.Connection) -> None:
         BEGIN
             SELECT RAISE(ABORT, 'durable owner CAS contract is required');
         END;
-        """
-    )
+        """)
 
 
 def _insert_seed(
@@ -149,9 +147,31 @@ def _harness(tmp_path: Path) -> _Harness:
     )
 
 
-def _load(harness: _Harness, branch_id: str = "branch-1") -> RevisionedBranchRecord | None:
+def _load(
+    harness: _Harness, branch_id: str = "branch-1"
+) -> RevisionedBranchRecord | None:
     with sqlite_boundary.immediate_transaction(harness.authority) as transaction:
         return harness.store.load_revisioned_in(transaction, branch_id)
+
+
+def _authorize_branch_creation(
+    harness: _Harness,
+    transaction: sqlite_boundary.ImmediateTransaction,
+    ledger: owner._OwnerReceiptLedger,
+    target: RevisionedBranchRecord,
+) -> tuple[
+    owner._OwnerCreationAuthorizerAuthority,
+    owner._OwnerCreationAuthorization,
+]:
+    authorizer = owner._issue_branch_creation_authorizer_authority(harness.authority)
+    authorization = owner._register_branch_creation_authorization(
+        authorizer,
+        transaction,
+        ledger,
+        target.branch_id,
+        target.payload_sha256,
+    )
+    return authorizer, authorization
 
 
 def test_registry_snapshot_readers_return_single_and_complete_inventory(
@@ -172,10 +192,13 @@ def test_registry_snapshot_readers_return_single_and_complete_inventory(
     with sqlite_boundary._independent_authority_read_snapshot(
         harness.authority
     ) as snapshot:
-        assert harness.store._load_revisioned_branch_from_snapshot(
-            snapshot,
-            harness.expected.branch_id,
-        ) == harness.expected
+        assert (
+            harness.store._load_revisioned_branch_from_snapshot(
+                snapshot,
+                harness.expected.branch_id,
+            )
+            == harness.expected
+        )
         assert (
             harness.store._load_revisioned_branch_from_snapshot(
                 snapshot,
@@ -183,9 +206,10 @@ def test_registry_snapshot_readers_return_single_and_complete_inventory(
             )
             is None
         )
-        assert harness.store._load_all_revisioned_branches_from_snapshot(
-            snapshot
-        ) == (harness.expected, second)
+        assert harness.store._load_all_revisioned_branches_from_snapshot(snapshot) == (
+            harness.expected,
+            second,
+        )
 
     with pytest.raises(sqlite_boundary.InactiveImmediateTransactionError):
         harness.store._load_revisioned_branch_from_snapshot(
@@ -200,13 +224,11 @@ def test_registry_snapshot_reader_reuses_strict_complete_decoder(
     harness = _harness(tmp_path)
     connection = sqlite_boundary._connect_sqlite(harness.path)
     try:
-        connection.execute(
-            """
+        connection.execute("""
             UPDATE branches
             SET failure_codes = '{}', owner_revision = owner_revision + 1
             WHERE branch_id = 'branch-1'
-            """
-        )
+            """)
         connection.commit()
     finally:
         connection.close()
@@ -258,7 +280,31 @@ def test_insert_once_round_trip_issues_creation_receipt(tmp_path: Path) -> None:
             transaction,
             harness.authority,
         )
-        receipt = harness.store.insert_once_in(transaction, target)
+        authorizer, authorization = _authorize_branch_creation(
+            harness,
+            transaction,
+            ledger,
+            target_token,
+        )
+        receipt = harness.store.insert_once_in(
+            transaction,
+            target,
+            authorization,
+        )
+        outcome_witness = owner._issue_branch_semantic_creation_outcome_witness(
+            authorizer,
+            transaction,
+            ledger,
+            authorization,
+        )
+        owner._complete_branch_creation_authorization(
+            authorizer,
+            transaction,
+            ledger,
+            authorization,
+            receipt,
+            outcome_witness,
+        )
         witness = owner._consume_branch_creation_receipt(ledger, receipt)
         assert witness.expected_token is None
         assert witness.committed_token == target_token
@@ -467,15 +513,13 @@ def test_zero_row_cas_leaves_pending_and_rolls_back(tmp_path: Path) -> None:
     harness = _harness(tmp_path)
     connection = sqlite_boundary._connect_sqlite(harness.path)
     try:
-        connection.execute(
-            """
+        connection.execute("""
             CREATE TRIGGER ignore_focused_branch_update
             BEFORE UPDATE ON branches
             BEGIN
                 SELECT RAISE(IGNORE);
             END
-            """
-        )
+            """)
         connection.commit()
     finally:
         connection.close()
@@ -504,7 +548,21 @@ def test_duplicate_insert_is_typed_and_does_not_replace(tmp_path: Path) -> None:
                 transaction,
                 harness.authority,
             )
-            harness.store.insert_once_in(transaction, duplicate)
+            duplicate_token = RevisionedBranchRecord.from_value(
+                duplicate,
+                owner_revision=0,
+            )
+            _, authorization = _authorize_branch_creation(
+                harness,
+                transaction,
+                ledger,
+                duplicate_token,
+            )
+            harness.store.insert_once_in(
+                transaction,
+                duplicate,
+                authorization,
+            )
             assert ledger is not None
     assert _load(harness) == harness.expected
 
@@ -513,13 +571,11 @@ def test_malformed_complete_row_is_integrity_error(tmp_path: Path) -> None:
     harness = _harness(tmp_path)
     connection = sqlite_boundary._connect_sqlite(harness.path)
     try:
-        connection.execute(
-            """
+        connection.execute("""
             UPDATE branches
             SET failure_codes = '{}', owner_revision = owner_revision + 1
             WHERE branch_id = 'branch-1'
-            """
-        )
+            """)
         connection.commit()
     finally:
         connection.close()
@@ -631,6 +687,7 @@ def test_dormant_public_and_static_surface_is_exact() -> None:
         }:
             continue
         assert len(node.args) >= 4
-        assert isinstance(node.args[3], ast.Name)
-        execute_sql_names.append(node.args[3].id)
+        sql_index = 4 if node.func.attr == "_execute_branch_owner_insert" else 3
+        assert isinstance(node.args[sql_index], ast.Name)
+        execute_sql_names.append(node.args[sql_index].id)
     assert sorted(execute_sql_names) == ["_BRANCH_CAS_SQL", "_BRANCH_INSERT_SQL"]

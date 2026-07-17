@@ -28,6 +28,8 @@ class _Harness:
     authority: sqlite_boundary.CampaignDatabaseAuthority
     branch_store: subject._OwnerStoreAuthority
     hypothesis_store: subject._OwnerStoreAuthority
+    branch_authorizer: subject._OwnerCreationAuthorizerAuthority
+    hypothesis_authorizer: subject._OwnerCreationAuthorizerAuthority
     branch: RevisionedBranchRecord
     hypothesis: RevisionedHypothesisRecord
 
@@ -99,8 +101,7 @@ def _harness(
     )
     connection = sqlite_boundary._connect_sqlite(path)
     try:
-        connection.executescript(
-            """
+        connection.executescript("""
             CREATE TABLE branches (
                 branch_id TEXT PRIMARY KEY,
                 owner_revision INTEGER NOT NULL,
@@ -118,8 +119,7 @@ def _harness(
                 event_id TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
-            """
-        )
+            """)
         connection.execute(
             "INSERT INTO branches VALUES (?, ?, ?, ?)",
             (
@@ -154,8 +154,7 @@ def _harness(
                 ),
             )
         if owner_trigger:
-            connection.execute(
-                """
+            connection.execute("""
                 CREATE TRIGGER branch_writes_hypothesis
                 AFTER UPDATE ON branches
                 BEGIN
@@ -163,8 +162,7 @@ def _harness(
                     SET owner_revision = owner_revision + 1
                     WHERE hypothesis_id = 'hypothesis-1';
                 END
-                """
-            )
+                """)
         connection.commit()
     finally:
         connection.close()
@@ -175,6 +173,12 @@ def _harness(
         authority=authority,
         branch_store=subject._issue_branch_store_authority(authority),
         hypothesis_store=subject._issue_hypothesis_store_authority(authority),
+        branch_authorizer=(
+            subject._issue_branch_creation_authorizer_authority(authority)
+        ),
+        hypothesis_authorizer=(
+            subject._issue_hypothesis_creation_authorizer_authority(authority)
+        ),
         branch=branch,
         hypothesis=hypothesis,
     )
@@ -299,6 +303,70 @@ def _write_hypothesis(
     return receipt, committed
 
 
+def _prepare_branch_creation(
+    harness: _Harness,
+    transaction: sqlite_boundary.ImmediateTransaction,
+    ledger: subject._OwnerReceiptLedger,
+    initial: RevisionedBranchRecord,
+) -> tuple[
+    subject._OwnerCreationAuthorization,
+    subject._OwnerWriteFact,
+    subject.OwnerCreationReceipt,
+]:
+    authorization = subject._register_branch_creation_authorization(
+        harness.branch_authorizer,
+        transaction,
+        ledger,
+        initial.branch_id,
+        initial.payload_sha256,
+    )
+    result, write_fact = subject._execute_branch_owner_insert(
+        harness.branch_store,
+        ledger,
+        authorization,
+        initial.branch_id,
+        "INSERT INTO branches VALUES (?, ?, ?, ?)",
+        (
+            initial.branch_id,
+            initial.owner_revision,
+            initial.payload_sha256,
+            "durable-owner.v1",
+        ),
+    )
+    assert result.rowcount == 1
+    receipt = subject._issue_branch_creation_receipt(
+        harness.branch_store,
+        ledger,
+        write_fact,
+        initial,
+    )
+    return authorization, write_fact, receipt
+
+
+def _complete_branch_creation(
+    harness: _Harness,
+    transaction: sqlite_boundary.ImmediateTransaction,
+    ledger: subject._OwnerReceiptLedger,
+    authorization: subject._OwnerCreationAuthorization,
+    receipt: subject.OwnerCreationReceipt,
+) -> subject.SemanticCreationOutcomeWitness:
+    outcome_witness = subject._issue_branch_semantic_creation_outcome_witness(
+        harness.branch_authorizer,
+        transaction,
+        ledger,
+        authorization,
+    )
+    subject._complete_branch_creation_authorization(
+        harness.branch_authorizer,
+        transaction,
+        ledger,
+        authorization,
+        receipt,
+        outcome_witness,
+    )
+    return outcome_witness
+
+
 def _database_owner(
     harness: _Harness,
     table: str,
@@ -335,6 +403,43 @@ def test_receipt_types_are_sealed_and_copies_are_not_issued(
         subject._lookup_receipt(forged)
     with pytest.raises(subject.InvalidOwnerReceiptError):
         copy.copy(forged)
+    with pytest.raises((TypeError, pickle.PicklingError)):
+        pickle.dumps(forged)
+
+
+@pytest.mark.parametrize(
+    ("capability_type", "lookup"),
+    [
+        (
+            subject._OwnerCreationAuthorizerAuthority,
+            subject._lookup_creation_authorizer_authority,
+        ),
+        (
+            subject._OwnerCreationAuthorization,
+            subject._lookup_creation_authorization,
+        ),
+        (
+            subject.SemanticCreationOutcomeWitness,
+            subject._lookup_semantic_creation_outcome_witness,
+        ),
+    ],
+)
+def test_creation_authority_types_are_sealed_and_forged_values_fail(
+    capability_type: type[object],
+    lookup,
+) -> None:
+    with pytest.raises(subject.InvalidOwnerReceiptError):
+        capability_type()
+    with pytest.raises(TypeError):
+        type("Subclass", (capability_type,), {})
+
+    forged = object.__new__(capability_type)
+    with pytest.raises(subject.InvalidOwnerReceiptError):
+        lookup(forged)
+    with pytest.raises(subject.InvalidOwnerReceiptError):
+        copy.copy(forged)
+    with pytest.raises(subject.InvalidOwnerReceiptError):
+        copy.deepcopy(forged)
     with pytest.raises((TypeError, pickle.PicklingError)):
         pickle.dumps(forged)
 
@@ -499,11 +604,14 @@ def test_mixed_branch_hypothesis_receipts_close_by_exact_identity(
         ) == (branch_witness, hypothesis_witness)
 
     assert _database_owner(harness, "branches", harness.branch.branch_id)[0] == 1
-    assert _database_owner(
-        harness,
-        "hypotheses",
-        harness.hypothesis.hypothesis_id,
-    )[0] == 1
+    assert (
+        _database_owner(
+            harness,
+            "hypotheses",
+            harness.hypothesis.hypothesis_id,
+        )[0]
+        == 1
+    )
     assert branch_committed.owner_revision == hypothesis_committed.owner_revision == 1
 
 
@@ -555,10 +663,13 @@ def test_transaction_has_one_exact_attached_owner_ledger(tmp_path: Path) -> None
             transaction,
             harness.authority,
         )
-        assert subject._require_branch_store_ledger(
-            transaction,
-            harness.branch_store,
-        ) is ledger
+        assert (
+            subject._require_branch_store_ledger(
+                transaction,
+                harness.branch_store,
+            )
+            is ledger
+        )
         with pytest.raises(subject.OwnerWriteProtocolError, match="already attached"):
             subject._attach_owner_receipt_ledger(
                 transaction,
@@ -612,8 +723,7 @@ def test_zero_or_multi_row_write_cannot_issue_receipt(
             "not authorized",
         ),
         (
-            "INSERT INTO branches VALUES "
-            "('branch-x', 0, 'x', 'durable-owner.v1')",
+            "INSERT INTO branches VALUES " "('branch-x', 0, 'x', 'durable-owner.v1')",
             "not authorized",
         ),
     ],
@@ -659,11 +769,14 @@ def test_owner_trigger_write_is_denied_and_rolls_back_top_level_write(
             )
 
     assert _database_owner(harness, "branches", harness.branch.branch_id)[0] == 0
-    assert _database_owner(
-        harness,
-        "hypotheses",
-        harness.hypothesis.hypothesis_id,
-    )[0] == 0
+    assert (
+        _database_owner(
+            harness,
+            "hypotheses",
+            harness.hypothesis.hypothesis_id,
+        )[0]
+        == 0
+    )
 
 
 def test_authorizer_permit_rejects_non_main_trigger_and_delete_events(
@@ -684,38 +797,50 @@ def test_authorizer_permit_rejects_non_main_trigger_and_delete_events(
             )
             state.active_permit = permit
             ledger_ref = weakref.ref(ledger)
-            assert subject._authorize_owner_table_action(
-                ledger_ref,
-                sqlite3.SQLITE_UPDATE,
-                "branches",
-                "owner_revision",
-                "main",
-                None,
-            ) == sqlite3.SQLITE_OK
-            assert subject._authorize_owner_table_action(
-                ledger_ref,
-                sqlite3.SQLITE_UPDATE,
-                "branches",
-                "owner_revision",
-                "aux",
-                None,
-            ) == sqlite3.SQLITE_DENY
-            assert subject._authorize_owner_table_action(
-                ledger_ref,
-                sqlite3.SQLITE_UPDATE,
-                "branches",
-                "owner_revision",
-                "main",
-                "owner_trigger",
-            ) == sqlite3.SQLITE_DENY
-            assert subject._authorize_owner_table_action(
-                ledger_ref,
-                sqlite3.SQLITE_DELETE,
-                "branches",
-                None,
-                "main",
-                None,
-            ) == sqlite3.SQLITE_DENY
+            assert (
+                subject._authorize_owner_table_action(
+                    ledger_ref,
+                    sqlite3.SQLITE_UPDATE,
+                    "branches",
+                    "owner_revision",
+                    "main",
+                    None,
+                )
+                == sqlite3.SQLITE_OK
+            )
+            assert (
+                subject._authorize_owner_table_action(
+                    ledger_ref,
+                    sqlite3.SQLITE_UPDATE,
+                    "branches",
+                    "owner_revision",
+                    "aux",
+                    None,
+                )
+                == sqlite3.SQLITE_DENY
+            )
+            assert (
+                subject._authorize_owner_table_action(
+                    ledger_ref,
+                    sqlite3.SQLITE_UPDATE,
+                    "branches",
+                    "owner_revision",
+                    "main",
+                    "owner_trigger",
+                )
+                == sqlite3.SQLITE_DENY
+            )
+            assert (
+                subject._authorize_owner_table_action(
+                    ledger_ref,
+                    sqlite3.SQLITE_DELETE,
+                    "branches",
+                    None,
+                    "main",
+                    None,
+                )
+                == sqlite3.SQLITE_DENY
+            )
             permit.executing = False
             state.active_permit = None
             raise RuntimeError("rollback authorizer matrix")
@@ -799,7 +924,9 @@ def test_interruption_after_execute_return_leaves_pending_and_rolls_back(
 
 def test_same_owner_cannot_receive_two_writes_in_one_ledger(tmp_path: Path) -> None:
     harness = _harness(tmp_path)
-    with pytest.raises(subject.OwnerWriteProtocolError, match="cannot be written twice"):
+    with pytest.raises(
+        subject.OwnerWriteProtocolError, match="cannot be written twice"
+    ):
         with sqlite_boundary.immediate_transaction(harness.authority) as transaction:
             ledger = subject._attach_owner_receipt_ledger(
                 transaction,
@@ -945,9 +1072,17 @@ def test_creation_receipt_requires_revision_zero_and_fixed_kind(tmp_path: Path) 
             transaction,
             harness.authority,
         )
+        authorization = subject._register_branch_creation_authorization(
+            harness.branch_authorizer,
+            transaction,
+            ledger,
+            initial.branch_id,
+            initial.payload_sha256,
+        )
         result, fact = subject._execute_branch_owner_insert(
             harness.branch_store,
             ledger,
+            authorization,
             initial.branch_id,
             "INSERT INTO branches VALUES (?, ?, ?, ?)",
             (
@@ -971,6 +1106,13 @@ def test_creation_receipt_requires_revision_zero_and_fixed_kind(tmp_path: Path) 
             fact,
             initial,
         )
+        outcome_witness = _complete_branch_creation(
+            harness,
+            transaction,
+            ledger,
+            authorization,
+            receipt,
+        )
         with pytest.raises(subject.OwnerWriteProtocolError, match="interchanged"):
             subject._consume_receipt_as(
                 ledger,
@@ -979,8 +1121,16 @@ def test_creation_receipt_requires_revision_zero_and_fixed_kind(tmp_path: Path) 
                 creation=False,
             )
         witness = subject._consume_branch_creation_receipt(ledger, receipt)
+        subject._require_branch_semantic_creation_outcome_witness(
+            harness.branch_authorizer,
+            transaction,
+            ledger,
+            authorization,
+            outcome_witness,
+        )
         subject._seal_owner_receipt_ledger(ledger, (receipt,))
         assert witness.expected_token is None
+        assert witness.creation_authorization is authorization
 
 
 def test_hypothesis_creation_receipt_binds_actual_branch_and_revision(
@@ -996,9 +1146,17 @@ def test_hypothesis_creation_receipt_binds_actual_branch_and_revision(
             transaction,
             harness.authority,
         )
+        authorization = subject._register_hypothesis_creation_authorization(
+            harness.hypothesis_authorizer,
+            transaction,
+            ledger,
+            initial.hypothesis_id,
+            initial.payload_sha256,
+        )
         _, fact = subject._execute_hypothesis_owner_insert(
             harness.hypothesis_store,
             ledger,
+            authorization,
             initial.hypothesis_id,
             "INSERT INTO hypotheses VALUES (?, ?, ?, ?, ?)",
             (
@@ -1015,15 +1173,496 @@ def test_hypothesis_creation_receipt_binds_actual_branch_and_revision(
             fact,
             initial,
         )
+        outcome_witness = subject._issue_hypothesis_semantic_creation_outcome_witness(
+            harness.hypothesis_authorizer,
+            transaction,
+            ledger,
+            authorization,
+        )
+        subject._complete_hypothesis_creation_authorization(
+            harness.hypothesis_authorizer,
+            transaction,
+            ledger,
+            authorization,
+            receipt,
+            outcome_witness,
+        )
         witness = subject._consume_hypothesis_creation_receipt(ledger, receipt)
         subject._seal_owner_receipt_ledger(ledger, (receipt,))
         assert witness.owner_id == "hypothesis-new"
         assert witness.expected_token is None
+        assert witness.creation_authorization is authorization
 
     assert _database_owner(harness, "hypotheses", "hypothesis-new") == (
         0,
         initial.payload_sha256,
     )
+
+
+def test_creation_authorization_requires_completion_before_consumption(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    initial = RevisionedBranchRecord.from_value(
+        _branch(branch_id="branch-new"),
+        owner_revision=0,
+    )
+    with sqlite_boundary.immediate_transaction(harness.authority) as transaction:
+        ledger = subject._attach_owner_receipt_ledger(
+            transaction,
+            harness.authority,
+        )
+        authorization, write_fact, receipt = _prepare_branch_creation(
+            harness,
+            transaction,
+            ledger,
+            initial,
+        )
+        authorization_state = subject._lookup_creation_authorization(authorization)
+        assert (
+            authorization_state.phase is subject._CreationAuthorizationPhase.WRITE_BOUND
+        )
+        assert authorization_state.write_fact is write_fact
+        with pytest.raises(subject.OwnerWriteProtocolError, match="not completed"):
+            subject._consume_branch_creation_receipt(ledger, receipt)
+        outcome_witness = subject._issue_branch_semantic_creation_outcome_witness(
+            harness.branch_authorizer,
+            transaction,
+            ledger,
+            authorization,
+        )
+        with pytest.raises(
+            subject.InvalidOwnerReceiptError,
+            match="another semantic authorizer",
+        ):
+            subject._complete_branch_creation_authorization(
+                subject._issue_branch_creation_authorizer_authority(harness.authority),
+                transaction,
+                ledger,
+                authorization,
+                receipt,
+                outcome_witness,
+            )
+        subject._complete_branch_creation_authorization(
+            harness.branch_authorizer,
+            transaction,
+            ledger,
+            authorization,
+            receipt,
+            outcome_witness,
+        )
+        assert (
+            authorization_state.phase is subject._CreationAuthorizationPhase.COMPLETED
+        )
+        with pytest.raises(subject.OwnerWriteProtocolError, match="WRITE_BOUND"):
+            subject._complete_branch_creation_authorization(
+                harness.branch_authorizer,
+                transaction,
+                ledger,
+                authorization,
+                receipt,
+                outcome_witness,
+            )
+        witness = subject._consume_branch_creation_receipt(ledger, receipt)
+        assert witness.creation_authorization is authorization
+        subject._seal_owner_receipt_ledger(ledger, (receipt,))
+
+
+def test_creation_authorization_rejects_wrong_kind_database_and_digest(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path / "a")
+    other = _harness(tmp_path / "b")
+    with pytest.raises(RuntimeError, match="rollback authorization validation"):
+        with sqlite_boundary.immediate_transaction(harness.authority) as transaction:
+            ledger = subject._attach_owner_receipt_ledger(
+                transaction,
+                harness.authority,
+            )
+            forged_transaction = object.__new__(sqlite_boundary.ImmediateTransaction)
+            with pytest.raises(
+                subject.InvalidOwnerReceiptError,
+                match="another transaction",
+            ):
+                subject._register_branch_creation_authorization(
+                    harness.branch_authorizer,
+                    forged_transaction,
+                    ledger,
+                    "branch-new",
+                    "a" * 64,
+                )
+            with pytest.raises(subject.InvalidOwnerReceiptError, match="owner kind"):
+                subject._register_hypothesis_creation_authorization(
+                    harness.branch_authorizer,
+                    transaction,
+                    ledger,
+                    "hypothesis-new",
+                    "a" * 64,
+                )
+            with pytest.raises(
+                subject.InvalidOwnerReceiptError,
+                match="another database",
+            ):
+                subject._register_branch_creation_authorization(
+                    other.branch_authorizer,
+                    transaction,
+                    ledger,
+                    "branch-new",
+                    "a" * 64,
+                )
+            for malformed_owner_id in ("", " ", " branch-new", "branch-new "):
+                with pytest.raises(
+                    subject.OwnerWriteProtocolError,
+                    match="nonempty exact str",
+                ):
+                    subject._register_branch_creation_authorization(
+                        harness.branch_authorizer,
+                        transaction,
+                        ledger,
+                        malformed_owner_id,
+                        "a" * 64,
+                    )
+            for malformed in ("", "A" * 64, "g" * 64, "a" * 63):
+                with pytest.raises(
+                    subject.OwnerWriteProtocolError,
+                    match="SHA-256",
+                ):
+                    subject._register_branch_creation_authorization(
+                        harness.branch_authorizer,
+                        transaction,
+                        ledger,
+                        "branch-new",
+                        malformed,
+                    )
+            raise RuntimeError("rollback authorization validation")
+
+
+def test_owner_insert_rejects_forged_and_wrong_id_authorization(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    initial = RevisionedBranchRecord.from_value(
+        _branch(branch_id="branch-new"),
+        owner_revision=0,
+    )
+    with pytest.raises(RuntimeError, match="rollback insert authorization"):
+        with sqlite_boundary.immediate_transaction(harness.authority) as transaction:
+            ledger = subject._attach_owner_receipt_ledger(
+                transaction,
+                harness.authority,
+            )
+            forged = object.__new__(subject._OwnerCreationAuthorization)
+            with pytest.raises(subject.InvalidOwnerReceiptError, match="not issued"):
+                subject._execute_branch_owner_insert(
+                    harness.branch_store,
+                    ledger,
+                    forged,
+                    initial.branch_id,
+                    "INSERT INTO branches VALUES (?, ?, ?, ?)",
+                    (
+                        initial.branch_id,
+                        0,
+                        initial.payload_sha256,
+                        "durable-owner.v1",
+                    ),
+                )
+            authorization = subject._register_branch_creation_authorization(
+                harness.branch_authorizer,
+                transaction,
+                ledger,
+                initial.branch_id,
+                initial.payload_sha256,
+            )
+            with pytest.raises(subject.OwnerWriteProtocolError, match="ID differs"):
+                subject._execute_branch_owner_insert(
+                    harness.branch_store,
+                    ledger,
+                    authorization,
+                    "branch-other",
+                    "INSERT INTO branches VALUES (?, ?, ?, ?)",
+                    ("branch-other", 0, initial.payload_sha256, "durable-owner.v1"),
+                )
+            raise RuntimeError("rollback insert authorization")
+
+
+def test_creation_receipt_rejects_authorization_target_digest_drift(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    initial = RevisionedBranchRecord.from_value(
+        _branch(branch_id="branch-new"),
+        owner_revision=0,
+    )
+    with pytest.raises(RuntimeError, match="rollback digest drift"):
+        with sqlite_boundary.immediate_transaction(harness.authority) as transaction:
+            ledger = subject._attach_owner_receipt_ledger(
+                transaction,
+                harness.authority,
+            )
+            authorization = subject._register_branch_creation_authorization(
+                harness.branch_authorizer,
+                transaction,
+                ledger,
+                initial.branch_id,
+                "e" * 64,
+            )
+            _, write_fact = subject._execute_branch_owner_insert(
+                harness.branch_store,
+                ledger,
+                authorization,
+                initial.branch_id,
+                "INSERT INTO branches VALUES (?, ?, ?, ?)",
+                (
+                    initial.branch_id,
+                    0,
+                    initial.payload_sha256,
+                    "durable-owner.v1",
+                ),
+            )
+            with pytest.raises(subject.OwnerWriteProtocolError, match="digest"):
+                subject._issue_branch_creation_receipt(
+                    harness.branch_store,
+                    ledger,
+                    write_fact,
+                    initial,
+                )
+            raise RuntimeError("rollback digest drift")
+
+
+def test_semantic_creation_outcome_witness_is_exact_and_one_shot(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    initial = RevisionedBranchRecord.from_value(
+        _branch(branch_id="branch-new"),
+        owner_revision=0,
+    )
+    with sqlite_boundary.immediate_transaction(harness.authority) as transaction:
+        ledger = subject._attach_owner_receipt_ledger(
+            transaction,
+            harness.authority,
+        )
+        authorization = subject._register_branch_creation_authorization(
+            harness.branch_authorizer,
+            transaction,
+            ledger,
+            initial.branch_id,
+            initial.payload_sha256,
+        )
+        _, write_fact = subject._execute_branch_owner_insert(
+            harness.branch_store,
+            ledger,
+            authorization,
+            initial.branch_id,
+            "INSERT INTO branches VALUES (?, ?, ?, ?)",
+            (
+                initial.branch_id,
+                0,
+                initial.payload_sha256,
+                "durable-owner.v1",
+            ),
+        )
+        with pytest.raises(subject.OwnerWriteProtocolError, match="exact issued"):
+            subject._issue_branch_semantic_creation_outcome_witness(
+                harness.branch_authorizer,
+                transaction,
+                ledger,
+                authorization,
+            )
+        receipt = subject._issue_branch_creation_receipt(
+            harness.branch_store,
+            ledger,
+            write_fact,
+            initial,
+        )
+        outcome_witness = subject._issue_branch_semantic_creation_outcome_witness(
+            harness.branch_authorizer,
+            transaction,
+            ledger,
+            authorization,
+        )
+        with pytest.raises(subject.OwnerWriteProtocolError, match="only once"):
+            subject._issue_branch_semantic_creation_outcome_witness(
+                harness.branch_authorizer,
+                transaction,
+                ledger,
+                authorization,
+            )
+        forged = object.__new__(subject.SemanticCreationOutcomeWitness)
+        with pytest.raises(subject.InvalidOwnerReceiptError, match="not issued"):
+            subject._require_branch_semantic_creation_outcome_witness(
+                harness.branch_authorizer,
+                transaction,
+                ledger,
+                authorization,
+                forged,
+            )
+        with pytest.raises(subject.InvalidOwnerReceiptError, match="transaction"):
+            subject._require_branch_semantic_creation_outcome_witness(
+                harness.branch_authorizer,
+                object.__new__(sqlite_boundary.ImmediateTransaction),
+                ledger,
+                authorization,
+                outcome_witness,
+            )
+        subject._complete_branch_creation_authorization(
+            harness.branch_authorizer,
+            transaction,
+            ledger,
+            authorization,
+            receipt,
+            outcome_witness,
+        )
+        subject._consume_branch_creation_receipt(ledger, receipt)
+        subject._seal_owner_receipt_ledger(ledger, (receipt,))
+
+
+def test_creation_completion_rejects_swapped_receipt(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    first = RevisionedBranchRecord.from_value(
+        _branch(branch_id="branch-new-1"),
+        owner_revision=0,
+    )
+    second = RevisionedBranchRecord.from_value(
+        _branch(branch_id="branch-new-2"),
+        owner_revision=0,
+    )
+    with sqlite_boundary.immediate_transaction(harness.authority) as transaction:
+        ledger = subject._attach_owner_receipt_ledger(
+            transaction,
+            harness.authority,
+        )
+        first_authorization, first_fact, first_receipt = _prepare_branch_creation(
+            harness,
+            transaction,
+            ledger,
+            first,
+        )
+        second_authorization, second_fact, second_receipt = _prepare_branch_creation(
+            harness,
+            transaction,
+            ledger,
+            second,
+        )
+        first_outcome = subject._issue_branch_semantic_creation_outcome_witness(
+            harness.branch_authorizer,
+            transaction,
+            ledger,
+            first_authorization,
+        )
+        second_outcome = subject._issue_branch_semantic_creation_outcome_witness(
+            harness.branch_authorizer,
+            transaction,
+            ledger,
+            second_authorization,
+        )
+        with pytest.raises(
+            subject.InvalidOwnerReceiptError,
+            match="completion facts",
+        ):
+            subject._complete_branch_creation_authorization(
+                harness.branch_authorizer,
+                transaction,
+                ledger,
+                first_authorization,
+                second_receipt,
+                first_outcome,
+            )
+        assert (
+            subject._lookup_creation_authorization(first_authorization).write_fact
+            is first_fact
+        )
+        assert (
+            subject._lookup_creation_authorization(second_authorization).write_fact
+            is second_fact
+        )
+        for authorization, receipt, outcome_witness in (
+            (first_authorization, first_receipt, first_outcome),
+            (second_authorization, second_receipt, second_outcome),
+        ):
+            subject._complete_branch_creation_authorization(
+                harness.branch_authorizer,
+                transaction,
+                ledger,
+                authorization,
+                receipt,
+                outcome_witness,
+            )
+            subject._consume_branch_creation_receipt(ledger, receipt)
+        subject._seal_owner_receipt_ledger(
+            ledger,
+            (first_receipt, second_receipt),
+        )
+
+
+def test_extra_issued_creation_authorization_prevents_mutation_only_closure(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    with pytest.raises(
+        subject.OwnerReceiptClosureError,
+        match="creation authorization identities differ",
+    ):
+        with sqlite_boundary.immediate_transaction(harness.authority) as transaction:
+            ledger = subject._attach_owner_receipt_ledger(
+                transaction,
+                harness.authority,
+            )
+            subject._register_branch_creation_authorization(
+                harness.branch_authorizer,
+                transaction,
+                ledger,
+                "branch-never-written",
+                "a" * 64,
+            )
+            receipt, _ = _write_branch(harness, ledger, harness.branch)
+            witness = subject._consume_branch_mutation_receipt(ledger, receipt)
+            assert witness.creation_authorization is None
+            subject._seal_owner_receipt_ledger(ledger, (receipt,))
+
+
+def test_failed_creation_insert_stays_write_bound_and_pending(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    with pytest.raises(sqlite3.DatabaseError, match="not authorized"):
+        with sqlite_boundary.immediate_transaction(harness.authority) as transaction:
+            ledger = subject._attach_owner_receipt_ledger(
+                transaction,
+                harness.authority,
+            )
+            authorization = subject._register_branch_creation_authorization(
+                harness.branch_authorizer,
+                transaction,
+                ledger,
+                harness.branch.branch_id,
+                harness.branch.payload_sha256,
+            )
+            with pytest.raises(sqlite3.IntegrityError):
+                subject._execute_branch_owner_insert(
+                    harness.branch_store,
+                    ledger,
+                    authorization,
+                    harness.branch.branch_id,
+                    "INSERT INTO branches VALUES (?, ?, ?, ?)",
+                    (
+                        harness.branch.branch_id,
+                        0,
+                        harness.branch.payload_sha256,
+                        "durable-owner.v1",
+                    ),
+                )
+            authorization_state = subject._lookup_creation_authorization(authorization)
+            assert (
+                authorization_state.phase
+                is subject._CreationAuthorizationPhase.WRITE_BOUND
+            )
+            assert authorization_state.write_fact is not None
+            assert subject._lookup_ledger(ledger).pending_write is (
+                authorization_state.write_fact
+            )
 
 
 @pytest.mark.parametrize("staged", [(), "duplicate", "missing"])
@@ -1250,3 +1889,49 @@ def test_receipt_registry_does_not_keep_completed_receipts_alive(
     assert receipt_ref() is None
     assert ledger_ref() is None
     assert len(subject._RECEIPT_STATES) == initial_receipts
+
+
+def test_creation_authorization_registry_retains_no_completed_capabilities(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    initial = RevisionedBranchRecord.from_value(
+        _branch(branch_id="branch-new"),
+        owner_revision=0,
+    )
+    gc.collect()
+    initial_authorizations = len(subject._CREATION_AUTHORIZATION_STATES)
+
+    def _commit_once() -> tuple[
+        weakref.ReferenceType[subject._OwnerCreationAuthorization],
+        weakref.ReferenceType[subject.OwnerCreationReceipt],
+        weakref.ReferenceType[subject._OwnerReceiptLedger],
+    ]:
+        with sqlite_boundary.immediate_transaction(harness.authority) as transaction:
+            ledger = subject._attach_owner_receipt_ledger(
+                transaction,
+                harness.authority,
+            )
+            authorization, _, receipt = _prepare_branch_creation(
+                harness,
+                transaction,
+                ledger,
+                initial,
+            )
+            _complete_branch_creation(
+                harness,
+                transaction,
+                ledger,
+                authorization,
+                receipt,
+            )
+            subject._consume_branch_creation_receipt(ledger, receipt)
+            subject._seal_owner_receipt_ledger(ledger, (receipt,))
+            return weakref.ref(authorization), weakref.ref(receipt), weakref.ref(ledger)
+
+    authorization_ref, receipt_ref, ledger_ref = _commit_once()
+    gc.collect()
+    assert authorization_ref() is None
+    assert receipt_ref() is None
+    assert ledger_ref() is None
+    assert len(subject._CREATION_AUTHORIZATION_STATES) == initial_authorizations

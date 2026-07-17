@@ -35,6 +35,9 @@ eight-round owner and every patched base/result blob remained reconstructible.
 Batch 18 removed one pre-evaluation permission-failure replay shell and one
 zero-effective capacity-blocked successor only after copy-isolated SQLite
 inspection and complete retained-owner payload equality were proved.
+Batch 19 was a read-only boundary audit over all 752 remaining roots. It found
+no whole root for which a retained-owner-equivalence proof covered every unique
+research artifact, so it deleted nothing.
 
 | Batch | Roots | Deleted logical bytes | GiB | Scope |
 |---|---:|---:|---:|---|
@@ -86,6 +89,8 @@ Filesystem observations:
 - batch 18 available space: 40,556,687,360 to 40,771,444,736 bytes;
 - batch 18 observed available-space change: +214,757,376 bytes, exactly equal
   to 210,616,320 candidate bytes plus the 4,141,056-byte isolated audit copy.
+- batch 19 was read-only: 752 roots remained, zero candidate bytes were
+  deleted, and 40,398,311,424 bytes were available at audit completion.
 
 The filesystem delta is larger than the logical size sum because other
 processes may allocate or release blocks concurrently. The auditable cleanup
@@ -131,6 +136,33 @@ Batch 17 is recorded in
 [`v04-experiment-retention-cleanup-batch17-20260716.tsv`](./v04-experiment-retention-cleanup-batch17-20260716.tsv).
 Batch 18 is recorded in
 [`v04-experiment-retention-cleanup-batch18-20260716.tsv`](./v04-experiment-retention-cleanup-batch18-20260716.tsv).
+
+## Batch-19 retained-evidence boundary
+
+Batch 19 rescanned all `752` remaining top-level roots and `781` campaign
+directories without modifying them. It protected the current R6-R11c,
+Warehouse R2/R3, Phase A/B/C, baseline-strength, current successor/baseline,
+and every root referenced from TASK, current-state, design, or experiment
+reports. All `29` old status records whose legacy accounting fields were zero
+remained fail-closed: each retained independent trace evidence, nonzero newer
+accounting/formal evidence, or a protected archived launch.
+
+Global trace-identity comparison found no unreferenced zero-value root whose
+entire trace set was retained elsewhere. Seven unreferenced roots without the
+standard database/metric/trace/formal layout were independent MILP, offline,
+or direct-VRP research records containing unique logs, CSV data, analysis, or
+results, rather than disposable shells with a named retained owner. Referenced
+CVRP/Warehouse healthcheck and prepared-status copies also remained protected.
+
+Three ambiguous roots were inspected only through copies under `/tmp`, with
+WAL materialized into the audit copies and immutable SQLite reads. Source DB
+size and timestamps were unchanged. Although one had a completed similarly
+named owner, its two tool-selection traces were globally unique; the other two
+also retained independent trace or hypothesis/session evidence. Temporary
+audit copies were removed. The resulting deletion candidate set was empty:
+zero roots and zero bytes were removed. Further whole-root cleanup must wait
+for a newly provable complete retained-owner equivalence; otherwise it would
+cross into unique research evidence.
 
 ## Batch-3 deletion predicate
 

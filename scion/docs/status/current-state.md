@@ -197,7 +197,7 @@ and diff-check pass. Schema activation and legacy-writer migration remain
 deferred to the indivisible offline cutover and must not be collapsed into the
 SQLite, permit, focused-store, or Registry foundation layers.
 
-The authorization-bound creation contract is now frozen in
+The authorization-bound creation contract is frozen in
 `scion/docs/planning/v0.4/v0.4-d2b0b-authorization-bound-owner-creation-plan-20260716.md`.
 Three specialized audits and three adversarial revision rounds close at
 P0=0/P1=0. Branch creation binds a sealed champion-lock lease, complete durable
@@ -210,9 +210,24 @@ Generic owner transaction code sees only authorization identity and receipt
 closure; champion and attempt semantics remain in their focused participants.
 The plan also freezes exact legacy completion-only activation inventories so
 pre-cutover history is neither forged into new authority nor misclassified as
-post-cutover corruption. Implementation is next and remains dormant: no
-production composition importer, schema effect, retry, budget, cap, gate,
-cutoff, or truncation is authorized before D2b.0b.C.
+post-cutover corruption. Its first dormant checkpoint is implemented: the
+generic ledger closes exact creation authorization/write/receipt/witness
+identity; the strict connection-scoped champion participant and focused
+Branch/H INSERTs require it; and the only provider-generation permit consumes
+an exact committed START event after independent-snapshot reread. Provider
+issuance then binds the persisted context/prompt to one persisted receipt,
+trace/manifest/raw response, and sealed generated result. Rolled-back or
+replaced STARTs and mismatched context/prompt fail before transport. The
+combined focused set passes `219`; the correctly rooted full suite passes
+`2672` with `1` skipped in `503.28s`; independent review closes
+P0=0/P1=0/P2=0. The code remains production-uncomposed and creates no schema.
+The remaining checkpoint is the generated-H event, immutable attempt-to-H
+binding, H authorization/classification, then Registry generation/creation
+views and fused publication. Generic ledger and provider-result state machines
+intentionally remain colocated until that full transition graph is stable;
+splitting now would create cross-module authority and callback/circular-helper
+risk. No production composition importer, schema effect, retry, budget, cap,
+gate, cutoff, or truncation is authorized before D2b.0b.C.
 
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
@@ -265,6 +280,11 @@ owner. Batch 18 removed a pre-evaluation permission-failure replay shell and a
 zero-effective capacity-blocked successor only after isolated database review
 proved complete retained-owner coverage. `752` roots remain and about
 `38.0 GiB` is available.
+Read-only batch 19 rescanned those `752` roots and found no further exact-safe
+whole-root deletion: every plausible boundary candidate retained a report
+reference, a unique trace or research artifact, newer nonzero evidence, or no
+provable complete retained owner. It therefore deleted zero roots and zero
+bytes; the cleanup boundary is now unique research evidence, not disk space.
 Exact whole-root,
 gray, disposition, subtree-hash, and restore manifests are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
