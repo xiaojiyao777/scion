@@ -673,8 +673,20 @@ The implementation order is fixed; items 1-3 are complete:
    or truncation. Two independent implementation audits close at P0=0/P1=0;
    its expanded responsibility regression passes `183`, and the correctly
    rooted suite passes `2607` with `1` skipped in `474.04s`. Next implement the
-   authorization-bound creation participants, then perform the indivisible
-   D2b.0b.C schema/all-writer cutover and D2b.0b.V acceptance; no intermediate runnable
+   authorization-bound creation participants. Their implementation contract is
+   now frozen in
+   `scion/docs/planning/v0.4/v0.4-d2b0b-authorization-bound-owner-creation-plan-20260716.md`
+   after three specialized audits and three adversarial revision rounds close
+   at P0=0/P1=0. It separates a connection-scoped durable champion participant,
+   proposal-attempt/H binding owner, provider-issued sealed generated result,
+   problem-neutral authorization ledger, and Registry-only one-root
+   publication. A provider-time generation view binds the exact Branch and H
+   history head before one started attempt and one provider call; legacy
+   pre-binding history is admitted only through a sealed completion-only
+   activation inventory. The foundation remains production-disabled and has no
+   schema effect. Implement it by responsibility layer, then perform the
+   indivisible D2b.0b.C schema/all-writer cutover and D2b.0b.V acceptance; no
+   intermediate runnable
    state may combine active revisions with a legacy writer. Then continue the
    remaining D2b slices, D2c
    exact Decision transport, D2d isolated snapshot handoff, and D2e v2
@@ -753,8 +765,11 @@ scientific and lineage-owning artifacts remain in place.
    P0/P1; its foundation transaction/publication correction has passed six more
    rounds with no open P0/P1. Its corrected SQLite responsibility layer is
    complete and production-unimported; owner transaction, focused stores, and
-   the mutation-only one-root Registry are also complete and dormant. Continue
-   with authorization-bound creation participants, indivisible offline cutover,
+   the mutation-only one-root Registry are also complete and dormant. The
+   authorization-bound creation contract has now passed its own champion,
+   proposal-attempt, and generic-ledger reviews with P0=0/P1=0. Continue with
+   its dormant responsibility-layer implementation, then indivisible offline
+   cutover,
    and closure exactly as frozen, then implement the remaining paired
    slot/dispatch/receipt slices, D2c exact Decision transport, D2d isolated
    snapshot handoff, and D2e v2 completion/recovery;

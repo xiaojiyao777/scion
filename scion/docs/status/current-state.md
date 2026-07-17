@@ -197,6 +197,23 @@ and diff-check pass. Schema activation and legacy-writer migration remain
 deferred to the indivisible offline cutover and must not be collapsed into the
 SQLite, permit, focused-store, or Registry foundation layers.
 
+The authorization-bound creation contract is now frozen in
+`scion/docs/planning/v0.4/v0.4-d2b0b-authorization-bound-owner-creation-plan-20260716.md`.
+Three specialized audits and three adversarial revision rounds close at
+P0=0/P1=0. Branch creation binds a sealed champion-lock lease, complete durable
+current-champion token, authorization-bound write fact, creation receipt, and
+one Registry publication. H creation captures the exact Branch and prior-H
+history head before one started attempt/provider call, accepts only a real
+provider-issued sealed generated result, and atomically owns generated event,
+immutable attempt-to-H binding, revision-zero H, receipt, and publication.
+Generic owner transaction code sees only authorization identity and receipt
+closure; champion and attempt semantics remain in their focused participants.
+The plan also freezes exact legacy completion-only activation inventories so
+pre-cutover history is neither forged into new authority nor misclassified as
+post-cutover corruption. Implementation is next and remains dormant: no
+production composition importer, schema effect, retry, budget, cap, gate,
+cutoff, or truncation is authorized before D2b.0b.C.
+
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
 Raw runtime already exposed VNS/ALNS phase facts while next-H saw only ALNS
