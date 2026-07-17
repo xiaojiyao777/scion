@@ -638,8 +638,16 @@ The implementation order is fixed; items 1-3 are complete:
    have one pure owner, the separate strict stable source-H projection is
    canonical across Python/SQLite REAL, focused compatibility passes `193`, and
    the full suite passes `2388` with `1` skipped; two final reviews report no
-   P0/P1. Continue with D2b.0b global Branch/H revision CAS, dormant evaluation
-   lease schema, and SQL writer predicates, then the remaining D2b slices, D2c
+   P0/P1. The D2b.0b global durable-owner migration contract is now frozen after
+   three adversarial rounds by three reviewers with no open P0/P1. It requires
+   immutable storage-digest tokens, one Campaign projection coordinator, a sole
+   schema bootstrap, offline clean-stop cutover, database rejection of legacy
+   writers, dormant lease predicates, exact completion revision/digest recovery,
+   and collision-free champion snapshot publication. Implement D2b.0b.F as a
+   production-unimported foundation, then perform the indivisible D2b.0b.C
+   schema/all-writer cutover and D2b.0b.V acceptance; no intermediate runnable
+   state may combine active revisions with a legacy writer. Then continue the
+   remaining D2b slices, D2c
    exact Decision transport, D2d isolated snapshot handoff, and D2e v2
    completion/recovery before D3/D4; then implement the reversible L1-L3 ledger;
 6. run a serial no-LLM four-profile characterization using Protocol-resolved
@@ -702,8 +710,10 @@ scientific and lineage-owning artifacts remain in place.
    snapshot/disposition and D2a campaign/mode compatibility are complete but
    unwired, the D2b-D4 basis contract has passed four adversarial rounds, and
    the D2b implementation contract has passed five more with no open P0/P1.
-   D2b.0a pure codec extraction is complete and unwired. Execute D2b.0b global
-   Branch/H revision CAS plus dormant lease predicates and the remaining paired
+   D2b.0a pure codec extraction is complete and unwired. D2b.0b's focused
+   migration plan has passed three additional adversarial rounds with no open
+   P0/P1; execute its dormant foundation, indivisible offline cutover, and
+   closure exactly as frozen, then implement the remaining paired
    slot/dispatch/receipt slices, D2c exact Decision transport, D2d isolated
    snapshot handoff, and D2e v2 completion/recovery;
    then D3-D4 continuation/lineage/promotion and L1-L3 normalized research

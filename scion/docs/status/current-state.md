@@ -131,6 +131,21 @@ evaluation-lease schema, and SQL writer predicates are next. The remaining
 private `_upsert_branch` cross-module dependency is explicitly owned by that
 slice.
 
+D2b.0b now has its own frozen migration contract in
+`scion/docs/planning/v0.4/v0.4-d2b0b-global-durable-owner-migration-plan-20260716.md`.
+Three independent reviewers accepted it after three adversarial rounds with no
+open P0/P1. The design uses truly immutable complete-storage digest tokens,
+focused Branch/H stores, one Campaign-local projection coordinator, one schema
+bootstrap, exact Decision/rejection auxiliary revision+digest recovery, and
+atomic durable promotion/weight facts. Schema activation and every legacy
+writer migration are one indivisible offline cutover: runners must be stopped,
+the campaign execution lock held, and database generation/revision triggers
+make old `REPLACE` or bare UPDATE fail. Champion/weight snapshots publish to
+unique no-replace immutable object paths, so a concurrent loser cannot overwrite
+or delete the winner. D2b.0b.F dormant foundation is next; it must have no
+production import or schema effect. No positive lease, slot, dispatch, receipt,
+retry, budget, cap, or truncation writer is authorized in this slice.
+
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
 Raw runtime already exposed VNS/ALNS phase facts while next-H saw only ALNS
