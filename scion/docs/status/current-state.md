@@ -233,8 +233,18 @@ one Branch reservation, unique START, provider outcome, terminal persistence,
 and restart holds; B adds frozen Contract/taxonomy semantics, authority-bound
 clock/UUID target construction, event/binding/H, semantic/global
 classification, and one Registry publication. SQL, state/recovery, and
-dependency audits close at P0=0/P1=0/P2=0. Checkpoint A is next and must receive
-independent acceptance before B begins. Historical activation is separately
+dependency audits close at P0=0/P1=0/P2=0. Checkpoint A is now complete,
+independently accepted, dormant, and production-uncomposed. Its exact six-owner
+leaf graph covers immutable code-source capture, canonical evidence/prompt,
+Branch-local reservation, same-transaction Branch/H revalidation, unique START,
+provider success/failure/unknown, pre-START and durable abort, terminal receipt,
+restart holds, GC-safe one-shot capability state, and exact static caller
+closure. No production composition, schema, retry, budget, cap, gate, cutoff,
+or truncation was added. The expanded focused set passes `207`; the correctly
+rooted full suite passes `2765` with `1` skipped in `482.44s`; compileall and
+diff-check pass. Independent leaf, Registry transaction/recovery, and static
+dependency reviews report no open P0/P1/P2. Checkpoint B is next. Historical
+activation is separately
 blocked on an evidence-preserving addendum after the read-only 827-database
 inventory found legacy-extra JSON, malformed rows, orphan/multi-campaign
 ambiguity, and missing sealed provenance. Generic ledger and provider-result
@@ -292,7 +302,7 @@ patch payload was proved byte-identical to a retained completed eight-round
 owner. Batch 18 removed a pre-evaluation permission-failure replay shell and a
 zero-effective capacity-blocked successor only after isolated database review
 proved complete retained-owner coverage. `752` roots remain and about
-`38.0 GiB` is available.
+`37 GiB` is currently available.
 Read-only batch 19 rescanned those `752` roots and found no further exact-safe
 whole-root deletion: every plausible boundary candidate retained a report
 reference, a unique trace or research artifact, newer nonzero evidence, or no

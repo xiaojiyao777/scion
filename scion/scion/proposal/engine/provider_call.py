@@ -2,28 +2,23 @@
 
 from __future__ import annotations
 
-import contextvars
-import enum
 import hashlib
 import json
-import threading
 import uuid
-import weakref
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from types import MappingProxyType
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, Mapping, NoReturn
 
 from scion.core.models import HypothesisProposal
 from scion.core.public_refs import public_artifact_ref
-from scion.lineage import proposal_attempt_owner as _proposal_attempt_owner
-from scion.lineage import sqlite_connection as _sqlite
+from scion.proposal import hypothesis_generation_authority as _generation
 from scion.proposal.context_snapshot import ProposalContextSnapshot
 from scion.proposal.prompt_manifest import (
     build_api_visible_prompt_manifest,
     stable_digest,
 )
 from scion.proposal.prompt_manifest_accounting import _provider_prompt_hash
+from scion.proposal.schemas import bind_hypothesis_tool_to_context
 
 from .trace import _TraceWriter, _client_request_policy
 
@@ -68,186 +63,22 @@ class PromptCallReceipt:
 
 _PROMPT_CALL_RECEIPT_ATTR = "_scion_prompt_call_receipt"
 
-
-class GeneratedHypothesisResultError(RuntimeError):
-    """Base error for the dormant provider-issued hypothesis proof."""
-
-
-class InvalidGeneratedHypothesisResultError(
-    TypeError,
-    GeneratedHypothesisResultError,
-):
-    """A value is not an exact proof issued by the provider boundary."""
+ProviderGenerationPermit = _generation.ProviderGenerationPermit
+GeneratedHypothesisResult = _generation.GeneratedHypothesisResult
+FailedHypothesisGeneration = _generation.FailedHypothesisGeneration
+BoundHypothesisPrompt = _generation.BoundHypothesisPrompt
 
 
-class GeneratedHypothesisResultLifecycleError(GeneratedHypothesisResultError):
-    """A genuine result crossed its bound execution context or was reused."""
+class ProviderCallUnknownError(RuntimeError):
+    """A claimed provider permit could not bind a truthful terminal outcome."""
 
 
-class ProviderGenerationPermit:
-    """Sealed one-shot authority for one started hypothesis provider call."""
-
-    __slots__ = ("__weakref__",)
-
-    def __new__(
-        cls,
-        *_args: object,
-        **_kwargs: object,
-    ) -> "ProviderGenerationPermit":
-        raise InvalidGeneratedHypothesisResultError(
-            "ProviderGenerationPermit is issued only for a bound started attempt"
-        )
-
-    def __init_subclass__(cls, **_kwargs: object) -> None:
-        raise TypeError("ProviderGenerationPermit is sealed")
-
-    def __copy__(self) -> "ProviderGenerationPermit":
-        raise InvalidGeneratedHypothesisResultError(
-            "ProviderGenerationPermit cannot be copied"
-        )
-
-    def __deepcopy__(
-        self,
-        _memo: dict[int, object],
-    ) -> "ProviderGenerationPermit":
-        raise InvalidGeneratedHypothesisResultError(
-            "ProviderGenerationPermit cannot be copied"
-        )
-
-    def __reduce__(self) -> object:
-        raise InvalidGeneratedHypothesisResultError(
-            "ProviderGenerationPermit cannot be pickled"
-        )
-
-    def __reduce_ex__(self, _protocol: int) -> object:
-        raise InvalidGeneratedHypothesisResultError(
-            "ProviderGenerationPermit cannot be pickled"
-        )
+class InvalidBoundProviderSnapshotError(TypeError):
+    """Bound prompt bytes are malformed or differ from their exact authority."""
 
 
-class _ProviderGenerationPermitPhase(enum.Enum):
-    ISSUED = enum.auto()
-    START_BOUND = enum.auto()
-    RESULT_BOUND = enum.auto()
-
-
-@dataclass(slots=True)
-class _ProviderGenerationPermitState:
-    started_attempt: _proposal_attempt_owner.StartedHypothesisAttempt
-    attempt_audit: Mapping[str, Any]
-    expected_context_digest: str
-    expected_prompt_hash: str
-    thread_id: int
-    context_probe: contextvars.ContextVar[object | None]
-    context_token: contextvars.Token[object | None]
-    phase: _ProviderGenerationPermitPhase = _ProviderGenerationPermitPhase.ISSUED
-    result_ref: weakref.ReferenceType[GeneratedHypothesisResult] | None = None
-
-
-class GeneratedHypothesisResult:
-    """Sealed one-shot proof of one persisted, parsed hypothesis response."""
-
-    __slots__ = ("__weakref__",)
-
-    def __new__(
-        cls,
-        *_args: object,
-        **_kwargs: object,
-    ) -> "GeneratedHypothesisResult":
-        raise InvalidGeneratedHypothesisResultError(
-            "GeneratedHypothesisResult is issued only by the provider boundary"
-        )
-
-    def __init_subclass__(cls, **_kwargs: object) -> None:
-        raise TypeError("GeneratedHypothesisResult is sealed")
-
-    def __copy__(self) -> "GeneratedHypothesisResult":
-        raise InvalidGeneratedHypothesisResultError(
-            "GeneratedHypothesisResult cannot be copied"
-        )
-
-    def __deepcopy__(
-        self,
-        _memo: dict[int, object],
-    ) -> "GeneratedHypothesisResult":
-        raise InvalidGeneratedHypothesisResultError(
-            "GeneratedHypothesisResult cannot be copied"
-        )
-
-    def __reduce__(self) -> object:
-        raise InvalidGeneratedHypothesisResultError(
-            "GeneratedHypothesisResult cannot be pickled"
-        )
-
-    def __reduce_ex__(self, _protocol: int) -> object:
-        raise InvalidGeneratedHypothesisResultError(
-            "GeneratedHypothesisResult cannot be pickled"
-        )
-
-
-@dataclass(slots=True)
-class _GeneratedHypothesisResultState:
-    permit: ProviderGenerationPermit
-    started_attempt: object
-    attempt_id: str
-    started_event_id: str
-    context_digest: str
-    prompt_hash: str
-    receipt: PromptCallReceipt
-    trace_ref: str
-    prompt_manifest_ref: str
-    raw_response_ref: str
-    proposal_canonical_bytes: bytes
-    proposal_sha256: str
-    thread_id: int
-    context_probe: contextvars.ContextVar[object | None]
-    context_token: contextvars.Token[object | None]
-    consumed: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class _ConsumedGeneratedHypothesisResult:
-    """Immutable facts returned after exact proof consumption."""
-
-    attempt_id: str
-    started_event_id: str
-    context_digest: str
-    prompt_hash: str
-    receipt: PromptCallReceipt
-    trace_ref: str
-    prompt_manifest_ref: str
-    raw_response_ref: str
-    proposal_canonical_bytes: bytes
-    proposal_sha256: str
-
-    def detached_hypothesis(self) -> HypothesisProposal:
-        """Return a fresh value copy; this value is data, never authority."""
-
-        return _hypothesis_from_canonical_bytes(self.proposal_canonical_bytes)
-
-
-_GENERATED_HYPOTHESIS_RESULT_STATES: weakref.WeakKeyDictionary[
-    GeneratedHypothesisResult,
-    _GeneratedHypothesisResultState,
-] = weakref.WeakKeyDictionary()
-_GENERATED_HYPOTHESIS_RESULT_STATES_LOCK = threading.RLock()
-_PROVIDER_GENERATION_PERMIT_STATES: weakref.WeakKeyDictionary[
-    ProviderGenerationPermit,
-    _ProviderGenerationPermitState,
-] = weakref.WeakKeyDictionary()
-_PROVIDER_GENERATION_PERMIT_STATES_LOCK = threading.RLock()
-_GENERATED_HYPOTHESIS_CONTEXT_PROOF: contextvars.ContextVar[object | None] = (
-    contextvars.ContextVar(
-        "scion_generated_hypothesis_result_context_proof",
-        default=None,
-    )
-)
-_PROVIDER_GENERATION_PERMIT_CONTEXT_PROOF: contextvars.ContextVar[object | None] = (
-    contextvars.ContextVar(
-        "scion_provider_generation_permit_context_proof",
-        default=None,
-    )
-)
+class InvalidProviderOutcomeError(RuntimeError):
+    """A real receipt/trace/response cannot support the requested leaf outcome."""
 
 
 def prompt_call_receipt_from_error(error: BaseException) -> PromptCallReceipt | None:
@@ -270,6 +101,13 @@ def _attach_prompt_call_receipt(
 class ProviderCallOwner:
     """Own prompt-manifest, trace, provider, and receipt ordering."""
 
+    __slots__ = (
+        "__generation_authority",
+        "_client",
+        "_model",
+        "_trace_dir",
+    )
+
     def __init__(
         self,
         client: Any,
@@ -280,6 +118,170 @@ class ProviderCallOwner:
         self._client = client
         self._model = model
         self._trace_dir = trace_dir
+        self.__generation_authority: _generation._AuthorityHandle | None = None
+
+    def _install_hypothesis_generation_authority(
+        self,
+        authority: _generation._AuthorityHandle,
+    ) -> None:
+        """Install this exact provider's leaf handle once during composition."""
+
+        if self.__generation_authority is not None:
+            raise _generation.HypothesisGenerationLifecycleError(
+                "ProviderCallOwner generation authority is already installed"
+            )
+        _generation._require_authority(
+            authority,
+            role=_generation._AuthorityRole.PROVIDER,
+            owner=self,
+        )
+        self.__generation_authority = authority
+
+    def _require_hypothesis_generation_authority(
+        self,
+    ) -> _generation._AuthorityHandle:
+        authority = self.__generation_authority
+        if authority is None:
+            raise _generation.InvalidHypothesisGenerationCapabilityError(
+                "ProviderCallOwner generation authority is not installed"
+            )
+        _generation._require_authority(
+            authority,
+            role=_generation._AuthorityRole.PROVIDER,
+            owner=self,
+        )
+        return authority
+
+    def call_hypothesis(
+        self,
+        permit: ProviderGenerationPermit,
+        bound_prompt: BoundHypothesisPrompt,
+    ) -> GeneratedHypothesisResult | FailedHypothesisGeneration:
+        """Consume one leaf permit and bind exactly one real provider outcome."""
+
+        authority = self._require_hypothesis_generation_authority()
+        _, prompt, started = _generation._claim_provider_permit(
+            authority,
+            permit,
+            bound_prompt,
+        )
+        try:
+            context, snapshot = _rebuild_bound_hypothesis_turn(prompt)
+            attempt_audit = _attempt_audit_from_started_projection(
+                started,
+                snapshot,
+            )
+            prompt_manifest_session_id = f"prompt-call-{uuid.uuid4()}"
+        except BaseException as exc:
+            _mark_claim_unknown(authority, permit, exc)
+
+        try:
+            raw, receipt = self.call_with_receipt(
+                request_kind="hypothesis",
+                tool=dict(snapshot.provider_tool),
+                context=context,
+                snapshot=snapshot,
+                attempt_audit=attempt_audit,
+                _prompt_manifest_session_id=prompt_manifest_session_id,
+            )
+        except KeyboardInterrupt as exc:
+            receipt = prompt_call_receipt_from_error(exc)
+            return _bind_failed_receipt_or_mark_unknown(
+                authority,
+                permit,
+                receipt,
+                kind="provider_interruption",
+                prompt=snapshot,
+                started=started,
+                cause=exc,
+            )
+        except Exception as exc:
+            receipt = prompt_call_receipt_from_error(exc)
+            return _bind_failed_receipt_or_mark_unknown(
+                authority,
+                permit,
+                receipt,
+                kind="provider_failure",
+                prompt=snapshot,
+                started=started,
+                cause=exc,
+            )
+        except BaseException as exc:
+            _mark_claim_unknown(authority, permit, exc)
+
+        try:
+            from .parsing import _parse_hypothesis
+
+            hypothesis = _parse_hypothesis(
+                raw,
+                allowed_change_loci=snapshot.allowed_change_loci,
+            )
+            proposal_canonical_bytes = _canonical_hypothesis_bytes(hypothesis)
+            proposal_sha256 = hashlib.sha256(proposal_canonical_bytes).hexdigest()
+        except Exception as exc:
+            failed = replace(
+                receipt,
+                ok=False,
+                error_category="response_parse_failed",
+                error_type=type(exc).__name__,
+            )
+            return _bind_failed_receipt_or_mark_unknown(
+                authority,
+                permit,
+                failed,
+                kind="invalid_response",
+                prompt=snapshot,
+                started=started,
+                cause=exc,
+            )
+
+        try:
+            trace_ref, prompt_manifest_ref, raw_response_ref = (
+                _validate_successful_provider_call(
+                    owner=self,
+                    receipt=receipt,
+                    snapshot=snapshot,
+                    context=context,
+                    attempt_audit=attempt_audit,
+                    prompt_manifest_session_id=prompt_manifest_session_id,
+                    raw_response=raw,
+                )
+            )
+        except Exception as exc:
+            failed = replace(
+                receipt,
+                ok=False,
+                error_category="generated_result_issuance_failed",
+                error_type=type(exc).__name__,
+            )
+            return _bind_failed_receipt_or_mark_unknown(
+                authority,
+                permit,
+                failed,
+                kind="provider_failure",
+                prompt=snapshot,
+                started=started,
+                cause=exc,
+            )
+
+        try:
+            return _generation._issue_generated_result(
+                authority,
+                permit,
+                receipt=receipt,
+                trace_ref=trace_ref,
+                prompt_manifest_ref=prompt_manifest_ref,
+                raw_response_ref=raw_response_ref,
+                proposal_canonical_bytes=proposal_canonical_bytes,
+                proposal_sha256=proposal_sha256,
+                provider_ok=receipt.provider_ok,
+                ok=receipt.ok,
+                error_category=receipt.error_category,
+                error_type=receipt.error_type,
+                trace_persistence_error=receipt.trace_persistence_error,
+            )
+        except BaseException as exc:
+            _mark_claim_unknown(authority, permit, exc)
 
     def call_with_receipt(
         self,
@@ -497,186 +499,333 @@ class ProviderCallOwner:
         )
 
 
-def _issue_provider_generation_permit(
-    *,
-    started_attempt: _proposal_attempt_owner.StartedHypothesisAttempt,
-    committed_snapshot: _sqlite._IndependentReadSnapshot,
-) -> ProviderGenerationPermit:
-    """Consume one persisted START authority and issue its exact call permit."""
-
-    binding = _proposal_attempt_owner._bind_started_hypothesis_attempt_to_provider(
-        started_attempt,
-        committed_snapshot,
-    )
-    normalized_attempt_audit = _validate_provider_call_attempt_audit(
-        binding.attempt_audit,
-        request_kind="hypothesis",
-    )
-    if normalized_attempt_audit is None:
-        raise InvalidGeneratedHypothesisResultError(
-            "provider generation permit requires attempt audit identity"
-        )
-    context_probe = _PROVIDER_GENERATION_PERMIT_CONTEXT_PROOF
-    context_token = context_probe.set(object())
-    permit = object.__new__(ProviderGenerationPermit)
-    state = _ProviderGenerationPermitState(
-        started_attempt=started_attempt,
-        attempt_audit=MappingProxyType(dict(normalized_attempt_audit)),
-        expected_context_digest=binding.context_digest,
-        expected_prompt_hash=binding.prompt_hash,
-        thread_id=threading.get_ident(),
-        context_probe=context_probe,
-        context_token=context_token,
-    )
-    with _PROVIDER_GENERATION_PERMIT_STATES_LOCK:
-        _PROVIDER_GENERATION_PERMIT_STATES[permit] = state
-    return permit
+_PROVIDER_SNAPSHOT_KEYS = frozenset(
+    {
+        "schema_version",
+        "render_kind",
+        "system_blocks",
+        "user_prompt",
+        "context_digest",
+        "provider_tool",
+        "allowed_change_loci",
+        "authoritative_context_ref",
+    }
+)
 
 
-def _claim_provider_generation_permit(
-    permit: ProviderGenerationPermit,
-) -> _ProviderGenerationPermitState:
-    """Irreversibly bind one permit before any provider transport is invoked."""
+def _canonical_json_bytes(value: object, *, label: str) -> bytes:
+    try:
+        return json.dumps(
+            value,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError, RecursionError, UnicodeEncodeError) as exc:
+        raise InvalidBoundProviderSnapshotError(
+            f"{label} cannot be canonically encoded"
+        ) from exc
 
-    if type(permit) is not ProviderGenerationPermit:
-        raise InvalidGeneratedHypothesisResultError(
-            "operation requires an exact ProviderGenerationPermit"
-        )
-    with _PROVIDER_GENERATION_PERMIT_STATES_LOCK:
-        state = _PROVIDER_GENERATION_PERMIT_STATES.get(permit)
-        if state is None:
-            raise InvalidGeneratedHypothesisResultError(
-                "ProviderGenerationPermit was not issued"
+
+def _duplicate_rejecting_object(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise InvalidBoundProviderSnapshotError(
+                "bound provider JSON contains a duplicate object key"
             )
-        if state.phase is not _ProviderGenerationPermitPhase.ISSUED:
-            raise GeneratedHypothesisResultLifecycleError(
-                "ProviderGenerationPermit is already bound"
-            )
-        if state.thread_id != threading.get_ident():
-            raise GeneratedHypothesisResultLifecycleError(
-                "ProviderGenerationPermit cannot cross threads"
-            )
-        _prove_provider_generation_permit_context(state)
-        state.phase = _ProviderGenerationPermitPhase.START_BOUND
-        return state
+        value[key] = item
+    return value
 
 
-def _generate_hypothesis_result_with_receipt(
-    owner: ProviderCallOwner,
-    *,
-    context: Dict[str, Any],
-    snapshot: PromptTurnSnapshot,
-    permit: ProviderGenerationPermit,
-) -> tuple[
-    HypothesisProposal,
-    PromptCallReceipt,
-    GeneratedHypothesisResult,
-]:
-    """Dormant real-call seam that privately issues one generated-H proof.
+def _reject_nonfinite_json(value: str) -> None:
+    raise InvalidBoundProviderSnapshotError(
+        f"bound provider JSON contains non-finite constant {value!r}"
+    )
 
-    The existing production facade intentionally does not call this seam.  A
-    later Registry cutover can do so only after it owns the sealed started
-    attempt supplied here.  Keeping provider call, successful trace finish,
-    parse, canonicalization, and issuance in one frame prevents a caller from
-    combining an audit receipt with a substituted proposal.
-    """
 
-    if type(owner) is not ProviderCallOwner:
-        raise InvalidGeneratedHypothesisResultError(
-            "generated hypothesis call requires an exact ProviderCallOwner"
+def _decode_canonical_json_object(value: object, *, label: str) -> dict[str, Any]:
+    if type(value) is not bytes or not value:
+        raise InvalidBoundProviderSnapshotError(
+            f"{label} must be exact nonempty canonical bytes"
         )
-    permit_state = _claim_provider_generation_permit(permit)
-    normalized_attempt_audit = dict(permit_state.attempt_audit)
-    if (
-        snapshot.context_digest != permit_state.expected_context_digest
-        or _provider_prompt_hash(snapshot.system_blocks, snapshot.user_prompt)
-        != permit_state.expected_prompt_hash
+    try:
+        decoded = json.loads(
+            value.decode("utf-8"),
+            object_pairs_hook=_duplicate_rejecting_object,
+            parse_constant=_reject_nonfinite_json,
+        )
+    except InvalidBoundProviderSnapshotError:
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+        raise InvalidBoundProviderSnapshotError(f"{label} is malformed") from exc
+    if type(decoded) is not dict:
+        raise InvalidBoundProviderSnapshotError(f"{label} must contain an object")
+    if _canonical_json_bytes(decoded, label=label) != value:
+        raise InvalidBoundProviderSnapshotError(f"{label} bytes are not canonical")
+    return decoded
+
+
+def _rebuild_bound_hypothesis_turn(
+    prompt: _generation._BoundPromptProjection,
+) -> tuple[dict[str, Any], PromptTurnSnapshot]:
+    context_snapshot = prompt.context_snapshot
+    if type(context_snapshot) is not ProposalContextSnapshot:
+        raise InvalidBoundProviderSnapshotError(
+            "bound provider prompt has no exact ProposalContextSnapshot"
+        )
+    if context_snapshot.phase != "hypothesis":
+        raise InvalidBoundProviderSnapshotError(
+            "bound provider context is not a hypothesis snapshot"
+        )
+    provider_context = _decode_canonical_json_object(
+        prompt.provider_context_json,
+        label="bound provider context",
+    )
+    expected_context = context_snapshot.inputs.provider_context(
+        include_renderer_inputs=True
+    )
+    if provider_context != expected_context or prompt.provider_context_json != (
+        _canonical_json_bytes(
+            expected_context,
+            label="authoritative provider context",
+        )
     ):
-        raise InvalidGeneratedHypothesisResultError(
-            "provider generation input does not match the persisted START"
+        raise InvalidBoundProviderSnapshotError(
+            "bound provider context differs from its exact snapshot"
         )
-    prompt_manifest_session_id = f"prompt-call-{uuid.uuid4()}"
 
-    raw, receipt = owner.call_with_receipt(
-        request_kind="hypothesis",
-        tool=dict(snapshot.provider_tool),
-        context=context,
-        snapshot=snapshot,
-        attempt_audit=normalized_attempt_audit,
-        _prompt_manifest_session_id=prompt_manifest_session_id,
+    encoded_snapshot = _decode_canonical_json_object(
+        prompt.provider_snapshot_bytes,
+        label="bound hypothesis provider snapshot",
     )
-    try:
-        from .parsing import _parse_hypothesis
-
-        hypothesis = _parse_hypothesis(
-            raw,
-            allowed_change_loci=snapshot.allowed_change_loci,
+    if frozenset(encoded_snapshot) != _PROVIDER_SNAPSHOT_KEYS:
+        raise InvalidBoundProviderSnapshotError(
+            "bound hypothesis provider snapshot has unexpected fields"
         )
-    except Exception as exc:
-        failed = replace(
+    if (
+        encoded_snapshot["schema_version"] != "hypothesis-provider-snapshot.v1"
+        or encoded_snapshot["render_kind"] != "hypothesis"
+        or encoded_snapshot["authoritative_context_ref"]
+        != context_snapshot.snapshot_id
+    ):
+        raise InvalidBoundProviderSnapshotError(
+            "bound hypothesis provider snapshot has another identity"
+        )
+    system_blocks = encoded_snapshot["system_blocks"]
+    provider_tool = encoded_snapshot["provider_tool"]
+    allowed_change_loci = encoded_snapshot["allowed_change_loci"]
+    user_prompt = encoded_snapshot["user_prompt"]
+    context_digest = encoded_snapshot["context_digest"]
+    if (
+        type(system_blocks) is not list
+        or any(type(block) is not dict for block in system_blocks)
+        or type(provider_tool) is not dict
+        or type(allowed_change_loci) is not list
+        or any(type(locus) is not str for locus in allowed_change_loci)
+        or type(user_prompt) is not str
+        or not user_prompt
+        or type(context_digest) is not str
+    ):
+        raise InvalidBoundProviderSnapshotError(
+            "bound hypothesis provider snapshot has invalid field types"
+        )
+    expected_tool, expected_loci = bind_hypothesis_tool_to_context(provider_context)
+    if provider_tool != expected_tool or tuple(allowed_change_loci) != tuple(
+        expected_loci
+    ):
+        raise InvalidBoundProviderSnapshotError(
+            "bound hypothesis provider tool differs from its exact context"
+        )
+    expected_context_digest = stable_digest(provider_context, length=64)
+    expected_prompt_hash = _provider_prompt_hash(system_blocks, user_prompt)
+    if (
+        context_digest != expected_context_digest
+        or prompt.context_digest != expected_context_digest
+        or prompt.prompt_hash != expected_prompt_hash
+        or prompt.provider_tool_digest
+        != stable_digest(provider_tool, length=64)
+        or prompt.governance_digest != context_snapshot.governance_envelope.digest
+    ):
+        raise InvalidBoundProviderSnapshotError(
+            "bound hypothesis provider digests do not match exact bytes"
+        )
+    snapshot = PromptTurnSnapshot(
+        render_kind="hypothesis",
+        system_blocks=tuple(dict(block) for block in system_blocks),
+        user_prompt=user_prompt,
+        context_digest=context_digest,
+        provider_tool=dict(provider_tool),
+        allowed_change_loci=tuple(allowed_change_loci),
+        authoritative_context_ref=context_snapshot.snapshot_id,
+        authoritative_context=context_snapshot,
+    )
+    _validate_authoritative_provider_context(
+        request_kind="hypothesis",
+        context=provider_context,
+        snapshot=snapshot,
+    )
+    return provider_context, snapshot
+
+
+def _attempt_audit_from_started_projection(
+    started: _generation._StartedAttemptProjection,
+    prompt: PromptTurnSnapshot,
+) -> dict[str, Any]:
+    if (
+        started.context_digest != prompt.context_digest
+        or started.prompt_hash
+        != _provider_prompt_hash(prompt.system_blocks, prompt.user_prompt)
+    ):
+        raise InvalidBoundProviderSnapshotError(
+            "durable START differs from the exact bound provider prompt"
+        )
+    audit = {
+        "schema_version": "provider-call-attempt-audit.v1",
+        "attempt_id": started.attempt_id,
+        "phase": "hypothesis",
+        "attempt_kind": "initial",
+        "continuation_of_attempt_id": None,
+        "hypothesis_attempt_id": started.attempt_id,
+        "started_lineage_event_id": started.started_event_id,
+    }
+    normalized = _validate_provider_call_attempt_audit(
+        audit,
+        request_kind="hypothesis",
+    )
+    if normalized is None:  # pragma: no cover - exact dict cannot normalize to null
+        raise InvalidBoundProviderSnapshotError(
+            "durable START cannot form provider attempt audit"
+        )
+    return normalized
+
+
+def _validate_failure_receipt(
+    receipt: object,
+    *,
+    kind: str,
+    prompt: PromptTurnSnapshot,
+    started: _generation._StartedAttemptProjection,
+) -> PromptCallReceipt:
+    if type(receipt) is not PromptCallReceipt:
+        raise InvalidProviderOutcomeError(
+            "claimed provider failure has no exact call receipt"
+        )
+    if (
+        receipt.request_kind != "hypothesis"
+        or receipt.context_digest != prompt.context_digest
+        or receipt.prompt_hash
+        != _provider_prompt_hash(prompt.system_blocks, prompt.user_prompt)
+        or receipt.attempt_id != started.attempt_id
+        or receipt.attempt_started_event_id != started.started_event_id
+        or receipt.continuation_of_attempt_id is not None
+        or receipt.ok is not False
+        or type(receipt.error_category) is not str
+        or not receipt.error_category
+        or type(receipt.error_type) is not str
+        or not receipt.error_type
+    ):
+        raise InvalidProviderOutcomeError(
+            "claimed provider failure receipt differs from START/prompt facts"
+        )
+    if kind == "provider_interruption" and (
+        receipt.error_category != "provider_call_interrupted"
+    ):
+        raise InvalidProviderOutcomeError(
+            "provider interruption receipt has another category"
+        )
+    if kind == "invalid_response" and (
+        receipt.provider_ok is not True
+        or receipt.error_category != "response_parse_failed"
+    ):
+        raise InvalidProviderOutcomeError(
+            "invalid-response receipt has another provider outcome"
+        )
+    trace_ref = receipt.trace_ref
+    if trace_ref is None:
+        if (
+            receipt.prompt_manifest_ref is not None
+            or receipt.raw_response_ref is not None
+        ):
+            raise InvalidProviderOutcomeError(
+                "provider failure refs have no trace owner"
+            )
+    else:
+        if receipt.prompt_manifest_ref != f"{trace_ref}#/prompt_manifest":
+            raise InvalidProviderOutcomeError(
+                "provider failure prompt manifest ref differs from its trace"
+            )
+        if receipt.raw_response_ref not in {None, f"{trace_ref}#/response"}:
+            raise InvalidProviderOutcomeError(
+                "provider failure raw response ref differs from its trace"
+            )
+    return receipt
+
+
+def _bind_failed_receipt_or_mark_unknown(
+    authority: _generation._AuthorityHandle,
+    permit: ProviderGenerationPermit,
+    receipt: PromptCallReceipt | None,
+    *,
+    kind: str,
+    prompt: PromptTurnSnapshot,
+    started: _generation._StartedAttemptProjection,
+    cause: BaseException,
+) -> FailedHypothesisGeneration:
+    try:
+        exact = _validate_failure_receipt(
             receipt,
-            ok=False,
-            error_category="response_parse_failed",
-            error_type=type(exc).__name__,
+            kind=kind,
+            prompt=prompt,
+            started=started,
         )
-        _attach_prompt_call_receipt(exc, failed)
-        raise
-
-    try:
-        result_state = _validated_generated_hypothesis_result_state(
-            owner=owner,
-            permit=permit,
-            started_attempt=permit_state.started_attempt,
-            attempt_audit=normalized_attempt_audit,
-            prompt_manifest_session_id=prompt_manifest_session_id,
-            context=context,
-            snapshot=snapshot,
-            receipt=receipt,
-            raw_response=raw,
-            hypothesis=hypothesis,
-        )
-        result = object.__new__(GeneratedHypothesisResult)
-        _bind_provider_generation_result(
+        return _generation._issue_failed_generation(
+            authority,
             permit,
-            result=result,
-            result_state=result_state,
+            kind=kind,
+            receipt=exact,
+            trace_ref=exact.trace_ref,
+            prompt_manifest_ref=exact.prompt_manifest_ref,
+            raw_response_ref=exact.raw_response_ref,
+            provider_ok=exact.provider_ok,
+            ok=exact.ok,
+            failure_category=exact.error_category,
+            failure_type=exact.error_type,
+            trace_persistence_error=exact.trace_persistence_error,
         )
-    except Exception as exc:
-        failed = replace(
-            receipt,
-            ok=False,
-            error_category="generated_result_issuance_failed",
-            error_type=type(exc).__name__,
-        )
-        _attach_prompt_call_receipt(exc, failed)
-        raise
-    return hypothesis, receipt, result
+    except BaseException as exc:
+        _mark_claim_unknown(authority, permit, exc if exc is not cause else cause)
 
 
-def _validated_generated_hypothesis_result_state(
+def _mark_claim_unknown(
+    authority: _generation._AuthorityHandle,
+    permit: ProviderGenerationPermit,
+    cause: BaseException,
+) -> NoReturn:
+    _generation._mark_provider_claim_unknown(authority, permit)
+    if not isinstance(cause, Exception):
+        raise cause
+    raise ProviderCallUnknownError(
+        "claimed provider call could not bind a truthful outcome"
+    ) from cause
+
+
+def _validate_successful_provider_call(
     *,
     owner: ProviderCallOwner,
-    permit: ProviderGenerationPermit,
-    started_attempt: object,
+    receipt: PromptCallReceipt,
+    snapshot: PromptTurnSnapshot,
+    context: Mapping[str, Any],
     attempt_audit: Mapping[str, Any],
     prompt_manifest_session_id: str,
-    context: Mapping[str, Any],
-    snapshot: PromptTurnSnapshot,
-    receipt: PromptCallReceipt,
     raw_response: Mapping[str, Any],
-    hypothesis: HypothesisProposal,
-) -> _GeneratedHypothesisResultState:
-    """Validate bound facts without exposing an object-issuance operation."""
-
+) -> tuple[str, str, str]:
     if type(receipt) is not PromptCallReceipt:
-        raise InvalidGeneratedHypothesisResultError(
-            "generated result requires the exact provider receipt type"
-        )
-    attempt_id = str(attempt_audit.get("attempt_id") or "")
-    started_event_id = str(attempt_audit.get("started_lineage_event_id") or "")
-    if not attempt_id or not started_event_id:
-        raise InvalidGeneratedHypothesisResultError(
-            "generated result requires complete started-attempt identity"
+        raise InvalidProviderOutcomeError(
+            "generated result requires the exact provider receipt"
         )
     if (
         receipt.request_kind != "hypothesis"
@@ -685,28 +834,16 @@ def _validated_generated_hypothesis_result_state(
         or receipt.error_category is not None
         or receipt.error_type is not None
         or receipt.trace_persistence_error is not None
-    ):
-        raise InvalidGeneratedHypothesisResultError(
-            "generated result requires a successful persisted provider call"
-        )
-    if (
-        receipt.attempt_id != attempt_id
-        or receipt.attempt_started_event_id != started_event_id
+        or receipt.attempt_id != attempt_audit["attempt_id"]
+        or receipt.attempt_started_event_id
+        != attempt_audit["started_lineage_event_id"]
         or receipt.continuation_of_attempt_id is not None
+        or receipt.context_digest != snapshot.context_digest
+        or receipt.prompt_hash
+        != _provider_prompt_hash(snapshot.system_blocks, snapshot.user_prompt)
     ):
-        raise InvalidGeneratedHypothesisResultError(
-            "provider receipt does not match the exact started attempt"
-        )
-    expected_prompt_hash = _provider_prompt_hash(
-        snapshot.system_blocks,
-        snapshot.user_prompt,
-    )
-    if (
-        receipt.context_digest != snapshot.context_digest
-        or receipt.prompt_hash != expected_prompt_hash
-    ):
-        raise InvalidGeneratedHypothesisResultError(
-            "provider receipt does not match the exact context and prompt"
+        raise InvalidProviderOutcomeError(
+            "generated result receipt differs from its exact START/prompt"
         )
     trace_ref = _required_durable_ref(receipt.trace_ref, label="trace")
     prompt_manifest_ref = _required_durable_ref(
@@ -718,11 +855,11 @@ def _validated_generated_hypothesis_result_state(
         label="raw response",
     )
     if prompt_manifest_ref != f"{trace_ref}#/prompt_manifest":
-        raise InvalidGeneratedHypothesisResultError(
+        raise InvalidProviderOutcomeError(
             "prompt manifest ref is not bound to the trace"
         )
     if raw_response_ref != f"{trace_ref}#/response":
-        raise InvalidGeneratedHypothesisResultError(
+        raise InvalidProviderOutcomeError(
             "raw response ref is not bound to the trace"
         )
     _validate_persisted_generated_hypothesis_trace(
@@ -735,175 +872,13 @@ def _validated_generated_hypothesis_result_state(
         attempt_audit=attempt_audit,
         raw_response=raw_response,
     )
-
-    proposal_canonical_bytes = _canonical_hypothesis_bytes(hypothesis)
-    proposal_sha256 = hashlib.sha256(proposal_canonical_bytes).hexdigest()
-    context_probe = _GENERATED_HYPOTHESIS_CONTEXT_PROOF
-    context_token = context_probe.set(object())
-    return _GeneratedHypothesisResultState(
-        permit=permit,
-        started_attempt=started_attempt,
-        attempt_id=attempt_id,
-        started_event_id=started_event_id,
-        context_digest=receipt.context_digest,
-        prompt_hash=receipt.prompt_hash,
-        receipt=receipt,
-        trace_ref=trace_ref,
-        prompt_manifest_ref=prompt_manifest_ref,
-        raw_response_ref=raw_response_ref,
-        proposal_canonical_bytes=proposal_canonical_bytes,
-        proposal_sha256=proposal_sha256,
-        thread_id=threading.get_ident(),
-        context_probe=context_probe,
-        context_token=context_token,
-    )
-
-
-def _consume_generated_hypothesis_result(
-    result: GeneratedHypothesisResult,
-    *,
-    permit: ProviderGenerationPermit,
-    started_attempt: object,
-    receipt: PromptCallReceipt,
-) -> _ConsumedGeneratedHypothesisResult:
-    """Consume one exact provider proof and return its immutable bound facts."""
-
-    if type(result) is not GeneratedHypothesisResult:
-        raise InvalidGeneratedHypothesisResultError(
-            "operation requires an exact GeneratedHypothesisResult"
-        )
-    if type(permit) is not ProviderGenerationPermit:
-        raise InvalidGeneratedHypothesisResultError(
-            "operation requires an exact ProviderGenerationPermit"
-        )
-    with _PROVIDER_GENERATION_PERMIT_STATES_LOCK:
-        permit_state = _PROVIDER_GENERATION_PERMIT_STATES.get(permit)
-        if permit_state is None:
-            raise InvalidGeneratedHypothesisResultError(
-                "ProviderGenerationPermit was not issued"
-            )
-        if (
-            permit_state.phase is not _ProviderGenerationPermitPhase.RESULT_BOUND
-            or permit_state.result_ref is None
-            or permit_state.result_ref() is not result
-        ):
-            raise InvalidGeneratedHypothesisResultError(
-                "ProviderGenerationPermit is not bound to the exact result"
-            )
-        if permit_state.thread_id != threading.get_ident():
-            raise GeneratedHypothesisResultLifecycleError(
-                "ProviderGenerationPermit cannot cross threads"
-            )
-        _prove_provider_generation_permit_context(permit_state)
-    with _GENERATED_HYPOTHESIS_RESULT_STATES_LOCK:
-        state = _GENERATED_HYPOTHESIS_RESULT_STATES.get(result)
-        if state is None:
-            raise InvalidGeneratedHypothesisResultError(
-                "GeneratedHypothesisResult was not issued"
-            )
-        if state.consumed:
-            raise GeneratedHypothesisResultLifecycleError(
-                "GeneratedHypothesisResult is already consumed"
-            )
-        if state.thread_id != threading.get_ident():
-            raise GeneratedHypothesisResultLifecycleError(
-                "GeneratedHypothesisResult cannot cross threads"
-            )
-        if state.permit is not permit:
-            raise InvalidGeneratedHypothesisResultError(
-                "GeneratedHypothesisResult requires the exact provider permit"
-            )
-        if state.started_attempt is not started_attempt:
-            raise InvalidGeneratedHypothesisResultError(
-                "GeneratedHypothesisResult has another started attempt"
-            )
-        if state.receipt is not receipt:
-            raise InvalidGeneratedHypothesisResultError(
-                "GeneratedHypothesisResult requires the exact provider receipt"
-            )
-        _prove_generated_hypothesis_result_context(state)
-        consumed = _ConsumedGeneratedHypothesisResult(
-            attempt_id=state.attempt_id,
-            started_event_id=state.started_event_id,
-            context_digest=state.context_digest,
-            prompt_hash=state.prompt_hash,
-            receipt=state.receipt,
-            trace_ref=state.trace_ref,
-            prompt_manifest_ref=state.prompt_manifest_ref,
-            raw_response_ref=state.raw_response_ref,
-            proposal_canonical_bytes=state.proposal_canonical_bytes,
-            proposal_sha256=state.proposal_sha256,
-        )
-        state.consumed = True
-        return consumed
-
-
-def _bind_provider_generation_result(
-    permit: ProviderGenerationPermit,
-    *,
-    result: GeneratedHypothesisResult,
-    result_state: _GeneratedHypothesisResultState,
-) -> None:
-    """Atomically register one result and advance its exact permit."""
-
-    with _PROVIDER_GENERATION_PERMIT_STATES_LOCK:
-        permit_state = _PROVIDER_GENERATION_PERMIT_STATES.get(permit)
-        if permit_state is None:
-            raise InvalidGeneratedHypothesisResultError(
-                "ProviderGenerationPermit was not issued"
-            )
-        if permit_state.phase is not _ProviderGenerationPermitPhase.START_BOUND:
-            raise GeneratedHypothesisResultLifecycleError(
-                "ProviderGenerationPermit has no active started call"
-            )
-        if permit_state.thread_id != threading.get_ident():
-            raise GeneratedHypothesisResultLifecycleError(
-                "ProviderGenerationPermit cannot cross threads"
-            )
-        _prove_provider_generation_permit_context(permit_state)
-        if (
-            result_state.permit is not permit
-            or result_state.started_attempt is not permit_state.started_attempt
-        ):
-            raise InvalidGeneratedHypothesisResultError(
-                "generated result does not match its exact provider permit"
-            )
-        with _GENERATED_HYPOTHESIS_RESULT_STATES_LOCK:
-            _GENERATED_HYPOTHESIS_RESULT_STATES[result] = result_state
-        permit_state.result_ref = weakref.ref(result)
-        permit_state.phase = _ProviderGenerationPermitPhase.RESULT_BOUND
-
-
-def _prove_provider_generation_permit_context(
-    state: _ProviderGenerationPermitState,
-) -> None:
-    current = state.context_probe.get()
-    try:
-        state.context_probe.reset(state.context_token)
-    except (RuntimeError, ValueError) as exc:
-        raise GeneratedHypothesisResultLifecycleError(
-            "ProviderGenerationPermit cannot cross Contexts"
-        ) from exc
-    state.context_token = state.context_probe.set(current)
-
-
-def _prove_generated_hypothesis_result_context(
-    state: _GeneratedHypothesisResultState,
-) -> None:
-    current = state.context_probe.get()
-    try:
-        state.context_probe.reset(state.context_token)
-    except (RuntimeError, ValueError) as exc:
-        raise GeneratedHypothesisResultLifecycleError(
-            "GeneratedHypothesisResult cannot cross Contexts"
-        ) from exc
-    state.context_token = state.context_probe.set(current)
+    return trace_ref, prompt_manifest_ref, raw_response_ref
 
 
 def _required_durable_ref(value: str | None, *, label: str) -> str:
     normalized = str(value or "").strip()
     if not normalized:
-        raise InvalidGeneratedHypothesisResultError(
+        raise InvalidProviderOutcomeError(
             f"generated result requires a durable {label} ref"
         )
     return normalized
@@ -922,7 +897,7 @@ def _validate_persisted_generated_hypothesis_trace(
 ) -> None:
     trace_dir = str(owner._trace_dir or "").strip()
     if not trace_dir:
-        raise InvalidGeneratedHypothesisResultError(
+        raise InvalidProviderOutcomeError(
             "generated result requires persisted trace storage"
         )
     trace_root = Path(trace_dir).resolve()
@@ -930,30 +905,30 @@ def _validate_persisted_generated_hypothesis_trace(
     try:
         candidate.relative_to(trace_root)
     except ValueError as exc:
-        raise InvalidGeneratedHypothesisResultError(
+        raise InvalidProviderOutcomeError(
             "generated result trace ref escapes its trace owner"
         ) from exc
     if _public_trace_ref(str(candidate), trace_dir=trace_dir) != trace_ref:
-        raise InvalidGeneratedHypothesisResultError(
+        raise InvalidProviderOutcomeError(
             "generated result trace ref is not canonical"
         )
     try:
         persisted = json.loads(candidate.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise InvalidGeneratedHypothesisResultError(
+        raise InvalidProviderOutcomeError(
             "generated result trace is not durably readable"
         ) from exc
     if type(persisted) is not dict:
-        raise InvalidGeneratedHypothesisResultError(
+        raise InvalidProviderOutcomeError(
             "generated result trace has unsupported shape"
         )
     manifest = persisted.get("prompt_manifest")
     if not isinstance(manifest, Mapping):
-        raise InvalidGeneratedHypothesisResultError(
+        raise InvalidProviderOutcomeError(
             "generated result prompt manifest was not persisted"
         )
     if type(prompt_manifest_session_id) is not str or not prompt_manifest_session_id:
-        raise InvalidGeneratedHypothesisResultError(
+        raise InvalidProviderOutcomeError(
             "generated result has no prebound prompt manifest session identity"
         )
     expected_manifest = build_api_visible_prompt_manifest(
@@ -976,14 +951,14 @@ def _validate_persisted_generated_hypothesis_trace(
         or persisted.get("provider_call_attempt") != dict(attempt_audit)
         or dict(manifest) != expected_manifest
     ):
-        raise InvalidGeneratedHypothesisResultError(
+        raise InvalidProviderOutcomeError(
             "generated result trace, manifest, or raw response is incomplete"
         )
 
 
 def _canonical_hypothesis_bytes(hypothesis: HypothesisProposal) -> bytes:
     if type(hypothesis) is not HypothesisProposal:
-        raise InvalidGeneratedHypothesisResultError(
+        raise InvalidProviderOutcomeError(
             "generated result requires an exact HypothesisProposal"
         )
     payload = {
@@ -1005,24 +980,10 @@ def _canonical_hypothesis_bytes(hypothesis: HypothesisProposal) -> bytes:
             allow_nan=False,
         )
     except (TypeError, ValueError) as exc:
-        raise InvalidGeneratedHypothesisResultError(
+        raise InvalidProviderOutcomeError(
             "HypothesisProposal cannot be canonically encoded"
         ) from exc
     return rendered.encode("utf-8")
-
-
-def _hypothesis_from_canonical_bytes(value: bytes) -> HypothesisProposal:
-    try:
-        payload = json.loads(value.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise InvalidGeneratedHypothesisResultError(
-            "generated hypothesis canonical bytes are malformed"
-        ) from exc
-    if type(payload) is not dict:
-        raise InvalidGeneratedHypothesisResultError(
-            "generated hypothesis canonical payload is malformed"
-        )
-    return HypothesisProposal(**payload)
 
 
 def _validate_provider_call_attempt_audit(
@@ -1200,13 +1161,15 @@ def _client_usage_metadata(client: Any) -> Dict[str, Any] | None:
 
 
 __all__ = [
+    "BoundHypothesisPrompt",
+    "FailedHypothesisGeneration",
     "GeneratedHypothesisResult",
-    "GeneratedHypothesisResultError",
-    "GeneratedHypothesisResultLifecycleError",
-    "InvalidGeneratedHypothesisResultError",
+    "InvalidBoundProviderSnapshotError",
+    "InvalidProviderOutcomeError",
     "PromptCallReceipt",
     "PromptTurnSnapshot",
-    "ProviderGenerationPermit",
     "ProviderCallOwner",
+    "ProviderCallUnknownError",
+    "ProviderGenerationPermit",
     "prompt_call_receipt_from_error",
 ]

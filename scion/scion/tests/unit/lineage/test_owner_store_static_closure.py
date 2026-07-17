@@ -9,6 +9,7 @@ from scion.lineage import champion_store
 from scion.lineage import hypothesis_owner_store
 from scion.lineage import owner_transaction
 from scion.lineage import proposal_attempt_owner
+from scion.proposal import hypothesis_code_source_owner
 
 _BRANCH_PRIVATE = frozenset(
     {
@@ -267,15 +268,16 @@ def test_focused_owner_stores_have_no_production_importer() -> None:
     assert importers == {registry_path}
 
 
-def test_connection_scoped_champion_creation_surface_has_zero_wiring() -> None:
+def test_connection_scoped_champion_surface_has_exact_checkpoint_a_reader() -> None:
     trees = _production_trees()
     champion_path = Path(champion_store.__file__).resolve()
+    code_source_path = Path(hypothesis_code_source_owner.__file__).resolve()
     callers = _attribute_callers(
         trees,
         _CHAMPION_DORMANT_SURFACE,
     )
     assert callers == {
-        "ConnectionScopedChampionStore": set(),
+        "ConnectionScopedChampionStore": {code_source_path},
         "_authorize_branch_creation_in": set(),
         "_complete_branch_creation_in": set(),
         "_require_branch_creation_outcome": {champion_path},

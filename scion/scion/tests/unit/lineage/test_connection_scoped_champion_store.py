@@ -160,6 +160,20 @@ def _load(
         return store.load_current_in(transaction)
 
 
+def _load_exact(
+    authority: sqlite_boundary.CampaignDatabaseAuthority,
+    store: subject.ConnectionScopedChampionStore,
+    version: int,
+    weight_revision: int,
+) -> subject.StoredChampionRecord | None:
+    with sqlite_boundary._independent_authority_read_snapshot(authority) as snapshot:
+        return store._load_exact_from_snapshot(
+            snapshot,
+            version,
+            weight_revision,
+        )
+
+
 def test_strict_current_load_returns_exact_storage_token_and_detached_values(
     tmp_path: Path,
 ) -> None:
@@ -231,6 +245,78 @@ def test_snapshot_reader_uses_same_strict_token_and_expires_with_snapshot(
 
     with pytest.raises(sqlite_boundary.InactiveImmediateTransactionError):
         store._load_current_from_snapshot(snapshot)
+
+
+def test_exact_snapshot_reader_loads_captured_historical_revision_not_current(
+    tmp_path: Path,
+) -> None:
+    path, authority, store = _harness(tmp_path)
+    connection = sqlite_boundary._connect_sqlite(path)
+    try:
+        _insert(connection, version=7, weight_revision=3)
+        _insert(connection, version=8, weight_revision=0)
+        connection.commit()
+    finally:
+        connection.close()
+
+    exact = _load_exact(authority, store, 7, 2)
+    current = _load(authority, store)
+
+    assert exact is not None
+    assert current is not None
+    assert (exact.version, exact.weight_revision) == (7, 2)
+    assert (current.version, current.weight_revision) == (8, 0)
+    assert exact == _load_exact(authority, store, 7, 2)
+    assert _load_exact(authority, store, 99, 0) is None
+
+
+@pytest.mark.parametrize(
+    ("version", "weight_revision", "message"),
+    [
+        (True, 0, "SQLite integer"),
+        (-1, 0, "non-negative"),
+        (7, True, "SQLite integer"),
+        (7, -1, "non-negative"),
+    ],
+)
+def test_exact_snapshot_reader_rejects_non_exact_identity_parameters(
+    tmp_path: Path,
+    version: object,
+    weight_revision: object,
+    message: str,
+) -> None:
+    _, authority, store = _harness(tmp_path)
+    with sqlite_boundary._independent_authority_read_snapshot(authority) as snapshot:
+        with pytest.raises(DurableOwnerIntegrityError, match=message):
+            store._load_exact_from_snapshot(  # type: ignore[arg-type]
+                snapshot,
+                version,
+                weight_revision,
+            )
+
+
+def test_exact_snapshot_reader_rejects_duplicate_storage_facts(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "duplicate-champion.db"
+    connection = sqlite_boundary._connect_sqlite(path)
+    try:
+        connection.execute(
+            _CREATE_SCHEMA.replace(
+                ",\n    PRIMARY KEY (version, weight_revision)",
+                "",
+            )
+        )
+        _insert(connection)
+        _insert(connection)
+        connection.commit()
+    finally:
+        connection.close()
+    authority = sqlite_boundary._issue_test_campaign_database_authority(path)
+    store = subject.ConnectionScopedChampionStore(authority)
+
+    with pytest.raises(DurableOwnerIntegrityError, match="more than one"):
+        _load_exact(authority, store, 7, 2)
 
 
 @pytest.mark.parametrize(

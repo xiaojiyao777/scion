@@ -16,9 +16,14 @@ from __future__ import annotations
 
 import contextvars
 import enum
+import hashlib
+import json
+import re
 import threading
+import uuid
 import weakref
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from types import MappingProxyType
 from typing import Any, Final, Mapping
 
@@ -33,6 +38,28 @@ from scion.lineage.durable_owner import (
     RevisionedHypothesisRecord,
 )
 from scion.lineage.hypothesis_owner_store import HypothesisStore
+from scion.lineage.proposal_attempt_owner import (
+    ProposalAttemptCommitClassification,
+    ProposalAttemptOwner,
+    StoredProposalAttemptEvent,
+    _AttemptGroupDisposition,
+    _HypothesisAttemptInventory,
+)
+from scion.proposal import hypothesis_generation_authority as _generation
+from scion.proposal.context_manager.manager import (
+    ContextManager,
+    HypothesisProblemEvidenceRejectedError,
+    HypothesisProblemEvidenceUnknownError,
+)
+from scion.proposal.engine.provider_call import ProviderCallOwner
+from scion.proposal.hypothesis_code_source_owner import (
+    HypothesisCodeSourceOwner,
+    HypothesisCodeSourceRejectedError,
+    HypothesisCodeSourceUnknownError,
+)
+from scion.proposal.prompt_projection_authority import (
+    ProposalPromptProjectionAuthority,
+)
 
 __all__ = (
     "BranchMutationView",
@@ -44,6 +71,7 @@ __all__ = (
     "CampaignOwnerRegistryError",
     "CampaignOwnerTransactionScope",
     "HypothesisMutationView",
+    "HypothesisGenerationReservationHoldError",
     "InvalidCampaignOwnerCapabilityError",
     "LoadedRestoreAuthority",
 )
@@ -71,6 +99,10 @@ class CampaignOwnerIntegrityHoldError(CampaignOwnerRegistryError):
 
 class CampaignOwnerCleanupError(CampaignOwnerRegistryError):
     """Cleanup failed after a proven durable/local owner result."""
+
+
+class HypothesisGenerationReservationHoldError(CampaignOwnerRegistryError):
+    """One Branch remains unavailable after uncertain generation persistence."""
 
 
 class _StartupPhase(enum.Enum):
@@ -103,6 +135,15 @@ class _CommitOutcome(enum.Enum):
     UNCERTAIN_OR_MIXED = enum.auto()
 
 
+class _GenerationReservationPhase(enum.Enum):
+    LOCAL = enum.auto()
+    DURABLE_OPEN = enum.auto()
+    OUTCOME_BOUND = enum.auto()
+    RESOLVED = enum.auto()
+    UNCERTAIN_HOLD = enum.auto()
+    RELEASED = enum.auto()
+
+
 @dataclass(frozen=True, slots=True)
 class _BranchSlot:
     owner: RevisionedBranchRecord
@@ -126,6 +167,53 @@ class _CampaignOwnerState:
     branch_slots: Mapping[str, _BranchSlot]
     hypothesis_slots: _HypothesisSlotIndex
     publication_generation: int
+
+
+@dataclass(frozen=True, slots=True)
+class _HypothesisGenerationComponents:
+    code_source_owner: HypothesisCodeSourceOwner
+    context_manager: ContextManager
+    prompt_owner: ProposalPromptProjectionAuthority
+    proposal_owner: ProposalAttemptOwner
+    provider_owner: ProviderCallOwner
+    registry_authority: _generation._AuthorityHandle
+    provider_authority: _generation._AuthorityHandle
+    campaign_id: str
+    runtime_mode: str
+    problem_id: str
+    problem_spec_hash: str
+    split_manifest_hash: str
+    seed_ledger_hash: str
+
+
+@dataclass(slots=True)
+class _HypothesisGenerationReservation:
+    branch_id: str
+    reservation_id: str
+    phase: _GenerationReservationPhase
+    view: _generation.HypothesisGenerationView | None
+
+
+@dataclass(slots=True)
+class _HypothesisGenerationState:
+    view: _generation.HypothesisGenerationView
+    reservation: _HypothesisGenerationReservation
+    root: _CampaignOwnerState
+    branch_owner: RevisionedBranchRecord
+    hypothesis_bundle: tuple[RevisionedHypothesisRecord, ...]
+    prior_head: RevisionedHypothesisRecord | None
+    code_source: _generation.HypothesisCodeSource | None = None
+    prompt_source: _generation.HypothesisPromptSource | None = None
+    bound_prompt: _generation.BoundHypothesisPrompt | None = None
+    pending_start: StoredProposalAttemptEvent | None = None
+    started_attempt: _generation.StartedHypothesisAttempt | None = None
+    permit: _generation.ProviderGenerationPermit | None = None
+    outcome: (
+        _generation.GeneratedHypothesisResult
+        | _generation.FailedHypothesisGeneration
+        | _generation.AbortedHypothesisGeneration
+        | None
+    ) = None
 
 
 class LoadedRestoreAuthority:
@@ -386,6 +474,12 @@ _DATABASE_REGISTRIES: dict[
     weakref.ReferenceType[CampaignOwnerRegistry],
 ] = {}
 _AUTHORITY_REGISTRIES_LOCK = threading.Lock()
+_CANONICAL_UTC_RE: Final[re.Pattern[str]] = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"\.[0-9]{6}\+00:00$"
+)
+_OWNER_CONTEXT_SCHEMA: Final[str] = "hypothesis-owner-context-projection.v1"
+_H_BUNDLE_SCHEMA: Final[str] = "hypothesis-generation-source-bundle.v1"
 
 
 def _database_registry_key(
@@ -412,6 +506,260 @@ def _required_owner_id(value: object, *, label: str) -> str:
             f"{label} must be a non-empty exact string without edge whitespace"
         )
     return value
+
+
+def _required_digest(value: object, *, label: str) -> str:
+    text = _required_owner_id(value, label=label)
+    if len(text) != 64:
+        raise DurableOwnerIntegrityError(f"{label} must be a SHA-256 digest")
+    try:
+        int(text, 16)
+    except ValueError as exc:
+        raise DurableOwnerIntegrityError(f"{label} must be a SHA-256 digest") from exc
+    if text != text.lower():
+        raise DurableOwnerIntegrityError(
+            f"{label} must be a lowercase SHA-256 digest"
+        )
+    return text
+
+
+def _required_sqlite_integer(value: object, *, label: str) -> int:
+    if type(value) is not int or value < 0 or value > (1 << 63) - 1:
+        raise DurableOwnerIntegrityError(
+            f"{label} must be a nonnegative SQLite INTEGER"
+        )
+    return value
+
+
+def _canonical_json_bytes(value: object, *, label: str) -> bytes:
+    try:
+        return json.dumps(
+            value,
+            ensure_ascii=True,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    except (TypeError, ValueError, RecursionError, UnicodeEncodeError) as exc:
+        raise DurableOwnerIntegrityError(f"{label} is not canonical JSON") from exc
+
+
+def _canonical_hypothesis_created_at(
+    token: RevisionedHypothesisRecord,
+) -> str:
+    try:
+        payload = json.loads(token.canonical_storage_payload_json)
+        raw = payload["created_at"]
+    except (TypeError, KeyError, json.JSONDecodeError) as exc:
+        raise DurableOwnerIntegrityError(
+            "hypothesis owner has no canonical created_at"
+        ) from exc
+    if type(raw) is not str or _CANONICAL_UTC_RE.fullmatch(raw) is None:
+        raise DurableOwnerIntegrityError(
+            "hypothesis created_at is not canonical UTC microsecond text"
+        )
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError as exc:
+        raise DurableOwnerIntegrityError(
+            "hypothesis created_at is invalid"
+        ) from exc
+    if (
+        parsed.tzinfo != timezone.utc
+        or parsed.isoformat(timespec="microseconds") != raw
+    ):
+        raise DurableOwnerIntegrityError(
+            "hypothesis created_at is not canonical UTC microsecond text"
+        )
+    return raw
+
+
+def _hypothesis_owner_item(
+    token: RevisionedHypothesisRecord,
+) -> dict[str, object]:
+    return {
+        "hypothesis_id": _required_owner_id(
+            token.hypothesis_id,
+            label="hypothesis ID",
+        ),
+        "owner_revision": _required_sqlite_integer(
+            token.owner_revision,
+            label="hypothesis owner revision",
+        ),
+        "storage_sha256": _required_digest(
+            token.payload_sha256,
+            label="hypothesis storage digest",
+        ),
+    }
+
+
+def _hypothesis_bundle_projection(
+    branch_id: str,
+    bundle: tuple[RevisionedHypothesisRecord, ...],
+) -> tuple[str, tuple[dict[str, object], ...]]:
+    items = tuple(
+        _hypothesis_owner_item(token)
+        for token in sorted(bundle, key=lambda item: item.hypothesis_id)
+    )
+    digest_payload = {
+        "schema_version": _H_BUNDLE_SCHEMA,
+        "branch_id": branch_id,
+        "count": len(items),
+        "items": items,
+    }
+    digest = hashlib.sha256(
+        _canonical_json_bytes(digest_payload, label="hypothesis owner bundle")
+    ).hexdigest()
+    return digest, items
+
+
+def _prior_hypothesis_head(
+    bundle: tuple[RevisionedHypothesisRecord, ...],
+) -> RevisionedHypothesisRecord | None:
+    if not bundle:
+        return None
+    return max(
+        bundle,
+        key=lambda token: (
+            _canonical_hypothesis_created_at(token),
+            token.hypothesis_id,
+        ),
+    )
+
+
+def _owner_context_json(
+    components: _HypothesisGenerationComponents,
+    *,
+    root: _CampaignOwnerState,
+    branch_owner: RevisionedBranchRecord,
+    bundle: tuple[RevisionedHypothesisRecord, ...],
+    prior_head: RevisionedHypothesisRecord | None,
+    h_bundle_digest: str,
+    h_bundle_items: tuple[dict[str, object], ...],
+) -> bytes:
+    branch = branch_owner.value()
+    branch_id = _required_owner_id(branch.branch_id, label="Branch ID")
+    branch_revision = _required_sqlite_integer(
+        branch_owner.owner_revision,
+        label="Branch owner revision",
+    )
+    branch_storage_digest = _required_digest(
+        branch_owner.payload_sha256,
+        label="Branch storage digest",
+    )
+    base_champion_id = _required_sqlite_integer(
+        branch.base_champion_id,
+        label="base champion ID",
+    )
+    base_weight_revision = _required_sqlite_integer(
+        branch.weight_revision,
+        label="base champion weight revision",
+    )
+    current_code_hash = (
+        None
+        if branch.current_code_hash is None
+        else _required_digest(
+            branch.current_code_hash,
+            label="Branch current code hash",
+        )
+    )
+    last_clean_code_hash = (
+        None
+        if branch.last_clean_code_hash is None
+        else _required_digest(
+            branch.last_clean_code_hash,
+            label="Branch last-clean code hash",
+        )
+    )
+    base_hash = _required_digest(
+        branch.base_champion_hash,
+        label="Branch base champion hash",
+    )
+    anchors = {
+        "problem_id": components.problem_id,
+        "problem_spec_hash": components.problem_spec_hash,
+        "split_manifest_hash": components.split_manifest_hash,
+        "seed_ledger_hash": components.seed_ledger_hash,
+        "champion_version": base_champion_id,
+        "champion_weight_revision": base_weight_revision,
+        "champion_code_snapshot_hash": base_hash,
+        "branch_base_champion_id": base_champion_id,
+        "branch_base_champion_hash": base_hash,
+    }
+    payload = {
+        "schema_version": _OWNER_CONTEXT_SCHEMA,
+        "campaign_id": components.campaign_id,
+        "runtime_mode": components.runtime_mode,
+        "root_generation": _required_sqlite_integer(
+            root.publication_generation,
+            label="owner root generation",
+        ),
+        "branch": {
+            "branch_id": branch_id,
+            "owner_revision": branch_revision,
+            "storage_sha256": branch_storage_digest,
+            "state": branch.state.value,
+            "branch_code_status": branch.branch_code_status,
+            "current_code_hash": current_code_hash,
+            "last_clean_code_hash": last_clean_code_hash,
+            "base_champion_id": base_champion_id,
+            "base_champion_hash": base_hash,
+            "base_champion_weight_revision": base_weight_revision,
+        },
+        "h_bundle": {
+            "digest": h_bundle_digest,
+            "count": len(h_bundle_items),
+            "items": h_bundle_items,
+        },
+        "prior_head": (
+            None if prior_head is None else _hypothesis_owner_item(prior_head)
+        ),
+        "anchors": anchors,
+    }
+    return _canonical_json_bytes(payload, label="hypothesis owner context")
+
+
+def _restore_generation_holds(
+    inventory: _HypothesisAttemptInventory,
+    prepared_root: _CampaignOwnerState,
+) -> dict[str, _HypothesisGenerationReservation]:
+    if type(inventory) is not _HypothesisAttemptInventory:
+        raise DurableOwnerIntegrityError(
+            "proposal-attempt restore returned another inventory kind"
+        )
+    if inventory.unattributed_malformed:
+        raise DurableOwnerIntegrityError(
+            "proposal-attempt restore contains unattributed malformed storage"
+        )
+    held_branches = set(inventory.malformed_branch_ids)
+    for group in inventory.groups:
+        if group.disposition in {
+            _AttemptGroupDisposition.UNRESOLVED,
+            _AttemptGroupDisposition.MALFORMED,
+        }:
+            held_branches.add(
+                _required_owner_id(
+                    group.branch_id,
+                    label="restored proposal-attempt Branch ID",
+                )
+            )
+        elif group.disposition is not _AttemptGroupDisposition.RESOLVED:
+            raise DurableOwnerIntegrityError(
+                "proposal-attempt restore has an unknown group disposition"
+            )
+    holds: dict[str, _HypothesisGenerationReservation] = {}
+    for branch_id in sorted(held_branches):
+        if branch_id not in prepared_root.branch_slots:
+            raise DurableOwnerIntegrityError(
+                "proposal-attempt hold references a missing Branch owner"
+            )
+        holds[branch_id] = _HypothesisGenerationReservation(
+            branch_id=branch_id,
+            reservation_id=f"restored-hold:{branch_id}",
+            phase=_GenerationReservationPhase.UNCERTAIN_HOLD,
+            view=None,
+        )
+    return holds
 
 
 def _validate_generation(value: object) -> int:
@@ -693,10 +1041,14 @@ class CampaignOwnerRegistry:
         "_condition",
         "_database_authority",
         "_hypothesis_store",
+        "_hypothesis_generation_components",
+        "_hypothesis_generation_reservations",
+        "_hypothesis_generation_states",
         "_initialized",
         "_owner_lock",
         "_owner_state",
         "_pending_restore_root",
+        "_pending_restore_generation_holds",
         "_standalone_leases",
         "_startup_phase",
     )
@@ -747,6 +1099,21 @@ class CampaignOwnerRegistry:
         self._standalone_leases: set[_StandaloneLease] = set()
         self._owner_state = _empty_owner_state()
         self._pending_restore_root: _CampaignOwnerState | None = None
+        self._hypothesis_generation_components: (
+            _HypothesisGenerationComponents | None
+        ) = None
+        self._hypothesis_generation_reservations: dict[
+            str,
+            _HypothesisGenerationReservation,
+        ] = {}
+        self._hypothesis_generation_states: dict[
+            _generation.HypothesisGenerationView,
+            _HypothesisGenerationState,
+        ] = {}
+        self._pending_restore_generation_holds: dict[
+            str,
+            _HypothesisGenerationReservation,
+        ] | None = None
 
     def __init_subclass__(cls, **_kwargs: object) -> None:
         raise TypeError("CampaignOwnerRegistry is sealed")
@@ -766,6 +1133,117 @@ class CampaignOwnerRegistry:
             "CampaignOwnerRegistry cannot be pickled"
         )
 
+    def _install_hypothesis_generation_components(
+        self,
+        *,
+        code_source_owner: HypothesisCodeSourceOwner,
+        context_manager: ContextManager,
+        prompt_owner: ProposalPromptProjectionAuthority,
+        proposal_owner: ProposalAttemptOwner,
+        provider_owner: ProviderCallOwner,
+        registry_authority: _generation._AuthorityHandle,
+        provider_authority: _generation._AuthorityHandle,
+        runtime_mode: str,
+        problem_id: str,
+        problem_spec_hash: str,
+        split_manifest_hash: str,
+        seed_ledger_hash: str,
+    ) -> None:
+        """Install one immutable dormant checkpoint-A composition exactly once."""
+
+        _assert_no_active_scope()
+        if type(code_source_owner) is not HypothesisCodeSourceOwner:
+            raise InvalidCampaignOwnerCapabilityError(
+                "generation install requires the exact code-source owner"
+            )
+        if type(context_manager) is not ContextManager:
+            raise InvalidCampaignOwnerCapabilityError(
+                "generation install requires the exact ContextManager"
+            )
+        if type(prompt_owner) is not ProposalPromptProjectionAuthority:
+            raise InvalidCampaignOwnerCapabilityError(
+                "generation install requires the exact prompt owner"
+            )
+        if type(proposal_owner) is not ProposalAttemptOwner:
+            raise InvalidCampaignOwnerCapabilityError(
+                "generation install requires the exact proposal-attempt owner"
+            )
+        if type(provider_owner) is not ProviderCallOwner:
+            raise InvalidCampaignOwnerCapabilityError(
+                "generation install requires the exact provider owner"
+            )
+        registry_handle_state = _generation._require_authority(
+            registry_authority,
+            role=_generation._AuthorityRole.REGISTRY,
+            owner=self,
+        )
+        provider_handle_state = _generation._require_authority(
+            provider_authority,
+            role=_generation._AuthorityRole.PROVIDER,
+            owner=provider_owner,
+        )
+        del registry_handle_state, provider_handle_state
+        component_handles = (
+            code_source_owner._require_hypothesis_generation_authority(),
+            context_manager._require_hypothesis_generation_authority(),
+            prompt_owner._require_hypothesis_generation_authority(),
+            proposal_owner._require_hypothesis_generation_authority(),
+            provider_owner._require_hypothesis_generation_authority(),
+        )
+        if component_handles[-1] is not provider_authority:
+            raise InvalidCampaignOwnerCapabilityError(
+                "installed provider handle differs from Registry composition"
+            )
+        _generation._require_same_installation(
+            registry_authority,
+            provider_authority,
+            *component_handles,
+        )
+        authority_state = _sqlite._lookup_authority_state(self._database_authority)
+        mode = _required_owner_id(runtime_mode, label="runtime mode")
+        if mode != "direct_v3":
+            raise DurableOwnerIntegrityError(
+                "hypothesis generation requires direct_v3 runtime mode"
+            )
+        components = _HypothesisGenerationComponents(
+            code_source_owner=code_source_owner,
+            context_manager=context_manager,
+            prompt_owner=prompt_owner,
+            proposal_owner=proposal_owner,
+            provider_owner=provider_owner,
+            registry_authority=registry_authority,
+            provider_authority=provider_authority,
+            campaign_id=_required_owner_id(
+                authority_state.campaign_id,
+                label="Campaign ID",
+            ),
+            runtime_mode=mode,
+            problem_id=_required_owner_id(problem_id, label="problem ID"),
+            problem_spec_hash=_required_digest(
+                problem_spec_hash,
+                label="problem-spec hash",
+            ),
+            split_manifest_hash=_required_digest(
+                split_manifest_hash,
+                label="split-manifest hash",
+            ),
+            seed_ledger_hash=_required_digest(
+                seed_ledger_hash,
+                label="seed-ledger hash",
+            ),
+        )
+        with self._owner_lock:
+            self._require_not_held_locked()
+            if self._startup_phase is not _StartupPhase.OFFLINE_STANDALONE:
+                raise CampaignOwnerLifecycleError(
+                    "generation components must install before restore"
+                )
+            if self._hypothesis_generation_components is not None:
+                raise CampaignOwnerLifecycleError(
+                    "hypothesis generation components are already installed"
+                )
+            self._hypothesis_generation_components = components
+
     def begin_restore(self) -> LoadedRestoreAuthority:
         """Drain dormant standalone owners and load one complete invisible root."""
 
@@ -780,6 +1258,7 @@ class CampaignOwnerRegistry:
             self._startup_phase = _StartupPhase.DRAINING_STANDALONE
             self._condition.wait_for(lambda: not self._standalone_leases)
             self._startup_phase = _StartupPhase.RESTORING
+            attempt_inventory: _HypothesisAttemptInventory | None = None
             with _sqlite._independent_authority_read_snapshot(
                 self._database_authority
             ) as snapshot:
@@ -793,6 +1272,12 @@ class CampaignOwnerRegistry:
                         snapshot
                     )
                 )
+                components = self._hypothesis_generation_components
+                if components is not None:
+                    attempt_inventory = (
+                        components.proposal_owner
+                        ._load_hypothesis_attempt_inventory_from_snapshot(snapshot)
+                    )
             branch_tokens = {token.branch_id: token for token in branches}
             hypothesis_tokens = {token.hypothesis_id: token for token in hypotheses}
             if len(branch_tokens) != len(branches):
@@ -808,7 +1293,13 @@ class CampaignOwnerRegistry:
                 hypothesis_tokens,
                 generation=0,
             )
+            restore_holds = (
+                {}
+                if attempt_inventory is None
+                else _restore_generation_holds(attempt_inventory, prepared)
+            )
             self._pending_restore_root = prepared
+            self._pending_restore_generation_holds = restore_holds
             authority = object.__new__(LoadedRestoreAuthority)
             probe, context_token = _new_context_proof()
             with _CAPABILITY_STATES_LOCK:
@@ -824,6 +1315,7 @@ class CampaignOwnerRegistry:
             if transition_started:
                 self._availability = _Availability.PERMANENT_HOLD
                 self._pending_restore_root = None
+                self._pending_restore_generation_holds = None
                 if type(exc) is CampaignOwnerIntegrityHoldError:
                     raise
                 raise CampaignOwnerIntegrityHoldError(
@@ -840,6 +1332,7 @@ class CampaignOwnerRegistry:
         self._owner_lock.acquire()
         restore_state: _RestoreState | None = None
         spent = False
+        generation_holds_installed = False
         try:
             self._require_not_held_locked()
             if self._startup_phase is not _StartupPhase.RESTORING:
@@ -865,16 +1358,30 @@ class CampaignOwnerRegistry:
                 raise CampaignOwnerIntegrityHoldError(
                     "loaded restore root identity is no longer authoritative"
                 )
+            pending_generation_holds = self._pending_restore_generation_holds
+            if pending_generation_holds is None:
+                self._availability = _Availability.PERMANENT_HOLD
+                raise CampaignOwnerIntegrityHoldError(
+                    "loaded restore lost its generation-hold inventory"
+                )
 
             # Arm fail-closed cleanup before the irreversible spend latch.
             spent = True
             restore_state.phase = _RestorePhase.SPENT
             self._owner_state = restore_state.prepared_root
+            self._hypothesis_generation_reservations = dict(
+                pending_generation_holds
+            )
+            generation_holds_installed = True
         finally:
             try:
                 if spent and restore_state is not None:
-                    if self._owner_state is restore_state.prepared_root:
+                    if (
+                        self._owner_state is restore_state.prepared_root
+                        and generation_holds_installed
+                    ):
                         self._pending_restore_root = None
+                        self._pending_restore_generation_holds = None
                         self._availability = _Availability.CLEAR
                         self._startup_phase = _StartupPhase.LIVE_REGISTRY
                     else:
@@ -939,11 +1446,866 @@ class CampaignOwnerRegistry:
                 )
             return slot.owner.value()
 
+    def _require_hypothesis_generation_components(
+        self,
+    ) -> _HypothesisGenerationComponents:
+        components = self._hypothesis_generation_components
+        if components is None:
+            raise CampaignOwnerLifecycleError(
+                "hypothesis generation components are not installed"
+            )
+        return components
+
+    def _lookup_hypothesis_generation_state_locked(
+        self,
+        view: _generation.HypothesisGenerationView,
+    ) -> _HypothesisGenerationState:
+        if type(view) is not _generation.HypothesisGenerationView:
+            raise InvalidCampaignOwnerCapabilityError(
+                "operation requires an exact HypothesisGenerationView"
+            )
+        state = self._hypothesis_generation_states.get(view)
+        if state is None or state.view is not view:
+            raise InvalidCampaignOwnerCapabilityError(
+                "hypothesis generation view was not issued by this Registry"
+            )
+        reservation = self._hypothesis_generation_reservations.get(
+            state.branch_owner.branch_id
+        )
+        if reservation is not state.reservation:
+            raise CampaignOwnerIntegrityHoldError(
+                "hypothesis generation view lost its Branch reservation"
+            )
+        return state
+
+    def _require_generation_root_current_locked(
+        self,
+        state: _HypothesisGenerationState,
+    ) -> None:
+        root = self._capture_live_root_locked()
+        slot = root.branch_slots.get(state.branch_owner.branch_id)
+        if (
+            root is not state.root
+            or root.publication_generation != state.root.publication_generation
+            or slot is None
+            or slot.owner != state.branch_owner
+        ):
+            raise CampaignOwnerLifecycleError(
+                "hypothesis generation view belongs to a stale owner root"
+            )
+
+    def _require_generation_owners_current_in(
+        self,
+        transaction: _sqlite.ImmediateTransaction,
+        state: _HypothesisGenerationState,
+    ) -> None:
+        durable_branch = self._branch_store.load_revisioned_in(
+            transaction,
+            state.branch_owner.branch_id,
+        )
+        if durable_branch != state.branch_owner:
+            raise DurableOwnerIntegrityError(
+                "generation START Branch differs from its captured owner"
+            )
+        durable_bundle = self._hypothesis_store._load_branch_hypotheses_in(
+            transaction,
+            state.branch_owner.branch_id,
+        )
+        expected_bundle = tuple(
+            sorted(
+                state.hypothesis_bundle,
+                key=lambda token: token.hypothesis_id,
+            )
+        )
+        if durable_bundle != expected_bundle:
+            raise DurableOwnerIntegrityError(
+                "generation START H bundle differs from its complete capture"
+            )
+
+    def _release_local_generation_locked(
+        self,
+        state: _HypothesisGenerationState,
+    ) -> None:
+        reservation = state.reservation
+        if reservation.phase is not _GenerationReservationPhase.LOCAL:
+            raise CampaignOwnerLifecycleError(
+                "only a local generation reservation can be released"
+            )
+        current = self._hypothesis_generation_reservations.get(
+            reservation.branch_id
+        )
+        if current is not reservation:
+            self._availability = _Availability.PERMANENT_HOLD
+            raise CampaignOwnerIntegrityHoldError(
+                "local generation release lost its exact Branch reservation"
+            )
+        reservation.phase = _GenerationReservationPhase.RELEASED
+        del self._hypothesis_generation_reservations[reservation.branch_id]
+        self._hypothesis_generation_states.pop(state.view, None)
+
+    def _hold_generation_reservation_locked(
+        self,
+        state: _HypothesisGenerationState,
+    ) -> None:
+        reservation = state.reservation
+        current = self._hypothesis_generation_reservations.get(
+            reservation.branch_id
+        )
+        if current is not reservation:
+            self._availability = _Availability.PERMANENT_HOLD
+            raise CampaignOwnerIntegrityHoldError(
+                "generation hold lost its exact Branch reservation"
+            )
+        reservation.phase = _GenerationReservationPhase.UNCERTAIN_HOLD
+
+    def _resolve_generation_reservation_locked(
+        self,
+        state: _HypothesisGenerationState,
+    ) -> None:
+        reservation = state.reservation
+        current = self._hypothesis_generation_reservations.get(
+            reservation.branch_id
+        )
+        if current is not reservation:
+            self._availability = _Availability.PERMANENT_HOLD
+            raise CampaignOwnerIntegrityHoldError(
+                "terminal receipt lost its exact Branch reservation"
+            )
+        reservation.phase = _GenerationReservationPhase.RESOLVED
+        del self._hypothesis_generation_reservations[reservation.branch_id]
+        self._hypothesis_generation_states.pop(state.view, None)
+
+    def _require_branch_generation_clear_locked(self, branch_id: str) -> None:
+        reservation = self._hypothesis_generation_reservations.get(branch_id)
+        if reservation is not None and reservation.phase not in {
+            _GenerationReservationPhase.RELEASED,
+            _GenerationReservationPhase.RESOLVED,
+        }:
+            if reservation.phase is _GenerationReservationPhase.UNCERTAIN_HOLD:
+                raise HypothesisGenerationReservationHoldError(
+                    "Branch has an unresolved hypothesis generation hold"
+                )
+            raise CampaignOwnerLifecycleError(
+                "Branch has an active hypothesis generation reservation"
+            )
+
+    def _settle_provider_claim_unknown_locked(
+        self,
+        components: _HypothesisGenerationComponents,
+        state: _HypothesisGenerationState,
+    ) -> bool:
+        if (
+            state.reservation.phase
+            is not _GenerationReservationPhase.DURABLE_OPEN
+        ):
+            return False
+        if not _generation._settle_provider_claim_unknown(
+            components.registry_authority,
+            state.view,
+        ):
+            return False
+        self._hold_generation_reservation_locked(state)
+        return True
+
+    def _settle_failed_start_claim_locked(
+        self,
+        components: _HypothesisGenerationComponents,
+        state: _HypothesisGenerationState,
+        cause: BaseException,
+    ) -> None:
+        cleanup_errors: list[BaseException] = []
+        try:
+            _generation._finish_start_without_authority(
+                components.registry_authority,
+                state.view,
+                mixed=False,
+            )
+            self._release_local_generation_locked(state)
+            return
+        except BaseException as error:
+            cleanup_errors.append(error)
+        try:
+            _generation._spend_prestart_generation_view(
+                components.registry_authority,
+                state.view,
+                rejected=False,
+            )
+            self._release_local_generation_locked(state)
+            return
+        except BaseException as error:
+            cleanup_errors.append(error)
+        try:
+            _generation._hold_generation_view(
+                components.registry_authority,
+                state.view,
+            )
+        except BaseException as error:
+            cleanup_errors.append(error)
+        self._hold_generation_reservation_locked(state)
+        for error in cleanup_errors:
+            _append_cleanup_context(cause, error)
+        raise HypothesisGenerationReservationHoldError(
+            "failed START claim could not prove a local release"
+        ) from cause
+
+    def settle_hypothesis_prompt_failure(
+        self,
+        view: _generation.HypothesisGenerationView,
+    ) -> bool | None:
+        """Release a LOCAL reservation only from the leaf's exact prompt state."""
+
+        _assert_no_active_scope()
+        components = self._require_hypothesis_generation_components()
+        with self._owner_lock:
+            state = self._lookup_hypothesis_generation_state_locked(view)
+            if state.reservation.phase is not _GenerationReservationPhase.LOCAL:
+                return None
+            disposition = _generation._settle_prompt_failure(
+                components.registry_authority,
+                view,
+            )
+            if disposition is not None:
+                self._release_local_generation_locked(state)
+            return disposition
+
+    def acquire_hypothesis_generation(
+        self,
+        branch_id: str,
+    ) -> _generation.HypothesisGenerationView:
+        """Capture one exact immutable root and reserve its Branch locally."""
+
+        _assert_no_active_scope()
+        owner_id = _required_owner_id(branch_id, label="Branch ID")
+        components = self._require_hypothesis_generation_components()
+        with self._owner_lock:
+            root = self._capture_live_root_locked()
+            existing = self._hypothesis_generation_reservations.get(owner_id)
+            if (
+                existing is not None
+                and existing.phase is _GenerationReservationPhase.LOCAL
+                and existing.view is not None
+            ):
+                disposition = _generation._settle_prompt_failure(
+                    components.registry_authority,
+                    existing.view,
+                )
+                if disposition is not None:
+                    existing_state = self._hypothesis_generation_states.get(
+                        existing.view
+                    )
+                    if existing_state is None:
+                        raise CampaignOwnerIntegrityHoldError(
+                            "local generation reservation lost its view state"
+                        )
+                    self._release_local_generation_locked(existing_state)
+                    existing = None
+            if (
+                existing is not None
+                and existing.phase is _GenerationReservationPhase.DURABLE_OPEN
+                and existing.view is not None
+            ):
+                existing_state = self._hypothesis_generation_states.get(
+                    existing.view
+                )
+                if existing_state is None:
+                    raise CampaignOwnerIntegrityHoldError(
+                        "durable generation reservation lost its view state"
+                    )
+                self._settle_provider_claim_unknown_locked(
+                    components,
+                    existing_state,
+                )
+            if existing is not None:
+                if (
+                    existing.phase
+                    is _GenerationReservationPhase.UNCERTAIN_HOLD
+                ):
+                    raise HypothesisGenerationReservationHoldError(
+                        "Branch has an unresolved hypothesis generation hold"
+                    )
+                raise CampaignOwnerLifecycleError(
+                    "Branch already has a hypothesis generation reservation"
+                )
+            branch_slot = root.branch_slots.get(owner_id)
+            if branch_slot is None:
+                raise OwnerNotFound(f"Branch owner does not exist: {owner_id}")
+            if owner_id in root.hypothesis_slots.current_by_branch:
+                raise CampaignOwnerLifecycleError(
+                    "Branch already has an active hypothesis owner"
+                )
+            bundle = tuple(
+                slot.owner
+                for slot in root.hypothesis_slots.by_id.values()
+                if slot.projection.branch_id == owner_id
+            )
+            bundle = tuple(sorted(bundle, key=lambda token: token.hypothesis_id))
+            prior_head = _prior_hypothesis_head(bundle)
+            h_bundle_digest, h_bundle_items = _hypothesis_bundle_projection(
+                owner_id,
+                bundle,
+            )
+            reservation_id = str(uuid.uuid4())
+            owner_context_json = _owner_context_json(
+                components,
+                root=root,
+                branch_owner=branch_slot.owner,
+                bundle=bundle,
+                prior_head=prior_head,
+                h_bundle_digest=h_bundle_digest,
+                h_bundle_items=h_bundle_items,
+            )
+            view = _generation._issue_generation_view(
+                components.registry_authority,
+                root_identity=root,
+                root_generation=root.publication_generation,
+                branch_owner=branch_slot.owner,
+                hypothesis_bundle=bundle,
+                prior_head=prior_head,
+                reservation_id=reservation_id,
+                h_bundle_digest=h_bundle_digest,
+                owner_context_json=owner_context_json,
+            )
+            reservation = _HypothesisGenerationReservation(
+                branch_id=owner_id,
+                reservation_id=reservation_id,
+                phase=_GenerationReservationPhase.LOCAL,
+                view=view,
+            )
+            state = _HypothesisGenerationState(
+                view=view,
+                reservation=reservation,
+                root=root,
+                branch_owner=branch_slot.owner,
+                hypothesis_bundle=bundle,
+                prior_head=prior_head,
+            )
+            self._hypothesis_generation_reservations[owner_id] = reservation
+            self._hypothesis_generation_states[view] = state
+            return view
+
+    def _spend_prestart_generation(
+        self,
+        view: _generation.HypothesisGenerationView,
+        *,
+        rejected: bool,
+    ) -> None:
+        components = self._require_hypothesis_generation_components()
+        _generation._spend_prestart_generation_view(
+            components.registry_authority,
+            view,
+            rejected=rejected,
+        )
+        with self._owner_lock:
+            state = self._lookup_hypothesis_generation_state_locked(view)
+            self._release_local_generation_locked(state)
+
+    def bind_hypothesis_code_source(
+        self,
+        view: _generation.HypothesisGenerationView,
+    ) -> _generation.HypothesisCodeSource:
+        """Invoke the exact configured code-source owner without caller inputs."""
+
+        _assert_no_active_scope()
+        components = self._require_hypothesis_generation_components()
+        with self._owner_lock:
+            state = self._lookup_hypothesis_generation_state_locked(view)
+            if state.reservation.phase is not _GenerationReservationPhase.LOCAL:
+                raise CampaignOwnerLifecycleError(
+                    "generation view has no local reservation"
+                )
+            request = _generation._issue_code_source_request(
+                components.registry_authority,
+                view,
+            )
+            try:
+                self._require_generation_root_current_locked(state)
+            except BaseException:
+                _generation._spend_prestart_generation_view(
+                    components.registry_authority,
+                    view,
+                    rejected=False,
+                )
+                self._release_local_generation_locked(state)
+                raise
+        try:
+            with _sqlite._independent_authority_read_snapshot(
+                self._database_authority
+            ) as snapshot:
+                source = (
+                    components.code_source_owner
+                    ._bind_hypothesis_code_source_from_snapshot(
+                        snapshot,
+                        request,
+                    )
+                )
+        except HypothesisCodeSourceRejectedError:
+            self._spend_prestart_generation(view, rejected=True)
+            raise
+        except HypothesisCodeSourceUnknownError:
+            self._spend_prestart_generation(view, rejected=False)
+            raise
+        except BaseException:
+            self._spend_prestart_generation(view, rejected=False)
+            raise
+        try:
+            with self._owner_lock:
+                state = self._lookup_hypothesis_generation_state_locked(view)
+                self._require_generation_root_current_locked(state)
+                _generation._inspect_code_source(
+                    components.registry_authority,
+                    source,
+                    view=view,
+                )
+                state.code_source = source
+        except BaseException:
+            self._spend_prestart_generation(view, rejected=False)
+            raise
+        return source
+
+    def issue_hypothesis_prompt_source(
+        self,
+        view: _generation.HypothesisGenerationView,
+    ) -> _generation.HypothesisPromptSource:
+        """Issue evidence and prompt source through the exact configured owners."""
+
+        _assert_no_active_scope()
+        components = self._require_hypothesis_generation_components()
+        with self._owner_lock:
+            state = self._lookup_hypothesis_generation_state_locked(view)
+            if state.reservation.phase is not _GenerationReservationPhase.LOCAL:
+                raise CampaignOwnerLifecycleError(
+                    "generation view has no local reservation"
+                )
+            source = state.code_source
+            if source is None:
+                raise CampaignOwnerLifecycleError(
+                    "generation view has no bound code source"
+                )
+            try:
+                self._require_generation_root_current_locked(state)
+            except BaseException:
+                _generation._spend_prestart_generation_view(
+                    components.registry_authority,
+                    view,
+                    rejected=False,
+                )
+                self._release_local_generation_locked(state)
+                raise
+        try:
+            evidence = components.context_manager._project_hypothesis_problem_evidence(
+                source
+            )
+        except HypothesisProblemEvidenceRejectedError:
+            self._spend_prestart_generation(view, rejected=True)
+            raise
+        except HypothesisProblemEvidenceUnknownError:
+            self._spend_prestart_generation(view, rejected=False)
+            raise
+        except BaseException:
+            self._spend_prestart_generation(view, rejected=False)
+            raise
+        try:
+            with self._owner_lock:
+                state = self._lookup_hypothesis_generation_state_locked(view)
+                self._require_generation_root_current_locked(state)
+                prompt_source = _generation._issue_prompt_source(
+                    components.registry_authority,
+                    view=view,
+                    code_source=source,
+                    evidence=evidence,
+                )
+                state.prompt_source = prompt_source
+        except BaseException:
+            self._spend_prestart_generation(view, rejected=False)
+            raise
+        return prompt_source
+
+    def start_hypothesis_generation(
+        self,
+        view: _generation.HypothesisGenerationView,
+        bound_prompt: _generation.BoundHypothesisPrompt,
+        audit_metadata: Mapping[str, Any] | None = None,
+    ) -> _generation.ProviderGenerationPermit:
+        """Persist and independently classify START before issuing a permit."""
+
+        _assert_no_active_scope()
+        if audit_metadata is not None:
+            if type(audit_metadata) is not dict:
+                raise TypeError("START audit_metadata must be an exact dict or None")
+            _canonical_json_bytes(audit_metadata, label="START audit metadata")
+        components = self._require_hypothesis_generation_components()
+        transaction_error: BaseException | None = None
+        transaction_traceback: Any = None
+        classification_error: BaseException | None = None
+        stored: StoredProposalAttemptEvent | None = None
+        classification = ProposalAttemptCommitClassification.MIXED
+        started: _generation.StartedHypothesisAttempt | None = None
+
+        self._owner_lock.acquire()
+        transition_started = False
+        try:
+            state = self._lookup_hypothesis_generation_state_locked(view)
+            if state.reservation.phase is not _GenerationReservationPhase.LOCAL:
+                raise CampaignOwnerLifecycleError(
+                    "generation START requires a local Branch reservation"
+                )
+            try:
+                self._require_generation_root_current_locked(state)
+            except BaseException:
+                _generation._spend_prestart_generation_view(
+                    components.registry_authority,
+                    view,
+                    rejected=False,
+                )
+                self._release_local_generation_locked(state)
+                raise
+            try:
+                _generation._inspect_bound_prompt(
+                    components.registry_authority,
+                    bound_prompt,
+                    view=view,
+                )
+                state.bound_prompt = bound_prompt
+                _generation._begin_started_attempt(
+                    components.registry_authority,
+                    view,
+                    bound_prompt,
+                )
+            except BaseException as error:
+                self._settle_failed_start_claim_locked(
+                    components,
+                    state,
+                    error,
+                )
+                raise
+
+            self._availability = _Availability.TRANSITION
+            transition_started = True
+            try:
+                with _sqlite.immediate_transaction(
+                    self._database_authority
+                ) as transaction:
+                    self._require_generation_owners_current_in(
+                        transaction,
+                        state,
+                    )
+                    stored = (
+                        components.proposal_owner
+                        .append_started_hypothesis_attempt_in(
+                            transaction,
+                            bound_prompt,
+                        )
+                    )
+                    state.pending_start = stored
+            except BaseException as error:
+                transaction_error = error
+                transaction_traceback = error.__traceback__
+
+            try:
+                with _sqlite._independent_authority_read_snapshot(
+                    self._database_authority
+                ) as snapshot:
+                    if stored is not None:
+                        classification, started = (
+                            components.proposal_owner
+                            ._classify_started_attempt_from_snapshot(
+                                snapshot,
+                                expected=stored,
+                            )
+                        )
+                    else:
+                        inventory = (
+                            components.proposal_owner
+                            ._load_hypothesis_attempt_inventory_from_snapshot(
+                                snapshot
+                            )
+                        )
+                        classification = (
+                            ProposalAttemptCommitClassification.EXPECTED
+                            if inventory.branch_is_clear(
+                                state.branch_owner.branch_id
+                            )
+                            else ProposalAttemptCommitClassification.MIXED
+                        )
+            except BaseException as error:
+                classification_error = error
+                classification = ProposalAttemptCommitClassification.MIXED
+
+            if classification is ProposalAttemptCommitClassification.EXPECTED:
+                try:
+                    _generation._finish_start_without_authority(
+                        components.registry_authority,
+                        view,
+                        mixed=False,
+                    )
+                    self._release_local_generation_locked(state)
+                except BaseException as error:
+                    classification_error = classification_error or error
+                    self._hold_generation_reservation_locked(state)
+                    raise HypothesisGenerationReservationHoldError(
+                        "rolled-back START could not release its Branch reservation"
+                    ) from classification_error
+                if transaction_error is not None:
+                    raise transaction_error.with_traceback(transaction_traceback)
+                raise CampaignOwnerLifecycleError(
+                    "hypothesis START was not durably committed"
+                )
+
+            if (
+                classification is ProposalAttemptCommitClassification.COMMITTED
+                and started is not None
+            ):
+                try:
+                    _generation._inspect_started_attempt(
+                        components.registry_authority,
+                        started,
+                        view=view,
+                    )
+                    permit = _generation._issue_provider_permit(
+                        components.registry_authority,
+                        components.provider_authority,
+                        view=view,
+                        started_attempt=started,
+                        bound_prompt=bound_prompt,
+                    )
+                    state.started_attempt = started
+                    state.permit = permit
+                    state.reservation.phase = (
+                        _GenerationReservationPhase.DURABLE_OPEN
+                    )
+                    return permit
+                except BaseException as error:
+                    classification_error = classification_error or error
+
+            try:
+                if started is None:
+                    try:
+                        _generation._finish_start_without_authority(
+                            components.registry_authority,
+                            view,
+                            mixed=True,
+                        )
+                    except BaseException:
+                        _generation._hold_generation_view(
+                            components.registry_authority,
+                            view,
+                        )
+                else:
+                    _generation._hold_generation_view(
+                        components.registry_authority,
+                        view,
+                    )
+            except BaseException as error:
+                classification_error = classification_error or error
+            self._hold_generation_reservation_locked(state)
+            hold_error = HypothesisGenerationReservationHoldError(
+                "hypothesis START classification is uncertain or mixed"
+            )
+            cause = classification_error or transaction_error
+            if cause is not None:
+                raise hold_error from cause
+            raise hold_error
+        finally:
+            if transition_started and self._availability is _Availability.TRANSITION:
+                self._availability = _Availability.CLEAR
+            self._owner_lock.release()
+
+    def observe_hypothesis_generation_outcome(
+        self,
+        view: _generation.HypothesisGenerationView,
+        outcome: _generation.GeneratedHypothesisResult
+        | _generation.FailedHypothesisGeneration,
+    ) -> None:
+        """Bind one exact externally produced provider outcome to its view."""
+
+        _assert_no_active_scope()
+        components = self._require_hypothesis_generation_components()
+        with self._owner_lock:
+            state = self._lookup_hypothesis_generation_state_locked(view)
+            if (
+                state.reservation.phase
+                is not _GenerationReservationPhase.DURABLE_OPEN
+                or state.permit is None
+            ):
+                raise CampaignOwnerLifecycleError(
+                    "generation view has no open durable provider permit"
+                )
+            if self._settle_provider_claim_unknown_locked(components, state):
+                raise HypothesisGenerationReservationHoldError(
+                    "provider claim outcome is unknown for this Branch"
+                )
+            _generation._inspect_generation_outcome(
+                components.registry_authority,
+                permit=state.permit,
+                outcome=outcome,
+                view=view,
+            )
+            state.outcome = outcome
+            if type(outcome) is _generation.FailedHypothesisGeneration:
+                state.reservation.phase = (
+                    _GenerationReservationPhase.OUTCOME_BOUND
+                )
+
+    def abort_hypothesis_generation(
+        self,
+        view: _generation.HypothesisGenerationView,
+    ) -> _generation.AbortedHypothesisGeneration | None:
+        """Release pre-START work or bind one exact durable pre-claim abort."""
+
+        _assert_no_active_scope()
+        components = self._require_hypothesis_generation_components()
+        with self._owner_lock:
+            state = self._lookup_hypothesis_generation_state_locked(view)
+            if state.reservation.phase is _GenerationReservationPhase.LOCAL:
+                _generation._abort_prestart_generation_view(
+                    components.registry_authority,
+                    view,
+                )
+                self._release_local_generation_locked(state)
+                return None
+            if (
+                state.reservation.phase
+                is not _GenerationReservationPhase.DURABLE_OPEN
+                or state.started_attempt is None
+                or state.bound_prompt is None
+            ):
+                raise CampaignOwnerLifecycleError(
+                    "generation view is not abortable after durable START"
+                )
+            if self._settle_provider_claim_unknown_locked(components, state):
+                raise HypothesisGenerationReservationHoldError(
+                    "provider claim outcome is unknown for this Branch"
+                )
+            outcome = _generation._issue_aborted_generation(
+                components.registry_authority,
+                started_attempt=state.started_attempt,
+                bound_prompt=state.bound_prompt,
+                view=view,
+                permit=state.permit,
+            )
+            state.outcome = outcome
+            state.reservation.phase = _GenerationReservationPhase.OUTCOME_BOUND
+            return outcome
+
+    def terminalize_hypothesis_generation(
+        self,
+        view: _generation.HypothesisGenerationView,
+        outcome: _generation.FailedHypothesisGeneration
+        | _generation.AbortedHypothesisGeneration,
+    ) -> _generation.TerminalAttemptReceipt:
+        """Persist one exact terminal outcome and resolve only a committed receipt."""
+
+        _assert_no_active_scope()
+        components = self._require_hypothesis_generation_components()
+        transaction_error: BaseException | None = None
+        classification_error: BaseException | None = None
+        classification = ProposalAttemptCommitClassification.MIXED
+        receipt: _generation.TerminalAttemptReceipt | None = None
+
+        self._owner_lock.acquire()
+        transition_started = False
+        try:
+            state = self._lookup_hypothesis_generation_state_locked(view)
+            if (
+                state.reservation.phase
+                is not _GenerationReservationPhase.OUTCOME_BOUND
+                or state.outcome is not outcome
+                or state.started_attempt is None
+                or state.bound_prompt is None
+            ):
+                raise CampaignOwnerLifecycleError(
+                    "generation view has no exact terminal outcome to persist"
+                )
+            try:
+                _generation._begin_terminal_persistence(
+                    components.registry_authority,
+                    view,
+                    outcome,
+                )
+            except BaseException as error:
+                try:
+                    _generation._hold_generation_view(
+                        components.registry_authority,
+                        view,
+                    )
+                except BaseException as cleanup:
+                    _append_cleanup_context(error, cleanup)
+                self._hold_generation_reservation_locked(state)
+                raise HypothesisGenerationReservationHoldError(
+                    "terminal claim failed after its durable outcome was bound"
+                ) from error
+            self._availability = _Availability.TRANSITION
+            transition_started = True
+            try:
+                with _sqlite.immediate_transaction(
+                    self._database_authority
+                ) as transaction:
+                    components.proposal_owner.append_terminal_hypothesis_attempt_in(
+                        transaction,
+                        started=state.started_attempt,
+                        bound_prompt=state.bound_prompt,
+                        outcome=outcome,
+                    )
+            except BaseException as error:
+                transaction_error = error
+
+            try:
+                with _sqlite._independent_authority_read_snapshot(
+                    self._database_authority
+                ) as snapshot:
+                    classification, receipt = (
+                        components.proposal_owner
+                        ._classify_terminal_attempt_from_snapshot(
+                            snapshot,
+                            outcome=outcome,
+                        )
+                    )
+            except BaseException as error:
+                classification_error = error
+                classification = ProposalAttemptCommitClassification.MIXED
+
+            if (
+                classification is ProposalAttemptCommitClassification.COMMITTED
+                and receipt is not None
+            ):
+                try:
+                    _generation._resolve_terminal_receipt(
+                        components.registry_authority,
+                        receipt,
+                        started_attempt=state.started_attempt,
+                        view=view,
+                    )
+                    self._resolve_generation_reservation_locked(state)
+                    return receipt
+                except BaseException as error:
+                    classification_error = classification_error or error
+
+            try:
+                _generation._hold_generation_view(
+                    components.registry_authority,
+                    view,
+                )
+            except BaseException as error:
+                classification_error = classification_error or error
+            self._hold_generation_reservation_locked(state)
+            hold_error = HypothesisGenerationReservationHoldError(
+                "hypothesis terminal classification is not strictly committed"
+            )
+            cause = classification_error or transaction_error
+            if cause is not None:
+                raise hold_error from cause
+            raise hold_error
+        finally:
+            if transition_started and self._availability is _Availability.TRANSITION:
+                self._availability = _Availability.CLEAR
+            self._owner_lock.release()
+
     def acquire_branch_mutation(self, branch_id: str) -> BranchMutationView:
         _assert_no_active_scope()
         owner_id = _required_owner_id(branch_id, label="Branch ID")
         with self._owner_lock:
             root = self._capture_live_root_locked()
+            self._require_branch_generation_clear_locked(owner_id)
             slot = root.branch_slots.get(owner_id)
             if slot is None:
                 raise OwnerNotFound(f"Branch owner does not exist: {owner_id}")
@@ -973,6 +2335,9 @@ class CampaignOwnerRegistry:
             slot = root.hypothesis_slots.by_id.get(owner_id)
             if slot is None:
                 raise OwnerNotFound(f"hypothesis owner does not exist: {owner_id}")
+            self._require_branch_generation_clear_locked(
+                slot.projection.branch_id
+            )
             view = object.__new__(HypothesisMutationView)
             probe, context_token = _new_context_proof()
             with _CAPABILITY_STATES_LOCK:
@@ -1019,6 +2384,7 @@ class CampaignOwnerRegistry:
         owner_id = _required_owner_id(branch_id, label="Branch ID")
         with self._owner_lock:
             root = self._capture_live_root_locked()
+            self._require_branch_generation_clear_locked(owner_id)
             self._availability = _Availability.TRANSITION
             prepared: _CampaignOwnerState | None = None
             try:
@@ -1071,15 +2437,16 @@ class CampaignOwnerRegistry:
         owner_id = _required_owner_id(hypothesis_id, label="hypothesis ID")
         with self._owner_lock:
             root = self._capture_live_root_locked()
+            local = root.hypothesis_slots.by_id.get(owner_id)
+            if local is None:
+                raise DurableOwnerIntegrityError(
+                    "hypothesis durable refresh found an absent local owner"
+                )
+            affected_branch = local.projection.branch_id
+            self._require_branch_generation_clear_locked(affected_branch)
             self._availability = _Availability.TRANSITION
             prepared: _CampaignOwnerState | None = None
             try:
-                local = root.hypothesis_slots.by_id.get(owner_id)
-                if local is None:
-                    raise DurableOwnerIntegrityError(
-                        "hypothesis durable refresh found an absent local owner"
-                    )
-                affected_branch = local.projection.branch_id
                 with _sqlite._independent_authority_read_snapshot(
                     self._database_authority
                 ) as snapshot:
@@ -1359,6 +2726,7 @@ def _validate_requested_views_locked(
                 )
             slot = root.branch_slots.get(state.owner.branch_id)
             owner_id = state.owner.branch_id
+            affected_branch_id = owner_id
         else:
             if type(state.owner) is not RevisionedHypothesisRecord:
                 raise InvalidCampaignOwnerCapabilityError(
@@ -1366,8 +2734,10 @@ def _validate_requested_views_locked(
                 )
             slot = root.hypothesis_slots.by_id.get(state.owner.hypothesis_id)
             owner_id = state.owner.hypothesis_id
+            affected_branch_id = state.owner.value().branch_id
         if slot is None or slot.owner != state.owner:
             raise CampaignOwnerLifecycleError("mutation view owner is no longer current")
+        registry._require_branch_generation_clear_locked(affected_branch_id)
         identity = (state.kind, owner_id)
         if identity in seen:
             raise CampaignOwnerLifecycleError(

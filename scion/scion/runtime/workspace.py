@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Literal, Optional
+from typing import ClassVar, Iterable, Literal, Optional
 
 from scion.core.models import (
     ChampionState,
@@ -30,6 +30,36 @@ _DEFAULT_FROZEN_PATTERNS = frozenset()
 
 class FrozenFileError(Exception):
     """Raised when apply_patch attempts to modify a frozen file."""
+
+
+class WorkspaceIdentityCaptureError(RuntimeError):
+    """One exact editable-identity byte capture could not be proven."""
+
+
+class WorkspaceIdentityDriftError(WorkspaceIdentityCaptureError):
+    """The selected workspace identity changed while it was being captured."""
+
+
+@dataclass(frozen=True, slots=True)
+class EditableIdentityBytesEntry:
+    """One immutable file fact read exactly once during an identity capture."""
+
+    file_path: str
+    content: bytes
+    sha256: str
+    code_identity: bool
+    snapshot_identity: bool
+
+
+@dataclass(frozen=True, slots=True)
+class EditableIdentityBytesCapture:
+    """One complete immutable code/snapshot identity derived from the same bytes."""
+
+    schema_version: ClassVar[str] = "scion.editable_identity_bytes_capture.v1"
+    entries: tuple[EditableIdentityBytesEntry, ...]
+    code_hash: str
+    snapshot_hash: str
+    manifest_digest: str
 
 
 @dataclass(frozen=True)
@@ -1016,6 +1046,117 @@ class WorkspaceMaterializer:
             "code_hash": _hash_files(ws, files),
         }
 
+    def capture_editable_identity_bytes(
+        self,
+        workspace: str,
+    ) -> EditableIdentityBytesCapture:
+        """Capture one exact editable identity without accepting a manifest.
+
+        Every selected file is read once.  Per-file digests, the legacy
+        ``compute_code_hash`` identity, the legacy ``compute_snapshot_hash``
+        identity, and the canonical manifest digest are then derived from those
+        same immutable bytes.  The stricter capture boundary rejects relative or
+        aliased roots, symlinks, non-canonical relative paths, and any path,
+        metadata, or membership drift observed during the capture.
+        """
+
+        ws = _strict_capture_workspace(workspace)
+        code_files = _strict_capture_identity_files(
+            ws,
+            patterns=self._editable_patterns,
+            is_frozen=self._is_frozen,
+        )
+        code_paths = tuple(
+            _canonical_capture_relative_path(ws, path) for path in code_files
+        )
+        snapshot_paths = list(code_paths)
+        registry_path = ws / "registry.yaml"
+        if registry_path.exists() or registry_path.is_symlink():
+            _validate_capture_file(ws, registry_path)
+            if "registry.yaml" not in snapshot_paths:
+                snapshot_paths.append("registry.yaml")
+        snapshot_paths.sort()
+        all_paths = tuple(sorted(set(snapshot_paths)))
+        expected_signatures = {
+            relative: _capture_file_signature(ws, relative)
+            for relative in all_paths
+        }
+
+        captured: dict[str, bytes] = {}
+        for relative in all_paths:
+            captured[relative] = _read_stable_identity_file_once(
+                ws,
+                relative,
+                expected_signatures[relative],
+            )
+
+        after_code_files = _strict_capture_identity_files(
+            ws,
+            patterns=self._editable_patterns,
+            is_frozen=self._is_frozen,
+        )
+        after_code_paths = tuple(
+            _canonical_capture_relative_path(ws, path) for path in after_code_files
+        )
+        after_snapshot_paths = list(after_code_paths)
+        if registry_path.exists() or registry_path.is_symlink():
+            _validate_capture_file(ws, registry_path)
+            if "registry.yaml" not in after_snapshot_paths:
+                after_snapshot_paths.append("registry.yaml")
+        after_snapshot_paths.sort()
+        if code_paths != after_code_paths or tuple(snapshot_paths) != tuple(
+            after_snapshot_paths
+        ):
+            raise WorkspaceIdentityDriftError(
+                "workspace identity membership changed during capture"
+            )
+        for relative, expected in expected_signatures.items():
+            if _capture_file_signature(ws, relative) != expected:
+                raise WorkspaceIdentityDriftError(
+                    f"workspace identity file changed during capture: {relative}"
+                )
+
+        code_path_set = frozenset(code_paths)
+        entries = tuple(
+            EditableIdentityBytesEntry(
+                file_path=relative,
+                content=captured[relative],
+                sha256=hashlib.sha256(captured[relative]).hexdigest(),
+                code_identity=relative in code_path_set,
+                snapshot_identity=True,
+            )
+            for relative in all_paths
+        )
+        code_hash = _hash_captured_identity(entries, code_only=True)
+        snapshot_hash = _hash_captured_identity(entries, code_only=False)
+        manifest_payload = {
+            "schema_version": EditableIdentityBytesCapture.schema_version,
+            "entries": [
+                {
+                    "file_path": entry.file_path,
+                    "sha256": entry.sha256,
+                    "code_identity": entry.code_identity,
+                    "snapshot_identity": entry.snapshot_identity,
+                }
+                for entry in entries
+            ],
+            "code_hash": code_hash,
+            "snapshot_hash": snapshot_hash,
+        }
+        manifest_bytes = json.dumps(
+            manifest_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        ).encode("utf-8")
+        return EditableIdentityBytesCapture(
+            entries=entries,
+            code_hash=code_hash,
+            snapshot_hash=snapshot_hash,
+            manifest_digest=hashlib.sha256(manifest_bytes).hexdigest(),
+        )
+
     def compute_snapshot_hash(self, workspace: str) -> str:
         """Compute SHA-256 of editable identity files + registry.yaml.
 
@@ -1187,6 +1328,228 @@ def _hash_files(ws: Path, files: Iterable[Path]) -> str:
         h.update(rel.as_posix().encode())
         h.update(file_path.read_bytes())
     return h.hexdigest()
+
+
+def _strict_capture_workspace(workspace: str) -> Path:
+    if type(workspace) is not str or not workspace:
+        raise WorkspaceIdentityCaptureError(
+            "workspace identity capture requires an exact absolute path"
+        )
+    raw = Path(workspace)
+    if not raw.is_absolute():
+        raise WorkspaceIdentityCaptureError(
+            "workspace identity capture requires an absolute path"
+        )
+    if raw.is_symlink():
+        raise WorkspaceIdentityCaptureError(
+            "workspace identity capture root cannot be a symlink"
+        )
+    try:
+        resolved = raw.resolve(strict=True)
+    except OSError as exc:
+        raise WorkspaceIdentityCaptureError(
+            "workspace identity capture root is unavailable"
+        ) from exc
+    if raw != resolved:
+        raise WorkspaceIdentityCaptureError(
+            "workspace identity capture root is not canonical"
+        )
+    if not resolved.is_dir():
+        raise WorkspaceIdentityCaptureError(
+            "workspace identity capture root is not a directory"
+        )
+    return resolved
+
+
+def _strict_capture_identity_files(
+    ws: Path,
+    *,
+    patterns: tuple[str, ...] | None,
+    is_frozen: Callable[[str], bool],
+) -> list[Path]:
+    if patterns is None:
+        return []
+    _reject_capture_pattern_symlinks(ws, patterns)
+    files = _explicit_identity_files(
+        ws,
+        patterns=patterns,
+        is_frozen=is_frozen,
+    )
+    for path in files:
+        _validate_capture_file(ws, path)
+    return files
+
+
+def _reject_capture_pattern_symlinks(
+    ws: Path,
+    patterns: Iterable[str],
+) -> None:
+    """Reject symlinks in paths selected by one editable identity pattern."""
+
+    for pattern in patterns:
+        target = ws / pattern
+        matches = list(ws.glob(pattern)) if _contains_glob(pattern) else [target]
+        for match in matches:
+            if not (match.exists() or match.is_symlink()):
+                continue
+            _validate_capture_path(ws, match)
+            if match.is_dir():
+                try:
+                    descendants = tuple(match.rglob("*"))
+                except OSError as exc:
+                    raise WorkspaceIdentityCaptureError(
+                        "workspace identity pattern cannot be enumerated"
+                    ) from exc
+                for descendant in descendants:
+                    _validate_capture_path(ws, descendant)
+
+
+def _validate_capture_path(ws: Path, path: Path) -> None:
+    try:
+        relative_parts = path.absolute().relative_to(ws.absolute()).parts
+    except ValueError as exc:
+        raise WorkspaceIdentityCaptureError(
+            "workspace identity path escapes the capture root"
+        ) from exc
+    cursor = ws
+    for part in relative_parts:
+        cursor /= part
+        if cursor.is_symlink():
+            raise WorkspaceIdentityCaptureError(
+                "workspace identity path contains a symlink"
+            )
+    try:
+        resolved = path.resolve(strict=True)
+        resolved.relative_to(ws)
+    except (OSError, ValueError) as exc:
+        raise WorkspaceIdentityCaptureError(
+            "workspace identity path escapes the capture root"
+        ) from exc
+    if resolved != path.absolute():
+        raise WorkspaceIdentityCaptureError(
+            "workspace identity path is not canonical"
+        )
+
+
+def _validate_capture_file(ws: Path, path: Path) -> None:
+    _validate_capture_path(ws, path)
+    try:
+        metadata = os.stat(path, follow_symlinks=False)
+    except OSError as exc:
+        raise WorkspaceIdentityCaptureError(
+            "workspace identity file is unavailable"
+        ) from exc
+    if not stat.S_ISREG(metadata.st_mode):
+        raise WorkspaceIdentityCaptureError(
+            "workspace identity path is not a regular file"
+        )
+    _canonical_capture_relative_path(ws, path)
+
+
+def _canonical_capture_relative_path(ws: Path, path: Path) -> str:
+    try:
+        relative = path.relative_to(ws).as_posix()
+    except ValueError as exc:
+        raise WorkspaceIdentityCaptureError(
+            "workspace identity path escapes the capture root"
+        ) from exc
+    if (
+        not relative
+        or relative.startswith("/")
+        or "\\" in relative
+        or any(part in {"", ".", ".."} for part in relative.split("/"))
+    ):
+        raise WorkspaceIdentityCaptureError(
+            "workspace identity relative path is not canonical"
+        )
+    return relative
+
+
+def _capture_stat_signature(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        int(metadata.st_dev),
+        int(metadata.st_ino),
+        int(stat.S_IFMT(metadata.st_mode)),
+        int(metadata.st_size),
+        int(metadata.st_mtime_ns),
+        int(metadata.st_ctime_ns),
+    )
+
+
+def _capture_file_signature(ws: Path, relative: str) -> tuple[int, ...]:
+    path = ws / relative
+    _validate_capture_file(ws, path)
+    try:
+        return _capture_stat_signature(os.stat(path, follow_symlinks=False))
+    except OSError as exc:
+        raise WorkspaceIdentityDriftError(
+            f"workspace identity file disappeared during capture: {relative}"
+        ) from exc
+
+
+def _read_stable_identity_file_once(
+    ws: Path,
+    relative: str,
+    expected_signature: tuple[int, ...],
+) -> bytes:
+    path = ws / relative
+    _validate_capture_file(ws, path)
+    before = _capture_stat_signature(os.stat(path, follow_symlinks=False))
+    if before != expected_signature:
+        raise WorkspaceIdentityDriftError(
+            f"workspace identity file changed before read: {relative}"
+        )
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise WorkspaceIdentityCaptureError(
+            f"workspace identity file cannot be opened safely: {relative}"
+        ) from exc
+    try:
+        opened = _capture_stat_signature(os.fstat(descriptor))
+        if opened != expected_signature:
+            raise WorkspaceIdentityDriftError(
+                f"workspace identity file changed while opening: {relative}"
+            )
+        with os.fdopen(descriptor, "rb", closefd=True) as handle:
+            descriptor = -1
+            content = handle.read()
+            after_read = _capture_stat_signature(os.fstat(handle.fileno()))
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if after_read != expected_signature or len(content) != expected_signature[3]:
+        raise WorkspaceIdentityDriftError(
+            f"workspace identity file changed while reading: {relative}"
+        )
+    after = _capture_stat_signature(os.stat(path, follow_symlinks=False))
+    if after != expected_signature:
+        raise WorkspaceIdentityDriftError(
+            f"workspace identity file changed after read: {relative}"
+        )
+    _validate_capture_file(ws, path)
+    return content
+
+
+def _hash_captured_identity(
+    entries: tuple[EditableIdentityBytesEntry, ...],
+    *,
+    code_only: bool,
+) -> str:
+    digest = hashlib.sha256()
+    for entry in entries:
+        if code_only and not entry.code_identity:
+            continue
+        if not entry.snapshot_identity:
+            continue
+        digest.update(entry.file_path.encode())
+        digest.update(entry.content)
+    return digest.hexdigest()
 
 
 def compute_snapshot_hash_for_files(

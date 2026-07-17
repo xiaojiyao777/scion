@@ -7,6 +7,9 @@ quality gates, retry advice, portfolio controls, or host-generated repairs.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import math
 import os
 from dataclasses import fields, is_dataclass
 from enum import Enum
@@ -33,6 +36,7 @@ from scion.problem.providers import (
     resolve_solver_design_prompt_provider,
     typed_research_question_payload,
 )
+from scion.proposal import hypothesis_generation_authority as _generation
 from scion.proposal.context.problem_adapter import (
     _build_operator_interface_spec,
     _build_problem_object,
@@ -97,6 +101,279 @@ _MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS = (
 
 CANONICAL_SCREENING_HISTORY_KEY = "canonical_screening_history"
 
+HypothesisCodeSource = _generation.HypothesisCodeSource
+HypothesisProblemEvidenceProjection = (
+    _generation.HypothesisProblemEvidenceProjection
+)
+
+_CHECKPOINT_A_EVIDENCE_KEYS = frozenset(
+    {
+        "problem_summary",
+        "problem_object",
+        "solver_mechanics",
+        "research_surfaces",
+        "available_actions",
+        "objective_policy_guidance",
+        "problem_measurement_diagnostics",
+        "research_question",
+        "forced_research_target",
+        "seed",
+        "experiment_history",
+        RENDERER_INPUTS_KEY,
+    }
+)
+_CHECKPOINT_A_OWNER_SOURCE_KEYS = frozenset(
+    {
+        "branch_id",
+        "branch_current_code",
+        "champion_operators_code",
+        "champion_stats",
+        "champion_version",
+        "targetable_files",
+    }
+)
+_CHECKPOINT_A_NESTED_OWNER_SOURCE_KEYS = frozenset(
+    {
+        "base_champion_hash",
+        "base_champion_id",
+        "base_champion_weight_revision",
+        "branch_current_code",
+        "branch_id",
+        "branch_owner",
+        "champion_code_snapshot_hash",
+        "champion_operators_code",
+        "champion_version",
+        "champion_weight_revision",
+        "code_hash",
+        "current_code_hash",
+        "h_bundle",
+        "last_clean_code_hash",
+        "owner_context",
+        "prior_head",
+        "selected_manifest_digest",
+        "snapshot_hash",
+        "source_kind",
+        "targetable_files",
+    }
+)
+
+
+class HypothesisProblemEvidenceRejectedError(RuntimeError):
+    """Configured problem evidence deterministically rejected one source."""
+
+
+class HypothesisProblemEvidenceUnknownError(RuntimeError):
+    """Unexpected work failed after the exact code source was claimed."""
+
+
+def _checkpoint_a_canonical_config(value: Mapping[str, Any]) -> bytes:
+    if type(value) is not dict:
+        raise HypothesisProblemEvidenceRejectedError(
+            "hypothesis problem evidence configuration must be an exact mapping"
+        )
+    unknown = set(value).difference(_CHECKPOINT_A_EVIDENCE_KEYS)
+    reserved = set(value).intersection(_CHECKPOINT_A_OWNER_SOURCE_KEYS)
+    if reserved:
+        raise HypothesisProblemEvidenceRejectedError(
+            "hypothesis problem evidence cannot configure owner/source key: "
+            f"{sorted(reserved)[0]}"
+        )
+    if unknown:
+        raise HypothesisProblemEvidenceRejectedError(
+            "hypothesis problem evidence key is not allowlisted: "
+            f"{sorted(str(key) for key in unknown)[0]}"
+        )
+    normalized = _checkpoint_a_json_value(value, path="$.problem_evidence")
+    if type(normalized) is not dict:
+        raise HypothesisProblemEvidenceRejectedError(
+            "hypothesis problem evidence configuration must be a mapping"
+        )
+    return _checkpoint_a_canonical_json_bytes(normalized)
+
+
+def _checkpoint_a_provider_context(configured_json: bytes) -> bytes:
+    """Deep-normalize one already detached configuration after leaf claim."""
+
+    try:
+        decoded = json.loads(configured_json.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HypothesisProblemEvidenceRejectedError(
+            "configured hypothesis problem evidence is malformed"
+        ) from exc
+    normalized = _checkpoint_a_json_value(decoded, path="$.problem_evidence")
+    if type(normalized) is not dict:
+        raise HypothesisProblemEvidenceRejectedError(
+            "configured hypothesis problem evidence is not a mapping"
+        )
+    encoded = _checkpoint_a_canonical_json_bytes(normalized)
+    if encoded != configured_json:
+        raise HypothesisProblemEvidenceRejectedError(
+            "configured hypothesis problem evidence is not canonical"
+        )
+    if set(normalized).difference(_CHECKPOINT_A_EVIDENCE_KEYS):
+        raise HypothesisProblemEvidenceRejectedError(
+            "configured hypothesis problem evidence changed its allowlisted shape"
+        )
+    _checkpoint_a_reject_nested_owner_source_fields(
+        normalized,
+        path="$.problem_evidence",
+        root=True,
+    )
+    problem_summary = normalized.get("problem_summary")
+    if (
+        type(problem_summary) is not str
+        or not problem_summary
+        or problem_summary != problem_summary.strip()
+    ):
+        raise HypothesisProblemEvidenceRejectedError(
+            "hypothesis problem evidence requires an exact problem_summary"
+        )
+    surfaces = normalized.get("research_surfaces")
+    if type(surfaces) is not list or not surfaces:
+        raise HypothesisProblemEvidenceRejectedError(
+            "hypothesis problem evidence requires research_surfaces"
+        )
+    names: set[str] = set()
+    for index, surface in enumerate(surfaces):
+        if type(surface) is not dict:
+            raise HypothesisProblemEvidenceRejectedError(
+                "hypothesis research surface must be a mapping at "
+                f"index {index}"
+            )
+        name = surface.get("name")
+        if (
+            type(name) is not str
+            or not name
+            or name != name.strip()
+            or name in names
+        ):
+            raise HypothesisProblemEvidenceRejectedError(
+                "hypothesis research surface has invalid or duplicate name at "
+                f"index {index}"
+            )
+        names.add(name)
+    history = normalized.get("experiment_history", [])
+    if type(history) is not list or any(type(item) is not dict for item in history):
+        raise HypothesisProblemEvidenceRejectedError(
+            "hypothesis experiment_history must be a list of mappings"
+        )
+    return encoded
+
+
+def _checkpoint_a_reject_nested_owner_source_fields(
+    value: object,
+    *,
+    path: str,
+    root: bool = False,
+) -> None:
+    if type(value) is list:
+        for index, child in enumerate(value):
+            _checkpoint_a_reject_nested_owner_source_fields(
+                child,
+                path=f"{path}[{index}]",
+            )
+        return
+    if type(value) is not dict:
+        return
+    for key, child in value.items():
+        if not root and key in _CHECKPOINT_A_NESTED_OWNER_SOURCE_KEYS:
+            raise HypothesisProblemEvidenceRejectedError(
+                "hypothesis problem evidence contains nested owner/source key "
+                f"at {path}.{key}"
+            )
+        _checkpoint_a_reject_nested_owner_source_fields(
+            child,
+            path=f"{path}.{key}",
+        )
+
+
+def _checkpoint_a_evidence_governance(
+    *,
+    configured_json: bytes,
+    provider_context_json: bytes,
+) -> bytes:
+    return _checkpoint_a_canonical_json_bytes(
+        {
+            "configured_keys": sorted(json.loads(configured_json)),
+            "configured_problem_evidence_sha256": hashlib.sha256(
+                configured_json
+            ).hexdigest(),
+            "provider_context_sha256": hashlib.sha256(
+                provider_context_json
+            ).hexdigest(),
+            "schema_version": "hypothesis-problem-evidence-governance.v1",
+        }
+    )
+
+
+def _checkpoint_a_json_value(
+    value: Any,
+    *,
+    path: str,
+    active_ids: set[int] | None = None,
+) -> Any:
+    active = set() if active_ids is None else active_ids
+    value_type = type(value)
+    if value is None or value_type in {str, bool, int}:
+        return value
+    if value_type is float:
+        if not math.isfinite(value):
+            raise HypothesisProblemEvidenceRejectedError(
+                f"non-finite hypothesis problem evidence number at {path}"
+            )
+        return value
+    if value_type in {list, dict}:
+        value_id = id(value)
+        if value_id in active:
+            raise HypothesisProblemEvidenceRejectedError(
+                f"cyclic hypothesis problem evidence at {path}"
+            )
+        active.add(value_id)
+        try:
+            if value_type is list:
+                return [
+                    _checkpoint_a_json_value(
+                        child,
+                        path=f"{path}[{index}]",
+                        active_ids=active,
+                    )
+                    for index, child in enumerate(value)
+                ]
+            normalized: dict[str, Any] = {}
+            for key, child in value.items():
+                if type(key) is not str or not key or key != key.strip():
+                    raise HypothesisProblemEvidenceRejectedError(
+                        f"invalid hypothesis problem evidence key at {path}"
+                    )
+                normalized[key] = _checkpoint_a_json_value(
+                    child,
+                    path=f"{path}.{key}",
+                    active_ids=active,
+                )
+            return normalized
+        finally:
+            active.remove(value_id)
+    raise HypothesisProblemEvidenceRejectedError(
+        "hypothesis problem evidence must be primitive-only at "
+        f"{path}: {value_type.__name__}"
+    )
+
+
+def _checkpoint_a_canonical_json_bytes(value: Any) -> bytes:
+    try:
+        encoded = json.dumps(
+            value,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (TypeError, ValueError) as exc:
+        raise HypothesisProblemEvidenceRejectedError(
+            "hypothesis problem evidence cannot be canonically encoded"
+        ) from exc
+    return encoded.encode("utf-8")
+
 
 def _filter_hypothesis_prompt_steps(
     step_history: list[StepRecord],
@@ -120,8 +397,95 @@ class ContextManager:
         self,
         *,
         adapter: Any | None = None,
+        hypothesis_problem_evidence: Mapping[str, Any] | None = None,
     ) -> None:
         self._adapter = adapter
+        configured = (
+            {} if hypothesis_problem_evidence is None else hypothesis_problem_evidence
+        )
+        self.__checkpoint_a_problem_evidence_json = _checkpoint_a_canonical_config(
+            configured
+        )
+        self.__hypothesis_generation_authority: (
+            _generation._AuthorityHandle | None
+        ) = None
+
+    def _install_hypothesis_generation_authority(
+        self,
+        authority: _generation._AuthorityHandle,
+    ) -> None:
+        """Install this exact Context Manager's checkpoint-A handle once."""
+
+        if self.__hypothesis_generation_authority is not None:
+            raise _generation.HypothesisGenerationLifecycleError(
+                "ContextManager generation authority is already installed"
+            )
+        if self._adapter is not None:
+            raise HypothesisProblemEvidenceRejectedError(
+                "checkpoint-A ContextManager cannot retain an adapter callback"
+            )
+        _generation._require_authority(
+            authority,
+            role=_generation._AuthorityRole.CONTEXT_MANAGER,
+            owner=self,
+        )
+        self.__hypothesis_generation_authority = authority
+
+    def _require_hypothesis_generation_authority(
+        self,
+    ) -> _generation._AuthorityHandle:
+        authority = self.__hypothesis_generation_authority
+        if authority is None:
+            raise _generation.InvalidHypothesisGenerationCapabilityError(
+                "ContextManager generation authority is not installed"
+            )
+        _generation._require_authority(
+            authority,
+            role=_generation._AuthorityRole.CONTEXT_MANAGER,
+            owner=self,
+        )
+        return authority
+
+    def _project_hypothesis_problem_evidence(
+        self,
+        source: HypothesisCodeSource,
+    ) -> HypothesisProblemEvidenceProjection:
+        """Claim one exact source and bind detached configured problem evidence."""
+
+        authority = self._require_hypothesis_generation_authority()
+        _generation._claim_code_source_for_evidence(authority, source)
+        try:
+            provider_context_json = _checkpoint_a_provider_context(
+                self.__checkpoint_a_problem_evidence_json
+            )
+            governance_json = _checkpoint_a_evidence_governance(
+                configured_json=self.__checkpoint_a_problem_evidence_json,
+                provider_context_json=provider_context_json,
+            )
+            return _generation._issue_problem_evidence(
+                authority,
+                source,
+                provider_context_json=provider_context_json,
+                governance_json=governance_json,
+            )
+        except HypothesisProblemEvidenceRejectedError:
+            _generation._finish_problem_evidence_failure(
+                authority,
+                source,
+                rejected=True,
+            )
+            raise
+        except BaseException as exc:
+            _generation._finish_problem_evidence_failure(
+                authority,
+                source,
+                rejected=False,
+            )
+            if not isinstance(exc, Exception):
+                raise
+            raise HypothesisProblemEvidenceUnknownError(
+                "problem-evidence projection failed unexpectedly after claim"
+            ) from exc
 
     def build_hypothesis_context(
         self,
@@ -1004,6 +1368,10 @@ def _drop_empty(value: Any) -> Any:
 __all__ = [
     "CANONICAL_SCREENING_HISTORY_KEY",
     "ContextManager",
+    "HypothesisCodeSource",
+    "HypothesisProblemEvidenceProjection",
+    "HypothesisProblemEvidenceRejectedError",
+    "HypothesisProblemEvidenceUnknownError",
     "canonical_screening_history",
     "canonical_screening_record",
     "persist_canonical_screening_record",

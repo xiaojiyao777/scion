@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+import dataclasses
+import hashlib
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from scion.runtime import workspace as workspace_module
 from scion.core.research_surface_index import editable_identity_patterns
 from scion.core.models import PatchProposal
 from scion.runtime.workspace import (
+    EditableIdentityBytesCapture,
     FrozenFileError,
     WorkspaceMaterializer,
+    WorkspaceIdentityCaptureError,
+    WorkspaceIdentityDriftError,
     compute_snapshot_hash_for_files,
 )
 
@@ -76,6 +83,146 @@ def test_explicit_surface_hash_tracks_non_legacy_surface_only(tmp_path: Path) ->
 
     assert materializer.compute_code_hash(str(ws)) == code_hash
     assert materializer.compute_snapshot_hash(str(ws)) == snapshot_hash
+
+
+def test_one_shot_identity_capture_matches_legacy_hashes_from_same_entries(
+    tmp_path: Path,
+) -> None:
+    ws = _workspace(tmp_path)
+    materializer = WorkspaceMaterializer(
+        str(tmp_path / "campaign-capture"),
+        editable_patterns=("surfaces/*.py",),
+    )
+
+    capture = materializer.capture_editable_identity_bytes(str(ws.resolve()))
+
+    assert isinstance(capture, EditableIdentityBytesCapture)
+    assert capture.code_hash == materializer.compute_code_hash(str(ws))
+    assert capture.snapshot_hash == materializer.compute_snapshot_hash(str(ws))
+    assert [entry.file_path for entry in capture.entries] == [
+        "registry.yaml",
+        "surfaces/frozen.py",
+        "surfaces/heuristic.py",
+    ]
+    assert [
+        entry.file_path for entry in capture.entries if entry.code_identity
+    ] == ["surfaces/frozen.py", "surfaces/heuristic.py"]
+    for entry in capture.entries:
+        assert entry.snapshot_identity is True
+        assert entry.sha256 == hashlib.sha256(entry.content).hexdigest()
+    payload = {
+        "schema_version": EditableIdentityBytesCapture.schema_version,
+        "entries": [
+            {
+                "file_path": entry.file_path,
+                "sha256": entry.sha256,
+                "code_identity": entry.code_identity,
+                "snapshot_identity": entry.snapshot_identity,
+            }
+            for entry in capture.entries
+        ],
+        "code_hash": capture.code_hash,
+        "snapshot_hash": capture.snapshot_hash,
+    }
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("utf-8")
+    assert capture.manifest_digest == hashlib.sha256(canonical).hexdigest()
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        capture.code_hash = "forged"  # type: ignore[misc]
+
+
+def test_one_shot_identity_capture_reads_each_selected_file_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ws = _workspace(tmp_path)
+    materializer = WorkspaceMaterializer(
+        str(tmp_path / "campaign-single-read"),
+        editable_patterns=("surfaces/*.py",),
+    )
+    original = workspace_module._read_stable_identity_file_once
+    calls: list[str] = []
+
+    def counted(
+        root: Path,
+        relative: str,
+        expected_signature: tuple[int, ...],
+    ) -> bytes:
+        calls.append(relative)
+        return original(root, relative, expected_signature)
+
+    monkeypatch.setattr(
+        workspace_module,
+        "_read_stable_identity_file_once",
+        counted,
+    )
+    capture = materializer.capture_editable_identity_bytes(str(ws.resolve()))
+
+    assert calls == [entry.file_path for entry in capture.entries]
+    assert len(calls) == len(set(calls))
+
+
+def test_one_shot_identity_capture_rejects_post_read_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ws = _workspace(tmp_path)
+    materializer = WorkspaceMaterializer(
+        str(tmp_path / "campaign-drift"),
+        editable_patterns=("surfaces/*.py",),
+    )
+    original = workspace_module._read_stable_identity_file_once
+    changed = False
+
+    def mutate_after_read(
+        root: Path,
+        relative: str,
+        expected_signature: tuple[int, ...],
+    ) -> bytes:
+        nonlocal changed
+        content = original(root, relative, expected_signature)
+        if not changed:
+            changed = True
+            (root / relative).write_bytes(content + b"# drift\n")
+        return content
+
+    monkeypatch.setattr(
+        workspace_module,
+        "_read_stable_identity_file_once",
+        mutate_after_read,
+    )
+    with pytest.raises(WorkspaceIdentityDriftError, match="changed"):
+        materializer.capture_editable_identity_bytes(str(ws.resolve()))
+
+
+def test_one_shot_identity_capture_rejects_symlink_and_noncanonical_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ws = _workspace(tmp_path)
+    materializer = WorkspaceMaterializer(
+        str(tmp_path / "campaign-symlink"),
+        editable_patterns=("surfaces/*.py",),
+    )
+    outside = tmp_path / "outside.py"
+    outside.write_text("VALUE = 99\n", encoding="utf-8")
+    linked = ws / "surfaces" / "heuristic.py"
+    linked.unlink()
+    linked.symlink_to(outside)
+
+    with pytest.raises(WorkspaceIdentityCaptureError, match="symlink"):
+        materializer.capture_editable_identity_bytes(str(ws.resolve()))
+
+    linked.unlink()
+    _write(linked, "VALUE = 1\n")
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(WorkspaceIdentityCaptureError, match="absolute"):
+        materializer.capture_editable_identity_bytes("workspace")
 
 
 def test_explicit_archive_copies_only_editable_non_frozen_files(tmp_path: Path) -> None:

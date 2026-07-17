@@ -707,11 +707,24 @@ The implementation order is fixed; items 1-3 are complete:
    terminalization, and restart holds. Checkpoint B owns frozen Contract and
    taxonomy semantics, authority-bound clock/UUID target construction,
    generated event/binding/H, semantic/global classification, and one Registry
-   publication. Static SQL, state/recovery, and dependency reviews close at
-   P0=0/P1=0/P2=0. The generic ledger and provider result state machines remain
-   colocated until this full graph is implemented; no isolated helper slice is
-   authorized. Implement and independently accept all of checkpoint A before
-   starting B. Historical activation remains a separate addendum because the
+   publication. Checkpoint A is now complete and remains dormant. One leaf
+   capability graph binds the exact six semantic owners; Registry owns the
+   Branch-local reservation and exact owner context; the source owner captures
+   champion-or-verified-workspace bytes once; Context/Prompt build one canonical
+   provider snapshot; ProposalAttemptOwner persists and independently classifies
+   START/terminal rows; ProviderCallOwner alone consumes the permit. START
+   revalidates the captured Branch and complete H bundle inside the same
+   `BEGIN IMMEDIATE`; provider-unknown, rollback, mixed storage, restart,
+   pre-START abort, and terminal uncertainty all converge to exact release or
+   hold states. The capability graph is GC-safe, uses one bounded Context proof,
+   distinguishes invalid cross-binding from genuine replay, and has executable
+   exact-caller dependency closure. No production composition, schema effect,
+   retry, budget, cap, gate, cutoff, or truncation was added. The expanded
+   focused set passes `207`; the correctly rooted full suite passes `2765` with
+   `1` skipped in `482.44s`; compileall and diff-check pass. Independent leaf,
+   Registry transaction/recovery, and static dependency reviews close at
+   P0=0/P1=0/P2=0. Checkpoint B is next. Historical activation remains a
+   separate addendum because the
    827-database read-only inventory found legacy-extra JSON, malformed rows,
    orphan/multi-campaign ambiguity, and missing sealed provenance that cannot
    be invented. Only after A and B close may the project perform the
@@ -773,7 +786,7 @@ No path and zero bytes were deleted in batch 19.
 Batches 8-10 and 12 then compacted
 `2,850` Git-restorable static subtree copies totaling `6.759 GiB` without
 deleting any additional root or changing registry/DB/metrics/trace/formal/log
-counts. `752` roots remain and about `38.0 GiB` is available.
+counts. `752` roots remain and about `37 GiB` is currently available.
 The exact paths, predicates, restore manifests, inventories, and
 retained gray set are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
@@ -805,11 +818,12 @@ scientific and lineage-owning artifacts remain in place.
    proposal-attempt, and generic-ledger reviews with P0=0/P1=0. Its generic
    creation ledger, champion/Branch authorization participant, committed START,
    provider permit, and generated-result proof are implemented and dormant.
-   The corrected H vertical supersedes the old participant-first continuation:
-   implement its complete checkpoint A generation-provenance/reservation/
-   terminal-recovery path and obtain independent acceptance, then implement
-   checkpoint B frozen Contract/target plus fused event/binding/H/Registry
-   publication. Keep historical activation in its own evidence-preserving
+   The corrected H vertical supersedes the old participant-first continuation.
+   Its complete checkpoint A generation-provenance/reservation/terminal-
+   recovery path is implemented, independently accepted, dormant, and
+   production-uncomposed. Implement checkpoint B frozen Contract/target plus
+   fused event/binding/H/Registry publication next. Keep historical activation
+   in its own evidence-preserving
    addendum. Only then proceed to the indivisible offline cutover,
    and closure exactly as frozen, then implement the remaining paired
    slot/dispatch/receipt slices, D2c exact Decision transport, D2d isolated

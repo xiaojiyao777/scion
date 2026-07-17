@@ -50,6 +50,20 @@ ORDER BY version DESC, weight_revision DESC
 LIMIT 1
 """
 
+_EXACT_CHAMPION_SELECT_SQL: Final[str] = """
+SELECT version,
+       weight_revision,
+       operator_pool_json,
+       solver_config_hash,
+       code_snapshot_path,
+       code_snapshot_hash,
+       promotion_experiment_id,
+       promotion_dossier_ref,
+       promoted_at
+FROM champions
+WHERE version = ? AND weight_revision = ?
+"""
+
 _OPERATOR_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
     {"name", "file_path", "category", "weight", "class_name"}
 )
@@ -320,11 +334,25 @@ class StoredChampionRecord:
 def _decode_current_champion_rows(
     rows: tuple[object, ...],
 ) -> StoredChampionRecord | None:
+    return _decode_single_champion_rows(rows, query_label="Current champion")
+
+
+def _decode_exact_champion_rows(
+    rows: tuple[object, ...],
+) -> StoredChampionRecord | None:
+    return _decode_single_champion_rows(rows, query_label="Exact champion")
+
+
+def _decode_single_champion_rows(
+    rows: tuple[object, ...],
+    *,
+    query_label: str,
+) -> StoredChampionRecord | None:
     if not rows:
         return None
     if len(rows) != 1:
         raise DurableOwnerIntegrityError(
-            "Current champion query returned more than one storage fact"
+            f"{query_label} query returned more than one storage fact"
         )
     row = rows[0]
     try:
@@ -332,11 +360,11 @@ def _decode_current_champion_rows(
         values = tuple(row)  # type: ignore[arg-type]
     except (AttributeError, TypeError, ValueError) as exc:
         raise DurableOwnerIntegrityError(
-            "Current champion row is not a named materialized SQLite row"
+            f"{query_label} row is not a named materialized SQLite row"
         ) from exc
     if columns != _CHAMPION_COLUMNS:
         raise DurableOwnerIntegrityError(
-            "Current champion query returned incomplete or unexpected columns"
+            f"{query_label} query returned incomplete or unexpected columns"
         )
     return StoredChampionRecord._from_storage_values(values)
 
@@ -419,6 +447,38 @@ class ConnectionScopedChampionStore:
             _CURRENT_CHAMPION_SELECT_SQL,
         )
         return _decode_current_champion_rows(rows)
+
+    def _load_exact_from_snapshot(
+        self,
+        snapshot: _sqlite._IndependentReadSnapshot,
+        version: int,
+        weight_revision: int,
+    ) -> StoredChampionRecord | None:
+        """Load one captured append-only champion identity from one read snapshot."""
+
+        exact_version = _nonnegative_sqlite_integer(
+            version,
+            field="Champion version",
+        )
+        exact_weight_revision = _nonnegative_sqlite_integer(
+            weight_revision,
+            field="Champion weight revision",
+        )
+        rows = _sqlite._execute_read_snapshot(
+            snapshot,
+            self.__database_authority,
+            _EXACT_CHAMPION_SELECT_SQL,
+            (exact_version, exact_weight_revision),
+        )
+        token = _decode_exact_champion_rows(rows)
+        if token is not None and (
+            token.version != exact_version
+            or token.weight_revision != exact_weight_revision
+        ):
+            raise DurableOwnerIntegrityError(
+                "Exact champion query returned another storage identity"
+            )
+        return token
 
     @staticmethod
     def _require_branch_anchor(

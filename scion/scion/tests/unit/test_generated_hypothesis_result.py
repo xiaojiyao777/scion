@@ -1,21 +1,18 @@
 from __future__ import annotations
 
+import ast
 import contextvars
-import copy
 import hashlib
+import inspect
 import json
-import pickle
-import sqlite3
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from scion.lineage import proposal_attempt_owner
-from scion.lineage import sqlite_connection as sqlite_boundary
-from scion.proposal.engine.facade import build_prompt_turn_snapshot
+from scion.proposal import hypothesis_generation_authority as generation
 from scion.proposal.engine import provider_call as subject
+from scion.proposal.engine.facade import build_prompt_turn_snapshot
 from scion.proposal.prompt_manifest import stable_digest
 
 _RESPONSE = {
@@ -35,7 +32,7 @@ class _DeterministicTransport:
         self,
         response: dict[str, object] | None = None,
         *,
-        error: Exception | None = None,
+        error: BaseException | None = None,
     ) -> None:
         self.response = dict(_RESPONSE if response is None else response)
         self.error = error
@@ -58,6 +55,35 @@ class _DeterministicTransport:
         return dict(self.response)
 
 
+@dataclass(frozen=True, slots=True)
+class _Harness:
+    authorities: generation._CheckpointAAuthorities
+    view: generation.HypothesisGenerationView
+    bound_prompt: generation.BoundHypothesisPrompt
+    permit: generation.ProviderGenerationPermit
+    owner: subject.ProviderCallOwner
+    transport: _DeterministicTransport
+    expected_turn: subject.PromptTurnSnapshot
+    trace_root: Path
+
+
+_KEEPALIVE: list[tuple[object, ...]] = []
+
+
+def _digest(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _canonical(value: object) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+
 def _context() -> dict[str, object]:
     return {
         "problem_summary": "Synthetic routing control.",
@@ -68,7 +94,7 @@ def _context() -> dict[str, object]:
                 "target_files": ["operators/*.py"],
             }
         ],
-        "objective_policy_guidance": ("Minimize cost while preserving feasibility."),
+        "objective_policy_guidance": "Minimize cost while preserving feasibility.",
         "solver_mechanics": "",
         "champion_operators_code": "class Control: pass",
         "champion_stats": {"version": 3, "operators": []},
@@ -80,850 +106,481 @@ def _context() -> dict[str, object]:
     }
 
 
-def _started_payload(snapshot: subject.PromptTurnSnapshot) -> dict[str, object]:
-    return {
-        "schema_version": "proposal-attempt-transition.v1",
-        "attempt_id": "attempt-generated-result",
-        "campaign_id": "test-campaign",
-        "branch_id": "branch-generated-result",
-        "runtime_mode": "direct_v3",
-        "phase": "hypothesis",
-        "status": "started",
-        "transition_reason": "provider_call_started",
-        "failure_lane": None,
-        "hypothesis_id": None,
-        "hypothesis_digest": None,
-        "patch_digest": None,
-        "attempt_kind": "initial",
-        "continuation_of_attempt_id": None,
-        "prompt_call": {
-            "request_kind": "hypothesis",
-            "context_digest": snapshot.context_digest,
-            "prompt_hash": subject._provider_prompt_hash(
-                snapshot.system_blocks,
-                snapshot.user_prompt,
-            ),
-            "trace_ref": None,
-            "prompt_manifest_ref": None,
-            "raw_response_ref": None,
-            "provider_ok": None,
-            "ok": None,
-            "error_category": None,
-            "error_type": None,
-        },
-        "anchors": {
-            "problem_id": "cvrp",
-            "problem_spec_hash": "spec-hash",
-            "split_manifest_hash": "split-hash",
-            "seed_ledger_hash": "seed-hash",
-            "champion_version": 3,
-            "champion_weight_revision": 0,
-            "champion_code_snapshot_hash": "champion-hash",
-            "branch_base_champion_id": 3,
-            "branch_base_champion_hash": "branch-hash",
-        },
-        "tainted_artifact_refs": [],
-    }
-
-
-def _issue_started_attempt(
-    tmp_path: Path,
-    snapshot: subject.PromptTurnSnapshot,
-) -> tuple[
-    proposal_attempt_owner.StartedHypothesisAttempt,
-    sqlite_boundary.CampaignDatabaseAuthority,
-]:
-    tmp_path.mkdir(parents=True, exist_ok=True)
-    database_path = tmp_path / "started-attempt.db"
-    connection = sqlite_boundary._connect_sqlite(database_path)
-    try:
-        connection.execute("""
-            CREATE TABLE experiment_events (
-                event_id TEXT PRIMARY KEY,
-                campaign_id TEXT NOT NULL,
-                branch_id TEXT NOT NULL,
-                hypothesis_id TEXT,
-                timestamp TEXT NOT NULL,
-                event_kind TEXT NOT NULL,
-                stage TEXT NOT NULL,
-                audit_payload_json TEXT NOT NULL
-            )
-            """)
-        connection.commit()
-    finally:
-        connection.close()
-    authority = sqlite_boundary._issue_test_campaign_database_authority(
-        database_path,
-        campaign_id="test-campaign",
-    )
-    owner = proposal_attempt_owner.ProposalAttemptOwner(authority)
-    with sqlite_boundary.immediate_transaction(authority) as transaction:
-        started = owner.append_started_hypothesis_attempt_in(
-            transaction,
-            _started_payload(snapshot),
-        )
-    return started, authority
-
-
-def _permit(
-    tmp_path: Path,
-    snapshot: subject.PromptTurnSnapshot,
-) -> tuple[
-    proposal_attempt_owner.StartedHypothesisAttempt,
-    subject.ProviderGenerationPermit,
-]:
-    started_attempt, authority = _issue_started_attempt(tmp_path, snapshot)
-    with sqlite_boundary._independent_authority_read_snapshot(
-        authority
-    ) as committed_snapshot:
-        permit = subject._issue_provider_generation_permit(
-            started_attempt=started_attempt,
-            committed_snapshot=committed_snapshot,
-        )
-    return started_attempt, permit
-
-
-def _issue(
+def _harness(
     tmp_path: Path,
     *,
     response: dict[str, object] | None = None,
-) -> tuple[
-    object,
-    subject.PromptTurnSnapshot,
-    subject.PromptCallReceipt,
-    subject.GeneratedHypothesisResult,
-    object,
-    subject.ProviderGenerationPermit,
-    _DeterministicTransport,
-]:
+    error: BaseException | None = None,
+    mutate_provider_snapshot: object | None = None,
+    transform_provider_context_bytes: object | None = None,
+    transform_provider_snapshot_bytes: object | None = None,
+) -> _Harness:
     context = _context()
-    snapshot = build_prompt_turn_snapshot("hypothesis", context)
-    transport = _DeterministicTransport(response)
+    turn = build_prompt_turn_snapshot("hypothesis", context)
+    context_snapshot = turn.authoritative_context
+    assert context_snapshot is not None
+    provider_context = context_snapshot.inputs.provider_context(
+        include_renderer_inputs=True
+    )
+    provider_snapshot: dict[str, object] = {
+        "schema_version": "hypothesis-provider-snapshot.v1",
+        "render_kind": "hypothesis",
+        "system_blocks": [dict(block) for block in turn.system_blocks],
+        "user_prompt": turn.user_prompt,
+        "context_digest": turn.context_digest,
+        "provider_tool": dict(turn.provider_tool),
+        "allowed_change_loci": list(turn.allowed_change_loci),
+        "authoritative_context_ref": context_snapshot.snapshot_id,
+    }
+    if mutate_provider_snapshot is not None:
+        assert callable(mutate_provider_snapshot)
+        mutate_provider_snapshot(provider_snapshot)
+
+    transport = _DeterministicTransport(response, error=error)
+    trace_root = tmp_path / "traces"
     owner = subject.ProviderCallOwner(
         transport,
         "test-model",
-        trace_dir=str(tmp_path / "traces"),
+        trace_dir=str(trace_root),
     )
-    started_attempt, permit = _permit(tmp_path / "started", snapshot)
-    hypothesis, receipt, result = subject._generate_hypothesis_result_with_receipt(
-        owner,
-        context=context,
-        snapshot=snapshot,
-        permit=permit,
+    registry_owner = object()
+    code_owner = object()
+    context_owner = object()
+    prompt_owner = object()
+    proposal_owner = object()
+    authorities = generation._install_checkpoint_a_authorities(
+        registry=registry_owner,
+        code_source_owner=code_owner,
+        context_manager=context_owner,
+        prompt_owner=prompt_owner,
+        proposal_owner=proposal_owner,
+        provider=owner,
     )
-    return (
-        hypothesis,
-        snapshot,
-        receipt,
-        result,
-        started_attempt,
-        permit,
-        transport,
-    )
-
-
-def test_real_persisted_provider_and_parse_path_issues_complete_bound_result(
-    tmp_path: Path,
-) -> None:
-    hypothesis, snapshot, receipt, result, started_attempt, permit, transport = _issue(
-        tmp_path
-    )
-
-    consumed = subject._consume_generated_hypothesis_result(
-        result,
-        permit=permit,
-        started_attempt=started_attempt,
-        receipt=receipt,
-    )
-
-    assert transport.calls == 1
-    assert consumed.attempt_id == "attempt-generated-result"
-    assert consumed.started_event_id == receipt.attempt_started_event_id
-    assert consumed.started_event_id
-    assert consumed.context_digest == snapshot.context_digest
-    assert consumed.prompt_hash == receipt.prompt_hash
-    assert consumed.receipt is receipt
-    assert consumed.trace_ref == receipt.trace_ref
-    assert consumed.prompt_manifest_ref == receipt.prompt_manifest_ref
-    assert consumed.raw_response_ref == receipt.raw_response_ref
-    assert receipt.trace_ref is not None
-    persisted_trace = json.loads(
-        (tmp_path / receipt.trace_ref.split("#", 1)[0]).read_text(encoding="utf-8")
-    )
-    assert persisted_trace["ok"] is True
-    assert persisted_trace["response"] == _RESPONSE
-    assert persisted_trace["prompt_manifest"]["context_digest"] == (
-        snapshot.context_digest
-    )
-    assert (
-        consumed.proposal_sha256
-        == hashlib.sha256(consumed.proposal_canonical_bytes).hexdigest()
-    )
-    assert consumed.proposal_sha256 == stable_digest(asdict(hypothesis), length=64)
-    assert consumed.detached_hypothesis() == hypothesis
-    assert consumed.detached_hypothesis() is not hypothesis
-
-
-def test_public_proposal_mutation_cannot_change_issued_canonical_result(
-    tmp_path: Path,
-) -> None:
-    hypothesis, _, receipt, result, started_attempt, permit, _ = _issue(tmp_path)
-    original_text = hypothesis.hypothesis_text
-    hypothesis.hypothesis_text = "caller substituted text"
-    hypothesis.target_file = "operators/substituted.py"
-
-    consumed = subject._consume_generated_hypothesis_result(
-        result,
-        permit=permit,
-        started_attempt=started_attempt,
-        receipt=receipt,
-    )
-
-    detached = consumed.detached_hypothesis()
-    assert detached.hypothesis_text == original_text
-    assert detached.target_file == _RESPONSE["target_file"]
-    assert consumed.proposal_sha256 != stable_digest(asdict(hypothesis), length=64)
-
-
-def test_result_requires_exact_started_capability_and_receipt_identity(
-    tmp_path: Path,
-) -> None:
-    _, _, receipt, result, started_attempt, permit, _ = _issue(tmp_path)
-    equal_but_distinct_receipt = replace(receipt)
-    assert equal_but_distinct_receipt == receipt
-    assert equal_but_distinct_receipt is not receipt
-
-    with pytest.raises(
-        subject.InvalidGeneratedHypothesisResultError,
-        match="another started attempt",
-    ):
-        subject._consume_generated_hypothesis_result(
-            result,
-            permit=permit,
-            started_attempt=object(),
-            receipt=receipt,
-        )
-    with pytest.raises(
-        subject.InvalidGeneratedHypothesisResultError,
-        match="exact provider receipt",
-    ):
-        subject._consume_generated_hypothesis_result(
-            result,
-            permit=permit,
-            started_attempt=started_attempt,
-            receipt=equal_but_distinct_receipt,
-        )
-
-    consumed = subject._consume_generated_hypothesis_result(
-        result,
-        permit=permit,
-        started_attempt=started_attempt,
-        receipt=receipt,
-    )
-    assert consumed.receipt is receipt
-
-
-def test_permit_reverse_binding_rejects_another_issued_result(
-    tmp_path: Path,
-) -> None:
-    _, _, first_receipt, first_result, first_start, first_permit, _ = _issue(
-        tmp_path / "first"
-    )
-    _, _, _, _, _, second_permit, _ = _issue(tmp_path / "second")
-
-    with pytest.raises(
-        subject.InvalidGeneratedHypothesisResultError,
-        match="not bound to the exact result",
-    ):
-        subject._consume_generated_hypothesis_result(
-            first_result,
-            permit=second_permit,
-            started_attempt=first_start,
-            receipt=first_receipt,
-        )
-
-    assert (
-        subject._consume_generated_hypothesis_result(
-            first_result,
-            permit=first_permit,
-            started_attempt=first_start,
-            receipt=first_receipt,
-        ).receipt
-        is first_receipt
-    )
-
-
-def test_result_is_one_shot(
-    tmp_path: Path,
-) -> None:
-    _, _, receipt, result, started_attempt, permit, _ = _issue(tmp_path)
-    subject._consume_generated_hypothesis_result(
-        result,
-        permit=permit,
-        started_attempt=started_attempt,
-        receipt=receipt,
-    )
-
-    with pytest.raises(
-        subject.GeneratedHypothesisResultLifecycleError,
-        match="already consumed",
-    ):
-        subject._consume_generated_hypothesis_result(
-            result,
-            permit=permit,
-            started_attempt=started_attempt,
-            receipt=receipt,
-        )
-
-
-def test_result_rejects_copied_context_without_being_spent(
-    tmp_path: Path,
-) -> None:
-    _, _, receipt, result, started_attempt, permit, _ = _issue(tmp_path)
-    copied_context = contextvars.copy_context()
-
-    with pytest.raises(
-        subject.GeneratedHypothesisResultLifecycleError,
-        match="cross Contexts",
-    ):
-        copied_context.run(
-            subject._consume_generated_hypothesis_result,
-            result,
-            permit=permit,
-            started_attempt=started_attempt,
-            receipt=receipt,
-        )
-
-    assert (
-        subject._consume_generated_hypothesis_result(
-            result,
-            permit=permit,
-            started_attempt=started_attempt,
-            receipt=receipt,
-        ).attempt_id
-        == "attempt-generated-result"
-    )
-
-
-def test_result_rejects_another_thread_without_being_spent(
-    tmp_path: Path,
-) -> None:
-    _, _, receipt, result, started_attempt, permit, _ = _issue(tmp_path)
-
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(
-            subject._consume_generated_hypothesis_result,
-            result,
-            permit=permit,
-            started_attempt=started_attempt,
-            receipt=receipt,
-        )
-        with pytest.raises(
-            subject.GeneratedHypothesisResultLifecycleError,
-            match="cross threads",
-        ):
-            future.result()
-
-    assert (
-        subject._consume_generated_hypothesis_result(
-            result,
-            permit=permit,
-            started_attempt=started_attempt,
-            receipt=receipt,
-        ).attempt_id
-        == "attempt-generated-result"
-    )
-
-
-def test_result_cannot_be_constructed_subclassed_copied_or_pickled(
-    tmp_path: Path,
-) -> None:
-    _, _, receipt, result, started_attempt, permit, _ = _issue(tmp_path)
-
-    with pytest.raises(subject.InvalidGeneratedHypothesisResultError):
-        subject.GeneratedHypothesisResult()
-    with pytest.raises(TypeError, match="sealed"):
-
-        class _Subclass(subject.GeneratedHypothesisResult):
-            pass
-
-    with pytest.raises(subject.InvalidGeneratedHypothesisResultError):
-        copy.copy(result)
-    with pytest.raises(subject.InvalidGeneratedHypothesisResultError):
-        copy.deepcopy(result)
-    with pytest.raises(subject.InvalidGeneratedHypothesisResultError):
-        pickle.dumps(result)
-
-    assert (
-        subject._consume_generated_hypothesis_result(
-            result,
-            permit=permit,
-            started_attempt=started_attempt,
-            receipt=receipt,
-        ).receipt
-        is receipt
-    )
-
-
-def test_provider_generation_permit_is_sealed_and_non_transferable(
-    tmp_path: Path,
-) -> None:
-    context = _context()
-    snapshot = build_prompt_turn_snapshot("hypothesis", context)
-    transport = _DeterministicTransport()
-    owner = subject.ProviderCallOwner(
-        transport,
-        "test-model",
-        trace_dir=str(tmp_path / "traces"),
-    )
-    started_attempt, permit = _permit(tmp_path / "started", snapshot)
-
-    with pytest.raises(subject.InvalidGeneratedHypothesisResultError):
-        subject.ProviderGenerationPermit()
-    with pytest.raises(TypeError, match="sealed"):
-
-        class _PermitSubclass(subject.ProviderGenerationPermit):
-            pass
-
-    with pytest.raises(subject.InvalidGeneratedHypothesisResultError):
-        copy.copy(permit)
-    with pytest.raises(subject.InvalidGeneratedHypothesisResultError):
-        copy.deepcopy(permit)
-    with pytest.raises(subject.InvalidGeneratedHypothesisResultError):
-        pickle.dumps(permit)
-
-    subject._generate_hypothesis_result_with_receipt(
-        owner,
-        context=context,
-        snapshot=snapshot,
-        permit=permit,
-    )
-    assert transport.calls == 1
-
-
-def test_forged_cross_context_and_cross_thread_permits_fail_before_transport(
-    tmp_path: Path,
-) -> None:
-    context = _context()
-    snapshot = build_prompt_turn_snapshot("hypothesis", context)
-    transport = _DeterministicTransport()
-    owner = subject.ProviderCallOwner(
-        transport,
-        "test-model",
-        trace_dir=str(tmp_path / "traces"),
-    )
-    forged = object.__new__(subject.ProviderGenerationPermit)
-    with pytest.raises(
-        subject.InvalidGeneratedHypothesisResultError,
-        match="was not issued",
-    ):
-        subject._generate_hypothesis_result_with_receipt(
+    _KEEPALIVE.append(
+        (
+            registry_owner,
+            code_owner,
+            context_owner,
+            prompt_owner,
+            proposal_owner,
             owner,
-            context=context,
-            snapshot=snapshot,
-            permit=forged,
+            authorities,
         )
-    assert transport.calls == 0
-
-    _, context_permit = _permit(tmp_path / "context-started", snapshot)
-    copied_context = contextvars.copy_context()
-    with pytest.raises(
-        subject.GeneratedHypothesisResultLifecycleError,
-        match="cross Contexts",
-    ):
-        copied_context.run(
-            subject._generate_hypothesis_result_with_receipt,
-            owner,
-            context=context,
-            snapshot=snapshot,
-            permit=context_permit,
-        )
-    assert transport.calls == 0
-    subject._generate_hypothesis_result_with_receipt(
-        owner,
-        context=context,
-        snapshot=snapshot,
-        permit=context_permit,
     )
-    assert transport.calls == 1
+    owner._install_hypothesis_generation_authority(authorities.provider)
 
-    _, thread_permit = _permit(tmp_path / "thread-started", snapshot)
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(
-            subject._generate_hypothesis_result_with_receipt,
-            owner,
-            context=context,
-            snapshot=snapshot,
-            permit=thread_permit,
-        )
-        with pytest.raises(
-            subject.GeneratedHypothesisResultLifecycleError,
-            match="cross threads",
-        ):
-            future.result()
-    assert transport.calls == 1
-    subject._generate_hypothesis_result_with_receipt(
-        owner,
-        context=context,
-        snapshot=snapshot,
-        permit=thread_permit,
+    owner_context = _canonical(
+        {
+            "branch_id": "branch-generated-result",
+            "schema_version": "hypothesis-owner-context.test.v1",
+        }
     )
-    assert transport.calls == 2
-
-
-def test_result_bound_permit_cannot_call_transport_twice(
-    tmp_path: Path,
-) -> None:
-    context = _context()
-    snapshot = build_prompt_turn_snapshot("hypothesis", context)
-    transport = _DeterministicTransport()
-    owner = subject.ProviderCallOwner(
-        transport,
-        "test-model",
-        trace_dir=str(tmp_path / "traces"),
+    view = generation._issue_generation_view(
+        authorities.registry,
+        root_identity=object(),
+        root_generation=7,
+        branch_owner=object(),
+        hypothesis_bundle=(),
+        prior_head=None,
+        reservation_id="reservation-generated-result",
+        h_bundle_digest=_digest(b"empty-H-bundle"),
+        owner_context_json=owner_context,
     )
-    _, permit = _permit(tmp_path / "started", snapshot)
-    subject._generate_hypothesis_result_with_receipt(
-        owner,
-        context=context,
-        snapshot=snapshot,
-        permit=permit,
-    )
-
-    with pytest.raises(
-        subject.GeneratedHypothesisResultLifecycleError,
-        match="already bound",
-    ):
-        subject._generate_hypothesis_result_with_receipt(
-            owner,
-            context=context,
-            snapshot=snapshot,
-            permit=permit,
-        )
-    assert transport.calls == 1
-
-
-@pytest.mark.parametrize("failure_kind", ["provider", "parse", "persistence"])
-def test_start_bound_permit_cannot_retry_after_any_call_failure(
-    tmp_path: Path,
-    failure_kind: str,
-) -> None:
-    context = _context()
-    snapshot = build_prompt_turn_snapshot("hypothesis", context)
-    response = (
-        {**_RESPONSE, "change_locus": "unknown"} if failure_kind == "parse" else None
-    )
-    transport = _DeterministicTransport(
-        response,
-        error=(RuntimeError("provider failed") if failure_kind == "provider" else None),
-    )
-    owner = subject.ProviderCallOwner(
-        transport,
-        "test-model",
-        trace_dir=(
-            None
-            if failure_kind == "persistence"
-            else str(tmp_path / f"traces-{failure_kind}")
+    request = generation._issue_code_source_request(authorities.registry, view)
+    generation._claim_code_source_request(authorities.code_source_owner, request)
+    source_content = b"def solve():\n    return 1\n"
+    source = generation._issue_code_source(
+        authorities.code_source_owner,
+        request,
+        source_kind="base_champion",
+        selected_manifest_digest=_digest(b"source-manifest"),
+        code_hash=_digest(b"code"),
+        snapshot_hash=_digest(b"snapshot"),
+        entries=(
+            (
+                "solver.py",
+                source_content,
+                _digest(source_content),
+                True,
+                True,
+            ),
         ),
     )
-    _, permit = _permit(tmp_path / "started", snapshot)
-
-    with pytest.raises(Exception):
-        subject._generate_hypothesis_result_with_receipt(
-            owner,
-            context=context,
-            snapshot=snapshot,
-            permit=permit,
+    generation._inspect_code_source(authorities.registry, source, view=view)
+    generation._claim_code_source_for_evidence(
+        authorities.context_manager,
+        source,
+    )
+    provider_context_bytes = _canonical(provider_context)
+    if transform_provider_context_bytes is not None:
+        assert callable(transform_provider_context_bytes)
+        provider_context_bytes = transform_provider_context_bytes(
+            provider_context_bytes
         )
-    assert transport.calls == 1
-
-    transport.error = None
-    transport.response = dict(_RESPONSE)
-    with pytest.raises(
-        subject.GeneratedHypothesisResultLifecycleError,
-        match="already bound",
-    ):
-        subject._generate_hypothesis_result_with_receipt(
-            owner,
-            context=context,
-            snapshot=snapshot,
-            permit=permit,
+    evidence = generation._issue_problem_evidence(
+        authorities.context_manager,
+        source,
+        provider_context_json=provider_context_bytes,
+        governance_json=_canonical({"protocol": "direct-v3"}),
+    )
+    prompt_source = generation._issue_prompt_source(
+        authorities.registry,
+        view=view,
+        code_source=source,
+        evidence=evidence,
+    )
+    generation._claim_prompt_source(authorities.prompt_owner, prompt_source)
+    prompt_hash = subject._provider_prompt_hash(
+        turn.system_blocks,
+        turn.user_prompt,
+    )
+    provider_snapshot_bytes = _canonical(provider_snapshot)
+    if transform_provider_snapshot_bytes is not None:
+        assert callable(transform_provider_snapshot_bytes)
+        provider_snapshot_bytes = transform_provider_snapshot_bytes(
+            provider_snapshot_bytes
         )
-    assert transport.calls == 1
-
-
-def test_forged_and_same_shaped_values_are_not_results(
-    tmp_path: Path,
-) -> None:
-    _, _, receipt, _, started_attempt, permit, _ = _issue(tmp_path)
-    forged = object.__new__(subject.GeneratedHypothesisResult)
-
-    @dataclass
-    class _SameShape:
-        attempt_id: str
-        started_event_id: str
-        context_digest: str
-        prompt_hash: str
-
-    same_shape = _SameShape(
+    bound_prompt = generation._issue_bound_prompt(
+        authorities.prompt_owner,
+        prompt_source,
+        context_snapshot=context_snapshot,
+        provider_context_json=provider_context_bytes,
+        provider_snapshot_bytes=provider_snapshot_bytes,
+        context_digest=turn.context_digest,
+        prompt_hash=prompt_hash,
+        provider_tool_digest=stable_digest(turn.provider_tool, length=64),
+        governance_digest=context_snapshot.governance_envelope.digest,
+    )
+    generation._inspect_bound_prompt(
+        authorities.registry,
+        bound_prompt,
+        view=view,
+    )
+    generation._begin_started_attempt(authorities.registry, view, bound_prompt)
+    prompt_projection = generation._claim_bound_prompt_for_start(
+        authorities.proposal_owner,
+        bound_prompt,
+    )
+    started = generation._issue_started_attempt(
+        authorities.proposal_owner,
+        stored_event=object(),
         attempt_id="attempt-generated-result",
         started_event_id="event-started-generated-result",
-        context_digest=receipt.context_digest,
-        prompt_hash=receipt.prompt_hash,
+        campaign_id="test-campaign",
+        branch_id="branch-generated-result",
+        context_digest=prompt_projection.context_digest,
+        prompt_hash=prompt_projection.prompt_hash,
+        event_storage_sha256=_digest(b"stored-START"),
+        bound_prompt=bound_prompt,
+    )
+    generation._inspect_started_attempt(
+        authorities.registry,
+        started,
+        view=view,
+    )
+    permit = generation._issue_provider_permit(
+        authorities.registry,
+        authorities.provider,
+        view=view,
+        started_attempt=started,
+        bound_prompt=bound_prompt,
+    )
+    return _Harness(
+        authorities=authorities,
+        view=view,
+        bound_prompt=bound_prompt,
+        permit=permit,
+        owner=owner,
+        transport=transport,
+        expected_turn=turn,
+        trace_root=trace_root,
     )
 
-    with pytest.raises(
-        subject.InvalidGeneratedHypothesisResultError,
-        match="not bound to the exact result",
-    ):
-        subject._consume_generated_hypothesis_result(
-            forged,
-            permit=permit,
-            started_attempt=started_attempt,
-            receipt=receipt,
-        )
-    with pytest.raises(
-        subject.InvalidGeneratedHypothesisResultError,
-        match="exact GeneratedHypothesisResult",
-    ):
-        subject._consume_generated_hypothesis_result(
-            same_shape,  # type: ignore[arg-type]
-            permit=permit,
-            started_attempt=started_attempt,
-            receipt=receipt,
-        )
+
+def _projection(
+    harness: _Harness,
+    outcome: generation.GeneratedHypothesisResult
+    | generation.FailedHypothesisGeneration,
+) -> generation._GeneratedResultProjection | generation._TerminalOutcomeProjection:
+    return generation._inspect_generation_outcome(
+        harness.authorities.registry,
+        permit=harness.permit,
+        outcome=outcome,
+        view=harness.view,
+    )
 
 
-def test_dormant_path_requires_real_durable_refs_after_provider_success(
+def test_real_six_owner_path_issues_leaf_success_from_persisted_provider_bytes(
     tmp_path: Path,
 ) -> None:
-    context = _context()
-    snapshot = build_prompt_turn_snapshot("hypothesis", context)
-    transport = _DeterministicTransport()
-    owner = subject.ProviderCallOwner(
-        transport,
-        "test-model",
-        trace_dir=None,
-    )
-    _, permit = _permit(tmp_path / "started", snapshot)
+    harness = _harness(tmp_path)
 
-    with pytest.raises(
-        subject.InvalidGeneratedHypothesisResultError,
-        match="durable trace ref",
-    ) as caught:
-        subject._generate_hypothesis_result_with_receipt(
-            owner,
-            context=context,
-            snapshot=snapshot,
-            permit=permit,
+    result = harness.owner.call_hypothesis(
+        harness.permit,
+        harness.bound_prompt,
+    )
+    projection = _projection(harness, result)
+
+    assert type(result) is generation.GeneratedHypothesisResult
+    assert harness.transport.calls == 1
+    assert projection.provider_ok is True
+    assert projection.ok is True
+    assert projection.receipt.attempt_id == "attempt-generated-result"
+    assert projection.receipt.attempt_started_event_id == (
+        "event-started-generated-result"
+    )
+    assert projection.proposal_sha256 == hashlib.sha256(
+        projection.proposal_canonical_bytes
+    ).hexdigest()
+    assert json.loads(projection.proposal_canonical_bytes) == _RESPONSE
+    assert projection.trace_ref == projection.receipt.trace_ref
+    assert projection.prompt_manifest_ref == (
+        f"{projection.trace_ref}#/prompt_manifest"
+    )
+    assert projection.raw_response_ref == f"{projection.trace_ref}#/response"
+    persisted = json.loads(
+        (tmp_path / projection.trace_ref).read_text(encoding="utf-8")
+    )
+    assert persisted["ok"] is True
+    assert persisted["response"] == _RESPONSE
+    assert persisted["provider_call_attempt"]["attempt_id"] == (
+        "attempt-generated-result"
+    )
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_kind", "expected_category"),
+    (
+        (RuntimeError("provider failed"), "provider_failure", "provider_call_failed"),
+        (
+            KeyboardInterrupt(),
+            "provider_interruption",
+            "provider_call_interrupted",
+        ),
+    ),
+)
+def test_real_provider_failure_receipt_issues_leaf_failure(
+    tmp_path: Path,
+    error: BaseException,
+    expected_kind: str,
+    expected_category: str,
+) -> None:
+    harness = _harness(tmp_path, error=error)
+
+    failure = harness.owner.call_hypothesis(
+        harness.permit,
+        harness.bound_prompt,
+    )
+    projection = _projection(harness, failure)
+
+    assert type(failure) is generation.FailedHypothesisGeneration
+    assert harness.transport.calls == 1
+    assert projection.kind == expected_kind
+    assert projection.failure_category == expected_category
+    assert projection.receipt.error_category == expected_category
+    assert projection.ok is False
+
+
+def test_invalid_response_issues_leaf_invalid_response_failure(tmp_path: Path) -> None:
+    harness = _harness(
+        tmp_path,
+        response={**_RESPONSE, "change_locus": "not-allowed"},
+    )
+
+    failure = harness.owner.call_hypothesis(
+        harness.permit,
+        harness.bound_prompt,
+    )
+    projection = _projection(harness, failure)
+
+    assert type(failure) is generation.FailedHypothesisGeneration
+    assert harness.transport.calls == 1
+    assert projection.kind == "invalid_response"
+    assert projection.provider_ok is True
+    assert projection.failure_category == "response_parse_failed"
+    assert projection.raw_response_ref == (
+        f"{projection.trace_ref}#/response"
+    )
+
+
+def test_malformed_bound_provider_bytes_claim_unknown_before_transport(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(
+        tmp_path,
+        mutate_provider_snapshot=lambda value: value.__setitem__(
+            "caller_mapping",
+            {"substitute": True},
+        ),
+    )
+
+    with pytest.raises(subject.ProviderCallUnknownError):
+        harness.owner.call_hypothesis(
+            harness.permit,
+            harness.bound_prompt,
         )
 
-    receipt = subject.prompt_call_receipt_from_error(caught.value)
-    assert transport.calls == 1
-    assert receipt is not None
-    assert receipt.provider_ok is True
-    assert receipt.ok is False
-    assert receipt.error_category == "generated_result_issuance_failed"
+    assert harness.transport.calls == 0
+    assert (
+        generation._PERMIT_STATES[harness.permit].phase
+        is generation._PermitPhase.CLAIMED_UNKNOWN
+    )
 
 
-def test_incomplete_persisted_trace_cannot_issue_result(
+@pytest.mark.parametrize(
+    ("projection", "transform"),
+    (
+        ("snapshot", lambda value: value + b"\n"),
+        (
+            "snapshot",
+            lambda _value: (
+                b'{"schema_version":"one","schema_version":"two"}'
+            ),
+        ),
+        ("snapshot", lambda _value: b'{"context_digest":NaN}'),
+        ("context", lambda value: b" " + value),
+    ),
+)
+def test_provider_rejects_noncanonical_duplicate_and_nonfinite_json(
+    tmp_path: Path,
+    projection: str,
+    transform: object,
+) -> None:
+    kwargs = (
+        {"transform_provider_snapshot_bytes": transform}
+        if projection == "snapshot"
+        else {"transform_provider_context_bytes": transform}
+    )
+    harness = _harness(tmp_path, **kwargs)
+
+    with pytest.raises(subject.ProviderCallUnknownError):
+        harness.owner.call_hypothesis(
+            harness.permit,
+            harness.bound_prompt,
+        )
+
+    assert harness.transport.calls == 0
+    assert (
+        generation._PERMIT_STATES[harness.permit].phase
+        is generation._PermitPhase.CLAIMED_UNKNOWN
+    )
+
+
+def test_leaf_success_issuance_fault_marks_claim_unknown_after_one_transport(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    context = _context()
-    snapshot = build_prompt_turn_snapshot("hypothesis", context)
-    transport = _DeterministicTransport()
-    owner = subject.ProviderCallOwner(
-        transport,
-        "test-model",
-        trace_dir=str(tmp_path / "traces"),
+    harness = _harness(tmp_path)
+
+    def fail_issue(*_args: object, **_kwargs: object) -> object:
+        raise RuntimeError("leaf issuance fault")
+
+    monkeypatch.setattr(generation, "_issue_generated_result", fail_issue)
+    with pytest.raises(subject.ProviderCallUnknownError):
+        harness.owner.call_hypothesis(
+            harness.permit,
+            harness.bound_prompt,
+        )
+
+    assert harness.transport.calls == 1
+    assert (
+        generation._PERMIT_STATES[harness.permit].phase
+        is generation._PermitPhase.CLAIMED_UNKNOWN
     )
 
-    def _incomplete_finish(
+
+def test_incomplete_persisted_success_becomes_truthful_provider_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _harness(tmp_path)
+
+    def incomplete_finish(
         _writer: object,
         path: str | None,
         **_kwargs: object,
     ) -> None:
         assert path is not None
-        Path(path).write_text('{"ok": true}\n', encoding="utf-8")
+        Path(path).write_text('{"ok":true}\n', encoding="utf-8")
 
-    monkeypatch.setattr(subject._TraceWriter, "write_finish", _incomplete_finish)
-    _, permit = _permit(tmp_path / "started", snapshot)
-    with pytest.raises(
-        subject.InvalidGeneratedHypothesisResultError,
-        match="prompt manifest was not persisted",
-    ) as caught:
-        subject._generate_hypothesis_result_with_receipt(
-            owner,
-            context=context,
-            snapshot=snapshot,
-            permit=permit,
-        )
-
-    receipt = subject.prompt_call_receipt_from_error(caught.value)
-    assert transport.calls == 1
-    assert receipt is not None
-    assert receipt.error_category == "generated_result_issuance_failed"
-
-
-def test_partial_prompt_manifest_replacement_cannot_issue_result(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    context = _context()
-    snapshot = build_prompt_turn_snapshot("hypothesis", context)
-    transport = _DeterministicTransport()
-    owner = subject.ProviderCallOwner(
-        transport,
-        "test-model",
-        trace_dir=str(tmp_path / "traces"),
+    monkeypatch.setattr(subject._TraceWriter, "write_finish", incomplete_finish)
+    failure = harness.owner.call_hypothesis(
+        harness.permit,
+        harness.bound_prompt,
     )
-    original_finish = subject._TraceWriter.write_finish
+    projection = _projection(harness, failure)
 
-    def _partial_manifest_finish(
-        writer: object,
-        path: str | None,
-        **kwargs: object,
-    ) -> None:
-        original_finish(writer, path, **kwargs)  # type: ignore[arg-type]
-        assert path is not None
-        trace_path = Path(path)
-        persisted = json.loads(trace_path.read_text(encoding="utf-8"))
-        manifest = persisted["prompt_manifest"]
-        persisted["prompt_manifest"] = {
-            "session_id": manifest["session_id"],
-            "context_digest": manifest["context_digest"],
-            "prompt_hash": manifest["prompt_hash"],
-        }
-        trace_path.write_text(json.dumps(persisted), encoding="utf-8")
-
-    monkeypatch.setattr(
-        subject._TraceWriter,
-        "write_finish",
-        _partial_manifest_finish,
-    )
-    _, permit = _permit(tmp_path / "started", snapshot)
-    with pytest.raises(
-        subject.InvalidGeneratedHypothesisResultError,
-        match="trace, manifest, or raw response is incomplete",
-    ):
-        subject._generate_hypothesis_result_with_receipt(
-            owner,
-            context=context,
-            snapshot=snapshot,
-            permit=permit,
-        )
-    assert transport.calls == 1
+    assert harness.transport.calls == 1
+    assert type(failure) is generation.FailedHypothesisGeneration
+    assert projection.kind == "provider_failure"
+    assert projection.failure_category == "generated_result_issuance_failed"
 
 
-def test_prompt_manifest_session_identity_replacement_cannot_issue_result(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    context = _context()
-    snapshot = build_prompt_turn_snapshot("hypothesis", context)
-    transport = _DeterministicTransport()
-    owner = subject.ProviderCallOwner(
-        transport,
-        "test-model",
-        trace_dir=str(tmp_path / "traces"),
-    )
-    original_finish = subject._TraceWriter.write_finish
-
-    def _replaced_session_finish(
-        writer: object,
-        path: str | None,
-        **kwargs: object,
-    ) -> None:
-        original_finish(writer, path, **kwargs)  # type: ignore[arg-type]
-        assert path is not None
-        trace_path = Path(path)
-        persisted = json.loads(trace_path.read_text(encoding="utf-8"))
-        persisted["prompt_manifest"]["session_id"] = "forged-session-id"
-        trace_path.write_text(json.dumps(persisted), encoding="utf-8")
-
-    monkeypatch.setattr(
-        subject._TraceWriter,
-        "write_finish",
-        _replaced_session_finish,
-    )
-    _, permit = _permit(tmp_path / "started", snapshot)
-    with pytest.raises(
-        subject.InvalidGeneratedHypothesisResultError,
-        match="trace, manifest, or raw response is incomplete",
-    ):
-        subject._generate_hypothesis_result_with_receipt(
-            owner,
-            context=context,
-            snapshot=snapshot,
-            permit=permit,
-        )
-    assert transport.calls == 1
-
-
-def test_parse_failure_never_issues_a_result_and_keeps_failure_receipt(
+def test_permit_is_claimed_before_transport_and_cannot_call_twice(
     tmp_path: Path,
 ) -> None:
-    context = _context()
-    snapshot = build_prompt_turn_snapshot("hypothesis", context)
-    transport = _DeterministicTransport({**_RESPONSE, "change_locus": "unknown"})
-    owner = subject.ProviderCallOwner(
-        transport,
-        "test-model",
-        trace_dir=str(tmp_path / "traces"),
-    )
-    _, permit = _permit(tmp_path / "started", snapshot)
+    harness = _harness(tmp_path)
+    harness.owner.call_hypothesis(harness.permit, harness.bound_prompt)
 
-    with pytest.raises(Exception) as caught:
-        subject._generate_hypothesis_result_with_receipt(
-            owner,
-            context=context,
-            snapshot=snapshot,
-            permit=permit,
-        )
+    with pytest.raises(generation.HypothesisGenerationLifecycleError):
+        harness.owner.call_hypothesis(harness.permit, harness.bound_prompt)
 
-    receipt = subject.prompt_call_receipt_from_error(caught.value)
-    assert transport.calls == 1
-    assert receipt is not None
-    assert receipt.provider_ok is True
-    assert receipt.ok is False
-    assert receipt.error_category == "response_parse_failed"
+    assert harness.transport.calls == 1
 
 
-def test_forged_start_and_persisted_prompt_mismatch_fail_before_transport(
+def test_provider_owner_handle_is_installed_once_and_entry_has_no_mapping_surface(
     tmp_path: Path,
 ) -> None:
-    context = _context()
-    snapshot = build_prompt_turn_snapshot("hypothesis", context)
-    transport = _DeterministicTransport()
-    owner = subject.ProviderCallOwner(
-        transport,
-        "test-model",
-        trace_dir=str(tmp_path / "traces"),
+    harness = _harness(tmp_path)
+    signature = inspect.signature(subject.ProviderCallOwner.call_hypothesis)
+
+    assert tuple(signature.parameters) == ("self", "permit", "bound_prompt")
+    with pytest.raises(generation.HypothesisGenerationLifecycleError):
+        harness.owner._install_hypothesis_generation_authority(
+            harness.authorities.provider
+        )
+
+
+def test_provider_module_has_no_old_authority_or_lineage_sql_dependencies() -> None:
+    source = inspect.getsource(subject)
+    tree = ast.parse(source)
+    imported = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    imported.update(
+        node.module or ""
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
     )
-    with pytest.raises(
-        proposal_attempt_owner.InvalidStartedHypothesisAttemptError,
-        match="exact StartedHypothesisAttempt",
-    ):
-        subject._issue_provider_generation_permit(
-            started_attempt=object(),  # type: ignore[arg-type]
-            committed_snapshot=object(),  # type: ignore[arg-type]
-        )
-    assert transport.calls == 0
 
-    _, permit = _permit(tmp_path / "started", snapshot)
-    changed_context = _context()
-    changed_context["problem_summary"] = "A different persisted prompt input."
-    changed_snapshot = build_prompt_turn_snapshot("hypothesis", changed_context)
+    assert not any("proposal_attempt_owner" in name for name in imported)
+    assert not any("sqlite_connection" in name for name in imported)
+    assert not hasattr(subject, "_issue_provider_generation_permit")
+    assert not hasattr(subject, "_generate_hypothesis_result_with_receipt")
+    assert not hasattr(subject, "_consume_generated_hypothesis_result")
+    assert subject.ProviderGenerationPermit is generation.ProviderGenerationPermit
+    assert subject.GeneratedHypothesisResult is generation.GeneratedHypothesisResult
+
+
+def test_copied_context_fails_leaf_claim_before_transport(tmp_path: Path) -> None:
+    harness = _harness(tmp_path)
+    copied = contextvars.copy_context()
+
     with pytest.raises(
-        subject.InvalidGeneratedHypothesisResultError,
-        match="does not match the persisted START",
+        generation.HypothesisGenerationLifecycleError,
+        match="cross Contexts",
     ):
-        subject._generate_hypothesis_result_with_receipt(
-            owner,
-            context=changed_context,
-            snapshot=changed_snapshot,
-            permit=permit,
+        copied.run(
+            harness.owner.call_hypothesis,
+            harness.permit,
+            harness.bound_prompt,
         )
 
-    assert transport.calls == 0
+    assert harness.transport.calls == 0
+    assert type(
+        harness.owner.call_hypothesis(harness.permit, harness.bound_prompt)
+    ) is generation.GeneratedHypothesisResult
+    assert harness.transport.calls == 1

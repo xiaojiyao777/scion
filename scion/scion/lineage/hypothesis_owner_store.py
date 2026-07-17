@@ -212,6 +212,29 @@ class HypothesisStore:
         owner_id = _validate_hypothesis_id(hypothesis_id)
         return self._read_optional_in(transaction, owner_id)
 
+    def _load_branch_hypotheses_in(
+        self,
+        transaction: _sqlite.ImmediateTransaction,
+        branch_id: str,
+    ) -> tuple[RevisionedHypothesisRecord, ...]:
+        """Return one Branch's complete H bundle inside an active transaction."""
+
+        _sqlite.require_active_immediate_transaction(
+            transaction,
+            self.__database_authority,
+        )
+        owner_branch_id = _validate_branch_id(branch_id)
+        result = _sqlite._execute_participant(
+            transaction,
+            self.__database_authority,
+            _HYPOTHESIS_SELECT_BRANCH_SQL,
+            {"branch_id": owner_branch_id},
+        )
+        return _decode_branch_hypotheses(
+            tuple(result.fetchall()),
+            owner_branch_id,
+        )
+
     def _load_revisioned_hypothesis_from_snapshot(
         self,
         snapshot: _sqlite._IndependentReadSnapshot,
@@ -262,12 +285,7 @@ class HypothesisStore:
             _HYPOTHESIS_SELECT_BRANCH_SQL,
             {"branch_id": owner_branch_id},
         )
-        decoded = _decode_hypothesis_snapshot_rows(rows)
-        if any(token.value().branch_id != owner_branch_id for token in decoded):
-            raise DurableOwnerIntegrityError(
-                "hypothesis Branch snapshot returned another Branch's owner"
-            )
-        return decoded
+        return _decode_branch_hypotheses(rows, owner_branch_id)
 
     def compare_and_swap_in(
         self,
@@ -469,6 +487,18 @@ def _decode_hypothesis_snapshot_rows(
         owner_ids.add(token.hypothesis_id)
         decoded.append(token)
     return tuple(decoded)
+
+
+def _decode_branch_hypotheses(
+    rows: tuple[object, ...],
+    branch_id: str,
+) -> tuple[RevisionedHypothesisRecord, ...]:
+    decoded = _decode_hypothesis_snapshot_rows(rows)
+    if any(token.value().branch_id != branch_id for token in decoded):
+        raise DurableOwnerIntegrityError(
+            "hypothesis Branch query returned another Branch's owner"
+        )
+    return tuple(sorted(decoded, key=lambda token: token.hypothesis_id))
 
 
 def _decode_hypothesis_row(row: Any) -> RevisionedHypothesisRecord:
