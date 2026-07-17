@@ -146,9 +146,9 @@ Disk pressure is no longer an active blocker. A safe cleanup removed inactive
 pip/npm caches plus `42,630` solver interchange files created before R11c,
 reclaiming about `16.6 GiB` and raising available space from about `6.1 GiB` to
 `23 GiB`. No experiment root, runtime, repository, user document, proxy data,
-or R11c output was touched in that pass. Seven retention-audited cleanup
-batches then removed `367` exact experiment roots with a recorded per-path sum
-of `10.544 GiB`. Batch 3 removed `23` empty, pre-Protocol failure,
+or R11c output was touched in that pass. Eight retention-audited whole-root
+batches then removed `379` exact experiment roots with a recorded per-path sum
+of `10.552 GiB`. Batch 3 removed `23` empty, pre-Protocol failure,
 zero-effective duplicate-local, and superseded-prepared roots only after
 protecting `73` active-doc roots and verifying retained canonical evidence.
 Batch 4 used a tracked-evidence inventory and removed only a reconstructible
@@ -156,10 +156,12 @@ pre-Protocol replay failure plus an empty wrapper shell; roots with unique
 traces or raw metrics remained. Batch 5 removed 20 copied prepared shells after
 full campaign-tree equality checks against retained CVRP/Warehouse canonical
 roots. Batches 6-7 removed 64 pre-campaign shells and two superseded failures,
-while retaining all unique/referenced large-history evidence. Batches 8-10
-removed `2,722` Git-restorable static subtree copies totaling `6.176 GiB`
+while retaining all unique/referenced large-history evidence. Batch 11 removed
+12 superseded failures/preflights or exact-subset roots with named retained
+owners and zero unique scientific evidence. Batches 8-10 and 12 removed
+`2,850` Git-restorable static subtree copies totaling `6.759 GiB`
 without deleting more roots or changing registry/DB/metrics/trace/formal/log
-counts. `776` roots remain and about `39.3 GiB` is available. Exact whole-root,
+counts. `764` roots remain and about `39.2 GiB` is available. Exact whole-root,
 gray, disposition, subtree-hash, and restore manifests are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
 Current R6-R11c, baseline-strength inputs, recent roots, and ambiguous roots

@@ -2,7 +2,7 @@
 
 ## Result
 
-Seven exact, retention-aware cleanup batches removed 367 roots under
+Eight exact, retention-aware cleanup batches removed 379 roots under
 `/home/clawd/research/scion-experiments`. The first two batches were
 prepared-only. The third batch extended the same evidence protections to empty
 roots, pre-Protocol infrastructure failures, duplicate local resume copies, and
@@ -15,7 +15,10 @@ identical to retained CVRP/Warehouse canonical campaigns except for SQLite
 `wal/shm` transients. Batch 6 removed only tiny pre-campaign shells whose
 complete contents were launch metadata, stale PIDs, empty logs, or recorded
 infrastructure errors. Batch 7 applied a larger-history disposition inventory
-and removed only two roots whose completed replacements are retained.
+and removed only two roots whose completed replacements are retained. Batch 11
+removed 12 more superseded pre-campaign, infrastructure-failure, dirty-
+preflight, corrupt-launcher, or exact-subset roots only after an identified
+retained owner and zero unique scientific evidence were verified for each.
 
 | Batch | Roots | Deleted logical bytes | GiB | Scope |
 |---|---:|---:|---:|---|
@@ -26,7 +29,8 @@ and removed only two roots whose completed replacements are retained.
 | batch-5 | 20 | 792,592,384 | 0.738 | copied prepared shells with retained canonical campaigns |
 | batch-6 | 64 | 868,352 | 0.001 | pre-campaign shells and trivial launch failures |
 | batch-7 | 2 | 39,088,128 | 0.036 | failed matrix and aborted wrapper with completed replacements |
-| **Total** | **367** | **11,321,282,312** | **10.544** | exact roots without unique retained evidence |
+| batch-11 | 12 | 8,667,136 | 0.008 | superseded failures, dirty preflights, and one exact subset |
+| **Total** | **379** | **11,329,949,448** | **10.552** | exact roots without unique retained evidence |
 
 Filesystem observations:
 
@@ -38,13 +42,18 @@ Filesystem observations:
 - batch-4 used-space observation: 87,579,115,520 to 87,329,017,856 bytes;
 - batch-4 observed freed space: 250,097,664 bytes (238.5 MiB).
 - after batches 6 and 7: 35,629,588,480 bytes available, 71% used.
+- immediately before batches 11 and 12: 41,445,580,800 bytes available, 67% used;
+- immediately after batches 11 and 12: 42,092,539,904 bytes available, 66% used;
+- batches 11 and 12 observed available-space change: +646,959,104 bytes
+  (617.0 MiB), versus a 635,191,296-byte recorded target sum.
 
 The filesystem delta is larger than the logical size sum because other
 processes may allocate or release blocks concurrently. The auditable cleanup
 quantity is the per-path recorded-byte sum in the manifest.
 
 The historical manifest column name is retained for compatibility, but
-batches 3 through 7 recorded pre-delete allocated bytes from `du -s -B1`; the
+batches 3 through 7 and batch 11 recorded pre-delete allocated bytes from
+`du -s -B1`; the
 arithmetic total is therefore an audit sum of each batch's recorded byte
 measure, not a claim that every batch used one apparent-size metric.
 
@@ -67,7 +76,9 @@ Cleanup was path-exact and was not an age-only deletion.
 
 The batch 1-4 and 6-7 per-path record is in
 [`v04-experiment-retention-cleanup-manifest-20260716.tsv`](./v04-experiment-retention-cleanup-manifest-20260716.tsv).
-Batch 5 remains in its dedicated exact manifest linked below.
+Batch 5 remains in its dedicated exact manifest linked below, and batch 11 is
+recorded separately in
+[`v04-experiment-retention-cleanup-batch11-20260716.tsv`](./v04-experiment-retention-cleanup-batch11-20260716.tsv).
 
 ## Batch-3 deletion predicate
 
@@ -234,9 +245,27 @@ After batch 7, 776 top-level experiment directories remain. Current R6-R11c,
 Warehouse R2/R3, Phase A/B/C, and every protected large-history candidate
 still exist.
 
-## Batches 8-10 exact static-subtree compaction
+## Batch-11 superseded failure roots
 
-Batches 8-10 did not delete experiment roots or scientific evidence. They
+Batch 11 selected exactly 12 inactive roots whose lifecycle had stopped before
+usable scientific evidence or whose content was an exact subset of a retained
+owner. The classes were wrong working directory, wrong problem path, missing
+API key, pre-calibration path failure, corrupt launcher, dirty-runtime
+preflight, missing runtime dependency, and one exact subset. Every row passed
+an immediate pre-delete size check, zero scientific-artifact check, zero
+repository-reference check outside cleanup records, git/worktree exclusion,
+and PID/cwd/command-line/open-fd scan. Its named retained owner existed both
+before and after deletion.
+
+All 12 exact roots are absent, while their retained owners and the current
+R6-R11c, Warehouse R2/R3, and Phase A/B/C anchors remain. The exact path,
+classification, recorded allocated bytes, retained owner, and validation
+conclusion are in
+[`v04-experiment-retention-cleanup-batch11-20260716.tsv`](./v04-experiment-retention-cleanup-batch11-20260716.tsv).
+
+## Batches 8-10 and 12 exact static-subtree compaction
+
+Batches 8-10 and 12 did not delete experiment roots or scientific evidence. They
 removed only repeated static source/data/test subtrees below directories that
 own a `registry.yaml`, after proving each occurrence byte-for-byte equivalent
 to a retained Git owner commit. Python caches were allowed as untracked extras;
@@ -248,7 +277,8 @@ the source-content hash because Git cannot restore caches.
 | batch-8 | 8 | 229 | 1,374 | 2,726,719,488 | 2.539 |
 | batch-9 | 6 | 268 | 1,154 | 2,947,604,480 | 2.745 |
 | batch-10 | 6 | 97 | 194 | 956,686,336 | 0.891 |
-| **Static total** | **20 root memberships** | **594** | **2,722** | **6,631,010,304** | **6.176** |
+| batch-12 | 1 | 64 | 128 | 626,524,160 | 0.583 |
+| **Static total** | **21 root memberships** | **658** | **2,850** | **7,257,534,464** | **6.759** |
 
 For every occurrence, the audit verified that the owner commit exists, the
 Git source subtree exists, no symlink is present, a recursive comparison has
@@ -260,26 +290,42 @@ template:
 
 - [`v04-experiment-static-subtree-cleanup-batch8-20260716.tsv`](./v04-experiment-static-subtree-cleanup-batch8-20260716.tsv);
 - [`v04-experiment-static-subtree-cleanup-batch9-20260716.tsv`](./v04-experiment-static-subtree-cleanup-batch9-20260716.tsv);
-- [`v04-experiment-static-subtree-cleanup-batch10-20260716.tsv`](./v04-experiment-static-subtree-cleanup-batch10-20260716.tsv).
+- [`v04-experiment-static-subtree-cleanup-batch10-20260716.tsv`](./v04-experiment-static-subtree-cleanup-batch10-20260716.tsv);
+- [`v04-experiment-static-subtree-cleanup-batch12-20260716.tsv`](./v04-experiment-static-subtree-cleanup-batch12-20260716.tsv).
 
 Batch 8 compacted six static subtrees from Phase-5 Warehouse matrix/replay
 copies. Batch 9 compacted four or five static subtrees from retained v0.3
 validation trees; `v03-validation` correctly uses distinct historical owners
 for `data/tests` and `sprint-f4-milp-results/milp_bounds`. Batch 10 compacted
-only `data` and `tests` from Sprint-F roots.
+only `data` and `tests` from Sprint-F roots. Batch 12 removed only `data` and
+`tests` from 64 registry-owning parents in the retained Warehouse long-run
+regression root. All 128 copies matched Git commit
+`f384884d4fe45d5f87cabdab193054b1f66e9c79` and the manifest hashes.
 
 Deletion changed owner-write permission only while removing an exact subtree
 and restored each retained registry parent's original mode. Full post-delete
-checks found all 2,722 target paths absent while registry, database, metric,
+checks found all 2,850 target paths absent while registry, database, metric,
 LLM/session, formal-artifact, and log counts remained unchanged within every
 batch. Operators, root Python, registry files, workspaces, archives, champions,
 formal patches, DBs, metrics, statuses, summaries, traces, logs, and postrun
-reports were not selected. The 20 root memberships remain in place.
+reports were not selected. The 21 root memberships remain in place.
+
+Batch 12's first removal attempt cleared the first selected `data` directory
+but stopped before removing its empty directory entry because the retained
+registry parent was owner-read-only. No later target or whole root was touched
+in that attempt. The retry temporarily added owner-write permission only to
+each exact target's direct parent, removed the target, and immediately restored
+the parent's original mode. All 128 targets then passed absence checks. Within
+the retained Warehouse root, post-delete counts remain 64 registries, 3
+databases, 464 metrics, 131 formal artifacts, 1,798 LLM/session files, 4 logs,
+and 12 outer reports.
 
 Across whole-root deletion and static compaction, the recorded per-path/
-per-subtree audit sum is 17,952,292,616 bytes (16.719 GiB). After batch 10,
-776 top-level experiment directories remain and the filesystem reports
-42,230,607,872 bytes available (about 39.3 GiB), 66% used.
+per-subtree audit sum is 18,587,483,912 bytes (17.311 GiB). After batches 11
+and 12, 764 top-level experiment directories remain. The independent
+post-delete verification observed 42,077,360,128 bytes available (about 39.2
+GiB), 66% used; the small difference from the immediate post-delete reading is
+concurrent filesystem activity, so the manifests remain the cleanup authority.
 
 ## Follow-up boundary
 

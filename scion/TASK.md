@@ -661,8 +661,8 @@ SearchAllocationEvidence, and no-LLM controls may proceed first.
 Disk pressure is no longer a current blocker. A safe cleanup on 2026-07-16
 removed only inactive package caches and pre-R11c solver interchange files,
 raising free space from about `6.1 GiB` to `23 GiB` without touching any
-experiment root. Seven retention-audited batches have now removed `367` exact
-roots with a recorded per-path sum of `10.544 GiB`. The third batch added `23` empty,
+experiment root. Eight retention-audited whole-root batches have now removed
+`379` exact roots with a recorded per-path sum of `10.552 GiB`. The third batch added `23` empty,
 pre-Protocol failure, zero-effective duplicate-local, and superseded-prepared
 roots only after protecting `73` active-doc roots and proving that canonical
 evidence remained. The fourth used a tracked-evidence inventory and removed
@@ -671,10 +671,12 @@ wrapper shell, while retaining roots with unique traces or raw metrics. The
 fifth batch removed 20 copied prepared shells only after full campaign-tree
 equality against retained CVRP/Warehouse canonical roots. Batches 6-7 removed
 64 pre-campaign shells plus two superseded failures while preserving twelve
-large-history candidates with unique or referenced evidence. Batches 8-10
-then compacted `2,722` Git-restorable static subtree copies totaling
-`6.176 GiB` without deleting any additional root or changing registry/DB/metrics/
-trace/formal/log counts. `776` roots remain and about `39.3 GiB` is available.
+large-history candidates with unique or referenced evidence. Batch 11 removed
+12 superseded failures/preflights or exact-subset roots with named retained
+owners and zero unique scientific evidence. Batches 8-10 and 12 then compacted
+`2,850` Git-restorable static subtree copies totaling `6.759 GiB` without
+deleting any additional root or changing registry/DB/metrics/trace/formal/log
+counts. `764` roots remain and about `39.2 GiB` is available.
 The exact paths, predicates, restore manifests, inventories, and
 retained gray set are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
