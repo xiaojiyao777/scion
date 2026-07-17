@@ -73,6 +73,30 @@ FROM branches
 WHERE branch_id = ?
 """
 
+_BRANCH_SELECT_ALL_SQL: Final[str] = """
+SELECT branch_id,
+       state,
+       base_champion_id,
+       base_champion_hash,
+       lineage_id,
+       current_code_hash,
+       last_clean_code_hash,
+       screening_expand_count,
+       validation_expand_count,
+       failure_codes,
+       created_at,
+       updated_at,
+       direction,
+       weight_revision,
+       branch_code_status,
+       branch_evidence_summary_json,
+       infra_block_count,
+       owner_revision,
+       owner_protocol_generation
+FROM branches
+ORDER BY branch_id ASC
+"""
+
 _BRANCH_INSERT_SQL: Final[str] = """
 INSERT INTO branches (
     branch_id,
@@ -306,6 +330,32 @@ def _read_branch_in(
     )
 
 
+def _decode_branch_snapshot_rows(
+    rows: tuple[object, ...],
+) -> tuple[RevisionedBranchRecord, ...]:
+    decoded: list[RevisionedBranchRecord] = []
+    owner_ids: set[str] = set()
+    for row in rows:
+        try:
+            columns = tuple(row.keys())  # type: ignore[attr-defined]
+        except (AttributeError, TypeError) as exc:
+            raise DurableOwnerIntegrityError(
+                "Branch snapshot row is not a named SQLite row"
+            ) from exc
+        if columns != _BRANCH_COLUMNS:
+            raise DurableOwnerIntegrityError(
+                "Branch snapshot row has incomplete or unexpected columns"
+            )
+        token = _decode_branch_row(row)
+        if token.branch_id in owner_ids:
+            raise DurableOwnerIntegrityError(
+                "Branch snapshot returned duplicate durable owners"
+            )
+        owner_ids.add(token.branch_id)
+        decoded.append(token)
+    return tuple(decoded)
+
+
 def _json_text(value: object, *, field: str) -> str:
     try:
         return json.dumps(
@@ -417,6 +467,42 @@ class BranchStore:
             self.__database_authority,
             branch_id,
         )
+
+    def _load_revisioned_branch_from_snapshot(
+        self,
+        snapshot: _sqlite._IndependentReadSnapshot,
+        branch_id: str,
+    ) -> RevisionedBranchRecord | None:
+        """Strictly decode one Branch for Registry-owned outcome classification."""
+
+        owner_id = _required_branch_id(branch_id)
+        rows = _sqlite._execute_read_snapshot(
+            snapshot,
+            self.__database_authority,
+            _BRANCH_SELECT_SQL,
+            (owner_id,),
+        )
+        decoded = _decode_branch_snapshot_rows(rows)
+        if not decoded:
+            return None
+        if len(decoded) != 1 or decoded[0].branch_id != owner_id:
+            raise DurableOwnerIntegrityError(
+                "Branch snapshot did not return the exact requested owner"
+            )
+        return decoded[0]
+
+    def _load_all_revisioned_branches_from_snapshot(
+        self,
+        snapshot: _sqlite._IndependentReadSnapshot,
+    ) -> tuple[RevisionedBranchRecord, ...]:
+        """Return the complete stable Branch inventory from the caller's snapshot."""
+
+        rows = _sqlite._execute_read_snapshot(
+            snapshot,
+            self.__database_authority,
+            _BRANCH_SELECT_ALL_SQL,
+        )
+        return _decode_branch_snapshot_rows(rows)
 
     def compare_and_swap_in(
         self,

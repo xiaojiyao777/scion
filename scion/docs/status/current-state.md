@@ -182,10 +182,20 @@ unapproved private helper/importer; no production module imports either store.
 Two final independent reviews report no P0/P1/P2. The complete focused set
 passes `155`, lineage unit tests pass `191`, and the correctly rooted suite
 passes `2579` with `1` skipped in `504.50s`; compileall and diff-check pass.
-The one-root Campaign owner Registry with startup/live state, staging,
-classification, and post-commit publication is next. Schema activation and
-legacy-writer migration remain deferred to the indivisible offline cutover and
-must not be collapsed into the SQLite or permit layers.
+The mutation-only one-root Campaign owner Registry is now complete and remains
+production-unimported. One immutable root owns Branch, all H, derived current-H,
+and publication generation. Startup is unique per physical database, drains
+standalone leases without polling/cutoff, restores through one shared snapshot,
+and seals once. Context/thread-bound views feed fused Registry-owned focused
+CAS/staging; commit uncertainty is classified through one new snapshot, and
+ID-only refresh publishes coherent monotonic Branch or full-Branch H bundles.
+Creation views/receipt consumption remain absent pending champion and proposal-
+attempt authorization participants. Two independent implementation audits close
+at P0=0/P1=0; the expanded responsibility regression passes `183`, and the
+correctly rooted suite passes `2607` with `1` skipped in `474.04s`; compileall
+and diff-check pass. Schema activation and legacy-writer migration remain
+deferred to the indivisible offline cutover and must not be collapsed into the
+SQLite, permit, focused-store, or Registry foundation layers.
 
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
@@ -214,9 +224,9 @@ Disk pressure is no longer an active blocker. A safe cleanup removed inactive
 pip/npm caches plus `42,630` solver interchange files created before R11c,
 reclaiming about `16.6 GiB` and raising available space from about `6.1 GiB` to
 `23 GiB`. No experiment root, runtime, repository, user document, proxy data,
-or R11c output was touched in that pass. Twelve retention-audited whole-root
-batches then removed `388` exact experiment roots with a recorded per-path sum
-of `10.576 GiB`. Batch 3 removed `23` empty, pre-Protocol failure,
+or R11c output was touched in that pass. Fourteen retention-audited whole-root
+batches then removed `391` exact experiment roots with a recorded per-path sum
+of `10.773 GiB`. Batch 3 removed `23` empty, pre-Protocol failure,
 zero-effective duplicate-local, and superseded-prepared roots only after
 protecting `73` active-doc roots and verifying retained canonical evidence.
 Batch 4 used a tracked-evidence inventory and removed only a reconstructible
@@ -232,8 +242,12 @@ without deleting more roots or changing registry/DB/metrics/trace/formal/log
 counts. Batches 13-16 removed nine more planned-only, pre-Protocol, or
 zero-round exact-subset roots with named retained owners, retained reserved
 schema or byte-identical copied campaign, and zero unique scientific evidence.
-`755` roots remain and about
-`38.2 GiB` is available.
+Batch 17 removed one additional pre-campaign shell only after its substantive
+patch payload was proved byte-identical to a retained completed eight-round
+owner. Batch 18 removed a pre-evaluation permission-failure replay shell and a
+zero-effective capacity-blocked successor only after isolated database review
+proved complete retained-owner coverage. `752` roots remain and about
+`38.0 GiB` is available.
 Exact whole-root,
 gray, disposition, subtree-hash, and restore manifests are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.

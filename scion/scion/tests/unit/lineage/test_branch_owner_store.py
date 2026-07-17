@@ -154,6 +154,73 @@ def _load(harness: _Harness, branch_id: str = "branch-1") -> RevisionedBranchRec
         return harness.store.load_revisioned_in(transaction, branch_id)
 
 
+def test_registry_snapshot_readers_return_single_and_complete_inventory(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    second = RevisionedBranchRecord.from_value(
+        _branch(branch_id="branch-2", state=BranchState.VALIDATING),
+        owner_revision=3,
+    )
+    connection = sqlite_boundary._connect_sqlite(harness.path)
+    try:
+        _insert_seed(connection, second)
+        connection.commit()
+    finally:
+        connection.close()
+
+    with sqlite_boundary._independent_authority_read_snapshot(
+        harness.authority
+    ) as snapshot:
+        assert harness.store._load_revisioned_branch_from_snapshot(
+            snapshot,
+            harness.expected.branch_id,
+        ) == harness.expected
+        assert (
+            harness.store._load_revisioned_branch_from_snapshot(
+                snapshot,
+                "branch-missing",
+            )
+            is None
+        )
+        assert harness.store._load_all_revisioned_branches_from_snapshot(
+            snapshot
+        ) == (harness.expected, second)
+
+    with pytest.raises(sqlite_boundary.InactiveImmediateTransactionError):
+        harness.store._load_revisioned_branch_from_snapshot(
+            snapshot,
+            harness.expected.branch_id,
+        )
+
+
+def test_registry_snapshot_reader_reuses_strict_complete_decoder(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    connection = sqlite_boundary._connect_sqlite(harness.path)
+    try:
+        connection.execute(
+            """
+            UPDATE branches
+            SET failure_codes = '{}', owner_revision = owner_revision + 1
+            WHERE branch_id = 'branch-1'
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    with sqlite_boundary._independent_authority_read_snapshot(
+        harness.authority
+    ) as snapshot:
+        with pytest.raises(DurableOwnerIntegrityError, match="list of strings"):
+            harness.store._load_revisioned_branch_from_snapshot(
+                snapshot,
+                harness.expected.branch_id,
+            )
+
+
 def test_complete_read_and_cas_round_trip_detach_caller_target(tmp_path: Path) -> None:
     harness = _harness(tmp_path)
     assert _load(harness) == harness.expected
@@ -524,6 +591,8 @@ def test_dormant_public_and_static_surface_is_exact() -> None:
         assert not parameters & forbidden_parameters
 
     for statement in (
+        subject._BRANCH_SELECT_SQL,
+        subject._BRANCH_SELECT_ALL_SQL,
         subject._BRANCH_INSERT_SQL,
         subject._BRANCH_CAS_SQL,
     ):
@@ -534,6 +603,21 @@ def test_dormant_public_and_static_surface_is_exact() -> None:
         assert "ON CONFLICT" not in upper
         assert "DELETE" not in upper
         assert "PAYLOAD_SHA256" not in upper
+
+    assert tuple(
+        inspect.signature(
+            subject.BranchStore._load_revisioned_branch_from_snapshot
+        ).parameters
+    ) == ("self", "snapshot", "branch_id")
+    assert tuple(
+        inspect.signature(
+            subject.BranchStore._load_all_revisioned_branches_from_snapshot
+        ).parameters
+    ) == ("self", "snapshot")
+    for column in subject._BRANCH_COLUMNS:
+        assert column in subject._BRANCH_SELECT_SQL
+        assert column in subject._BRANCH_SELECT_ALL_SQL
+    assert "ORDER BY branch_id ASC" in subject._BRANCH_SELECT_ALL_SQL
 
     source_path = Path(subject.__file__).resolve()
     tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))

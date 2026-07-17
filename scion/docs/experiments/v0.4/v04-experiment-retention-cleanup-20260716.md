@@ -2,7 +2,7 @@
 
 ## Result
 
-Twelve exact, retention-aware cleanup batches removed 388 roots under
+Fourteen exact, retention-aware cleanup batches removed 391 roots under
 `/home/clawd/research/scion-experiments`. The first two batches were
 prepared-only. The third batch extended the same evidence protections to empty
 roots, pre-Protocol infrastructure failures, duplicate local resume copies, and
@@ -29,6 +29,12 @@ elsewhere.
 Batch 16 removed one pre-campaign transport failure with no campaign payload
 and one pre-campaign authentication failure whose copied 1,083-file campaign
 tree was byte-identical to a retained completed owner.
+Batch 17 removed one pre-campaign launch shell only after its substantive
+worktree diff and Git status were proved byte-identical to a retained exit-zero
+eight-round owner and every patched base/result blob remained reconstructible.
+Batch 18 removed one pre-evaluation permission-failure replay shell and one
+zero-effective capacity-blocked successor only after copy-isolated SQLite
+inspection and complete retained-owner payload equality were proved.
 
 | Batch | Roots | Deleted logical bytes | GiB | Scope |
 |---|---:|---:|---:|---|
@@ -44,7 +50,9 @@ tree was byte-identical to a retained completed owner.
 | batch-14 | 3 | 4,227,072 | 0.004 | zero-round exact subsets with completed retained owners |
 | batch-15 | 2 | 57,344 | 0.000 | dry-run planned jobs and reserved schema retained by completed owners |
 | batch-16 | 2 | 22,106,112 | 0.021 | pre-campaign failures with no unique scientific evidence |
-| **Total** | **388** | **11,356,417,800** | **10.576** | exact roots without unique retained evidence |
+| batch-17 | 1 | 94,208 | 0.000 | pre-campaign shell whose complete substantive payload is exactly retained |
+| batch-18 | 2 | 210,616,320 | 0.196 | pre-evaluation failure and zero-effective successor with complete retained owners |
+| **Total** | **391** | **11,567,128,328** | **10.773** | exact roots without unique retained evidence |
 
 Filesystem observations:
 
@@ -72,13 +80,19 @@ Filesystem observations:
 - batch 16 available space: 40,972,238,848 to 40,994,271,232 bytes;
 - batch 16 observed available-space change: +22,032,384 bytes, versus a
   22,106,112-byte recorded allocated-byte sum.
+- batch 17 available space: 40,550,375,424 to 40,550,449,152 bytes;
+- batch 17 observed available-space change: +73,728 bytes, versus a
+  94,208-byte recorded allocated-byte sum.
+- batch 18 available space: 40,556,687,360 to 40,771,444,736 bytes;
+- batch 18 observed available-space change: +214,757,376 bytes, exactly equal
+  to 210,616,320 candidate bytes plus the 4,141,056-byte isolated audit copy.
 
 The filesystem delta is larger than the logical size sum because other
 processes may allocate or release blocks concurrently. The auditable cleanup
 quantity is the per-path recorded-byte sum in the manifest.
 
 The historical manifest column name is retained for compatibility, but
-batches 3 through 7, batch 11, and batches 13-16 recorded pre-delete allocated
+batches 3 through 7, batch 11, and batches 13-18 recorded pre-delete allocated
 bytes from `du -s -B1`; the arithmetic total is therefore an audit sum of each
 batch's recorded byte measure, not a claim that every batch used one apparent-
 size metric.
@@ -113,6 +127,10 @@ Batch 15 is recorded in
 [`v04-experiment-retention-cleanup-batch15-20260716.tsv`](./v04-experiment-retention-cleanup-batch15-20260716.tsv).
 Batch 16 is recorded in
 [`v04-experiment-retention-cleanup-batch16-20260716.tsv`](./v04-experiment-retention-cleanup-batch16-20260716.tsv).
+Batch 17 is recorded in
+[`v04-experiment-retention-cleanup-batch17-20260716.tsv`](./v04-experiment-retention-cleanup-batch17-20260716.tsv).
+Batch 18 is recorded in
+[`v04-experiment-retention-cleanup-batch18-20260716.tsv`](./v04-experiment-retention-cleanup-batch18-20260716.tsv).
 
 ## Batch-3 deletion predicate
 
@@ -389,6 +407,54 @@ permission restored; deletion then completed. Both roots are absent and all
 three named retained replacement/owner roots remain. The exact record is in
 [`v04-experiment-retention-cleanup-batch16-20260716.tsv`](./v04-experiment-retention-cleanup-batch16-20260716.tsv).
 
+## Batch-17 exact retained launch payload
+
+Batch 17 selected one inactive pre-campaign shell. It contained six files: an
+empty run log, launch metadata, a stale PID, Git status, and a worktree diff.
+It had no Campaign, database, metric, LLM, formal, or workspace evidence. Its
+`worktree.diff` and `git-status.txt` were byte-identical to the named retained
+owner, with diff SHA-256
+`a573be20f1b16af4209aa0a410e0d34ce9a6e484b54b1c64a5643ee226fed283`.
+The retained owner exited zero after eight rounds and retains 24 metric files,
+145 LLM/agent files, and the exact intermediate patch. Every one of the 12
+patched base blobs remains in Git commit `3da3f137`; 11 final result blobs are
+also retained by `0a794790`, while the differing current-state intermediate is
+preserved verbatim in the retained diff.
+
+Immediately before deletion the shell still occupied 94,208 allocated bytes,
+had no repository reference, symlink, Git directory, registered worktree,
+live PID, cwd, command line other than the audit process itself, or open file
+descriptor. The exact shell is absent, the completed owner remains, and five
+nearby candidates with document references, a unique launcher, different
+runtime conditions, or unique LLM traces were explicitly retained. The exact
+record is in
+[`v04-experiment-retention-cleanup-batch17-20260716.tsv`](./v04-experiment-retention-cleanup-batch17-20260716.tsv).
+
+## Batch-18 pre-evaluation and zero-effective retained payloads
+
+Batch 18 selected two inactive roots. The first stopped before candidate
+evaluation with two `PermissionError` rows. It had no database, metric, LLM,
+formal, or workspace evidence, and all 910 materialized files were byte-equal
+to a subset of the named owner that completed both replay arms.
+
+The second reported zero rounds, steps, experiments, screened experiments, and
+effective rounds. Its LLM traces, agent sessions, metrics, workspaces,
+champions, formal candidates, and Branch/H/champion/weight database rows were
+identical to valid successor17. Its only additions were two pre-Protocol
+`capacity_blocked` scheduler events; corrected successor18b remains valid and
+complete.
+
+All SQLite inspection was performed only after reflink/copy isolation under
+`/tmp`, using read-only immutable connections. Before and after that audit,
+candidate and retained-owner allocated/logical bytes, root and database
+mtimes, full-tree metadata digests, and repository-reference counts were
+unchanged. The final deletion gate found no repository reference, symlink, Git
+marker, worktree registration, PID, cwd, command line, or open descriptor.
+Owner-write permission was added only to 56 and 22 directories inside the two
+exact candidates. Both candidates and the temporary audit copy are absent;
+all three retained owners are unchanged. The exact record is in
+[`v04-experiment-retention-cleanup-batch18-20260716.tsv`](./v04-experiment-retention-cleanup-batch18-20260716.tsv).
+
 ## Batches 8-10 and 12 exact static-subtree compaction
 
 Batches 8-10 and 12 did not delete experiment roots or scientific evidence. They
@@ -447,9 +513,9 @@ databases, 464 metrics, 131 formal artifacts, 1,798 LLM/session files, 4 logs,
 and 12 outer reports.
 
 Across whole-root deletion and static compaction, the recorded per-path/
-per-subtree audit sum is 18,613,952,264 bytes (17.336 GiB). After batch 16,
-755 top-level experiment directories remain. Its immediate post-delete
-verification observed 40,994,271,232 bytes available; filesystem readings may
+per-subtree audit sum is 18,824,662,792 bytes (17.532 GiB). After batch 18,
+752 top-level experiment directories remain. Its immediate post-delete
+verification observed 40,771,444,736 bytes available; filesystem readings may
 continue to move with concurrent activity, so the manifests remain the cleanup
 authority.
 

@@ -71,6 +71,53 @@ FROM hypotheses
 WHERE hypothesis_id = :hypothesis_id
 """
 
+_HYPOTHESIS_SELECT_ALL_SQL: Final[str] = """
+SELECT hypothesis_id,
+       branch_id,
+       change_locus,
+       action,
+       status,
+       target_file,
+       parent_hypothesis_id,
+       suggested_weight,
+       hypothesis_text,
+       created_at,
+       base_champion_version,
+       family_id,
+       family_source,
+       taxonomy_version,
+       predicted_direction,
+       proposal_digest,
+       owner_revision,
+       owner_protocol_generation
+FROM hypotheses
+ORDER BY hypothesis_id ASC
+"""
+
+_HYPOTHESIS_SELECT_BRANCH_SQL: Final[str] = """
+SELECT hypothesis_id,
+       branch_id,
+       change_locus,
+       action,
+       status,
+       target_file,
+       parent_hypothesis_id,
+       suggested_weight,
+       hypothesis_text,
+       created_at,
+       base_champion_version,
+       family_id,
+       family_source,
+       taxonomy_version,
+       predicted_direction,
+       proposal_digest,
+       owner_revision,
+       owner_protocol_generation
+FROM hypotheses
+WHERE branch_id = :branch_id
+ORDER BY hypothesis_id ASC
+"""
+
 _HYPOTHESIS_INSERT_SQL: Final[str] = """
 INSERT INTO hypotheses (
     hypothesis_id,
@@ -164,6 +211,63 @@ class HypothesisStore:
         )
         owner_id = _validate_hypothesis_id(hypothesis_id)
         return self._read_optional_in(transaction, owner_id)
+
+    def _load_revisioned_hypothesis_from_snapshot(
+        self,
+        snapshot: _sqlite._IndependentReadSnapshot,
+        hypothesis_id: str,
+    ) -> RevisionedHypothesisRecord | None:
+        """Strictly decode one H for Registry-owned outcome classification."""
+
+        owner_id = _validate_hypothesis_id(hypothesis_id)
+        rows = _sqlite._execute_read_snapshot(
+            snapshot,
+            self.__database_authority,
+            _HYPOTHESIS_SELECT_SQL,
+            {"hypothesis_id": owner_id},
+        )
+        decoded = _decode_hypothesis_snapshot_rows(rows)
+        if not decoded:
+            return None
+        if len(decoded) != 1 or decoded[0].hypothesis_id != owner_id:
+            raise DurableOwnerIntegrityError(
+                "hypothesis snapshot did not return the exact requested owner"
+            )
+        return decoded[0]
+
+    def _load_all_revisioned_hypotheses_from_snapshot(
+        self,
+        snapshot: _sqlite._IndependentReadSnapshot,
+    ) -> tuple[RevisionedHypothesisRecord, ...]:
+        """Return the complete stable H inventory from the caller's snapshot."""
+
+        rows = _sqlite._execute_read_snapshot(
+            snapshot,
+            self.__database_authority,
+            _HYPOTHESIS_SELECT_ALL_SQL,
+        )
+        return _decode_hypothesis_snapshot_rows(rows)
+
+    def _load_branch_hypotheses_from_snapshot(
+        self,
+        snapshot: _sqlite._IndependentReadSnapshot,
+        branch_id: str,
+    ) -> tuple[RevisionedHypothesisRecord, ...]:
+        """Return one affected Branch's complete H bundle in the same snapshot."""
+
+        owner_branch_id = _validate_branch_id(branch_id)
+        rows = _sqlite._execute_read_snapshot(
+            snapshot,
+            self.__database_authority,
+            _HYPOTHESIS_SELECT_BRANCH_SQL,
+            {"branch_id": owner_branch_id},
+        )
+        decoded = _decode_hypothesis_snapshot_rows(rows)
+        if any(token.value().branch_id != owner_branch_id for token in decoded):
+            raise DurableOwnerIntegrityError(
+                "hypothesis Branch snapshot returned another Branch's owner"
+            )
+        return decoded
 
     def compare_and_swap_in(
         self,
@@ -344,6 +448,30 @@ def _validate_hypothesis_id(value: object) -> str:
             "hypothesis ID must be a non-empty exact string"
         )
     return value
+
+
+def _validate_branch_id(value: object) -> str:
+    if type(value) is not str or not value or value != value.strip():
+        raise DurableOwnerIntegrityError(
+            "hypothesis Branch ID must be a non-empty exact string"
+        )
+    return value
+
+
+def _decode_hypothesis_snapshot_rows(
+    rows: tuple[object, ...],
+) -> tuple[RevisionedHypothesisRecord, ...]:
+    decoded: list[RevisionedHypothesisRecord] = []
+    owner_ids: set[str] = set()
+    for row in rows:
+        token = _decode_hypothesis_row(row)
+        if token.hypothesis_id in owner_ids:
+            raise DurableOwnerIntegrityError(
+                "hypothesis snapshot returned duplicate durable owners"
+            )
+        owner_ids.add(token.hypothesis_id)
+        decoded.append(token)
+    return tuple(decoded)
 
 
 def _decode_hypothesis_row(row: Any) -> RevisionedHypothesisRecord:

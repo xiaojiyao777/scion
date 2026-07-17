@@ -152,6 +152,25 @@ def _attach(
     return owner._attach_owner_receipt_ledger(transaction, harness.authority)
 
 
+def _insert_hypothesis(
+    harness: _Harness,
+    hypothesis: HypothesisRecord,
+    *,
+    owner_revision: int,
+) -> RevisionedHypothesisRecord:
+    token = RevisionedHypothesisRecord.from_value(hypothesis, owner_revision)
+    connection = sqlite_boundary._connect_sqlite(harness.path)
+    try:
+        connection.execute(
+            subject._HYPOTHESIS_INSERT_SQL,
+            subject._write_parameters(token),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return token
+
+
 def _commit_mutation(
     ledger: object,
     receipt: owner.OwnerMutationReceipt,
@@ -166,6 +185,69 @@ def _commit_creation(
 ) -> None:
     owner._consume_hypothesis_creation_receipt(ledger, receipt)  # type: ignore[arg-type]
     owner._seal_owner_receipt_ledger(ledger, (receipt,))  # type: ignore[arg-type]
+
+
+def test_registry_snapshot_readers_return_single_inventory_and_branch_bundle(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    second_value = dataclasses.replace(
+        _hypothesis(hypothesis_id="hypothesis-2"),
+        created_at=datetime(2026, 7, 16, 1, 3, 5),
+        status="validated",
+    )
+    third_value = dataclasses.replace(
+        _hypothesis(hypothesis_id="hypothesis-3", branch_id="branch-2"),
+        created_at=datetime(2026, 7, 16, 1, 4, 5),
+    )
+    second = _insert_hypothesis(harness, second_value, owner_revision=2)
+    third = _insert_hypothesis(harness, third_value, owner_revision=4)
+
+    with sqlite_boundary._independent_authority_read_snapshot(
+        harness.authority
+    ) as snapshot:
+        assert harness.store._load_revisioned_hypothesis_from_snapshot(
+            snapshot,
+            harness.token.hypothesis_id,
+        ) == harness.token
+        assert (
+            harness.store._load_revisioned_hypothesis_from_snapshot(
+                snapshot,
+                "hypothesis-missing",
+            )
+            is None
+        )
+        assert harness.store._load_all_revisioned_hypotheses_from_snapshot(
+            snapshot
+        ) == (harness.token, second, third)
+        assert harness.store._load_branch_hypotheses_from_snapshot(
+            snapshot,
+            "branch-1",
+        ) == (harness.token, second)
+        assert harness.store._load_branch_hypotheses_from_snapshot(
+            snapshot,
+            "branch-empty",
+        ) == ()
+
+    with pytest.raises(sqlite_boundary.InactiveImmediateTransactionError):
+        harness.store._load_revisioned_hypothesis_from_snapshot(
+            snapshot,
+            harness.token.hypothesis_id,
+        )
+
+
+def test_registry_snapshot_reader_reuses_strict_complete_decoder(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(
+        tmp_path,
+        row_overrides={"proposal_digest": "not-a-digest"},
+    )
+    with sqlite_boundary._independent_authority_read_snapshot(
+        harness.authority
+    ) as snapshot:
+        with pytest.raises(DurableOwnerIntegrityError):
+            harness.store._load_all_revisioned_hypotheses_from_snapshot(snapshot)
 
 
 def test_complete_read_and_cas_round_trip_binds_proposal_digest(
@@ -451,6 +533,21 @@ def test_public_api_hides_ledger_sql_parameters_facts_and_committed_tokens() -> 
     }
     forbidden = {"ledger", "sql", "parameters", "write_fact", "committed_token"}
     assert all(forbidden.isdisjoint(parameters) for parameters in signatures.values())
+    assert tuple(
+        inspect.signature(
+            subject.HypothesisStore._load_revisioned_hypothesis_from_snapshot
+        ).parameters
+    ) == ("self", "snapshot", "hypothesis_id")
+    assert tuple(
+        inspect.signature(
+            subject.HypothesisStore._load_all_revisioned_hypotheses_from_snapshot
+        ).parameters
+    ) == ("self", "snapshot")
+    assert tuple(
+        inspect.signature(
+            subject.HypothesisStore._load_branch_hypotheses_from_snapshot
+        ).parameters
+    ) == ("self", "snapshot", "branch_id")
 
 
 def test_store_sql_is_fixed_complete_and_avoids_replace_surfaces() -> None:
@@ -469,6 +566,8 @@ def test_store_sql_is_fixed_complete_and_avoids_replace_surfaces() -> None:
         name: constants[name]
         for name in (
             "_HYPOTHESIS_SELECT_SQL",
+            "_HYPOTHESIS_SELECT_ALL_SQL",
+            "_HYPOTHESIS_SELECT_BRANCH_SQL",
             "_HYPOTHESIS_INSERT_SQL",
             "_HYPOTHESIS_CAS_SQL",
         )
@@ -484,7 +583,11 @@ def test_store_sql_is_fixed_complete_and_avoids_replace_surfaces() -> None:
     assert "branch_id =" not in sql["_HYPOTHESIS_CAS_SQL"].split("WHERE", 1)[0]
     for column in subject._HYPOTHESIS_COLUMNS:
         assert column in sql["_HYPOTHESIS_SELECT_SQL"]
+        assert column in sql["_HYPOTHESIS_SELECT_ALL_SQL"]
+        assert column in sql["_HYPOTHESIS_SELECT_BRANCH_SQL"]
         assert column in sql["_HYPOTHESIS_INSERT_SQL"]
+    assert "ORDER BY hypothesis_id ASC" in sql["_HYPOTHESIS_SELECT_ALL_SQL"]
+    assert "ORDER BY hypothesis_id ASC" in sql["_HYPOTHESIS_SELECT_BRANCH_SQL"]
 
     expected_sql_arguments = {
         "_execute_hypothesis_owner_update": "_HYPOTHESIS_CAS_SQL",
