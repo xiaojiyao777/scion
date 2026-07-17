@@ -2,7 +2,7 @@
 
 ## Result
 
-Ten exact, retention-aware cleanup batches removed 384 roots under
+Twelve exact, retention-aware cleanup batches removed 388 roots under
 `/home/clawd/research/scion-experiments`. The first two batches were
 prepared-only. The third batch extended the same evidence protections to empty
 roots, pre-Protocol infrastructure failures, duplicate local resume copies, and
@@ -23,6 +23,12 @@ Batch 13 removed one dry-run-only planned matrix subset and one wrong-working-
 directory wrapper that stopped before Protocol, LLM, metric, or database work.
 Batch 14 removed three zero-round shells whose only scientific payload was an
 initial champion exactly retained by an identified completed owner.
+Batch 15 removed two dry-run-only planned matrices after every planned job and
+the only differing reserved telemetry schema were proved to be retained
+elsewhere.
+Batch 16 removed one pre-campaign transport failure with no campaign payload
+and one pre-campaign authentication failure whose copied 1,083-file campaign
+tree was byte-identical to a retained completed owner.
 
 | Batch | Roots | Deleted logical bytes | GiB | Scope |
 |---|---:|---:|---:|---|
@@ -36,7 +42,9 @@ initial champion exactly retained by an identified completed owner.
 | batch-11 | 12 | 8,667,136 | 0.008 | superseded failures, dirty preflights, and one exact subset |
 | batch-13 | 2 | 77,824 | 0.000 | planned-only exact subset and pre-Protocol wrong-cwd shell |
 | batch-14 | 3 | 4,227,072 | 0.004 | zero-round exact subsets with completed retained owners |
-| **Total** | **384** | **11,334,254,344** | **10.556** | exact roots without unique retained evidence |
+| batch-15 | 2 | 57,344 | 0.000 | dry-run planned jobs and reserved schema retained by completed owners |
+| batch-16 | 2 | 22,106,112 | 0.021 | pre-campaign failures with no unique scientific evidence |
+| **Total** | **388** | **11,356,417,800** | **10.576** | exact roots without unique retained evidence |
 
 Filesystem observations:
 
@@ -58,13 +66,19 @@ Filesystem observations:
 - batch 14 available space: 41,509,257,216 to 41,514,598,400 bytes;
 - batch 14 observed available-space change: +5,341,184 bytes, versus a
   4,227,072-byte recorded allocated-byte sum.
+- batch 15 available space: 40,986,202,112 to 40,986,259,456 bytes;
+- batch 15 observed available-space change: +57,344 bytes, exactly matching
+  its recorded allocated-byte sum.
+- batch 16 available space: 40,972,238,848 to 40,994,271,232 bytes;
+- batch 16 observed available-space change: +22,032,384 bytes, versus a
+  22,106,112-byte recorded allocated-byte sum.
 
 The filesystem delta is larger than the logical size sum because other
 processes may allocate or release blocks concurrently. The auditable cleanup
 quantity is the per-path recorded-byte sum in the manifest.
 
 The historical manifest column name is retained for compatibility, but
-batches 3 through 7, batch 11, and batches 13-14 recorded pre-delete allocated
+batches 3 through 7, batch 11, and batches 13-16 recorded pre-delete allocated
 bytes from `du -s -B1`; the arithmetic total is therefore an audit sum of each
 batch's recorded byte measure, not a claim that every batch used one apparent-
 size metric.
@@ -95,6 +109,10 @@ Batch 13 is recorded in
 [`v04-experiment-retention-cleanup-batch13-20260716.tsv`](./v04-experiment-retention-cleanup-batch13-20260716.tsv).
 Batch 14 is recorded in
 [`v04-experiment-retention-cleanup-batch14-20260716.tsv`](./v04-experiment-retention-cleanup-batch14-20260716.tsv).
+Batch 15 is recorded in
+[`v04-experiment-retention-cleanup-batch15-20260716.tsv`](./v04-experiment-retention-cleanup-batch15-20260716.tsv).
+Batch 16 is recorded in
+[`v04-experiment-retention-cleanup-batch16-20260716.tsv`](./v04-experiment-retention-cleanup-batch16-20260716.tsv).
 
 ## Batch-3 deletion predicate
 
@@ -319,6 +337,58 @@ The exact paths, pre-delete allocated bytes, classifications, retained owners,
 and validation conclusions are in
 [`v04-experiment-retention-cleanup-batch14-20260716.tsv`](./v04-experiment-retention-cleanup-batch14-20260716.tsv).
 
+## Batch-15 dry-run planned matrices
+
+Batch 15 selected exactly two inactive dry-run matrices. Each root contained
+only `manifest.json`, `results.json`, and `summary.csv`; all three jobs were
+`planned`, every objective/runtime/move observation was null, and no raw,
+workspace, database, LLM, metric, formal, Protocol, or promotion evidence
+existed. Every exact job ID is completed with a nonempty raw result in a named
+retained owner: one owner completed 80/80 jobs and the other completed 60/60.
+
+The second planned root declared `objective_probes` in its reserved result
+schema. Its three-job schema digest,
+`bfadb711a8ecd43f7c89ed601cdb38d8e20ecc5168c6058393e7a40969fea1c8`,
+is used by all 80 jobs in the retained VNS-variants owner, and its three
+mechanism definitions exactly match the retained P76 deep-mechanism owner.
+Thus neither an observation nor a schema variant depended on the planned root.
+
+Immediately before deletion both roots still matched their recorded allocated
+size, had no repository reference outside cleanup records, contained no git
+directory or registered worktree, and had no PID, cwd, command-line, or open-fd
+owner. Both deleted roots are absent, both primary owners remain, and the
+observed available-space increase exactly equals the 57,344-byte manifest sum.
+The exact record is in
+[`v04-experiment-retention-cleanup-batch15-20260716.tsv`](./v04-experiment-retention-cleanup-batch15-20260716.tsv).
+
+## Batch-16 pre-campaign failures and copied evidence
+
+Batch 16 selected exactly two inactive pre-campaign failures. The Warehouse
+root ended during completion preflight with a transport timeout and wrapper
+exit 64. It contains no Campaign directory, database, LLM session, metric,
+formal candidate, or workspace. A retained replacement has the same execution,
+model, research-guidance, and data-root contract, and its retained R2 successor
+completed two rounds and two experiments validly.
+
+The CVRP root ended during completion preflight with an authentication failure
+and no execution marker. Its Campaign directory was copied from the retained
+completed owner
+`v04-cvrp-proofstatus-followup-05ade2e0-2r-gpt55-20260625T155106Z-claw`:
+all 1,083 relative files compared byte-for-byte equal and both relative-tree
+digests were
+`7bca4bbf524f3917e1858392eb72d16576c75a51444d66ddcf2f72a021296777`.
+The retained owner remains valid and complete at two rounds/two experiments,
+and the candidate's referenced Git commit remains available.
+
+Immediately before deletion both roots matched their recorded allocated sizes,
+had no repository reference, git directory, registered worktree, live PID,
+cwd, command line, or open descriptor. Read-only permissions in the copied
+champion tree stopped the first exact deletion attempt after writable files had
+been removed. Only that already-approved candidate tree had owner-write
+permission restored; deletion then completed. Both roots are absent and all
+three named retained replacement/owner roots remain. The exact record is in
+[`v04-experiment-retention-cleanup-batch16-20260716.tsv`](./v04-experiment-retention-cleanup-batch16-20260716.tsv).
+
 ## Batches 8-10 and 12 exact static-subtree compaction
 
 Batches 8-10 and 12 did not delete experiment roots or scientific evidence. They
@@ -377,9 +447,9 @@ databases, 464 metrics, 131 formal artifacts, 1,798 LLM/session files, 4 logs,
 and 12 outer reports.
 
 Across whole-root deletion and static compaction, the recorded per-path/
-per-subtree audit sum is 18,591,788,808 bytes (17.315 GiB). After batch 14,
-759 top-level experiment directories remain. Its immediate post-delete
-verification observed 41,514,598,400 bytes available; filesystem readings may
+per-subtree audit sum is 18,613,952,264 bytes (17.336 GiB). After batch 16,
+755 top-level experiment directories remain. Its immediate post-delete
+verification observed 40,994,271,232 bytes available; filesystem readings may
 continue to move with concurrent activity, so the manifests remain the cleanup
 authority.
 

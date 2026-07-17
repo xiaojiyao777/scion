@@ -1711,6 +1711,28 @@ def _install_transaction_authorizer(
     return handle
 
 
+def _install_transaction_authorizer_for_transaction(
+    transaction: ImmediateTransaction,
+    authority: CampaignDatabaseAuthority,
+    authorizer: _SQLiteAuthorizer,
+) -> _TransactionAuthorizerHandle:
+    """Install policy for an exact capability without exposing its session.
+
+    Responsibility-focused participant policy modules need to attach an
+    authorizer to both split-lifecycle and convenience-context transactions.
+    They receive only the sealed transaction capability; session discovery
+    remains inside this SQLite boundary.
+    """
+
+    capability_state = _require_active_state(transaction, authority)
+    session = capability_state.session_ref()
+    if session is None:
+        raise InactiveImmediateTransactionError(
+            "ImmediateTransaction session is no longer available"
+        )
+    return _install_transaction_authorizer(session, authority, authorizer)
+
+
 def _require_transaction_authorizer(
     handle: _TransactionAuthorizerHandle,
     session: _CoordinatedTransactionSession,
@@ -1741,6 +1763,22 @@ def _require_transaction_authorizer(
             "transaction authorizer handle has a different binding"
         )
     return handle
+
+
+def _require_transaction_authorizer_for_transaction(
+    handle: _TransactionAuthorizerHandle,
+    transaction: ImmediateTransaction,
+    authority: CampaignDatabaseAuthority,
+) -> _TransactionAuthorizerHandle:
+    """Validate an authorizer against an exact active transaction capability."""
+
+    capability_state = _require_active_state(transaction, authority)
+    session = capability_state.session_ref()
+    if session is None:
+        raise InactiveImmediateTransactionError(
+            "ImmediateTransaction session is no longer available"
+        )
+    return _require_transaction_authorizer(handle, session, authority)
 
 
 def _first_effective_keyword(sql: str) -> str:

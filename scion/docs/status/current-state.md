@@ -169,9 +169,23 @@ connection/native handle, and proof descriptor are all released. Focused tests
 pass `79`, the lineage unit suite passes `115`, and the correctly rooted full
 suite passes `2503` with `1` skipped in `508.79s`; compileall and diff-check
 pass. Two independent final reviews report no P0/P1. The module has no
-production importer. `lineage/owner_transaction.py` is next; Branch/H permits,
-receipts, Registry publication, schema activation, and legacy-writer migration
-remain unimplemented and must not be collapsed back into this SQLite boundary.
+production importer. The second corrected responsibility layer is now complete
+and also dormant. `lineage/owner_transaction.py` contains only one-shot Branch/H
+permits, pending facts, sealed receipts, exact identity closure, and a COMMIT
+authorizer that rejects every unsealed ledger. The focused
+`lineage/branch_owner_store.py` and `lineage/hypothesis_owner_store.py` own all
+fixed owner SQL, complete strict row decoding, exact pre-state checks, and
+same-transaction authoritative post-state tokens. Receipt issuance no longer
+accepts a caller-selected committed token, and the rejected partial owner-row
+query/SQL-parser approach is absent. AST closure automatically denies every
+unapproved private helper/importer; no production module imports either store.
+Two final independent reviews report no P0/P1/P2. The complete focused set
+passes `155`, lineage unit tests pass `191`, and the correctly rooted suite
+passes `2579` with `1` skipped in `504.50s`; compileall and diff-check pass.
+The one-root Campaign owner Registry with startup/live state, staging,
+classification, and post-commit publication is next. Schema activation and
+legacy-writer migration remain deferred to the indivisible offline cutover and
+must not be collapsed into the SQLite or permit layers.
 
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
@@ -200,9 +214,9 @@ Disk pressure is no longer an active blocker. A safe cleanup removed inactive
 pip/npm caches plus `42,630` solver interchange files created before R11c,
 reclaiming about `16.6 GiB` and raising available space from about `6.1 GiB` to
 `23 GiB`. No experiment root, runtime, repository, user document, proxy data,
-or R11c output was touched in that pass. Ten retention-audited whole-root
-batches then removed `384` exact experiment roots with a recorded per-path sum
-of `10.556 GiB`. Batch 3 removed `23` empty, pre-Protocol failure,
+or R11c output was touched in that pass. Twelve retention-audited whole-root
+batches then removed `388` exact experiment roots with a recorded per-path sum
+of `10.576 GiB`. Batch 3 removed `23` empty, pre-Protocol failure,
 zero-effective duplicate-local, and superseded-prepared roots only after
 protecting `73` active-doc roots and verifying retained canonical evidence.
 Batch 4 used a tracked-evidence inventory and removed only a reconstructible
@@ -215,9 +229,11 @@ while retaining all unique/referenced large-history evidence. Batch 11 removed
 owners and zero unique scientific evidence. Batches 8-10 and 12 removed
 `2,850` Git-restorable static subtree copies totaling `6.759 GiB`
 without deleting more roots or changing registry/DB/metrics/trace/formal/log
-counts. Batches 13-14 removed five more planned-only, pre-Protocol, or
-zero-round exact-subset roots with named retained owners and zero unique
-scientific evidence. `759` roots remain and about `38.7 GiB` is available.
+counts. Batches 13-16 removed nine more planned-only, pre-Protocol, or
+zero-round exact-subset roots with named retained owners, retained reserved
+schema or byte-identical copied campaign, and zero unique scientific evidence.
+`755` roots remain and about
+`38.2 GiB` is available.
 Exact whole-root,
 gray, disposition, subtree-hash, and restore manifests are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
