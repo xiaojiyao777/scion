@@ -221,13 +221,26 @@ replaced STARTs and mismatched context/prompt fail before transport. The
 combined focused set passes `219`; the correctly rooted full suite passes
 `2672` with `1` skipped in `503.28s`; independent review closes
 P0=0/P1=0/P2=0. The code remains production-uncomposed and creates no schema.
-The remaining checkpoint is the generated-H event, immutable attempt-to-H
-binding, H authorization/classification, then Registry generation/creation
-views and fused publication. Generic ledger and provider-result state machines
-intentionally remain colocated until that full transition graph is stable;
-splitting now would create cross-module authority and callback/circular-helper
-risk. No production composition importer, schema effect, retry, budget, cap,
-gate, cutoff, or truncation is authorized before D2b.0b.C.
+An end-to-end audit rejected the old participant-first continuation before more
+code was added. It exposed conflicting Branch/H/event/binding classification
+ownership, an incomplete provider-result-to-view binding, and mutable or
+caller-ambiguous code-source, Contract, taxonomy, clock, and UUID authority.
+The accepted correction is
+`scion/docs/planning/v0.4/v0.4-d2b0b-hypothesis-creation-vertical-correction-20260716.md`.
+It keeps one H-creation architecture but requires two complete dormant
+checkpoints: A binds champion-or-verified-workspace bytes, prompt projection,
+one Branch reservation, unique START, provider outcome, terminal persistence,
+and restart holds; B adds frozen Contract/taxonomy semantics, authority-bound
+clock/UUID target construction, event/binding/H, semantic/global
+classification, and one Registry publication. SQL, state/recovery, and
+dependency audits close at P0=0/P1=0/P2=0. Checkpoint A is next and must receive
+independent acceptance before B begins. Historical activation is separately
+blocked on an evidence-preserving addendum after the read-only 827-database
+inventory found legacy-extra JSON, malformed rows, orphan/multi-campaign
+ambiguity, and missing sealed provenance. Generic ledger and provider-result
+state machines remain colocated until the full transition graph is stable. No
+production composition importer, schema effect, retry, budget, cap, gate,
+cutoff, or truncation is authorized before D2b.0b.C.
 
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.

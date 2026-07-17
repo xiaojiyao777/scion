@@ -693,14 +693,28 @@ The implementation order is fixed; items 1-3 are complete:
    combined focused set passes `219`; the correctly rooted suite passes `2672`
    with `1` skipped in `503.28s`; independent review closes P0=0/P1=0 after its
    rollback finding was fixed. Production remains uncomposed and no schema is
-   created. Two maintainability reviews require keeping the generic ledger and
-   provider result state machines colocated for now: splitting them before the
-   H participant and Registry transition graph stabilizes would introduce
-   cross-module mutable authority, callbacks, or circular helper ownership.
-   Reassess package-level mechanical decomposition after those boundaries are
-   complete. Next finish the proposal-attempt generated-event/binding/H
-   authorization and classification participant, then add Registry generation/
-   creation views and fused publication. Only then perform the
+   created. A follow-up end-to-end H-creation audit found that the earlier
+   instruction to add the proposal participant before the Registry generation
+   view was unsafe: it conflicted over Branch/H/event/binding classification
+   ownership, left provider result-to-view binding incomplete, and did not
+   freeze code-source, Contract, taxonomy, clock, or UUID authority. That
+   continuation is superseded by
+   `scion/docs/planning/v0.4/v0.4-d2b0b-hypothesis-creation-vertical-correction-20260716.md`.
+   The correction keeps one architecture but divides implementation into two
+   complete dormant checkpoints. Checkpoint A owns authoritative champion-or-
+   verified-workspace source selection, prompt projection, one Branch-local
+   reservation, unique committed START, one provider permit/outcome, durable
+   terminalization, and restart holds. Checkpoint B owns frozen Contract and
+   taxonomy semantics, authority-bound clock/UUID target construction,
+   generated event/binding/H, semantic/global classification, and one Registry
+   publication. Static SQL, state/recovery, and dependency reviews close at
+   P0=0/P1=0/P2=0. The generic ledger and provider result state machines remain
+   colocated until this full graph is implemented; no isolated helper slice is
+   authorized. Implement and independently accept all of checkpoint A before
+   starting B. Historical activation remains a separate addendum because the
+   827-database read-only inventory found legacy-extra JSON, malformed rows,
+   orphan/multi-campaign ambiguity, and missing sealed provenance that cannot
+   be invented. Only after A and B close may the project perform the
    indivisible D2b.0b.C schema/all-writer cutover and D2b.0b.V acceptance; no
    intermediate runnable
    state may combine active revisions with a legacy writer. Then continue the
@@ -791,9 +805,12 @@ scientific and lineage-owning artifacts remain in place.
    proposal-attempt, and generic-ledger reviews with P0=0/P1=0. Its generic
    creation ledger, champion/Branch authorization participant, committed START,
    provider permit, and generated-result proof are implemented and dormant.
-   Continue with the generated-event/attempt-to-H binding/H authorization
-   participant and Registry generation/creation publication layers, then the
-   indivisible offline cutover,
+   The corrected H vertical supersedes the old participant-first continuation:
+   implement its complete checkpoint A generation-provenance/reservation/
+   terminal-recovery path and obtain independent acceptance, then implement
+   checkpoint B frozen Contract/target plus fused event/binding/H/Registry
+   publication. Keep historical activation in its own evidence-preserving
+   addendum. Only then proceed to the indivisible offline cutover,
    and closure exactly as frozen, then implement the remaining paired
    slot/dispatch/receipt slices, D2c exact Decision transport, D2d isolated
    snapshot handoff, and D2e v2 completion/recovery;
