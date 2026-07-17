@@ -146,6 +146,20 @@ or delete the winner. D2b.0b.F dormant foundation is next; it must have no
 production import or schema effect. No positive lease, slot, dispatch, receipt,
 retry, budget, cap, or truncation writer is authorized in this slice.
 
+The first D2b.0b.F implementation review rejected the initial Registry/SQLite
+draft before wiring: participant SQL could escape transaction ownership, and
+local owner installation was not provably ordered after durable commit. The
+corrected dormant contract is now frozen in
+`scion/docs/planning/v0.4/v0.4-d2b0b-foundation-transaction-publication-correction-20260716.md`
+after six adversarial rounds by three reviewers with no open P0/P1. It binds one
+verified Campaign database authority, materializes results without raw cursor
+leakage, gives Branch/H writes sealed same-transaction receipts, drains startup
+standalone writers before restore, and publishes one immutable Campaign-owner
+root only after a proved commit. Commit uncertainty uses a new verified
+connection or holds fail-closed; it never retries a mutation. The rejected draft
+remains unimported/uncommitted and must be rewritten in these responsibility
+layers before owner stores or schema activation proceed.
+
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
 Raw runtime already exposed VNS/ALNS phase facts while next-H saw only ALNS

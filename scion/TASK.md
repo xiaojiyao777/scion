@@ -644,7 +644,14 @@ The implementation order is fixed; items 1-3 are complete:
    schema bootstrap, offline clean-stop cutover, database rejection of legacy
    writers, dormant lease predicates, exact completion revision/digest recovery,
    and collision-free champion snapshot publication. Implement D2b.0b.F as a
-   production-unimported foundation, then perform the indivisible D2b.0b.C
+   production-unimported foundation. Its transaction/publication correction is
+   frozen in
+   `scion/docs/planning/v0.4/v0.4-d2b0b-foundation-transaction-publication-correction-20260716.md`
+   after six adversarial rounds by three reviewers with no open P0/P1. The
+   rejected first draft must not be wired: implement sealed Campaign database
+   authority and materialized participant results, focused owner-table
+   permits/receipts, then the one-root Campaign registry and its startup/live
+   state machine. After dormant acceptance, perform the indivisible D2b.0b.C
    schema/all-writer cutover and D2b.0b.V acceptance; no intermediate runnable
    state may combine active revisions with a legacy writer. Then continue the
    remaining D2b slices, D2c
@@ -712,7 +719,9 @@ scientific and lineage-owning artifacts remain in place.
    the D2b implementation contract has passed five more with no open P0/P1.
    D2b.0a pure codec extraction is complete and unwired. D2b.0b's focused
    migration plan has passed three additional adversarial rounds with no open
-   P0/P1; execute its dormant foundation, indivisible offline cutover, and
+   P0/P1; its foundation transaction/publication correction has passed six more
+   rounds with no open P0/P1. Execute the corrected dormant foundation,
+   indivisible offline cutover, and
    closure exactly as frozen, then implement the remaining paired
    slot/dispatch/receipt slices, D2c exact Decision transport, D2d isolated
    snapshot handoff, and D2e v2 completion/recovery;
