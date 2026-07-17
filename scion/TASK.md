@@ -648,8 +648,12 @@ The implementation order is fixed; items 1-3 are complete:
    frozen in
    `scion/docs/planning/v0.4/v0.4-d2b0b-foundation-transaction-publication-correction-20260716.md`
    after six adversarial rounds by three reviewers with no open P0/P1. The
-   rejected first draft must not be wired: implement sealed Campaign database
-   authority and materialized participant results, focused owner-table
+   rejected first draft remains unwired. The corrected production-unimported
+   SQLite layer is complete: sealed Campaign database authority, actual native
+   main-handle verification, materialized participant results, exact
+   thread/Context ownership, independent classification snapshots, and
+   component-state cleanup passed two independent final reviews with no P0/P1.
+   Next implement `lineage/owner_transaction.py` for focused owner-table
    permits/receipts, then the one-root Campaign registry and its startup/live
    state machine. After dormant acceptance, perform the indivisible D2b.0b.C
    schema/all-writer cutover and D2b.0b.V acceptance; no intermediate runnable
@@ -680,8 +684,8 @@ SearchAllocationEvidence, and no-LLM controls may proceed first.
 Disk pressure is no longer a current blocker. A safe cleanup on 2026-07-16
 removed only inactive package caches and pre-R11c solver interchange files,
 raising free space from about `6.1 GiB` to `23 GiB` without touching any
-experiment root. Eight retention-audited whole-root batches have now removed
-`379` exact roots with a recorded per-path sum of `10.552 GiB`. The third batch added `23` empty,
+experiment root. Ten retention-audited whole-root batches have now removed
+`384` exact roots with a recorded per-path sum of `10.556 GiB`. The third batch added `23` empty,
 pre-Protocol failure, zero-effective duplicate-local, and superseded-prepared
 roots only after protecting `73` active-doc roots and proving that canonical
 evidence remained. The fourth used a tracked-evidence inventory and removed
@@ -692,10 +696,13 @@ equality against retained CVRP/Warehouse canonical roots. Batches 6-7 removed
 64 pre-campaign shells plus two superseded failures while preserving twelve
 large-history candidates with unique or referenced evidence. Batch 11 removed
 12 superseded failures/preflights or exact-subset roots with named retained
-owners and zero unique scientific evidence. Batches 8-10 and 12 then compacted
+owners and zero unique scientific evidence. Batches 13-14 removed five more
+planned-only, pre-Protocol, or zero-round exact-subset roots after proving a
+named retained owner and zero unique scientific evidence. Batches 8-10 and 12
+then compacted
 `2,850` Git-restorable static subtree copies totaling `6.759 GiB` without
 deleting any additional root or changing registry/DB/metrics/trace/formal/log
-counts. `764` roots remain and about `39.2 GiB` is available.
+counts. `759` roots remain and about `38.7 GiB` is available.
 The exact paths, predicates, restore manifests, inventories, and
 retained gray set are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
@@ -720,8 +727,9 @@ scientific and lineage-owning artifacts remain in place.
    D2b.0a pure codec extraction is complete and unwired. D2b.0b's focused
    migration plan has passed three additional adversarial rounds with no open
    P0/P1; its foundation transaction/publication correction has passed six more
-   rounds with no open P0/P1. Execute the corrected dormant foundation,
-   indivisible offline cutover, and
+   rounds with no open P0/P1. Its corrected SQLite responsibility layer is
+   complete and production-unimported; continue with owner transaction,
+   one-root Registry, indivisible offline cutover, and
    closure exactly as frozen, then implement the remaining paired
    slot/dispatch/receipt slices, D2c exact Decision transport, D2d isolated
    snapshot handoff, and D2e v2 completion/recovery;
