@@ -239,12 +239,23 @@ leaf graph covers immutable code-source capture, canonical evidence/prompt,
 Branch-local reservation, same-transaction Branch/H revalidation, unique START,
 provider success/failure/unknown, pre-START and durable abort, terminal receipt,
 restart holds, GC-safe one-shot capability state, and exact static caller
-closure. No production composition, schema, retry, budget, cap, gate, cutoff,
-or truncation was added. The expanded focused set passes `207`; the correctly
-rooted full suite passes `2765` with `1` skipped in `482.44s`; compileall and
-diff-check pass. Independent leaf, Registry transaction/recovery, and static
-dependency reviews report no open P0/P1/P2. Checkpoint B is next. Historical
-activation is separately
+closure. Checkpoint B is now also complete, independently accepted, dormant,
+and production-uncomposed. It freezes exact legacy Contract/taxonomy semantics,
+binds target construction to sealed clock/UUID authorities, persists strict
+generated event/binding/revision-zero H ownership, classifies the complete
+Branch/H/event/binding outcome from one snapshot, and publishes one Registry
+root. Normal reuse is distinct from hidden claim/issue faults; rollback,
+restart, partial legacy rows, active lease, malformed terminal semantics, and
+resource-close-before-effect converge to explicit holds without another
+provider call. No production composition, schema, retry, budget, cap, gate,
+cutoff, or truncation was added. The final Checkpoint A+B focused regression
+passes `171`; the correctly rooted full suite passes `2906` with `1` skipped in
+`516.67s`; compileall and diff-check pass. Independent leaf, Registry
+transaction/recovery, and static dependency reviews report no open P0/P1. One
+nonblocking P2 remains: the same creation transaction repeats its START/lease
+preflight after generated-result consumption without retry or intervening state
+change. Collapse it before activation only if the authority surface remains
+unchanged. Historical activation is separately
 blocked on an evidence-preserving addendum after the read-only 827-database
 inventory found legacy-extra JSON, malformed rows, orphan/multi-campaign
 ambiguity, and missing sealed provenance. Generic ledger and provider-result
@@ -947,17 +958,20 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Implement frozen D2a-D2e in order: campaign/mode compatibility, paired
-   slot/dispatch/receipt ownership, exact DecisionOutcome transport, isolated
-   snapshot handoff, and v2 completion/recovery. Keep snapshot-mode production
-   dispatch disabled until D3 continuation planning and D4 SourceLedger/
-   promotion/replay are complete.
-2. Correct event replay identity, terminal last-outcome ownership, and postrun
-   projection completeness in their owning lifecycle slices.
-3. Run serial no-LLM four-profile characterization, matched canonical/pure-ALNS
-   campaigns, and canonical transplant replay in that order.
-4. Execute the warehouse fixed/decomposition plan after D3 problem-owned
-   mechanism attribution is implemented; protect every named evidence input.
+1. Keep Checkpoints A and B dormant and write the evidence-preserving historical
+   activation addendum. Classify every legacy database without inventing sealed
+   provenance; retain, quarantine, or reject ambiguous state explicitly.
+2. After addendum acceptance, perform one clean-stop, indivisible D2b.0b.C
+   schema/all-writer cutover followed by D2b.0b.V acceptance. No runnable state
+   may combine active revisions with a legacy writer.
+3. Complete the remaining paired D2b slot/dispatch/receipt ownership, D2c exact
+   DecisionOutcome transport, D2d isolated snapshot handoff, D2e v2 completion/
+   recovery, then D3-D4 continuation/lineage/promotion and the L1-L3 normalized
+   research ledger. Correct replay/finalization/postrun facts only in their
+   owning lifecycle slices.
+4. Run serial no-LLM four-profile characterization, matched canonical/pure-ALNS
+   campaigns, canonical transplant replay, and the warehouse fixed/decomposition
+   plan only after the owning runtime boundaries are accepted.
 
 ## R9 Continuation Terminal Checks
 

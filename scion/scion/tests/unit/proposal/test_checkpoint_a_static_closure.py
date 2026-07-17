@@ -16,6 +16,8 @@ _CODE_SOURCE_OWNER = "proposal/hypothesis_code_source_owner.py"
 _CONTEXT_MANAGER = "proposal/context_manager/manager.py"
 _PROMPT_OWNER = "proposal/prompt_projection_authority.py"
 _PROVIDER_OWNER = "proposal/engine/provider_call.py"
+_CONTRACT_GATE = "contract/gate.py"
+_TARGET_FACTORY = "proposal/hypothesis_target_factory.py"
 
 _LEAF_IMPORTERS = {
     _REGISTRY,
@@ -24,10 +26,13 @@ _LEAF_IMPORTERS = {
     _CONTEXT_MANAGER,
     _PROMPT_OWNER,
     _PROVIDER_OWNER,
+    _CONTRACT_GATE,
+    _TARGET_FACTORY,
 }
 
 _LEAF_EXTERNAL_CALLERS = {
     "_install_checkpoint_a_authorities": set(),
+    "_extend_checkpoint_b_authorities": set(),
     "_require_authority": set(_LEAF_IMPORTERS),
     "_require_same_installation": {_REGISTRY},
     "_issue_generation_view": {_REGISTRY},
@@ -62,6 +67,22 @@ _LEAF_EXTERNAL_CALLERS = {
     "_issue_failed_generation": {_PROVIDER_OWNER},
     "_issue_aborted_generation": {_REGISTRY},
     "_inspect_generation_outcome": {_REGISTRY},
+    "_claim_generated_result_for_contract": {_CONTRACT_GATE},
+    "_issue_hypothesis_contract_approval": {_CONTRACT_GATE},
+    "_issue_hypothesis_contract_rejection": {_CONTRACT_GATE},
+    "_finish_hypothesis_contract_unknown": {_CONTRACT_GATE},
+    "_verify_hypothesis_contract_rejection": {_REGISTRY},
+    "_claim_contract_approval_for_target": {_TARGET_FACTORY},
+    "_issue_approved_hypothesis_target": {_TARGET_FACTORY},
+    "_finish_hypothesis_target_unknown": {_TARGET_FACTORY},
+    "_claim_approved_target_for_creation": {_REGISTRY},
+    "_finish_hypothesis_creation_unknown": {_REGISTRY},
+    "_issue_hypothesis_creation_view": {_REGISTRY},
+    "_claim_hypothesis_creation_view": {_REGISTRY},
+    "_claim_generated_result_for_creation": {_PROPOSAL_OWNER},
+    "_spend_hypothesis_creation_view": {_REGISTRY},
+    "_settle_creation_view_claim_fault": {_REGISTRY},
+    "_settle_checkpoint_b_unknown": {_REGISTRY},
     "_begin_terminal_persistence": {_REGISTRY},
     "_claim_terminal_outcome": {_PROPOSAL_OWNER},
     "_issue_terminal_receipt": {_PROPOSAL_OWNER},
@@ -80,6 +101,8 @@ _LEAF_INTERNAL_ONLY = {
     "_optional_bool",
     "_required_digest",
     "_required_nonnegative_int",
+    "_canonical_c0_governance_bytes",
+    "_issue_contract_decision",
     "_lookup_exact",
     "_handle_state",
     "_same_installation",
@@ -218,6 +241,7 @@ def test_checkpoint_a_leaf_and_prompt_provider_dependencies_are_acyclic() -> Non
         "dataclasses",
         "enum",
         "hashlib",
+        "json",
         "threading",
         "typing",
         "weakref",

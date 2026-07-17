@@ -1,4 +1,4 @@
-"""Dormant one-root Campaign coordination for durable Branch/H mutations.
+"""Dormant one-root Campaign coordination for durable Branch/H ownership.
 
 The Registry is the sole Campaign-local owner of immutable revision tokens,
 detached projections, mutation views, receipt staging, and post-commit local
@@ -7,9 +7,9 @@ decoder; ``owner_transaction`` owns permits and receipts; ``sqlite_connection``
 owns connection and transaction lifecycle.
 
 This module is deliberately not imported by production Campaign composition.
-It implements existing-owner mutation only.  Creation views and creation
-receipt consumption remain unavailable until champion and proposal-attempt
-participants can bind their durable authorization into the write receipt.
+It owns existing-owner mutation and the complete dormant authorization-bound
+hypothesis-creation vertical.  Schema activation, legacy-writer migration, and
+production cutover remain separate responsibilities.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from types import MappingProxyType
 from typing import Any, Final, Mapping
 
+from scion.contract.gate import ContractGate
 from scion.core.models import Branch, HypothesisRecord
 from scion.lineage import owner_transaction as _owner
 from scion.lineage import sqlite_connection as _sqlite
@@ -57,6 +58,7 @@ from scion.proposal.hypothesis_code_source_owner import (
     HypothesisCodeSourceRejectedError,
     HypothesisCodeSourceUnknownError,
 )
+from scion.proposal.hypothesis_target_factory import HypothesisTargetFactory
 from scion.proposal.prompt_projection_authority import (
     ProposalPromptProjectionAuthority,
 )
@@ -178,6 +180,15 @@ class _HypothesisGenerationComponents:
     provider_owner: ProviderCallOwner
     registry_authority: _generation._AuthorityHandle
     provider_authority: _generation._AuthorityHandle
+    contract_gate: ContractGate | None
+    target_factory: HypothesisTargetFactory | None
+    contract_gate_authority: _generation._AuthorityHandle | None
+    target_factory_authority: _generation._AuthorityHandle | None
+    contract_config_digest: str | None
+    contract_protocol_generation: str | None
+    target_factory_config_digest: str | None
+    target_factory_protocol_generation: str | None
+    taxonomy_digest: str | None
     campaign_id: str
     runtime_mode: str
     problem_id: str
@@ -212,8 +223,11 @@ class _HypothesisGenerationState:
         _generation.GeneratedHypothesisResult
         | _generation.FailedHypothesisGeneration
         | _generation.AbortedHypothesisGeneration
+        | _generation.HypothesisContractRejection
         | None
     ) = None
+    approved_target: _generation.ApprovedHypothesisTarget | None = None
+    creation_view: _generation.HypothesisCreationView | None = None
 
 
 class LoadedRestoreAuthority:
@@ -722,6 +736,8 @@ def _owner_context_json(
 def _restore_generation_holds(
     inventory: _HypothesisAttemptInventory,
     prepared_root: _CampaignOwnerState,
+    *,
+    creation_aware: bool,
 ) -> dict[str, _HypothesisGenerationReservation]:
     if type(inventory) is not _HypothesisAttemptInventory:
         raise DurableOwnerIntegrityError(
@@ -747,6 +763,76 @@ def _restore_generation_holds(
             raise DurableOwnerIntegrityError(
                 "proposal-attempt restore has an unknown group disposition"
             )
+        elif creation_aware and any(
+            event.status == "generated" for event in group.events
+        ):
+            binding = group.binding
+            if binding is None:
+                held_branches.add(
+                    _required_owner_id(
+                        group.branch_id,
+                        label="restored unbound generated-H Branch ID",
+                    )
+                )
+                continue
+            branch_slot = prepared_root.branch_slots.get(group.branch_id)
+            hypothesis_slot = prepared_root.hypothesis_slots.by_id.get(
+                binding.hypothesis_id
+            )
+            generated = tuple(
+                event for event in group.events if event.status == "generated"
+            )
+            parent_slot = (
+                None
+                if binding.parent_hypothesis_id is None
+                else prepared_root.hypothesis_slots.by_id.get(
+                    binding.parent_hypothesis_id
+                )
+            )
+            target_value = (
+                None if hypothesis_slot is None else hypothesis_slot.projection
+            )
+            parent_matches = (
+                binding.parent_hypothesis_id is None
+                and binding.parent_owner_revision is None
+                and binding.parent_storage_sha256 is None
+                and target_value is not None
+                and target_value.parent_hypothesis_id is None
+            ) or (
+                binding.parent_hypothesis_id is not None
+                and parent_slot is not None
+                and target_value is not None
+                and target_value.parent_hypothesis_id
+                == binding.parent_hypothesis_id
+                and parent_slot.owner.owner_revision
+                == binding.parent_owner_revision
+                and parent_slot.owner.payload_sha256
+                == binding.parent_storage_sha256
+                and parent_slot.projection.branch_id == group.branch_id
+            )
+            if not (
+                len(generated) == 1
+                and generated[0].hypothesis_id == binding.hypothesis_id
+                and branch_slot is not None
+                and branch_slot.owner.owner_revision
+                == binding.branch_owner_revision
+                and branch_slot.owner.payload_sha256
+                == binding.branch_storage_sha256
+                and hypothesis_slot is not None
+                and hypothesis_slot.owner.owner_revision == 0
+                and hypothesis_slot.owner.payload_sha256
+                == binding.hypothesis_storage_sha256
+                and target_value is not None
+                and target_value.branch_id == group.branch_id
+                and target_value.proposal_digest == binding.proposal_digest
+                and parent_matches
+            ):
+                held_branches.add(
+                    _required_owner_id(
+                        group.branch_id,
+                        label="restored generated-H Branch ID",
+                    )
+                )
     holds: dict[str, _HypothesisGenerationReservation] = {}
     for branch_id in sorted(held_branches):
         if branch_id not in prepared_root.branch_slots:
@@ -861,6 +947,8 @@ def _root_hypothesis_tokens(
 def _prepare_successor_root(
     old_root: _CampaignOwnerState,
     staged_tokens: Mapping[_MutationView, _OwnerToken],
+    *,
+    created_hypothesis: RevisionedHypothesisRecord | None = None,
 ) -> _CampaignOwnerState:
     branch_tokens = _root_branch_tokens(old_root)
     hypothesis_tokens = _root_hypothesis_tokens(old_root)
@@ -889,11 +977,128 @@ def _prepare_successor_root(
             raise InvalidCampaignOwnerCapabilityError(
                 "prepared root contains a forged mutation view"
             )
+    if created_hypothesis is not None:
+        if type(created_hypothesis) is not RevisionedHypothesisRecord:
+            raise DurableOwnerIntegrityError(
+                "hypothesis creation produced another owner kind"
+            )
+        if created_hypothesis.owner_revision != 0:
+            raise DurableOwnerIntegrityError(
+                "hypothesis creation must publish revision zero"
+            )
+        if created_hypothesis.hypothesis_id in hypothesis_tokens:
+            raise DurableOwnerIntegrityError(
+                "hypothesis creation cannot replace a local owner"
+            )
+        target = created_hypothesis.value()
+        if target.branch_id not in branch_tokens:
+            raise DurableOwnerIntegrityError(
+                "hypothesis creation references an absent Branch owner"
+            )
+        if target.parent_hypothesis_id is not None:
+            parent = hypothesis_tokens.get(target.parent_hypothesis_id)
+            if parent is None:
+                raise DurableOwnerIntegrityError(
+                    "hypothesis creation references an absent parent owner"
+                )
+            if parent.value().branch_id != target.branch_id:
+                raise DurableOwnerIntegrityError(
+                    "hypothesis creation parent belongs to another Branch"
+                )
+        hypothesis_tokens[created_hypothesis.hypothesis_id] = created_hypothesis
     return _build_owner_state(
         branch_tokens,
         hypothesis_tokens,
         generation=old_root.publication_generation + 1,
     )
+
+
+def _classify_hypothesis_creation_from_snapshot(
+    registry: "CampaignOwnerRegistry",
+    snapshot: _sqlite._IndependentReadSnapshot,
+    *,
+    source_root: _CampaignOwnerState,
+    source_branch: RevisionedBranchRecord,
+    source_bundle: tuple[RevisionedHypothesisRecord, ...],
+    prior_head: RevisionedHypothesisRecord | None,
+    target: RevisionedHypothesisRecord,
+    proposal_witness: _owner.SemanticCreationOutcomeWitness,
+    creation_authorization: _owner._OwnerCreationAuthorization,
+) -> _CommitOutcome:
+    """Classify the complete Branch/H/event/binding group in one snapshot."""
+
+    if type(registry) is not CampaignOwnerRegistry:
+        raise InvalidCampaignOwnerCapabilityError(
+            "creation classification requires the exact Registry"
+        )
+    if type(target) is not RevisionedHypothesisRecord or target.owner_revision != 0:
+        raise DurableOwnerIntegrityError(
+            "creation classification requires an exact revision-zero target"
+        )
+    actual_branch = registry._branch_store._load_revisioned_branch_from_snapshot(
+        snapshot,
+        source_branch.branch_id,
+    )
+    actual_bundle = (
+        registry._hypothesis_store
+        ._load_branch_hypotheses_with_generated_target_from_snapshot(
+            snapshot,
+            source_branch.branch_id,
+            target.hypothesis_id,
+        )
+    )
+    actual_target = (
+        registry._hypothesis_store
+        ._load_generated_revisioned_hypothesis_from_snapshot(
+            snapshot,
+            target.hypothesis_id,
+        )
+    )
+    semantic = registry._require_hypothesis_generation_components().proposal_owner._classify(
+        snapshot,
+        proposal_witness,
+        creation_authorization,
+    )
+    expected_bundle = tuple(
+        sorted(source_bundle, key=lambda token: token.hypothesis_id)
+    )
+    committed_bundle = tuple(
+        sorted((*source_bundle, target), key=lambda token: token.hypothesis_id)
+    )
+    retained_prior = _prior_hypothesis_head(source_bundle)
+    root_branch = source_root.branch_slots.get(source_branch.branch_id)
+    root_bundle = tuple(
+        sorted(
+            (
+                slot.owner
+                for slot in source_root.hypothesis_slots.by_id.values()
+                if slot.projection.branch_id == source_branch.branch_id
+            ),
+            key=lambda token: token.hypothesis_id,
+        )
+    )
+    if (
+        root_branch is None
+        or root_branch.owner != source_branch
+        or root_bundle != expected_bundle
+        or retained_prior != prior_head
+    ):
+        return _CommitOutcome.UNCERTAIN_OR_MIXED
+    if (
+        semantic is ProposalAttemptCommitClassification.EXPECTED
+        and actual_branch == source_branch
+        and actual_target is None
+        and actual_bundle == expected_bundle
+    ):
+        return _CommitOutcome.PROVEN_ROLLED_BACK
+    if (
+        semantic is ProposalAttemptCommitClassification.COMMITTED
+        and actual_branch == source_branch
+        and actual_target == target
+        and actual_bundle == committed_bundle
+    ):
+        return _CommitOutcome.PROVEN_COMMITTED
+    return _CommitOutcome.UNCERTAIN_OR_MIXED
 
 
 def _lookup_restore_state(value: object) -> _RestoreState:
@@ -1143,13 +1348,17 @@ class CampaignOwnerRegistry:
         provider_owner: ProviderCallOwner,
         registry_authority: _generation._AuthorityHandle,
         provider_authority: _generation._AuthorityHandle,
+        contract_gate: ContractGate | None = None,
+        target_factory: HypothesisTargetFactory | None = None,
+        contract_gate_authority: _generation._AuthorityHandle | None = None,
+        target_factory_authority: _generation._AuthorityHandle | None = None,
         runtime_mode: str,
         problem_id: str,
         problem_spec_hash: str,
         split_manifest_hash: str,
         seed_ledger_hash: str,
     ) -> None:
-        """Install one immutable dormant checkpoint-A composition exactly once."""
+        """Install one immutable dormant A or complete A+B composition once."""
 
         _assert_no_active_scope()
         if type(code_source_owner) is not HypothesisCodeSourceOwner:
@@ -1199,6 +1408,53 @@ class CampaignOwnerRegistry:
             provider_authority,
             *component_handles,
         )
+        checkpoint_b_values = (
+            contract_gate,
+            target_factory,
+            contract_gate_authority,
+            target_factory_authority,
+        )
+        if any(value is not None for value in checkpoint_b_values):
+            if any(value is None for value in checkpoint_b_values):
+                raise InvalidCampaignOwnerCapabilityError(
+                    "checkpoint-B composition requires both exact owners and handles"
+                )
+            if type(contract_gate) is not ContractGate:
+                raise InvalidCampaignOwnerCapabilityError(
+                    "checkpoint-B composition requires the exact ContractGate"
+                )
+            if type(target_factory) is not HypothesisTargetFactory:
+                raise InvalidCampaignOwnerCapabilityError(
+                    "checkpoint-B composition requires the exact target factory"
+                )
+            assert contract_gate_authority is not None
+            assert target_factory_authority is not None
+            _generation._require_authority(
+                contract_gate_authority,
+                role=_generation._AuthorityRole.CONTRACT_GATE,
+                owner=contract_gate,
+            )
+            _generation._require_authority(
+                target_factory_authority,
+                role=_generation._AuthorityRole.TARGET_FACTORY,
+                owner=target_factory,
+            )
+            if (
+                contract_gate._require_hypothesis_generation_authority()
+                is not contract_gate_authority
+                or target_factory._require_authority()
+                is not target_factory_authority
+            ):
+                raise InvalidCampaignOwnerCapabilityError(
+                    "checkpoint-B owner handles differ from their composition"
+                )
+            _generation._require_same_installation(
+                registry_authority,
+                provider_authority,
+                contract_gate_authority,
+                target_factory_authority,
+                *component_handles,
+            )
         authority_state = _sqlite._lookup_authority_state(self._database_authority)
         mode = _required_owner_id(runtime_mode, label="runtime mode")
         if mode != "direct_v3":
@@ -1213,6 +1469,50 @@ class CampaignOwnerRegistry:
             provider_owner=provider_owner,
             registry_authority=registry_authority,
             provider_authority=provider_authority,
+            contract_gate=contract_gate,
+            target_factory=target_factory,
+            contract_gate_authority=contract_gate_authority,
+            target_factory_authority=target_factory_authority,
+            contract_config_digest=(
+                None
+                if contract_gate is None
+                else _required_digest(
+                    contract_gate.hypothesis_contract_config_digest,
+                    label="hypothesis Contract config digest",
+                )
+            ),
+            contract_protocol_generation=(
+                None
+                if contract_gate is None
+                else _required_owner_id(
+                    contract_gate.hypothesis_contract_protocol_generation,
+                    label="hypothesis Contract protocol generation",
+                )
+            ),
+            target_factory_config_digest=(
+                None
+                if target_factory is None
+                else _required_digest(
+                    target_factory.target_factory_config_digest,
+                    label="hypothesis target-factory config digest",
+                )
+            ),
+            target_factory_protocol_generation=(
+                None
+                if target_factory is None
+                else _required_owner_id(
+                    target_factory.target_factory_protocol_generation,
+                    label="hypothesis target-factory protocol generation",
+                )
+            ),
+            taxonomy_digest=(
+                None
+                if target_factory is None
+                else _required_digest(
+                    target_factory.taxonomy_digest,
+                    label="hypothesis taxonomy digest",
+                )
+            ),
             campaign_id=_required_owner_id(
                 authority_state.campaign_id,
                 label="Campaign ID",
@@ -1267,16 +1567,40 @@ class CampaignOwnerRegistry:
                         snapshot
                     )
                 )
-                hypotheses = (
-                    self._hypothesis_store._load_all_revisioned_hypotheses_from_snapshot(
-                        snapshot
-                    )
-                )
                 components = self._hypothesis_generation_components
                 if components is not None:
                     attempt_inventory = (
                         components.proposal_owner
                         ._load_hypothesis_attempt_inventory_from_snapshot(snapshot)
+                    )
+                creation_aware = (
+                    components is not None
+                    and components.contract_gate is not None
+                    and components.target_factory is not None
+                )
+                if creation_aware and attempt_inventory is not None:
+                    generated_target_ids = tuple(
+                        sorted(
+                            {
+                                group.binding.hypothesis_id
+                                for group in attempt_inventory.groups
+                                if group.disposition
+                                is _AttemptGroupDisposition.RESOLVED
+                                and group.binding is not None
+                            }
+                        )
+                    )
+                    hypotheses = (
+                        self._hypothesis_store
+                        ._load_all_hypotheses_with_generated_targets_from_snapshot(
+                            snapshot,
+                            generated_target_ids,
+                        )
+                    )
+                else:
+                    hypotheses = (
+                        self._hypothesis_store
+                        ._load_all_revisioned_hypotheses_from_snapshot(snapshot)
                     )
             branch_tokens = {token.branch_id: token for token in branches}
             hypothesis_tokens = {token.hypothesis_id: token for token in hypotheses}
@@ -1296,7 +1620,15 @@ class CampaignOwnerRegistry:
             restore_holds = (
                 {}
                 if attempt_inventory is None
-                else _restore_generation_holds(attempt_inventory, prepared)
+                else _restore_generation_holds(
+                    attempt_inventory,
+                    prepared,
+                    creation_aware=(
+                        components is not None
+                        and components.contract_gate is not None
+                        and components.target_factory is not None
+                    ),
+                )
             )
             self._pending_restore_root = prepared
             self._pending_restore_generation_holds = restore_holds
@@ -1476,6 +1808,27 @@ class CampaignOwnerRegistry:
             raise CampaignOwnerIntegrityHoldError(
                 "hypothesis generation view lost its Branch reservation"
             )
+        return state
+
+    def _lookup_hypothesis_creation_state_locked(
+        self,
+        creation_view: _generation.HypothesisCreationView,
+    ) -> _HypothesisGenerationState:
+        if type(creation_view) is not _generation.HypothesisCreationView:
+            raise InvalidCampaignOwnerCapabilityError(
+                "operation requires an exact HypothesisCreationView"
+            )
+        matches = tuple(
+            state
+            for state in self._hypothesis_generation_states.values()
+            if state.creation_view is creation_view
+        )
+        if len(matches) != 1:
+            raise InvalidCampaignOwnerCapabilityError(
+                "creation view was not issued by this Registry"
+            )
+        state = matches[0]
+        self._lookup_hypothesis_generation_state_locked(state.view)
         return state
 
     def _require_generation_root_current_locked(
@@ -1764,6 +2117,19 @@ class CampaignOwnerRegistry:
                 reservation_id=reservation_id,
                 h_bundle_digest=h_bundle_digest,
                 owner_context_json=owner_context_json,
+                contract_gate_authority=components.contract_gate_authority,
+                target_factory_authority=components.target_factory_authority,
+                contract_config_digest=components.contract_config_digest,
+                contract_protocol_generation=(
+                    components.contract_protocol_generation
+                ),
+                target_factory_config_digest=(
+                    components.target_factory_config_digest
+                ),
+                target_factory_protocol_generation=(
+                    components.target_factory_protocol_generation
+                ),
+                taxonomy_digest=components.taxonomy_digest,
             )
             reservation = _HypothesisGenerationReservation(
                 branch_id=owner_id,
@@ -2146,6 +2512,516 @@ class CampaignOwnerRegistry:
                     _GenerationReservationPhase.OUTCOME_BOUND
                 )
 
+    def prepare_hypothesis_creation(
+        self,
+        view: _generation.HypothesisGenerationView,
+        approved_target: _generation.ApprovedHypothesisTarget,
+    ) -> _generation.HypothesisCreationView:
+        """Transfer one exact approved result into its independent creation view."""
+
+        _assert_no_active_scope()
+        components = self._require_hypothesis_generation_components()
+        if (
+            components.contract_gate is None
+            or components.target_factory is None
+            or components.contract_gate_authority is None
+            or components.target_factory_authority is None
+        ):
+            raise CampaignOwnerLifecycleError(
+                "hypothesis creation requires complete checkpoint-B composition"
+            )
+        if type(approved_target) is not _generation.ApprovedHypothesisTarget:
+            raise InvalidCampaignOwnerCapabilityError(
+                "hypothesis creation requires an exact approved target"
+            )
+        with self._owner_lock:
+            state = self._lookup_hypothesis_generation_state_locked(view)
+            if (
+                state.reservation.phase
+                is not _GenerationReservationPhase.DURABLE_OPEN
+                or type(state.outcome) is not _generation.GeneratedHypothesisResult
+                or state.approved_target is not None
+                or state.creation_view is not None
+            ):
+                raise CampaignOwnerLifecycleError(
+                    "generation view has no exact approved result to transfer"
+                )
+            self._require_generation_root_current_locked(state)
+            try:
+                target_projection = _generation._claim_approved_target_for_creation(
+                    components.registry_authority,
+                    view,
+                    approved_target,
+                )
+                creation_view = _generation._issue_hypothesis_creation_view(
+                    components.registry_authority,
+                    view,
+                    result=state.outcome,
+                    approval=target_projection.approval,
+                    target=approved_target,
+                )
+            except BaseException as error:
+                postclaim = False
+                try:
+                    postclaim = (
+                        _generation._finish_hypothesis_creation_unknown(
+                            components.registry_authority,
+                            view,
+                            approved_target,
+                        )
+                    )
+                except BaseException as cleanup:
+                    _append_cleanup_context(error, cleanup)
+                if postclaim:
+                    self._hold_generation_reservation_locked(state)
+                raise
+            state.approved_target = approved_target
+            state.creation_view = creation_view
+            return creation_view
+
+    def commit_hypothesis_creation(
+        self,
+        creation_view: _generation.HypothesisCreationView,
+    ) -> RevisionedHypothesisRecord:
+        """Atomically own generated event, binding, revision-zero H, and root."""
+
+        _assert_no_active_scope()
+        components = self._require_hypothesis_generation_components()
+        if (
+            components.contract_gate is None
+            or components.target_factory is None
+            or components.contract_gate_authority is None
+            or components.target_factory_authority is None
+        ):
+            raise CampaignOwnerLifecycleError(
+                "hypothesis creation requires complete checkpoint-B composition"
+            )
+
+        primary: BaseException | None = None
+        primary_traceback: Any = None
+        cleanup_errors: list[BaseException] = []
+        session: _sqlite._CoordinatedTransactionSession | None = None
+        ledger: _owner._OwnerReceiptLedger | None = None
+        creation_authorization: _owner._OwnerCreationAuthorization | None = None
+        receipt: _owner.OwnerCreationReceipt | None = None
+        receipt_witness: _owner._OwnerReceiptWitness | None = None
+        proposal_witness: _owner.SemanticCreationOutcomeWitness | None = None
+        target: RevisionedHypothesisRecord | None = None
+        prepared_root: _CampaignOwnerState | None = None
+        commit_latched = False
+        commit_returned = False
+        creation_claimed = False
+        creation_settled_on_fault = False
+        deactivation_complete = False
+        session_resources_closed = False
+        settlement: _sqlite._OriginalConnectionSettlement | None = None
+        outcome: _CommitOutcome | None = None
+
+        self._owner_lock.acquire()
+        state: _HypothesisGenerationState | None = None
+        try:
+            state = self._lookup_hypothesis_creation_state_locked(creation_view)
+            if (
+                state.reservation.phase
+                is not _GenerationReservationPhase.DURABLE_OPEN
+                or state.creation_view is not creation_view
+                or state.approved_target is None
+                or type(state.outcome) is not _generation.GeneratedHypothesisResult
+                or state.started_attempt is None
+            ):
+                raise CampaignOwnerLifecycleError(
+                    "creation view has no exact durable generation reservation"
+                )
+            self._require_generation_root_current_locked(state)
+            if self._availability is not _Availability.CLEAR:
+                raise CampaignOwnerLifecycleError(
+                    "Campaign owner Registry is not available for creation"
+                )
+            self._availability = _Availability.TRANSITION
+
+            try:
+                session = _sqlite._open_coordinated_transaction_session(
+                    self._database_authority
+                )
+                transaction = _sqlite._coordinated_transaction(
+                    session,
+                    self._database_authority,
+                )
+                ledger = _owner._attach_owner_receipt_ledger(
+                    transaction,
+                    self._database_authority,
+                )
+                creation_projection = _generation._claim_hypothesis_creation_view(
+                    components.registry_authority,
+                    creation_view,
+                )
+                creation_claimed = True
+                target = creation_projection.revision_zero_target
+                if (
+                    creation_projection.generation_view is not state.view
+                    or creation_projection.result is not state.outcome
+                    or creation_projection.target is not state.approved_target
+                    or type(target) is not RevisionedHypothesisRecord
+                    or target.owner_revision != 0
+                    or target.hypothesis_id
+                    in state.root.hypothesis_slots.by_id
+                    or target.value().branch_id != state.branch_owner.branch_id
+                    or target.value().parent_hypothesis_id
+                    != (
+                        None
+                        if state.prior_head is None
+                        else state.prior_head.hypothesis_id
+                    )
+                ):
+                    raise DurableOwnerIntegrityError(
+                        "creation view differs from its captured Registry owner facts"
+                    )
+                self._require_generation_owners_current_in(transaction, state)
+                creation_authorization = (
+                    components.proposal_owner
+                    .begin_generated_hypothesis_creation_in(
+                        transaction,
+                        ledger,
+                        creation_view,
+                        source_branch=state.branch_owner,
+                        prior_head=state.prior_head,
+                        started_attempt=state.started_attempt,
+                        target=target,
+                    )
+                )
+                components.proposal_owner.append_generated_hypothesis_creation_in(
+                    transaction,
+                    creation_authorization,
+                )
+                receipt = self._hypothesis_store.insert_generated_once_in(
+                    transaction,
+                    state.branch_owner,
+                    state.prior_head,
+                    target,
+                    creation_authorization,
+                )
+                proposal_witness = (
+                    components.proposal_owner
+                    .complete_generated_hypothesis_creation_in(
+                        transaction,
+                        ledger,
+                        creation_authorization,
+                        receipt,
+                    )
+                )
+                components.proposal_owner._require(
+                    proposal_witness,
+                    creation_authorization,
+                )
+                receipt_witness = _owner._consume_hypothesis_creation_receipt(
+                    ledger,
+                    receipt,
+                )
+                if (
+                    receipt_witness.owner_kind is not _owner._OwnerKind.HYPOTHESIS
+                    or receipt_witness.expected_token is not None
+                    or receipt_witness.committed_token != target
+                    or receipt_witness.creation_authorization
+                    is not creation_authorization
+                ):
+                    raise DurableOwnerIntegrityError(
+                        "hypothesis creation receipt differs from its exact target"
+                    )
+                prepared_root = _prepare_successor_root(
+                    state.root,
+                    {},
+                    created_hypothesis=target,
+                )
+                sealed = _owner._seal_owner_receipt_ledger(ledger, (receipt,))
+                if sealed != (receipt_witness,):
+                    raise _owner.OwnerReceiptClosureError(
+                        "sealed H creation witness differs from staged receipt"
+                    )
+                components.proposal_owner._require(
+                    proposal_witness,
+                    creation_authorization,
+                )
+                commit_latched = True
+                _sqlite._commit_coordinated_transaction(
+                    session,
+                    self._database_authority,
+                )
+                commit_returned = True
+                outcome = _CommitOutcome.PROVEN_COMMITTED
+            except BaseException as error:
+                primary = error
+                primary_traceback = error.__traceback__
+                if not creation_claimed:
+                    try:
+                        creation_settled_on_fault = (
+                            _generation._settle_creation_view_claim_fault(
+                                components.registry_authority,
+                                creation_view,
+                            )
+                        )
+                        creation_claimed = creation_settled_on_fault
+                    except BaseException as cleanup:
+                        cleanup_errors.append(cleanup)
+
+            if session is None:
+                try:
+                    recovered_session = _sqlite._thread_session_owner()
+                    if type(recovered_session) is _sqlite._CoordinatedTransactionSession:
+                        recovered_state = _sqlite._lookup_session_state(
+                            recovered_session
+                        )
+                        if recovered_state.authority is self._database_authority:
+                            session = recovered_session
+                except BaseException as error:
+                    cleanup_errors.append(error)
+
+            if ledger is not None:
+                try:
+                    _owner._close_owner_receipt_ledger(
+                        ledger,
+                        self._database_authority,
+                    )
+                except BaseException as error:
+                    cleanup_errors.append(error)
+
+            if session is not None:
+                try:
+                    _sqlite._deactivate_coordinated_transaction(
+                        session,
+                        self._database_authority,
+                    )
+                except BaseException as error:
+                    cleanup_errors.append(error)
+                try:
+                    session_state = _sqlite._lookup_session_state(session)
+                    deactivation_complete = _sqlite._session_deactivation_complete(
+                        session_state
+                    )
+                except BaseException as error:
+                    cleanup_errors.append(error)
+                if commit_returned:
+                    if deactivation_complete:
+                        try:
+                            _sqlite._close_coordinated_transaction(
+                                session,
+                                self._database_authority,
+                            )
+                        except BaseException as error:
+                            cleanup_errors.append(error)
+                elif deactivation_complete:
+                    try:
+                        settlement = (
+                            _sqlite._settle_deactivated_original_connection(
+                                session,
+                                self._database_authority,
+                            )
+                        )
+                    except BaseException as error:
+                        cleanup_errors.append(error)
+                try:
+                    session_state = _sqlite._lookup_session_state(session)
+                    session_resources_closed = _sqlite._session_resources_closed(
+                        session,
+                        session_state,
+                    )
+                except BaseException as error:
+                    cleanup_errors.append(error)
+
+            if (
+                commit_latched
+                and not commit_returned
+                and deactivation_complete
+                and proposal_witness is not None
+                and creation_authorization is not None
+                and target is not None
+            ):
+                try:
+                    with _sqlite._independent_authority_read_snapshot(
+                        self._database_authority
+                    ) as snapshot:
+                        outcome = _classify_hypothesis_creation_from_snapshot(
+                            self,
+                            snapshot,
+                            source_root=state.root,
+                            source_branch=state.branch_owner,
+                            source_bundle=state.hypothesis_bundle,
+                            prior_head=state.prior_head,
+                            target=target,
+                            proposal_witness=proposal_witness,
+                            creation_authorization=creation_authorization,
+                        )
+                except BaseException as error:
+                    cleanup_errors.append(error)
+                    outcome = _CommitOutcome.UNCERTAIN_OR_MIXED
+
+            if outcome is _CommitOutcome.PROVEN_COMMITTED:
+                if not deactivation_complete or prepared_root is None or target is None:
+                    outcome = _CommitOutcome.UNCERTAIN_OR_MIXED
+                else:
+                    if self._owner_state is not state.root:
+                        outcome = _CommitOutcome.UNCERTAIN_OR_MIXED
+                    else:
+                        self._owner_state = prepared_root
+                        try:
+                            if proposal_witness is None or creation_authorization is None:
+                                raise DurableOwnerIntegrityError(
+                                    "committed creation lost its semantic strong pair"
+                                )
+                            components.proposal_owner._settle(
+                                proposal_witness,
+                                creation_authorization,
+                            )
+                            _generation._spend_hypothesis_creation_view(
+                                components.registry_authority,
+                                creation_view,
+                            )
+                            self._resolve_generation_reservation_locked(state)
+                            self._availability = (
+                                _Availability.CLEAR
+                                if session_resources_closed
+                                else _Availability.PERMANENT_HOLD
+                            )
+                        except BaseException as error:
+                            cleanup_errors.append(error)
+                            self._availability = _Availability.PERMANENT_HOLD
+
+            if outcome is _CommitOutcome.PROVEN_ROLLED_BACK:
+                try:
+                    if proposal_witness is None or creation_authorization is None:
+                        raise DurableOwnerIntegrityError(
+                            "classified rollback lost its semantic strong pair"
+                        )
+                    components.proposal_owner._settle(
+                        proposal_witness,
+                        creation_authorization,
+                    )
+                    _generation._spend_hypothesis_creation_view(
+                        components.registry_authority,
+                        creation_view,
+                    )
+                    self._hold_generation_reservation_locked(state)
+                    self._availability = (
+                        _Availability.CLEAR
+                        if session_resources_closed
+                        else _Availability.PERMANENT_HOLD
+                    )
+                except BaseException as error:
+                    cleanup_errors.append(error)
+                    self._availability = _Availability.PERMANENT_HOLD
+
+            if not commit_latched:
+                safe_without_session = (
+                    session is None and _sqlite._thread_session_owner() is None
+                )
+                rollback_proven = (
+                    settlement is _sqlite._OriginalConnectionSettlement.ROLLED_BACK
+                )
+                if creation_authorization is not None:
+                    try:
+                        components.proposal_owner._discard(creation_authorization)
+                    except BaseException as error:
+                        cleanup_errors.append(error)
+                else:
+                    try:
+                        components.proposal_owner._discard_pending_creation_view(
+                            creation_view
+                        )
+                    except BaseException as error:
+                        cleanup_errors.append(error)
+                if creation_claimed:
+                    if not creation_settled_on_fault:
+                        try:
+                            _generation._spend_hypothesis_creation_view(
+                                components.registry_authority,
+                                creation_view,
+                            )
+                        except BaseException as error:
+                            cleanup_errors.append(error)
+                    try:
+                        self._hold_generation_reservation_locked(state)
+                    except BaseException as error:
+                        cleanup_errors.append(error)
+                if (rollback_proven or safe_without_session) and not cleanup_errors:
+                    self._availability = _Availability.CLEAR
+                else:
+                    self._availability = _Availability.PERMANENT_HOLD
+
+            if commit_latched and outcome is None:
+                outcome = _CommitOutcome.UNCERTAIN_OR_MIXED
+
+            if commit_latched and outcome is _CommitOutcome.UNCERTAIN_OR_MIXED:
+                try:
+                    _generation._spend_hypothesis_creation_view(
+                        components.registry_authority,
+                        creation_view,
+                    )
+                except BaseException as error:
+                    cleanup_errors.append(error)
+                try:
+                    self._hold_generation_reservation_locked(state)
+                except BaseException as error:
+                    cleanup_errors.append(error)
+                self._availability = _Availability.PERMANENT_HOLD
+                hold_error = CampaignOwnerIntegrityHoldError(
+                    "hypothesis creation commit outcome is uncertain or mixed"
+                )
+                if primary is not None:
+                    _append_cleanup_context(hold_error, primary)
+                primary = hold_error
+                primary_traceback = hold_error.__traceback__
+
+            if (
+                outcome is _CommitOutcome.PROVEN_COMMITTED
+                and self._owner_state is prepared_root
+                and self._availability is _Availability.CLEAR
+                and target is not None
+            ):
+                if cleanup_errors:
+                    cleanup_error = CampaignOwnerCleanupError(
+                        "hypothesis creation committed but cleanup was incomplete"
+                    )
+                    for error in cleanup_errors:
+                        _append_cleanup_context(cleanup_error, error)
+                    raise cleanup_error
+                return target
+
+            if primary is not None:
+                _raise_primary(primary, primary_traceback, cleanup_errors)
+            if cleanup_errors:
+                cleanup_error = CampaignOwnerCleanupError(
+                    "hypothesis creation cleanup failed"
+                )
+                for error in cleanup_errors:
+                    _append_cleanup_context(cleanup_error, error)
+                raise cleanup_error
+            raise HypothesisGenerationReservationHoldError(
+                "hypothesis creation did not publish a committed owner root"
+            )
+        finally:
+            if (
+                state is not None
+                and self._availability is _Availability.TRANSITION
+            ):
+                self._availability = _Availability.PERMANENT_HOLD
+            self._owner_lock.release()
+
+    def settle_hypothesis_creation_unknown(
+        self,
+        view: _generation.HypothesisGenerationView,
+    ) -> str:
+        """Spend one post-START B UNKNOWN and retain its Branch-local hold."""
+
+        _assert_no_active_scope()
+        components = self._require_hypothesis_generation_components()
+        with self._owner_lock:
+            state = self._lookup_hypothesis_generation_state_locked(view)
+            kind = _generation._settle_checkpoint_b_unknown(
+                components.registry_authority,
+                view,
+            )
+            self._hold_generation_reservation_locked(state)
+            return kind
+
     def abort_hypothesis_generation(
         self,
         view: _generation.HypothesisGenerationView,
@@ -2191,7 +3067,8 @@ class CampaignOwnerRegistry:
         self,
         view: _generation.HypothesisGenerationView,
         outcome: _generation.FailedHypothesisGeneration
-        | _generation.AbortedHypothesisGeneration,
+        | _generation.AbortedHypothesisGeneration
+        | _generation.HypothesisContractRejection,
     ) -> _generation.TerminalAttemptReceipt:
         """Persist one exact terminal outcome and resolve only a committed receipt."""
 
@@ -2206,6 +3083,25 @@ class CampaignOwnerRegistry:
         transition_started = False
         try:
             state = self._lookup_hypothesis_generation_state_locked(view)
+            if type(outcome) is _generation.HypothesisContractRejection:
+                if (
+                    state.reservation.phase
+                    is not _GenerationReservationPhase.DURABLE_OPEN
+                    or type(state.outcome)
+                    is not _generation.GeneratedHypothesisResult
+                ):
+                    raise CampaignOwnerLifecycleError(
+                        "generation view has no exact Contract rejection source"
+                    )
+                _generation._verify_hypothesis_contract_rejection(
+                    components.registry_authority,
+                    view,
+                    outcome,
+                )
+                state.outcome = outcome
+                state.reservation.phase = (
+                    _GenerationReservationPhase.OUTCOME_BOUND
+                )
             if (
                 state.reservation.phase
                 is not _GenerationReservationPhase.OUTCOME_BOUND

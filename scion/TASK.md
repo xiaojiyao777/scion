@@ -1,7 +1,7 @@
 # Scion v0.4 Direct-Runtime Research Task
 
 *Branch: `v0.4-dev`*
-*Last updated: 2026-07-16*
+*Last updated: 2026-07-17*
 
 This is the active task source. Read it with
 `scion/docs/status/current-state.md`; use
@@ -718,13 +718,25 @@ The implementation order is fixed; items 1-3 are complete:
    pre-START abort, and terminal uncertainty all converge to exact release or
    hold states. The capability graph is GC-safe, uses one bounded Context proof,
    distinguishes invalid cross-binding from genuine replay, and has executable
-   exact-caller dependency closure. No production composition, schema effect,
-   retry, budget, cap, gate, cutoff, or truncation was added. The expanded
-   focused set passes `207`; the correctly rooted full suite passes `2765` with
-   `1` skipped in `482.44s`; compileall and diff-check pass. Independent leaf,
-   Registry transaction/recovery, and static dependency reviews close at
-   P0=0/P1=0/P2=0. Checkpoint B is next. Historical activation remains a
-   separate addendum because the
+   exact-caller dependency closure. Checkpoint B is also complete and remains
+   dormant. It freezes exact legacy Contract/taxonomy semantics, binds target
+   construction to sealed clock/UUID authorities, persists strict generated
+   event/binding/revision-zero H ownership, classifies the complete Branch/H/
+   event/binding outcome from one snapshot, and publishes exactly one Registry
+   root. Normal capability reuse is distinguished from hidden claim/issue
+   faults; rollback, restart, partial legacy rows, active lease, malformed
+   terminal semantics, and resource-close-before-effect all converge to an
+   explicit Branch or Campaign hold without a second provider call. No
+   production composition, schema effect, retry, budget, cap, gate, cutoff, or
+   truncation was added. The final Checkpoint A+B focused regression passes
+   `171`; the correctly rooted full suite passes `2906` with `1` skipped in
+   `516.67s`; compileall and diff-check pass. Independent leaf, Registry
+   transaction/recovery, and static dependency reviews close at P0=0/P1=0.
+   One nonblocking P2 remains explicit: the same `BEGIN IMMEDIATE` creation
+   transaction repeats its START/lease preflight after consuming the generated
+   result. It performs no retry or intervening state change and may be collapsed
+   before activation only if doing so does not broaden the authority surface.
+   Historical activation remains a separate addendum because the
    827-database read-only inventory found legacy-extra JSON, malformed rows,
    orphan/multi-campaign ambiguity, and missing sealed provenance that cannot
    be invented. Only after A and B close may the project perform the
@@ -820,11 +832,11 @@ scientific and lineage-owning artifacts remain in place.
    provider permit, and generated-result proof are implemented and dormant.
    The corrected H vertical supersedes the old participant-first continuation.
    Its complete checkpoint A generation-provenance/reservation/terminal-
-   recovery path is implemented, independently accepted, dormant, and
-   production-uncomposed. Implement checkpoint B frozen Contract/target plus
-   fused event/binding/H/Registry publication next. Keep historical activation
-   in its own evidence-preserving
-   addendum. Only then proceed to the indivisible offline cutover,
+   recovery path and checkpoint B frozen Contract/target plus fused event/
+   binding/H/Registry publication are implemented, independently accepted,
+   dormant, and production-uncomposed. Design and accept historical activation
+   in its own evidence-preserving addendum next. Only then proceed to the
+   indivisible offline cutover,
    and closure exactly as frozen, then implement the remaining paired
    slot/dispatch/receipt slices, D2c exact Decision transport, D2d isolated
    snapshot handoff, and D2e v2 completion/recovery;

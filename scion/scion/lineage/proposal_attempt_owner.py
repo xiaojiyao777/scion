@@ -1,10 +1,11 @@
-"""Dormant connection-scoped owner for hypothesis-attempt durable events.
+"""Dormant connection-scoped owner for hypothesis-attempt durable semantics.
 
-The participant owns the strict stored-event codec plus START and non-success
-terminal persistence.  It deliberately owns neither Campaign schema nor
-transaction/snapshot lifecycle, provider transport, Branch/H stores, or
-production composition.  Sealed lifecycle capabilities live only in the leaf
-generation authority.
+The participant owns START/terminal events, immutable generated-H bindings,
+and the H-creation semantic authorizer lifecycle.  It deliberately owns
+neither Campaign schema nor transaction/snapshot lifecycle, provider transport,
+Branch/H stores, or production composition.  Sealed generation capabilities
+live only in the leaf authority; durable owner receipts live in the generic
+transaction ledger.
 """
 
 from __future__ import annotations
@@ -14,12 +15,37 @@ import hashlib
 import json
 import re
 import uuid
+import weakref
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Final
 
 from scion.core.proposal_pipeline.attempts import ProposalAttemptRecorder
+from scion.lineage import owner_transaction as _owner
 from scion.lineage import sqlite_connection as _sqlite
+from scion.lineage.durable_owner import (
+    RevisionedBranchRecord,
+    RevisionedHypothesisRecord,
+)
+from scion.lineage.proposal_attempt_codec import (
+    InvalidStartedHypothesisAttemptError,
+    StartedHypothesisAttemptError,
+    StoredProposalAttemptEvent,
+    StoredProposalHypothesisBinding,
+    _STARTED_EVENT_COLUMNS,
+    _canonical_json_bytes,
+    _decode_canonical_payload_json,
+    _decode_stored_proposal_attempt_event,
+    _decode_stored_proposal_hypothesis_binding,
+    _EVENT_KIND,
+    _EVENT_STAGE,
+    _json_object,
+    _raise_nonfinite_json,
+    _required_digest,
+    _required_exact_string,
+    _required_sqlite_integer,
+    proposal_hypothesis_transition_group_sha256,
+)
 from scion.proposal import hypothesis_generation_authority as _generation
 
 StartedHypothesisAttempt = _generation.StartedHypothesisAttempt
@@ -32,19 +58,10 @@ __all__ = (
     "StartedHypothesisAttempt",
     "StartedHypothesisAttemptError",
     "StoredProposalAttemptEvent",
+    "StoredProposalHypothesisBinding",
     "TerminalAttemptReceipt",
 )
 
-_STARTED_EVENT_COLUMNS: Final[tuple[str, ...]] = (
-    "event_id",
-    "campaign_id",
-    "branch_id",
-    "hypothesis_id",
-    "timestamp",
-    "event_kind",
-    "stage",
-    "audit_payload_json",
-)
 _STARTED_EVENT_INSERT_SQL: Final[str] = """
 INSERT INTO experiment_events (
     event_id,
@@ -70,13 +87,6 @@ SELECT event_id,
 FROM experiment_events
 WHERE event_id = ?
 """
-_EVENT_KIND: Final[str] = "proposal_attempt_transition"
-_EVENT_STAGE: Final[str] = "proposal_hypothesis"
-_EVENT_STORAGE_SCHEMA: Final[str] = "proposal-attempt-event-storage.v1"
-_CANONICAL_UTC_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
-    r"\.[0-9]{6}\+00:00$"
-)
 _CAMPAIGN_HYPOTHESIS_EVENTS_SELECT_SQL: Final[str] = """
 SELECT event_id,
        campaign_id,
@@ -91,8 +101,102 @@ WHERE campaign_id = ?
   AND event_kind = 'proposal_attempt_transition'
 ORDER BY timestamp ASC, event_id ASC
 """
+_PROPOSAL_HYPOTHESIS_BINDING_INSERT_SQL: Final[str] = """
+INSERT INTO proposal_hypothesis_attempt_bindings (
+    campaign_id,
+    provider_attempt_id,
+    started_event_id,
+    generated_event_id,
+    branch_id,
+    branch_owner_revision,
+    branch_storage_sha256,
+    hypothesis_id,
+    parent_hypothesis_id,
+    parent_owner_revision,
+    parent_storage_sha256,
+    proposal_digest,
+    hypothesis_storage_sha256,
+    transition_group_sha256,
+    binding_protocol_generation,
+    created_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+_PROPOSAL_HYPOTHESIS_BINDING_SELECT_SQL: Final[str] = """
+SELECT campaign_id,
+       provider_attempt_id,
+       started_event_id,
+       generated_event_id,
+       branch_id,
+       branch_owner_revision,
+       branch_storage_sha256,
+       hypothesis_id,
+       parent_hypothesis_id,
+       parent_owner_revision,
+       parent_storage_sha256,
+       proposal_digest,
+       hypothesis_storage_sha256,
+       transition_group_sha256,
+       binding_protocol_generation,
+       created_at
+FROM proposal_hypothesis_attempt_bindings
+WHERE campaign_id = ?
+ORDER BY provider_attempt_id ASC
+"""
+_PROPOSAL_HYPOTHESIS_BINDING_SELECT_ONE_SQL: Final[str] = """
+SELECT campaign_id,
+       provider_attempt_id,
+       started_event_id,
+       generated_event_id,
+       branch_id,
+       branch_owner_revision,
+       branch_storage_sha256,
+       hypothesis_id,
+       parent_hypothesis_id,
+       parent_owner_revision,
+       parent_storage_sha256,
+       proposal_digest,
+       hypothesis_storage_sha256,
+       transition_group_sha256,
+       binding_protocol_generation,
+       created_at
+FROM proposal_hypothesis_attempt_bindings
+WHERE campaign_id = ? AND provider_attempt_id = ?
+"""
+_PROPOSAL_BINDING_TABLE_PRESENT_SQL: Final[str] = """
+SELECT COUNT(*) AS table_count
+FROM sqlite_schema
+WHERE type = 'table' AND name = 'proposal_hypothesis_attempt_bindings'
+"""
+_ACTIVE_EVALUATION_LEASE_PREFLIGHT_SQL: Final[str] = """
+SELECT EXISTS (
+    SELECT 1
+    FROM candidate_evaluation_leases AS active_lease
+    WHERE active_lease.state = 'active'
+      AND (
+          active_lease.branch_id = ?
+          OR active_lease.source_hypothesis_id = ?
+          OR active_lease.source_hypothesis_id IN (
+              SELECT source_h.hypothesis_id
+              FROM hypotheses AS source_h
+              WHERE source_h.branch_id = ?
+          )
+      )
+) AS lease_conflict
+"""
+_PROPOSAL_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "hypothesis_text",
+        "change_locus",
+        "action",
+        "target_file",
+        "predicted_direction",
+        "target_weakness",
+        "expected_effect",
+        "suggested_weight",
+    }
+)
 _OWNER_CONTEXT_SCHEMA: Final[str] = "hypothesis-owner-context-projection.v1"
-_SQLITE_INTEGER_MAX: Final[int] = (1 << 63) - 1
 _OWNER_CONTEXT_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "schema_version",
@@ -140,17 +244,6 @@ _ATTEMPT_ANCHOR_FIELDS: Final[frozenset[str]] = frozenset(
 )
 
 
-class StartedHypothesisAttemptError(RuntimeError):
-    """Base error for the dormant START owner and its sealed capability."""
-
-
-class InvalidStartedHypothesisAttemptError(
-    TypeError,
-    StartedHypothesisAttemptError,
-):
-    """A START payload or capability is forged, malformed, or mismatched."""
-
-
 class ProposalAttemptCommitClassification(enum.Enum):
     """Exact independent-snapshot classification for one attempted append."""
 
@@ -165,32 +258,12 @@ class _AttemptGroupDisposition(enum.Enum):
     MALFORMED = enum.auto()
 
 
-@dataclass(frozen=True, slots=True)
-class StoredProposalAttemptEvent:
-    """Strict value token for all eight stored proposal-event columns.
-
-    This token is durable evidence, never authority.  Its digest includes the
-    exact raw stored JSON text so byte-different rows cannot compare as the
-    same storage fact merely because their decoded mappings are equal.
-    """
-
-    event_id: str
-    campaign_id: str
-    branch_id: str
-    hypothesis_id: str | None
-    timestamp: str
-    event_kind: str
-    stage: str
-    audit_payload_json: str
-    storage_sha256: str
-    attempt_id: str
-    status: str
-    context_digest: str
-    prompt_hash: str
-
-    @property
-    def canonical_payload_json(self) -> bytes:
-        return self.audit_payload_json.encode("utf-8")
+class _ProposalCreationPhase(enum.Enum):
+    PENDING_AUTH = enum.auto()
+    PENDING_WITNESS = enum.auto()
+    STRONG_BOUND = enum.auto()
+    SETTLED = enum.auto()
+    DISCARDED = enum.auto()
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +271,7 @@ class _HypothesisAttemptGroup:
     attempt_id: str
     branch_id: str
     events: tuple[StoredProposalAttemptEvent, ...]
+    binding: StoredProposalHypothesisBinding | None
     disposition: _AttemptGroupDisposition
 
 
@@ -233,45 +307,46 @@ class _PendingStartedProjection:
     bound_prompt: _generation.BoundHypothesisPrompt
 
 
-def _required_exact_string(value: object, *, field: str) -> str:
-    if type(value) is not str or not value or value != value.strip():
-        raise InvalidStartedHypothesisAttemptError(
-            f"started hypothesis attempt requires exact {field}"
-        )
-    return value
+@dataclass(frozen=True, slots=True)
+class _ProposalSemanticProjection:
+    started: StoredProposalAttemptEvent
+    generated: StoredProposalAttemptEvent | None
+    binding: StoredProposalHypothesisBinding | None
 
 
-def _required_digest(value: object, *, field: str) -> str:
-    text = _required_exact_string(value, field=field)
-    if len(text) != 64:
-        raise InvalidStartedHypothesisAttemptError(
-            f"proposal attempt owner requires SHA-256 {field}"
-        )
-    try:
-        int(text, 16)
-    except ValueError as exc:
-        raise InvalidStartedHypothesisAttemptError(
-            f"proposal attempt owner requires SHA-256 {field}"
-        ) from exc
-    if text != text.lower():
-        raise InvalidStartedHypothesisAttemptError(
-            f"proposal attempt owner requires lowercase SHA-256 {field}"
-        )
-    return text
+@dataclass(frozen=True, slots=True)
+class _PendingGeneratedCreation:
+    creation_view: _generation.HypothesisCreationView | None
+    result_projection: _generation._GeneratedResultProjection
+    source_branch: RevisionedBranchRecord
+    prior_head: RevisionedHypothesisRecord | None
+    target: RevisionedHypothesisRecord
+
+
+@dataclass(slots=True)
+class _ProposalCreationState:
+    authorization: _owner._OwnerCreationAuthorization
+    transaction: _sqlite.ImmediateTransaction
+    pending: _PendingGeneratedCreation | None
+    expected: _ProposalSemanticProjection
+    committed: _ProposalSemanticProjection
+    phase: _ProposalCreationPhase = _ProposalCreationPhase.PENDING_AUTH
+    witness: _owner.SemanticCreationOutcomeWitness | None = None
+    classification: ProposalAttemptCommitClassification | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ProposalCreationTombstone:
+    phase: _ProposalCreationPhase
+    witness_ref: (
+        weakref.ReferenceType[_owner.SemanticCreationOutcomeWitness] | None
+    ) = None
 
 
 def _optional_digest(value: object, *, field: str) -> str | None:
     if value is None:
         return None
     return _required_digest(value, field=field)
-
-
-def _required_sqlite_integer(value: object, *, field: str) -> int:
-    if type(value) is not int or not 0 <= value <= _SQLITE_INTEGER_MAX:
-        raise InvalidStartedHypothesisAttemptError(
-            f"proposal attempt owner requires nonnegative SQLite integer {field}"
-        )
-    return value
 
 
 def _required_exact_object(
@@ -285,67 +360,6 @@ def _required_exact_object(
             f"proposal attempt owner requires exact {label} object"
         )
     return value
-
-
-def _json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise InvalidStartedHypothesisAttemptError(
-                "started hypothesis attempt JSON contains a duplicate object key"
-            )
-        result[key] = value
-    return result
-
-
-def _canonical_json_bytes(value: object, *, label: str) -> bytes:
-    try:
-        return json.dumps(
-            value,
-            ensure_ascii=True,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        ).encode("utf-8")
-    except (TypeError, ValueError, RecursionError, UnicodeEncodeError) as exc:
-        raise InvalidStartedHypothesisAttemptError(
-            f"{label} cannot be canonically encoded"
-        ) from exc
-
-
-def _decode_canonical_payload_json(value: object) -> dict[str, Any]:
-    if type(value) is not str:
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt payload must be exact SQLite TEXT"
-        )
-    try:
-        decoded = json.loads(
-            value,
-            object_pairs_hook=_json_object,
-            parse_constant=lambda constant: _raise_nonfinite_json(constant),
-        )
-    except InvalidStartedHypothesisAttemptError:
-        raise
-    except (TypeError, json.JSONDecodeError, RecursionError) as exc:
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt stored payload is malformed"
-        ) from exc
-    if type(decoded) is not dict:
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt stored payload must be an exact object"
-        )
-    encoded = _canonical_json_bytes(decoded, label="proposal attempt payload")
-    try:
-        stored = value.encode("utf-8")
-    except UnicodeEncodeError as exc:
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt payload is not UTF-8 encodable"
-        ) from exc
-    if encoded != stored:
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt stored payload bytes are not canonical"
-        )
-    return decoded
 
 
 def _decode_owner_start_projection(
@@ -587,187 +601,6 @@ def _decode_owner_start_projection(
     )
 
 
-def _canonical_utc_timestamp(value: object) -> str:
-    if type(value) is not str or _CANONICAL_UTC_RE.fullmatch(value) is None:
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt timestamp is not canonical UTC microsecond text"
-        )
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError as exc:
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt timestamp is invalid"
-        ) from exc
-    if (
-        parsed.tzinfo != timezone.utc
-        or parsed.isoformat(timespec="microseconds") != value
-    ):
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt timestamp is not canonical UTC microsecond text"
-        )
-    return value
-
-
-def _stored_event_storage_sha256(
-    *,
-    event_id: str,
-    campaign_id: str,
-    branch_id: str,
-    hypothesis_id: str | None,
-    timestamp: str,
-    event_kind: str,
-    stage: str,
-    audit_payload_json: str,
-) -> str:
-    storage = {
-        "schema_version": _EVENT_STORAGE_SCHEMA,
-        "event_id": event_id,
-        "campaign_id": campaign_id,
-        "branch_id": branch_id,
-        "hypothesis_id": hypothesis_id,
-        "timestamp": timestamp,
-        "event_kind": event_kind,
-        "stage": stage,
-        "audit_payload_json": audit_payload_json,
-    }
-    return hashlib.sha256(
-        _canonical_json_bytes(storage, label="proposal attempt event storage")
-    ).hexdigest()
-
-
-def _decode_stored_proposal_attempt_event(
-    row: object,
-    *,
-    authority_campaign_id: str | None = None,
-) -> StoredProposalAttemptEvent:
-    try:
-        columns = tuple(row.keys())  # type: ignore[attr-defined]
-        values = tuple(row)  # type: ignore[arg-type]
-    except (AttributeError, TypeError, ValueError) as exc:
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt event is not a named materialized SQLite row"
-        ) from exc
-    if columns != _STARTED_EVENT_COLUMNS or len(values) != len(
-        _STARTED_EVENT_COLUMNS
-    ):
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt event has incomplete or unexpected columns"
-        )
-    (
-        event_id,
-        campaign_id,
-        branch_id,
-        hypothesis_id,
-        timestamp,
-        event_kind,
-        stage,
-        audit_payload_json,
-    ) = values
-    stored_event_id = _required_exact_string(event_id, field="event_id")
-    stored_campaign_id = _required_exact_string(
-        campaign_id,
-        field="campaign_id",
-    )
-    stored_branch_id = _required_exact_string(branch_id, field="branch_id")
-    if hypothesis_id is not None:
-        stored_hypothesis_id = _required_exact_string(
-            hypothesis_id,
-            field="hypothesis_id",
-        )
-    else:
-        stored_hypothesis_id = None
-    stored_timestamp = _canonical_utc_timestamp(timestamp)
-    if event_kind != _EVENT_KIND:
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt event_kind is not authoritative"
-        )
-    if stage != _EVENT_STAGE:
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt stage is not authoritative"
-        )
-    if (
-        authority_campaign_id is not None
-        and stored_campaign_id != authority_campaign_id
-    ):
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt event belongs to another campaign authority"
-        )
-
-    payload = _decode_canonical_payload_json(audit_payload_json)
-    try:
-        ProposalAttemptRecorder.validate_transition(payload)
-    except (TypeError, ValueError) as exc:
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt event failed the complete v1 transition schema"
-        ) from exc
-    if payload.get("phase") != "hypothesis":
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt owner accepts hypothesis events only"
-        )
-    if (
-        payload.get("attempt_kind") != "initial"
-        or payload.get("continuation_of_attempt_id") is not None
-    ):
-        raise InvalidStartedHypothesisAttemptError(
-            "hypothesis attempt must be an initial non-continuation"
-        )
-    if (
-        payload.get("campaign_id") != stored_campaign_id
-        or payload.get("branch_id") != stored_branch_id
-        or payload.get("hypothesis_id") != stored_hypothesis_id
-    ):
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt top-level and payload identities differ"
-        )
-    attempt_id = _required_exact_string(
-        payload.get("attempt_id"),
-        field="attempt_id",
-    )
-    status = _required_exact_string(payload.get("status"), field="status")
-    prompt_call = payload.get("prompt_call")
-    if type(prompt_call) is not dict:
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt prompt_call must be an exact object"
-        )
-    context_digest = _required_exact_string(
-        prompt_call.get("context_digest"),
-        field="prompt context_digest",
-    )
-    prompt_hash = _required_exact_string(
-        prompt_call.get("prompt_hash"),
-        field="prompt_hash",
-    )
-    raw_payload = audit_payload_json
-    if type(raw_payload) is not str:
-        raise InvalidStartedHypothesisAttemptError(
-            "proposal attempt payload must be SQLite TEXT"
-        )
-    return StoredProposalAttemptEvent(
-        event_id=stored_event_id,
-        campaign_id=stored_campaign_id,
-        branch_id=stored_branch_id,
-        hypothesis_id=stored_hypothesis_id,
-        timestamp=stored_timestamp,
-        event_kind=event_kind,
-        stage=stage,
-        audit_payload_json=raw_payload,
-        storage_sha256=_stored_event_storage_sha256(
-            event_id=stored_event_id,
-            campaign_id=stored_campaign_id,
-            branch_id=stored_branch_id,
-            hypothesis_id=stored_hypothesis_id,
-            timestamp=stored_timestamp,
-            event_kind=event_kind,
-            stage=stage,
-            audit_payload_json=raw_payload,
-        ),
-        attempt_id=attempt_id,
-        status=status,
-        context_digest=context_digest,
-        prompt_hash=prompt_hash,
-    )
-
-
 def _terminal_matches_start(
     started: StoredProposalAttemptEvent,
     terminal: StoredProposalAttemptEvent,
@@ -791,6 +624,8 @@ def _terminal_matches_start(
         return False
     started_payload = _decode_canonical_payload_json(started.audit_payload_json)
     terminal_payload = _decode_canonical_payload_json(terminal.audit_payload_json)
+    if not _terminal_has_frozen_mapping(terminal, terminal_payload):
+        return False
     for field in (
         "schema_version",
         "attempt_id",
@@ -814,12 +649,150 @@ def _terminal_matches_start(
     )
 
 
+def _terminal_has_frozen_mapping(
+    terminal: StoredProposalAttemptEvent,
+    payload: dict[str, Any],
+) -> bool:
+    """Prove the fixed v1 generated/terminal semantic mapping at restore."""
+
+    prompt = payload.get("prompt_call")
+    if type(prompt) is not dict or prompt.get("request_kind") != "hypothesis":
+        return False
+    status = payload.get("status")
+    reason = payload.get("transition_reason")
+    lane = payload.get("failure_lane")
+    refs = tuple(
+        prompt.get(field)
+        for field in ("trace_ref", "prompt_manifest_ref", "raw_response_ref")
+    )
+    if status == "generated":
+        return (
+            terminal.hypothesis_id is not None
+            and reason == "generated"
+            and lane is None
+            and payload.get("hypothesis_id") == terminal.hypothesis_id
+            and type(payload.get("hypothesis_digest")) is str
+            and payload.get("patch_digest") is None
+            and all(type(value) is str and value for value in refs)
+            and prompt.get("provider_ok") is True
+            and prompt.get("ok") is True
+            and prompt.get("error_category") is None
+            and prompt.get("error_type") is None
+            and payload.get("tainted_artifact_refs") == []
+            and "non_resumable" not in payload
+        )
+    if (
+        terminal.hypothesis_id is not None
+        or payload.get("hypothesis_id") is not None
+        or payload.get("hypothesis_digest") is not None
+        or payload.get("patch_digest") is not None
+        or prompt.get("ok") is not False
+        or type(prompt.get("error_category")) is not str
+        or not prompt.get("error_category")
+        or type(prompt.get("error_type")) is not str
+        or not prompt.get("error_type")
+    ):
+        return False
+    expected_refs: list[str] = []
+    for value in refs:
+        if value is not None:
+            if type(value) is not str or not value:
+                return False
+            if value not in expected_refs:
+                expected_refs.append(value)
+    if payload.get("tainted_artifact_refs") != expected_refs:
+        return False
+    if reason == "provider_call_interrupted":
+        return (
+            status == "interrupted"
+            and lane is None
+            and type(prompt.get("provider_ok")) is bool
+            and prompt.get("error_category") == "provider_call_interrupted"
+            and refs[2] is None
+            and payload.get("non_resumable") is True
+        )
+    if reason == "provider_call_failed":
+        return (
+            status == "failed"
+            and lane == "infra"
+            and prompt.get("provider_ok") in {None, False, True}
+            and type(prompt.get("provider_ok")) in {type(None), bool}
+            and "non_resumable" not in payload
+        )
+    if reason == "proposal_response_invalid":
+        return (
+            status == "failed"
+            and lane == "invalid_response"
+            and prompt.get("provider_ok") is True
+            and all(type(value) is str and value for value in refs)
+            and "non_resumable" not in payload
+        )
+    if reason == "hypothesis_contract_rejected":
+        return (
+            status == "failed"
+            and lane == "invalid_response"
+            and prompt.get("provider_ok") is True
+            and prompt.get("error_category") == "hypothesis_contract_rejected"
+            and prompt.get("error_type") == "HypothesisContractRejection"
+            and all(type(value) is str and value for value in refs)
+            and "non_resumable" not in payload
+        )
+    if reason == "provider_call_cancelled_before_transport":
+        return (
+            status == "failed"
+            and lane == "infra"
+            and refs == (None, None, None)
+            and prompt.get("provider_ok") is None
+            and prompt.get("error_category")
+            == "provider_call_cancelled_before_transport"
+            and prompt.get("error_type") == "AbortedHypothesisGeneration"
+            and payload.get("tainted_artifact_refs") == []
+            and "trace_persistence_error" not in payload
+            and "non_resumable" not in payload
+        )
+    return False
+
+
+def _binding_matches_generated_group(
+    started: StoredProposalAttemptEvent,
+    generated: StoredProposalAttemptEvent,
+    binding: StoredProposalHypothesisBinding,
+) -> bool:
+    if (
+        not _terminal_matches_start(started, generated)
+        or generated.status != "generated"
+        or generated.hypothesis_id is None
+        or binding.campaign_id != started.campaign_id
+        or binding.provider_attempt_id != started.attempt_id
+        or binding.started_event_id != started.event_id
+        or binding.generated_event_id != generated.event_id
+        or binding.branch_id != started.branch_id
+        or binding.hypothesis_id != generated.hypothesis_id
+        or binding.created_at != generated.timestamp
+    ):
+        return False
+    payload = _decode_canonical_payload_json(generated.audit_payload_json)
+    proposal_digest = payload.get("hypothesis_digest")
+    if binding.proposal_digest != proposal_digest:
+        return False
+    return binding.transition_group_sha256 == (
+        proposal_hypothesis_transition_group_sha256(
+            started_event_id=started.event_id,
+            started_event_storage_sha256=started.storage_sha256,
+            generated_event_id=generated.event_id,
+            generated_event_storage_sha256=generated.storage_sha256,
+        )
+    )
+
+
 def _build_hypothesis_attempt_inventory(
     rows: tuple[object, ...],
     *,
     authority_campaign_id: str,
+    binding_rows: tuple[object, ...] | None = None,
 ) -> _HypothesisAttemptInventory:
     grouped: dict[str, list[StoredProposalAttemptEvent]] = {}
+    bindings: dict[str, list[StoredProposalHypothesisBinding]] = {}
     malformed_branches: set[str] = set()
     unattributed_malformed = False
     for row in rows:
@@ -849,10 +822,43 @@ def _build_hypothesis_attempt_inventory(
             continue
         grouped.setdefault(event.attempt_id, []).append(event)
 
+    if binding_rows is not None:
+        for row in binding_rows:
+            try:
+                binding = _decode_stored_proposal_hypothesis_binding(
+                    row,
+                    authority_campaign_id=authority_campaign_id,
+                )
+            except InvalidStartedHypothesisAttemptError:
+                try:
+                    values = tuple(row)  # type: ignore[arg-type]
+                    raw_campaign_id = values[0]
+                    raw_branch_id = values[4]
+                except (TypeError, ValueError, IndexError):
+                    unattributed_malformed = True
+                else:
+                    if (
+                        type(raw_campaign_id) is str
+                        and raw_campaign_id == authority_campaign_id
+                        and type(raw_branch_id) is str
+                        and raw_branch_id
+                        and raw_branch_id == raw_branch_id.strip()
+                    ):
+                        malformed_branches.add(raw_branch_id)
+                    else:
+                        unattributed_malformed = True
+                continue
+            bindings.setdefault(binding.provider_attempt_id, []).append(binding)
+
     groups: list[_HypothesisAttemptGroup] = []
-    for attempt_id in sorted(grouped):
-        events = tuple(grouped[attempt_id])
+    for attempt_id in sorted(set(grouped) | set(bindings)):
+        events = tuple(grouped.get(attempt_id, ()))
+        attempt_bindings = tuple(bindings.get(attempt_id, ()))
         branches = {event.branch_id for event in events}
+        branches.update(binding.branch_id for binding in attempt_bindings)
+        selected_binding = (
+            attempt_bindings[0] if len(attempt_bindings) == 1 else None
+        )
         if len(branches) != 1:
             malformed_branches.update(branches)
             branch_id = sorted(branches)[0] if branches else ""
@@ -861,13 +867,38 @@ def _build_hypothesis_attempt_inventory(
             branch_id = next(iter(branches))
             started = tuple(event for event in events if event.status == "started")
             terminals = tuple(event for event in events if event.status != "started")
-            if len(started) == 1 and len(terminals) == 0 and len(events) == 1:
+            if (
+                len(started) == 1
+                and len(terminals) == 0
+                and len(events) == 1
+                and not attempt_bindings
+            ):
                 disposition = _AttemptGroupDisposition.UNRESOLVED
             elif (
                 len(started) == 1
                 and len(terminals) == 1
                 and len(events) == 2
                 and _terminal_matches_start(started[0], terminals[0])
+                and (
+                    (
+                        terminals[0].status == "generated"
+                        and (
+                            binding_rows is None
+                            or (
+                                selected_binding is not None
+                                and _binding_matches_generated_group(
+                                    started[0],
+                                    terminals[0],
+                                    selected_binding,
+                                )
+                            )
+                        )
+                    )
+                    or (
+                        terminals[0].status in {"failed", "interrupted"}
+                        and not attempt_bindings
+                    )
+                )
             ):
                 disposition = _AttemptGroupDisposition.RESOLVED
             else:
@@ -878,6 +909,7 @@ def _build_hypothesis_attempt_inventory(
                 attempt_id=attempt_id,
                 branch_id=branch_id,
                 events=events,
+                binding=selected_binding,
                 disposition=disposition,
             )
         )
@@ -885,12 +917,6 @@ def _build_hypothesis_attempt_inventory(
         groups=tuple(groups),
         malformed_branch_ids=tuple(sorted(malformed_branches)),
         unattributed_malformed=unattributed_malformed,
-    )
-
-
-def _raise_nonfinite_json(value: str) -> None:
-    raise InvalidStartedHypothesisAttemptError(
-        f"started hypothesis JSON contains non-finite value {value}"
     )
 
 
@@ -994,6 +1020,221 @@ def _append_stored_proposal_attempt_event_in(
     )
 
 
+def _append_proposal_hypothesis_binding_in(
+    transaction: _sqlite.ImmediateTransaction,
+    database_authority: _sqlite.CampaignDatabaseAuthority,
+    *,
+    started: StoredProposalAttemptEvent,
+    generated: StoredProposalAttemptEvent,
+    source_branch: RevisionedBranchRecord,
+    parent: RevisionedHypothesisRecord | None,
+    target: RevisionedHypothesisRecord,
+    proposal_digest: str,
+) -> StoredProposalHypothesisBinding:
+    if not _terminal_matches_start(started, generated) or generated.status != "generated":
+        raise InvalidStartedHypothesisAttemptError(
+            "proposal binding requires one exact START/generated pair"
+        )
+    transition_digest = proposal_hypothesis_transition_group_sha256(
+        started_event_id=started.event_id,
+        started_event_storage_sha256=started.storage_sha256,
+        generated_event_id=generated.event_id,
+        generated_event_storage_sha256=generated.storage_sha256,
+    )
+    values: tuple[object, ...] = (
+        started.campaign_id,
+        started.attempt_id,
+        started.event_id,
+        generated.event_id,
+        source_branch.branch_id,
+        source_branch.owner_revision,
+        source_branch.payload_sha256,
+        target.hypothesis_id,
+        None if parent is None else parent.hypothesis_id,
+        None if parent is None else parent.owner_revision,
+        None if parent is None else parent.payload_sha256,
+        proposal_digest,
+        target.payload_sha256,
+        transition_digest,
+        "proposal-h-binding.v1",
+        generated.timestamp,
+    )
+    result = _sqlite._execute_participant(
+        transaction,
+        database_authority,
+        _PROPOSAL_HYPOTHESIS_BINDING_INSERT_SQL,
+        values,
+    )
+    if result.rowcount != 1:
+        raise InvalidStartedHypothesisAttemptError(
+            "proposal hypothesis binding INSERT did not change exactly one row"
+        )
+    reread = _sqlite._execute_participant(
+        transaction,
+        database_authority,
+        _PROPOSAL_HYPOTHESIS_BINDING_SELECT_ONE_SQL,
+        (started.campaign_id, started.attempt_id),
+    )
+    if _result_columns(reread) != tuple(
+        StoredProposalHypothesisBinding.__dataclass_fields__
+    ):
+        raise InvalidStartedHypothesisAttemptError(
+            "proposal hypothesis binding reread did not return frozen columns"
+        )
+    rows = reread.fetchall()
+    if len(rows) != 1:
+        raise InvalidStartedHypothesisAttemptError(
+            "proposal hypothesis binding INSERT did not reread one exact row"
+        )
+    for column, stored_value, expected_value in zip(
+        StoredProposalHypothesisBinding.__dataclass_fields__,
+        tuple(rows[0]),
+        values,
+        strict=True,
+    ):
+        if type(stored_value) is not type(expected_value) or stored_value != expected_value:
+            raise InvalidStartedHypothesisAttemptError(
+                f"proposal hypothesis binding post-write storage differs: {column}"
+            )
+    binding = _decode_stored_proposal_hypothesis_binding(
+        rows[0],
+        authority_campaign_id=started.campaign_id,
+    )
+    if not _binding_matches_generated_group(started, generated, binding):
+        raise InvalidStartedHypothesisAttemptError(
+            "proposal hypothesis binding does not resolve its exact event group"
+        )
+    return binding
+
+
+def _decode_generated_proposal(
+    projection: _generation._GeneratedResultProjection,
+) -> dict[str, Any]:
+    if type(projection) is not _generation._GeneratedResultProjection:
+        raise InvalidStartedHypothesisAttemptError(
+            "generated H creation requires the sealed result projection"
+        )
+    if (
+        projection.receipt is None
+        or projection.provider_ok is not True
+        or projection.ok is not True
+        or projection.error_category is not None
+        or projection.error_type is not None
+    ):
+        raise InvalidStartedHypothesisAttemptError(
+            "generated result projection is not an exact successful receipt"
+        )
+    for value, field in (
+        (projection.trace_ref, "trace reference"),
+        (projection.prompt_manifest_ref, "prompt-manifest reference"),
+        (projection.raw_response_ref, "raw-response reference"),
+    ):
+        _required_exact_string(value, field=field)
+    raw = projection.proposal_canonical_bytes
+    if type(raw) is not bytes or not raw:
+        raise InvalidStartedHypothesisAttemptError(
+            "generated proposal must be exact nonempty canonical bytes"
+        )
+    digest = _required_digest(projection.proposal_sha256, field="proposal digest")
+    if hashlib.sha256(raw).hexdigest() != digest:
+        raise InvalidStartedHypothesisAttemptError(
+            "generated proposal bytes differ from their sealed digest"
+        )
+    try:
+        decoded = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_json_object,
+            parse_constant=lambda constant: _raise_nonfinite_json(constant),
+        )
+    except InvalidStartedHypothesisAttemptError:
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+        raise InvalidStartedHypothesisAttemptError(
+            "generated proposal canonical bytes are malformed"
+        ) from exc
+    proposal = _required_exact_object(
+        decoded,
+        fields=_PROPOSAL_FIELDS,
+        label="generated proposal",
+    )
+    if _canonical_json_bytes(
+        proposal,
+        label="generated proposal",
+        ensure_ascii=True,
+    ) != raw:
+        raise InvalidStartedHypothesisAttemptError(
+            "generated proposal bytes are not in the frozen canonical form"
+        )
+    return proposal
+
+
+def _generated_payload_from_exact_facts(
+    started: StoredProposalAttemptEvent,
+    projection: _generation._GeneratedResultProjection,
+    target: RevisionedHypothesisRecord,
+) -> dict[str, Any]:
+    proposal = _decode_generated_proposal(projection)
+    target_value = target.value()
+    if target.owner_revision != 0:
+        raise InvalidStartedHypothesisAttemptError(
+            "generated hypothesis target must be revision zero"
+        )
+    if target_value.proposal_digest != projection.proposal_sha256:
+        raise InvalidStartedHypothesisAttemptError(
+            "target proposal digest differs from the sealed provider proposal"
+        )
+    for field in (
+        "hypothesis_text",
+        "change_locus",
+        "action",
+        "target_file",
+        "predicted_direction",
+        "suggested_weight",
+    ):
+        if getattr(target_value, field) != proposal[field]:
+            raise InvalidStartedHypothesisAttemptError(
+                f"generated target differs from sealed proposal: {field}"
+            )
+    start_payload = _decode_canonical_payload_json(started.audit_payload_json)
+    payload: dict[str, Any] = {
+        "schema_version": start_payload["schema_version"],
+        "attempt_id": started.attempt_id,
+        "campaign_id": started.campaign_id,
+        "branch_id": started.branch_id,
+        "runtime_mode": start_payload["runtime_mode"],
+        "phase": start_payload["phase"],
+        "status": "generated",
+        "transition_reason": "generated",
+        "failure_lane": None,
+        "hypothesis_id": target.hypothesis_id,
+        "hypothesis_digest": projection.proposal_sha256,
+        "patch_digest": None,
+        "attempt_kind": start_payload["attempt_kind"],
+        "continuation_of_attempt_id": start_payload["continuation_of_attempt_id"],
+        "prompt_call": {
+            "request_kind": "hypothesis",
+            "context_digest": started.context_digest,
+            "prompt_hash": started.prompt_hash,
+            "trace_ref": projection.trace_ref,
+            "prompt_manifest_ref": projection.prompt_manifest_ref,
+            "raw_response_ref": projection.raw_response_ref,
+            "provider_ok": True,
+            "ok": True,
+            "error_category": None,
+            "error_type": None,
+        },
+        "anchors": start_payload["anchors"],
+        "tainted_artifact_refs": [],
+    }
+    try:
+        ProposalAttemptRecorder.validate_transition(payload)
+    except (TypeError, ValueError) as exc:
+        raise InvalidStartedHypothesisAttemptError(
+            "rebuilt generated event failed the complete v1 schema"
+        ) from exc
+    return payload
+
+
 def _trace_persistence_error_payload(
     projection: _generation._TerminalOutcomeProjection,
 ) -> dict[str, str] | None:
@@ -1068,6 +1309,22 @@ def _terminal_payload_from_start(
         ):
             raise InvalidStartedHypothesisAttemptError(
                 "invalid response requires successful transport and durable refs"
+            )
+    elif kind == "hypothesis_contract_rejected":
+        status = "failed"
+        transition_reason = "hypothesis_contract_rejected"
+        failure_lane = "invalid_response"
+        if (
+            projection.provider_ok is not True
+            or projection.trace_ref is None
+            or projection.prompt_manifest_ref is None
+            or projection.raw_response_ref is None
+            or projection.failure_category != "hypothesis_contract_rejected"
+            or projection.failure_type != "HypothesisContractRejection"
+            or projection.contract_result is None
+        ):
+            raise InvalidStartedHypothesisAttemptError(
+                "Contract rejection requires its exact success and decision facts"
             )
     elif kind == "aborted_before_transport":
         status = "failed"
@@ -1169,6 +1426,9 @@ class ProposalAttemptOwner:
 
     __slots__ = (
         "__authority_campaign_id",
+        "__creation_authorizer_authority",
+        "__creation_states",
+        "__creation_tombstones",
         "__database_authority",
         "__generation_authority",
         "__pending_starts",
@@ -1183,6 +1443,19 @@ class ProposalAttemptOwner:
         authority_state = _sqlite._lookup_authority_state(database_authority)
         self.__database_authority = database_authority
         self.__authority_campaign_id = authority_state.campaign_id
+        self.__creation_authorizer_authority = (
+            _owner._issue_hypothesis_creation_authorizer_authority(
+                database_authority
+            )
+        )
+        self.__creation_states: dict[
+            _owner._OwnerCreationAuthorization,
+            _ProposalCreationState,
+        ] = {}
+        self.__creation_tombstones: weakref.WeakKeyDictionary[
+            _owner._OwnerCreationAuthorization,
+            _ProposalCreationTombstone,
+        ] = weakref.WeakKeyDictionary()
         self.__generation_authority: _generation._AuthorityHandle | None = None
         self.__pending_starts: dict[int, _PendingStartedProjection] = {}
         self.__started_events: dict[
@@ -1191,7 +1464,8 @@ class ProposalAttemptOwner:
         ] = {}
         self.__terminal_events: dict[
             _generation.FailedHypothesisGeneration
-            | _generation.AbortedHypothesisGeneration,
+            | _generation.AbortedHypothesisGeneration
+            | _generation.HypothesisContractRejection,
             tuple[StartedHypothesisAttempt, StoredProposalAttemptEvent],
         ] = {}
 
@@ -1239,9 +1513,27 @@ class ProposalAttemptOwner:
             _CAMPAIGN_HYPOTHESIS_EVENTS_SELECT_SQL,
             (self.__authority_campaign_id,),
         )
+        table_rows = _sqlite._execute_read_snapshot(
+            snapshot,
+            self.__database_authority,
+            _PROPOSAL_BINDING_TABLE_PRESENT_SQL,
+        )
+        binding_rows: tuple[object, ...] | None = None
+        if len(table_rows) != 1 or tuple(table_rows[0]) not in {(0,), (1,)}:
+            raise InvalidStartedHypothesisAttemptError(
+                "proposal binding table inventory is malformed"
+            )
+        if tuple(table_rows[0]) == (1,):
+            binding_rows = _sqlite._execute_read_snapshot(
+                snapshot,
+                self.__database_authority,
+                _PROPOSAL_HYPOTHESIS_BINDING_SELECT_SQL,
+                (self.__authority_campaign_id,),
+            )
         return _build_hypothesis_attempt_inventory(
             rows,
             authority_campaign_id=self.__authority_campaign_id,
+            binding_rows=binding_rows,
         )
 
     def _load_hypothesis_attempt_inventory_in(
@@ -1258,9 +1550,97 @@ class ProposalAttemptOwner:
             raise InvalidStartedHypothesisAttemptError(
                 "proposal attempt inventory SELECT did not return the frozen columns"
             )
+        table_result = _sqlite._execute_participant(
+            transaction,
+            self.__database_authority,
+            _PROPOSAL_BINDING_TABLE_PRESENT_SQL,
+        )
+        if _result_columns(table_result) != ("table_count",):
+            raise InvalidStartedHypothesisAttemptError(
+                "proposal binding table inventory returned unexpected columns"
+            )
+        table_rows = table_result.fetchall()
+        if len(table_rows) != 1 or tuple(table_rows[0]) not in {(0,), (1,)}:
+            raise InvalidStartedHypothesisAttemptError(
+                "proposal binding table inventory is malformed"
+            )
+        binding_rows: tuple[object, ...] | None = None
+        if tuple(table_rows[0]) == (1,):
+            binding_result = _sqlite._execute_participant(
+                transaction,
+                self.__database_authority,
+                _PROPOSAL_HYPOTHESIS_BINDING_SELECT_SQL,
+                (self.__authority_campaign_id,),
+            )
+            if _result_columns(binding_result) != tuple(
+                StoredProposalHypothesisBinding.__dataclass_fields__
+            ):
+                raise InvalidStartedHypothesisAttemptError(
+                    "proposal binding inventory returned unexpected columns"
+                )
+            binding_rows = tuple(binding_result.fetchall())
         return _build_hypothesis_attempt_inventory(
             tuple(result.fetchall()),
             authority_campaign_id=self.__authority_campaign_id,
+            binding_rows=binding_rows,
+        )
+
+    def _load_hypothesis_creation_inventory_from_snapshot(
+        self,
+        snapshot: _sqlite._IndependentReadSnapshot,
+    ) -> _HypothesisAttemptInventory:
+        """Read only the fixed event/binding semantic projection."""
+
+        event_rows = _sqlite._execute_read_snapshot(
+            snapshot,
+            self.__database_authority,
+            _CAMPAIGN_HYPOTHESIS_EVENTS_SELECT_SQL,
+            (self.__authority_campaign_id,),
+        )
+        binding_rows = _sqlite._execute_read_snapshot(
+            snapshot,
+            self.__database_authority,
+            _PROPOSAL_HYPOTHESIS_BINDING_SELECT_SQL,
+            (self.__authority_campaign_id,),
+        )
+        return _build_hypothesis_attempt_inventory(
+            event_rows,
+            authority_campaign_id=self.__authority_campaign_id,
+            binding_rows=binding_rows,
+        )
+
+    def _load_hypothesis_creation_inventory_in(
+        self,
+        transaction: _sqlite.ImmediateTransaction,
+    ) -> _HypothesisAttemptInventory:
+        """Read only fixed event/binding rows in the caller-owned transaction."""
+
+        event_result = _sqlite._execute_participant(
+            transaction,
+            self.__database_authority,
+            _CAMPAIGN_HYPOTHESIS_EVENTS_SELECT_SQL,
+            (self.__authority_campaign_id,),
+        )
+        if _result_columns(event_result) != _STARTED_EVENT_COLUMNS:
+            raise InvalidStartedHypothesisAttemptError(
+                "proposal creation event inventory returned unexpected columns"
+            )
+        binding_result = _sqlite._execute_participant(
+            transaction,
+            self.__database_authority,
+            _PROPOSAL_HYPOTHESIS_BINDING_SELECT_SQL,
+            (self.__authority_campaign_id,),
+        )
+        if _result_columns(binding_result) != tuple(
+            StoredProposalHypothesisBinding.__dataclass_fields__
+        ):
+            raise InvalidStartedHypothesisAttemptError(
+                "proposal creation binding inventory returned unexpected columns"
+            )
+        return _build_hypothesis_attempt_inventory(
+            tuple(event_result.fetchall()),
+            authority_campaign_id=self.__authority_campaign_id,
+            binding_rows=tuple(binding_result.fetchall()),
         )
 
     def _require_branch_clear_for_start_in(
@@ -1441,6 +1821,534 @@ class ProposalAttemptOwner:
             return ProposalAttemptCommitClassification.COMMITTED
         return ProposalAttemptCommitClassification.MIXED
 
+    def _require_generated_creation_preflight_in(
+        self,
+        transaction: _sqlite.ImmediateTransaction,
+        *,
+        started: StoredProposalAttemptEvent,
+        target_hypothesis_id: str,
+    ) -> None:
+        inventory = self._load_hypothesis_creation_inventory_in(transaction)
+        matching = tuple(
+            group for group in inventory.groups if group.attempt_id == started.attempt_id
+        )
+        if (
+            len(matching) != 1
+            or matching[0].branch_id != started.branch_id
+            or matching[0].disposition is not _AttemptGroupDisposition.UNRESOLVED
+            or matching[0].events != (started,)
+            or matching[0].binding is not None
+            or inventory.unattributed_malformed
+            or started.branch_id in inventory.malformed_branch_ids
+            or any(
+                group is not matching[0]
+                and group.branch_id == started.branch_id
+                and group.disposition is not _AttemptGroupDisposition.RESOLVED
+                for group in inventory.groups
+            )
+        ):
+            raise InvalidStartedHypothesisAttemptError(
+                "generated creation requires one exact START and no terminal/binding"
+            )
+        lease_result = _sqlite._execute_participant(
+            transaction,
+            self.__database_authority,
+            _ACTIVE_EVALUATION_LEASE_PREFLIGHT_SQL,
+            (started.branch_id, target_hypothesis_id, started.branch_id),
+        )
+        if _result_columns(lease_result) != ("lease_conflict",):
+            raise InvalidStartedHypothesisAttemptError(
+                "evaluation-lease preflight returned unexpected columns"
+            )
+        rows = lease_result.fetchall()
+        if (
+            len(rows) != 1
+            or type(rows[0][0]) is not int
+            or rows[0][0] not in {0, 1}
+        ):
+            raise InvalidStartedHypothesisAttemptError(
+                "evaluation-lease preflight returned a malformed fact"
+            )
+        if rows[0][0] == 1:
+            raise InvalidStartedHypothesisAttemptError(
+                "generated creation conflicts with an active evaluation lease"
+            )
+
+    def _register_generated_hypothesis_projection_in(
+        self,
+        transaction: _sqlite.ImmediateTransaction,
+        ledger: _owner._OwnerReceiptLedger,
+        *,
+        result_projection: _generation._GeneratedResultProjection,
+        source_branch: RevisionedBranchRecord,
+        prior_head: RevisionedHypothesisRecord | None,
+        target: RevisionedHypothesisRecord,
+        creation_view: _generation.HypothesisCreationView | None = None,
+    ) -> _owner._OwnerCreationAuthorization:
+        """Validate semantic intent, then return its registered H authority."""
+
+        if type(result_projection) is not _generation._GeneratedResultProjection:
+            raise InvalidStartedHypothesisAttemptError(
+                "generated creation requires the exact leaf result projection"
+            )
+        if type(source_branch) is not RevisionedBranchRecord:
+            raise InvalidStartedHypothesisAttemptError(
+                "generated creation requires an exact captured Branch"
+            )
+        if prior_head is not None and type(prior_head) is not RevisionedHypothesisRecord:
+            raise InvalidStartedHypothesisAttemptError(
+                "generated creation prior head must be exact or absent"
+            )
+        if type(target) is not RevisionedHypothesisRecord or target.owner_revision != 0:
+            raise InvalidStartedHypothesisAttemptError(
+                "generated creation target must be exact revision zero"
+            )
+        started_capability = result_projection.started_attempt
+        if type(started_capability) is not StartedHypothesisAttempt:
+            raise InvalidStartedHypothesisAttemptError(
+                "generated result lacks its exact START authority"
+            )
+        started = self.__started_events.get(started_capability)
+        if started is None:
+            raise InvalidStartedHypothesisAttemptError(
+                "generated result START was not issued by this ProposalAttemptOwner"
+            )
+        target_value = target.value()
+        if (
+            started.branch_id != source_branch.branch_id
+            or target_value.branch_id != source_branch.branch_id
+            or target_value.parent_hypothesis_id
+            != (None if prior_head is None else prior_head.hypothesis_id)
+            or (
+                prior_head is not None
+                and prior_head.value().branch_id != source_branch.branch_id
+            )
+        ):
+            raise InvalidStartedHypothesisAttemptError(
+                "generated Branch/parent/target projection is not exact"
+            )
+        _generated_payload_from_exact_facts(
+            started,
+            result_projection,
+            target,
+        )
+        self._require_generated_creation_preflight_in(
+            transaction,
+            started=started,
+            target_hypothesis_id=target.hypothesis_id,
+        )
+        authorization = _owner._register_hypothesis_creation_authorization(
+            self.__creation_authorizer_authority,
+            transaction,
+            ledger,
+            target.hypothesis_id,
+            target.payload_sha256,
+        )
+        state = _ProposalCreationState(
+            authorization=authorization,
+            transaction=transaction,
+            pending=_PendingGeneratedCreation(
+                creation_view=creation_view,
+                result_projection=result_projection,
+                source_branch=source_branch,
+                prior_head=prior_head,
+                target=target,
+            ),
+            expected=_ProposalSemanticProjection(started, None, None),
+            committed=_ProposalSemanticProjection(started, None, None),
+        )
+        self.__creation_states[authorization] = state
+        self.__creation_tombstones[authorization] = _ProposalCreationTombstone(
+            phase=_ProposalCreationPhase.PENDING_AUTH
+        )
+        return authorization
+
+    def begin_generated_hypothesis_creation_in(
+        self,
+        transaction: _sqlite.ImmediateTransaction,
+        ledger: _owner._OwnerReceiptLedger,
+        creation_view: _generation.HypothesisCreationView,
+        *,
+        source_branch: RevisionedBranchRecord,
+        prior_head: RevisionedHypothesisRecord | None,
+        started_attempt: StartedHypothesisAttempt,
+        target: RevisionedHypothesisRecord,
+    ) -> _owner._OwnerCreationAuthorization:
+        """Preflight durable facts, then claim result and register authority."""
+
+        if type(source_branch) is not RevisionedBranchRecord or (
+            prior_head is not None and type(prior_head) is not RevisionedHypothesisRecord
+        ):
+            raise InvalidStartedHypothesisAttemptError(
+                "generated creation requires exact Branch/history tokens"
+            )
+        if type(started_attempt) is not StartedHypothesisAttempt:
+            raise InvalidStartedHypothesisAttemptError(
+                "generated creation preflight requires its exact START capability"
+            )
+        if type(target) is not RevisionedHypothesisRecord or target.owner_revision != 0:
+            raise InvalidStartedHypothesisAttemptError(
+                "generated creation preflight requires its exact revision-zero target"
+            )
+        stored_start = self.__started_events.get(started_attempt)
+        target_value = target.value()
+        if (
+            stored_start is None
+            or stored_start.branch_id != source_branch.branch_id
+            or target_value.branch_id != source_branch.branch_id
+            or target_value.parent_hypothesis_id
+            != (None if prior_head is None else prior_head.hypothesis_id)
+        ):
+            raise InvalidStartedHypothesisAttemptError(
+                "generated creation preflight facts are not exact"
+            )
+        self._require_generated_creation_preflight_in(
+            transaction,
+            started=stored_start,
+            target_hypothesis_id=target.hypothesis_id,
+        )
+        projection = _generation._claim_generated_result_for_creation(
+            self._require_hypothesis_generation_authority(),
+            creation_view,
+        )
+        result_projection = projection.result_projection
+        if type(result_projection) is not _generation._GeneratedResultProjection:
+            raise InvalidStartedHypothesisAttemptError(
+                "leaf creation view omitted its sealed generated-result projection"
+            )
+        claimed_target = projection.revision_zero_target
+        if claimed_target is not target:
+            raise InvalidStartedHypothesisAttemptError(
+                "leaf creation view target differs from the preflight target"
+            )
+        if projection.started_attempt is not started_attempt:
+            raise InvalidStartedHypothesisAttemptError(
+                "leaf creation view START differs from the preflight START"
+            )
+        return self._register_generated_hypothesis_projection_in(
+            transaction,
+            ledger,
+            result_projection=result_projection,
+            source_branch=source_branch,
+            prior_head=prior_head,
+            target=target,
+            creation_view=creation_view,
+        )
+
+    def append_generated_hypothesis_creation_in(
+        self,
+        transaction: _sqlite.ImmediateTransaction,
+        authorization: _owner._OwnerCreationAuthorization,
+    ) -> None:
+        """Append exact event/binding facts for a caller-retained authority."""
+
+        state = self.__creation_states.get(authorization)
+        if (
+            state is None
+            or state.authorization is not authorization
+            or state.transaction is not transaction
+            or state.phase is not _ProposalCreationPhase.PENDING_AUTH
+        ):
+            raise InvalidStartedHypothesisAttemptError(
+                "semantic append requires its exact pending transaction authority"
+            )
+        _sqlite.require_active_immediate_transaction(
+            transaction,
+            self.__database_authority,
+        )
+        pending = state.pending
+        if pending is None:
+            raise InvalidStartedHypothesisAttemptError(
+                "semantic append lost its exact generated creation facts"
+            )
+        started = state.expected.started
+        payload = _generated_payload_from_exact_facts(
+            started,
+            pending.result_projection,
+            pending.target,
+        )
+        generated = _append_stored_proposal_attempt_event_in(
+            transaction,
+            self.__database_authority,
+            payload,
+        )
+        binding = _append_proposal_hypothesis_binding_in(
+            transaction,
+            self.__database_authority,
+            started=started,
+            generated=generated,
+            source_branch=pending.source_branch,
+            parent=pending.prior_head,
+            target=pending.target,
+            proposal_digest=pending.result_projection.proposal_sha256,
+        )
+        state.committed = _ProposalSemanticProjection(started, generated, binding)
+        state.pending = None
+        state.phase = _ProposalCreationPhase.PENDING_WITNESS
+        self.__creation_tombstones[authorization] = _ProposalCreationTombstone(
+            phase=_ProposalCreationPhase.PENDING_WITNESS
+        )
+
+    def complete_generated_hypothesis_creation_in(
+        self,
+        transaction: _sqlite.ImmediateTransaction,
+        ledger: _owner._OwnerReceiptLedger,
+        authorization: _owner._OwnerCreationAuthorization,
+        receipt: _owner.OwnerCreationReceipt,
+    ) -> _owner.SemanticCreationOutcomeWitness:
+        """Strong-bind exact semantic facts before completing generic H authority."""
+
+        state = self.__creation_states.get(authorization)
+        if (
+            state is None
+            or state.authorization is not authorization
+            or state.transaction is not transaction
+        ):
+            raise InvalidStartedHypothesisAttemptError(
+                "H creation authorization is unknown to this ProposalAttemptOwner"
+            )
+        if state.phase is not _ProposalCreationPhase.PENDING_WITNESS:
+            raise InvalidStartedHypothesisAttemptError(
+                "H creation authorization has no pending semantic witness"
+            )
+        inventory = self._load_hypothesis_creation_inventory_in(transaction)
+        committed = state.committed
+        matching = tuple(
+            group
+            for group in inventory.groups
+            if group.attempt_id == committed.started.attempt_id
+        )
+        if (
+            committed.generated is None
+            or committed.binding is None
+            or len(matching) != 1
+            or matching[0].disposition is not _AttemptGroupDisposition.RESOLVED
+            or matching[0].events != (committed.started, committed.generated)
+            or matching[0].binding != committed.binding
+            or inventory.unattributed_malformed
+            or committed.started.branch_id in inventory.malformed_branch_ids
+        ):
+            raise InvalidStartedHypothesisAttemptError(
+                "H creation semantic group differs before witness issuance"
+            )
+        witness = _owner._issue_hypothesis_semantic_creation_outcome_witness(
+            self.__creation_authorizer_authority,
+            transaction,
+            ledger,
+            authorization,
+        )
+        state.witness = witness
+        state.phase = _ProposalCreationPhase.STRONG_BOUND
+        self.__creation_tombstones[authorization] = _ProposalCreationTombstone(
+            phase=_ProposalCreationPhase.STRONG_BOUND,
+            witness_ref=weakref.ref(witness),
+        )
+        _owner._complete_hypothesis_creation_authorization(
+            self.__creation_authorizer_authority,
+            transaction,
+            ledger,
+            authorization,
+            receipt,
+            witness,
+        )
+        return witness
+
+    def _require(
+        self,
+        witness: _owner.SemanticCreationOutcomeWitness,
+        authorization: _owner._OwnerCreationAuthorization,
+    ) -> None:
+        state = self.__creation_states.get(authorization)
+        if (
+            type(witness) is not _owner.SemanticCreationOutcomeWitness
+            or state is None
+            or state.authorization is not authorization
+            or state.phase is not _ProposalCreationPhase.STRONG_BOUND
+            or state.witness is not witness
+        ):
+            raise InvalidStartedHypothesisAttemptError(
+                "proposal semantic witness/authorization pair is not strongly bound"
+            )
+
+    def _classify(
+        self,
+        snapshot: _sqlite._IndependentReadSnapshot,
+        witness: _owner.SemanticCreationOutcomeWitness,
+        authorization: _owner._OwnerCreationAuthorization,
+    ) -> ProposalAttemptCommitClassification:
+        self._require(witness, authorization)
+        state = self.__creation_states[authorization]
+        if state.classification is not None:
+            return state.classification
+        _sqlite._require_read_snapshot(snapshot, self.__database_authority)
+        try:
+            inventory = self._load_hypothesis_creation_inventory_from_snapshot(snapshot)
+        except Exception:
+            state.classification = ProposalAttemptCommitClassification.MIXED
+            return state.classification
+        expected = state.expected
+        committed = state.committed
+        matching = tuple(
+            group
+            for group in inventory.groups
+            if group.attempt_id == expected.started.attempt_id
+        )
+        branch_is_well_formed = (
+            not inventory.unattributed_malformed
+            and expected.started.branch_id not in inventory.malformed_branch_ids
+            and all(
+                group in matching
+                or group.branch_id != expected.started.branch_id
+                or group.disposition is _AttemptGroupDisposition.RESOLVED
+                for group in inventory.groups
+            )
+        )
+        if (
+            branch_is_well_formed
+            and len(matching) == 1
+            and matching[0].disposition is _AttemptGroupDisposition.UNRESOLVED
+            and matching[0].events == (expected.started,)
+            and matching[0].binding is None
+        ):
+            classification = ProposalAttemptCommitClassification.EXPECTED
+        elif (
+            branch_is_well_formed
+            and committed.generated is not None
+            and committed.binding is not None
+            and len(matching) == 1
+            and matching[0].disposition is _AttemptGroupDisposition.RESOLVED
+            and matching[0].events == (committed.started, committed.generated)
+            and matching[0].binding == committed.binding
+        ):
+            classification = ProposalAttemptCommitClassification.COMMITTED
+        else:
+            classification = ProposalAttemptCommitClassification.MIXED
+        state.classification = classification
+        return classification
+
+    def _settle(
+        self,
+        witness: _owner.SemanticCreationOutcomeWitness,
+        authorization: _owner._OwnerCreationAuthorization,
+    ) -> None:
+        tombstone = self.__creation_tombstones.get(authorization)
+        state = self.__creation_states.get(authorization)
+        if (
+            state is not None
+            and state.phase is _ProposalCreationPhase.SETTLED
+            and state.witness is witness
+            and tombstone is not None
+            and tombstone.phase is _ProposalCreationPhase.SETTLED
+            and tombstone.witness_ref is not None
+            and tombstone.witness_ref() is witness
+        ):
+            self.__creation_states.pop(authorization, None)
+            return
+        if state is None:
+            if (
+                tombstone is not None
+                and tombstone.phase is _ProposalCreationPhase.SETTLED
+                and tombstone.witness_ref is not None
+                and tombstone.witness_ref() is witness
+            ):
+                return
+            raise InvalidStartedHypothesisAttemptError(
+                "proposal semantic settlement uses an unknown or mismatched pair"
+            )
+        if (
+            type(witness) is not _owner.SemanticCreationOutcomeWitness
+            or state.authorization is not authorization
+            or state.witness is not witness
+            or state.phase is not _ProposalCreationPhase.STRONG_BOUND
+            or state.classification
+            not in {
+                None,
+                ProposalAttemptCommitClassification.EXPECTED,
+                ProposalAttemptCommitClassification.COMMITTED,
+            }
+        ):
+            raise InvalidStartedHypothesisAttemptError(
+                "proposal semantic settlement requires one exact classified pair"
+            )
+        self.__creation_tombstones[authorization] = _ProposalCreationTombstone(
+            phase=_ProposalCreationPhase.SETTLED,
+            witness_ref=weakref.ref(witness),
+        )
+        state.phase = _ProposalCreationPhase.SETTLED
+        self.__creation_states.pop(authorization, None)
+
+    def _discard(
+        self,
+        authorization: _owner._OwnerCreationAuthorization,
+    ) -> None:
+        tombstone = self.__creation_tombstones.get(authorization)
+        state = self.__creation_states.get(authorization)
+        if (
+            state is not None
+            and state.phase is _ProposalCreationPhase.DISCARDED
+            and tombstone is not None
+            and tombstone.phase is _ProposalCreationPhase.DISCARDED
+        ):
+            self.__creation_states.pop(authorization, None)
+            return
+        if state is None:
+            if (
+                tombstone is not None
+                and tombstone.phase is _ProposalCreationPhase.DISCARDED
+            ):
+                return
+            raise InvalidStartedHypothesisAttemptError(
+                "proposal semantic discard uses an unknown or settled authorization"
+            )
+        if (
+            state.authorization is not authorization
+            or state.phase in {
+                _ProposalCreationPhase.SETTLED,
+                _ProposalCreationPhase.DISCARDED,
+            }
+            or state.classification is ProposalAttemptCommitClassification.MIXED
+        ):
+            raise InvalidStartedHypothesisAttemptError(
+                "proposal semantic authorization cannot be discarded"
+            )
+        self.__creation_tombstones[authorization] = _ProposalCreationTombstone(
+            phase=_ProposalCreationPhase.DISCARDED
+        )
+        state.phase = _ProposalCreationPhase.DISCARDED
+        self.__creation_states.pop(authorization, None)
+
+    def _discard_pending_creation_view(
+        self,
+        creation_view: _generation.HypothesisCreationView,
+    ) -> bool:
+        """Discard an authorization hidden by a post-registration call fault."""
+
+        if type(creation_view) is not _generation.HypothesisCreationView:
+            raise InvalidStartedHypothesisAttemptError(
+                "pending discard requires an exact creation view"
+            )
+        matching = tuple(
+            authorization
+            for authorization, state in self.__creation_states.items()
+            if state.pending is not None
+            and state.pending.creation_view is creation_view
+        )
+        if not matching:
+            return False
+        if len(matching) != 1:
+            raise InvalidStartedHypothesisAttemptError(
+                "creation view resolves multiple pending authorizations"
+            )
+        authorization = matching[0]
+        state = self.__creation_states[authorization]
+        if state.phase is not _ProposalCreationPhase.PENDING_AUTH:
+            raise InvalidStartedHypothesisAttemptError(
+                "creation-view discard found a non-pending authorization"
+            )
+        self._discard(authorization)
+        self.__creation_tombstones.pop(authorization, None)
+        return True
+
     def _require_exact_start_for_terminal_in(
         self,
         transaction: _sqlite.ImmediateTransaction,
@@ -1478,7 +2386,8 @@ class ProposalAttemptOwner:
         started: StartedHypothesisAttempt,
         bound_prompt: _generation.BoundHypothesisPrompt,
         outcome: _generation.FailedHypothesisGeneration
-        | _generation.AbortedHypothesisGeneration,
+        | _generation.AbortedHypothesisGeneration
+        | _generation.HypothesisContractRejection,
     ) -> None:
         """Consume one terminal outcome and append its strictly rebuilt event."""
 
@@ -1489,6 +2398,7 @@ class ProposalAttemptOwner:
         if type(outcome) not in {
             _generation.FailedHypothesisGeneration,
             _generation.AbortedHypothesisGeneration,
+            _generation.HypothesisContractRejection,
         }:
             raise InvalidStartedHypothesisAttemptError(
                 "terminal append requires an exact leaf terminal outcome"
@@ -1530,7 +2440,8 @@ class ProposalAttemptOwner:
         snapshot: _sqlite._IndependentReadSnapshot,
         *,
         outcome: _generation.FailedHypothesisGeneration
-        | _generation.AbortedHypothesisGeneration,
+        | _generation.AbortedHypothesisGeneration
+        | _generation.HypothesisContractRejection,
     ) -> tuple[
         ProposalAttemptCommitClassification,
         TerminalAttemptReceipt | None,
@@ -1538,6 +2449,7 @@ class ProposalAttemptOwner:
         if type(outcome) not in {
             _generation.FailedHypothesisGeneration,
             _generation.AbortedHypothesisGeneration,
+            _generation.HypothesisContractRejection,
         }:
             raise InvalidStartedHypothesisAttemptError(
                 "terminal classification requires an exact leaf terminal outcome"

@@ -40,11 +40,15 @@ _MUTATION_REGISTRY_PRIVATE = frozenset(
         "_close_owner_receipt_ledger",
     }
 )
-_CREATION_REGISTRY_PRIVATE = frozenset(
-    {
-        "_consume_branch_creation_receipt",
-        "_consume_hypothesis_creation_receipt",
-    }
+_BRANCH_CREATION_REGISTRY_PRIVATE = frozenset(
+    {"_consume_branch_creation_receipt"}
+)
+_HYPOTHESIS_CREATION_REGISTRY_PRIVATE = frozenset(
+    {"_consume_hypothesis_creation_receipt"}
+)
+_CREATION_REGISTRY_PRIVATE = (
+    _BRANCH_CREATION_REGISTRY_PRIVATE
+    | _HYPOTHESIS_CREATION_REGISTRY_PRIVATE
 )
 _CHAMPION_CREATION_PRIVATE = frozenset(
     {
@@ -52,6 +56,14 @@ _CHAMPION_CREATION_PRIVATE = frozenset(
         "_register_branch_creation_authorization",
         "_issue_branch_semantic_creation_outcome_witness",
         "_complete_branch_creation_authorization",
+    }
+)
+_PROPOSAL_CREATION_PRIVATE = frozenset(
+    {
+        "_issue_hypothesis_creation_authorizer_authority",
+        "_register_hypothesis_creation_authorization",
+        "_issue_hypothesis_semantic_creation_outcome_witness",
+        "_complete_hypothesis_creation_authorization",
     }
 )
 _REGISTRY_PRIVATE = _MUTATION_REGISTRY_PRIVATE | _CREATION_REGISTRY_PRIVATE
@@ -77,6 +89,7 @@ _REGISTRY_SQLITE_STATE_PRIVATE = frozenset(
         "_thread_session_owner",
         "_lookup_session_state",
         "_session_deactivation_complete",
+        "_session_resources_closed",
     }
 )
 _SHARED_SQLITE_AUTHORITY_PRIVATE = frozenset({"_lookup_authority_state"})
@@ -138,6 +151,7 @@ def _owner_internal_private_names() -> frozenset[str]:
         | _HYPOTHESIS_PRIVATE
         | _REGISTRY_PRIVATE
         | _CHAMPION_CREATION_PRIVATE
+        | _PROPOSAL_CREATION_PRIVATE
     )
     return frozenset(private_definitions - approved_cross_module)
 
@@ -218,10 +232,24 @@ def test_owner_private_importers_are_an_exact_dormant_allowlist() -> None:
         }
     }
     assert all(
+        callers == {proposal_attempt_path}
+        for callers in _attribute_callers(
+            trees,
+            _PROPOSAL_CREATION_PRIVATE,
+        ).values()
+    )
+    assert all(
         not callers
         for callers in _attribute_callers(
             trees,
-            _CREATION_REGISTRY_PRIVATE,
+            _BRANCH_CREATION_REGISTRY_PRIVATE,
+        ).values()
+    )
+    assert all(
+        callers == {registry_path}
+        for callers in _attribute_callers(
+            trees,
+            _HYPOTHESIS_CREATION_REGISTRY_PRIVATE,
         ).values()
     )
     assert all(
@@ -297,6 +325,10 @@ def test_focused_store_registry_surface_has_exact_production_callers() -> None:
         trees,
         frozenset({"insert_once_in"}),
     )
+    generated_creation_callers = _attribute_callers(
+        trees,
+        frozenset({"insert_generated_once_in"}),
+    )
     snapshot_callers = _attribute_callers(
         trees,
         frozenset(
@@ -306,11 +338,17 @@ def test_focused_store_registry_surface_has_exact_production_callers() -> None:
                 "_load_revisioned_hypothesis_from_snapshot",
                 "_load_all_revisioned_hypotheses_from_snapshot",
                 "_load_branch_hypotheses_from_snapshot",
+                "_load_generated_revisioned_hypothesis_from_snapshot",
+                "_load_branch_hypotheses_with_generated_target_from_snapshot",
+                "_load_all_hypotheses_with_generated_targets_from_snapshot",
             }
         ),
     )
     assert mutation_callers == {"compare_and_swap_in": {registry_path}}
     assert creation_callers == {"insert_once_in": set()}
+    assert generated_creation_callers == {
+        "insert_generated_once_in": {registry_path}
+    }
     assert all(callers == {registry_path} for callers in snapshot_callers.values())
 
 

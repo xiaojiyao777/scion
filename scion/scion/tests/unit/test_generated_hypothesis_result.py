@@ -250,6 +250,13 @@ def _harness(
         prompt_hash=prompt_hash,
         provider_tool_digest=stable_digest(turn.provider_tool, length=64),
         governance_digest=context_snapshot.governance_envelope.digest,
+        c0_governance_json=json.dumps(
+            context_snapshot.governance_envelope.to_primitive(),
+            ensure_ascii=True,
+            sort_keys=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8"),
     )
     generation._inspect_bound_prompt(
         authorities.registry,

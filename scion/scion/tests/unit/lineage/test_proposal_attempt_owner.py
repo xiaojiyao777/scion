@@ -168,7 +168,10 @@ def _prompt_path(tmp_path: Path, *, owner_context: bytes | None = None) -> _Path
         context_digest=_digest("context"),
         prompt_hash=_digest("prompt"),
         provider_tool_digest=_digest("provider-tool"),
-        governance_digest=_digest("governance"),
+        governance_digest=hashlib.sha256(
+            b'{"schema_version":"proposal-governance-envelope.v1","governance":{}}'
+        ).hexdigest(),
+        c0_governance_json=b"{}",
     )
     generation._inspect_bound_prompt(authorities.registry, prompt, view=view)
     generation._begin_started_attempt(authorities.registry, view, prompt)

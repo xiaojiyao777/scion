@@ -17,7 +17,7 @@ import json
 import math
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from scion.core.models import Branch, BranchState, HypothesisRecord
@@ -70,6 +70,10 @@ _HYPOTHESIS_STORAGE_KEYS = frozenset(
 
 _HYPOTHESIS_ACTIONS = frozenset({"modify", "create_new", "remove"})
 _PREDICTED_DIRECTIONS = frozenset({"improve", "tradeoff", "exploratory"})
+_GENERATED_HYPOTHESIS_UTC_MICROSECOND_RE = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"\.[0-9]{6}\+00:00$"
+)
 
 __all__ = (
     "ActiveEvaluationLeaseConflict",
@@ -82,6 +86,7 @@ __all__ = (
     "RevisionedBranchRecord",
     "RevisionedHypothesisRecord",
     "branch_storage_payload",
+    "generated_hypothesis_storage_payload",
     "hypothesis_storage_payload",
 )
 
@@ -245,6 +250,24 @@ def hypothesis_storage_payload(record: HypothesisRecord) -> dict[str, Any]:
     }
 
 
+def generated_hypothesis_storage_payload(
+    record: HypothesisRecord,
+) -> dict[str, Any]:
+    """Return the Checkpoint-B generated-H projection.
+
+    This deliberately differs from the generic owner projection only in its
+    timestamp protocol: generated H records require UTC and always retain six
+    fractional digits, including exact-second ``.000000`` values.
+    """
+
+    payload = hypothesis_storage_payload(record)
+    payload["created_at"] = _generated_hypothesis_datetime_text(
+        record.created_at,
+        "generated hypothesis creation time",
+    )
+    return payload
+
+
 @dataclass(frozen=True, slots=True)
 class RevisionedBranchRecord:
     """Immutable expected owner for one durable Branch row."""
@@ -335,7 +358,7 @@ class RevisionedHypothesisRecord:
             _HYPOTHESIS_STORAGE_KEYS,
             "hypothesis",
         )
-        validated = _validate_hypothesis_payload(payload)
+        validated = _validate_hypothesis_token_payload(payload)
         if (
             _canonical_json_bytes(validated)
             != self.canonical_storage_payload_json
@@ -363,6 +386,23 @@ class RevisionedHypothesisRecord:
             payload_sha256=_sha256(canonical),
         )
 
+    @classmethod
+    def from_generated_value(
+        cls,
+        hypothesis: HypothesisRecord,
+        owner_revision: int,
+    ) -> "RevisionedHypothesisRecord":
+        """Capture one H under the strict generated-H timestamp protocol."""
+
+        payload = generated_hypothesis_storage_payload(hypothesis)
+        canonical = _canonical_json_bytes(payload)
+        return cls(
+            hypothesis_id=payload["hypothesis_id"],
+            owner_revision=owner_revision,
+            canonical_storage_payload_json=canonical,
+            payload_sha256=_sha256(canonical),
+        )
+
     def value(self) -> HypothesisRecord:
         payload = _load_canonical_payload(
             self.canonical_storage_payload_json,
@@ -370,7 +410,7 @@ class RevisionedHypothesisRecord:
             _HYPOTHESIS_STORAGE_KEYS,
             "hypothesis",
         )
-        payload = _validate_hypothesis_payload(payload)
+        payload = _validate_hypothesis_token_payload(payload)
         return HypothesisRecord(
             hypothesis_id=payload["hypothesis_id"],
             branch_id=payload["branch_id"],
@@ -453,6 +493,50 @@ def _validate_hypothesis_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     return hypothesis_storage_payload(hypothesis)
 
 
+def _validate_generated_hypothesis_payload(
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    try:
+        hypothesis = HypothesisRecord(
+            hypothesis_id=payload["hypothesis_id"],
+            branch_id=payload["branch_id"],
+            change_locus=payload["change_locus"],
+            action=payload["action"],
+            status=payload["status"],
+            target_file=payload["target_file"],
+            parent_hypothesis_id=payload["parent_hypothesis_id"],
+            suggested_weight=payload["suggested_weight"],
+            hypothesis_text=payload["hypothesis_text"],
+            created_at=_parse_generated_hypothesis_datetime(
+                payload["created_at"],
+                "generated hypothesis creation time",
+            ),
+            base_champion_version=payload["base_champion_version"],
+            family_id=payload["family_id"],
+            family_source=payload["family_source"],
+            taxonomy_version=payload["taxonomy_version"],
+            predicted_direction=payload["predicted_direction"],
+            proposal_digest=payload["proposal_digest"],
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise DurableOwnerIntegrityError(
+            "generated hypothesis canonical payload is invalid"
+        ) from exc
+    return generated_hypothesis_storage_payload(hypothesis)
+
+
+def _validate_hypothesis_token_payload(
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    try:
+        return _validate_hypothesis_payload(payload)
+    except DurableOwnerIntegrityError as generic_error:
+        try:
+            return _validate_generated_hypothesis_payload(payload)
+        except DurableOwnerIntegrityError:
+            raise generic_error
+
+
 def _load_canonical_payload(
     canonical: bytes,
     digest: str,
@@ -531,6 +615,19 @@ def _datetime_text(value: Any, label: str) -> str:
     return result
 
 
+def _generated_hypothesis_datetime_text(value: Any, label: str) -> str:
+    if not isinstance(value, datetime):
+        raise DurableOwnerIntegrityError(f"{label} must be a datetime")
+    if value.tzinfo != timezone.utc:
+        raise DurableOwnerIntegrityError(f"{label} must use UTC")
+    result = value.isoformat(timespec="microseconds")
+    if _GENERATED_HYPOTHESIS_UTC_MICROSECOND_RE.fullmatch(result) is None:
+        raise DurableOwnerIntegrityError(
+            f"{label} must use canonical UTC microsecond text"
+        )
+    return result
+
+
 def _parse_canonical_datetime(value: Any, label: str) -> datetime:
     if type(value) is not str:
         raise DurableOwnerIntegrityError(f"{label} must be a string")
@@ -540,6 +637,28 @@ def _parse_canonical_datetime(value: Any, label: str) -> datetime:
         raise DurableOwnerIntegrityError(f"{label} is invalid") from exc
     if parsed.isoformat() != value:
         raise DurableOwnerIntegrityError(f"{label} is not canonical")
+    return parsed
+
+
+def _parse_generated_hypothesis_datetime(value: Any, label: str) -> datetime:
+    if (
+        type(value) is not str
+        or _GENERATED_HYPOTHESIS_UTC_MICROSECOND_RE.fullmatch(value) is None
+    ):
+        raise DurableOwnerIntegrityError(
+            f"{label} must use canonical UTC microsecond text"
+        )
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise DurableOwnerIntegrityError(f"{label} is invalid") from exc
+    if (
+        parsed.tzinfo != timezone.utc
+        or parsed.isoformat(timespec="microseconds") != value
+    ):
+        raise DurableOwnerIntegrityError(
+            f"{label} must use canonical UTC microsecond text"
+        )
     return parsed
 
 

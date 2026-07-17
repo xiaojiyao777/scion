@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextvars
 import enum
 import hashlib
+import json
 import threading
 import weakref
 from dataclasses import dataclass
@@ -157,6 +158,34 @@ class TerminalAttemptReceipt(_OpaqueCapability):
         _sealed_subclass("TerminalAttemptReceipt")
 
 
+class HypothesisContractApproval(_OpaqueCapability):
+    __slots__ = ()
+
+    def __init_subclass__(cls, **_kwargs: object) -> None:
+        _sealed_subclass("HypothesisContractApproval")
+
+
+class HypothesisContractRejection(_OpaqueCapability):
+    __slots__ = ()
+
+    def __init_subclass__(cls, **_kwargs: object) -> None:
+        _sealed_subclass("HypothesisContractRejection")
+
+
+class ApprovedHypothesisTarget(_OpaqueCapability):
+    __slots__ = ()
+
+    def __init_subclass__(cls, **_kwargs: object) -> None:
+        _sealed_subclass("ApprovedHypothesisTarget")
+
+
+class HypothesisCreationView(_OpaqueCapability):
+    __slots__ = ()
+
+    def __init_subclass__(cls, **_kwargs: object) -> None:
+        _sealed_subclass("HypothesisCreationView")
+
+
 class _AuthorityHandle(_OpaqueCapability):
     __slots__ = ()
 
@@ -171,6 +200,8 @@ class _AuthorityRole(enum.Enum):
     PROMPT_OWNER = enum.auto()
     PROPOSAL_OWNER = enum.auto()
     PROVIDER = enum.auto()
+    CONTRACT_GATE = enum.auto()
+    TARGET_FACTORY = enum.auto()
 
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
@@ -188,6 +219,12 @@ class _CheckpointAAuthorities:
     prompt_owner: _AuthorityHandle
     proposal_owner: _AuthorityHandle
     provider: _AuthorityHandle
+
+
+@dataclass(frozen=True, slots=True)
+class _CheckpointBAuthorities:
+    contract_gate: _AuthorityHandle
+    target_factory: _AuthorityHandle
 
 
 class _CapabilityStateTable(
@@ -284,6 +321,58 @@ def _install_checkpoint_a_authorities(
         prompt_owner=handles[_AuthorityRole.PROMPT_OWNER],
         proposal_owner=handles[_AuthorityRole.PROPOSAL_OWNER],
         provider=handles[_AuthorityRole.PROVIDER],
+    )
+
+
+def _extend_checkpoint_b_authorities(
+    checkpoint_a: _CheckpointAAuthorities,
+    *,
+    contract_gate: object,
+    target_factory: object,
+) -> _CheckpointBAuthorities:
+    """Extend one exact checkpoint-A installation with the two B owners."""
+
+    if type(checkpoint_a) is not _CheckpointAAuthorities:
+        raise InvalidHypothesisGenerationCapabilityError(
+            "checkpoint-B extension requires the exact checkpoint-A authority set"
+        )
+    _require_same_installation(
+        checkpoint_a.registry,
+        checkpoint_a.code_source_owner,
+        checkpoint_a.context_manager,
+        checkpoint_a.prompt_owner,
+        checkpoint_a.proposal_owner,
+        checkpoint_a.provider,
+    )
+    owners = (
+        (_AuthorityRole.CONTRACT_GATE, contract_gate),
+        (_AuthorityRole.TARGET_FACTORY, target_factory),
+    )
+    if any(owner is None for _, owner in owners):
+        raise InvalidHypothesisGenerationCapabilityError(
+            "checkpoint-B authority installation requires every semantic owner"
+        )
+    installation = _lookup_handle(checkpoint_a.registry).installation
+    handles: dict[_AuthorityRole, _AuthorityHandle] = {}
+    with _AUTHORITY_HANDLE_LOCK:
+        keys = tuple((id(owner), role) for role, owner in owners)
+        if any(key in _INSTALLED_OWNER_ROLES for key in keys):
+            raise HypothesisGenerationLifecycleError(
+                "checkpoint-B semantic owner is already installed"
+            )
+        for (role, owner), key in zip(owners, keys, strict=True):
+            handle = object.__new__(_AuthorityHandle)
+            _AUTHORITY_HANDLE_STATES[handle] = _AuthorityHandleState(
+                role=role,
+                owner=owner,
+                installation=installation,
+            )
+            _INSTALLED_OWNER_ROLES.add(key)
+            weakref.finalize(handle, _release_installed_owner_role, key)
+            handles[role] = handle
+    return _CheckpointBAuthorities(
+        contract_gate=handles[_AuthorityRole.CONTRACT_GATE],
+        target_factory=handles[_AuthorityRole.TARGET_FACTORY],
     )
 
 
@@ -431,6 +520,88 @@ def _required_nonnegative_int(value: object, *, field: str) -> int:
     return value
 
 
+def _canonical_c0_governance_bytes(
+    value: object,
+    *,
+    governance_digest: str,
+) -> tuple[bytes, str]:
+    if type(value) is not bytes or not value:
+        raise InvalidHypothesisGenerationCapabilityError(
+            "bound prompt requires canonical C0 governance bytes"
+        )
+
+    def _pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        decoded: dict[str, object] = {}
+        for key, item in pairs:
+            if key in decoded:
+                raise ValueError(f"duplicate C0 governance key {key!r}")
+            decoded[key] = item
+        return decoded
+
+    def _constant(raw: str) -> None:
+        raise ValueError(f"non-finite C0 governance value {raw!r}")
+
+    try:
+        primitive = json.loads(
+            value.decode("utf-8"),
+            object_pairs_hook=_pairs,
+            parse_constant=_constant,
+        )
+        owner_canonical = json.dumps(
+            primitive,
+            ensure_ascii=True,
+            sort_keys=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        raise InvalidHypothesisGenerationCapabilityError(
+            "bound prompt C0 governance is not canonical JSON"
+        ) from exc
+    if type(primitive) is not dict or owner_canonical != value:
+        raise InvalidHypothesisGenerationCapabilityError(
+            "bound prompt C0 governance must be one canonical JSON object"
+        )
+    envelope = {
+        "schema_version": "proposal-governance-envelope.v1",
+        "governance": primitive,
+    }
+    actual_digest = hashlib.sha256(
+        json.dumps(
+            envelope,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    if actual_digest != governance_digest:
+        raise InvalidHypothesisGenerationCapabilityError(
+            "bound prompt C0 governance bytes do not match governance digest"
+        )
+    # GovernanceEnvelope's existing digest deliberately preserves owner order.
+    # After proving that authority, detach a second C0 projection whose codec is
+    # sorted-key canonical and domain-separated.  Contract validation consumes
+    # only these bytes, so insertion-order noise cannot alter its decision.
+    canonical = json.dumps(
+        primitive,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    c0_envelope = json.dumps(
+        {
+            "governance": primitive,
+            "schema_version": "hypothesis-c0-governance.v1",
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return canonical, hashlib.sha256(c0_envelope).hexdigest()
+
+
 class _CodeRequestPhase(enum.Enum):
     ISSUED = enum.auto()
     SOURCE_IN_FLIGHT = enum.auto()
@@ -449,6 +620,15 @@ class _GenerationViewPhase(enum.Enum):
     START_BOUND = enum.auto()
     PERMIT_ISSUED = enum.auto()
     RESULT_BOUND = enum.auto()
+    CONTRACT_IN_FLIGHT = enum.auto()
+    CONTRACT_APPROVED = enum.auto()
+    CONTRACT_UNKNOWN = enum.auto()
+    TARGET_IN_FLIGHT = enum.auto()
+    TARGET_BOUND = enum.auto()
+    TARGET_UNKNOWN = enum.auto()
+    CREATION_IN_FLIGHT = enum.auto()
+    CREATION_UNKNOWN = enum.auto()
+    CREATION_VIEW_ISSUED = enum.auto()
     TERMINAL_OUTCOME_BOUND = enum.auto()
     TERMINAL_IN_FLIGHT = enum.auto()
     PRESTART_REJECTED = enum.auto()
@@ -506,6 +686,37 @@ class _PermitPhase(enum.Enum):
 
 class _SuccessPhase(enum.Enum):
     ISSUED = enum.auto()
+    CONTRACT_IN_FLIGHT = enum.auto()
+    CONTRACT_APPROVED = enum.auto()
+    CONTRACT_REJECTED = enum.auto()
+    CONTRACT_UNKNOWN = enum.auto()
+    CREATION_BOUND = enum.auto()
+
+
+class _ContractDecisionPhase(enum.Enum):
+    ISSUED = enum.auto()
+    TARGET_IN_FLIGHT = enum.auto()
+    TARGET_BOUND = enum.auto()
+    TARGET_UNKNOWN = enum.auto()
+    TERMINAL_BOUND = enum.auto()
+    TERMINALIZED = enum.auto()
+    RESOLVED = enum.auto()
+    UNKNOWN = enum.auto()
+
+
+class _ApprovedTargetPhase(enum.Enum):
+    ISSUED = enum.auto()
+    CREATION_IN_FLIGHT = enum.auto()
+    CREATION_VIEW_BOUND = enum.auto()
+    CREATION_UNKNOWN = enum.auto()
+    ISSUANCE_UNKNOWN = enum.auto()
+
+
+class _CreationViewPhase(enum.Enum):
+    ISSUED = enum.auto()
+    CLAIMED = enum.auto()
+    STAGED = enum.auto()
+    SPENT = enum.auto()
 
 
 class _TerminalOutcomePhase(enum.Enum):
@@ -528,6 +739,13 @@ class _GenerationViewProjection:
     reservation_id: str
     h_bundle_digest: str
     owner_context_json: bytes
+    contract_gate_authority: _AuthorityHandle | None = None
+    target_factory_authority: _AuthorityHandle | None = None
+    contract_config_digest: str | None = None
+    contract_protocol_generation: str | None = None
+    target_factory_config_digest: str | None = None
+    target_factory_protocol_generation: str | None = None
+    taxonomy_digest: str | None = None
 
 
 @dataclass(slots=True, weakref_slot=True)
@@ -546,9 +764,15 @@ class _GenerationViewState:
         GeneratedHypothesisResult
         | FailedHypothesisGeneration
         | AbortedHypothesisGeneration
+        | HypothesisContractRejection
         | None
     ) = None
     terminal_receipt: TerminalAttemptReceipt | None = None
+    contract_decision: (
+        HypothesisContractApproval | HypothesisContractRejection | None
+    ) = None
+    approved_target: ApprovedHypothesisTarget | None = None
+    creation_view: HypothesisCreationView | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -645,6 +869,8 @@ class _BoundPromptProjection:
     prompt_hash: str
     provider_tool_digest: str
     governance_digest: str
+    c0_governance_json: bytes
+    c0_governance_digest: str
     source_kind: str
     selected_manifest_digest: str
     evidence_digest: str
@@ -726,6 +952,85 @@ class _GeneratedResultState:
 
 
 @dataclass(frozen=True, slots=True)
+class _ContractValidationProjection:
+    result: GeneratedHypothesisResult
+    result_projection: _GeneratedResultProjection
+    view_identity: HypothesisGenerationView
+    view_projection: _GenerationViewProjection
+    c0_governance_json: bytes
+    c0_governance_digest: str
+    governance_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ContractDecisionProjection:
+    result: GeneratedHypothesisResult
+    view_identity: HypothesisGenerationView
+    contract_result: object
+    contract_result_digest: str
+    contract_config_digest: str
+    contract_protocol_generation: str
+
+
+@dataclass(slots=True, weakref_slot=True)
+class _ContractDecisionState:
+    projection: _ContractDecisionProjection
+    contract_gate: _AuthorityHandle
+    binding: _ContextBinding
+    phase: _ContractDecisionPhase = _ContractDecisionPhase.ISSUED
+    terminal_projection: _TerminalOutcomeProjection | None = None
+    terminal_receipt: TerminalAttemptReceipt | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _TargetCreationProjection:
+    approval: HypothesisContractApproval
+    approval_projection: _ContractDecisionProjection
+    result_projection: _GeneratedResultProjection
+    view_identity: HypothesisGenerationView
+    view_projection: _GenerationViewProjection
+
+
+@dataclass(frozen=True, slots=True)
+class _ApprovedTargetProjection:
+    approval: HypothesisContractApproval
+    view_identity: HypothesisGenerationView
+    revision_zero_target: object
+    taxonomy_digest: str
+    target_factory_config_digest: str
+    target_factory_protocol_generation: str
+    clock_authority: object
+    uuid_authority: object
+
+
+@dataclass(slots=True, weakref_slot=True)
+class _ApprovedTargetState:
+    projection: _ApprovedTargetProjection
+    target_factory: _AuthorityHandle
+    binding: _ContextBinding
+    phase: _ApprovedTargetPhase = _ApprovedTargetPhase.ISSUED
+
+
+@dataclass(frozen=True, slots=True)
+class _CreationViewProjection:
+    generation_view: HypothesisGenerationView
+    result: GeneratedHypothesisResult
+    result_projection: _GeneratedResultProjection
+    approval: HypothesisContractApproval
+    target: ApprovedHypothesisTarget
+    revision_zero_target: object
+    started_attempt: StartedHypothesisAttempt
+
+
+@dataclass(slots=True, weakref_slot=True)
+class _CreationViewState:
+    projection: _CreationViewProjection
+    registry: _AuthorityHandle
+    binding: _ContextBinding
+    phase: _CreationViewPhase = _CreationViewPhase.ISSUED
+
+
+@dataclass(frozen=True, slots=True)
 class _TerminalOutcomeProjection:
     kind: str
     permit: ProviderGenerationPermit | None
@@ -740,6 +1045,7 @@ class _TerminalOutcomeProjection:
     failure_category: str
     failure_type: str
     trace_persistence_error: str | None
+    contract_result: object | None = None
 
 
 @dataclass(slots=True, weakref_slot=True)
@@ -755,7 +1061,11 @@ class _TerminalOutcomeState:
 class _TerminalReceiptProjection:
     terminal_event: object
     terminal_event_storage_sha256: str
-    outcome: FailedHypothesisGeneration | AbortedHypothesisGeneration
+    outcome: (
+        FailedHypothesisGeneration
+        | AbortedHypothesisGeneration
+        | HypothesisContractRejection
+    )
     started_attempt: StartedHypothesisAttempt
 
 
@@ -776,6 +1086,10 @@ _BOUND_PROMPT_STATES = _CapabilityStateTable()
 _STARTED_STATES = _CapabilityStateTable()
 _PERMIT_STATES = _CapabilityStateTable()
 _RESULT_STATES = _CapabilityStateTable()
+_CONTRACT_APPROVAL_STATES = _CapabilityStateTable()
+_CONTRACT_REJECTION_STATES = _CapabilityStateTable()
+_APPROVED_TARGET_STATES = _CapabilityStateTable()
+_CREATION_VIEW_STATES = _CapabilityStateTable()
 _FAILURE_STATES = _CapabilityStateTable()
 _ABORT_STATES = _CapabilityStateTable()
 _RECEIPT_STATES = _CapabilityStateTable()
@@ -828,6 +1142,13 @@ def _issue_generation_view(
     reservation_id: str,
     h_bundle_digest: str,
     owner_context_json: bytes,
+    contract_gate_authority: _AuthorityHandle | None = None,
+    target_factory_authority: _AuthorityHandle | None = None,
+    contract_config_digest: str | None = None,
+    contract_protocol_generation: str | None = None,
+    target_factory_config_digest: str | None = None,
+    target_factory_protocol_generation: str | None = None,
+    taxonomy_digest: str | None = None,
 ) -> HypothesisGenerationView:
     """Issue one exact Registry-root generation view and local reservation identity."""
 
@@ -845,6 +1166,35 @@ def _issue_generation_view(
     if type(owner_context_json) is not bytes or not owner_context_json:
         raise InvalidHypothesisGenerationCapabilityError(
             "generation view requires canonical owner-context bytes"
+        )
+    checkpoint_b_values = (
+        contract_gate_authority,
+        target_factory_authority,
+        contract_config_digest,
+        contract_protocol_generation,
+        target_factory_config_digest,
+        target_factory_protocol_generation,
+        taxonomy_digest,
+    )
+    if any(value is not None for value in checkpoint_b_values):
+        if any(value is None for value in checkpoint_b_values):
+            raise InvalidHypothesisGenerationCapabilityError(
+                "generation view requires one complete checkpoint-B owner binding"
+            )
+        assert contract_gate_authority is not None
+        assert target_factory_authority is not None
+        _handle_state(
+            contract_gate_authority,
+            role=_AuthorityRole.CONTRACT_GATE,
+        )
+        _handle_state(
+            target_factory_authority,
+            role=_AuthorityRole.TARGET_FACTORY,
+        )
+        _require_same_installation(
+            registry,
+            contract_gate_authority,
+            target_factory_authority,
         )
     value = object.__new__(HypothesisGenerationView)
     with _CAPABILITY_LOCK:
@@ -867,6 +1217,48 @@ def _issue_generation_view(
                     field="H-bundle digest",
                 ),
                 owner_context_json=bytes(owner_context_json),
+                contract_gate_authority=contract_gate_authority,
+                target_factory_authority=target_factory_authority,
+                contract_config_digest=(
+                    None
+                    if contract_config_digest is None
+                    else _required_digest(
+                        contract_config_digest,
+                        field="contract config digest",
+                    )
+                ),
+                contract_protocol_generation=(
+                    None
+                    if contract_protocol_generation is None
+                    else _required_text(
+                        contract_protocol_generation,
+                        field="contract protocol generation",
+                    )
+                ),
+                target_factory_config_digest=(
+                    None
+                    if target_factory_config_digest is None
+                    else _required_digest(
+                        target_factory_config_digest,
+                        field="target-factory config digest",
+                    )
+                ),
+                target_factory_protocol_generation=(
+                    None
+                    if target_factory_protocol_generation is None
+                    else _required_text(
+                        target_factory_protocol_generation,
+                        field="target-factory protocol generation",
+                    )
+                ),
+                taxonomy_digest=(
+                    None
+                    if taxonomy_digest is None
+                    else _required_digest(
+                        taxonomy_digest,
+                        field="taxonomy digest",
+                    )
+                ),
             ),
             registry=registry,
             binding=_new_context_binding("generation_view"),
@@ -1737,11 +2129,13 @@ def _issue_bound_prompt(
     prompt_hash: str,
     provider_tool_digest: str,
     governance_digest: str,
+    c0_governance_json: bytes,
 ) -> BoundHypothesisPrompt:
     _handle_state(prompt_owner, role=_AuthorityRole.PROMPT_OWNER)
     byte_fields = {
         "provider context": provider_context_json,
         "provider snapshot": provider_snapshot_bytes,
+        "C0 governance": c0_governance_json,
     }
     if context_snapshot is None or any(
         type(value) is not bytes or not value for value in byte_fields.values()
@@ -1749,6 +2143,14 @@ def _issue_bound_prompt(
         raise InvalidHypothesisGenerationCapabilityError(
             "bound prompt requires exact snapshot identity and canonical bytes"
         )
+    governance_identity = _required_digest(
+        governance_digest,
+        field="governance digest",
+    )
+    canonical_c0, c0_governance_digest = _canonical_c0_governance_bytes(
+        c0_governance_json,
+        governance_digest=governance_identity,
+    )
     with _CAPABILITY_LOCK:
         source_state = _lookup_exact(
             source,
@@ -1811,10 +2213,9 @@ def _issue_bound_prompt(
                     provider_tool_digest,
                     field="provider tool digest",
                 ),
-                governance_digest=_required_digest(
-                    governance_digest,
-                    field="governance digest",
-                ),
+                governance_digest=governance_identity,
+                c0_governance_json=canonical_c0,
+                c0_governance_digest=c0_governance_digest,
                 source_kind=source_state.projection.source_kind,
                 selected_manifest_digest=(
                     source_state.projection.selected_manifest_digest
@@ -2699,10 +3100,1028 @@ def _inspect_generation_outcome(
         )
 
 
+def _claim_generated_result_for_contract(
+    contract_gate: _AuthorityHandle,
+    result: GeneratedHypothesisResult,
+    *,
+    contract_config_digest: str,
+    contract_protocol_generation: str,
+) -> _ContractValidationProjection:
+    """Atomically give one exact generated result to its bound ContractGate."""
+
+    _handle_state(contract_gate, role=_AuthorityRole.CONTRACT_GATE)
+    config_digest = _required_digest(
+        contract_config_digest,
+        field="contract config digest",
+    )
+    protocol_generation = _required_text(
+        contract_protocol_generation,
+        field="contract protocol generation",
+    )
+    with _CAPABILITY_LOCK:
+        result_state = _lookup_exact(
+            result,
+            GeneratedHypothesisResult,
+            _RESULT_STATES,  # type: ignore[arg-type]
+            label="GeneratedHypothesisResult",
+        )
+        assert isinstance(result_state, _GeneratedResultState)
+        result_projection = result_state.projection
+        prompt_state = _lookup_exact(
+            result_projection.bound_prompt,
+            BoundHypothesisPrompt,
+            _BOUND_PROMPT_STATES,  # type: ignore[arg-type]
+            label="BoundHypothesisPrompt",
+        )
+        assert isinstance(prompt_state, _BoundPromptState)
+        view = prompt_state.projection.view_identity
+        view_state = _lookup_exact(
+            view,
+            HypothesisGenerationView,
+            _GENERATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisGenerationView",
+        )
+        assert isinstance(view_state, _GenerationViewState)
+        _prove_context(result_state.binding, label="GeneratedHypothesisResult")
+        _prove_context(view_state.binding, label="HypothesisGenerationView")
+        if (
+            view_state.projection.contract_gate_authority is not contract_gate
+            or view_state.projection.contract_config_digest != config_digest
+            or view_state.projection.contract_protocol_generation
+            != protocol_generation
+        ):
+            raise InvalidHypothesisGenerationCapabilityError(
+                "generated result is bound to another ContractGate/configuration"
+            )
+        _require_same_installation(contract_gate, result_state.provider)
+        if (
+            result_state.phase is not _SuccessPhase.ISSUED
+            or view_state.phase is not _GenerationViewPhase.RESULT_BOUND
+            or view_state.outcome is not result
+            or view_state.contract_decision is not None
+        ):
+            raise HypothesisGenerationLifecycleError(
+                "generated result is no longer contract-claimable"
+            )
+        result_state.phase = _SuccessPhase.CONTRACT_IN_FLIGHT
+        view_state.phase = _GenerationViewPhase.CONTRACT_IN_FLIGHT
+        return _ContractValidationProjection(
+            result=result,
+            result_projection=result_projection,
+            view_identity=view,
+            view_projection=view_state.projection,
+            c0_governance_json=bytes(prompt_state.projection.c0_governance_json),
+            c0_governance_digest=prompt_state.projection.c0_governance_digest,
+            governance_digest=prompt_state.projection.governance_digest,
+        )
+
+
+def _issue_contract_decision(
+    contract_gate: _AuthorityHandle,
+    result: GeneratedHypothesisResult,
+    *,
+    approved: bool,
+    contract_result: object,
+    contract_result_digest: str,
+    contract_config_digest: str,
+    contract_protocol_generation: str,
+) -> HypothesisContractApproval | HypothesisContractRejection:
+    _handle_state(contract_gate, role=_AuthorityRole.CONTRACT_GATE)
+    if type(approved) is not bool or contract_result is None:
+        raise InvalidHypothesisGenerationCapabilityError(
+            "contract decision requires exact approval bool and result"
+        )
+    decision_digest = _required_digest(
+        contract_result_digest,
+        field="contract result digest",
+    )
+    config_digest = _required_digest(
+        contract_config_digest,
+        field="contract config digest",
+    )
+    protocol_generation = _required_text(
+        contract_protocol_generation,
+        field="contract protocol generation",
+    )
+    with _CAPABILITY_LOCK:
+        result_state = _lookup_exact(
+            result,
+            GeneratedHypothesisResult,
+            _RESULT_STATES,  # type: ignore[arg-type]
+            label="GeneratedHypothesisResult",
+        )
+        assert isinstance(result_state, _GeneratedResultState)
+        prompt_state = _lookup_exact(
+            result_state.projection.bound_prompt,
+            BoundHypothesisPrompt,
+            _BOUND_PROMPT_STATES,  # type: ignore[arg-type]
+            label="BoundHypothesisPrompt",
+        )
+        assert isinstance(prompt_state, _BoundPromptState)
+        view = prompt_state.projection.view_identity
+        view_state = _lookup_exact(
+            view,
+            HypothesisGenerationView,
+            _GENERATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisGenerationView",
+        )
+        assert isinstance(view_state, _GenerationViewState)
+        _prove_context(result_state.binding, label="GeneratedHypothesisResult")
+        _prove_context(view_state.binding, label="HypothesisGenerationView")
+        if (
+            result_state.phase is not _SuccessPhase.CONTRACT_IN_FLIGHT
+            or view_state.phase is not _GenerationViewPhase.CONTRACT_IN_FLIGHT
+            or view_state.outcome is not result
+            or view_state.contract_decision is not None
+            or view_state.projection.contract_gate_authority is not contract_gate
+            or view_state.projection.contract_config_digest != config_digest
+            or view_state.projection.contract_protocol_generation
+            != protocol_generation
+        ):
+            raise HypothesisGenerationLifecycleError(
+                "generated result has no active contract claim"
+            )
+        capability_type = (
+            HypothesisContractApproval
+            if approved
+            else HypothesisContractRejection
+        )
+        value = object.__new__(capability_type)
+        decision_state = _ContractDecisionState(
+            projection=_ContractDecisionProjection(
+                result=result,
+                view_identity=view,
+                contract_result=contract_result,
+                contract_result_digest=decision_digest,
+                contract_config_digest=config_digest,
+                contract_protocol_generation=protocol_generation,
+            ),
+            contract_gate=contract_gate,
+            binding=_new_context_binding("hypothesis_contract_decision"),
+        )
+        if not approved:
+            generated = result_state.projection
+            decision_state.terminal_projection = _TerminalOutcomeProjection(
+                kind="hypothesis_contract_rejected",
+                permit=generated.permit,
+                started_attempt=generated.started_attempt,
+                bound_prompt=generated.bound_prompt,
+                receipt=generated.receipt,
+                trace_ref=generated.trace_ref,
+                prompt_manifest_ref=generated.prompt_manifest_ref,
+                raw_response_ref=generated.raw_response_ref,
+                provider_ok=generated.provider_ok,
+                ok=False,
+                failure_category="hypothesis_contract_rejected",
+                failure_type="HypothesisContractRejection",
+                trace_persistence_error=generated.trace_persistence_error,
+                contract_result=contract_result,
+            )
+        states = (
+            _CONTRACT_APPROVAL_STATES
+            if approved
+            else _CONTRACT_REJECTION_STATES
+        )
+        states[value] = decision_state
+        view_state.contract_decision = value
+        if approved:
+            result_state.phase = _SuccessPhase.CONTRACT_APPROVED
+            view_state.phase = _GenerationViewPhase.CONTRACT_APPROVED
+        else:
+            result_state.phase = _SuccessPhase.CONTRACT_REJECTED
+            view_state.phase = _GenerationViewPhase.RESULT_BOUND
+        return value
+
+
+def _issue_hypothesis_contract_approval(
+    contract_gate: _AuthorityHandle,
+    result: GeneratedHypothesisResult,
+    *,
+    contract_result: object,
+    contract_result_digest: str,
+    contract_config_digest: str,
+    contract_protocol_generation: str,
+) -> HypothesisContractApproval:
+    value = _issue_contract_decision(
+        contract_gate,
+        result,
+        approved=True,
+        contract_result=contract_result,
+        contract_result_digest=contract_result_digest,
+        contract_config_digest=contract_config_digest,
+        contract_protocol_generation=contract_protocol_generation,
+    )
+    assert isinstance(value, HypothesisContractApproval)
+    return value
+
+
+def _issue_hypothesis_contract_rejection(
+    contract_gate: _AuthorityHandle,
+    result: GeneratedHypothesisResult,
+    *,
+    contract_result: object,
+    contract_result_digest: str,
+    contract_config_digest: str,
+    contract_protocol_generation: str,
+) -> HypothesisContractRejection:
+    value = _issue_contract_decision(
+        contract_gate,
+        result,
+        approved=False,
+        contract_result=contract_result,
+        contract_result_digest=contract_result_digest,
+        contract_config_digest=contract_config_digest,
+        contract_protocol_generation=contract_protocol_generation,
+    )
+    assert isinstance(value, HypothesisContractRejection)
+    return value
+
+
+def _finish_hypothesis_contract_unknown(
+    contract_gate: _AuthorityHandle,
+    result: GeneratedHypothesisResult,
+) -> bool:
+    """Settle an exact Contract call-boundary fault without guessing."""
+
+    _handle_state(contract_gate, role=_AuthorityRole.CONTRACT_GATE)
+    with _CAPABILITY_LOCK:
+        result_state = _lookup_exact(
+            result,
+            GeneratedHypothesisResult,
+            _RESULT_STATES,  # type: ignore[arg-type]
+            label="GeneratedHypothesisResult",
+        )
+        assert isinstance(result_state, _GeneratedResultState)
+        prompt_state = _lookup_exact(
+            result_state.projection.bound_prompt,
+            BoundHypothesisPrompt,
+            _BOUND_PROMPT_STATES,  # type: ignore[arg-type]
+            label="BoundHypothesisPrompt",
+        )
+        assert isinstance(prompt_state, _BoundPromptState)
+        view_state = _lookup_exact(
+            prompt_state.projection.view_identity,
+            HypothesisGenerationView,
+            _GENERATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisGenerationView",
+        )
+        assert isinstance(view_state, _GenerationViewState)
+        _prove_context(result_state.binding, label="GeneratedHypothesisResult")
+        if view_state.projection.contract_gate_authority is not contract_gate:
+            raise HypothesisGenerationLifecycleError(
+                "generated result belongs to another Contract claim"
+            )
+        if (
+            result_state.phase is _SuccessPhase.ISSUED
+            and view_state.phase is _GenerationViewPhase.RESULT_BOUND
+            and view_state.outcome is result
+            and view_state.contract_decision is None
+        ):
+            return False
+        if (
+            result_state.phase is _SuccessPhase.CONTRACT_IN_FLIGHT
+            and view_state.phase is _GenerationViewPhase.CONTRACT_IN_FLIGHT
+            and view_state.outcome is result
+            and view_state.contract_decision is None
+        ):
+            result_state.phase = _SuccessPhase.CONTRACT_UNKNOWN
+            view_state.phase = _GenerationViewPhase.CONTRACT_UNKNOWN
+            return True
+        decision = view_state.contract_decision
+        if type(decision) is HypothesisContractApproval:
+            decision_state = _lookup_exact(
+                decision,
+                HypothesisContractApproval,
+                _CONTRACT_APPROVAL_STATES,  # type: ignore[arg-type]
+                label="HypothesisContractApproval",
+            )
+            issued_state = (
+                result_state.phase is _SuccessPhase.CONTRACT_APPROVED
+                and view_state.phase is _GenerationViewPhase.CONTRACT_APPROVED
+            )
+        elif type(decision) is HypothesisContractRejection:
+            decision_state = _lookup_exact(
+                decision,
+                HypothesisContractRejection,
+                _CONTRACT_REJECTION_STATES,  # type: ignore[arg-type]
+                label="HypothesisContractRejection",
+            )
+            issued_state = (
+                result_state.phase is _SuccessPhase.CONTRACT_REJECTED
+                and view_state.phase is _GenerationViewPhase.RESULT_BOUND
+            )
+        else:
+            raise HypothesisGenerationLifecycleError(
+                "generated result has no exact Contract fault state"
+            )
+        assert isinstance(decision_state, _ContractDecisionState)
+        if (
+            not issued_state
+            or view_state.outcome is not result
+            or decision_state.projection.result is not result
+            or decision_state.contract_gate is not contract_gate
+            or decision_state.phase is not _ContractDecisionPhase.ISSUED
+        ):
+            raise HypothesisGenerationLifecycleError(
+                "hidden Contract decision has no exact issued state"
+            )
+        decision_state.phase = _ContractDecisionPhase.UNKNOWN
+        _retire_context(
+            decision_state.binding,
+            label=type(decision).__name__,
+        )
+        result_state.phase = _SuccessPhase.CONTRACT_UNKNOWN
+        view_state.phase = _GenerationViewPhase.CONTRACT_UNKNOWN
+        return True
+
+
+def _verify_hypothesis_contract_rejection(
+    registry: _AuthorityHandle,
+    view: HypothesisGenerationView,
+    rejection: HypothesisContractRejection,
+) -> _ContractDecisionProjection:
+    """Verify the exact rejection, then move the view to terminal persistence."""
+
+    _handle_state(registry, role=_AuthorityRole.REGISTRY)
+    with _CAPABILITY_LOCK:
+        view_state = _lookup_exact(
+            view,
+            HypothesisGenerationView,
+            _GENERATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisGenerationView",
+        )
+        rejection_state = _lookup_exact(
+            rejection,
+            HypothesisContractRejection,
+            _CONTRACT_REJECTION_STATES,  # type: ignore[arg-type]
+            label="HypothesisContractRejection",
+        )
+        assert isinstance(view_state, _GenerationViewState)
+        assert isinstance(rejection_state, _ContractDecisionState)
+        result_state = _lookup_exact(
+            rejection_state.projection.result,
+            GeneratedHypothesisResult,
+            _RESULT_STATES,  # type: ignore[arg-type]
+            label="GeneratedHypothesisResult",
+        )
+        assert isinstance(result_state, _GeneratedResultState)
+        _prove_context(view_state.binding, label="HypothesisGenerationView")
+        _prove_context(
+            rejection_state.binding,
+            label="HypothesisContractRejection",
+        )
+        _require_same_installation(registry, rejection_state.contract_gate)
+        if (
+            view_state.registry is not registry
+            or view_state.phase is not _GenerationViewPhase.RESULT_BOUND
+            or view_state.contract_decision is not rejection
+            or rejection_state.projection.view_identity is not view
+            or rejection_state.phase is not _ContractDecisionPhase.ISSUED
+            or result_state.phase is not _SuccessPhase.CONTRACT_REJECTED
+        ):
+            raise HypothesisGenerationLifecycleError(
+                "contract rejection does not match this live generation view"
+            )
+        rejection_state.phase = _ContractDecisionPhase.TERMINAL_BOUND
+        view_state.outcome = rejection
+        view_state.phase = _GenerationViewPhase.TERMINAL_OUTCOME_BOUND
+        return rejection_state.projection
+
+
+def _claim_contract_approval_for_target(
+    target_factory: _AuthorityHandle,
+    approval: HypothesisContractApproval,
+    *,
+    target_factory_config_digest: str,
+    target_factory_protocol_generation: str,
+    taxonomy_digest: str,
+) -> _TargetCreationProjection:
+    _handle_state(target_factory, role=_AuthorityRole.TARGET_FACTORY)
+    config_digest = _required_digest(
+        target_factory_config_digest,
+        field="target-factory config digest",
+    )
+    protocol_generation = _required_text(
+        target_factory_protocol_generation,
+        field="target-factory protocol generation",
+    )
+    frozen_taxonomy_digest = _required_digest(
+        taxonomy_digest,
+        field="taxonomy digest",
+    )
+    with _CAPABILITY_LOCK:
+        approval_state = _lookup_exact(
+            approval,
+            HypothesisContractApproval,
+            _CONTRACT_APPROVAL_STATES,  # type: ignore[arg-type]
+            label="HypothesisContractApproval",
+        )
+        assert isinstance(approval_state, _ContractDecisionState)
+        result_state = _lookup_exact(
+            approval_state.projection.result,
+            GeneratedHypothesisResult,
+            _RESULT_STATES,  # type: ignore[arg-type]
+            label="GeneratedHypothesisResult",
+        )
+        assert isinstance(result_state, _GeneratedResultState)
+        view = approval_state.projection.view_identity
+        view_state = _lookup_exact(
+            view,
+            HypothesisGenerationView,
+            _GENERATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisGenerationView",
+        )
+        assert isinstance(view_state, _GenerationViewState)
+        _prove_context(approval_state.binding, label="HypothesisContractApproval")
+        _prove_context(view_state.binding, label="HypothesisGenerationView")
+        if (
+            view_state.projection.target_factory_authority is not target_factory
+            or view_state.projection.target_factory_config_digest != config_digest
+            or view_state.projection.target_factory_protocol_generation
+            != protocol_generation
+            or view_state.projection.taxonomy_digest != frozen_taxonomy_digest
+        ):
+            raise InvalidHypothesisGenerationCapabilityError(
+                "contract approval is bound to another target factory/configuration"
+            )
+        _require_same_installation(target_factory, approval_state.contract_gate)
+        if (
+            approval_state.phase is not _ContractDecisionPhase.ISSUED
+            or result_state.phase is not _SuccessPhase.CONTRACT_APPROVED
+            or view_state.phase is not _GenerationViewPhase.CONTRACT_APPROVED
+            or view_state.contract_decision is not approval
+            or view_state.approved_target is not None
+        ):
+            raise HypothesisGenerationLifecycleError(
+                "contract approval is no longer target-claimable"
+            )
+        approval_state.phase = _ContractDecisionPhase.TARGET_IN_FLIGHT
+        view_state.phase = _GenerationViewPhase.TARGET_IN_FLIGHT
+        return _TargetCreationProjection(
+            approval=approval,
+            approval_projection=approval_state.projection,
+            result_projection=result_state.projection,
+            view_identity=view,
+            view_projection=view_state.projection,
+        )
+
+
+def _issue_approved_hypothesis_target(
+    target_factory: _AuthorityHandle,
+    approval: HypothesisContractApproval,
+    *,
+    revision_zero_target: object,
+    taxonomy_digest: str,
+    target_factory_config_digest: str,
+    target_factory_protocol_generation: str,
+    clock_authority: object,
+    uuid_authority: object,
+) -> ApprovedHypothesisTarget:
+    _handle_state(target_factory, role=_AuthorityRole.TARGET_FACTORY)
+    if revision_zero_target is None or clock_authority is None or uuid_authority is None:
+        raise InvalidHypothesisGenerationCapabilityError(
+            "approved target requires exact target, clock, and UUID authorities"
+        )
+    config_digest = _required_digest(
+        target_factory_config_digest,
+        field="target-factory config digest",
+    )
+    protocol_generation = _required_text(
+        target_factory_protocol_generation,
+        field="target-factory protocol generation",
+    )
+    frozen_taxonomy_digest = _required_digest(
+        taxonomy_digest,
+        field="taxonomy digest",
+    )
+    with _CAPABILITY_LOCK:
+        approval_state = _lookup_exact(
+            approval,
+            HypothesisContractApproval,
+            _CONTRACT_APPROVAL_STATES,  # type: ignore[arg-type]
+            label="HypothesisContractApproval",
+        )
+        assert isinstance(approval_state, _ContractDecisionState)
+        view = approval_state.projection.view_identity
+        view_state = _lookup_exact(
+            view,
+            HypothesisGenerationView,
+            _GENERATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisGenerationView",
+        )
+        assert isinstance(view_state, _GenerationViewState)
+        _prove_context(approval_state.binding, label="HypothesisContractApproval")
+        _prove_context(view_state.binding, label="HypothesisGenerationView")
+        if (
+            approval_state.phase is not _ContractDecisionPhase.TARGET_IN_FLIGHT
+            or view_state.phase is not _GenerationViewPhase.TARGET_IN_FLIGHT
+            or view_state.contract_decision is not approval
+            or view_state.projection.target_factory_authority is not target_factory
+            or view_state.projection.target_factory_config_digest != config_digest
+            or view_state.projection.target_factory_protocol_generation
+            != protocol_generation
+            or view_state.projection.taxonomy_digest != frozen_taxonomy_digest
+        ):
+            raise HypothesisGenerationLifecycleError(
+                "contract approval has no active target claim"
+            )
+        value = object.__new__(ApprovedHypothesisTarget)
+        _APPROVED_TARGET_STATES[value] = _ApprovedTargetState(
+            projection=_ApprovedTargetProjection(
+                approval=approval,
+                view_identity=view,
+                revision_zero_target=revision_zero_target,
+                taxonomy_digest=frozen_taxonomy_digest,
+                target_factory_config_digest=config_digest,
+                target_factory_protocol_generation=protocol_generation,
+                clock_authority=clock_authority,
+                uuid_authority=uuid_authority,
+            ),
+            target_factory=target_factory,
+            binding=_new_context_binding("approved_hypothesis_target"),
+        )
+        approval_state.phase = _ContractDecisionPhase.TARGET_BOUND
+        view_state.approved_target = value
+        view_state.phase = _GenerationViewPhase.TARGET_BOUND
+        return value
+
+
+def _finish_hypothesis_target_unknown(
+    target_factory: _AuthorityHandle,
+    approval: HypothesisContractApproval,
+) -> bool:
+    _handle_state(target_factory, role=_AuthorityRole.TARGET_FACTORY)
+    with _CAPABILITY_LOCK:
+        approval_state = _lookup_exact(
+            approval,
+            HypothesisContractApproval,
+            _CONTRACT_APPROVAL_STATES,  # type: ignore[arg-type]
+            label="HypothesisContractApproval",
+        )
+        assert isinstance(approval_state, _ContractDecisionState)
+        view_state = _lookup_exact(
+            approval_state.projection.view_identity,
+            HypothesisGenerationView,
+            _GENERATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisGenerationView",
+        )
+        assert isinstance(view_state, _GenerationViewState)
+        _prove_context(approval_state.binding, label="HypothesisContractApproval")
+        if view_state.projection.target_factory_authority is not target_factory:
+            raise HypothesisGenerationLifecycleError(
+                "contract approval belongs to another target claim"
+            )
+        if (
+            approval_state.phase is _ContractDecisionPhase.ISSUED
+            and view_state.phase is _GenerationViewPhase.CONTRACT_APPROVED
+            and view_state.contract_decision is approval
+            and view_state.approved_target is None
+        ):
+            return False
+        if (
+            approval_state.phase is _ContractDecisionPhase.TARGET_IN_FLIGHT
+            and view_state.phase is _GenerationViewPhase.TARGET_IN_FLIGHT
+            and view_state.contract_decision is approval
+            and view_state.approved_target is None
+        ):
+            approval_state.phase = _ContractDecisionPhase.TARGET_UNKNOWN
+            view_state.phase = _GenerationViewPhase.TARGET_UNKNOWN
+            return True
+        target = view_state.approved_target
+        if type(target) is not ApprovedHypothesisTarget:
+            raise HypothesisGenerationLifecycleError(
+                "contract approval has no exact target fault state"
+            )
+        target_state = _lookup_exact(
+            target,
+            ApprovedHypothesisTarget,
+            _APPROVED_TARGET_STATES,  # type: ignore[arg-type]
+            label="ApprovedHypothesisTarget",
+        )
+        assert isinstance(target_state, _ApprovedTargetState)
+        if (
+            approval_state.phase is not _ContractDecisionPhase.TARGET_BOUND
+            or view_state.phase is not _GenerationViewPhase.TARGET_BOUND
+            or view_state.contract_decision is not approval
+            or target_state.projection.approval is not approval
+            or target_state.target_factory is not target_factory
+            or target_state.phase is not _ApprovedTargetPhase.ISSUED
+        ):
+            raise HypothesisGenerationLifecycleError(
+                "hidden approved target has no exact issued state"
+            )
+        target_state.phase = _ApprovedTargetPhase.ISSUANCE_UNKNOWN
+        _retire_context(target_state.binding, label="ApprovedHypothesisTarget")
+        approval_state.phase = _ContractDecisionPhase.TARGET_UNKNOWN
+        view_state.phase = _GenerationViewPhase.TARGET_UNKNOWN
+        return True
+
+
+def _claim_approved_target_for_creation(
+    registry: _AuthorityHandle,
+    view: HypothesisGenerationView,
+    target: ApprovedHypothesisTarget,
+) -> _ApprovedTargetProjection:
+    """Atomically claim the exact revision-zero target before view construction."""
+
+    _handle_state(registry, role=_AuthorityRole.REGISTRY)
+    with _CAPABILITY_LOCK:
+        view_state = _lookup_exact(
+            view,
+            HypothesisGenerationView,
+            _GENERATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisGenerationView",
+        )
+        target_state = _lookup_exact(
+            target,
+            ApprovedHypothesisTarget,
+            _APPROVED_TARGET_STATES,  # type: ignore[arg-type]
+            label="ApprovedHypothesisTarget",
+        )
+        assert isinstance(view_state, _GenerationViewState)
+        assert isinstance(target_state, _ApprovedTargetState)
+        _prove_context(view_state.binding, label="HypothesisGenerationView")
+        _prove_context(target_state.binding, label="ApprovedHypothesisTarget")
+        _require_same_installation(registry, target_state.target_factory)
+        if (
+            view_state.registry is not registry
+            or view_state.phase is not _GenerationViewPhase.TARGET_BOUND
+            or view_state.approved_target is not target
+            or target_state.projection.view_identity is not view
+            or target_state.phase is not _ApprovedTargetPhase.ISSUED
+            or view_state.creation_view is not None
+        ):
+            raise HypothesisGenerationLifecycleError(
+                "approved target is no longer creation-claimable"
+            )
+        target_state.phase = _ApprovedTargetPhase.CREATION_IN_FLIGHT
+        view_state.phase = _GenerationViewPhase.CREATION_IN_FLIGHT
+        return target_state.projection
+
+
+def _finish_hypothesis_creation_unknown(
+    registry: _AuthorityHandle,
+    view: HypothesisGenerationView,
+    target: ApprovedHypothesisTarget,
+) -> bool:
+    """Close only an exact post-claim creation handoff fault.
+
+    ``False`` proves that the claim made no leaf transition.  ``True`` proves
+    that the exact target/view pair reached the in-flight latch and has now
+    been made non-retryable.  Any other state is neither guessed nor reset.
+    """
+
+    _handle_state(registry, role=_AuthorityRole.REGISTRY)
+    with _CAPABILITY_LOCK:
+        view_state = _lookup_exact(
+            view,
+            HypothesisGenerationView,
+            _GENERATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisGenerationView",
+        )
+        target_state = _lookup_exact(
+            target,
+            ApprovedHypothesisTarget,
+            _APPROVED_TARGET_STATES,  # type: ignore[arg-type]
+            label="ApprovedHypothesisTarget",
+        )
+        assert isinstance(view_state, _GenerationViewState)
+        assert isinstance(target_state, _ApprovedTargetState)
+        _prove_context(view_state.binding, label="HypothesisGenerationView")
+        _prove_context(target_state.binding, label="ApprovedHypothesisTarget")
+        _require_same_installation(registry, target_state.target_factory)
+        if (
+            view_state.registry is not registry
+            or view_state.approved_target is not target
+            or target_state.projection.view_identity is not view
+        ):
+            raise HypothesisGenerationLifecycleError(
+                "approved target differs from the failed creation claim"
+            )
+        if (
+            view_state.phase is _GenerationViewPhase.TARGET_BOUND
+            and target_state.phase is _ApprovedTargetPhase.ISSUED
+            and view_state.creation_view is None
+        ):
+            return False
+        if (
+            view_state.phase is _GenerationViewPhase.CREATION_IN_FLIGHT
+            and target_state.phase is _ApprovedTargetPhase.CREATION_IN_FLIGHT
+            and view_state.creation_view is None
+        ):
+            target_state.phase = _ApprovedTargetPhase.CREATION_UNKNOWN
+            view_state.phase = _GenerationViewPhase.CREATION_UNKNOWN
+            return True
+        creation_view = view_state.creation_view
+        if type(creation_view) is not HypothesisCreationView:
+            raise HypothesisGenerationLifecycleError(
+                "approved target has no exact creation-view fault state"
+            )
+        creation_state = _lookup_exact(
+            creation_view,
+            HypothesisCreationView,
+            _CREATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisCreationView",
+        )
+        assert isinstance(creation_state, _CreationViewState)
+        if (
+            view_state.phase is not _GenerationViewPhase.CREATION_VIEW_ISSUED
+            or target_state.phase is not _ApprovedTargetPhase.CREATION_VIEW_BOUND
+            or creation_state.registry is not registry
+            or creation_state.phase is not _CreationViewPhase.ISSUED
+            or creation_state.projection.generation_view is not view
+            or creation_state.projection.target is not target
+        ):
+            raise HypothesisGenerationLifecycleError(
+                "hidden creation view has no exact issued state"
+            )
+        creation_state.phase = _CreationViewPhase.SPENT
+        _retire_context(creation_state.binding, label="HypothesisCreationView")
+        target_state.phase = _ApprovedTargetPhase.CREATION_UNKNOWN
+        view_state.phase = _GenerationViewPhase.CREATION_UNKNOWN
+        return True
+
+
+def _issue_hypothesis_creation_view(
+    registry: _AuthorityHandle,
+    view: HypothesisGenerationView,
+    *,
+    result: GeneratedHypothesisResult,
+    approval: HypothesisContractApproval,
+    target: ApprovedHypothesisTarget,
+) -> HypothesisCreationView:
+    """Transfer the exact approved target into an independent creation context."""
+
+    _handle_state(registry, role=_AuthorityRole.REGISTRY)
+    with _CAPABILITY_LOCK:
+        view_state = _lookup_exact(
+            view,
+            HypothesisGenerationView,
+            _GENERATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisGenerationView",
+        )
+        result_state = _lookup_exact(
+            result,
+            GeneratedHypothesisResult,
+            _RESULT_STATES,  # type: ignore[arg-type]
+            label="GeneratedHypothesisResult",
+        )
+        approval_state = _lookup_exact(
+            approval,
+            HypothesisContractApproval,
+            _CONTRACT_APPROVAL_STATES,  # type: ignore[arg-type]
+            label="HypothesisContractApproval",
+        )
+        target_state = _lookup_exact(
+            target,
+            ApprovedHypothesisTarget,
+            _APPROVED_TARGET_STATES,  # type: ignore[arg-type]
+            label="ApprovedHypothesisTarget",
+        )
+        assert isinstance(view_state, _GenerationViewState)
+        assert isinstance(result_state, _GeneratedResultState)
+        assert isinstance(approval_state, _ContractDecisionState)
+        assert isinstance(target_state, _ApprovedTargetState)
+        _prove_context(view_state.binding, label="HypothesisGenerationView")
+        _prove_context(target_state.binding, label="ApprovedHypothesisTarget")
+        if (
+            view_state.registry is not registry
+            or view_state.phase is not _GenerationViewPhase.CREATION_IN_FLIGHT
+            or view_state.outcome is not result
+            or view_state.contract_decision is not approval
+            or view_state.approved_target is not target
+            or approval_state.projection.result is not result
+            or target_state.projection.approval is not approval
+            or approval_state.phase is not _ContractDecisionPhase.TARGET_BOUND
+            or target_state.phase is not _ApprovedTargetPhase.CREATION_IN_FLIGHT
+            or result_state.phase is not _SuccessPhase.CONTRACT_APPROVED
+            or view_state.started_attempt is None
+        ):
+            raise HypothesisGenerationLifecycleError(
+                "approved target is no longer creation-view claimable"
+            )
+        value = object.__new__(HypothesisCreationView)
+        _CREATION_VIEW_STATES[value] = _CreationViewState(
+            projection=_CreationViewProjection(
+                generation_view=view,
+                result=result,
+                result_projection=result_state.projection,
+                approval=approval,
+                target=target,
+                revision_zero_target=target_state.projection.revision_zero_target,
+                started_attempt=view_state.started_attempt,
+            ),
+            registry=registry,
+            binding=_new_context_binding("hypothesis_creation_view"),
+        )
+        view_state.creation_view = value
+        view_state.phase = _GenerationViewPhase.CREATION_VIEW_ISSUED
+        result_state.phase = _SuccessPhase.CREATION_BOUND
+        approval_state.phase = _ContractDecisionPhase.RESOLVED
+        target_state.phase = _ApprovedTargetPhase.CREATION_VIEW_BOUND
+        return value
+
+
+def _claim_hypothesis_creation_view(
+    registry: _AuthorityHandle,
+    creation_view: HypothesisCreationView,
+) -> _CreationViewProjection:
+    _handle_state(registry, role=_AuthorityRole.REGISTRY)
+    with _CAPABILITY_LOCK:
+        state = _lookup_exact(
+            creation_view,
+            HypothesisCreationView,
+            _CREATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisCreationView",
+        )
+        assert isinstance(state, _CreationViewState)
+        _prove_context(state.binding, label="HypothesisCreationView")
+        if state.registry is not registry:
+            raise InvalidHypothesisGenerationCapabilityError(
+                "creation view belongs to another Registry"
+            )
+        if state.phase is not _CreationViewPhase.ISSUED:
+            raise HypothesisGenerationLifecycleError(
+                "creation view is no longer claimable"
+            )
+        generation_state = _lookup_exact(
+            state.projection.generation_view,
+            HypothesisGenerationView,
+            _GENERATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisGenerationView",
+        )
+        assert isinstance(generation_state, _GenerationViewState)
+        _prove_context(
+            generation_state.binding,
+            label="HypothesisGenerationView",
+        )
+        if (
+            generation_state.phase
+            is not _GenerationViewPhase.CREATION_VIEW_ISSUED
+            or generation_state.creation_view is not creation_view
+        ):
+            raise HypothesisGenerationLifecycleError(
+                "creation view lost its exact generation handoff"
+            )
+        generation_state.phase = _GenerationViewPhase.SPENT
+        _retire_context(
+            generation_state.binding,
+            label="HypothesisGenerationView",
+        )
+        state.phase = _CreationViewPhase.CLAIMED
+        return state.projection
+
+
+def _claim_generated_result_for_creation(
+    proposal_owner: _AuthorityHandle,
+    creation_view: HypothesisCreationView,
+) -> _CreationViewProjection:
+    _handle_state(proposal_owner, role=_AuthorityRole.PROPOSAL_OWNER)
+    with _CAPABILITY_LOCK:
+        state = _lookup_exact(
+            creation_view,
+            HypothesisCreationView,
+            _CREATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisCreationView",
+        )
+        assert isinstance(state, _CreationViewState)
+        _prove_context(state.binding, label="HypothesisCreationView")
+        started_state = _lookup_exact(
+            state.projection.started_attempt,
+            StartedHypothesisAttempt,
+            _STARTED_STATES,  # type: ignore[arg-type]
+            label="StartedHypothesisAttempt",
+        )
+        assert isinstance(started_state, _StartedAttemptState)
+        _require_same_installation(proposal_owner, state.registry)
+        if started_state.proposal_owner is not proposal_owner:
+            raise InvalidHypothesisGenerationCapabilityError(
+                "creation view belongs to another ProposalAttemptOwner"
+            )
+        if state.phase is not _CreationViewPhase.CLAIMED:
+            raise HypothesisGenerationLifecycleError(
+                "creation view was not claimed by its Registry"
+            )
+        state.phase = _CreationViewPhase.STAGED
+        started_state.phase = _StartedPhase.CREATION_BOUND
+        return state.projection
+
+
+def _spend_hypothesis_creation_view(
+    registry: _AuthorityHandle,
+    creation_view: HypothesisCreationView,
+) -> _CreationViewProjection:
+    _handle_state(registry, role=_AuthorityRole.REGISTRY)
+    with _CAPABILITY_LOCK:
+        state = _lookup_exact(
+            creation_view,
+            HypothesisCreationView,
+            _CREATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisCreationView",
+        )
+        assert isinstance(state, _CreationViewState)
+        _prove_context(state.binding, label="HypothesisCreationView")
+        if state.registry is not registry or state.phase not in {
+            _CreationViewPhase.CLAIMED,
+            _CreationViewPhase.STAGED,
+        }:
+            raise HypothesisGenerationLifecycleError(
+                "creation view has no claimed creation to settle"
+            )
+        state.phase = _CreationViewPhase.SPENT
+        _retire_context(state.binding, label="HypothesisCreationView")
+        return state.projection
+
+
+def _settle_creation_view_claim_fault(
+    registry: _AuthorityHandle,
+    creation_view: HypothesisCreationView,
+) -> bool:
+    """Spend only an exact creation view whose claim crossed its call boundary."""
+
+    _handle_state(registry, role=_AuthorityRole.REGISTRY)
+    with _CAPABILITY_LOCK:
+        state = _lookup_exact(
+            creation_view,
+            HypothesisCreationView,
+            _CREATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisCreationView",
+        )
+        assert isinstance(state, _CreationViewState)
+        _prove_context(state.binding, label="HypothesisCreationView")
+        if state.registry is not registry:
+            raise InvalidHypothesisGenerationCapabilityError(
+                "creation view belongs to another Registry"
+            )
+        generation_state = _lookup_exact(
+            state.projection.generation_view,
+            HypothesisGenerationView,
+            _GENERATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisGenerationView",
+        )
+        assert isinstance(generation_state, _GenerationViewState)
+        if (
+            state.phase is _CreationViewPhase.ISSUED
+            and generation_state.phase
+            is _GenerationViewPhase.CREATION_VIEW_ISSUED
+            and generation_state.creation_view is creation_view
+        ):
+            return False
+        if state.phase in {
+            _CreationViewPhase.CLAIMED,
+            _CreationViewPhase.STAGED,
+        } and generation_state.phase is _GenerationViewPhase.SPENT:
+            state.phase = _CreationViewPhase.SPENT
+            _retire_context(state.binding, label="HypothesisCreationView")
+            return True
+        raise HypothesisGenerationLifecycleError(
+            "failed creation-view claim has no exact pre-claim or claimed state"
+        )
+
+
+def _settle_checkpoint_b_unknown(
+    registry: _AuthorityHandle,
+    view: HypothesisGenerationView,
+) -> str:
+    """Converge one post-claim B UNKNOWN into a permanent uncertain hold."""
+
+    _handle_state(registry, role=_AuthorityRole.REGISTRY)
+    with _CAPABILITY_LOCK:
+        state = _lookup_exact(
+            view,
+            HypothesisGenerationView,
+            _GENERATION_VIEW_STATES,  # type: ignore[arg-type]
+            label="HypothesisGenerationView",
+        )
+        assert isinstance(state, _GenerationViewState)
+        _prove_context(state.binding, label="HypothesisGenerationView")
+        if state.registry is not registry:
+            raise InvalidHypothesisGenerationCapabilityError(
+                "generation view belongs to another Registry"
+            )
+        if state.phase is _GenerationViewPhase.CONTRACT_UNKNOWN:
+            kind = "contract_unknown"
+        elif state.phase is _GenerationViewPhase.TARGET_UNKNOWN:
+            kind = "target_unknown"
+        elif state.phase is _GenerationViewPhase.CREATION_UNKNOWN:
+            kind = "creation_unknown"
+        else:
+            raise HypothesisGenerationLifecycleError(
+                "generation view has no unsettled checkpoint-B UNKNOWN"
+            )
+        state.phase = _GenerationViewPhase.UNCERTAIN_HOLD
+        _retire_context(state.binding, label="HypothesisGenerationView")
+        return kind
+
+
 def _begin_terminal_persistence(
     registry: _AuthorityHandle,
     view: HypothesisGenerationView,
-    outcome: FailedHypothesisGeneration | AbortedHypothesisGeneration,
+    outcome: (
+        FailedHypothesisGeneration
+        | AbortedHypothesisGeneration
+        | HypothesisContractRejection
+    ),
 ) -> None:
     """Spend the terminal-outcome view phase before the persistence transaction."""
 
@@ -2729,7 +4148,11 @@ def _begin_terminal_persistence(
 
 def _claim_terminal_outcome(
     proposal_owner: _AuthorityHandle,
-    outcome: FailedHypothesisGeneration | AbortedHypothesisGeneration,
+    outcome: (
+        FailedHypothesisGeneration
+        | AbortedHypothesisGeneration
+        | HypothesisContractRejection
+    ),
     *,
     started_attempt: StartedHypothesisAttempt,
     bound_prompt: BoundHypothesisPrompt,
@@ -2744,6 +4167,9 @@ def _claim_terminal_outcome(
         elif type(outcome) is AbortedHypothesisGeneration:
             states = _ABORT_STATES
             label = "AbortedHypothesisGeneration"
+        elif type(outcome) is HypothesisContractRejection:
+            states = _CONTRACT_REJECTION_STATES
+            label = "HypothesisContractRejection"
         else:
             raise InvalidHypothesisGenerationCapabilityError(
                 "terminal persistence requires an exact terminal outcome"
@@ -2766,9 +4192,26 @@ def _claim_terminal_outcome(
             _BOUND_PROMPT_STATES,  # type: ignore[arg-type]
             label="BoundHypothesisPrompt",
         )
-        assert isinstance(outcome_state, _TerminalOutcomeState)
         assert isinstance(started_state, _StartedAttemptState)
         assert isinstance(prompt_state, _BoundPromptState)
+        if isinstance(outcome_state, _TerminalOutcomeState):
+            projection = outcome_state.projection
+            issuer = outcome_state.issuer
+            binding = outcome_state.binding
+            issued = outcome_state.phase is _TerminalOutcomePhase.ISSUED
+        elif isinstance(outcome_state, _ContractDecisionState):
+            if outcome_state.terminal_projection is None:
+                raise InvalidHypothesisGenerationCapabilityError(
+                    "contract rejection lost its terminal projection"
+                )
+            projection = outcome_state.terminal_projection
+            issuer = outcome_state.contract_gate
+            binding = outcome_state.binding
+            issued = outcome_state.phase is _ContractDecisionPhase.TERMINAL_BOUND
+        else:
+            raise InvalidHypothesisGenerationCapabilityError(
+                "terminal outcome state is malformed"
+            )
         view_state = _lookup_exact(
             started_state.projection.view_identity,
             HypothesisGenerationView,
@@ -2776,14 +4219,13 @@ def _claim_terminal_outcome(
             label="HypothesisGenerationView",
         )
         assert isinstance(view_state, _GenerationViewState)
-        _same_installation(proposal_owner, outcome_state.issuer)
+        _same_installation(proposal_owner, issuer)
         _same_installation(proposal_owner, started_state.proposal_owner)
         _same_installation(proposal_owner, prompt_state.prompt_owner)
-        _prove_context(outcome_state.binding, label=label)
+        _prove_context(binding, label=label)
         _prove_context(started_state.binding, label="StartedHypothesisAttempt")
         _prove_context(prompt_state.binding, label="BoundHypothesisPrompt")
         _prove_context(view_state.binding, label="HypothesisGenerationView")
-        projection = outcome_state.projection
         if (
             started_state.proposal_owner is not proposal_owner
             or projection.started_attempt is not started_attempt
@@ -2795,7 +4237,7 @@ def _claim_terminal_outcome(
                 "terminal outcome belongs to another START/prompt/view"
             )
         if (
-            outcome_state.phase is not _TerminalOutcomePhase.ISSUED
+            not issued
             or started_state.phase
             not in {_StartedPhase.DURABLE_BOUND, _StartedPhase.PROVIDER_BOUND}
             or prompt_state.phase
@@ -2813,14 +4255,23 @@ def _claim_terminal_outcome(
                 label="ProviderGenerationPermit",
             )
             assert isinstance(permit_state, _PermitState)
-            permit_matches = (
-                permit_state.phase is _PermitPhase.FAILURE_BOUND
-                and permit_state.outcome is outcome
-            ) or (
-                permit_state.phase is _PermitPhase.CANCELLED
-                and type(outcome) is AbortedHypothesisGeneration
-                and permit_state.outcome is None
-            )
+            if type(outcome) is HypothesisContractRejection:
+                rejection_state = outcome_state
+                assert isinstance(rejection_state, _ContractDecisionState)
+                permit_matches = (
+                    permit_state.phase is _PermitPhase.SUCCESS_BOUND
+                    and permit_state.outcome
+                    is rejection_state.projection.result
+                )
+            else:
+                permit_matches = (
+                    permit_state.phase is _PermitPhase.FAILURE_BOUND
+                    and permit_state.outcome is outcome
+                ) or (
+                    permit_state.phase is _PermitPhase.CANCELLED
+                    and type(outcome) is AbortedHypothesisGeneration
+                    and permit_state.outcome is None
+                )
             if started_state.permit is not projection.permit or not permit_matches:
                 raise InvalidHypothesisGenerationCapabilityError(
                     "terminal outcome does not match the START permit"
@@ -2829,7 +4280,10 @@ def _claim_terminal_outcome(
             raise InvalidHypothesisGenerationCapabilityError(
                 "pre-permit abort cannot terminalize a permit-bound START"
             )
-        outcome_state.phase = _TerminalOutcomePhase.TERMINALIZED
+        if isinstance(outcome_state, _TerminalOutcomeState):
+            outcome_state.phase = _TerminalOutcomePhase.TERMINALIZED
+        else:
+            outcome_state.phase = _ContractDecisionPhase.TERMINALIZED
         started_state.phase = _StartedPhase.TERMINALIZED
         prompt_state.phase = _BoundPromptPhase.TERMINALIZED
         return projection
@@ -2840,7 +4294,11 @@ def _issue_terminal_receipt(
     *,
     terminal_event: object,
     terminal_event_storage_sha256: str,
-    outcome: FailedHypothesisGeneration | AbortedHypothesisGeneration,
+    outcome: (
+        FailedHypothesisGeneration
+        | AbortedHypothesisGeneration
+        | HypothesisContractRejection
+    ),
     started_attempt: StartedHypothesisAttempt,
 ) -> TerminalAttemptReceipt:
     """Issue a receipt only after exact terminal commit classification."""
@@ -2861,6 +4319,9 @@ def _issue_terminal_receipt(
         elif type(outcome) is AbortedHypothesisGeneration:
             states = _ABORT_STATES
             label = "AbortedHypothesisGeneration"
+        elif type(outcome) is HypothesisContractRejection:
+            states = _CONTRACT_REJECTION_STATES
+            label = "HypothesisContractRejection"
         else:
             raise InvalidHypothesisGenerationCapabilityError(
                 "terminal receipt requires an exact terminal outcome"
@@ -2877,8 +4338,31 @@ def _issue_terminal_receipt(
             _STARTED_STATES,  # type: ignore[arg-type]
             label="StartedHypothesisAttempt",
         )
-        assert isinstance(outcome_state, _TerminalOutcomeState)
         assert isinstance(started_state, _StartedAttemptState)
+        if isinstance(outcome_state, _TerminalOutcomeState):
+            projection = outcome_state.projection
+            issuer = outcome_state.issuer
+            binding = outcome_state.binding
+            terminalized = (
+                outcome_state.phase is _TerminalOutcomePhase.TERMINALIZED
+            )
+            prior_receipt = outcome_state.terminal_receipt
+        elif isinstance(outcome_state, _ContractDecisionState):
+            if outcome_state.terminal_projection is None:
+                raise InvalidHypothesisGenerationCapabilityError(
+                    "contract rejection lost its terminal projection"
+                )
+            projection = outcome_state.terminal_projection
+            issuer = outcome_state.contract_gate
+            binding = outcome_state.binding
+            terminalized = (
+                outcome_state.phase is _ContractDecisionPhase.TERMINALIZED
+            )
+            prior_receipt = outcome_state.terminal_receipt
+        else:
+            raise InvalidHypothesisGenerationCapabilityError(
+                "terminal outcome state is malformed"
+            )
         view_state = _lookup_exact(
             started_state.projection.view_identity,
             HypothesisGenerationView,
@@ -2886,21 +4370,21 @@ def _issue_terminal_receipt(
             label="HypothesisGenerationView",
         )
         assert isinstance(view_state, _GenerationViewState)
-        _same_installation(proposal_owner, outcome_state.issuer)
-        _prove_context(outcome_state.binding, label=label)
+        _same_installation(proposal_owner, issuer)
+        _prove_context(binding, label=label)
         _prove_context(started_state.binding, label="StartedHypothesisAttempt")
         _prove_context(view_state.binding, label="HypothesisGenerationView")
         if (
             started_state.proposal_owner is not proposal_owner
-            or outcome_state.projection.started_attempt is not started_attempt
+            or projection.started_attempt is not started_attempt
             or view_state.outcome is not outcome
         ):
             raise InvalidHypothesisGenerationCapabilityError(
                 "terminal receipt outcome belongs to another START/view"
             )
         if (
-            outcome_state.phase is not _TerminalOutcomePhase.TERMINALIZED
-            or outcome_state.terminal_receipt is not None
+            not terminalized
+            or prior_receipt is not None
             or started_state.phase is not _StartedPhase.TERMINALIZED
             or view_state.phase is not _GenerationViewPhase.TERMINAL_IN_FLIGHT
         ):
@@ -2985,6 +4469,7 @@ def _resolve_terminal_receipt(
 
 __all__ = (
     "AbortedHypothesisGeneration",
+    "ApprovedHypothesisTarget",
     "BoundHypothesisPrompt",
     "FailedHypothesisGeneration",
     "GeneratedHypothesisResult",
@@ -2993,6 +4478,9 @@ __all__ = (
     "HypothesisGenerationAuthorityError",
     "HypothesisGenerationLifecycleError",
     "HypothesisGenerationView",
+    "HypothesisContractApproval",
+    "HypothesisContractRejection",
+    "HypothesisCreationView",
     "HypothesisProblemEvidenceProjection",
     "HypothesisPromptSource",
     "InvalidHypothesisGenerationCapabilityError",

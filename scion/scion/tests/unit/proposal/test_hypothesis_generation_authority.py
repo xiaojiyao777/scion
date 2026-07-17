@@ -174,7 +174,10 @@ def _prompt_path_for(
         context_digest=_D1,
         prompt_hash=_D2,
         provider_tool_digest=_D3,
-        governance_digest=_D4,
+        governance_digest=_digest(
+            b'{"schema_version":"proposal-governance-envelope.v1","governance":{}}'
+        ),
+        c0_governance_json=b"{}",
     )
     inspected_prompt = subject._inspect_bound_prompt(
         authorities.registry,

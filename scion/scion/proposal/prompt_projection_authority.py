@@ -274,6 +274,9 @@ class ProposalPromptProjectionAuthority:
                     length=64,
                 ),
                 governance_digest=snapshot.governance_envelope.digest,
+                c0_governance_json=_governance_json_bytes(
+                    snapshot.governance_envelope.to_primitive()
+                ),
             )
         except HypothesisPromptRejectedError:
             _generation._finish_prompt_failure(
@@ -871,6 +874,24 @@ def _canonical_json_bytes(value: Any) -> bytes:
     except (TypeError, ValueError) as exc:
         raise HypothesisPromptRejectedError(
             "checkpoint-A prompt value cannot be canonically encoded"
+        ) from exc
+    return encoded.encode("utf-8")
+
+
+def _governance_json_bytes(value: Any) -> bytes:
+    """Use the GovernanceEnvelope codec whose digest preserves owner key order."""
+
+    try:
+        encoded = json.dumps(
+            value,
+            ensure_ascii=True,
+            sort_keys=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (TypeError, ValueError) as exc:
+        raise HypothesisPromptRejectedError(
+            "checkpoint-A governance cannot be canonically encoded"
         ) from exc
     return encoded.encode("utf-8")
 
