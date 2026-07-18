@@ -888,11 +888,17 @@ scientific and lineage-owning artifacts remain in place.
      aggregate `ae6a0b32...6fd9e5`, and independent code/science reviews both
      P0=0/P1=0/P2=0. W3's 43-cell x 4-arm contract is frozen at pushed commit
      `024ae1e3`, design SHA `5538a81b...bb35`. Its first implementation/r6 root
-     are rejected. Freeze the corrected generic execution-integrity envelope,
-     then implement the core envelope and problem-owned W3 manifest/replay/
-     analysis without a Warehouse helper fork. Independently accept the new
-     source/manifest/root before one fresh serial launch. B1 no longer occupies
-     the host.
+     are rejected. The corrected minimal trusted-execution envelope is design-
+     frozen at SHA `0e7e3e9a...2926b`; two independent fixed-hash reviews report
+     P0=0/P1=0. It uses an acyclic external authority/projection, one generic
+     guardian and generic terminal publisher, pidfd/job-cgroup closure, complete
+     untruncated bytes, systemd run-to-close handoff, and a problem-owned
+     Warehouse validator without a sandbox or new research gate. Implement the
+     core envelope and problem-owned W3 manifest/replay/analysis without a
+     Warehouse helper fork. Implementation acceptance must include the systemd
+     255 GC/handoff fixture and keep failed close units at
+     `CollectMode=inactive`. Independently accept the new source/manifest/root
+     before one fresh serial launch. B1 no longer occupies the host.
 3. [Design frozen] Implement fresh D2b.0b dormant primitives and isolated
    fixtures under execution-addendum SHA `25b2c424...3a939`, pushed at
    `9119e89b`: descriptor-
@@ -903,8 +909,15 @@ scientific and lineage-owning artifacts remain in place.
    writer closure. Any present target is a hold and historical roots stay read-
    only. The first E1 implementation candidate is rejected: two final reviews
    reproduced close/reuse, cleanup-convergence, open-assignment, and fork-lock
-   defects. A separate cancellation-safe descriptor-ownership correction is
-   under design review; no E1 code is accepted yet. In E1-E6 any
+   defects. The replacement E1 acceptance-only native-ownership correction is
+   design-frozen at SHA `0888f13c...2e854`; two independent fixed-hash reviews
+   report P0=0/P1=0. It admits one binding/plan/scope per fresh process, installs
+   every returned FD into one of three native slots before Python resumes,
+   uses a literal five-operation automaton, closes once before traceback escape,
+   and never unlinks the retained staging inode. Implementation must freeze the
+   full staging identity predicates, require successful at-fork registration,
+   and defer all Python decref/finalization until after slot settlement. No E1
+   code is accepted yet. In E1-E6 any
    journal/WAL/SHM is a read-only hold; production stays blocked until a
    separately frozen controlled-VFS or equivalent design closes actual
    journal-handle recovery.

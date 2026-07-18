@@ -1011,9 +1011,15 @@ The 17 directed fixtures, native-HiGHS fail-closed classification, exact replay,
 W1 31-case feasibility, and R3 preservation all pass; independent code and
 science reviews both report P0=0/P1=0/P2=0. W3's exact 43-cell x 4-arm design
 is frozen at pushed commit `024ae1e3`, SHA `5538a81b...bb35`. The first W3
-implementation and r6 dry root are rejected without formal jobs. A corrected
-generic execution-integrity envelope plus problem-owned W3 replay/analysis is
-under fixed-hash design review; implementation and a new root remain locked.
+implementation and r6 dry root are rejected without formal jobs. The corrected
+minimal trusted-execution envelope is design-frozen at SHA
+`0e7e3e9a...2926b`; two independent fixed-hash reviews report P0=0/P1=0. It
+keeps authority/materialization, pidfd/job-cgroup lifecycle, complete output and
+terminal publication generic while Warehouse alone validates scientific rows.
+There is no sandbox, retry, budget, truncation or new research gate.
+Implementation and a new root remain locked. The implementation acceptance
+must include the systemd 255 GC/handoff fixture and explicit failed-close
+`CollectMode=inactive` behavior.
 B1 no longer occupies the host.
 
 The fresh activation execution seam is design-frozen at SHA
@@ -1022,8 +1028,15 @@ durability reviews reported P0=0/P1=0/P2=0. The first dormant E1 candidate is
 rejected rather than patched forward: independent final reviews reproduced
 same-inode/same-directory FD reuse, finalizer/public cleanup leakage,
 open-return-before-assignment ownership loss, and inherited-RLock fork
-deadlock. Its cancellation-safe close-once/fork correction is a separate design
-candidate; no E1 implementation is accepted.
+deadlock. Its replacement acceptance-only native-ownership correction is
+design-frozen at SHA `0888f13c...2e854`; two independent fixed-hash reviews
+report P0=0/P1=0. One fresh process admits one plan/scope, successful kernel FDs
+enter three native slots before Python resumes, the literal five-operation
+automaton closes each slot once before an exception/traceback escapes, and E1
+never unlinks its retained staging inode. Implementation must freeze complete
+staging identity predicates, require at-fork registration, and perform no
+Python decref/finalization before native settlement. No E1 implementation is
+accepted.
 The addendum explicitly narrows any journal/WAL/SHM observation to read-only
 hold; production cannot unlock until a separate controlled-VFS or equivalent
 actual-journal-handle design is frozen and accepted.
@@ -1037,13 +1050,14 @@ actual-journal-handle design is frozen and accepted.
    W2-overlap caveats; it cannot select a profile or authorize promotion. F1 is
    design-frozen at `a8167117...07faa` and must seal/reparse exact
    `.vrp + .sol` pairs.
-   Freeze and implement the generic execution-integrity envelope required by
-   W3/F1, then independently accept fresh manifests/roots. F1's dormant
-   materializer is accepted, but neither W3 nor F1 has formal launch authority.
-3. Keep Checkpoints A and B dormant. Review and freeze the E1 cancellation-
-   safety correction before replacing the rejected implementation; retain the
-   deterministic staging capability boundary and add no SQLite import, receipt
-   writer, publication permit, or production caller.
+   Implement the frozen generic execution-integrity envelope for W3 first, then
+   its problem-owned manifest/replay/analysis and independent source/dry-root
+   acceptance. F1's dormant materializer is accepted, but neither W3 nor F1 has
+   formal launch authority.
+3. Keep Checkpoints A and B dormant. Implement only the frozen E1 acceptance
+   slice after the W3 generic boundary is accepted; retain the deterministic
+   staging capability boundary and add no unlink, SQLite import, receipt writer,
+   publication permit, production caller, retry, budget or truncation.
 4. Complete D2b.1-D2e, D3-D4, and L1-L3 for the fresh path.
 5. On that same exact commit, freeze the final writer/composition manifest and
    pass D2b.0b.C/V, reopen/crash goldens, the full no-LLM end-to-end control,
