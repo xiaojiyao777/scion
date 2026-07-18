@@ -887,18 +887,23 @@ scientific and lineage-owning artifacts remain in place.
      SHA `c0d85d60...671fc7a`, preservation manifest `0ee66091...90dfc9`,
      aggregate `ae6a0b32...6fd9e5`, and independent code/science reviews both
      P0=0/P1=0/P2=0. W3's 43-cell x 4-arm contract is frozen at pushed commit
-     `024ae1e3`, design SHA `5538a81b...bb35`. Its first implementation/r6 root
-     are rejected. The corrected minimal trusted-execution envelope is design-
-     frozen at SHA `0e7e3e9a...2926b`; two independent fixed-hash reviews report
-     P0=0/P1=0. It uses an acyclic external authority/projection, one generic
-     guardian and generic terminal publisher, pidfd/job-cgroup closure, complete
-     untruncated bytes, systemd run-to-close handoff, and a problem-owned
-     Warehouse validator without a sandbox or new research gate. Implement the
-     core envelope and problem-owned W3 manifest/replay/analysis without a
-     Warehouse helper fork. Implementation acceptance must include the systemd
-     255 GC/handoff fixture and keep failed close units at
-     `CollectMode=inactive`. Independently accept the new source/manifest/root
-     before one fresh serial launch. B1 no longer occupies the host.
+     `024ae1e3`, design SHA `5538a81b...bb35`. Its first implementation and old
+     dry root ending `20260718T120346Z-r6-claw` are rejected. The final
+     corrected minimal trusted-execution envelope is
+     design-frozen at SHA `8e2a610e...10945`; two independent fixed-hash
+     reviews report P0=0/P1=0. Its first native spawn/build slice is accepted
+     at pushed commit `01873dad`, contract SHA `afaa0b7e...24f27`, and fresh
+     native-acceptance root ending `20260718T221215Z-r6-claw`. Two independent
+     prebuild and final postrun reviews report P0=0/P1=0/P2=0; the sole formal
+     delegated-cgroup transaction passed 64/64, both builds were byte-identical,
+     and both 2074-file/22-alias rehashes passed. Exact evidence is recorded in
+     `v04-w3-native-spawn-build-acceptance-20260718.md`. Next implement and
+     independently accept only the generic `SpawnBackend`/cgroup/systemd layer,
+     including the systemd-255 GC/handoff fixture and failed-close
+     `CollectMode=inactive` behavior. Then implement the generic guardian/
+     terminal layer and problem-owned W3 manifest/replay/analysis without a
+     Warehouse helper fork. No W3 dry root or formal launch is authorized yet.
+     B1 no longer occupies the host.
 3. [Design frozen] Implement fresh D2b.0b dormant primitives and isolated
    fixtures under execution-addendum SHA `25b2c424...3a939`, pushed at
    `9119e89b`: descriptor-

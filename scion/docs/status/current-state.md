@@ -7,6 +7,13 @@ Read `scion/TASK.md` first. Use
 
 ## Operational State
 
+No solver or Warehouse W3 formal experiment is live. The accepted native
+spawn/build root is terminal and read-only in intent at
+`/home/clawd/research/scion-experiments/v04-w3-native-acceptance-20260718T221215Z-r6-claw`.
+Its external acceptance record SHA is `51948ccd...00de7`; two final independent
+reviews report P0=0/P1=0/P2=0 and `NATIVE_ACCEPT`. This unlocks only the next
+generic `SpawnBackend`/cgroup/systemd implementation slice.
+
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
 with terminal wrapper PID `2892669`. Its clean detached runtime is
@@ -1011,15 +1018,22 @@ The 17 directed fixtures, native-HiGHS fail-closed classification, exact replay,
 W1 31-case feasibility, and R3 preservation all pass; independent code and
 science reviews both report P0=0/P1=0/P2=0. W3's exact 43-cell x 4-arm design
 is frozen at pushed commit `024ae1e3`, SHA `5538a81b...bb35`. The first W3
-implementation and r6 dry root are rejected without formal jobs. The corrected
-minimal trusted-execution envelope is design-frozen at SHA
-`0e7e3e9a...2926b`; two independent fixed-hash reviews report P0=0/P1=0. It
-keeps authority/materialization, pidfd/job-cgroup lifecycle, complete output and
-terminal publication generic while Warehouse alone validates scientific rows.
-There is no sandbox, retry, budget, truncation or new research gate.
-Implementation and a new root remain locked. The implementation acceptance
-must include the systemd 255 GC/handoff fixture and explicit failed-close
-`CollectMode=inactive` behavior.
+implementation and old dry root ending `20260718T120346Z-r6-claw` are rejected
+without formal jobs. The final
+corrected minimal trusted-execution envelope is design-frozen at SHA
+`8e2a610e...10945`; two independent fixed-hash reviews report P0=0/P1=0. Its
+native spawn/build slice is accepted at pushed commit `01873dad`, native
+contract SHA `afaa0b7e...24f27`, and the fresh acceptance root ending
+`20260718T221215Z-r6-claw`. The sole formal delegated-cgroup transaction passed
+64/64, the two offline builds were byte-identical, both mandatory
+2074-file/22-alias rehashes passed, and independent prebuild/final reviews each
+reported P0=0/P1=0/P2=0. The accepted record is
+`v04-w3-native-spawn-build-acceptance-20260718.md`. This accepts only the native
+slice. The generic `SpawnBackend`/cgroup/systemd layer is next and must still
+pass the systemd-255 GC/handoff fixture and explicit failed-close
+`CollectMode=inactive` behavior; guardian/terminal, Warehouse W3, dry-root and
+formal launch remain locked. There is no sandbox, retry, budget, truncation or
+new research gate.
 B1 no longer occupies the host.
 
 The fresh activation execution seam is design-frozen at SHA
@@ -1050,10 +1064,11 @@ actual-journal-handle design is frozen and accepted.
    W2-overlap caveats; it cannot select a profile or authorize promotion. F1 is
    design-frozen at `a8167117...07faa` and must seal/reparse exact
    `.vrp + .sol` pairs.
-   Implement the frozen generic execution-integrity envelope for W3 first, then
-   its problem-owned manifest/replay/analysis and independent source/dry-root
-   acceptance. F1's dormant materializer is accepted, but neither W3 nor F1 has
-   formal launch authority.
+   The W3 native spawn/build slice is accepted. Implement and independently
+   accept the frozen generic `SpawnBackend`/cgroup/systemd layer next, then the
+   generic guardian/terminal layer, then the problem-owned W3 manifest/replay/
+   analysis and independent source/dry-root acceptance. F1's dormant
+   materializer is accepted, but neither W3 nor F1 has formal launch authority.
 3. Keep Checkpoints A and B dormant. Implement only the frozen E1 acceptance
    slice after the W3 generic boundary is accepted; retain the deterministic
    staging capability boundary and add no unlink, SQLite import, receipt writer,
