@@ -975,13 +975,32 @@ Excluded and preserved:
 - tracked user change: `scion/docs/v0.4-measurement-readiness.md`;
 - unrelated untracked historical/future docs shown by `git status`.
 
+The non-generative problem lanes have advanced. CVRP B0 passed independent
+code and science review with P0=0/P1=0 and is pushed at `90a109b2`; its accepted
+dry manifest is `0151e2be...882b1`. Formal B1 is now running under user unit
+`scion-cvrp-b1-20260718T074653Z.service` at the fresh root ending
+`20260718T074653Z-claw`; F1 stays locked until all 256 raw results, the integrity
+check, closed receipt, and comparison report are accepted. The earlier root
+ending `20260718T074602Z-claw` stopped before manifest publication and is
+superseded non-evidence. The exact live/superseded identities are in
+`scion/docs/experiments/v0.4/v04-cvrp-b1-mechanism-matrix-inflight-20260718.md`.
+
+Warehouse W1 is complete at `0599fc29`. W2's origin-group semantics design is
+fixed at SHA `86bdc1ae...b970`, with preservation manifest SHA
+`0ee66091...dfc9`; independent architecture and domain reviews report no P0/P1.
+This freezes design only. W2 implementation must still make the exact allowed
+prose/empty-string initializer correction, produce the directed Oracle/adapter/
+fixed-candidate-MILP probe artifact, replay all protected hashes, and pass two
+implementation reviews before W3 unlocks.
+
 ## Immediate Resume Actions
 
 1. The fresh-only boundary is fixed-hash reviewed and the rejected executable-
    classifier/DSL prototype is removed. Keep historical roots read-only and
    non-authoritative.
-2. In parallel, execute the ordered no-LLM lanes from `TASK.md`: CVRP B0 -> B1
-   -> F1 and Warehouse W1 -> W2 -> W3. These do not require proposal ownership.
+2. Low-frequency monitor the live CVRP B1 unit and accept B1 before F1. In
+   parallel, implement the frozen Warehouse W2 contract and accept its probe
+   artifact before W3. These lanes do not require proposal ownership.
 3. Keep Checkpoints A and B dormant while implementing fresh activation
    primitives and isolated fixtures: staging/publication capabilities, offline
    main-only bootstrap, no-replace publication, phase receipts, and exact

@@ -854,18 +854,23 @@ scientific and lineage-owning artifacts remain in place.
    are rejected and removed; only a compact passive diagnostic record remains.
 2. In parallel, run non-generative science that does not depend on proposal
    ownership, in exact internal order:
-   - CVRP B0: update the mechanism-matrix launch contract to resolve Protocol
-     screening limits per case and freeze canonical, pure-ALNS, initial-on/
-     embedded-off, and initial-off/embedded-on manifests. Accept with focused
-     tests and one dry-run job manifest.
-   - CVRP B1: run the serial 16-case x 4-seed x 4-profile matrix and accept one
-     complete manifest, raw result set, integrity check, and comparison report.
+   - [Complete] CVRP B0: the Protocol-resolved mechanism-matrix contract passed
+     independent code and science review with P0=0/P1=0 and was pushed as
+     `90a109b2`. The accepted dry manifest is `0151e2be...882b1`.
+   - [Running] CVRP B1: the serial 16-case x 4-seed x 4-profile matrix is owned
+     by user unit `scion-cvrp-b1-20260718T074653Z.service` at the fresh root
+     ending `20260718T074653Z-claw`. Accept only its complete 256 raw results,
+     integrity check, closed receipt, and comparison report; the earlier root
+     ending `20260718T074602Z-claw` is a superseded pre-manifest shell-handoff
+     fragment, not evidence.
    - CVRP F1: run H1-only, SWAP-family-only, and cumulative ancestry arms only
      after B1 acceptance.
-   - Warehouse W1: reconcile protocol/manifest population; W2: freeze locked-
-     group semantics and directed probes; W3: only then run champion, destroy-
-     only, merge-only, and cumulative arms. Each step requires its own manifest,
-     focused tests/probes, and accepted report.
+   - [Complete] Warehouse W1 reconciles the exact 31-case Protocol population
+     at pushed commit `0599fc29`. W2's locked-group design, W1 receipt, and R3
+     preservation manifest are frozen separately from implementation; implement
+     the directed probes and owner-specific equivalence checks next. W3 remains
+     locked until W2 implementation review passes P0=0/P1=0, then runs champion,
+     destroy-only, merge-only, and cumulative treatment bundles.
 3. Implement fresh D2b.0b dormant primitives and isolated fixtures: descriptor-
    pinned absence authority, one-shot staging/publication capabilities, offline
    main-only SQLite bootstrap, staging/no-replace publication, database/external
