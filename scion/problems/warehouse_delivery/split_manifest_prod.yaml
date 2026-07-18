@@ -2,7 +2,7 @@
 # Sprint F4 正式实验 B 组
 #
 # 全部使用生产统计特征生成的实例（无合成数据）
-# Screening (17): micro×4 + small×4 + medium_small×3 + medium×3 + medium_large×2
+# Screening (16): micro×4 + small×4 + medium_small×3 + medium×3 + medium_large×2
 #   (removed scr_m02/scr_ml03: infeasible — locked vehicle capacity bug)
 # Validation (5): large×3 + large_xl×2
 #   (removed val_l03: infeasible — locked vehicle capacity bug)

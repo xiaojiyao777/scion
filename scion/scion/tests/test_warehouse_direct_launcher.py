@@ -13,6 +13,24 @@ import yaml
 SCION_DIR = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 LAUNCHER = SCION_DIR / "tools" / "launch_warehouse_direct_campaign.py"
+WAREHOUSE_SPLIT = (
+    SCION_DIR / "problems" / "warehouse_delivery" / "split_manifest_prod.yaml"
+)
+WAREHOUSE_SOURCE_DATA_ROOT = Path("/home/clawd/research/scion-data")
+
+
+def _materialize_warehouse_data_root(data_root: Path) -> Path:
+    """Copy the exact formal population instead of fabricating empty roots."""
+
+    manifest = yaml.safe_load(WAREHOUSE_SPLIT.read_text(encoding="utf-8"))
+    for stage in ("canary", "screening", "validation", "frozen"):
+        for source_value in manifest[stage]:
+            source = Path(source_value)
+            relative = source.relative_to(WAREHOUSE_SOURCE_DATA_ROOT)
+            destination = data_root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(source.read_bytes())
+    return data_root
 
 
 def _use_clean_git_guard_root(launch_env_path: Path, tmp_path: Path) -> None:
@@ -70,6 +88,47 @@ def test_warehouse_direct_launcher_help() -> None:
     assert "--measurement-governance" not in result.stdout
     assert "--proposal-context-ablation" not in result.stdout
     assert "--control-pair-key" in result.stdout
+
+
+def test_warehouse_launcher_rejects_protocol_population_shortfall_before_prepare(
+    tmp_path: Path,
+) -> None:
+    protocol_source = (
+        SCION_DIR / "problems" / "warehouse_delivery" / "protocol_prod.yaml"
+    )
+    protocol = yaml.safe_load(protocol_source.read_text(encoding="utf-8"))
+    protocol["screening"]["expand_to_create"] = 17
+    invalid_protocol = tmp_path / "protocol-invalid.yaml"
+    invalid_protocol.write_text(
+        yaml.safe_dump(protocol, sort_keys=False),
+        encoding="utf-8",
+    )
+    experiments_root = tmp_path / "experiments"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "population-shortfall",
+            "--experiments-root",
+            str(experiments_root),
+            "--warehouse-data-root",
+            str(tmp_path / "data"),
+            "--protocol",
+            str(invalid_protocol),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode != 0
+    assert "warehouse protocol/manifest population mismatch" in result.stderr
+    assert "screening.create.expanded requests 17 cases" in result.stderr
+    assert not experiments_root.exists()
 
 
 def test_warehouse_launcher_rejects_launch_without_completion_preflight(
@@ -190,7 +249,7 @@ def test_warehouse_launcher_rejects_enabled_parameter_search(
 def test_warehouse_direct_launcher_prepare_writes_rewritten_run_files(
     tmp_path: Path,
 ) -> None:
-    data_root = tmp_path / "scion-data"
+    data_root = _materialize_warehouse_data_root(tmp_path / "scion-data")
 
     result = subprocess.run(
         [
@@ -268,6 +327,49 @@ def test_warehouse_direct_launcher_prepare_writes_rewritten_run_files(
         block["block_id"] == "warehouse_open_research_surfaces"
         for block in typed_contract["guidance_blocks"]
     )
+    population_reconcile = prepared_manifest["protocol_population_reconcile"]
+    assert population_reconcile["status"] == "reconciled"
+    assert population_reconcile["candidate_gate"] is False
+    assert population_reconcile["sources"]["protocol"] == {
+        "path": str(run_root / "config" / "protocol_prod.yaml"),
+        "size_bytes": (
+            run_root / "config" / "protocol_prod.yaml"
+        ).stat().st_size,
+        "sha256": hashlib.sha256(
+            (run_root / "config" / "protocol_prod.yaml").read_bytes()
+        ).hexdigest(),
+    }
+    assert population_reconcile["sources"]["manifest"] == {
+        "path": str(run_root / "config" / "split_manifest_prod.yaml"),
+        "size_bytes": (
+            run_root / "config" / "split_manifest_prod.yaml"
+        ).stat().st_size,
+        "sha256": hashlib.sha256(
+            (run_root / "config" / "split_manifest_prod.yaml").read_bytes()
+        ).hexdigest(),
+    }
+    assert population_reconcile["protocol_version"] == "3.2-prod"
+    assert population_reconcile["manifest_version"] == "prod-1.1"
+    population_requests = {
+        row["request_id"]: row for row in population_reconcile["requests"]
+    }
+    assert population_requests["screening.create.expanded"]["requested"] == 16
+    assert population_requests["screening.create.expanded"]["resolved"] == 16
+    assert population_requests["validation.initial"]["requested"] == 5
+    assert population_requests["validation.expanded"]["requested"] == 5
+    assert all(
+        case_id.startswith(str(data_root))
+        for row in population_requests.values()
+        for case_id in row["exact_selected_case_ids"]
+    )
+    assert all(
+        case["resolved_path"].startswith(str(data_root))
+        and case["regular_file"] is True
+        and case["symlink_free"] is True
+        and len(case["content_sha256"]) == 64
+        for row in population_requests.values()
+        for case in row["selected_case_identities"]
+    )
     assert prepared_manifest["research_focus"]["scope"] == (
         "report_only_prepared_handoff"
     )
@@ -309,6 +411,7 @@ def test_warehouse_direct_launcher_prepare_writes_rewritten_run_files(
     assert f"PYTHONPATH={SCION_DIR}" in launch_env
     assert f"SCION_WAREHOUSE_DATA_ROOT={data_root}" in launch_env
     assert f"SCION_PROBLEM_DATA_ROOT={data_root}" in launch_env
+    assert "WAREHOUSE_PROTOCOL_POPULATION_RECONCILIATION_SHA256=" in launch_env
     assert "SCION_MODEL=gpt-5.5" in launch_env
     assert "SCION_BASE_URL=http://127.0.0.1:8080" in launch_env
     assert "SCION_API_KEY=pwd" in launch_env
@@ -377,6 +480,9 @@ def test_warehouse_direct_launcher_prepare_writes_rewritten_run_files(
     assert "GIT_COMMIT_MISMATCH" in run_sh_text
     assert "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED" not in run_sh_text
     assert "WAREHOUSE_DATA_ROOT_MISSING" in run_sh_text
+    assert "WAREHOUSE_PROTOCOL_POPULATION_IDENTITY_MISMATCH" in run_sh_text
+    assert "warehouse_population_launch_recheck.v2.json" in run_sh_text
+    assert "--expect-reconciliation-sha256" in run_sh_text
     assert "tools/check_completion_proxy.py" in run_sh_text
     assert "--login-url-on-failure" in run_sh_text
     assert "--json" in run_sh_text
@@ -557,6 +663,7 @@ def test_warehouse_direct_launcher_prepare_writes_rewritten_run_files(
 
 
 def test_warehouse_direct_launcher_can_copy_resume_campaign(tmp_path: Path) -> None:
+    data_root = _materialize_warehouse_data_root(tmp_path / "data")
     source_campaign = tmp_path / "source-campaign"
     (source_campaign / "champions" / "champion_v2").mkdir(parents=True)
     (source_campaign / "champions" / "champion_v2" / "registry.yaml").write_text(
@@ -620,7 +727,7 @@ def test_warehouse_direct_launcher_can_copy_resume_campaign(tmp_path: Path) -> N
             "--experiments-root",
             str(tmp_path / "experiments"),
             "--warehouse-data-root",
-            str(tmp_path / "data"),
+            str(data_root),
             "--resume-from-campaign",
             str(source_campaign),
         ],
@@ -682,6 +789,7 @@ def test_warehouse_direct_launcher_can_copy_resume_campaign(tmp_path: Path) -> N
 def test_warehouse_direct_launcher_api_key_env_avoids_secret_file(
     tmp_path: Path,
 ) -> None:
+    data_root = _materialize_warehouse_data_root(tmp_path / "data")
     result = subprocess.run(
         [
             sys.executable,
@@ -693,7 +801,7 @@ def test_warehouse_direct_launcher_api_key_env_avoids_secret_file(
             "--experiments-root",
             str(tmp_path),
             "--warehouse-data-root",
-            str(tmp_path / "data"),
+            str(data_root),
             "--api-key-env",
             "SCION_API_KEY",
             "--completion-preflight",
@@ -723,6 +831,7 @@ def test_warehouse_direct_launcher_api_key_env_avoids_secret_file(
 def test_warehouse_direct_launcher_api_key_env_missing_writes_valid_status(
     tmp_path: Path,
 ) -> None:
+    data_root = _materialize_warehouse_data_root(tmp_path / "data")
     result = subprocess.run(
         [
             sys.executable,
@@ -734,7 +843,7 @@ def test_warehouse_direct_launcher_api_key_env_missing_writes_valid_status(
             "--experiments-root",
             str(tmp_path / "runs"),
             "--warehouse-data-root",
-            str(tmp_path / "data"),
+            str(data_root),
             "--api-key-env",
             "SCION_MISSING_TEST_KEY",
             "--python",
@@ -771,7 +880,7 @@ def test_warehouse_direct_launcher_api_key_env_missing_writes_valid_status(
     assert list(readiness_dir.glob("*.postrun_acceptance_readiness.v1.json"))
 
 
-def test_warehouse_direct_launcher_missing_data_root_writes_valid_status(
+def test_warehouse_direct_launcher_rejects_missing_population_before_prepare(
     tmp_path: Path,
 ) -> None:
     missing_data_root = tmp_path / "missing-data-root"
@@ -793,14 +902,49 @@ def test_warehouse_direct_launcher_missing_data_root_writes_valid_status(
         cwd=SCION_DIR,
         text=True,
         capture_output=True,
+    )
+
+    assert result.returncode != 0
+    assert "screening case[0] missing" in result.stderr
+    assert not list((tmp_path / "runs").rglob("prepared_run_manifest.v1.json"))
+
+
+def test_warehouse_wrapper_rejects_case_content_drift_after_prepare(
+    tmp_path: Path,
+) -> None:
+    data_root = _materialize_warehouse_data_root(tmp_path / "data")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "unit-warehouse-content-drift",
+            "--experiments-root",
+            str(tmp_path / "runs"),
+            "--warehouse-data-root",
+            str(data_root),
+            "--python",
+            sys.executable,
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
         check=True,
     )
     run_root_line = next(
         line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
     )
     run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
-    launch_env = run_root / "launch.env"
-    _use_clean_git_guard_root(launch_env, tmp_path)
+    drifted_case = (
+        data_root
+        / "production"
+        / "generated"
+        / "instance_prod_scr_micro01.json"
+    )
+    drifted_case.write_text('{"content":"drifted-after-prepare"}', encoding="utf-8")
+    _use_clean_git_guard_root(run_root / "launch.env", tmp_path)
 
     run_result = subprocess.run(
         ["bash", str(run_root / "run.sh")],
@@ -809,22 +953,17 @@ def test_warehouse_direct_launcher_missing_data_root_writes_valid_status(
     )
 
     assert run_result.returncode == 64
-    assert f"WAREHOUSE_DATA_ROOT_MISSING:{missing_data_root}" in (
+    assert "WAREHOUSE_PROTOCOL_POPULATION_IDENTITY_MISMATCH" in (
         run_root / "exit.txt"
     ).read_text(encoding="utf-8")
     status = json.loads((run_root / "run_status.json").read_text(encoding="utf-8"))
-    assert status["wrapper_exit_status"] == 64
-    assert status["warehouse_data_root_missing"] is True
-    run_log = (run_root / "run.log").read_text(encoding="utf-8")
-    assert "POSTRUN_REPORTS_EXIT_STATUS:" in run_log
-    assert "POSTRUN_READINESS_EXIT_STATUS:" in run_log
-    readiness_dir = run_root / "postrun_acceptance" / "readiness"
-    assert list(readiness_dir.glob("*.postrun_acceptance_readiness.v1.json"))
+    assert status["warehouse_protocol_population_identity_mismatch"] is True
 
 
 def test_warehouse_direct_launcher_can_skip_postrun_reports(
     tmp_path: Path,
 ) -> None:
+    data_root = _materialize_warehouse_data_root(tmp_path / "data")
     result = subprocess.run(
         [
             sys.executable,
@@ -836,7 +975,7 @@ def test_warehouse_direct_launcher_can_skip_postrun_reports(
             "--experiments-root",
             str(tmp_path),
             "--warehouse-data-root",
-            str(tmp_path / "data"),
+            str(data_root),
             "--skip-postrun-reports",
         ],
         cwd=SCION_DIR,
@@ -885,9 +1024,7 @@ def test_warehouse_direct_launcher_fails_on_postrun_readiness_failure(
         encoding="utf-8",
     )
     fake_python.chmod(0o755)
-    data_root = tmp_path / "scion-data"
-    (data_root / "production" / "generated").mkdir(parents=True)
-    (data_root / "production" / "converted").mkdir(parents=True)
+    data_root = _materialize_warehouse_data_root(tmp_path / "scion-data")
 
     result = subprocess.run(
         [

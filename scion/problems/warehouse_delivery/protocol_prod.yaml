@@ -10,7 +10,7 @@
 #   - validation.win_rate_min: 0.60 → 0.55（同理，保持一致性）
 #
 #   - screening expand_to_modify: 10 → 14
-#     screening expand_to_create: 16 → 20
+#     screening expand_to_create: 16 (the complete preregistered population)
 #     原因：生产数据信号弱，expand 后需要更多 case 才能稳定 wr 估计。
 #
 #   - screening.expanded_borderline_advance 显式开启
@@ -27,7 +27,9 @@
 # 不变项：
 #   - frozen gate 保持 bootstrap CI，不降低，晋升标准不松动
 #   - n_seeds 保持 2/3（已够用）
-#   - validation n_cases 保持 6（frozen 是最终关卡，validation 可以宽松一点）
+#   - validation initial/expanded both use the five distinct preregistered
+#     cases; no independent expansion is claimed until a new manifest version
+#     adds cases.
 #
 # Measurement note:
 #   - median_delta_min resolves through the problem-owned measurement declaration
@@ -38,19 +40,19 @@
 # 使用方式：
 #   在 run_prod_campaign.py 里改 protocol_config_path 指向本文件。
 
-version: "3.1-prod"
+version: "3.2-prod"
 
 screening:
   n_cases_modify: 6
   n_cases_create: 10
   n_seeds: 2
   expand_to_modify: 14    # 原 10，信号弱时需更多样本
-  expand_to_create: 20    # 原 16
+  expand_to_create: 16    # complete prod-1.1 screening population
 
 validation:
-  n_cases: 6
+  n_cases: 5
   n_seeds: 3
-  expand_to: 12           # 原 10，略微放宽
+  expand_to: 5            # no independent expansion in prod-1.1
 
 frozen:
   n_cases: 4

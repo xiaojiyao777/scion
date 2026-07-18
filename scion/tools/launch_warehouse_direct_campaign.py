@@ -30,6 +30,11 @@ from scion.launcher.resume import (
     ResumePreparationError,
     prepare_launcher_campaign,
 )
+from scion.problems.warehouse_delivery.protocol_population import (
+    WarehouseProtocolPopulationError,
+    assert_warehouse_population_copy_matches,
+    reconcile_warehouse_protocol_population_from_paths,
+)
 DEFAULT_EXPERIMENTS_ROOT = Path.home() / "research" / "scion-experiments"
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_BASE_URL = "http://127.0.0.1:8080"
@@ -277,6 +282,23 @@ def _preflight_parameter_search_disabled(
             )
 
 
+def _warehouse_population_reconcile(
+    protocol_path: Path,
+    split_path: Path,
+) -> dict[str, Any]:
+    """Resolve the problem-owned W1 asset contract or fail before launch."""
+
+    try:
+        return reconcile_warehouse_protocol_population_from_paths(
+            protocol_path,
+            split_path,
+        )
+    except WarehouseProtocolPopulationError as exc:
+        raise SystemExit(
+            f"warehouse protocol/manifest population mismatch: {exc}"
+        ) from exc
+
+
 def _warehouse_guidance_manifest_fields(
     env: dict[str, object],
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
@@ -351,6 +373,7 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "SCION_API_KEY_ENV",
         "SCION_WAREHOUSE_DATA_ROOT",
         "SCION_PROBLEM_DATA_ROOT",
+        "WAREHOUSE_PROTOCOL_POPULATION_RECONCILIATION_SHA256",
         "COMPLETION_PREFLIGHT",
         "POSTRUN_REPORTS",
         "PROBLEM",
@@ -428,6 +451,22 @@ def _write_run_sh(run_root: Path, command: str, env: dict[str, object]) -> str:
                 ),
                 detail="$SCION_WAREHOUSE_DATA_ROOT",
                 status_fields={"warehouse_data_root_missing": True},
+            ),
+            PreCampaignGuard(
+                failure_key="WAREHOUSE_PROTOCOL_POPULATION_IDENTITY_MISMATCH",
+                condition=(
+                    '! "$PY" -m '
+                    "scion.problems.warehouse_delivery.protocol_population "
+                    '--protocol "$PROTOCOL" --manifest "$SPLIT" '
+                    '--output "$RUN_ROOT/warehouse_population_launch_recheck.v2.json" '
+                    "--expect-reconciliation-sha256 "
+                    '"$WAREHOUSE_PROTOCOL_POPULATION_RECONCILIATION_SHA256" '
+                    '>> "$RUN_ROOT/run.log" 2>&1'
+                ),
+                detail="$WAREHOUSE_PROTOCOL_POPULATION_RECONCILIATION_SHA256",
+                status_fields={
+                    "warehouse_protocol_population_identity_mismatch": True
+                },
             ),
         ),
         preflight_failure_exit_code=PREFLIGHT_FAILURE_EXIT_CODE,
@@ -508,6 +547,9 @@ def _write_prepared_run_manifest(
         "analysis_intent": analysis_intent,
         "research_focus": research_focus,
         "research_guidance_contract": research_guidance_contract,
+        "protocol_population_reconcile": env[
+            "WAREHOUSE_PROTOCOL_POPULATION_RECONCILE"
+        ],
         "task_doc": TASK_DOC,
         "current_state_doc": CURRENT_STATE_DOC,
         "analysis_handoff_doc": ANALYSIS_HANDOFF_DOC,
@@ -753,6 +795,10 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         args.problem,
         args.problem_v1,
     )
+    source_population_reconcile = _warehouse_population_reconcile(
+        _resolve_source_path(repo_root, args.protocol),
+        _resolve_source_path(repo_root, args.split),
+    )
     started_at = datetime.now(timezone.utc)
     timestamp = started_at.strftime("%Y%m%dT%H%M%SZ")
     label = _safe_label(args.label)
@@ -782,6 +828,17 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         split=args.split,
         seeds=args.seeds,
     )
+    population_reconcile = _warehouse_population_reconcile(
+        config_paths["protocol"],
+        config_paths["split"],
+    )
+    try:
+        assert_warehouse_population_copy_matches(
+            source_population_reconcile,
+            population_reconcile,
+        )
+    except WarehouseProtocolPopulationError as exc:
+        raise SystemExit(f"warehouse prepared-copy identity mismatch: {exc}") from exc
     api_key, api_key_env = _resolve_api_key(args)
     control_pair_key = _prepared_control_pair_key(
         args.control_pair_key,
@@ -802,6 +859,10 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "SCION_API_KEY_ENV": api_key_env,
         "SCION_WAREHOUSE_DATA_ROOT": warehouse_data_root,
         "SCION_PROBLEM_DATA_ROOT": warehouse_data_root,
+        "WAREHOUSE_PROTOCOL_POPULATION_RECONCILE": population_reconcile,
+        "WAREHOUSE_PROTOCOL_POPULATION_RECONCILIATION_SHA256": (
+            population_reconcile["reconciliation_sha256"]
+        ),
         "COMPLETION_PREFLIGHT": 1 if args.completion_preflight else 0,
         "POSTRUN_REPORTS": 0 if args.skip_postrun_reports else 1,
         "PROBLEM": config_paths["problem"],
