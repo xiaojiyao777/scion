@@ -1,0 +1,369 @@
+{
+  "allowed_semantic_text_owners": {
+    "adapter_exact_reverse_replacement": {
+      "path": "scion/scion/problems/warehouse_delivery/adapter.py",
+      "pre_raw_sha256": "3371c607106ced51b6465b33e01e1a45959efc5312fb50324e90996885d8b644",
+      "replacements": [
+        {
+          "after": "  - `locked_vehicle_id: Optional[str]` — None = freely assignable; non-None = an origin-group ID whose complete group may move as one unit",
+          "before": "  - `locked_vehicle_id: Optional[str]` — None = freely assignable; non-None = MUST stay in that vehicle"
+        },
+        {
+          "after": "2. **Locked groups**: orders sharing any non-None `locked_vehicle_id` are one indivisible movable group; move all or none",
+          "before": "2. **Locked orders**: never move orders where `order.locked_vehicle_id is not None`"
+        }
+      ],
+      "scope": "WarehouseDeliveryAdapter.render_operator_interface",
+      "verification": "each before occurs once pre-W2; each after occurs once post-W2; reverse replacement reproduces pre_raw_sha256"
+    },
+    "markdown": [
+      {
+        "path": "surrogate/surrogate-problem-spec-v1.md",
+        "pre_raw_sha256": "2f4ce1535efa1aa83791d48511a701b5d8ab9e106bb99a34a870d30783ae9a50"
+      },
+      {
+        "path": "surrogate/MILP_SOLVER_NOTES.md",
+        "pre_raw_sha256": "8c4cc96050d67c9c537acb8a917ba1d2ebece24de8e0f9c783598e377dc2eee4"
+      },
+      {
+        "path": "scion/docs/reference/milp-model.md",
+        "pre_raw_sha256": "fe183ee5e3ef69fb5c09abf5428ab34a5d3eb155bdf02e3339cc69ae9f6170ec"
+      }
+    ],
+    "python_docstring_only": [
+      {
+        "docstring_stripped_ast_sha256": "4f601b68e9e63ae3aa36a66eef5965e6398a2385f11d51cbfb489cbe1d1c9306",
+        "path": "surrogate/models.py",
+        "pre_raw_sha256": "04d5453767fcb9233bbf4ce34393fdc2cb9f3bb860f6729aa4967204790a2fb7"
+      },
+      {
+        "docstring_stripped_ast_sha256": "e3b21dbc68359adc2e321d8fae3d5af21b43fa63da05b09eaa3ee81ea64e6c4d",
+        "path": "surrogate/operators/base.py",
+        "pre_raw_sha256": "f37fabd3e58c56edec7f1b1525cd8c34f1aadf1f8d73889418bd3680ee45c582"
+      },
+      {
+        "docstring_stripped_ast_sha256": "96cfaf0a6a48202271dd29161734640ae5886571cfdd2bd532a40446b0909767",
+        "path": "surrogate/oracle.py",
+        "pre_raw_sha256": "c20deb68266d394bcc90dcf46f9edc2091eb346e636109c947a7d07b6dafb4b2"
+      }
+    ],
+    "python_exact_code_plus_docstrings": [
+      {
+        "after": "        vid = (\n            order.locked_vehicle_id\n            if order.locked_vehicle_id is not None\n            else generate_vehicle_id(rng)\n        )",
+        "before": "        vid = order.locked_vehicle_id or generate_vehicle_id(rng)",
+        "path": "surrogate/greedy_init.py",
+        "pre_docstring_stripped_ast_sha256": "ee76538eaca9acad32ef96cab1cb2fffab7576bb7f84dea07d113c933c070be6",
+        "pre_raw_sha256": "ccfa2e76038ddc710bdbd5bf05cdd2642dcecd0f69541c131a7b934c8f19bab6",
+        "scope": "_phase2_init locked_vehicle_id selection",
+        "verification": "before occurs once pre-W2; after occurs once post-W2; reverse exact line replacement then docstring stripping reproduces pre_docstring_stripped_ast_sha256"
+      }
+    ],
+    "python_normalization": "remove leading string Expr from Module/ClassDef/FunctionDef/AsyncFunctionDef, then SHA-256 UTF-8 ast.dump(annotate_fields=True, include_attributes=False)",
+    "yaml_guidance_only": [
+      {
+        "allowed_scalar_paths": [
+          "research_surfaces[0].prompt.implementation_guidance",
+          "research_surfaces[1].prompt.implementation_guidance"
+        ],
+        "masked_canonical_tree_sha256": "13a227eb4e3f57017dc09cc73ef3f16c0403da583acf97e045f0b6c9dfc288e9",
+        "path": "scion/problems/warehouse_delivery/problem-v1.yaml",
+        "pre_raw_sha256": "7dbb347bd53dbafab775b58b7d948953e5cac3d32d546f1b9d6d897644e8009e"
+      },
+      {
+        "allowed_scalar_paths": [
+          "research_surfaces[0].prompt.implementation_guidance",
+          "research_surfaces[1].prompt.implementation_guidance"
+        ],
+        "masked_canonical_tree_sha256": "e798fc3b874cbe8c44a3a7ffc25530544946f9047b503b3aee783c80c69f7b02",
+        "path": "scion/scion/problems/warehouse_delivery/problem-v1.yaml",
+        "pre_raw_sha256": "355e6e9811c1494a4b5a814b4ebac12d0e49e57819421fe83c8cbf44a4765698"
+      }
+    ],
+    "yaml_mask_sentinel": {
+      "$allowed_scalar": "warehouse_locked_group_guidance_v1"
+    },
+    "yaml_normalization": "parse YAML; replace both allowed scalar paths with yaml_mask_sentinel; SHA-256 canonical sorted compact UTF-8 JSON with ensure_ascii=false and allow_nan=false"
+  },
+  "protected_current_runtime": [
+    {
+      "path": "surrogate/milp_model.py",
+      "sha256": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc"
+    },
+    {
+      "path": "surrogate/solver.py",
+      "sha256": "7cf35771291f73a2c91e5da2a1d594da4abe7455ca24a922309874727079fb7a"
+    },
+    {
+      "path": "surrogate/vns.py",
+      "sha256": "232ba8c7166d4b5b0bb0039033ee6e8a60681e15825b3bc3f26110b6f893c8fa"
+    },
+    {
+      "path": "surrogate/operators/change_vehicle_type.py",
+      "sha256": "a7f9eeb1544d5cc538f4b9082a2fd37e55e74d7bee923295f50a1019c6f15099"
+    },
+    {
+      "path": "surrogate/operators/destroy_rebuild.py",
+      "sha256": "f285cb81cdd0d3638b506ad69e83844a3b34aa287a16bb4bd30d0ae622c61adb"
+    },
+    {
+      "path": "surrogate/operators/merge_vehicles.py",
+      "sha256": "d153ce3938c240c56183dc1e6344890119bf7c8ee0fdddf9d88953fad6823195"
+    },
+    {
+      "path": "surrogate/operators/move_order.py",
+      "sha256": "1d32358bfbe245f9e266bb1112b6c14f0dad7aa68391fd29879cfa0f6ffffb26"
+    },
+    {
+      "path": "surrogate/operators/split_vehicle.py",
+      "sha256": "68ebe7e9758aa795e7b501b2ab3a8c8ff8b9e4e221d3b65eb641f5676d1d44be"
+    },
+    {
+      "path": "surrogate/operators/swap_orders.py",
+      "sha256": "0aa644a2da179f8e43993734d27c0f71e4b819639d52ff7f1d7f08f9258ff315"
+    }
+  ],
+  "r3": {
+    "arm_derivation": {
+      "champion_operator_files": [
+        {
+          "path": "campaign/champions/champion_v1/operators/destroy_rebuild.py",
+          "sha256": "f285cb81cdd0d3638b506ad69e83844a3b34aa287a16bb4bd30d0ae622c61adb"
+        },
+        {
+          "path": "campaign/champions/champion_v1/operators/merge_vehicles.py",
+          "sha256": "d153ce3938c240c56183dc1e6344890119bf7c8ee0fdddf9d88953fad6823195"
+        }
+      ],
+      "workspace_replacements": [
+        {
+          "path": "campaign/workspaces/52b0b193-7bc3-469c-97a2-216b494b4e4a/operators/destroy_rebuild.py",
+          "sha256": "4910ad450fb8bf8a876b0d3287ce9322e5600a4a87e156e95e36b4ea1a22cc36"
+        },
+        {
+          "path": "campaign/workspaces/52b0b193-7bc3-469c-97a2-216b494b4e4a/operators/merge_vehicles.py",
+          "sha256": "6e251c9f5bba4562bc2893cc4d56e10c9e74fa9874a2afacb0fa9428f144dcd5"
+        }
+      ],
+      "arm_digest_contract": "SHA-256 canonical sorted compact UTF-8 JSON, ensure_ascii=false, allow_nan=false, no LF; domain scion.warehouse_w3_arm.v1; ordered slots destroy_rebuild then merge_vehicles",
+      "arms": [
+        {
+          "arm_sha256": "13e5063576c49ba048526c13abc842ad601c45c5b7a3d2ea6e29b525a82aae41",
+          "components": [
+            {
+              "sha256": "f285cb81cdd0d3638b506ad69e83844a3b34aa287a16bb4bd30d0ae622c61adb",
+              "slot": "destroy_rebuild"
+            },
+            {
+              "sha256": "d153ce3938c240c56183dc1e6344890119bf7c8ee0fdddf9d88953fad6823195",
+              "slot": "merge_vehicles"
+            }
+          ],
+          "name": "champion"
+        },
+        {
+          "arm_sha256": "ef3c9ea35245fbf21164dd608c15b117926638018b10901ca609f0281b0230bc",
+          "components": [
+            {
+              "sha256": "4910ad450fb8bf8a876b0d3287ce9322e5600a4a87e156e95e36b4ea1a22cc36",
+              "slot": "destroy_rebuild"
+            },
+            {
+              "sha256": "d153ce3938c240c56183dc1e6344890119bf7c8ee0fdddf9d88953fad6823195",
+              "slot": "merge_vehicles"
+            }
+          ],
+          "name": "destroy_only"
+        },
+        {
+          "arm_sha256": "9495771d9d170a3fbb5a0cf0a6fa7b9af002ac8a85d4344e3364d896fc38096b",
+          "components": [
+            {
+              "sha256": "f285cb81cdd0d3638b506ad69e83844a3b34aa287a16bb4bd30d0ae622c61adb",
+              "slot": "destroy_rebuild"
+            },
+            {
+              "sha256": "6e251c9f5bba4562bc2893cc4d56e10c9e74fa9874a2afacb0fa9428f144dcd5",
+              "slot": "merge_vehicles"
+            }
+          ],
+          "name": "merge_only"
+        },
+        {
+          "arm_sha256": "f617c55e99f140785239b89999c6b113212acfad479cff15265dd98d3b4c9996",
+          "components": [
+            {
+              "sha256": "4910ad450fb8bf8a876b0d3287ce9322e5600a4a87e156e95e36b4ea1a22cc36",
+              "slot": "destroy_rebuild"
+            },
+            {
+              "sha256": "6e251c9f5bba4562bc2893cc4d56e10c9e74fa9874a2afacb0fa9428f144dcd5",
+              "slot": "merge_vehicles"
+            }
+          ],
+          "name": "cumulative"
+        }
+      ]
+    },
+    "evidence_files": [
+      {
+        "path": "prepared_run_manifest.v1.json",
+        "sha256": "8492321a0fe5aa7dd05b162cfd4b7709686267d3dbd8f92aed046dc3203fa3c8"
+      },
+      {
+        "path": "config/problem-v1.yaml",
+        "sha256": "83e6fe347a784c908fd52ee2d60cd30ad1830034b7321978148ec13c66c2dd7f"
+      },
+      {
+        "path": "config/protocol_prod.yaml",
+        "sha256": "3393ad634e97dbe41cd64bb335c5c6519ebcc461f4ca2878209d65287d329298"
+      },
+      {
+        "path": "config/split_manifest_prod.yaml",
+        "sha256": "84b6cf700b9d93d9ee93768a01998d24cd11c0bdbdd182f860a92948026c07c2"
+      },
+      {
+        "path": "config/seed_ledger.yaml",
+        "sha256": "5eca3cbeafcac1e8f0b98539f7b5022bd7ad074ec0bd8c47596edb7fbaaebb15"
+      },
+      {
+        "path": "campaign/artifacts/formal_candidates/index.jsonl",
+        "sha256": "d17d3d24e0e5bdbc79d235be7b6ae22fbbb560b1be0dd7bfd87647530f41986f"
+      },
+      {
+        "path": "campaign/artifacts/formal_candidates/52b0b193/screening-df9aca90-79dd-477a-83a5-f6e0e9ec39e3-3b2af18838360c03/candidate.diff",
+        "sha256": "e26af935be62755de09d3e3a058631a2f2450f0d04805be6895c9a188d75ed83"
+      },
+      {
+        "path": "campaign/artifacts/formal_candidates/52b0b193/screening-df9aca90-79dd-477a-83a5-f6e0e9ec39e3-3b2af18838360c03/candidate.patch.json",
+        "sha256": "731ececa3baf4b87a46a8eefbd5b95875df0243ec91e5ba28a6f2c2746a8a2dc"
+      },
+      {
+        "path": "campaign/artifacts/formal_candidates/52b0b193/screening-fce79138-a50c-4502-86b8-5fe2421d9fb6-06cb8fbc70802ab9/candidate.diff",
+        "sha256": "62dabd3fcb97826ef195e4d5092ead9c8b16c0d0baf899a63b477fc661b51fd8"
+      },
+      {
+        "path": "campaign/artifacts/formal_candidates/52b0b193/screening-fce79138-a50c-4502-86b8-5fe2421d9fb6-06cb8fbc70802ab9/candidate.patch.json",
+        "sha256": "921fbb567d1663aebaef266f844899a36ba91913653b5710f8c039ef283a4459"
+      },
+      {
+        "path": "campaign/campaign_summary.json",
+        "sha256": "1be41ff0970028dd7c642b62db23cc72d5bf6709564a5110e870ab8c31c6d058"
+      },
+      {
+        "path": "campaign/metrics/0374674b-eeca-4eeb-b438-43e556bc38cb.json",
+        "sha256": "116d6c30def6082e5ea7593465fd3eed7087d1dee88ae36a30599139b1f73b7c"
+      },
+      {
+        "path": "campaign/metrics/5786be4f-e770-4590-b6e0-50bae52909d2.json",
+        "sha256": "8419e0555e44076e8b7f48f4f09e30c004728c3b25879e0519429eb67929203d"
+      },
+      {
+        "path": "campaign/metrics/v8_run1_2cdc06cb.json",
+        "sha256": "bb791eb06f941d9f9471dee139aa00b769f846e97e48e864cc5665687c8d37e3"
+      },
+      {
+        "path": "campaign/metrics/v8_run1_e5c6671c.json",
+        "sha256": "be94259613f8b4479de81f4b23d169606cbe21de9305337e1534a67c657d2739"
+      },
+      {
+        "path": "campaign/metrics/v8_run2_2cdc06cb.json",
+        "sha256": "ff632f06195d385f79bf560dc4b2990e7f5651dc64019af50269fb9208ba7ce1"
+      },
+      {
+        "path": "campaign/metrics/v8_run2_e5c6671c.json",
+        "sha256": "ea11b696924f3ee1b3066af7df1321de663b48307a5808e48304392a22ef6310"
+      },
+      {
+        "path": "campaign/metrics/champion_result_cache/00/00d921372ae33ce1cb69892bf059d42ad3cd1624b7f219fc4018654bd7278b9a.json",
+        "sha256": "3fa3be247edb2ff1a113f600d650e05050c44b4ab3c1ff0fbe7fc655c344164e"
+      },
+      {
+        "path": "campaign/metrics/champion_result_cache/1c/1c56c7ba9ca1e1f0529fade9792874584724cda49aee1feb0da882602acae4b6.json",
+        "sha256": "968a9d2140b60af480cbff41cb6886d4eaae1e5fe6ab24ca4bc42ddda98a085c"
+      },
+      {
+        "path": "campaign/metrics/champion_result_cache/4a/4a9e1925bd2d10bfdac9f5e1405bebf78a2caf9d03251a56c18eca83ef99bb6f.json",
+        "sha256": "7a5ce0e4626dde60092eb2d9f84d4b74c480eaf152123542df8d2ed6c3ab1ed3"
+      },
+      {
+        "path": "campaign/metrics/champion_result_cache/62/622615dfe20ea5c65f9889c42ab70b672a9a437317ee652a285f30047708bd0f.json",
+        "sha256": "e93163b592c70b957b0584394f3ec1b1d983833e09a0f1604a36f87d3dec511a"
+      },
+      {
+        "path": "campaign/metrics/champion_result_cache/73/73d0567de9ae5c2f61e417814000987ba4aaac913e0831549903a407cf896d86.json",
+        "sha256": "53673d04577aa0d9a671aa48605f975154e0c2655f6aa52016948fc8f38f143b"
+      },
+      {
+        "path": "campaign/metrics/champion_result_cache/74/747f3c4635da94976e8fdf6788d661ae2b4c0e2a07759e182ee02f1cf63c92e6.json",
+        "sha256": "9fc5e513bb9550ec6acd6edfc41d27dd5b9192d331b96788cc859dcea5157241"
+      },
+      {
+        "path": "campaign/metrics/champion_result_cache/7b/7b98b23a22f0c3f65b1ee613154a00ac0e8591d185df7e8a1275eebe7fbd1fe5.json",
+        "sha256": "69945f832fbd59ecd501c3facc94bc1bc28fe34622c464b2668992d5a65a1b2d"
+      },
+      {
+        "path": "campaign/metrics/champion_result_cache/a8/a8f89ee92a462f34d046dd570da044ab220afa34e4996679a304f7e94d8e7979.json",
+        "sha256": "b8d58e9a5fee4979eebf848f38af2d4cefc8ee15d36dbd49192cac7121aad85c"
+      },
+      {
+        "path": "campaign/metrics/champion_result_cache/ab/ab020c7db2e9b3e5f62ee5eb19689b7b1f391de4351f1e09f533b17909a99056.json",
+        "sha256": "8d0d33b374060e153eeabcc6d5951a9c310aa2aa5b41a41cbbb3093c4935d535"
+      },
+      {
+        "path": "campaign/metrics/champion_result_cache/bd/bdd58a6853433abdfd1a76938383150e806a775916dd346ae89a7a12c8db450b.json",
+        "sha256": "ab047199a4c5a5356cc325588f507fb2ebf116e67b36044159e2169cbc55ddbc"
+      },
+      {
+        "path": "campaign/metrics/champion_result_cache/f4/f4ebf78860805fe55ab839c88ecd715edf27e622da1c9f0f6b204336456acf9b.json",
+        "sha256": "10b2c80b09e9dbb1cac07d7e5abf54c14ec8fea4fed9e382569983a9a8ee37cc"
+      },
+      {
+        "path": "campaign/metrics/champion_result_cache/fa/fa797cba453b3d0da4a1b49b6f3af294767519a75686893d39c1ec8dcf4fa488.json",
+        "sha256": "caf3bb8705693ac6f213f4d36fd1e944ce8aeb524a050d54f9a4c7b736f9e5a8"
+      },
+      {
+        "path": "campaign/champions/champion_v1/data/validation_report_v2.json",
+        "sha256": "858c7b2a46c1baa5cceaa5e7ceb984b8f44bcc030646691f7418035761d5a76f"
+      },
+      {
+        "path": "campaign/workspaces/52b0b193-7bc3-469c-97a2-216b494b4e4a/data/validation_report_v2.json",
+        "sha256": "858c7b2a46c1baa5cceaa5e7ceb984b8f44bcc030646691f7418035761d5a76f"
+      },
+      {
+        "path": "campaign/scion.db",
+        "sha256": "0837573d24e1ea1797119ded52cb47e7ac3b2906f7cd92826cb945ed3f319916"
+      },
+      {
+        "path": "campaign/scion.db-wal",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "postrun_acceptance/summaries/warehouse_direct_v3.summary.json",
+        "sha256": "dff549e9c354d11685a878e08d80e5c01bd3b23fd0db033785c0237c8fb49ff3"
+      },
+      {
+        "path": "postrun_acceptance/manifests/warehouse_direct_v3.proposal_trajectory_manifest.v1.json",
+        "sha256": "062fc71db41cdf982b6950d4df03bd9db1c36c263bd9ad6454edcf61b9ca04eb"
+      }
+    ],
+    "root": "/home/clawd/research/scion-experiments/v04-warehouse-direct-repaired-context-confirm-r3-2r-gpt56sol-20260714T135820Z-claw"
+  },
+  "schema": "scion.warehouse_w2_preservation_manifest.v1",
+  "verification_toolchain": {
+    "python": {
+      "implementation": "CPython",
+      "resolved_executable": "/home/clawd/miniconda3/envs/claw/bin/python3.12",
+      "resolved_executable_sha256": "05ac06936ba7928748b0c038908a0a3176ddc4f12b7929f5d79cb7a8625c7744",
+      "version": "3.12.12"
+    },
+    "yaml": {
+      "duplicate_key_policy": "reject_fail_closed_before_masking",
+      "loader": "PyYAML SafeLoader with explicit duplicate-key rejection",
+      "version": "6.0.1"
+    }
+  },
+  "w1_receipt": {
+    "path": "scion/contracts/warehouse_w1_population_receipt.v1.json",
+    "sha256": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c"
+  }
+}

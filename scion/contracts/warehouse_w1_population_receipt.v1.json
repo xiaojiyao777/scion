@@ -1,0 +1,44 @@
+{
+  "git_commit": "0599fc29bc2c38e954c4cf06fc8be110c433dd3a",
+  "manifest": {
+    "sha256": "bbd9490e3f60a52696f7ac79c25ae79f4efca8270596f7ee85b28792670e24a8",
+    "version": "prod-1.1"
+  },
+  "population_reconcile": {
+    "artifact_sha256": "3cc053d24164b1ba3a3158792487046afbf983f2d50864aff33263059f3b7ab6",
+    "reconciliation_sha256": "520ea97a42537f7536bf54837fa0a14f58438cb09ebe71f3dacb7a40e69b9f97",
+    "schema": "scion.warehouse_protocol_population_reconcile.v2"
+  },
+  "populations": [
+    {
+      "available": 16,
+      "manifest_order_sha256": "7c98007ed8019aab90136f248be6dfb8c048f4edab79c61c88f13f987db09055",
+      "population_sha256": "045ab477154e713811355ae2d9788399a2fe9bf3b781e2feb080e28c6c8b6454",
+      "stage": "screening"
+    },
+    {
+      "available": 5,
+      "manifest_order_sha256": "b374e25970a059d01f7ee6aa6ba9430d020af001b5ae1b4353d8598421c34a1e",
+      "population_sha256": "edf8ce68124b24b8d364be56853152bc6862fc03acff23c2d19dc7093b415b87",
+      "stage": "validation"
+    },
+    {
+      "available": 8,
+      "manifest_order_sha256": "030200c209e2d0898667710c5d272a9dadabe426215b727cb969e2a35d5cf5a0",
+      "population_sha256": "a847dec0b8a86fca03925f0afdcbb4bd34b7c1f66d1dfec8282d34d39f4cb1ba",
+      "stage": "frozen"
+    },
+    {
+      "available": 2,
+      "manifest_order_sha256": "3b721394d816dfa3b8d4ae6217b469122f5b474402311015d7fb43fe5ef47845",
+      "population_sha256": "8528059d5893d677462307857ed772df80f49ca6cd33d6e100552bb57ccc3e90",
+      "stage": "canary"
+    }
+  ],
+  "protocol": {
+    "sha256": "6232b9653e260334864fa18afce5bc4513fb092925d2a50b6512bc61f1fb25ba",
+    "version": "3.2-prod"
+  },
+  "schema": "scion.warehouse_w1_population_receipt.v1",
+  "total_cases": 31
+}
