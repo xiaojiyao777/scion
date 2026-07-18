@@ -985,27 +985,35 @@ ending `20260718T074602Z-claw` stopped before manifest publication and is
 superseded non-evidence. The exact live/superseded identities are in
 `scion/docs/experiments/v0.4/v04-cvrp-b1-mechanism-matrix-inflight-20260718.md`.
 
-Warehouse W1 is complete at `0599fc29`. W2's origin-group semantics design is
-fixed at SHA `86bdc1ae...b970`, with preservation manifest SHA
-`0ee66091...dfc9`; independent architecture and domain reviews report no P0/P1.
-This freezes design only. W2 implementation must still make the exact allowed
-prose/empty-string initializer correction, produce the directed Oracle/adapter/
-fixed-candidate-MILP probe artifact, replay all protected hashes, and pass two
-implementation reviews before W3 unlocks.
+Warehouse W1 is complete at `0599fc29`, and W2 is accepted at pushed commit
+`d4d44689`. Its final design SHA is `c0d85d60...671fc7a`, preservation manifest
+SHA is `0ee66091...dfc9`, accepted aggregate is `ae6a0b32...6fd9e5`, report raw
+SHA is `0ba8f9ee...7fe8f`, and receipt raw SHA is `68eb68a1...15eb0c`.
+The 17 directed fixtures, native-HiGHS fail-closed classification, exact replay,
+W1 31-case feasibility, and R3 preservation all pass; independent code and
+science reviews both report P0=0/P1=0/P2=0. W3 is unlocked but has not launched;
+its exact manifest must freeze the four treatment bundles and it must not
+contend with the live B1 process.
+
+The fresh activation execution seam is design-frozen at SHA
+`25b2c424...3a939` and pushed at `9119e89b`, after independent architecture and
+durability reviews reported P0=0/P1=0/P2=0. E1 is next and remains dormant.
+The addendum explicitly narrows any journal/WAL/SHM observation to read-only
+hold; production cannot unlock until a separate controlled-VFS or equivalent
+actual-journal-handle design is frozen and accepted.
 
 ## Immediate Resume Actions
 
 1. The fresh-only boundary is fixed-hash reviewed and the rejected executable-
    classifier/DSL prototype is removed. Keep historical roots read-only and
    non-authoritative.
-2. Low-frequency monitor the live CVRP B1 unit and accept B1 before F1. In
-   parallel, implement the frozen Warehouse W2 contract and accept its probe
-   artifact before W3. These lanes do not require proposal ownership.
-3. Keep Checkpoints A and B dormant while implementing fresh activation
-   primitives and isolated fixtures: staging/publication capabilities, offline
-   main-only bootstrap, no-replace publication, phase receipts, and exact
-   cutover recovery. Do not make production runnable or claim final all-writer
-   closure yet.
+2. Low-frequency monitor and accept B1 before F1. Its acceptance must audit the
+   recorded W2 slow-test overlap rather than silently claiming an interference-
+   free host. W2 is accepted; freeze W3's exact manifest next, but do not run a
+   formal Warehouse matrix on the B1 host while B1 is live.
+3. Keep Checkpoints A and B dormant and implement only fresh activation E1:
+   deterministic staging capability to sealed `OfflineStagingFile`, with no
+   SQLite import, receipt writer, publication permit, or production caller.
 4. Complete D2b.1-D2e, D3-D4, and L1-L3 for the fresh path.
 5. On that same exact commit, freeze the final writer/composition manifest and
    pass D2b.0b.C/V, reopen/crash goldens, the full no-LLM end-to-end control,

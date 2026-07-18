@@ -866,18 +866,24 @@ scientific and lineage-owning artifacts remain in place.
    - CVRP F1: run H1-only, SWAP-family-only, and cumulative ancestry arms only
      after B1 acceptance.
    - [Complete] Warehouse W1 reconciles the exact 31-case Protocol population
-     at pushed commit `0599fc29`. W2's locked-group design, W1 receipt, and R3
-     preservation manifest are frozen separately from implementation; implement
-     the directed probes and owner-specific equivalence checks next. W3 remains
-     locked until W2 implementation review passes P0=0/P1=0, then runs champion,
-     destroy-only, merge-only, and cumulative treatment bundles.
-3. Implement fresh D2b.0b dormant primitives and isolated fixtures: descriptor-
+     at `0599fc29`. W2 is accepted at pushed commit `d4d44689`: final design
+     SHA `c0d85d60...671fc7a`, preservation manifest `0ee66091...90dfc9`,
+     aggregate `ae6a0b32...6fd9e5`, and independent code/science reviews both
+     P0=0/P1=0/P2=0. W3 is unlocked; freeze its exact W1 cases, common seeds,
+     solver limit, balanced serial order, greedy-initial hashes, and four
+     manifest-derived treatment bundles before launch. Do not share formal B1
+     CPU while B1 remains live.
+3. [Design frozen] Implement fresh D2b.0b dormant primitives and isolated
+   fixtures under execution-addendum SHA `25b2c424...3a939`, pushed at
+   `9119e89b`: descriptor-
    pinned absence authority, one-shot staging/publication capabilities, offline
    main-only SQLite bootstrap, staging/no-replace publication, database/external
    phase receipts, and explicit cutover recovery/reopen reconcile.
    This step cannot make production runnable and does not yet claim final all-
    writer closure. Any present target is a hold and historical roots stay read-
-   only.
+   only. E1 is next. In E1-E6 any journal/WAL/SHM is a read-only hold; production
+   stays blocked until a separately frozen controlled-VFS or equivalent design
+   closes actual journal-handle recovery.
 4. Complete D2b.1-D2b.4 snapshot/slot, dispatch capability, Protocol receipt,
    and uncertain/infra classification; then D2c exact DecisionOutcome transport,
    D2d isolated candidate snapshot handoff, and D2e exact completion, stage

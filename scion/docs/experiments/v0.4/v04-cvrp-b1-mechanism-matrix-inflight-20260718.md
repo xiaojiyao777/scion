@@ -43,6 +43,22 @@ At the first low-frequency health check the systemd unit was active/running,
 the manifest contained 256 jobs with `dry_run=false`, and 11 raw results were
 present. No results summary or closed receipt existed yet, as expected.
 
+## Host-overlap observation
+
+A Warehouse W2 historical slow MILP test process (PID `3791879`) started at
+`2026-07-18 08:56:08 UTC` on the same host while B1 was live. At the
+`2026-07-18 09:17:50 UTC` audit, 37 B1 raw files had mtimes after that start.
+The test was then lowered to nice `19`/idle I/O priority; it ended naturally
+before a later termination attempt, when B1 had 215 raw files. This was not a
+provider retry or another Scion experiment, but its CPU overlap can affect a
+time-limited solver and therefore cannot be silently ignored.
+
+B1 should continue once, without automatic restart. Completion analysis must
+bind the exact overlap interval to execution-job ordinals/profile order and
+compare objective/runtime/timeout behavior before deciding whether the full
+matrix, an unaffected subset, or no causal comparison is acceptable. Do not
+launch F1 or W3 on this host until that integrity decision is reviewed.
+
 ## Superseded non-evidence root
 
 The earlier shell-background handoff root
