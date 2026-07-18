@@ -22,9 +22,9 @@ complete problem/current-source context
   -> Workspace -> Verification -> Protocol -> Safe Features -> Decision
 ```
 
-Framework tests alone do not close v0.4. CVRP still needs an independently
-validated useful candidate and a later clean multi-round run showing that the
-agent can use evidence without accumulating framework noise.
+Framework tests alone do not close v0.4. The completion matrix below separates
+research-process, validated-effect, and retained-improvement claims so a
+scientifically valid negative result is not mislabeled as a solver improvement.
 
 ## Non-Negotiable Boundaries
 
@@ -628,7 +628,13 @@ The implementation order is fixed; items 1-3 are complete:
    and a read-only exact legacy pending-candidate compatibility owner while
    leaving composition and production behavior unchanged. Its focused suite
    passes `117`, compatibility regression passes `67`, and the full suite passes
-   `2332` with `1` skipped; two independent audits report no P0/P1. Four
+   `2332` with `1` skipped; two independent audits report no P0/P1.
+   **Fresh-only supersession:** D2a's legacy adoption and
+   `LegacyVerifiedCandidateReader` are historical dormant compatibility
+   surfaces. The v0.4 fresh production composition must not import, call, or
+   route through them. Only the non-adoption campaign/mode and immutable-
+   identity foundations may be reused.
+   Four
    adversarial rounds froze the cross-cutting D2-D4 contract. The narrower D2b
    implementation contract then passed five adversarial rounds by three
    reviewers with no open P0/P1; it freezes Branch+H revision CAS, the explicit
@@ -644,7 +650,11 @@ The implementation order is fixed; items 1-3 are complete:
    schema bootstrap, offline clean-stop cutover, database rejection of legacy
    writers, dormant lease predicates, exact completion revision/digest recovery,
    and collision-free champion snapshot publication. Implement D2b.0b.F as a
-   production-unimported foundation. Its transaction/publication correction is
+   production-unimported foundation. **Fresh-only supersession:** the global
+   adoption/in-place migration composition is no longer queued. Only the
+   transaction, store, Registry, digest, and writer-closure foundations that do
+   not depend on legacy adoption may be reused by fresh staging/no-replace
+   bootstrap. Its transaction/publication correction is
    frozen in
    `scion/docs/planning/v0.4/v0.4-d2b0b-foundation-transaction-publication-correction-20260716.md`
    after six adversarial rounds by three reviewers with no open P0/P1. The
@@ -681,9 +691,10 @@ The implementation order is fixed; items 1-3 are complete:
    proposal-attempt/H binding owner, provider-issued sealed generated result,
    problem-neutral authorization ledger, and Registry-only one-root
    publication. A provider-time generation view binds the exact Branch and H
-   history head before one started attempt and one provider call; legacy
-   pre-binding history is admitted only through a sealed completion-only
-   activation inventory. Its first dormant responsibility checkpoint is now
+   history head before one started attempt and one provider call. The earlier
+   completion-only legacy activation inventory is superseded and forbidden in
+   the fresh v0.4 composition; only freshly bootstrapped history is admitted.
+   Its first dormant responsibility checkpoint is now
    complete: the generic ledger proves exact creation authorization/write/
    receipt/witness closure; the connection-scoped champion participant and
    focused Branch/H INSERTs require exact authorization; and a committed,
@@ -736,26 +747,32 @@ The implementation order is fixed; items 1-3 are complete:
    transaction repeats its START/lease preflight after consuming the generated
    result. It performs no retry or intervening state change and may be collapsed
    before activation only if doing so does not broaden the authority surface.
-   Historical activation is now design-frozen in
-   `scion/docs/planning/v0.4/v0.4-d2b0b-historical-activation-addendum-20260717.md`
-   at addendum SHA `a9d912ff122883fd75ead5c9e04a787ce1245a17c75900281a445b2b0ee2766c`
-   and schema SHA `e2d5b7cde488fded97d084b209b7a17343af6ee6157a89091bcdbfa488def503`.
-   Three independent fixed-hash reviews close at P0=0/P1=0/P2=0. The next
-   artifact is the production-unimported read-only scanner plus independent
-   verifier and reproducible 827-root evidence. Only after that evidence is
-   accepted may the project perform the indivisible D2b.0b.C schema/all-writer
-   cutover and D2b.0b.V acceptance; no intermediate runnable state may combine
-   active revisions with a legacy writer. Then continue the
-   remaining D2b slices, D2c
-   exact Decision transport, D2d isolated snapshot handoff, and D2e v2
-   completion/recovery before D3/D4; then implement the reversible L1-L3 ledger;
-6. run a serial no-LLM four-profile characterization using Protocol-resolved
-   scientific limits;
-7. run two order-balanced matched pairs of fresh eight-observation direct-v3
-   roots, canonical versus pure ALNS;
-8. replay pure-profile positives on the canonical profile;
-9. add operator-level VNS attribution only if the compact allocation evidence
-   proves insufficient;
+   The v1 historical activation addendum and schema remain immutable evidence,
+   but implementation audit proved that their semantic classifier is not closed.
+   The attempted executable v2 classifier is rejected and parked: converting
+   filesystem, SQLite, decoder, join, digest, reason, and aggregate algorithms
+   into JSON metadata created a second interpreter without closing semantics.
+   The replacement boundary is design-frozen at SHA
+   `ba7a72e2eeb2c6304718224c73b98fc9204e77b72d953a1e631601388f4be400`
+   in `scion/docs/planning/v0.4/v0.4-d2b0b-fresh-only-activation-boundary-20260718.md`.
+   V0.4 grants bootstrap authority only for one explicitly targeted, stably
+   absent campaign database. Every present database and every corpus scan is
+   non-authoritative and read-only. The previously named 827-root corpus
+   classifier (752 roots remain), adoption, and historical selection/receipt
+   chain are moved off the research critical path.
+   Implement dormant fresh bootstrap primitives first; then complete the paired
+   D2b slices, D2c exact Decision transport, D2d isolated snapshot handoff,
+   D2e completion/recovery, D3/D4, and the reversible L1-L3 ledger. Only after
+   those composition-changing slices freeze may one exact commit undergo final
+   D2b.0b.C/V all-writer, reopen/crash, and end-to-end acceptance.
+6. in parallel, run the serial no-LLM CVRP four-profile characterization and
+   fixed-arm ancestry controls using Protocol-resolved scientific limits;
+7. reconcile Warehouse protocol/manifest and locked-group semantics, then run
+   champion/destroy-only/merge-only/cumulative fixed arms;
+8. after the fresh runtime path is accepted, run two order-balanced matched
+   pairs of fresh eight-observation direct-v3 roots, canonical versus pure ALNS;
+9. replay pure-profile positives on the canonical profile and add operator-level
+   VNS attribution only if the compact allocation evidence remains insufficient;
 10. begin hot-path modularization only after these behavioral boundaries are
    stable.
 
@@ -819,47 +836,91 @@ scientific and lineage-owning artifacts remain in place.
 
 ## Execution Queue
 
-1. Execute the remaining approved post-R11c design in order: D1 candidate
-   snapshot/disposition and D2a campaign/mode compatibility are complete but
-   unwired, the D2b-D4 basis contract has passed four adversarial rounds, and
-   the D2b implementation contract has passed five more with no open P0/P1.
-   D2b.0a pure codec extraction is complete and unwired. D2b.0b's focused
-   migration plan has passed three additional adversarial rounds with no open
-   P0/P1; its foundation transaction/publication correction has passed six more
-   rounds with no open P0/P1. Its corrected SQLite responsibility layer is
-   complete and production-unimported; owner transaction, focused stores, and
-   the mutation-only one-root Registry are also complete and dormant. The
-   authorization-bound creation contract has now passed its own champion,
-   proposal-attempt, and generic-ledger reviews with P0=0/P1=0. Its generic
-   creation ledger, champion/Branch authorization participant, committed START,
-   provider permit, and generated-result proof are implemented and dormant.
-   The corrected H vertical supersedes the old participant-first continuation.
-   Its complete checkpoint A generation-provenance/reservation/terminal-
-   recovery path and checkpoint B frozen Contract/target plus fused event/
-   binding/H/Registry publication are implemented, independently accepted,
-   dormant, and production-uncomposed. The historical-activation addendum and
-   machine-readable inventory schema are now fixed-hash accepted with no open
-   P0/P1/P2. Implement and independently verify the read-only scanner, check in
-   the reproducible named 827-root evidence, and re-review it before proceeding
-   to the indivisible offline cutover,
-   and closure exactly as frozen, then implement the remaining paired
-   slot/dispatch/receipt slices, D2c exact Decision transport, D2d isolated
-   snapshot handoff, and D2e v2 completion/recovery;
-   then D3-D4 continuation/lineage/promotion and L1-L3 normalized research
-   ledger, current no-LLM profiles, matched canonical/pure campaigns, and
-   transplant replay. Runner-owned temp lifecycle, proposal-only allocation
-   evidence, and research-rejection continuation are complete.
-2. Correct event replay identity, terminal status finalization, and postrun
-   projection completeness within their owning slices; do not patch reports in
-   isolation.
-3. Continue retention-aware historical experiment cleanup only when a tracked
-   evidence inventory proves that a root is reconstructible and non-unique;
-   do not delete a root required by the approved design or current closeout.
-4. After runner ownership and CVRP allocation evidence, align the warehouse
-   protocol with its distinct manifest population, freeze locked-group
-   semantics, add directed no-LLM constraint probes, and decompose R3 into
-   champion/destroy-only/merge-only/cumulative fixed arms. Do not launch another
-   warehouse generative root before problem-owned mechanism attribution exists.
+### Execution governance
+
+- The main session alone owns the architecture tie-break, scope and design
+  freeze, `TASK.md`/`current-state.md`, task ordering, and final acceptance.
+- Subagents receive bounded implementation, test, or read-only experiment-
+  analysis tasks. They return exact files/commit or run root, commands,
+  environment identity, tests, evidence, and unresolved findings.
+- A subagent may not expand architecture, alter the next-stage contract, or
+  chain into another generative stage without main-session acceptance.
+- Development and experiment-analysis outputs are not accepted by self-report:
+  the main session verifies hashes/status, focused tests, independent review,
+  and the named scientific artifact before advancing the queue.
+
+1. [Complete] The fresh-only activation boundary passed fixed-hash review. The
+   executable historical-classifier draft and its untracked DSL implementation
+   are rejected and removed; only a compact passive diagnostic record remains.
+2. In parallel, run non-generative science that does not depend on proposal
+   ownership, in exact internal order:
+   - CVRP B0: update the mechanism-matrix launch contract to resolve Protocol
+     screening limits per case and freeze canonical, pure-ALNS, initial-on/
+     embedded-off, and initial-off/embedded-on manifests. Accept with focused
+     tests and one dry-run job manifest.
+   - CVRP B1: run the serial 16-case x 4-seed x 4-profile matrix and accept one
+     complete manifest, raw result set, integrity check, and comparison report.
+   - CVRP F1: run H1-only, SWAP-family-only, and cumulative ancestry arms only
+     after B1 acceptance.
+   - Warehouse W1: reconcile protocol/manifest population; W2: freeze locked-
+     group semantics and directed probes; W3: only then run champion, destroy-
+     only, merge-only, and cumulative arms. Each step requires its own manifest,
+     focused tests/probes, and accepted report.
+3. Implement fresh D2b.0b dormant primitives and isolated fixtures: descriptor-
+   pinned absence authority, one-shot staging/publication capabilities, offline
+   main-only SQLite bootstrap, staging/no-replace publication, database/external
+   phase receipts, and explicit cutover recovery/reopen reconcile.
+   This step cannot make production runnable and does not yet claim final all-
+   writer closure. Any present target is a hold and historical roots stay read-
+   only.
+4. Complete D2b.1-D2b.4 snapshot/slot, dispatch capability, Protocol receipt,
+   and uncertain/infra classification; then D2c exact DecisionOutcome transport,
+   D2d isolated candidate snapshot handoff, and D2e exact completion, stage
+   reuse, and recovery.
+5. Complete D3 continuation with problem-owned CVRP/Warehouse mechanism owners,
+   clean/provisional/pivot bases, and rejected-ancestry exclusion. Complete D4
+   committed SourceLedger, replay, promotion, champion CAS, and recovery.
+6. Complete L1-L3 normalized research ledger before multi-round generative
+   experiments. Preserve every source, pair, observation, and problem fact;
+   add no top-k, summary replacement, token cap, or truncation.
+7. On one exact commit after steps 3-6, freeze the complete table/action-to-
+   writer manifest and production composition root; prove zero reachable legacy
+   constructors/helpers/direct SQL sites; then rerun final D2b.0b.C/V,
+   publication/reopen/crash goldens, full suite, and compileall. Production
+   remains non-runnable before the next step's acceptance.
+8. Run an end-to-end no-LLM fresh control proving the full H -> C -> snapshot ->
+   Protocol receipt -> Decision -> continuation -> exact reuse -> replay/
+   promotion path. Then have two independent reviewers audit the same exact
+   commit and the E2E artifact; only P0=0/P1=0 unlocks generative research and
+   stops authority work as a research blocker.
+9. Implement Warehouse problem-owned mechanism attribution, then run one fresh
+   2-4 observation current-runtime control. Effective research means substantive
+   algorithm edits and evidence-driven direction change; promotion is not
+   required if the evidence correctly rejects the candidates.
+10. Run the accepted CVRP B2 order-balanced canonical/pure-ALNS matched pairs
+    with fresh roots, then B3 exact-candidate eval-only canonical transplant
+    replay for every pure candidate that reaches validation and each pure cell's
+    final verified cumulative candidate. Only positive replays may support a
+    canonical improvement claim; the transplant is not a fresh generative root
+    and never regenerates H/C.
+11. Add deeper operator-level VNS instrumentation only if allocation evidence
+    cannot separate initial VNS, embedded VNS, and ALNS contribution.
+12. Correct replay identity, terminal status, and postrun projection only in
+    their owning lifecycle slices. Historical migration, extra root cleanup,
+    optional diagnostics, and large-file modularization must not block the fresh
+    research path.
+
+### V0.4 research completion matrix
+
+| Problem | Mandatory process claim | Mandatory validated-effect claim | Retained-improvement claim |
+|---|---|---|---|
+| Warehouse | A fresh current-runtime control completes at least two formal observations, makes a substantive problem-owned algorithm edit, and changes direction using prior structured evidence without framework/gate noise. | W1-W3 independently reproduce at least one Warehouse mechanism or constraint effect; the fresh control's verdict is scientifically attributable even if negative. | Made only if a candidate passes its independent Protocol stage; promotion is not required to close the process/effect claims. |
+| CVRP | A clean multi-round fresh run uses allocation and ancestry evidence, performs a substantive mechanism edit/pivot, excludes rejected ancestry, and is exactly replayable. | B1 + F1 + B2 isolate ALNS, initial/embedded VNS, and ancestry effects; B3 tests cross-profile transfer; at least one useful candidate receives independent validation support. | A pure-profile positive counts for canonical Scion only after its B3 canonical transplant replay and independent validation. |
+
+If Warehouse candidates are all negative but the process and mechanism-effect
+claims pass, Warehouse research is complete without a false improvement claim.
+If CVRP has no independently validated useful candidate, the research process
+may be reported as sound but the v0.4 objective remains incomplete.
 
 Two, four, and eight are requested observation counts, not retry budgets or
 automatic stop rules. Each generative experiment uses a distinct clean root;

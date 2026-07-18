@@ -101,8 +101,11 @@ v1 completion codec and static byte goldens are unchanged. Focused D2a tests
 pass `117`, adjacent v1/research-rejection compatibility passes `67`, and the
 full suite passes `2332` with `1` skipped in `487.47s`; two independent audits
 report no P0/P1. No campaign manager, composition, or CLI calls this surface
-yet. D2b paired slot/dispatch/receipt is next, and generative production remains
-disabled until D2-D4 are complete.
+yet. This is historical completed-but-superseded compatibility work: fresh
+v0.4 production must not import or call the legacy adoption request or
+`LegacyVerifiedCandidateReader`; only the non-adoption identity/mode foundation
+may be reused. D2b paired slot/dispatch/receipt is next, and generative
+production remains disabled until D2-D4 are complete.
 
 The D2b paired-evaluation implementation contract is now frozen in
 `scion/docs/planning/v0.4/v0.4-d2b-paired-evaluation-ownership-implementation-plan-20260716.md`
@@ -145,6 +148,12 @@ unique no-replace immutable object paths, so a concurrent loser cannot overwrite
 or delete the winner. D2b.0b.F dormant foundation is next; it must have no
 production import or schema effect. No positive lease, slot, dispatch, receipt,
 retry, budget, cap, or truncation writer is authorized in this slice.
+
+The global legacy-migration composition above is historical completed-but-
+superseded design. Fresh v0.4 must not activate its adoption or in-place
+migration route. Its reusable dormant transaction/store/Registry foundations
+may enter only the fresh staging/no-replace bootstrap and must pass the final
+writer-manifest closure before production becomes runnable.
 
 The first D2b.0b.F implementation review rejected the initial Registry/SQLite
 draft before wiring: participant SQL could escape transaction ownership, and
@@ -193,8 +202,8 @@ Creation views/receipt consumption remain absent pending champion and proposal-
 attempt authorization participants. Two independent implementation audits close
 at P0=0/P1=0; the expanded responsibility regression passes `183`, and the
 correctly rooted suite passes `2607` with `1` skipped in `474.04s`; compileall
-and diff-check pass. Schema activation and legacy-writer migration remain
-deferred to the indivisible offline cutover and must not be collapsed into the
+and diff-check pass. The old legacy-writer migration is no longer queued; only
+fresh all-writer composition is allowed, and it must not be collapsed into the
 SQLite, permit, focused-store, or Registry foundation layers.
 
 The authorization-bound creation contract is frozen in
@@ -208,9 +217,9 @@ provider-issued sealed generated result, and atomically owns generated event,
 immutable attempt-to-H binding, revision-zero H, receipt, and publication.
 Generic owner transaction code sees only authorization identity and receipt
 closure; champion and attempt semantics remain in their focused participants.
-The plan also freezes exact legacy completion-only activation inventories so
-pre-cutover history is neither forged into new authority nor misclassified as
-post-cutover corruption. Its first dormant checkpoint is implemented: the
+The plan's legacy completion-only activation inventory is superseded and must
+not be imported by fresh v0.4. Its non-adoption authorization foundations remain
+dormant and reusable. The first dormant checkpoint is implemented: the
 generic ledger closes exact creation authorization/write/receipt/witness
 identity; the strict connection-scoped champion participant and focused
 Branch/H INSERTs require it; and the only provider-generation permit consumes
@@ -255,18 +264,22 @@ transaction/recovery, and static dependency reviews report no open P0/P1. One
 nonblocking P2 remains: the same creation transaction repeats its START/lease
 preflight after generated-result consumption without retry or intervening state
 change. Collapse it before activation only if the authority surface remains
-unchanged. Historical activation is now design-frozen in
-`scion/docs/planning/v0.4/v0.4-d2b0b-historical-activation-addendum-20260717.md`.
-The accepted exact hashes are addendum
-`a9d912ff122883fd75ead5c9e04a787ce1245a17c75900281a445b2b0ee2766c` and
-schema `e2d5b7cde488fded97d084b209b7a17343af6ee6157a89091bcdbfa488def503`;
-three independent fixed-hash reviews close at P0=0/P1=0/P2=0. The contract is
-fresh-first, preserves legacy H/events as completion-only evidence, freezes
-read-only WAL-aware inventory bytes and cutover recovery, and adds no retry,
-budget, cap, gate, cutoff, or truncation. This accepts design only: the scanner,
-independent verifier, reproducible 827-root named evidence, D2b.0b.C, and
-D2b.0b.V are not implemented. Generic ledger and provider-result state machines
-remain colocated until the full transition graph is stable; production remains
+unchanged. The v1 historical activation addendum and schema remain immutable
+evidence, but implementation audit proved their semantic classifier is not
+closed. An attempted executable v2 classifier then grew into a second JSON AST
+interpreter while still leaving opaque operations; that design is rejected and
+parked as diagnostic audit material. The replacement fresh-only boundary is
+design-frozen at SHA
+`ba7a72e2eeb2c6304718224c73b98fc9204e77b72d953a1e631601388f4be400`
+in `scion/docs/planning/v0.4/v0.4-d2b0b-fresh-only-activation-boundary-20260718.md`.
+V0.4 may bootstrap only one explicitly targeted database proved stably absent.
+Every present database and every corpus scan has zero activation authority;
+historical adoption, selection/receipt, and the previously named 827-root scan
+(752 roots remain) are no longer research prerequisites. D2b.0b.C/V now means
+fresh schema/all-writer bootstrap,
+sealed receipt, and exact reopen/crash acceptance with zero runnable mixed-
+writer state. Generic ledger and provider-result state machines remain
+colocated until the full transition graph is stable; production remains
 uncomposed and schema-inactive.
 
 The next post-R11c work is design-frozen in
@@ -964,21 +977,23 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Keep Checkpoints A and B dormant. Implement the fixed-hash, read-only
-   historical scanner and an independently implemented verifier; reproduce and
-   check in the named 827-root evidence without mutating the corpus.
-2. Re-review the evidence against the frozen contract. Only after acceptance,
-   perform one clean-stop, indivisible D2b.0b.C schema/all-writer cutover
-   followed by D2b.0b.V acceptance. No runnable state may combine active
-   revisions with a legacy writer.
-3. Complete the remaining paired D2b slot/dispatch/receipt ownership, D2c exact
-   DecisionOutcome transport, D2d isolated snapshot handoff, D2e v2 completion/
-   recovery, then D3-D4 continuation/lineage/promotion and the L1-L3 normalized
-   research ledger. Correct replay/finalization/postrun facts only in their
-   owning lifecycle slices.
-4. Run serial no-LLM four-profile characterization, matched canonical/pure-ALNS
-   campaigns, canonical transplant replay, and the warehouse fixed/decomposition
-   plan only after the owning runtime boundaries are accepted.
+1. The fresh-only boundary is fixed-hash reviewed and the rejected executable-
+   classifier/DSL prototype is removed. Keep historical roots read-only and
+   non-authoritative.
+2. In parallel, execute the ordered no-LLM lanes from `TASK.md`: CVRP B0 -> B1
+   -> F1 and Warehouse W1 -> W2 -> W3. These do not require proposal ownership.
+3. Keep Checkpoints A and B dormant while implementing fresh activation
+   primitives and isolated fixtures: staging/publication capabilities, offline
+   main-only bootstrap, no-replace publication, phase receipts, and exact
+   cutover recovery. Do not make production runnable or claim final all-writer
+   closure yet.
+4. Complete D2b.1-D2e, D3-D4, and L1-L3 for the fresh path.
+5. On that same exact commit, freeze the final writer/composition manifest and
+   pass D2b.0b.C/V, reopen/crash goldens, the full no-LLM end-to-end control,
+   and two independent reviews with no P0/P1.
+6. Resume generative work with a fresh Warehouse 2-4 observation control and
+   CVRP order-balanced canonical/pure-ALNS campaigns. Use canonical transplant
+   replay before claiming a pure-profile positive as a canonical improvement.
 
 ## R9 Continuation Terminal Checks
 
