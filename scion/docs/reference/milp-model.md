@@ -14,6 +14,7 @@
 | $R$ | 片区集合，$R = \{\text{DG}, \text{SZ}\}$（Dongguan, Shenzhen） |
 | $P$ | pickup\_name 集合 |
 | $G$ | (destination\_country, ship\_method) 分组集合 |
+| $G_L$ | `locked_vehicle_id is not None` 的来源组 ID 集合；空串是有效 ID |
 
 ### 1.2 订单参数
 
@@ -26,7 +27,7 @@
 | $r_i \in R$ | 订单 $i$ 的片区 |
 | $\pi_i \in P$ | 订单 $i$ 的 pickup\_name |
 | $d_{ig}$ | 订单 $i$ 在分组 $g \in G$ 下的 declaration\_amount（不属于该分组则为 0） |
-| $\ell_i \in J \cup \{\emptyset\}$ | 订单 $i$ 的锁定车辆，$\emptyset$ 表示可自由分配 |
+| $g_i \in G_L \cup \{\emptyset\}$ | 订单 $i$ 的来源组标识；同一有效标识（Python 中 `is not None`，空串也有效）形成不可拆分、可整体移动的组，$\emptyset$ 表示自由订单 |
 
 ### 1.3 车型参数
 
@@ -240,13 +241,15 @@ $$
 
 > 每辆车内，每个 (destination\_country, ship\_method) 分组的 declaration\_amount 之和不超过上限 $D_g$。
 
-### 4.7 (H7) 锁定分配
+### 4.7 (H7) 来源组完整性
+
+对每个来源组 $q \in G_L$ 选择一个锚订单 $a(q)$：
 
 $$
-x_{i, \ell_i} = 1, \quad \forall i \in I: \ell_i \neq \emptyset
+x_{ij} = x_{a(q)j}, \quad \forall q \in G_L,\; i \in q,\; j \in J
 $$
 
-> 直接固定变量。对于有锁定的订单，其分配变量在对应车辆上固定为 1。
+> `locked_vehicle_id` 命名来源组而不是永久目标车辆。该等式只禁止组内拆分；完整组可以落到任意匿名槽位，也可以与自由订单或其他完整组共享槽位。
 
 ### 4.8 对称性破坏（可选，加速求解）
 
@@ -256,7 +259,7 @@ $$
 y_j \geq y_{j+1}, \quad \forall j \in \{1, \dots, K-1\}
 $$
 
-> 强制车辆按序号从小到大使用。注意：若存在 locked\_vehicle\_id，需确保锁定车辆不违反此序（实现时可仅对非锁定槽位施加）。
+> 强制匿名车辆槽位按序号从小到大使用。来源组不预留槽位，因此该前缀规则可应用于全部槽位。
 
 ---
 
@@ -283,7 +286,7 @@ $$
 & \text{(H4b)} \;\; \sum_c v_{jc} \leq 1 & \forall j \\
 & \text{(H5/H8)} \;\; \sum_i h_i x_{ij} \leq 1800 + (M_H - 1800) z_{j,\text{DG}} & \forall j \\
 & \text{(H6)} \;\; \sum_i d_{ig} x_{ij} \leq D_g & \forall j, g \\
-& \text{(H7)} \;\; x_{i,\ell_i} = 1 & \forall i: \ell_i \neq \emptyset \\[6pt]
+& \text{(H7)} \;\; x_{ij} = x_{a(q)j} & \forall q \in G_L, i \in q, j \in J \\[6pt]
 & x_{ij}, y_j, z_{jt}, w_{jr}, u_{jp}, v_{jc}, \alpha_{sj} \in \{0,1\} \\
 & \phi_s \in \mathbb{Z}_{\geq 0}
 \end{aligned}
@@ -346,7 +349,7 @@ $$
 > - H2/H4 的一致性约束天然剪枝大量不可行解，有利于 branch-and-bound。
 > - Phase 1 的整数变量 $\phi_s$ 取值范围小（$[1, K]$），通常很快收敛。
 > - 对于 $n \leq 40$ 的实例，Gurobi 在分钟级内可证明最优；CBC 可能需要更长但基本可行。
-> - 可通过预处理减少 $K$（例如 $K = \lceil \sum_i p_i / \min_t \text{cap}_t \rceil + \text{locked\_count}$ 更紧的上界）。
+> - 当前实现使用 $K = \min(n, \lceil \sum_i p_i / \min_t \text{cap}_t \rceil)$，且至少为 1；固定候选检查若候选使用更多车辆，则取两者最大值。
 
 ---
 

@@ -38,13 +38,13 @@ Phase 2 会用 phase 1 的 feasible 解作 warm start。
 
 ### 2.3 K 上界
 
-按 milp-model.md §6.3：`K = ceil(Σp_i / min_cap) + locked_count`，上限 n。
+按当前 `milp_model.compute_K`：`K = ceil(Σp_i / min_cap)`，上限为订单数且至少为 1。
 实测 s01 (22 orders) → K=22，s02 (32) → K=31，s03 (39) → K=39。
 
 ### 2.4 对称性破坏
 
-对**非锁定槽位**加 `y_j >= y_{j+1}`（milp-model.md §4.8）。
-锁定槽位占用 `[0, L-1]`，对称性破坏从 `j=L` 开始。
+对全部匿名槽位加 `y_j >= y_{j+1}`（milp-model.md §4.8）。
+`locked_vehicle_id` 是来源组标识，不预留或命名槽位，因此前缀对称性规则适用于全部槽位。
 
 ---
 
@@ -62,21 +62,16 @@ Phase 2 会用 phase 1 的 feasible 解作 warm start。
 
 **结论**：**撤回**。记录为教训：对于 LP 松弛中已自然取到正确值的 indicator 变量，补对称上界无助于求解。
 
-### 3.2 保留的：Optimization B（锁定订单预处理 fix）
+### 3.2 当前实现：车型不可行预处理与来源组等式
 
 **思路**：
-1. 锁定订单 i 的 `locked_vehicle_id`，直接 `fixValue` 把 `x[i, locked_slot] = 1`、其他 `x[i, j] = 0`
-2. 非锁定订单不能占用锁定槽位，`x[i, locked_slot] = 0` 直接 fix
-3. 锁定槽位内的订单总量/危险品若无法装某车型 t，则 `z[locked_slot, t] = 0` 直接 fix
+1. 预处理只识别单订单容量/危险品导致的不可能车型；
+2. 同一非 None `locked_vehicle_id`（包括空串）的订单通过 `x[i,j] == x[anchor,j]` 对每个槽位保持完整；
+3. 来源组不绑定特定槽位，可整体移动或与其他完整组/自由订单合并。
 
-**实现**：`surrogate/milp_model.py` 第 ~170-220 行（搜 `"Optimization B"`）。
+**实现**：`surrogate/milp_model.py` 中的 `order_infeasible_types` 与 H7 group-equality 约束。
 
-**效果**（对有锁定订单的实例）：
-- s02 (1 locked, 32 orders)：**未优化版 phase 2 只能找到 f2=28100；优化 B 版找到真正最优 f2=26800**（便宜 1300 元）
-- 说明 B 的主要价值**不是让求解更快，而是让相同时间预算内求解更"深"**
-- 对无锁定的实例（s01）基本持平
-
-**保留理由**：改动 20 行，零风险，对 locked 实例价值明显。
+旧版固定来源组到保留槽位的性能记录只属于历史实现，不再描述当前模型语义。
 
 ### 3.3 未尝试的后续方向
 
@@ -128,7 +123,7 @@ MILP 字典序上**不严格劣于** VNS 是必要条件（如果劣了说明模
 
 ### 5.3 Locked 订单测试
 
-`TestLockedOrders` 构造小规模 locked case（4 orders, 2 locked 共享 `LOCK_A`），验证 preprocessing B 的正确性。
+`TestLockedOrders` 构造小规模来源组 case（4 orders, 2 orders 共享 `LOCK_A`），验证组内等式、整体移动和合并语义。
 
 ### 5.4 Timeout 测试
 
@@ -136,17 +131,17 @@ MILP 字典序上**不严格劣于** VNS 是必要条件（如果劣了说明模
 
 ---
 
-## 6. 锁定订单的映射策略
+## 6. 来源组的映射策略
 
-**关键设计**：locked orders 按 `locked_vehicle_id` **分组**，每组共享一个 slot。
+**关键设计**：orders 按非 None `locked_vehicle_id` **分组**，每组在求解中共享同一个匿名 slot，但不固定到某个预留 slot。
 
-- `build_locked_slot_map(instance)` 遍历 orders，对每个唯一的 `locked_vehicle_id` 分配一个 `slot` 索引（0-based，按插入顺序）
-- 锁定槽位占用 `[0, L-1]`
-- `x[i, slot]` 对同组所有 locked orders `setInitialValue(1) + fixValue()`
-- 其他 slot 的 `x[i, j]` `setInitialValue(0) + fixValue()`
-- H7 约束 `x[i, slot] == 1` 保留作为可审计的冗余约束（PuLP 按常数处理，无额外开销）
+- 对每个来源组选择一个 anchor order；
+- 对组内其余订单和每个 slot 加 `x[i,j] == x[anchor,j]`；
+- 整组可落到任意匿名 slot，也可与自由订单或其他完整来源组共用 slot；
+- 非 None 的空串同样是有效来源组标识；
+- 需要固定某个业务车辆的未来版本必须新增独立字段，不能复用 `locked_vehicle_id`。
 
-**注意**：对称性破坏从 `j=L` 开始（跳过锁定槽位），避免与 H7 冲突。
+**注意**：全部槽位仍满足 `y_j >= y[j+1]` 的前缀对称性规则；来源组等式与该规则不冲突。
 
 ---
 

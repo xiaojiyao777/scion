@@ -38,7 +38,7 @@ def check_feasibility(
 
     检查顺序：
       0. C0a 所有订单分配了唯一一辆车（结构性完整性）
-      1. H7 锁定订单未被移动
+      1. H7 同一来源组保持完整（组可整体移动或合并）
       2. H4 分车大类隔离（Phase 1）
       3. H2 片区一致
       4. H3 提货点数 ≤ 上限
@@ -95,8 +95,8 @@ def check_feasibility(
             return FeasibilityResult(False, violations)
 
     # -----------------------------------------------------------------
-    # H7: 锁定组完整性 — 同一 locked_vehicle_id 的订单必须在同一辆车
-    #     两辆车合并方向不限，但锁定组不能被拆散
+    # H7: 来源组完整性 — 同一非 None locked_vehicle_id（包括空串）的订单
+    #     必须在同一辆车；合并和整体移动方向不限，但组不能被拆散。
     # -----------------------------------------------------------------
     locked_group_vehicle: dict[str, str] = {}  # group_id → vid
     for vid, vehicle in solution.vehicles.items():

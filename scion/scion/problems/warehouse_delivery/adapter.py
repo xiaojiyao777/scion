@@ -190,7 +190,7 @@ idea to investigate."""
   - `ship_method: str` — shipping method (H6 grouping key with destination_country)
   - `destination_country: str` — destination country (H6 grouping key with ship_method)
   - `spu_list: list[SPU]` — packing units; use `calc_pallets(order.spu_list)` from models.py
-  - `locked_vehicle_id: Optional[str]` — None = freely assignable; non-None = MUST stay in that vehicle
+  - `locked_vehicle_id: Optional[str]` — None = freely assignable; non-None = an origin-group ID whose complete group may move as one unit
 - `Instance`: accessed via `self.instance` (set in __init__); contains `orders: dict[str, Order]`, `amount_limits: dict[str, float]`
   - H6 amount-limit keys are exactly `f"{{order.destination_country}},{{order.ship_method}}"` (country first, comma separator)
 - Helper: `select_minimum_vehicle_type(total_pallets, total_hazard) -> str` from models.py
@@ -198,7 +198,7 @@ idea to investigate."""
 
 ### Critical Constraints
 1. **Deep copy first**: always call `new_sol = solution.deep_copy()` before any modification
-2. **Locked orders**: never move orders where `order.locked_vehicle_id is not None`
+2. **Locked groups**: orders sharing any non-None `locked_vehicle_id` are one indivisible movable group; move all or none
 3. **rng**: use `rng` (a `random.Random` instance) for all randomness — do NOT import `random` directly
 4. **Determinism**: NEVER use `uuid.uuid4()` or any system entropy source. Generate vehicle IDs with `generate_vehicle_id(rng)` from `operators.base`. NEVER use `list(set(...))` or iterate over `set`/`dict` in an order-dependent way. Use `sorted()` when you need a stable order from sets or dict keys/values. The solver runs twice with the same seed to verify determinism — any non-deterministic output causes rejection.
 5. **Return value**: return the modified solution (or the original if no valid move was found)

@@ -32,7 +32,8 @@ def greedy_init(instance: Instance, rng: Random) -> Solution:
       3. 车型先用 HQ40，再由 ChangeVehicleType 算子优化降级
 
     Phase 2：
-      所有订单已锁定到一次逻辑车，每个 locked_vehicle_id 对应一辆初始车辆。
+      每个非 None locked_vehicle_id（包括空串）定义一辆初始车辆；这是来源布局，
+      后续可以整体移动或合并，但同组订单不可拆分。
     """
     if instance.phase == 2:
         return _phase2_init(instance, rng)
@@ -61,7 +62,7 @@ def _phase1_init(instance: Instance, rng: Random) -> Solution:
         max_pickups = 2 if region == "Dongguan" else 3
 
         for order in orders:
-            # 锁定订单：必须放在指定车辆内，单独处理
+            # 来源组订单按组标识建立初始车辆；这不是永久目标车辆约束。
             if order.locked_vehicle_id is not None:
                 locked_vid = order.locked_vehicle_id
                 if locked_vid not in vehicles:
@@ -76,7 +77,7 @@ def _phase1_init(instance: Instance, rng: Random) -> Solution:
                     )
                 vehicles[locked_vid].order_ids.append(order.order_id)
                 assignment[order.order_id] = locked_vid
-                # 重置当前游标，避免后续未锁定订单混入锁定车辆
+                # 重置当前游标，避免后续自由订单混入来源组初始车辆。
                 current_vid = None
                 current_pallets = 0
                 current_hazard = 0
@@ -147,17 +148,21 @@ def _phase1_init(instance: Instance, rng: Random) -> Solution:
 
 
 def _phase2_init(instance: Instance, rng: Random) -> Solution:
-    """Phase 2 初始化：每个 locked_vehicle_id 对应一辆独立车辆。
+    """Phase 2 初始化：每个非 None locked_vehicle_id 对应一辆初始车辆。
 
-    所有订单已锁定在一次逻辑车内，按 locked_vehicle_id 分组。
+    同一来源组保持完整，但该组随后可以整体移动或与其他完整组合并。
     """
     vehicles: dict[str, Vehicle] = {}
     assignment: dict[str, str] = {}
 
-    # 按 locked_vehicle_id 分组
+    # 按来源组标识构造冻结初始布局；空串也是有效组标识。
     groups: dict[str, list[Order]] = defaultdict(list)
     for order in instance.orders.values():
-        vid = order.locked_vehicle_id or generate_vehicle_id(rng)
+        vid = (
+            order.locked_vehicle_id
+            if order.locked_vehicle_id is not None
+            else generate_vehicle_id(rng)
+        )
         groups[vid].append(order)
 
     for vid, orders in groups.items():

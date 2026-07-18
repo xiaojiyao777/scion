@@ -1,0 +1,1494 @@
+{
+  "aggregate_sha256": "ae6a0b327191c10091dac1e84063588e8caae50a8068a494de9ab5a5766fd9e5",
+  "authority": "diagnostic_scientific_evidence_only",
+  "fixture_bundle_sha256": "c4b8316207fcbf87c9c2c4d6f005ca5745c69887ba53e4078fe5a7d3ad3fa428",
+  "fixture_schema": "scion.warehouse_locked_group_fixtures.v1",
+  "passed": true,
+  "row_count": 17,
+  "rows": [
+    {
+      "adapter": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "candidate": {
+        "assignment": {
+          "L1": "LOCK-A",
+          "L2": "LOCK-A"
+        },
+        "vehicle_order_ids": {
+          "LOCK-A": [
+            "L1",
+            "L2"
+          ]
+        },
+        "vehicle_types": {
+          "LOCK-A": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "fixed_candidate_milp": {
+        "K": 1,
+        "applicable": true,
+        "compute_K": 1,
+        "fixed_variable_counts": {
+          "x": 2,
+          "y": 1,
+          "z": 5
+        },
+        "fixed_variable_digests": {
+          "x": "f0a527dc3b02344d5dc952497f7d5fb2877a71bcff549abd484c5b50dd0ba639",
+          "y": "8186226e10957a0b027e7d199a93d5481b09db3605e5c61cb85d65dbe33d90e3",
+          "z": "92a961a3d0c042714a1cf34accbaf2c0032c1b833d2c632bf61a5a505ef34c64"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": true,
+        "phase2_exact_subcategory_spread": null,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_feasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kOptimal",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 1,
+        "vehicle_to_slot": {
+          "LOCK-A": 0
+        }
+      },
+      "fixture_content_sha256": "dc94432e0e40c29f39cbc36c2f3450d386bd0f6bac881b4b7573b80d52510f6e",
+      "fixture_id": "01_group_initial_vehicle",
+      "oracle": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "candidate": {
+        "assignment": {
+          "L1": "MOVED",
+          "L2": "MOVED"
+        },
+        "vehicle_order_ids": {
+          "MOVED": [
+            "L1",
+            "L2"
+          ]
+        },
+        "vehicle_types": {
+          "MOVED": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "fixed_candidate_milp": {
+        "K": 1,
+        "applicable": true,
+        "compute_K": 1,
+        "fixed_variable_counts": {
+          "x": 2,
+          "y": 1,
+          "z": 5
+        },
+        "fixed_variable_digests": {
+          "x": "f0a527dc3b02344d5dc952497f7d5fb2877a71bcff549abd484c5b50dd0ba639",
+          "y": "8186226e10957a0b027e7d199a93d5481b09db3605e5c61cb85d65dbe33d90e3",
+          "z": "92a961a3d0c042714a1cf34accbaf2c0032c1b833d2c632bf61a5a505ef34c64"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": true,
+        "phase2_exact_subcategory_spread": null,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_feasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kOptimal",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 1,
+        "vehicle_to_slot": {
+          "MOVED": 0
+        }
+      },
+      "fixture_content_sha256": "7c7daa5e8316ce07ad81048e6e591366f426a256a974e95e8727fdbd309a6613",
+      "fixture_id": "02_multi_group_whole_move",
+      "oracle": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "candidate": {
+        "assignment": {
+          "F1": "MERGED",
+          "L1": "MERGED",
+          "L2": "MERGED"
+        },
+        "vehicle_order_ids": {
+          "MERGED": [
+            "L1",
+            "L2",
+            "F1"
+          ]
+        },
+        "vehicle_types": {
+          "MERGED": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "fixed_candidate_milp": {
+        "K": 1,
+        "applicable": true,
+        "compute_K": 1,
+        "fixed_variable_counts": {
+          "x": 3,
+          "y": 1,
+          "z": 5
+        },
+        "fixed_variable_digests": {
+          "x": "3e558490d038f6c05590dafbfdf86ff6840d08c3fda2238f7b928d20a1ad707f",
+          "y": "8186226e10957a0b027e7d199a93d5481b09db3605e5c61cb85d65dbe33d90e3",
+          "z": "92a961a3d0c042714a1cf34accbaf2c0032c1b833d2c632bf61a5a505ef34c64"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": true,
+        "phase2_exact_subcategory_spread": null,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_feasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kOptimal",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 1,
+        "vehicle_to_slot": {
+          "MERGED": 0
+        }
+      },
+      "fixture_content_sha256": "5fae1150f8d7d7f0dde2428e9cb2eedfb78c6e590c24ab81143fd08b63cd9895",
+      "fixture_id": "03_group_merge_free",
+      "oracle": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "candidate": {
+        "assignment": {
+          "L1": "MERGED",
+          "L2": "MERGED",
+          "R1": "MERGED",
+          "R2": "MERGED"
+        },
+        "vehicle_order_ids": {
+          "MERGED": [
+            "L1",
+            "L2",
+            "R1",
+            "R2"
+          ]
+        },
+        "vehicle_types": {
+          "MERGED": "T5"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "fixed_candidate_milp": {
+        "K": 2,
+        "applicable": true,
+        "compute_K": 2,
+        "fixed_variable_counts": {
+          "x": 8,
+          "y": 2,
+          "z": 10
+        },
+        "fixed_variable_digests": {
+          "x": "31f70cf4e53472a599c256291ef8dd22f828c183f23de3ac81ff4c592bf624fd",
+          "y": "192cdbb5f0761e25b734c992c6f395659c02bfbad2aef4aa8273fb80b84b2378",
+          "z": "a752be7661fd64f55364968927f978fe45402857df695e03ab61c4b494f2292c"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": true,
+        "phase2_exact_subcategory_spread": null,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_feasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kOptimal",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 1,
+        "vehicle_to_slot": {
+          "MERGED": 0
+        }
+      },
+      "fixture_content_sha256": "f16a4a2fc7f9cba9fa3126b4442989173095c904c34bacb06eb39ddea76235f5",
+      "fixture_id": "04_two_groups_merge",
+      "oracle": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "candidate": {
+        "assignment": {
+          "S1": "OTHER"
+        },
+        "vehicle_order_ids": {
+          "OTHER": [
+            "S1"
+          ]
+        },
+        "vehicle_types": {
+          "OTHER": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "fixed_candidate_milp": {
+        "K": 1,
+        "applicable": true,
+        "compute_K": 1,
+        "fixed_variable_counts": {
+          "x": 1,
+          "y": 1,
+          "z": 5
+        },
+        "fixed_variable_digests": {
+          "x": "8aabab99a44878646af91bbce072978c0747448ba4bad62eee44dee3ae82f812",
+          "y": "8186226e10957a0b027e7d199a93d5481b09db3605e5c61cb85d65dbe33d90e3",
+          "z": "92a961a3d0c042714a1cf34accbaf2c0032c1b833d2c632bf61a5a505ef34c64"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": true,
+        "phase2_exact_subcategory_spread": null,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_feasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kOptimal",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 1,
+        "vehicle_to_slot": {
+          "OTHER": 0
+        }
+      },
+      "fixture_content_sha256": "2011381d421194728d6a4608e545648bf94806f2f4b60f8e3635697fbb221b8e",
+      "fixture_id": "05_singleton_group_move",
+      "oracle": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "candidate": {
+        "assignment": {
+          "E1": "MOVED",
+          "E2": "MOVED"
+        },
+        "vehicle_order_ids": {
+          "MOVED": [
+            "E1",
+            "E2"
+          ]
+        },
+        "vehicle_types": {
+          "MOVED": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "fixed_candidate_milp": {
+        "K": 1,
+        "applicable": true,
+        "compute_K": 1,
+        "fixed_variable_counts": {
+          "x": 2,
+          "y": 1,
+          "z": 5
+        },
+        "fixed_variable_digests": {
+          "x": "b7950ae6cb1095a5a580565a1c9268c3d3cf16d477c22bc3b78fdeb508998068",
+          "y": "8186226e10957a0b027e7d199a93d5481b09db3605e5c61cb85d65dbe33d90e3",
+          "z": "92a961a3d0c042714a1cf34accbaf2c0032c1b833d2c632bf61a5a505ef34c64"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": true,
+        "phase2_exact_subcategory_spread": 1,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_feasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kOptimal",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 1,
+        "vehicle_to_slot": {
+          "MOVED": 0
+        }
+      },
+      "fixture_content_sha256": "e5ebe5b53832bcd35fd02d8ae641b87c9330efd3e1a019fc7993e6d0e27455d8",
+      "fixture_id": "06_empty_string_group_phase2",
+      "oracle": {
+        "constraint_family": "feasible",
+        "feasible": true
+      },
+      "passed": true,
+      "phase": 2,
+      "phase2_initialization": {
+        "assignment": {
+          "E1": "",
+          "E2": ""
+        },
+        "empty_string_group_orders": [
+          "E1",
+          "E2"
+        ],
+        "empty_string_vehicle_present": true,
+        "passed": true
+      },
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "H7",
+        "feasible": false
+      },
+      "candidate": {
+        "assignment": {
+          "L1": "LEFT",
+          "L2": "RIGHT"
+        },
+        "vehicle_order_ids": {
+          "LEFT": [
+            "L1"
+          ],
+          "RIGHT": [
+            "L2"
+          ]
+        },
+        "vehicle_types": {
+          "LEFT": "T3",
+          "RIGHT": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "H7",
+        "feasible": false
+      },
+      "fixed_candidate_milp": {
+        "K": 2,
+        "applicable": true,
+        "compute_K": 1,
+        "fixed_variable_counts": {
+          "x": 4,
+          "y": 2,
+          "z": 10
+        },
+        "fixed_variable_digests": {
+          "x": "88bfced683fe1c1443de3cc6884e25f9c5a0c5284c264c996a4b6e72c3aa8376",
+          "y": "b99e5b6355c4c0eca639367b3e638d866f3387b3fa7c0434746cd6e2cfe5386d",
+          "z": "cb37d7b2c62f3482099e3714b726f73f03a5dba8f43bd5e6dac93068b1daee86"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": null,
+        "phase2_exact_subcategory_spread": null,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_infeasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kInfeasible",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 2,
+        "vehicle_to_slot": {
+          "LEFT": 0,
+          "RIGHT": 1
+        }
+      },
+      "fixture_content_sha256": "bbb7534aae76a9a22f60e5c953fc3c8cb89d4cb835fb64e1c9fa1c5efca69867",
+      "fixture_id": "07_group_split",
+      "oracle": {
+        "constraint_family": "H7",
+        "feasible": false
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "H7",
+        "feasible": false
+      },
+      "candidate": {
+        "assignment": {
+          "L1": "LOCK-A",
+          "L2": "MOVED"
+        },
+        "vehicle_order_ids": {
+          "LOCK-A": [
+            "L1"
+          ],
+          "MOVED": [
+            "L2"
+          ]
+        },
+        "vehicle_types": {
+          "LOCK-A": "T3",
+          "MOVED": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "H7",
+        "feasible": false
+      },
+      "fixed_candidate_milp": {
+        "K": 2,
+        "applicable": true,
+        "compute_K": 1,
+        "fixed_variable_counts": {
+          "x": 4,
+          "y": 2,
+          "z": 10
+        },
+        "fixed_variable_digests": {
+          "x": "88bfced683fe1c1443de3cc6884e25f9c5a0c5284c264c996a4b6e72c3aa8376",
+          "y": "b99e5b6355c4c0eca639367b3e638d866f3387b3fa7c0434746cd6e2cfe5386d",
+          "z": "cb37d7b2c62f3482099e3714b726f73f03a5dba8f43bd5e6dac93068b1daee86"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": null,
+        "phase2_exact_subcategory_spread": null,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_infeasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kInfeasible",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 2,
+        "vehicle_to_slot": {
+          "LOCK-A": 0,
+          "MOVED": 1
+        }
+      },
+      "fixture_content_sha256": "f09c83eed70f0bb9b27b350c8cacb55b04986e572343e0223ddf65e1246a888a",
+      "fixture_id": "08_group_partial_move",
+      "oracle": {
+        "constraint_family": "H7",
+        "feasible": false
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "C0a",
+        "feasible": false
+      },
+      "candidate": {
+        "assignment": {
+          "L1": "ONLY"
+        },
+        "vehicle_order_ids": {
+          "ONLY": [
+            "L1"
+          ]
+        },
+        "vehicle_types": {
+          "ONLY": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "C0a",
+        "feasible": false
+      },
+      "fixed_candidate_milp": {
+        "applicable": false,
+        "contract_reason_code": "total_assignment_unrepresentable",
+        "result": "not_applicable_by_contract"
+      },
+      "fixture_content_sha256": "1b356fa0527452cf448f2784c10e800431aafdb8d3ce9bc2b732603dbe5d38eb",
+      "fixture_id": "09_order_lost",
+      "oracle": {
+        "constraint_family": "C0a",
+        "feasible": false
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "C0a",
+        "feasible": false
+      },
+      "candidate": {
+        "assignment": {
+          "D1": "A"
+        },
+        "vehicle_order_ids": {
+          "A": [
+            "D1"
+          ],
+          "B": [
+            "D1"
+          ]
+        },
+        "vehicle_types": {
+          "A": "T3",
+          "B": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "C0a",
+        "feasible": false
+      },
+      "fixed_candidate_milp": {
+        "applicable": false,
+        "contract_reason_code": "duplicate_membership_unrepresentable",
+        "result": "not_applicable_by_contract"
+      },
+      "fixture_content_sha256": "26a42e79165ddb88be6602814cd58a716a4f88453dd9b9b119aaf1cbed4cee6c",
+      "fixture_id": "10_order_duplicated",
+      "oracle": {
+        "constraint_family": "C0a",
+        "feasible": false
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "C0a",
+        "feasible": false
+      },
+      "candidate": {
+        "assignment": {
+          "A1": "B"
+        },
+        "vehicle_order_ids": {
+          "A": [
+            "A1"
+          ]
+        },
+        "vehicle_types": {
+          "A": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "C0a",
+        "feasible": false
+      },
+      "fixed_candidate_milp": {
+        "applicable": false,
+        "contract_reason_code": "dual_representation_disagreement_unrepresentable",
+        "result": "not_applicable_by_contract"
+      },
+      "fixture_content_sha256": "bf136f319bdfa5fa9ac58c392b8f8c322ecfc972648e908bd0d29b968931b984",
+      "fixture_id": "11_assignment_disagrees",
+      "oracle": {
+        "constraint_family": "C0a",
+        "feasible": false
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "H1",
+        "feasible": false
+      },
+      "candidate": {
+        "assignment": {
+          "C1": "MOVED",
+          "C2": "MOVED"
+        },
+        "vehicle_order_ids": {
+          "MOVED": [
+            "C1",
+            "C2"
+          ]
+        },
+        "vehicle_types": {
+          "MOVED": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "H1",
+        "feasible": false
+      },
+      "fixed_candidate_milp": {
+        "K": 2,
+        "applicable": true,
+        "compute_K": 2,
+        "fixed_variable_counts": {
+          "x": 4,
+          "y": 2,
+          "z": 10
+        },
+        "fixed_variable_digests": {
+          "x": "9d0a7f9c948adeb0c2170934f3d54fd5792565a3e9b343b2b8f52ef3c4459bf0",
+          "y": "192cdbb5f0761e25b734c992c6f395659c02bfbad2aef4aa8273fb80b84b2378",
+          "z": "e2eba1b745e131133e3409965948538c54ca61d1f6ae6ffcfd4cff48edeb075b"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": null,
+        "phase2_exact_subcategory_spread": null,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_infeasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kInfeasible",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 1,
+        "vehicle_to_slot": {
+          "MOVED": 0
+        }
+      },
+      "fixture_content_sha256": "ee3db46d2dd69f48de4f303a1a82cb3f58a393a75d312a4b341ba4c9d6d6be50",
+      "fixture_id": "12_capacity_exceeded",
+      "oracle": {
+        "constraint_family": "H1",
+        "feasible": false
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "H2",
+        "feasible": false
+      },
+      "candidate": {
+        "assignment": {
+          "G1": "MOVED",
+          "G2": "MOVED"
+        },
+        "vehicle_order_ids": {
+          "MOVED": [
+            "G1",
+            "G2"
+          ]
+        },
+        "vehicle_types": {
+          "MOVED": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "H2",
+        "feasible": false
+      },
+      "fixed_candidate_milp": {
+        "K": 1,
+        "applicable": true,
+        "compute_K": 1,
+        "fixed_variable_counts": {
+          "x": 2,
+          "y": 1,
+          "z": 5
+        },
+        "fixed_variable_digests": {
+          "x": "18378268374db68062c9ad26df3c05a9b1884582c900bb47021bb8217e342303",
+          "y": "8186226e10957a0b027e7d199a93d5481b09db3605e5c61cb85d65dbe33d90e3",
+          "z": "92a961a3d0c042714a1cf34accbaf2c0032c1b833d2c632bf61a5a505ef34c64"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": null,
+        "phase2_exact_subcategory_spread": null,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_infeasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kInfeasible",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 1,
+        "vehicle_to_slot": {
+          "MOVED": 0
+        }
+      },
+      "fixture_content_sha256": "bfa9505770246f1b07d51a6dfd6ea188784838db98e3c48ef431685f2adebaf5",
+      "fixture_id": "13_region_mixed",
+      "oracle": {
+        "constraint_family": "H2",
+        "feasible": false
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "H3",
+        "feasible": false
+      },
+      "candidate": {
+        "assignment": {
+          "P1": "MOVED",
+          "P2": "MOVED",
+          "P3": "MOVED"
+        },
+        "vehicle_order_ids": {
+          "MOVED": [
+            "P1",
+            "P2",
+            "P3"
+          ]
+        },
+        "vehicle_types": {
+          "MOVED": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "H3",
+        "feasible": false
+      },
+      "fixed_candidate_milp": {
+        "K": 1,
+        "applicable": true,
+        "compute_K": 1,
+        "fixed_variable_counts": {
+          "x": 3,
+          "y": 1,
+          "z": 5
+        },
+        "fixed_variable_digests": {
+          "x": "9966352810d11b046fb05af19fc95e5fcdfc3039c799080ceca238d86b2714dd",
+          "y": "8186226e10957a0b027e7d199a93d5481b09db3605e5c61cb85d65dbe33d90e3",
+          "z": "92a961a3d0c042714a1cf34accbaf2c0032c1b833d2c632bf61a5a505ef34c64"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": null,
+        "phase2_exact_subcategory_spread": null,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_infeasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kInfeasible",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 1,
+        "vehicle_to_slot": {
+          "MOVED": 0
+        }
+      },
+      "fixture_content_sha256": "21380b39ad42239ca2c9d4424e7fc3b8ec2e956a5885bbfd97760e063d4b1883",
+      "fixture_id": "14_pickup_limit",
+      "oracle": {
+        "constraint_family": "H3",
+        "feasible": false
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "H4",
+        "feasible": false
+      },
+      "candidate": {
+        "assignment": {
+          "K1": "MOVED",
+          "K2": "MOVED"
+        },
+        "vehicle_order_ids": {
+          "MOVED": [
+            "K1",
+            "K2"
+          ]
+        },
+        "vehicle_types": {
+          "MOVED": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "H4",
+        "feasible": false
+      },
+      "fixed_candidate_milp": {
+        "K": 1,
+        "applicable": true,
+        "compute_K": 1,
+        "fixed_variable_counts": {
+          "x": 2,
+          "y": 1,
+          "z": 5
+        },
+        "fixed_variable_digests": {
+          "x": "31bc41f748f9e01ddb7a97b34829e5e4887c37d5a6e8f9041a4b7b15b55e127c",
+          "y": "8186226e10957a0b027e7d199a93d5481b09db3605e5c61cb85d65dbe33d90e3",
+          "z": "92a961a3d0c042714a1cf34accbaf2c0032c1b833d2c632bf61a5a505ef34c64"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": null,
+        "phase2_exact_subcategory_spread": null,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_infeasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kInfeasible",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 1,
+        "vehicle_to_slot": {
+          "MOVED": 0
+        }
+      },
+      "fixture_content_sha256": "edb754c5134abb3edea702ea5759e93b8e2195fc3c4b662dccb945ed79d6fb2c",
+      "fixture_id": "15_phase1_category_mixed",
+      "oracle": {
+        "constraint_family": "H4",
+        "feasible": false
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "H5/H8",
+        "feasible": false
+      },
+      "candidate": {
+        "assignment": {
+          "H1": "MOVED",
+          "H2": "MOVED"
+        },
+        "vehicle_order_ids": {
+          "MOVED": [
+            "H1",
+            "H2"
+          ]
+        },
+        "vehicle_types": {
+          "MOVED": "HQ40"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "H5/H8",
+        "feasible": false
+      },
+      "fixed_candidate_milp": {
+        "K": 1,
+        "applicable": true,
+        "compute_K": 1,
+        "fixed_variable_counts": {
+          "x": 2,
+          "y": 1,
+          "z": 5
+        },
+        "fixed_variable_digests": {
+          "x": "9073df265b50a3207ea8c74496b46c52320db82326d645b2addc388134cc3b07",
+          "y": "8186226e10957a0b027e7d199a93d5481b09db3605e5c61cb85d65dbe33d90e3",
+          "z": "4cd466dddac716b5710f2d0158e4af799989df09de186a88d8c144a3c8eb58da"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": null,
+        "phase2_exact_subcategory_spread": null,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_infeasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kInfeasible",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 1,
+        "vehicle_to_slot": {
+          "MOVED": 0
+        }
+      },
+      "fixture_content_sha256": "fef6659e7e3ea8df9fb90e748580f9ca06798e26bca7da8236205c19047423fa",
+      "fixture_id": "16_hazard_h5_h8_family",
+      "oracle": {
+        "constraint_family": "H5/H8",
+        "feasible": false
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    },
+    {
+      "adapter": {
+        "constraint_family": "H6",
+        "feasible": false
+      },
+      "candidate": {
+        "assignment": {
+          "M1": "MOVED",
+          "M2": "MOVED"
+        },
+        "vehicle_order_ids": {
+          "MOVED": [
+            "M1",
+            "M2"
+          ]
+        },
+        "vehicle_types": {
+          "MOVED": "T3"
+        }
+      },
+      "checks": {
+        "adapter_matches_expected": true,
+        "milp_matches_expected": true,
+        "oracle_adapter_agree": true,
+        "oracle_matches_expected": true,
+        "phase2_empty_group_init": true
+      },
+      "expected": {
+        "constraint_family": "H6",
+        "feasible": false
+      },
+      "fixed_candidate_milp": {
+        "K": 1,
+        "applicable": true,
+        "compute_K": 1,
+        "fixed_variable_counts": {
+          "x": 2,
+          "y": 1,
+          "z": 5
+        },
+        "fixed_variable_digests": {
+          "x": "393612c2484bf73d9a1a485097f8ddeb310e05fef324b546574a86b64cc36907",
+          "y": "8186226e10957a0b027e7d199a93d5481b09db3605e5c61cb85d65dbe33d90e3",
+          "z": "92a961a3d0c042714a1cf34accbaf2c0032c1b833d2c632bf61a5a505ef34c64"
+        },
+        "incumbent_issue_codes": [],
+        "incumbent_valid": null,
+        "phase2_exact_subcategory_spread": null,
+        "prefix_symmetry_retained": true,
+        "result": "fixed_candidate_infeasible",
+        "solver": {
+          "name": "HiGHS",
+          "native_status": "HighsModelStatus.kInfeasible",
+          "version": "1.14.0"
+        },
+        "used_vehicle_count": 1,
+        "vehicle_to_slot": {
+          "MOVED": 0
+        }
+      },
+      "fixture_content_sha256": "93e6c8283df05f9fb56b37a0025cd566dfb5ca2a6d48398e5b5ea17a5b9117cb",
+      "fixture_id": "17_amount_limit_h6",
+      "oracle": {
+        "constraint_family": "H6",
+        "feasible": false
+      },
+      "passed": true,
+      "phase": 1,
+      "phase2_initialization": null,
+      "source_owner_hashes": {
+        "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+        "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+        "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+        "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+        "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+        "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+        "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+        "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+        "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+        "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+        "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+        "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+        "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+        "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+        "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+        "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+        "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+      }
+    }
+  ],
+  "schema": "scion.warehouse_locked_group_probe.v1",
+  "source_owner_hashes": {
+    "scion/contracts/warehouse_w1_population_receipt.v1.json": "5b7ddcf6c1cda6fa9fb742d1463c9fd4a3bbbcf3dbb361d8ef7172f0684f116c",
+    "scion/contracts/warehouse_w2_preservation_manifest.v1.json": "0ee66091942583c2f499f83338a96abeff51e53b9583afe03fce3356a890dfc9",
+    "scion/docs/reference/milp-model.md": "c76d926af843083b9504f748fb096c38dee7a35600aa234c47df274fa9b28d9c",
+    "scion/problems/warehouse_delivery/problem-v1.yaml": "a38b423d46487507d0c851d970b8b70c0beef28bdf59c1aa58f19deb961207ca",
+    "scion/scion/problems/warehouse_delivery/adapter.py": "3973d32e4093bd0276a21899230899d37b3cfb244338b23431f32bd5ee1b34b0",
+    "scion/scion/problems/warehouse_delivery/locked_group_fixtures.py": "1be737d07816d83b5e6f8f1ac5d32f763a6cf5497c6e54e4548d2202a6689ed8",
+    "scion/scion/problems/warehouse_delivery/locked_group_probe.py": "6b152ba9fb27f7ad95464f2d798a6a06c56da1987517fb0656dd7e9d660433b4",
+    "scion/scion/problems/warehouse_delivery/problem-v1.yaml": "ee6f0411f02d295584bac42d464568f4922555502a9fa54407ff1fe19804baa2",
+    "scion/scion/problems/warehouse_delivery/w2_preservation.py": "9b736f2bd58b0c079282308df68b06aa3911326cea19936c20388dbc5a21e34c",
+    "scion/tools/warehouse_locked_group_probe.py": "06530f24510ce4581840bfb696c1d331c1fd61b23065e1f0e9dd600c6f13c9d1",
+    "surrogate/MILP_SOLVER_NOTES.md": "9493086b7dd247fd19b158fecabdf7595e5e59289988e23712bb4d138cb88fe4",
+    "surrogate/greedy_init.py": "9598a6da7ec471a74b5f2288a58c01f28f66fa1d6cd4e859ae5566589447536b",
+    "surrogate/milp_model.py": "1b5800ef6415df4ff86b64f42d82f7c52caf9bdb5893b4689fc3c44cc5437cbc",
+    "surrogate/models.py": "3ebf98dec8e647d0d4f5e3d7dec5a3ca067bc2af369d02d2baf765a255723a5b",
+    "surrogate/operators/base.py": "423c56d6cae359f240a57af7afc94aebb5e5a7a37614e45719e458a7f2f0621c",
+    "surrogate/oracle.py": "988315ad9a94a1560076ca4b86bde9ece25516675a77e4d10d2d20698161d0a7",
+    "surrogate/surrogate-problem-spec-v1.md": "4eeb953da863de52a0e5a2b97f602ecc46bee7e84a54ab318707fd6fbdbe8b1c"
+  }
+}
