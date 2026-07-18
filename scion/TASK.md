@@ -870,9 +870,14 @@ scientific and lineage-owning artifacts remain in place.
      `v04-cvrp-b1-r11c-input-authority-caveat-20260718.md`; do not rerun B1 or
      reuse its single-file materializer. The earlier root ending
      `20260718T074602Z-claw` is superseded non-evidence.
-   - [Unlocked] CVRP F1: freeze and run H1-only, SWAP-family-only, and cumulative
-     ancestry arms with every exact `.vrp + .sol` pair sealed and reparsed. B1
-     does not select a production profile or authorize promotion.
+   - [Design frozen] CVRP F1: the exact champion, H1-only, SWAP-family-only,
+     and cumulative ancestry matrix is frozen at design SHA
+     `a8167117...07faa`; two independent fixed-hash reviews report
+     P0=0/P1=0/P2=0. It seals and reparses all 16 exact `.vrp + .sol` pairs,
+     executes 64 case/seed cells x 4 arms with stage-local Williams order, and
+     keeps complete and incomplete closure separate. Implement and independently
+     accept its materializer/preflight before a fresh serial launch. B1 does not
+     select a production profile or authorize promotion.
    - [Complete] Warehouse W1 reconciles the exact 31-case Protocol population
      at `0599fc29`. W2 is accepted at pushed commit `d4d44689`: final design
      SHA `c0d85d60...671fc7a`, preservation manifest `0ee66091...90dfc9`,

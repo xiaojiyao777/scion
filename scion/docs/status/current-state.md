@@ -990,8 +990,13 @@ support-only: it cannot select a profile or authorize promotion, and its single-
 file materializer must not be reused. The independently accepted correction is
 `scion/docs/experiments/v0.4/v04-cvrp-b1-r11c-input-authority-caveat-20260718.md`.
 F1 remains unlocked for a separately frozen ancestry decomposition that seals
-and reparses every exact `.vrp + .sol` pair; B1 is not automatically rerun. The
-earlier root ending `20260718T074602Z-claw` is superseded non-evidence.
+and reparses every exact `.vrp + .sol` pair; B1 is not automatically rerun. F1
+is now design-frozen at
+`scion/docs/planning/v0.4/v0.4-cvrp-f1-ancestry-matrix-20260718.md`, raw SHA
+`a8167117...07faa`, after two independent fixed-hash reviews reported
+P0=0/P1=0/P2=0. Its exact 4-arm, 64-cell/256-job Williams-balanced
+materializer/preflight is next; no formal F1 root exists yet. The earlier B1
+root ending `20260718T074602Z-claw` is superseded non-evidence.
 
 Warehouse W1 is complete at `0599fc29`, and W2 is accepted at pushed commit
 `d4d44689`. Its final design SHA is `c0d85d60...671fc7a`, preservation manifest
@@ -1023,9 +1028,10 @@ actual-journal-handle design is frozen and accepted.
    non-authoritative.
 2. B1 is accepted only as support evidence with explicit input-authority and
    W2-overlap caveats; it cannot select a profile or authorize promotion. F1 is
-   unlocked and must seal/reparse exact `.vrp + .sol` pairs.
+   design-frozen at `a8167117...07faa` and must seal/reparse exact
+   `.vrp + .sol` pairs.
    Implement and review the frozen W3 manifest/preflight, then launch one fresh
-   serial W3 root; independently freeze F1 before its own run.
+   serial W3 root; implement and independently accept F1 before its own run.
 3. Keep Checkpoints A and B dormant. Review and freeze the E1 cancellation-
    safety correction before replacing the rejected implementation; retain the
    deterministic staging capability boundary and add no SQLite import, receipt
