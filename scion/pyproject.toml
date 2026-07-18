@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools==80.10.2", "wheel==0.46.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -25,6 +25,18 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["scion*"]
+exclude = ["scion.tests*"]
+
+[[tool.setuptools.ext-modules]]
+name = "scion.runtime.native._spawn_into_cgroup"
+sources = ["scion/runtime/native/spawn_into_cgroup.c"]
+extra-compile-args = [
+    "-std=c11",
+    "-Wall",
+    "-Wextra",
+    "-Werror=implicit-function-declaration",
+    "-Werror=return-type",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["scion/tests"]

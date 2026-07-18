@@ -1,0 +1,71 @@
+"""Minimal Linux native spawn authority for trusted execution.
+
+This package deliberately exports only the unforgeable ``BlockedChild``
+handle and the exact constants needed to decode its fixed exec-error record.
+Lifecycle, cgroup-empty proof, publication, and problem semantics live above
+this native boundary.
+"""
+
+from ._spawn_into_cgroup import (
+    CHILD_EXEC_ERROR_FD,
+    CHILD_RELEASE_FD,
+    CHILD_STDERR_FD,
+    CHILD_STDIN_FD,
+    CHILD_STDOUT_FD,
+    CLONE_ARGS_SIZE,
+    CLONE_FLAGS,
+    ERROR_RECORD_MAGIC,
+    ERROR_RECORD_FORMAT,
+    ERROR_RECORD_SIZE,
+    ERROR_RECORD_VERSION,
+    ERROR_STAGE_CHDIR,
+    ERROR_STAGE_CLOSE_RANGE,
+    ERROR_STAGE_DUP_EXEC_ERROR,
+    ERROR_STAGE_DUP_RELEASE,
+    ERROR_STAGE_DUP_STDERR,
+    ERROR_STAGE_DUP_STDIN,
+    ERROR_STAGE_DUP_STDOUT,
+    ERROR_STAGE_EXECVE,
+    ERROR_STAGE_RELEASE_BYTE,
+    ERROR_STAGE_RELEASE_CLOSE,
+    ERROR_STAGE_RELEASE_READ,
+    ERROR_STAGE_SIGNAL_DISPOSITIONS,
+    ERROR_STAGE_SIGNAL_MASK,
+    EXIT_SIGNAL,
+    RELEASE_BYTE,
+    WAIT_RESULT_FIELDS,
+    BlockedChild,
+    spawn_blocked,
+)
+
+__all__ = [
+    "BlockedChild",
+    "CHILD_EXEC_ERROR_FD",
+    "CHILD_RELEASE_FD",
+    "CHILD_STDERR_FD",
+    "CHILD_STDIN_FD",
+    "CHILD_STDOUT_FD",
+    "CLONE_ARGS_SIZE",
+    "CLONE_FLAGS",
+    "ERROR_RECORD_FORMAT",
+    "ERROR_RECORD_MAGIC",
+    "ERROR_RECORD_SIZE",
+    "ERROR_RECORD_VERSION",
+    "ERROR_STAGE_CHDIR",
+    "ERROR_STAGE_CLOSE_RANGE",
+    "ERROR_STAGE_DUP_EXEC_ERROR",
+    "ERROR_STAGE_DUP_RELEASE",
+    "ERROR_STAGE_DUP_STDERR",
+    "ERROR_STAGE_DUP_STDIN",
+    "ERROR_STAGE_DUP_STDOUT",
+    "ERROR_STAGE_EXECVE",
+    "ERROR_STAGE_RELEASE_BYTE",
+    "ERROR_STAGE_RELEASE_CLOSE",
+    "ERROR_STAGE_RELEASE_READ",
+    "ERROR_STAGE_SIGNAL_DISPOSITIONS",
+    "ERROR_STAGE_SIGNAL_MASK",
+    "EXIT_SIGNAL",
+    "RELEASE_BYTE",
+    "WAIT_RESULT_FIELDS",
+    "spawn_blocked",
+]
