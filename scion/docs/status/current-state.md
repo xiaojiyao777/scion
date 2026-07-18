@@ -978,16 +978,20 @@ Excluded and preserved:
 The non-generative problem lanes have advanced. CVRP B0 passed independent
 code and science review with P0=0/P1=0 and is pushed at `90a109b2`; its accepted
 dry manifest is `0151e2be...882b1`. Formal B1 completed 256/256 valid rows at
-the fresh root ending `20260718T074653Z-claw` and is accepted as
-`accepted_conservative_scope`. Report/receipt SHAs are `833335bb...851b` and
-`03d1c466...5d43`; byte replay passes and both final reviews report
-P0=0/P1=0/P2=0. Canonical is better than pure ALNS and
-embedded-VNS-disabled across the full, boundary-excluded, and conservative
-clean views. Initial VNS is descriptive and heterogeneous; host-overlap
-throughput remains caveated. F1 is unlocked for a separately frozen ancestry
-decomposition. The earlier root ending `20260718T074602Z-claw` is superseded
-non-evidence. Full closure is in
-`scion/docs/experiments/v0.4/v04-cvrp-b1-mechanism-matrix-postrun-20260718.md`.
+the fresh root ending `20260718T074653Z-claw`; its corrected verdict is
+`accepted_with_input_authority_caveat`. The root sealed the 16 exact `.vrp`
+files but no companion `.sol`, so the loader left BKS/max-route authority unset
+and the run did not reproduce exact R11c input semantics. Original
+report/receipt/root remain immutable and byte-replayable at `833335bb...851b`
+and `03d1c466...5d43`. Nineteen of 256 rows across 9/64 quartets exceed the
+manifest BKS route count; after removing those whole quartets, canonical's
+direction over embedded-VNS-disabled and pure ALNS persists. B1 is therefore
+support-only: it cannot select a profile or authorize promotion, and its single-
+file materializer must not be reused. The independently accepted correction is
+`scion/docs/experiments/v0.4/v04-cvrp-b1-r11c-input-authority-caveat-20260718.md`.
+F1 remains unlocked for a separately frozen ancestry decomposition that seals
+and reparses every exact `.vrp + .sol` pair; B1 is not automatically rerun. The
+earlier root ending `20260718T074602Z-claw` is superseded non-evidence.
 
 Warehouse W1 is complete at `0599fc29`, and W2 is accepted at pushed commit
 `d4d44689`. Its final design SHA is `c0d85d60...671fc7a`, preservation manifest
@@ -1017,7 +1021,9 @@ actual-journal-handle design is frozen and accepted.
 1. The fresh-only boundary is fixed-hash reviewed and the rejected executable-
    classifier/DSL prototype is removed. Keep historical roots read-only and
    non-authoritative.
-2. B1 is accepted with explicit W2-overlap sensitivity and F1 is unlocked.
+2. B1 is accepted only as support evidence with explicit input-authority and
+   W2-overlap caveats; it cannot select a profile or authorize promotion. F1 is
+   unlocked and must seal/reparse exact `.vrp + .sol` pairs.
    Implement and review the frozen W3 manifest/preflight, then launch one fresh
    serial W3 root; independently freeze F1 before its own run.
 3. Keep Checkpoints A and B dormant. Review and freeze the E1 cancellation-

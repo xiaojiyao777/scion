@@ -859,15 +859,20 @@ scientific and lineage-owning artifacts remain in place.
      `90a109b2`. The accepted dry manifest is `0151e2be...882b1`.
    - [Complete] CVRP B1: the serial 16-case x 4-seed x 4-profile matrix at the
      root ending `20260718T074653Z-claw` completed 256/256 valid rows. The
-     accepted verdict is `accepted_conservative_scope`; report/receipt SHAs are
-     `833335bb...851b` / `03d1c466...5d43`, byte replay passes, and independent
-     integrity and science reviews both close P0=0/P1=0/P2=0. Canonical beats
-     pure ALNS and embedded-VNS-disabled in the full, boundary-excluded, and
-     conservative-clean views; overlap throughput remains caveated. The earlier
-     root ending `20260718T074602Z-claw` is superseded non-evidence.
+     corrected verdict is `accepted_with_input_authority_caveat`: its sealed
+     input has all 16 exact `.vrp` files but zero companion `.sol` files, so the
+     runtime did not receive R11c's BKS route-count constraint. The original
+     report/receipt/root stay immutable; `833335bb...851b` /
+     `03d1c466...5d43` still replay exactly. Canonical's direction over embedded-
+     VNS-disabled and pure ALNS persists after removing the 9/64 affected
+     quartets, but B1 is support-only and cannot select a profile or authorize
+     promotion. The accepted caveat analysis is
+     `v04-cvrp-b1-r11c-input-authority-caveat-20260718.md`; do not rerun B1 or
+     reuse its single-file materializer. The earlier root ending
+     `20260718T074602Z-claw` is superseded non-evidence.
    - [Unlocked] CVRP F1: freeze and run H1-only, SWAP-family-only, and cumulative
-     ancestry arms. B1 does not select a production profile or authorize
-     promotion.
+     ancestry arms with every exact `.vrp + .sol` pair sealed and reparsed. B1
+     does not select a production profile or authorize promotion.
    - [Complete] Warehouse W1 reconciles the exact 31-case Protocol population
      at `0599fc29`. W2 is accepted at pushed commit `d4d44689`: final design
      SHA `c0d85d60...671fc7a`, preservation manifest `0ee66091...90dfc9`,
