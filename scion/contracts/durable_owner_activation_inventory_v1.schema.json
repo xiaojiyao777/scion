@@ -1,0 +1,1442 @@
+{
+  "$defs": {
+    "aggregate_artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "aggregate_inventory_sha256": { "$ref": "#/$defs/sha256" },
+        "domain": { "const": "scion.durable-owner-activation.aggregate.v1" },
+        "items": {
+          "items": { "$ref": "#/$defs/aggregate_body" },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": ["aggregate_inventory_sha256", "domain", "items"],
+      "type": "object"
+    },
+    "absent_schema_inventory": {
+      "additionalProperties": false,
+      "properties": {
+        "database_present": { "const": false },
+        "schema_objects": { "maxItems": 0, "type": "array" },
+        "shm_present": { "const": false },
+        "tables": { "maxItems": 0, "type": "array" },
+        "wal_present": { "const": false }
+      },
+      "required": ["database_present", "schema_objects", "shm_present", "tables", "wal_present"],
+      "type": "object"
+    },
+    "aggregate_body": {
+      "additionalProperties": false,
+      "properties": {
+        "aggregate_source_file_facts_sha256": { "$ref": "#/$defs/sha256" },
+        "bundle_counts": {
+          "items": { "$ref": "#/$defs/named_count" },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "condition_counts": {
+          "items": { "$ref": "#/$defs/condition_count" },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "contract_source_sha256": { "$ref": "#/$defs/sha256" },
+        "database_count": { "$ref": "#/$defs/nonnegative_integer" },
+        "databases_jsonl_byte_length": { "$ref": "#/$defs/nonnegative_integer" },
+        "databases_jsonl_sha256": { "$ref": "#/$defs/sha256" },
+        "disposition_counts": {
+          "items": { "$ref": "#/$defs/disposition_count" },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "reason_counts": {
+          "items": { "$ref": "#/$defs/reason_count" },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "root_manifest_after_sha256": { "$ref": "#/$defs/sha256" },
+        "root_manifest_before_sha256": { "$ref": "#/$defs/sha256" },
+        "root_manifests_byte_equal": { "const": true },
+        "root_set_sha256": { "$ref": "#/$defs/sha256" },
+        "scanner_protocol_generation": { "const": "durable-owner-activation-scanner.v1" },
+        "scanner_runtime_sha256": { "$ref": "#/$defs/sha256" },
+        "scanner_source_sha256": { "$ref": "#/$defs/sha256" },
+        "schema_object_total": { "$ref": "#/$defs/nonnegative_integer" },
+        "table_total": { "$ref": "#/$defs/nonnegative_integer" },
+        "typed_row_total": { "$ref": "#/$defs/nonnegative_integer" }
+      },
+      "required": [
+        "aggregate_source_file_facts_sha256",
+        "bundle_counts",
+        "condition_counts",
+        "contract_source_sha256",
+        "database_count",
+        "databases_jsonl_byte_length",
+        "databases_jsonl_sha256",
+        "disposition_counts",
+        "reason_counts",
+        "root_manifest_after_sha256",
+        "root_manifest_before_sha256",
+        "root_manifests_byte_equal",
+        "root_set_sha256",
+        "scanner_protocol_generation",
+        "scanner_runtime_sha256",
+        "scanner_source_sha256",
+        "schema_object_total",
+        "table_total",
+        "typed_row_total"
+      ],
+      "type": "object"
+    },
+    "attempt_id_envelope": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": { "const": "scion.durable-owner-activation.attempt-id.v1" },
+        "items": {
+          "items": { "$ref": "#/$defs/attempt_id_item" },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": ["domain", "items"],
+      "type": "object"
+    },
+    "attempt_id_item": {
+      "additionalProperties": false,
+      "properties": {
+        "attempt_ordinal": { "minimum": 1, "type": "integer" },
+        "cutover_id": { "$ref": "#/$defs/sha256" },
+        "previous_attempt_receipt_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["attempt_ordinal", "cutover_id", "previous_attempt_receipt_sha256"],
+      "type": "object"
+    },
+    "canonical_row": {
+      "additionalProperties": false,
+      "properties": {
+        "column_names": { "items": { "type": "string" }, "type": "array" },
+        "row_sha256": { "$ref": "#/$defs/sha256" },
+        "values": { "items": { "$ref": "#/$defs/typed_value" }, "type": "array" }
+      },
+      "required": ["column_names", "row_sha256", "values"],
+      "type": "object"
+    },
+    "canonical_row_preimage": {
+      "additionalProperties": false,
+      "properties": {
+        "column_names": { "items": { "type": "string" }, "type": "array" },
+        "values": { "items": { "$ref": "#/$defs/typed_value" }, "type": "array" }
+      },
+      "required": ["column_names", "values"],
+      "type": "object"
+    },
+    "canonical_row_branch_final_owner_preimage": {
+      "additionalProperties": false,
+      "properties": {
+        "column_names": {
+          "type": "array",
+          "const": [
+            "branch_id",
+            "state",
+            "base_champion_id",
+            "base_champion_hash",
+            "lineage_id",
+            "current_code_hash",
+            "last_clean_code_hash",
+            "screening_expand_count",
+            "validation_expand_count",
+            "failure_codes",
+            "created_at",
+            "updated_at",
+            "direction",
+            "weight_revision",
+            "branch_code_status",
+            "branch_evidence_summary_json",
+            "infra_block_count",
+            "owner_revision",
+            "owner_protocol_generation"
+          ]
+        },
+        "values": {
+          "items": false,
+          "maxItems": 19,
+          "minItems": 19,
+          "prefixItems": [
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_integer" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_nullable_text" },
+            { "$ref": "#/$defs/final_owner_nullable_text" },
+            { "$ref": "#/$defs/final_owner_integer" },
+            { "$ref": "#/$defs/final_owner_integer" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_nullable_text" },
+            { "$ref": "#/$defs/final_owner_integer" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_integer" },
+            { "$ref": "#/$defs/final_owner_integer" },
+            { "$ref": "#/$defs/final_owner_text" }
+          ],
+          "type": "array"
+        }
+      },
+      "required": ["column_names", "values"],
+      "type": "object"
+    },
+    "canonical_row_hypothesis_final_owner_preimage": {
+      "additionalProperties": false,
+      "properties": {
+        "column_names": {
+          "type": "array",
+          "const": [
+            "hypothesis_id",
+            "branch_id",
+            "change_locus",
+            "action",
+            "status",
+            "target_file",
+            "parent_hypothesis_id",
+            "suggested_weight",
+            "hypothesis_text",
+            "created_at",
+            "base_champion_version",
+            "family_id",
+            "family_source",
+            "taxonomy_version",
+            "predicted_direction",
+            "proposal_digest",
+            "owner_revision",
+            "owner_protocol_generation"
+          ]
+        },
+        "values": {
+          "items": false,
+          "maxItems": 18,
+          "minItems": 18,
+          "prefixItems": [
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_nullable_text" },
+            { "$ref": "#/$defs/final_owner_nullable_text" },
+            { "$ref": "#/$defs/final_owner_optional_weight" },
+            { "$ref": "#/$defs/final_owner_nullable_text" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_integer" },
+            { "$ref": "#/$defs/final_owner_nullable_text" },
+            { "$ref": "#/$defs/final_owner_nullable_text" },
+            { "$ref": "#/$defs/final_owner_nullable_text" },
+            { "$ref": "#/$defs/final_owner_text" },
+            { "$ref": "#/$defs/final_owner_nullable_text" },
+            { "$ref": "#/$defs/final_owner_integer" },
+            { "$ref": "#/$defs/final_owner_text" }
+          ],
+          "type": "array"
+        }
+      },
+      "required": ["column_names", "values"],
+      "type": "object"
+    },
+    "condition_count": {
+      "additionalProperties": false,
+      "properties": {
+        "count": { "$ref": "#/$defs/nonnegative_integer" },
+        "name": {
+          "enum": [
+            "generated_pair",
+            "legacy_extra",
+            "legacy_hypothesis",
+            "malformed_database",
+            "missing_base_champion_version_schema",
+            "missing_family_schema",
+            "missing_predicted_direction_schema",
+            "multi_campaign_database",
+            "no_campaign_id_database",
+            "orphan_hypothesis"
+          ]
+        }
+      },
+      "required": ["count", "name"],
+      "type": "object"
+    },
+    "database_artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "database_inventory_sha256": { "$ref": "#/$defs/sha256" },
+        "domain": { "const": "scion.durable-owner-activation.database.v1" },
+        "items": {
+          "items": { "$ref": "#/$defs/database_body" },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": ["database_inventory_sha256", "domain", "items"],
+      "type": "object"
+    },
+    "database_body": {
+      "additionalProperties": false,
+      "properties": {
+        "active_hypothesis_conflict_count": { "oneOf": [{ "$ref": "#/$defs/nonnegative_integer" }, { "$ref": "#/$defs/unavailable" }] },
+        "active_hypothesis_conflict_ids": { "oneOf": [{ "items": { "type": "string" }, "type": "array", "uniqueItems": true }, { "$ref": "#/$defs/unavailable" }] },
+        "active_hypothesis_conflict_ids_sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "$ref": "#/$defs/unavailable" }] },
+        "adoption_schema_rows": { "oneOf": [{ "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" }, { "$ref": "#/$defs/unavailable" }] },
+        "binding_schema_rows": { "oneOf": [{ "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" }, { "$ref": "#/$defs/unavailable" }] },
+        "branch_count": { "oneOf": [{ "$ref": "#/$defs/nonnegative_integer" }, { "$ref": "#/$defs/unavailable" }] },
+        "branch_decode_outcomes": { "oneOf": [{ "items": { "$ref": "#/$defs/decode_outcome" }, "type": "array" }, { "$ref": "#/$defs/unavailable" }] },
+        "bundle_facts": { "items": { "$ref": "#/$defs/file_fact" }, "type": "array" },
+        "bundle_facts_sha256": { "$ref": "#/$defs/sha256" },
+        "bundle_copy_witness": { "$ref": "#/$defs/bundle_copy_witness" },
+        "campaign_consistency": { "oneOf": [{ "enum": ["conflict", "missing_for_history", "multiple", "not_applicable", "single_exact"] }, { "$ref": "#/$defs/unavailable" }] },
+        "campaign_identity": { "oneOf": [{ "type": ["null", "string"] }, { "$ref": "#/$defs/unavailable" }] },
+        "candidate_ownership_mode": { "oneOf": [{ "enum": ["candidate_snapshot_v1", "legacy_verified_commit_v1", "not_applicable"] }, { "$ref": "#/$defs/unavailable" }] },
+        "completion_schema_rows": { "oneOf": [{ "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" }, { "$ref": "#/$defs/unavailable" }] },
+        "contract_source_sha256": { "$ref": "#/$defs/sha256" },
+        "decode_error_code": { "oneOf": [{ "$ref": "#/$defs/inventory_error_code" }, { "type": "null" }] },
+        "decode_error_location": {
+          "oneOf": [
+            { "$ref": "#/$defs/value_error_location" },
+            { "type": "null" }
+          ]
+        },
+        "decode_error_stage": { "oneOf": [{ "$ref": "#/$defs/inventory_error_stage" }, { "type": "null" }] },
+        "disposition": { "$ref": "#/$defs/disposition" },
+        "generated_pairs": { "oneOf": [{ "items": { "$ref": "#/$defs/generated_pair" }, "type": "array" }, { "$ref": "#/$defs/unavailable" }] },
+        "hypothesis_count": { "oneOf": [{ "$ref": "#/$defs/nonnegative_integer" }, { "$ref": "#/$defs/unavailable" }] },
+        "hypothesis_decode_outcomes": { "oneOf": [{ "items": { "$ref": "#/$defs/decode_outcome" }, "type": "array" }, { "$ref": "#/$defs/unavailable" }] },
+        "integrity_check_rows": { "oneOf": [{ "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" }, { "$ref": "#/$defs/unavailable" }] },
+        "inventory_state": { "enum": ["available", "unavailable"] },
+        "foreign_key_check_rows": { "oneOf": [{ "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" }, { "$ref": "#/$defs/unavailable" }] },
+        "legacy_hypotheses": { "oneOf": [{ "items": { "$ref": "#/$defs/legacy_hypothesis" }, "type": "array" }, { "$ref": "#/$defs/unavailable" }] },
+        "logical_rows_sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "$ref": "#/$defs/unavailable" }] },
+        "observed_campaign_ids": { "oneOf": [{ "items": { "type": "string" }, "type": "array", "uniqueItems": true }, { "$ref": "#/$defs/unavailable" }] },
+        "orphan_hypothesis_count": { "oneOf": [{ "$ref": "#/$defs/nonnegative_integer" }, { "$ref": "#/$defs/unavailable" }] },
+        "orphan_hypothesis_ids": { "oneOf": [{ "items": { "type": "string" }, "type": "array", "uniqueItems": true }, { "$ref": "#/$defs/unavailable" }] },
+        "orphan_hypothesis_ids_sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "$ref": "#/$defs/unavailable" }] },
+        "owner_presence_bitmaps": { "oneOf": [{ "items": { "$ref": "#/$defs/presence_bitmap" }, "type": "array" }, { "$ref": "#/$defs/unavailable" }] },
+        "reason_set_sha256": { "$ref": "#/$defs/sha256" },
+        "reasons": { "items": { "$ref": "#/$defs/reason" }, "type": "array", "uniqueItems": true },
+        "relative_database_path": { "$ref": "#/$defs/relative_path" },
+        "relative_database_path_sha256": { "$ref": "#/$defs/sha256" },
+        "scanner_protocol_generation": { "const": "durable-owner-activation-scanner.v1" },
+        "scanner_runtime": { "$ref": "#/$defs/scanner_runtime" },
+        "scanner_runtime_sha256": { "$ref": "#/$defs/sha256" },
+        "scanner_source_sha256": { "$ref": "#/$defs/sha256" },
+        "schema_inventory": { "oneOf": [{ "$ref": "#/$defs/absent_schema_inventory" }, { "$ref": "#/$defs/schema_inventory" }, { "$ref": "#/$defs/unavailable" }] },
+        "schema_inventory_sha256": { "oneOf": [{ "$ref": "#/$defs/nullable_sha256" }, { "$ref": "#/$defs/unavailable" }] },
+        "storage_signature": { "$ref": "#/$defs/storage_signature" },
+        "tables": { "oneOf": [{ "items": { "$ref": "#/$defs/table_inventory" }, "type": "array" }, { "$ref": "#/$defs/unavailable" }] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "inventory_state": { "const": "available" } } },
+          "then": {
+            "properties": {
+              "active_hypothesis_conflict_count": { "not": { "$ref": "#/$defs/unavailable" } },
+              "active_hypothesis_conflict_ids": { "not": { "$ref": "#/$defs/unavailable" } },
+              "active_hypothesis_conflict_ids_sha256": { "$ref": "#/$defs/sha256" },
+              "adoption_schema_rows": { "not": { "$ref": "#/$defs/unavailable" } },
+              "binding_schema_rows": { "not": { "$ref": "#/$defs/unavailable" } },
+              "branch_count": { "not": { "$ref": "#/$defs/unavailable" } },
+              "branch_decode_outcomes": { "not": { "$ref": "#/$defs/unavailable" } },
+              "campaign_consistency": { "not": { "$ref": "#/$defs/unavailable" } },
+              "campaign_identity": { "not": { "$ref": "#/$defs/unavailable" } },
+              "candidate_ownership_mode": { "not": { "$ref": "#/$defs/unavailable" } },
+              "completion_schema_rows": { "not": { "$ref": "#/$defs/unavailable" } },
+              "decode_error_code": { "type": "null" },
+              "decode_error_location": { "type": "null" },
+              "decode_error_stage": { "type": "null" },
+              "foreign_key_check_rows": { "not": { "$ref": "#/$defs/unavailable" } },
+              "generated_pairs": { "not": { "$ref": "#/$defs/unavailable" } },
+              "hypothesis_count": { "not": { "$ref": "#/$defs/unavailable" } },
+              "hypothesis_decode_outcomes": { "not": { "$ref": "#/$defs/unavailable" } },
+              "integrity_check_rows": { "not": { "$ref": "#/$defs/unavailable" } },
+              "legacy_hypotheses": { "not": { "$ref": "#/$defs/unavailable" } },
+              "logical_rows_sha256": { "$ref": "#/$defs/sha256" },
+              "observed_campaign_ids": { "not": { "$ref": "#/$defs/unavailable" } },
+              "orphan_hypothesis_count": { "not": { "$ref": "#/$defs/unavailable" } },
+              "orphan_hypothesis_ids": { "not": { "$ref": "#/$defs/unavailable" } },
+              "orphan_hypothesis_ids_sha256": { "$ref": "#/$defs/sha256" },
+              "owner_presence_bitmaps": { "not": { "$ref": "#/$defs/unavailable" } },
+              "schema_inventory": { "not": { "$ref": "#/$defs/unavailable" } },
+              "schema_inventory_sha256": { "$ref": "#/$defs/sha256" },
+              "tables": { "not": { "$ref": "#/$defs/unavailable" } }
+            }
+          },
+          "else": {
+            "properties": {
+              "active_hypothesis_conflict_count": { "$ref": "#/$defs/unavailable" },
+              "active_hypothesis_conflict_ids": { "$ref": "#/$defs/unavailable" },
+              "active_hypothesis_conflict_ids_sha256": { "$ref": "#/$defs/unavailable" },
+              "adoption_schema_rows": { "$ref": "#/$defs/unavailable" },
+              "binding_schema_rows": { "$ref": "#/$defs/unavailable" },
+              "branch_count": { "$ref": "#/$defs/unavailable" },
+              "branch_decode_outcomes": { "$ref": "#/$defs/unavailable" },
+              "campaign_consistency": { "$ref": "#/$defs/unavailable" },
+              "campaign_identity": { "$ref": "#/$defs/unavailable" },
+              "candidate_ownership_mode": { "$ref": "#/$defs/unavailable" },
+              "completion_schema_rows": { "$ref": "#/$defs/unavailable" },
+              "decode_error_code": { "$ref": "#/$defs/inventory_error_code" },
+              "decode_error_stage": { "$ref": "#/$defs/inventory_error_stage" },
+              "foreign_key_check_rows": { "$ref": "#/$defs/unavailable" },
+              "generated_pairs": { "$ref": "#/$defs/unavailable" },
+              "hypothesis_count": { "$ref": "#/$defs/unavailable" },
+              "hypothesis_decode_outcomes": { "$ref": "#/$defs/unavailable" },
+              "integrity_check_rows": { "$ref": "#/$defs/unavailable" },
+              "legacy_hypotheses": { "$ref": "#/$defs/unavailable" },
+              "logical_rows_sha256": { "$ref": "#/$defs/unavailable" },
+              "observed_campaign_ids": { "$ref": "#/$defs/unavailable" },
+              "orphan_hypothesis_count": { "$ref": "#/$defs/unavailable" },
+              "orphan_hypothesis_ids": { "$ref": "#/$defs/unavailable" },
+              "orphan_hypothesis_ids_sha256": { "$ref": "#/$defs/unavailable" },
+              "owner_presence_bitmaps": { "$ref": "#/$defs/unavailable" },
+              "storage_signature": { "const": "unsupported" },
+              "tables": { "$ref": "#/$defs/unavailable" }
+            },
+            "oneOf": [
+              { "properties": { "decode_error_code": { "enum": ["path_nonregular", "path_symlink"] }, "decode_error_stage": { "const": "path_lstat" } } },
+              { "properties": { "decode_error_code": { "const": "bundle_incomplete" }, "decode_error_stage": { "const": "bundle_classification" } } },
+              { "properties": { "decode_error_code": { "enum": ["sqlite_malformed", "sqlite_open_failed"] }, "decode_error_stage": { "const": "sqlite_open" } } },
+              { "properties": { "decode_error_code": { "enum": ["sqlite_malformed", "sqlite_read_failed"] }, "decode_error_stage": { "const": "sqlite_schema" } } },
+              { "properties": { "decode_error_code": { "const": "unsupported_virtual_or_shadow_schema" }, "decode_error_stage": { "const": "logical_tables" } } },
+              { "properties": { "decode_error_code": { "enum": ["sqlite_malformed", "sqlite_read_failed"] }, "decode_error_stage": { "const": "sqlite_rows" } } },
+              {
+                "properties": {
+                  "decode_error_code": { "const": "invalid_unicode_text" },
+                  "decode_error_location": { "properties": { "value_kind": { "const": "text" } } },
+                  "decode_error_stage": { "const": "sqlite_value" }
+                }
+              },
+              {
+                "properties": {
+                  "decode_error_code": { "const": "unsupported_sqlite_value" },
+                  "decode_error_location": { "properties": { "value_kind": { "const": "unknown" } } },
+                  "decode_error_stage": { "const": "sqlite_value" }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": { "properties": { "decode_error_stage": { "type": "null" } } },
+          "then": { "properties": { "decode_error_code": { "type": "null" } } },
+          "else": { "properties": { "decode_error_code": { "$ref": "#/$defs/inventory_error_code" } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "decode_error_stage": { "enum": ["logical_tables", "sqlite_rows", "sqlite_value"] },
+              "inventory_state": { "const": "unavailable" }
+            }
+          },
+          "then": {
+            "properties": {
+              "schema_inventory": { "$ref": "#/$defs/schema_inventory" },
+              "schema_inventory_sha256": { "$ref": "#/$defs/sha256" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "decode_error_stage": { "enum": ["bundle_classification", "path_lstat", "sqlite_open", "sqlite_schema"] },
+              "inventory_state": { "const": "unavailable" }
+            }
+          },
+          "then": {
+            "properties": {
+              "schema_inventory": { "$ref": "#/$defs/unavailable" },
+              "schema_inventory_sha256": { "$ref": "#/$defs/unavailable" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "decode_error_stage": { "const": "sqlite_value" } } },
+          "then": { "properties": { "decode_error_location": { "$ref": "#/$defs/value_error_location" } } },
+          "else": { "properties": { "decode_error_location": { "type": "null" } } }
+        }
+      ],
+      "required": [
+        "active_hypothesis_conflict_count",
+        "active_hypothesis_conflict_ids",
+        "active_hypothesis_conflict_ids_sha256",
+        "adoption_schema_rows",
+        "binding_schema_rows",
+        "branch_count",
+        "branch_decode_outcomes",
+        "bundle_facts",
+        "bundle_facts_sha256",
+        "bundle_copy_witness",
+        "campaign_consistency",
+        "campaign_identity",
+        "candidate_ownership_mode",
+        "completion_schema_rows",
+        "contract_source_sha256",
+        "decode_error_code",
+        "decode_error_location",
+        "decode_error_stage",
+        "disposition",
+        "foreign_key_check_rows",
+        "generated_pairs",
+        "hypothesis_count",
+        "hypothesis_decode_outcomes",
+        "integrity_check_rows",
+        "inventory_state",
+        "legacy_hypotheses",
+        "logical_rows_sha256",
+        "observed_campaign_ids",
+        "orphan_hypothesis_count",
+        "orphan_hypothesis_ids",
+        "orphan_hypothesis_ids_sha256",
+        "owner_presence_bitmaps",
+        "reason_set_sha256",
+        "reasons",
+        "relative_database_path",
+        "relative_database_path_sha256",
+        "scanner_protocol_generation",
+        "scanner_runtime",
+        "scanner_runtime_sha256",
+        "scanner_source_sha256",
+        "schema_inventory",
+        "schema_inventory_sha256",
+        "storage_signature",
+        "tables"
+      ],
+      "type": "object"
+    },
+    "decode_outcome": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_id": { "type": "string" },
+        "error_code": {
+          "oneOf": [
+            { "$ref": "#/$defs/strict_decode_error_code" },
+            { "type": "null" }
+          ]
+        },
+        "ok": { "type": "boolean" },
+        "presence_bitmap_sha256": { "$ref": "#/$defs/sha256" },
+        "source_row_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "ok": { "const": true } } },
+          "then": { "properties": { "error_code": { "type": "null" } } },
+          "else": { "properties": { "error_code": { "$ref": "#/$defs/strict_decode_error_code" } } }
+        }
+      ],
+      "required": ["entity_id", "error_code", "ok", "presence_bitmap_sha256", "source_row_sha256"],
+      "type": "object"
+    },
+    "database_file_fact": {
+      "additionalProperties": false,
+      "properties": {
+        "database_path": { "$ref": "#/$defs/relative_path" },
+        "file_fact": { "$ref": "#/$defs/file_fact" }
+      },
+      "required": ["database_path", "file_fact"],
+      "type": "object"
+    },
+    "disposition": {
+      "enum": [
+        "already_active_exact",
+        "archive_only",
+        "exact_completion_only_adopt",
+        "fresh_empty_activate",
+        "integrity_hold",
+        "malformed_quarantine"
+      ]
+    },
+    "disposition_count": {
+      "additionalProperties": false,
+      "properties": {
+        "count": { "$ref": "#/$defs/nonnegative_integer" },
+        "disposition": { "$ref": "#/$defs/disposition" }
+      },
+      "required": ["count", "disposition"],
+      "type": "object"
+    },
+    "file_fact": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": { "type": ["integer", "null"], "minimum": 0 },
+        "content_state": { "enum": ["absent", "available", "unavailable_nonregular"] },
+        "entry_kind": { "enum": ["absent_target", "main", "shm", "unknown_sidecar", "wal"] },
+        "file_sha256": { "$ref": "#/$defs/nullable_sha256" },
+        "lstat": {
+          "oneOf": [
+            { "$ref": "#/$defs/lstat" },
+            { "type": "null" }
+          ]
+        },
+        "present": { "type": "boolean" },
+        "relative_path": { "$ref": "#/$defs/relative_path" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "content_state": { "const": "absent" } } },
+          "then": {
+            "properties": {
+              "byte_length": { "type": "null" },
+              "file_sha256": { "type": "null" },
+              "lstat": { "type": "null" },
+              "present": { "const": false }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "content_state": { "const": "available" } } },
+          "then": {
+            "properties": {
+              "byte_length": { "$ref": "#/$defs/nonnegative_integer" },
+              "file_sha256": { "$ref": "#/$defs/sha256" },
+              "lstat": { "$ref": "#/$defs/lstat" },
+              "present": { "const": true }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "content_state": { "const": "unavailable_nonregular" } } },
+          "then": {
+            "properties": {
+              "byte_length": { "type": "null" },
+              "file_sha256": { "type": "null" },
+              "lstat": { "$ref": "#/$defs/lstat" },
+              "present": { "const": true }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "entry_kind": { "const": "absent_target" } } },
+          "then": { "properties": { "content_state": { "const": "absent" } } }
+        }
+      ],
+      "required": ["byte_length", "content_state", "entry_kind", "file_sha256", "lstat", "present", "relative_path"],
+      "type": "object"
+    },
+    "field_digest_item": {
+      "additionalProperties": false,
+      "properties": {
+        "field_name": { "type": "string" },
+        "value_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["field_name", "value_sha256"],
+      "type": "object"
+    },
+    "field_value_item": {
+      "additionalProperties": false,
+      "properties": {
+        "field_name": { "type": "string" },
+        "value": { "$ref": "#/$defs/typed_value" }
+      },
+      "required": ["field_name", "value"],
+      "type": "object"
+    },
+    "final_owner_integer": {
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "integer" },
+        "value": { "maximum": 9223372036854775807, "minimum": 0, "type": "integer" }
+      },
+      "required": ["type", "value"],
+      "type": "object"
+    },
+    "final_owner_nullable_text": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": { "type": { "const": "null" }, "value": { "type": "null" } },
+          "required": ["type", "value"],
+          "type": "object"
+        },
+        { "$ref": "#/$defs/final_owner_text" }
+      ]
+    },
+    "final_owner_optional_weight": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": { "type": { "const": "null" }, "value": { "type": "null" } },
+          "required": ["type", "value"],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "bits": {
+              "allOf": [
+                { "pattern": "^[0-9a-f]{16}$", "type": "string" },
+                { "not": { "pattern": "^(?:7ff|fff)[0-9a-f]{13}$" } },
+                { "not": { "const": "8000000000000000" } }
+              ]
+            },
+            "type": { "const": "real" }
+          },
+          "required": ["bits", "type"],
+          "type": "object"
+        }
+      ]
+    },
+    "final_owner_text": {
+      "additionalProperties": false,
+      "properties": {
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "type": { "const": "text" },
+        "value": { "type": "string" }
+      },
+      "required": ["sha256", "type", "value"],
+      "type": "object"
+    },
+    "bundle_copy_witness": {
+      "additionalProperties": false,
+      "properties": {
+        "copy_result": { "enum": ["not_applicable_absent", "stable_equal", "unavailable_bundle_incomplete", "unavailable_nonregular"] },
+        "private_copy_facts": {
+          "items": { "$ref": "#/$defs/private_copy_fact" },
+          "type": "array"
+        },
+        "private_copy_facts_sha256": { "$ref": "#/$defs/sha256" },
+        "source_pre_facts": { "items": { "$ref": "#/$defs/file_fact" }, "type": "array" },
+        "source_pre_facts_sha256": { "$ref": "#/$defs/sha256" },
+        "source_pre_post_byte_equal": { "const": true },
+        "source_post_facts": { "items": { "$ref": "#/$defs/file_fact" }, "type": "array" },
+        "source_post_facts_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "copy_result": { "const": "not_applicable_absent" } } },
+          "then": {
+            "properties": {
+              "private_copy_facts": { "maxItems": 0 },
+              "source_post_facts": { "maxItems": 0 },
+              "source_pre_facts": { "maxItems": 0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "copy_result": { "const": "stable_equal" } } },
+          "then": {
+            "properties": {
+              "private_copy_facts": { "minItems": 1 },
+              "source_post_facts": { "minItems": 1 },
+              "source_pre_facts": { "minItems": 1 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "copy_result": { "const": "unavailable_bundle_incomplete" } } },
+          "then": {
+            "properties": {
+              "private_copy_facts": { "maxItems": 0 },
+              "source_post_facts": { "minItems": 1 },
+              "source_pre_facts": { "minItems": 1 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "copy_result": { "const": "unavailable_nonregular" } } },
+          "then": {
+            "properties": {
+              "private_copy_facts": { "maxItems": 0 },
+              "source_post_facts": { "minItems": 1 },
+              "source_pre_facts": { "minItems": 1 }
+            }
+          }
+        }
+      ],
+      "required": [
+        "copy_result",
+        "private_copy_facts",
+        "private_copy_facts_sha256",
+        "source_pre_facts",
+        "source_pre_facts_sha256",
+        "source_pre_post_byte_equal",
+        "source_post_facts",
+        "source_post_facts_sha256"
+      ],
+      "type": "object"
+    },
+    "inventory_error_code": {
+      "enum": [
+        "bundle_incomplete",
+        "invalid_unicode_text",
+        "path_nonregular",
+        "path_symlink",
+        "sqlite_malformed",
+        "sqlite_open_failed",
+        "sqlite_read_failed",
+        "unsupported_virtual_or_shadow_schema",
+        "unsupported_sqlite_value"
+      ]
+    },
+    "inventory_error_stage": {
+      "enum": [
+        "bundle_classification",
+        "logical_tables",
+        "path_lstat",
+        "sqlite_open",
+        "sqlite_rows",
+        "sqlite_schema",
+        "sqlite_value"
+      ]
+    },
+    "generated_pair": {
+      "additionalProperties": false,
+      "properties": {
+        "branch_id": { "type": "string" },
+        "campaign_id": { "type": "string" },
+        "generated_complete_row_sha256": { "$ref": "#/$defs/sha256" },
+        "generated_event_id": { "type": "string" },
+        "generated_strict_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "hypothesis_id": { "type": "string" },
+        "provider_attempt_id": { "type": "string" },
+        "started_complete_row_sha256": { "$ref": "#/$defs/sha256" },
+        "started_event_id": { "type": "string" },
+        "started_strict_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "transition_group_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": [
+        "branch_id",
+        "campaign_id",
+        "generated_complete_row_sha256",
+        "generated_event_id",
+        "generated_strict_identity_sha256",
+        "hypothesis_id",
+        "provider_attempt_id",
+        "started_complete_row_sha256",
+        "started_event_id",
+        "started_strict_identity_sha256",
+        "transition_group_sha256"
+      ],
+      "type": "object"
+    },
+    "git_commit": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+    "legacy_hypothesis": {
+      "additionalProperties": false,
+      "properties": {
+        "branch_id": { "type": ["null", "string"] },
+        "complete_source_row_sha256": { "$ref": "#/$defs/sha256" },
+        "extra_fields_sha256": { "$ref": "#/$defs/sha256" },
+        "final_owner_eligible": { "type": "boolean" },
+        "final_owner_row_sha256": { "$ref": "#/$defs/nullable_sha256" },
+        "hypothesis_id": { "type": "string" },
+        "presence_bitmap_sha256": { "$ref": "#/$defs/sha256" },
+        "proposal_authority_state": { "const": "unproven" },
+        "status": { "type": ["null", "string"] },
+        "text_value_digests_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "final_owner_eligible": { "const": true } } },
+          "then": { "properties": { "final_owner_row_sha256": { "$ref": "#/$defs/sha256" } } },
+          "else": { "properties": { "final_owner_row_sha256": { "type": "null" } } }
+        }
+      ],
+      "required": [
+        "branch_id",
+        "complete_source_row_sha256",
+        "extra_fields_sha256",
+        "final_owner_eligible",
+        "final_owner_row_sha256",
+        "hypothesis_id",
+        "presence_bitmap_sha256",
+        "proposal_authority_state",
+        "status",
+        "text_value_digests_sha256"
+      ],
+      "type": "object"
+    },
+    "lstat": {
+      "additionalProperties": false,
+      "properties": {
+        "ctime_ns": { "type": "integer" },
+        "device": { "$ref": "#/$defs/nonnegative_integer" },
+        "gid": { "$ref": "#/$defs/nonnegative_integer" },
+        "inode": { "$ref": "#/$defs/nonnegative_integer" },
+        "mode": { "$ref": "#/$defs/nonnegative_integer" },
+        "mtime_ns": { "type": "integer" },
+        "nlink": { "$ref": "#/$defs/nonnegative_integer" },
+        "size": { "$ref": "#/$defs/nonnegative_integer" },
+        "uid": { "$ref": "#/$defs/nonnegative_integer" }
+      },
+      "required": ["ctime_ns", "device", "gid", "inode", "mode", "mtime_ns", "nlink", "size", "uid"],
+      "type": "object"
+    },
+    "named_count": {
+      "additionalProperties": false,
+      "properties": {
+        "count": { "$ref": "#/$defs/nonnegative_integer" },
+        "name": { "enum": ["main", "main_only_bundle", "main_wal_shm_bundle", "shm", "wal"] }
+      },
+      "required": ["count", "name"],
+      "type": "object"
+    },
+    "nonnegative_integer": { "minimum": 0, "type": "integer" },
+    "nullable_sha256": {
+      "oneOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "presence_bitmap": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_id": { "type": "string" },
+        "fields": {
+          "items": { "$ref": "#/$defs/presence_field" },
+          "type": "array"
+        },
+        "presence_bitmap_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["entity_id", "fields", "presence_bitmap_sha256"],
+      "type": "object"
+    },
+    "private_copy_fact": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": { "$ref": "#/$defs/nonnegative_integer" },
+        "entry_kind": { "enum": ["main", "shm", "wal"] },
+        "file_sha256": { "$ref": "#/$defs/sha256" },
+        "source_device": { "$ref": "#/$defs/nonnegative_integer" },
+        "source_inode": { "$ref": "#/$defs/nonnegative_integer" }
+      },
+      "required": ["byte_length", "entry_kind", "file_sha256", "source_device", "source_inode"],
+      "type": "object"
+    },
+    "presence_field": {
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "physical_state": { "enum": ["absent", "null", "present"] }
+      },
+      "required": ["name", "physical_state"],
+      "type": "object"
+    },
+    "reason": {
+      "enum": [
+        "active_evaluation_lease",
+        "active_generation_mismatch",
+        "already_active_exact",
+        "binding_natural_key_conflict",
+        "campaign_identity_conflict",
+        "campaign_identity_missing_for_history",
+        "campaign_ids_multiple",
+        "candidate_mode_conflict",
+        "canonical_value_decode_failed",
+        "completion_owner_conflict",
+        "duplicate_active_hypothesis",
+        "existing_activation_digest_mismatch",
+        "existing_empty_target_forbidden",
+        "foreign_key_check_failed",
+        "fresh_path_absent",
+        "historical_nonterminal_h",
+        "integrity_check_failed",
+        "legacy_completion_only",
+        "legacy_extra_preserved",
+        "legacy_generated_pair_completion_only",
+        "legacy_proposal_authority_unproved",
+        "missing_final_branch_field",
+        "missing_final_hypothesis_field",
+        "no_durable_primary_identity",
+        "orphan_hypothesis",
+        "partial_activation_schema",
+        "partial_generation_group",
+        "partial_owner_schema",
+        "reason_combination_invalid",
+        "source_bundle_incomplete",
+        "source_path_nonregular",
+        "source_path_symlink",
+        "sqlite_malformed",
+        "sqlite_open_failed",
+        "sqlite_read_failed",
+        "strict_branch_decode_failed",
+        "strict_champion_decode_failed",
+        "strict_completion_decode_failed",
+        "strict_event_decode_failed",
+        "strict_hypothesis_decode_failed",
+        "unsupported_schema_signature",
+        "unsupported_virtual_or_shadow_schema"
+      ]
+    },
+    "reason_count": {
+      "additionalProperties": false,
+      "properties": {
+        "count": { "$ref": "#/$defs/nonnegative_integer" },
+        "reason": { "$ref": "#/$defs/reason" }
+      },
+      "required": ["count", "reason"],
+      "type": "object"
+    },
+    "relative_path": {
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\x00)(?!.*\\/$).+$",
+      "type": "string"
+    },
+    "root_manifest_artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": { "const": "scion.durable-owner-activation.root-manifest.v1" },
+        "items": { "items": { "$ref": "#/$defs/file_fact" }, "type": "array" },
+        "root_manifest_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["domain", "items", "root_manifest_sha256"],
+      "type": "object"
+    },
+    "root_set_artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": { "const": "scion.durable-owner-activation.root-set.v1" },
+        "items": {
+          "items": { "$ref": "#/$defs/root_set_body" },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        },
+        "root_set_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["domain", "items", "root_set_sha256"],
+      "type": "object"
+    },
+    "root_set_body": {
+      "additionalProperties": false,
+      "properties": {
+        "absolute_context_path_set_sha256": { "$ref": "#/$defs/sha256" },
+        "absolute_root_string_sha256": { "$ref": "#/$defs/sha256" },
+        "contract_source_sha256": { "$ref": "#/$defs/sha256" },
+        "database_count": { "$ref": "#/$defs/nonnegative_integer" },
+        "database_paths": { "items": { "$ref": "#/$defs/relative_path" }, "type": "array", "uniqueItems": true },
+        "portable_relative_path_set_sha256": { "$ref": "#/$defs/sha256" },
+        "scanner_protocol_generation": { "const": "durable-owner-activation-scanner.v1" },
+        "scanner_runtime_sha256": { "$ref": "#/$defs/sha256" },
+        "scanner_source_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": [
+        "absolute_context_path_set_sha256",
+        "absolute_root_string_sha256",
+        "contract_source_sha256",
+        "database_count",
+        "database_paths",
+        "portable_relative_path_set_sha256",
+        "scanner_protocol_generation",
+        "scanner_runtime_sha256",
+        "scanner_source_sha256"
+      ],
+      "type": "object"
+    },
+    "scanner_runtime": {
+      "additionalProperties": false,
+      "properties": {
+        "python_cache_tag": { "type": "string" },
+        "python_implementation": { "type": "string" },
+        "python_sqlite3_wrapper_version": { "type": "string" },
+        "python_version": { "type": "string" },
+        "sqlite_compile_options": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+        "sqlite_library_version": { "type": "string" },
+        "sqlite_source_id": { "type": "string" },
+        "sys_byteorder": { "enum": ["big", "little"] },
+        "unicode_database_version": { "type": "string" }
+      },
+      "required": [
+        "python_cache_tag",
+        "python_implementation",
+        "python_sqlite3_wrapper_version",
+        "python_version",
+        "sqlite_compile_options",
+        "sqlite_library_version",
+        "sqlite_source_id",
+        "sys_byteorder",
+        "unicode_database_version"
+      ],
+      "type": "object"
+    },
+    "selection_manifest_preimage": {
+      "additionalProperties": false,
+      "properties": {
+        "activation_protocol_generation": { "const": "durable-owner-historical-activation.v1" },
+        "aggregate_inventory_sha256": { "$ref": "#/$defs/sha256" },
+        "backup_directory_relative_path": { "$ref": "#/$defs/relative_path" },
+        "binding_protocol_generation": { "const": "proposal-h-binding.v1" },
+        "campaign_directory_relative_path": { "$ref": "#/$defs/relative_path" },
+        "campaign_id": { "minLength": 1, "type": "string" },
+        "candidate_ownership_mode": { "enum": ["candidate_snapshot_v1", "legacy_verified_commit_v1"] },
+        "contract_source_sha256": { "$ref": "#/$defs/sha256" },
+        "cutover_runtime_commit": { "$ref": "#/$defs/git_commit" },
+        "database_relative_path": { "$ref": "#/$defs/relative_path" },
+        "disposition": { "enum": ["exact_completion_only_adopt", "fresh_empty_activate"] },
+        "legacy_absolute_root_set_sha256": { "$ref": "#/$defs/nullable_sha256" },
+        "old_runtime_commit": { "$ref": "#/$defs/git_commit" },
+        "owner_protocol_generation": { "const": "durable-owner.v1" },
+        "portable_root_set_sha256": { "$ref": "#/$defs/sha256" },
+        "preimage_kind": { "enum": ["fresh-absent-preimage.v1", "legacy-bundle-preimage.v1"] },
+        "preimage_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "reason_set_sha256": { "$ref": "#/$defs/sha256" },
+        "scanner_protocol_generation": { "const": "durable-owner-activation-scanner.v1" },
+        "scanner_runtime_sha256": { "$ref": "#/$defs/sha256" },
+        "scanner_source_sha256": { "$ref": "#/$defs/sha256" },
+        "schema_bundle_sha256": { "$ref": "#/$defs/sha256" },
+        "selected_database_inventory_sha256": { "$ref": "#/$defs/sha256" },
+        "target_path_absent": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "disposition": { "const": "fresh_empty_activate" } } },
+          "then": {
+            "properties": {
+              "candidate_ownership_mode": { "const": "candidate_snapshot_v1" },
+              "preimage_kind": { "const": "fresh-absent-preimage.v1" },
+              "target_path_absent": { "const": true }
+            }
+          },
+          "else": {
+            "properties": {
+              "candidate_ownership_mode": { "const": "legacy_verified_commit_v1" },
+              "preimage_kind": { "const": "legacy-bundle-preimage.v1" },
+              "target_path_absent": { "const": false }
+            }
+          }
+        }
+      ],
+      "required": [
+        "activation_protocol_generation",
+        "aggregate_inventory_sha256",
+        "backup_directory_relative_path",
+        "binding_protocol_generation",
+        "campaign_directory_relative_path",
+        "campaign_id",
+        "candidate_ownership_mode",
+        "contract_source_sha256",
+        "cutover_runtime_commit",
+        "database_relative_path",
+        "disposition",
+        "legacy_absolute_root_set_sha256",
+        "old_runtime_commit",
+        "owner_protocol_generation",
+        "portable_root_set_sha256",
+        "preimage_kind",
+        "preimage_manifest_sha256",
+        "reason_set_sha256",
+        "scanner_protocol_generation",
+        "scanner_runtime_sha256",
+        "scanner_source_sha256",
+        "schema_bundle_sha256",
+        "selected_database_inventory_sha256",
+        "target_path_absent"
+      ],
+      "type": "object"
+    },
+    "schema_inventory": {
+      "additionalProperties": false,
+      "properties": {
+        "application_id": { "type": "integer" },
+        "attachment_projection": {
+          "items": { "$ref": "#/$defs/attachment_projection" },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        },
+        "foreign_key_check": { "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" },
+        "integrity_check": { "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" },
+        "sqlite_schema": { "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" },
+        "table_list": { "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" },
+        "table_pragmas": { "items": { "$ref": "#/$defs/table_pragma_inventory" }, "type": "array" },
+        "temp_schema_empty": { "const": true },
+        "user_version": { "type": "integer" }
+      },
+      "required": ["application_id", "attachment_projection", "foreign_key_check", "integrity_check", "sqlite_schema", "table_list", "table_pragmas", "temp_schema_empty", "user_version"],
+      "type": "object"
+    },
+    "attachment_projection": {
+      "additionalProperties": false,
+      "properties": {
+        "file_identity": { "const": "isolated_private_bundle" },
+        "schema_name": { "const": "main" },
+        "sequence": { "const": 0 }
+      },
+      "required": ["file_identity", "schema_name", "sequence"],
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "storage_signature": {
+      "enum": ["absent.v1", "durable-owner-active.v1", "exact-empty-sqlite.v1", "legacy-lineage.v1", "unsupported"]
+    },
+    "source_bundle_entry": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": { "$ref": "#/$defs/nonnegative_integer" },
+        "raw_file_sha256": { "$ref": "#/$defs/sha256" },
+        "relative_source_path": { "$ref": "#/$defs/relative_path" }
+      },
+      "required": ["byte_length", "raw_file_sha256", "relative_source_path"],
+      "type": "object"
+    },
+    "strict_decode_error_code": {
+      "enum": [
+        "strict_branch_decode_failed",
+        "strict_champion_decode_failed",
+        "strict_completion_decode_failed",
+        "strict_event_decode_failed",
+        "strict_hypothesis_decode_failed"
+      ]
+    },
+    "table_inventory": {
+      "additionalProperties": false,
+      "properties": {
+        "declared_primary_identity": { "enum": ["absent", "invalid", "strict"] },
+        "row_count": { "$ref": "#/$defs/nonnegative_integer" },
+        "rows": { "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" },
+        "rows_sha256": { "$ref": "#/$defs/sha256" },
+        "table_name": { "type": "string" }
+      },
+      "required": ["declared_primary_identity", "row_count", "rows", "rows_sha256", "table_name"],
+      "type": "object"
+    },
+    "table_digest_item": {
+      "additionalProperties": false,
+      "properties": {
+        "row_count": { "$ref": "#/$defs/nonnegative_integer" },
+        "rows_sha256": { "$ref": "#/$defs/sha256" },
+        "table_name": { "type": "string" }
+      },
+      "required": ["row_count", "rows_sha256", "table_name"],
+      "type": "object"
+    },
+    "table_pragma_inventory": {
+      "additionalProperties": false,
+      "properties": {
+        "foreign_key_list": { "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" },
+        "index_list": { "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" },
+        "indexes": { "items": { "$ref": "#/$defs/index_pragma_inventory" }, "type": "array" },
+        "table_info": { "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" },
+        "table_name": { "type": "string" },
+        "table_xinfo": { "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" }
+      },
+      "required": ["foreign_key_list", "index_list", "indexes", "table_info", "table_name", "table_xinfo"],
+      "type": "object"
+    },
+    "index_pragma_inventory": {
+      "additionalProperties": false,
+      "properties": {
+        "index_name": { "type": "string" },
+        "index_xinfo": { "items": { "$ref": "#/$defs/canonical_row" }, "type": "array" }
+      },
+      "required": ["index_name", "index_xinfo"],
+      "type": "object"
+    },
+    "identifier": { "minLength": 1, "type": "string" },
+    "typed_value": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": { "type": { "const": "null" }, "value": { "type": "null" } },
+          "required": ["type", "value"],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": { "type": { "const": "integer" }, "value": { "type": "integer" } },
+          "required": ["type", "value"],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "bits": {
+              "allOf": [
+                { "pattern": "^[0-9a-f]{16}$", "type": "string" },
+                { "not": { "pattern": "^(?:7ff|fff)(?!0{13}$)[0-9a-f]{13}$" } }
+              ]
+            },
+            "type": { "const": "real" }
+          },
+          "required": ["bits", "type"],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "sha256": { "$ref": "#/$defs/sha256" },
+            "type": { "const": "text" },
+            "value": { "type": "string" }
+          },
+          "required": ["sha256", "type", "value"],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "byte_length": { "$ref": "#/$defs/nonnegative_integer" },
+            "hex": { "pattern": "^(?:[0-9a-f]{2})*$", "type": "string" },
+            "sha256": { "$ref": "#/$defs/sha256" },
+            "type": { "const": "blob" }
+          },
+          "required": ["byte_length", "hex", "sha256", "type"],
+          "type": "object"
+        }
+      ]
+    },
+    "unavailable": {
+      "additionalProperties": false,
+      "properties": {
+        "state": { "const": "unavailable" }
+      },
+      "required": ["state"],
+      "type": "object"
+    },
+    "value_error_location": {
+      "additionalProperties": false,
+      "properties": {
+        "column_name": { "type": "string" },
+        "table_name": { "type": "string" },
+        "value_kind": { "enum": ["text", "unknown"] }
+      },
+      "required": ["column_name", "table_name", "value_kind"],
+      "type": "object"
+    }
+  },
+  "$id": "https://scion.local/contracts/durable-owner-activation-inventory-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    { "$ref": "#/$defs/aggregate_artifact" },
+    { "$ref": "#/$defs/attempt_id_envelope" },
+    { "$ref": "#/$defs/database_artifact" },
+    { "$ref": "#/$defs/root_manifest_artifact" },
+    { "$ref": "#/$defs/root_set_artifact" }
+  ],
+  "title": "SCION durable owner historical activation inventory v1",
+  "x-scion-array-orders": [
+    { "path_pattern": "**/absent_schema_inventory/*", "order": "exact_empty_array" },
+    { "path_pattern": "**/attempt_id_envelope/items", "order": "singleton" },
+    { "path_pattern": "**/root_manifest_artifact/items", "order": "relative_path_utf8_then_entry_kind_utf8" },
+    { "path_pattern": "**/root_set_body/database_paths", "order": "original_utf8_bytes" },
+    { "path_pattern": "**/database_body/bundle_facts", "order": "relative_path_utf8_then_entry_kind_utf8" },
+    { "path_pattern": "**/bundle_copy_witness/source_pre_facts", "order": "relative_path_utf8_then_entry_kind_utf8" },
+    { "path_pattern": "**/bundle_copy_witness/source_post_facts", "order": "relative_path_utf8_then_entry_kind_utf8" },
+    { "path_pattern": "**/bundle_copy_witness/private_copy_facts", "order": "entry_kind_utf8" },
+    { "path_pattern": "**/database_body/observed_campaign_ids", "order": "original_utf8_bytes_no_duplicates" },
+    { "path_pattern": "**/database_body/*_ids", "order": "original_utf8_bytes_no_duplicates" },
+    { "path_pattern": "**/database_body/reasons", "order": "enum_utf8_bytes_no_duplicates" },
+    { "path_pattern": "**/database_body/tables", "order": "table_name_utf8" },
+    { "path_pattern": "**/database_body/*_decode_outcomes", "order": "entity_id_utf8_then_canonical_item_bytes" },
+    { "path_pattern": "**/database_body/legacy_hypotheses", "order": "hypothesis_id_utf8_then_canonical_item_bytes" },
+    { "path_pattern": "**/database_body/owner_presence_bitmaps", "order": "entity_id_utf8_then_canonical_item_bytes" },
+    { "path_pattern": "**/database_body/generated_pairs", "order": "campaign_id_provider_attempt_id_started_event_id_generated_event_id_utf8_tuple_then_complete_canonical_item_bytes" },
+    { "path_pattern": "**/database_body/*_schema_rows", "order": "canonical_row_bytes" },
+    { "path_pattern": "**/database_body/*_check_rows", "order": "canonical_row_bytes" },
+    { "path_pattern": "**/canonical_row*/column_names", "order": "frozen_source_column_order" },
+    { "path_pattern": "**/canonical_row*/values", "order": "same_frozen_source_column_order_as_column_names" },
+    { "path_pattern": "**/presence_bitmap/fields", "order": "name_utf8_no_duplicates" },
+    { "path_pattern": "**/schema_inventory/sqlite_schema", "order": "type_name_table_utf8_then_canonical_row_bytes" },
+    { "path_pattern": "**/schema_inventory/*", "order": "canonical_row_bytes_unless_more_specific" },
+    { "path_pattern": "**/schema_inventory/table_pragmas", "order": "table_name_utf8" },
+    { "path_pattern": "**/schema_inventory/attachment_projection", "order": "singleton_main" },
+    { "path_pattern": "**/table_pragma_inventory/indexes", "order": "index_name_utf8" },
+    { "path_pattern": "**/table_pragma_inventory/*", "order": "canonical_row_bytes_unless_more_specific" },
+    { "path_pattern": "**/index_pragma_inventory/index_xinfo", "order": "canonical_row_bytes" },
+    { "path_pattern": "**/table_inventory/rows", "order": "canonical_row_bytes" },
+    { "path_pattern": "**/scanner_runtime/sqlite_compile_options", "order": "original_utf8_bytes_no_duplicates" },
+    { "path_pattern": "**/aggregate_body/*_counts", "order": "name_or_enum_utf8_no_duplicates_complete_enum_domain" },
+    { "path_pattern": "**/*_artifact/items", "order": "schema_specific_singleton_or_frozen_collection_order" }
+  ],
+  "x-scion-digest-contracts": [
+    { "class": "structured", "domain": "scion.durable-owner-activation.aggregate.v1", "field_pattern": "aggregate_artifact/aggregate_inventory_sha256", "items_source": "aggregate_artifact/items_with_own_digest_omitted", "order": "singleton" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.database.v1", "field_pattern": "database_artifact/database_inventory_sha256", "items_source": "database_artifact/items_with_own_digest_omitted", "order": "singleton" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.root-manifest.v1", "field_pattern": "root_manifest_artifact/root_manifest_sha256", "items_source": "root_manifest_artifact/items_with_own_digest_omitted", "order": "relative_path_then_entry_kind" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.root-set.v1", "field_pattern": "root_set_artifact/root_set_sha256", "items_source": "root_set_artifact/items_with_own_digest_omitted", "order": "singleton" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.canonical-row.v1", "field_pattern": "canonical_row/row_sha256", "items_source": "one_object_with_row_sha256_omitted", "order": "singleton" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.scanner-runtime.v1", "field_pattern": "**/scanner_runtime_sha256", "items_source": "one_scanner_runtime_object", "order": "singleton" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.scanner-source-bundle.v1", "field_pattern": "**/scanner_source_sha256", "items_source": "transitive_local_source_path_byte_length_raw_sha_entries", "order": "relative_source_path_utf8" },
+    { "class": "raw_file", "domain": null, "field_pattern": "**/contract_source_sha256", "items_source": "exact_contract_schema_file_bytes", "order": "not_applicable" },
+    { "class": "raw_file", "domain": null, "field_pattern": "file_fact/file_sha256", "items_source": "exact_source_file_bytes", "order": "not_applicable" },
+    { "class": "raw_file", "domain": null, "field_pattern": "private_copy_fact/file_sha256", "items_source": "exact_private_copy_bytes", "order": "not_applicable" },
+    { "class": "raw_file", "domain": null, "field_pattern": "source_bundle_entry/raw_file_sha256", "items_source": "exact_local_source_file_bytes", "order": "not_applicable" },
+    { "class": "raw_utf8", "domain": null, "field_pattern": "typed_value@text/sha256", "items_source": "exact_text_utf8_bytes", "order": "not_applicable" },
+    { "class": "raw_utf8", "domain": null, "field_pattern": "final_owner_text/sha256", "items_source": "exact_final_owner_text_utf8_bytes", "order": "not_applicable" },
+    { "class": "raw_blob", "domain": null, "field_pattern": "typed_value@blob/sha256", "items_source": "exact_blob_bytes", "order": "not_applicable" },
+    { "class": "path_set_terminal_nul", "domain": null, "field_pattern": "root_set_body/absolute_context_path_set_sha256", "items_source": "absolute_path_utf8_each_followed_by_0x00", "order": "original_utf8_bytes" },
+    { "class": "path_set_terminal_nul", "domain": null, "field_pattern": "root_set_body/portable_relative_path_set_sha256", "items_source": "relative_path_utf8_each_followed_by_0x00", "order": "original_utf8_bytes" },
+    { "class": "raw_utf8", "domain": null, "field_pattern": "root_set_body/absolute_root_string_sha256", "items_source": "operator_supplied_absolute_root_utf8", "order": "not_applicable" },
+    { "class": "raw_utf8", "domain": null, "field_pattern": "database_body/relative_database_path_sha256", "items_source": "relative_database_path_utf8", "order": "not_applicable" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.aggregate.v1", "field_pattern": "selection_manifest_preimage/aggregate_inventory_sha256", "items_source": "selected_aggregate_artifact_structured_preimage", "order": "singleton" },
+    { "class": "path_set_terminal_nul", "domain": null, "field_pattern": "selection_manifest_preimage/legacy_absolute_root_set_sha256", "items_source": "absolute_path_utf8_each_followed_by_0x00", "order": "original_utf8_bytes" },
+    { "class": "path_set_terminal_nul", "domain": null, "field_pattern": "selection_manifest_preimage/portable_root_set_sha256", "items_source": "relative_path_utf8_each_followed_by_0x00", "order": "original_utf8_bytes" },
+    { "class": "artifact_file", "domain": null, "field_pattern": "selection_manifest_preimage/preimage_manifest_sha256", "items_source": "complete_preimage_manifest_file_bytes_including_terminal_lf", "order": "file_bytes" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.reason-set.v1", "field_pattern": "selection_manifest_preimage/reason_set_sha256", "items_source": "selected_database_reason_array", "order": "enum_utf8_no_duplicates" },
+    { "class": "raw_file", "domain": null, "field_pattern": "selection_manifest_preimage/schema_bundle_sha256", "items_source": "exact_frozen_schema_bundle_source_bytes", "order": "file_bytes" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.database.v1", "field_pattern": "selection_manifest_preimage/selected_database_inventory_sha256", "items_source": "selected_database_artifact_structured_preimage", "order": "singleton" },
+    { "class": "artifact_file", "domain": null, "field_pattern": "aggregate_body/databases_jsonl_sha256", "items_source": "complete_databases_jsonl_bytes_including_terminal_lf", "order": "file_bytes" },
+    { "class": "artifact_file", "domain": null, "field_pattern": "aggregate_body/root_manifest_*_sha256", "items_source": "complete_named_root_manifest_artifact_bytes_including_terminal_lf", "order": "file_bytes" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.root-set.v1", "field_pattern": "aggregate_body/root_set_sha256", "items_source": "root_set_artifact_structured_preimage", "order": "singleton" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.source-file-facts.v1", "field_pattern": "aggregate_body/aggregate_source_file_facts_sha256", "items_source": "one_database_file_fact_for_every_available_database_body_bundle_facts_item_copying_database_relative_path_and_complete_file_fact", "order": "relative_database_path_relative_file_path_entry_kind" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.bundle-facts.v1", "field_pattern": "database_body/bundle_facts_sha256", "items_source": "database_body_bundle_facts", "order": "relative_path_then_entry_kind" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.private-copy-facts.v1", "field_pattern": "bundle_copy_witness/private_copy_facts_sha256", "items_source": "private_copy_facts", "order": "entry_kind" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.source-pre-facts.v1", "field_pattern": "bundle_copy_witness/source_pre_facts_sha256", "items_source": "source_pre_facts", "order": "relative_path_then_entry_kind" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.source-post-facts.v1", "field_pattern": "bundle_copy_witness/source_post_facts_sha256", "items_source": "source_post_facts", "order": "relative_path_then_entry_kind" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.schema-inventory.v1", "field_pattern": "database_body/schema_inventory_sha256", "items_source": "one_schema_inventory_object", "order": "singleton" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.logical-rows.v1", "field_pattern": "database_body/logical_rows_sha256", "items_source": "one_table_digest_item_per_database_body_tables_item_copying_table_name_row_count_rows_sha256", "order": "table_name_utf8" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.reason-set.v1", "field_pattern": "database_body/reason_set_sha256", "items_source": "reason_enum_strings", "order": "enum_utf8_no_duplicates" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.identifier-set.v1", "field_pattern": "database_body/*_ids_sha256", "items_source": "same_database_body_field_with_terminal__sha256_removed", "order": "identifier_utf8_no_duplicates" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.table-rows.v1", "field_pattern": "table_inventory/rows_sha256", "items_source": "canonical_rows", "order": "canonical_row_bytes" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.table-rows.v1", "field_pattern": "table_digest_item/rows_sha256", "items_source": "referenced_table_canonical_rows", "order": "canonical_row_bytes" },
+    { "class": "raw_utf8", "domain": null, "field_pattern": "field_digest_item/value_sha256", "items_source": "exact_named_text_utf8_bytes", "order": "not_applicable" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.presence-bitmap.v1", "field_pattern": "**/presence_bitmap_sha256", "items_source": "exact_owning_presence_bitmap.fields_array", "order": "field_name_utf8" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.source-row.v1", "field_pattern": "**/source_row_sha256", "items_source": "one_canonical_row_with_complete_table_xinfo_column_names_and_exact_source_values", "order": "frozen_table_xinfo_column_order" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.source-row.v1", "field_pattern": "legacy_hypothesis/complete_source_row_sha256", "items_source": "one_canonical_row_with_complete_h_table_xinfo_column_names_and_exact_source_values", "order": "frozen_table_xinfo_column_order" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.final-owner-row.v1", "field_pattern": "**/final_owner_row_sha256", "items_source": "one_exact_canonical_row_branch_final_owner_preimage_or_canonical_row_hypothesis_final_owner_preimage_selected_by_owning_entity_kind", "order": "exact_schema_column_names_order" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.extra-fields.v1", "field_pattern": "legacy_hypothesis/extra_fields_sha256", "items_source": "one_field_value_item_per_h_table_xinfo_column_not_in_canonical_row_hypothesis_final_owner_preimage_column_names", "order": "field_name_utf8" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.text-value-digests.v1", "field_pattern": "legacy_hypothesis/text_value_digests_sha256", "items_source": "one_field_digest_item_per_text_typed_value_in_complete_source_h_row", "order": "field_name_utf8" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.event-strict-identity.v1", "field_pattern": "generated_pair/*_strict_identity_sha256", "items_source": "field_value_items_named_campaign_id_provider_attempt_id_branch_id_hypothesis_id_event_id_event_kind_event_stage", "order": "listed_field_order" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.complete-event-row.v1", "field_pattern": "generated_pair/*_complete_row_sha256", "items_source": "one_canonical_row_with_complete_event_table_xinfo_column_names_and_exact_source_values", "order": "frozen_table_xinfo_column_order" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.transition-group.v1", "field_pattern": "generated_pair/transition_group_sha256", "items_source": "field_value_items_named_campaign_id_provider_attempt_id_branch_id_hypothesis_id_started_event_id_generated_event_id", "order": "listed_field_order" },
+    { "class": "artifact_file", "domain": null, "field_pattern": "attempt_id_item/previous_attempt_receipt_sha256", "items_source": "complete_previous_attempt_receipt_bytes_or_genesis_zero_sentinel", "order": "file_bytes_or_genesis" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.selection.v1", "field_pattern": "attempt_id_item/cutover_id", "items_source": "one_selection_manifest_preimage_with_cutover_id_omitted", "order": "singleton" },
+    { "class": "structured", "domain": "scion.durable-owner-activation.attempt-id.v1", "field_pattern": "computed/attempt_id", "items_source": "attempt_id_envelope_items", "order": "singleton" }
+  ],
+  "x-scion-structured-item-schemas": {
+    "scion.durable-owner-activation.aggregate.v1": { "item_schema_refs": ["#/$defs/aggregate_body"] },
+    "scion.durable-owner-activation.attempt-id.v1": { "item_schema_refs": ["#/$defs/attempt_id_item"] },
+    "scion.durable-owner-activation.bundle-facts.v1": { "item_schema_refs": ["#/$defs/file_fact"] },
+    "scion.durable-owner-activation.canonical-row.v1": { "item_schema_refs": ["#/$defs/canonical_row_preimage"] },
+    "scion.durable-owner-activation.complete-event-row.v1": { "item_schema_refs": ["#/$defs/canonical_row"] },
+    "scion.durable-owner-activation.database.v1": { "item_schema_refs": ["#/$defs/database_body"] },
+    "scion.durable-owner-activation.event-strict-identity.v1": { "item_schema_refs": ["#/$defs/field_value_item"] },
+    "scion.durable-owner-activation.extra-fields.v1": { "item_schema_refs": ["#/$defs/field_value_item"] },
+    "scion.durable-owner-activation.final-owner-row.v1": { "item_schema_refs": ["#/$defs/canonical_row_branch_final_owner_preimage", "#/$defs/canonical_row_hypothesis_final_owner_preimage"] },
+    "scion.durable-owner-activation.identifier-set.v1": { "item_schema_refs": ["#/$defs/identifier"] },
+    "scion.durable-owner-activation.logical-rows.v1": { "item_schema_refs": ["#/$defs/table_digest_item"] },
+    "scion.durable-owner-activation.presence-bitmap.v1": { "item_schema_refs": ["#/$defs/presence_field"] },
+    "scion.durable-owner-activation.private-copy-facts.v1": { "item_schema_refs": ["#/$defs/private_copy_fact"] },
+    "scion.durable-owner-activation.reason-set.v1": { "item_schema_refs": ["#/$defs/reason"] },
+    "scion.durable-owner-activation.root-manifest.v1": { "item_schema_refs": ["#/$defs/file_fact"] },
+    "scion.durable-owner-activation.root-set.v1": { "item_schema_refs": ["#/$defs/root_set_body"] },
+    "scion.durable-owner-activation.scanner-runtime.v1": { "item_schema_refs": ["#/$defs/scanner_runtime"] },
+    "scion.durable-owner-activation.scanner-source-bundle.v1": { "item_schema_refs": ["#/$defs/source_bundle_entry"] },
+    "scion.durable-owner-activation.schema-inventory.v1": { "item_schema_refs": ["#/$defs/absent_schema_inventory", "#/$defs/schema_inventory"] },
+    "scion.durable-owner-activation.selection.v1": { "item_schema_refs": ["#/$defs/selection_manifest_preimage"] },
+    "scion.durable-owner-activation.source-file-facts.v1": { "item_schema_refs": ["#/$defs/database_file_fact"] },
+    "scion.durable-owner-activation.source-post-facts.v1": { "item_schema_refs": ["#/$defs/file_fact"] },
+    "scion.durable-owner-activation.source-pre-facts.v1": { "item_schema_refs": ["#/$defs/file_fact"] },
+    "scion.durable-owner-activation.source-row.v1": { "item_schema_refs": ["#/$defs/canonical_row"] },
+    "scion.durable-owner-activation.table-rows.v1": { "item_schema_refs": ["#/$defs/canonical_row"] },
+    "scion.durable-owner-activation.text-value-digests.v1": { "item_schema_refs": ["#/$defs/field_digest_item"] },
+    "scion.durable-owner-activation.transition-group.v1": { "item_schema_refs": ["#/$defs/field_value_item"] }
+  },
+  "x-scion-metadata-semantics": {
+    "array_order_match": "most_specific_path_pattern_wins",
+    "digest_contract_match": "most_specific_field_pattern_wins_for_available_string_values",
+    "glob": "slash_separated_definition_property_path_star_matches_zero_or_more_codepoints_within_one_component_doublestar_matches_zero_or_more_whole_components",
+    "oneof_variant_path": "definition_at_variant_name_slash_property_for_example_typed_value_at_text_slash_sha256",
+    "structured_domain_rule": "every_structured_digest_domain_must_have_exactly_one_x_scion_structured_item_schemas_entry",
+    "structured_item_schema_selection": "every_preimage_item_must_validate_against_exactly_one_listed_item_schema_ref_multiple_refs_are_disjoint"
+  },
+  "x-scion-final-owner-real-encoding": "hypothesis_suggested_weight_is_null_or_finite_binary64_negative_zero_canonicalizes_to_positive_zero_positive_and_negative_infinity_rejected",
+  "x-scion-real-encoding": "ieee754_binary64_network_byte_order_lowercase_16_hex_reject_nan_allow_positive_and_negative_infinity_and_distinct_signed_zero"
+}

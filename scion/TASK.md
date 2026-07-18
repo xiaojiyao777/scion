@@ -1,7 +1,7 @@
 # Scion v0.4 Direct-Runtime Research Task
 
 *Branch: `v0.4-dev`*
-*Last updated: 2026-07-17*
+*Last updated: 2026-07-18*
 
 This is the active task source. Read it with
 `scion/docs/status/current-state.md`; use
@@ -736,13 +736,16 @@ The implementation order is fixed; items 1-3 are complete:
    transaction repeats its START/lease preflight after consuming the generated
    result. It performs no retry or intervening state change and may be collapsed
    before activation only if doing so does not broaden the authority surface.
-   Historical activation remains a separate addendum because the
-   827-database read-only inventory found legacy-extra JSON, malformed rows,
-   orphan/multi-campaign ambiguity, and missing sealed provenance that cannot
-   be invented. Only after A and B close may the project perform the
-   indivisible D2b.0b.C schema/all-writer cutover and D2b.0b.V acceptance; no
-   intermediate runnable
-   state may combine active revisions with a legacy writer. Then continue the
+   Historical activation is now design-frozen in
+   `scion/docs/planning/v0.4/v0.4-d2b0b-historical-activation-addendum-20260717.md`
+   at addendum SHA `a9d912ff122883fd75ead5c9e04a787ce1245a17c75900281a445b2b0ee2766c`
+   and schema SHA `e2d5b7cde488fded97d084b209b7a17343af6ee6157a89091bcdbfa488def503`.
+   Three independent fixed-hash reviews close at P0=0/P1=0/P2=0. The next
+   artifact is the production-unimported read-only scanner plus independent
+   verifier and reproducible 827-root evidence. Only after that evidence is
+   accepted may the project perform the indivisible D2b.0b.C schema/all-writer
+   cutover and D2b.0b.V acceptance; no intermediate runnable state may combine
+   active revisions with a legacy writer. Then continue the
    remaining D2b slices, D2c
    exact Decision transport, D2d isolated snapshot handoff, and D2e v2
    completion/recovery before D3/D4; then implement the reversible L1-L3 ledger;
@@ -834,9 +837,11 @@ scientific and lineage-owning artifacts remain in place.
    Its complete checkpoint A generation-provenance/reservation/terminal-
    recovery path and checkpoint B frozen Contract/target plus fused event/
    binding/H/Registry publication are implemented, independently accepted,
-   dormant, and production-uncomposed. Design and accept historical activation
-   in its own evidence-preserving addendum next. Only then proceed to the
-   indivisible offline cutover,
+   dormant, and production-uncomposed. The historical-activation addendum and
+   machine-readable inventory schema are now fixed-hash accepted with no open
+   P0/P1/P2. Implement and independently verify the read-only scanner, check in
+   the reproducible named 827-root evidence, and re-review it before proceeding
+   to the indivisible offline cutover,
    and closure exactly as frozen, then implement the remaining paired
    slot/dispatch/receipt slices, D2c exact Decision transport, D2d isolated
    snapshot handoff, and D2e v2 completion/recovery;

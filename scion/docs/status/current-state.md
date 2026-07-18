@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-07-16*
+*Last updated: 2026-07-18*
 
 Read `scion/TASK.md` first. Use
 `scion/design/scion-architecture-v3.md` as the architecture tie-breaker.
@@ -255,13 +255,19 @@ transaction/recovery, and static dependency reviews report no open P0/P1. One
 nonblocking P2 remains: the same creation transaction repeats its START/lease
 preflight after generated-result consumption without retry or intervening state
 change. Collapse it before activation only if the authority surface remains
-unchanged. Historical activation is separately
-blocked on an evidence-preserving addendum after the read-only 827-database
-inventory found legacy-extra JSON, malformed rows, orphan/multi-campaign
-ambiguity, and missing sealed provenance. Generic ledger and provider-result
-state machines remain colocated until the full transition graph is stable. No
-production composition importer, schema effect, retry, budget, cap, gate,
-cutoff, or truncation is authorized before D2b.0b.C.
+unchanged. Historical activation is now design-frozen in
+`scion/docs/planning/v0.4/v0.4-d2b0b-historical-activation-addendum-20260717.md`.
+The accepted exact hashes are addendum
+`a9d912ff122883fd75ead5c9e04a787ce1245a17c75900281a445b2b0ee2766c` and
+schema `e2d5b7cde488fded97d084b209b7a17343af6ee6157a89091bcdbfa488def503`;
+three independent fixed-hash reviews close at P0=0/P1=0/P2=0. The contract is
+fresh-first, preserves legacy H/events as completion-only evidence, freezes
+read-only WAL-aware inventory bytes and cutover recovery, and adds no retry,
+budget, cap, gate, cutoff, or truncation. This accepts design only: the scanner,
+independent verifier, reproducible 827-root named evidence, D2b.0b.C, and
+D2b.0b.V are not implemented. Generic ledger and provider-result state machines
+remain colocated until the full transition graph is stable; production remains
+uncomposed and schema-inactive.
 
 The next post-R11c work is design-frozen in
 `scion/docs/planning/v0.4/v0.4-cvrp-search-allocation-and-alns-control-design-20260716.md`.
@@ -958,12 +964,13 @@ Excluded and preserved:
 
 ## Immediate Resume Actions
 
-1. Keep Checkpoints A and B dormant and write the evidence-preserving historical
-   activation addendum. Classify every legacy database without inventing sealed
-   provenance; retain, quarantine, or reject ambiguous state explicitly.
-2. After addendum acceptance, perform one clean-stop, indivisible D2b.0b.C
-   schema/all-writer cutover followed by D2b.0b.V acceptance. No runnable state
-   may combine active revisions with a legacy writer.
+1. Keep Checkpoints A and B dormant. Implement the fixed-hash, read-only
+   historical scanner and an independently implemented verifier; reproduce and
+   check in the named 827-root evidence without mutating the corpus.
+2. Re-review the evidence against the frozen contract. Only after acceptance,
+   perform one clean-stop, indivisible D2b.0b.C schema/all-writer cutover
+   followed by D2b.0b.V acceptance. No runnable state may combine active
+   revisions with a legacy writer.
 3. Complete the remaining paired D2b slot/dispatch/receipt ownership, D2c exact
    DecisionOutcome transport, D2d isolated snapshot handoff, D2e v2 completion/
    recovery, then D3-D4 continuation/lineage/promotion and the L1-L3 normalized
